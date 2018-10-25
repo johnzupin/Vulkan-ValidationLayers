@@ -10599,7 +10599,8 @@ static bool PreCallValidateCmdExecuteCommands(layer_data *dev_data, GLOBAL_CB_NO
                             HandleToUint64(pCommandBuffers[i]), "UNASSIGNED-vkCmdExecuteCommands-commandBuffer-00001",
                             "%s: Cannot execute cmd buffer using image (0x%" PRIx64
                             ") [sub-resource: aspectMask 0x%X "
-                            "array layer %u, mip level %u], with current layout %s when first use is %s.",
+                            "array layer %u, mip level %u], with current layout %s when initial "
+                            "layout of the image is %s.",
                             "vkCmdExecuteCommands():", HandleToUint64(ilm_entry.first.image), subresource.aspectMask,
                             subresource.arrayLayer, subresource.mipLevel, string_VkImageLayout(cb_entry->second.layout),
                             string_VkImageLayout(ilm_entry.second.initialLayout));
@@ -10616,8 +10617,8 @@ static bool PreCallValidateCmdExecuteCommands(layer_data *dev_data, GLOBAL_CB_NO
                                 VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT, HandleToUint64(pCommandBuffers[i]),
                                 "UNASSIGNED-vkCmdExecuteCommands-commandBuffer-00001",
                                 "%s: Cannot execute cmd buffer using image (0x%" PRIx64
-                                ") [sub-resource: aspectMask 0x%X "
-                                "array layer %u, mip level %u], with current layout %s when first use is %s.",
+                                ") [sub-resource: aspectMask 0x%X array layer %u, mip level %u], with current layout %s when "
+                                "initial layout of the image is %s.",
                                 "vkCmdExecuteCommands():", HandleToUint64(ilm_entry.first.image), subresource.aspectMask,
                                 subresource.arrayLayer, subresource.mipLevel, string_VkImageLayout(node.layout),
                                 string_VkImageLayout(ilm_entry.second.initialLayout));

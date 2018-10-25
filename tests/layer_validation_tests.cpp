@@ -3829,7 +3829,8 @@ TEST_F(VkLayerTest, BlitImageLayout) {
 
     // Source image in invalid layout at start of the CB
     m_errorMonitor->SetDesiredFailureMsg(
-        VK_DEBUG_REPORT_ERROR_BIT_EXT, "layout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL when first use is VK_IMAGE_LAYOUT_GENERAL");
+        VK_DEBUG_REPORT_ERROR_BIT_EXT,
+        "layout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL when initial layout of the image is VK_IMAGE_LAYOUT_GENERAL");
     vkCmdBlitImage(m_commandBuffer->handle(), img_src_transfer.image(), img_src_transfer.Layout(), img_color.image(),
                    VK_IMAGE_LAYOUT_GENERAL, 1, &blit_region, VK_FILTER_LINEAR);
 
@@ -3843,8 +3844,9 @@ TEST_F(VkLayerTest, BlitImageLayout) {
     m_commandBuffer->begin();
 
     // Destination image in invalid layout at start of the CB
-    m_errorMonitor->SetDesiredFailureMsg(
-        VK_DEBUG_REPORT_ERROR_BIT_EXT, "layout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL when first use is VK_IMAGE_LAYOUT_GENERAL");
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
+                                         "layout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL when initial "
+                                         "layout of the image is VK_IMAGE_LAYOUT_GENERAL");
     vkCmdBlitImage(m_commandBuffer->handle(), img_color.image(), VK_IMAGE_LAYOUT_GENERAL, img_dst_transfer.image(),
                    img_dst_transfer.Layout(), 1, &blit_region, VK_FILTER_LINEAR);
 
