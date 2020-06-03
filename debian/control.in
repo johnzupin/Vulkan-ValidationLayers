@@ -34,7 +34,7 @@ Multi-Arch: same
 Description: Vulkan validation layers
  This project provides Vulkan validation layers that can
  be enabled to assist development by enabling developers
- to verify their applications correct use of the Vulkan API.
+ to verify their applications' correct use of the Vulkan API.
 
 Package: vulkan-validationlayers-dev
 Section: libdevel
@@ -50,4 +50,4 @@ Multi-Arch: same
 Description: Vulkan validation layers -- development files
  This project provides Vulkan validation layers that can
  be enabled to assist development by enabling developers
- to verify their applications correct use of the Vulkan API.
+ to verify their applications' correct use of the Vulkan API.
