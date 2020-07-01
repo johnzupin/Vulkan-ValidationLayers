@@ -1,0 +1,30 @@
+Source: vulkan-validationlayers
+Section: graphics
+Priority: optional
+Maintainer: John Zupin <johnz@lunarg.com>
+Build-Depends: debhelper (>= 10),
+ cmake,
+ glslang-tools,
+ vulkan-headers,
+ spirv-headers,
+ spirv-tools,
+ python3,
+ libwayland-dev,
+ libx11-dev,
+ libxcb1-dev,
+ libxrandr-dev,
+ pkg-config
+Standards-Version: 4.1.2
+Homepage: https://github.com/KhronosGroup/Vulkan-ValidationLayers
+Vcs-Git: https://github.com/KhronosGroup/Vulkan-ValidationLayers
+Vcs-Browser: https://github.com/KhronosGroup/Vulkan-ValidationLayers
+
+Package: vulkan-validationlayers
+Architecture: any
+Depends: vulkan-loader, ${shlibs:Depends}, ${misc:Depends}
+Description: Vulkan is an Explicit API, enabling direct control over how GPUs actually
+ work. By design, minimal error checking is done inside a Vulkan driver. Applications
+ have full control and responsibility for correct operation. Any errors in how Vulkan
+ is used can result in a crash. This project provides Vulkan validation layers that
+ can be enabled to assist development by enabling developers to verify their
+ applications correct use of the Vulkan API.
