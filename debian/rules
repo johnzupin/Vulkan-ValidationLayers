@@ -25,4 +25,5 @@ override_dh_auto_configure:
 				-DGLSLANG_INSTALL_DIR=/usr/bin \
 				-DBUILD_TESTS="OFF" \
 				-DBUILD_LAYER_SUPPORT_FILES="ON" \
+				-DSPIRV_HEADERS_INSTALL_DIR="/usr"
 				-DANNOTATED_SPEC_LINK="\"https://vulkan.lunarg.com/doc/view/_MAGIC_VERSION_ID_.0/linux/_MAGIC_ANNOTATED_SPEC_TYPE_/vkspec.html\"" ..
