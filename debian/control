@@ -5,7 +5,7 @@ Maintainer: John Zupin <johnz@lunarg.com>
 Build-Depends: debhelper (>= 10),
  cmake,
  glslang-tools,
- vulkan-headers,
+ vulkan-headers  (>= 1.2.141.0),
  spirv-headers,
  spirv-tools,
  python3,
@@ -21,7 +21,7 @@ Vcs-Browser: https://github.com/KhronosGroup/Vulkan-ValidationLayers
 
 Package: vulkan-validationlayers
 Architecture: any
-Depends: libvulkan1, ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, libvulkan1 (>= 1.2.141.0)
 Description: Vulkan is an Explicit API, enabling direct control over how GPUs actually
  work. By design, minimal error checking is done inside a Vulkan driver. Applications
  have full control and responsibility for correct operation. Any errors in how Vulkan
@@ -31,7 +31,7 @@ Description: Vulkan is an Explicit API, enabling direct control over how GPUs ac
 
 Package: vulkan-validationlayers-dev
 Architecture: any
-Depends: libvulkan1, ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, libvulkan1 (>= 1.2.141.0)
 Description: Vulkan is an Explicit API, enabling direct control over how GPUs actually
  work. By design, minimal error checking is done inside a Vulkan driver. Applications
  have full control and responsibility for correct operation. Any errors in how Vulkan
