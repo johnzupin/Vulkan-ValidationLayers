@@ -1,3 +1,581 @@
+vulkan-validationlayers (1.2.148.0-1lunarg20.04-1) focal; urgency=medium
+
+  [ Mark Lobodzinski ]
+  * corechecks: Add FB check for depth-stencil 3D image/imageviews
+  * tests: Added test for VUID-VkFBCreateInfo-pAttachments-00891
+
+  [ sfricke-samsung ]
+  * layers: Fix VK_EXT_sample_locations bug
+  * tests: Add extra VK_EXT_sample_location test
+
+  [ Mark Lobodzinski ]
+  * chassis: Load default callbacks earlier in CreateInstance
+  * chassis: Factor out some common parsing functions
+  * chassis: Properly use vk_safe_struct.cpp without including it
+  * chassis: Address non-const refs
+
+  [ sfricke-samsung ]
+  * layers: Add function name prefix to more logs
+
+  [ Christophe ]
+  * docs: Fix link to LAYER_CONFIGURATION.md, issue #1902
+
+  [ Mark Lobodzinski ]
+  * practices: Avoid null pApplicationInfo deref
+
+  [ sfricke-samsung ]
+  * layers: Label and fix Maintenance1 VUs
+
+  [ Tony-LunarG ]
+  * layers: Allow validation of push descriptors
+  * tests: Test push descriptor image layout validation
+
+  [ sfricke-samsung ]
+  * layers: Add YCbCr BufferImageCopy VUID
+  * tests: Add YCbCr BufferImageCopy VUID
+  * layers: Label VUID 01386 and fix log messages
+
+  [ Mark Lobodzinski ]
+  * tests: Leave handle wrapping enabled at all times
+
+  [ Tony-LunarG ]
+  * gpu: Record destroy of buffers and devices
+
+  [ sfricke-samsung ]
+  * layers: Validate VK_KHR_multiview features
+  * tests: Validate VK_KHR_multiview features
+
+  [ Marcin Ślusarz ]
+  * build: SPIRV-Tools and glsllang are 2 separate projects
+  * build: detect missing SPIRV_HEADERS_INSTALL_DIR at cmake time
+
+  [ sfricke-samsung ]
+  * layers: Add VUID 00336
+  * tests: Add VUID 00336
+
+  [ sourav parmar ]
+  * layers:Misc RayTracing VUID
+  * tests:Handles new rayTracing VUID
+
+  [ sfricke-samsung ]
+  * layers: Add VUID 01946
+  * tests: Add VUID 01946
+
+  [ Mark Lobodzinski ]
+  * tests: Remove vk_layer_settings.txt file
+
+  [ dan sinclair ]
+  * scripts: Use named params for generator options
+
+  [ Mark Lobodzinski ]
+  * layers: Add collection of info for layer settings file
+  * chassis: Add layer settings file info to layer status message
+
+  [ Bruce Dawson ]
+  * layers: Adjust shared_mutex usage
+
+  [ sourav parmar ]
+  * layers:Add missing KHR build info tracker
+  * tests:for BuildGeometryInfoKHR
+
+  [ John Zulauf ]
+  * layers: Allow EXTERNAL release acquire in same CB
+  * tests: Add test case for EXTERNAL release/acquire
+
+  [ sfricke-samsung ]
+  * layers: Add VUID 00827
+  * tests: Add VUID 00827
+
+  [ Mark Lobodzinski ]
+  * corechecks: Move CmdBeginQuery vuid parameters into struct
+  * corechecks: Move all CmdBeginQuery vuids into struct
+  * corechecks: Check for active queries with same type in CB
+  * tests: Add tests for duplicate BeginQuery calls
+
+  [ sfricke-samsung ]
+  * layers: Add VkImageResolve VUIDs
+  * tests: Add VkImageResolve VUIDs
+
+  [ Mark Lobodzinski ]
+  * corechecks: Add new unassigned vuid for freed memory access
+
+  [ Dorian Apanel ]
+  * corechecks: Validate img mem at CreateFramebuffer time
+  * tests: Add invalid FB image mem test
+
+  [ Mark Lobodzinski ]
+  * tests: Add correct vuid for mem-use-after-free
+
+  [ Jamie Madill ]
+  * Fix GN header dependencies.
+
+  [ Szilard Papp ]
+  * practices: Adding checks for triple buffering
+  * tests: Adding test for triple buffering
+
+  [ sfricke-samsung ]
+  * layers: Remove invalid check for AHB format
+
+  [ Mark Lobodzinski ]
+  * layers: Add private settings extension and write support
+  * tests: Replace setenv with private settings extension
+  * tests: Compile best practices tests for Android
+  * tests: Add filters for BP Android test failures
+
+  [ sfricke-samsung ]
+  * layers: Add function calls to error log messages
+  * layers: Validate maxSamplerAllocationCount
+  * tests: Validate maxSamplerAllocationCount
+  * layers: Wrap non external AHB logic together
+  * layers: Add export handleType VUIDs
+  * tests: Add export handleType VUIDs
+
+  [ Mark Lobodzinski ]
+  * tests: Don't run ManySmallIndexedDrawCall test on shieldTV
+
+  [ Tony-LunarG ]
+  * layers: Add is_khr to acceleration_structure_state
+
+  [ Jeremy Kniager ]
+  * layers: Add CMD_TYPE parameter to pipeline binding
+  * layers: Add combined image sampler check
+  * tests: Add combined image sampler test
+
+  [ Mark Lobodzinski ]
+  * corechecks: Fix DrawIndexedIndirect VUID name
+
+  [ Tony-LunarG ]
+  * layers: Remove leading comma in lists
+
+  [ Mark Lobodzinski ]
+  * chassis: Add ability to declare custom struct types
+  * tests: Add positive test for using a non-Vulkan custom struct
+  * layers: Updated settings file for custom structure setting
+
+  [ Yilong Li ]
+  * scripts: Add default sType for safe_struct initialization
+
+  [ sfricke-samsung ]
+  * layers: Removed AHB USAGE_GPU_COLOR_OUTPUT
+  * layers: Add Depth Stencil usage for AHB
+  * tests: Add Depth Stencil usage for AHB
+
+  [ Lionel Landwerlin ]
+  * layers: Fix DRM format properties accesses
+
+  [ Mark Lobodzinski ]
+  * tests: Block AndroidHardwareBufferDepthStencil on ShieldTV
+
+  [ Szilard Papp ]
+  * practices: Adding check for Presentation mode
+  * practices: Adding test for Presentation mode
+  * practices: Adding check for DethBias usage
+  * practices: Adding test for DethBias usage
+
+  [ Mark Lobodzinski ]
+  * tests: Skip DRM image format modifier test on Mock ICD
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.145 header
+  * build: Clean up VUID consistency checks
+  * build: Address memory barrier VUID changes
+  * build: Address graphics pipeline VUID changes
+  * build: Propogate genvk changes to `lvl_genvky.py`
+  * build: Address memory barrier VUID inconsistancies
+  * build: Fix more mem barrier VUID inconsistencies
+  * build: Fix more VUID changes for 144 header update
+  * build: Change removed VUIDs to UNASSIGNED
+
+  [ sfricke-samsung ]
+  * layers: Add RP potentialFormatFeature VUID
+  * tests: Add RP potentialFormatFeature VUID
+
+  [ Lionel Landwerlin ]
+  * layers: Fix image creation checks with DRM modifiers
+
+  [ Mark Lobodzinski ]
+  * corechecks: Prevent null ptr access for GetSwapchainImages
+  * layers: Add duplicate message limit infrastructure
+  * chassis: Add config steps for reading dup msg limits
+  * tests: Add duplicate message limit test
+  * docs: Added message limit to layer settings file
+  * docs: Update CONTRIBUTING.md with some new details
+
+  [ Jeremy Kniager ]
+  * layers: Fix vkCmdTraceRaysKHR VUID Mixup
+
+  [ Ricardo Garcia ]
+  * Use conversion format in some Ycbcr conversion VUs
+
+  [ キキジキ ]
+  * docs: Fix CMake update_deps/build instructions
+  * docs Add reference to the --dir option
+
+  [ Ricardo Garcia ]
+  * corechecks: Use all locations for samplerYcbcrConversion
+
+  [ Mark Lobodzinski ]
+  * chassis: Fix inadvertant StateTracker VO state-sharing
+
+  [ Tony-LunarG ]
+  * tests: Fix unexpected custom border color error
+
+  [ sfricke-samsung ]
+  * layers: Add HDR ASTC formats
+  * layers: Add VK_EXT_astc_decode_mode
+  * tests: Add VK_EXT_astc_decode_mode
+  * layers: Label VUID 02251
+
+  [ Szilard Papp ]
+  * practices: Adding check for robustBufferAccess
+  * practices: Adding test for robustBufferAccess
+
+  [ sfricke-samsung ]
+  * layers: Add maxExtent VUIDs
+  * tests: Add maxExtent VUIDs
+  * layers: Add External Import handleType VUIDs
+  * tests: Add External Import handleType VUIDs
+  * layers: Add VUID 00995
+  * tests: Add VUID 00995
+
+  [ Tony-LunarG ]
+  * gpu: Handle destroyed pipeline layout
+  * layers: Add more custom border color checks
+  * gpu: Remove incorrect descriptor set requirement
+
+  [ John Zupin ]
+  * package: add vulkan-validationlayers-dev package
+
+  [ sfricke-samsung ]
+  * layers: Fix YCbCr Format VUIDs
+  * tests: Fix AHB Test not covering 02251
+
+  [ Tony-LunarG ]
+  * layers: Use helper to pick spirv env
+  * gpu: Check for enabled features
+
+  [ Sam Walls ]
+  * practices: Add passing implementation of Arm perfdoc check 23
+  * tests: Add test for Arm perfdoc check 23
+
+  [ Mark Lobodzinski ]
+  * threading: Audit VkDisplay, VkDisplayMode object handling
+  * objtracker: Don't report undestroyable objects
+
+  [ sfricke-samsung ]
+  * layers: Add VUID 02711
+  * tests: Add VUID 02711
+
+  [ rumblehhh ]
+  * Update BUILD.md to use correct helper.cmake path
+
+  [ sfricke-samsung ]
+  * layers: Move some sparse VU to stateless
+
+  [ Tony-LunarG ]
+  * tests: Add PhysicalDeviceFeatures to device profile api
+  * gpu: Fix enabling of required features
+  * layers: Fix log message
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.146 header
+  * build: Fix VUID inconsistencies for 1.2.146 header
+
+  [ Lionel Landwerlin ]
+  * layers: fix image/view with modifier format feature storage
+
+  [ Yilong Li ]
+  * chassis: Fix memory leaks
+
+  [ Tony-LunarG ]
+  * layers: Remove leftover enum
+
+  [ sfricke-samsung ]
+  * layers: Add YCbCr Swizzle VUIDs
+  * tests: Add YCbCr Swizzle VUIDs
+
+  [ janharaldfredriksen-arm ]
+  * layers: Add VUID 04059
+  * tests: Add VUID 04059
+
+  [ Tim Van Patten ]
+  * build: Add a virtual dtor to AspectParameters
+
+  [ John Zupin ]
+  * rules: update to define spirv-headers location
+  * control: update runtime dep
+
+  [ sfricke-samsung ]
+  * layers: Add Protected Resource VUIDs
+  * tests: Add Protected Resource VUIDs
+
+  [ John Zulauf ]
+  * syncval: Init Sync Val Resource Hazard
+  * tests: Add testcases for buffer region copies
+  * tests: Add more flexible interface to VkImageObj
+  * syncval: Add image sync validation for CopyImage
+  * tests: Add first image sync tests
+  * syncval: Add image layout transition hazard checks
+  * sync: Add earlier/later stage maps to codegen
+  * syncval: Add logical stage extension to exec scope
+  * syncval: Adding race hazard support
+  * layers: Enhance Subpass DAG tree information
+  * syncval: Add context interface for detect/update
+
+  [ locke-lunarg ]
+  * syncval: Add new RangeEncoder and RangeGenerator
+  * syncval: Add dest image adjustment for compressed
+  * tests: Fix test synchronization errors
+  * syncval: Use new generator in synchronization
+  * syncval: Add copy buffer image and blit entry points
+  * tests: Test copy buffer image and blit hazards
+  * syncval: Add function name to hazard log messages
+
+  [ John Zulauf ]
+  * syncval: Change hazard check to use resolved map.
+  * syncval: Add end renderpass access context resolve
+  * syncval: Clean attachment first/last for RP creation
+
+  [ locke-lunarg ]
+  * syncval: Add default constructors for Encoders
+  * syncval: Change offset generator to image generator
+
+  [ John Zulauf ]
+  * syncval: Clean up and bugfix Access state resolve
+  * layers: Add subpass transition info to RP state
+  * layers: Add range operator + and copy constructor
+  * syncval: Cleanup/Refactor AccessContext
+
+  [ locke-lunarg ]
+  * syncval: Refactor Image encoder/generator
+
+  [ John Zulauf ]
+  * layers: Add support for fake device memory address
+  * syncval: Remove per-handle maps for AccessState
+
+  [ locke-lunarg ]
+  * scripts: Sort syncval output for consistency
+
+  [ John Zulauf ]
+  * syncval: Add FreeCommandBuffer callback support
+
+  [ locke-lunarg ]
+  * syncval: Move image encoder init to BindMemory
+  * syncval: Encode linear image as optimal in MockICD
+  * syncval: Fix texel size in ImageRangeEncoder
+  * syncval: Merge contiguous ranges during encode
+
+  [ John Zulauf ]
+  * tests: Fix access mask logic for SetLayout
+  * layers: Add hinted invalidation to parallel iter
+  * layers: Add additional attachment info
+  * syncval: Add renderpass image layout sync checks
+  * syncval: Convert all sync tagging to new style
+  * tests: Add begin renderpass hazard test
+
+  [ locke-lunarg ]
+  * syncval: Deal with whole size and remaining
+
+  [ John Zulauf ]
+  * syncval: Synch Val bugfixes from design review
+  * syncval: Add loadOp validation to renderpass
+  * syncval: Add hazard detection with ordering checks
+  * syncval: Add resolve validations NextSubpass only
+  * syncval: Add additional resolve att. val/update
+
+  [ locke-lunarg ]
+  * scripts: Deal with MEMORY_READ/WRITE_BIT
+  * layers: D24 depth pixel size is 3, not 4
+
+  [ John Zulauf ]
+  * syncval: Add renderpass store sync validation
+
+  [ locke-lunarg ]
+  * syncval: Syval descriptorSets in CmdDispatch
+  * tests: Syval CmdDispatch
+  * tests: Fix fail
+  * syncval: Syval more cmd
+  * syncval: Syval vertex and index
+  * syncval: shared_ptr renderpass/framebuffer
+  * syncval: Detect/Update Subpass attachments
+  * syncval: More syval in cmd
+  * syncval: Refactor get pipeline
+  * tests: More syval test in Cmd
+  * scripts: Add shader stage map
+  * syncval: Check every shader stages
+  * layers: Catch if shader use store function
+  * syncval: Refactor detect/update for draw/dispatch
+  * syncval: Remove dupl. input attachment validation
+  * syncval: Check fs writable output
+  * syncval: Skip FS validation w/rasterizerDiscardEnable
+  * syncval: Test depth/stencil separately
+  * tests: Test syval depth/stencil speparately
+  * syncval: Record in StateTracker
+
+  [ John Zulauf ]
+  * syncval: Add tag information to hazard log messages
+  * layers: Refactor Command name lookup to function
+  * syncval: Add command name to  harzard reports
+
+  [ locke-lunarg ]
+  * syncval: Fix blitImage offset and extent error
+  * syncval: Check for no current renderpass
+
+  [ John Zulauf ]
+  * syncval: Bound access resolve to range.
+
+  [ locke-lunarg ]
+  * syncval: Fix wrong mip count in encoder
+
+  [ John Zulauf ]
+  * syncval: Correct order for syval end rendpass calls
+
+  [ locke-lunarg ]
+  * syncval: Fix for 3D image
+  * syncval: Add Prior access
+  * layers: Fix sub extents
+
+  [ John Zulauf ]
+  * syncval: Fixes for attachment detection/update
+  * syncval: Add input attachment state tracking
+  * syncval: Add stage/access info to hazard messages
+
+  [ locke-lunarg ]
+  * tests: Layout Transition error test
+
+  [ John Zulauf ]
+  * docs: Add synchronization design doc
+
+  [ Bob Ellison ]
+  * scripts: update_deps retry on clone or fetch failure
+  * scripts: update copyright notice for update_deps
+
+  [ Piers Daniell ]
+  * layers: Add VK_EXT_extended_dynamic_state validation
+  * tests: Add VK_EXT_extended_dynamic_state tests
+
+  [ Timo Suoranta ]
+  * lifetimes: Fix GetPhysDeviceDisplayProp2 null derefs
+
+  [ John Zulauf ]
+  * syval: Correct assert during final layout record
+
+  [ Jonah Ryan-Davis ]
+  * Fix -Wrange-loop-construct range var copy warning
+
+  [ John Zulauf ]
+  * tests: Add test for attachment final layout tran
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.147 header
+  * build: Address VUID inconsistencies for 1.2.147
+
+  [ Tony-LunarG ]
+  * gpu: Report errors when shader instrumentation fails
+  * tests: Add ShieldTV rev b to skiplist
+
+  [ John Zupin ]
+  * control: add required versions
+
+  [ Bob Ellison ]
+  * scripts: fix update_deps retry clone
+
+  [ janharaldfredriksen-arm ]
+  * layers: Validate VK_EXT_fragment_density_map2
+  * tests: Add tests for VK_EXT_fragment_density_map2
+
+  [ Tony-LunarG ]
+  * practices: Make copies of createInfos
+
+  [ locke-lunarg ]
+  * tests: Add comment
+  * syval: Get sub extent by aspect
+
+  [ rumblehhh ]
+  * corechecks: Default init ACCELERATION_STRUCTURE_STATE members
+
+  [ Tony-LunarG ]
+  * tests: Avoid "abort, retry, ignore" dialog boxes
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.148 header
+
+  [ John Zulauf ]
+  * syncval: Add additional access info to hazard msg
+  * syncval: Add heuristic to suppress safe WAW msg
+
+  [ locke-lunarg ]
+  * syncval: Add descriptor type and image layout
+
+  [ Mark Lobodzinski ]
+  * corechecks: Check CONCURRENT_MODE against ALL pdev qfamilies
+  * tests: Add test for non-device concurrent buffer qfamily
+
+  [ John Zulauf ]
+  * syncval: Cleanup document from autogeneration
+
+  [ Tony-LunarG ]
+  * tests: Skip test if limits are very large
+
+  [ Christophe ]
+  * doc: Add links to per-feature docs
+
+  [ Jakub Okoński ]
+  * Fix timeline semaphore value difference validations on binary semaphores
+  * Simplify the guard around ValidateMaxTimelineSemaphoreValueDifference
+  * Add a test for binary semaphore value difference checks
+  * Revert "Simplify the guard around ValidateMaxTimelineSemaphoreValueDifference"
+
+  [ John Zupin ]
+  * copyright: updated for release
+
+  [ John Zulauf ]
+  * syncval: Style cleanup design/add user doc
+  * syncval: Cleanup of extraneous tags, user doc revs
+
+  [ Jeremy Hayes ]
+  * layers: Improve push constant error logging
+
+  [ Mark Lobodzinski ]
+  * chassis: Localize config and env settings handling
+  * chassis: Move layer option handling into separate files
+
+  [ sfricke-samsung ]
+  * layers: Remove AHB bindBuffer VUs
+  * tests: AHB test for bindBufferMemory
+  * layers: Fix exported AHB checking allocationSize
+  * tests: Add export AHB positive tests
+
+  [ Jeremy Hayes ]
+  * tests: Fix push-constant test
+
+  [ Jeremy Kniager ]
+  * layers: Add check for corner sampled with CtE
+  * tests: Add test for corner sampled with CtE
+
+  [ Christophe ]
+  * doc: Fix links on LunarXchange
+  * doc: Highlight Vulkan Configurator
+
+  [ Mike Schuchardt ]
+  * build: Handle glslang static lib dependency cycles
+
+  [ John Zulauf ]
+  * syncval: Update ordering/most recent hazard checks
+
+  [ Tony-LunarG ]
+  * build: Update Android known-good
+  * gpu: Add missing draw calls
+  * gpu: Add missing stages
+  * tests: Add gpu-av mesh shader test
+  * tests: Add debug printf mesh shader test
+  * tests: Add copyright to gpu tests
+
+  [ John Zupin ]
+  * control: update required headers to 1.2.148.0
+
+ -- John Zupin <john@odin>  Mon, 27 Jul 2020 17:13:58 -0600
+
 vulkan-validationlayers (1.2.141-1) unstable; urgency=medium
 
   * Initial release
