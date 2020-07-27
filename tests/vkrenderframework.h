@@ -207,7 +207,9 @@ typedef enum {
     kPixelC,
     kNexusPlayer,
     kShieldTV,
+    kShieldTVb,
     kPixel3aXL,
+    kPixel2XL,
     kMockICD,
 } PlatformType;
 
@@ -217,7 +219,9 @@ const std::unordered_map<PlatformType, std::string, std::hash<int>> vk_gpu_table
     {kPixelC, "NVIDIA Tegra X1"},
     {kNexusPlayer, "PowerVR Rogue G6430"},
     {kShieldTV, "NVIDIA Tegra X1 (nvgpu)"},
+    {kShieldTVb, "NVIDIA Tegra X1 (rev B) (nvgpu)"},
     {kPixel3aXL, "Adreno (TM) 615"},
+    {kPixel2XL, "Adreno (TM) 540"},
     {kMockICD, "Vulkan Mock Device"},
 };
 
@@ -400,6 +404,7 @@ class VkConstantBufferObj : public VkBufferObj {
 class VkRenderpassObj {
   public:
     VkRenderpassObj(VkDeviceObj *device, VkFormat format = VK_FORMAT_B8G8R8A8_UNORM);
+    VkRenderpassObj(VkDeviceObj *device, VkFormat format, bool depthStencil);
     ~VkRenderpassObj() NOEXCEPT;
     VkRenderPass handle() { return m_renderpass; }
 
@@ -414,14 +419,22 @@ class VkImageObj : public vk_testing::Image {
     bool IsCompatible(VkImageUsageFlags usages, VkFormatFeatureFlags features);
 
   public:
+    static VkImageCreateInfo ImageCreateInfo2D(uint32_t const width, uint32_t const height, uint32_t const mipLevels,
+                                               uint32_t const layers, VkFormat const format, VkFlags const usage,
+                                               VkImageTiling const requested_tiling = VK_IMAGE_TILING_LINEAR,
+                                               const std::vector<uint32_t> *queue_families = nullptr);
     void Init(uint32_t const width, uint32_t const height, uint32_t const mipLevels, VkFormat const format, VkFlags const usage,
               VkImageTiling const tiling = VK_IMAGE_TILING_LINEAR, VkMemoryPropertyFlags const reqs = 0,
               const std::vector<uint32_t> *queue_families = nullptr, bool memory = true);
+    void Init(const VkImageCreateInfo &create_info, VkMemoryPropertyFlags const reqs = 0, bool memory = true);
+
     void init(const VkImageCreateInfo *create_info);
 
     void InitNoLayout(uint32_t const width, uint32_t const height, uint32_t const mipLevels, VkFormat const format,
                       VkFlags const usage, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkMemoryPropertyFlags reqs = 0,
                       const std::vector<uint32_t> *queue_families = nullptr, bool memory = true);
+
+    void InitNoLayout(const VkImageCreateInfo &create_info, VkMemoryPropertyFlags reqs = 0, bool memory = true);
 
     //    void clear( CommandBuffer*, uint32_t[4] );
 
@@ -478,6 +491,8 @@ class VkImageObj : public vk_testing::Image {
 
     vk_testing::ImageView m_targetView;
     VkDescriptorImageInfo m_descriptorImageInfo;
+    uint32_t m_mipLevels;
+    uint32_t m_arrayLayers;
 };
 
 class VkTextureObj : public VkImageObj {

@@ -34,6 +34,7 @@
 #endif
 
 #include "layers/vk_device_profile_api_layer.h"
+#include "vk_layer_settings_ext.h"
 
 #if defined(ANDROID)
 #include <android/log.h>
@@ -163,8 +164,6 @@ static const char bindStateFragUniformShaderText[] =
     "   x = vec4(bar.y);\n"
     "}\n";
 
-void SetEnvVar(const char *env_var, const char *value);
-
 // Static arrays helper
 template <class ElementT, size_t array_size>
 size_t size(ElementT (&)[array_size]) {
@@ -274,8 +273,10 @@ class VkBestPracticesLayerTest : public VkLayerTest {
 
   protected:
     VkValidationFeatureEnableEXT enables_[1] = {VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT};
-    VkValidationFeatureDisableEXT disables_[1] = {VK_VALIDATION_FEATURE_DISABLE_ALL_EXT};
-    VkValidationFeaturesEXT features_ = {VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT, nullptr, 1, enables_, 1, disables_};
+    VkValidationFeatureDisableEXT disables_[4] = {
+        VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
+        VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT, VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
+    VkValidationFeaturesEXT features_ = {VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT, nullptr, 1, enables_, 4, disables_};
 };
 
 class VkArmBestPracticesLayerTest : public VkBestPracticesLayerTest {};
@@ -298,6 +299,17 @@ class VkDebugPrintfTest : public VkLayerTest {
     void InitDebugPrintfFramework();
 
   protected:
+};
+
+class VkSyncValTest : public VkLayerTest {
+  public:
+    void InitSyncValFramework();
+
+  protected:
+    VkValidationFeatureDisableEXT disables_[4] = {
+        VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
+        VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT, VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
+    VkValidationFeaturesEXT features_ = {VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT, nullptr, 0, nullptr, 4, disables_};
 };
 
 class VkBufferTest {
@@ -368,7 +380,8 @@ struct OneOffDescriptorSet {
     std::vector<VkWriteDescriptorSet> descriptor_writes;
 
     OneOffDescriptorSet(VkDeviceObj *device, const Bindings &bindings, VkDescriptorSetLayoutCreateFlags layout_flags = 0,
-                        void *layout_pnext = NULL, VkDescriptorPoolCreateFlags poolFlags = 0, void *allocate_pnext = NULL);
+                        void *layout_pnext = NULL, VkDescriptorPoolCreateFlags poolFlags = 0, void *allocate_pnext = NULL,
+                        int buffer_info_size = 10, int image_info_size = 10);
     ~OneOffDescriptorSet();
     bool Initialized();
     void WriteDescriptorBufferInfo(int binding, VkBuffer buffer, VkDeviceSize size,
@@ -376,7 +389,8 @@ struct OneOffDescriptorSet {
     void WriteDescriptorBufferView(int binding, VkBufferView &buffer_view,
                                    VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER);
     void WriteDescriptorImageInfo(int binding, VkImageView image_view, VkSampler sampler,
-                                  VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+                                  VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                  VkImageLayout imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     void UpdateDescriptorSets();
 };
 

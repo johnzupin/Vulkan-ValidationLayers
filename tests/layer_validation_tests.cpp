@@ -26,13 +26,8 @@
 #include "cast_utils.h"
 #include "layer_validation_tests.h"
 
-void SetEnvVar(const char *env_var, const char *value) {
-#if defined(_WIN32)
-    SetEnvironmentVariable(env_var, value);
-#else
-    setenv(env_var, value, true);
-#endif
-}
+// Global list of sType,size identifiers
+std::vector<std::pair<uint32_t, uint32_t>> custom_stype_info{};
 
 VkFormat FindSupportedDepthOnlyFormat(VkPhysicalDevice phy) {
     const VkFormat ds_formats[] = {VK_FORMAT_D16_UNORM, VK_FORMAT_X8_D24_UNORM_PACK32, VK_FORMAT_D32_SFLOAT};
@@ -1287,10 +1282,12 @@ void VkVerticesObj::BindVertexBuffers(VkCommandBuffer aCommandBuffer, unsigned a
 
 OneOffDescriptorSet::OneOffDescriptorSet(VkDeviceObj *device, const Bindings &bindings,
                                          VkDescriptorSetLayoutCreateFlags layout_flags, void *layout_pnext,
-                                         VkDescriptorPoolCreateFlags poolFlags, void *allocate_pnext)
+                                         VkDescriptorPoolCreateFlags poolFlags, void *allocate_pnext, int buffer_info_size,
+                                         int image_info_size)
     : device_{device}, pool_{}, layout_(device, bindings, layout_flags, layout_pnext), set_{} {
     VkResult err;
-
+    buffer_infos.reserve(buffer_info_size);
+    image_infos.reserve(image_info_size);
     std::vector<VkDescriptorPoolSize> sizes;
     for (const auto &b : bindings) sizes.push_back({b.descriptorType, std::max(1u, b.descriptorCount)});
 
@@ -1320,7 +1317,6 @@ void OneOffDescriptorSet::WriteDescriptorBufferInfo(int blinding, VkBuffer buffe
     buffer_info.offset = 0;
     buffer_info.range = size;
     buffer_infos.emplace_back(buffer_info);
-    size_t index = buffer_infos.size() - 1;
 
     VkWriteDescriptorSet descriptor_write;
     memset(&descriptor_write, 0, sizeof(descriptor_write));
@@ -1329,7 +1325,7 @@ void OneOffDescriptorSet::WriteDescriptorBufferInfo(int blinding, VkBuffer buffe
     descriptor_write.dstBinding = blinding;
     descriptor_write.descriptorCount = 1;
     descriptor_write.descriptorType = descriptorType;
-    descriptor_write.pBufferInfo = &buffer_infos[index];
+    descriptor_write.pBufferInfo = &buffer_infos.back();
     descriptor_write.pImageInfo = nullptr;
     descriptor_write.pTexelBufferView = nullptr;
 
@@ -1352,13 +1348,12 @@ void OneOffDescriptorSet::WriteDescriptorBufferView(int blinding, VkBufferView &
 }
 
 void OneOffDescriptorSet::WriteDescriptorImageInfo(int blinding, VkImageView image_view, VkSampler sampler,
-                                                   VkDescriptorType descriptorType) {
+                                                   VkDescriptorType descriptorType, VkImageLayout imageLayout) {
     VkDescriptorImageInfo image_info = {};
     image_info.imageView = image_view;
     image_info.sampler = sampler;
-    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_info.imageLayout = imageLayout;
     image_infos.emplace_back(image_info);
-    size_t index = image_infos.size() - 1;
 
     VkWriteDescriptorSet descriptor_write;
     memset(&descriptor_write, 0, sizeof(descriptor_write));
@@ -1367,7 +1362,7 @@ void OneOffDescriptorSet::WriteDescriptorImageInfo(int blinding, VkImageView ima
     descriptor_write.dstBinding = blinding;
     descriptor_write.descriptorCount = 1;
     descriptor_write.descriptorType = descriptorType;
-    descriptor_write.pImageInfo = &image_infos[index];
+    descriptor_write.pImageInfo = &image_infos.back();
     descriptor_write.pBufferInfo = nullptr;
     descriptor_write.pTexelBufferView = nullptr;
 
@@ -2025,11 +2020,14 @@ bool InitFrameworkForRayTracingTest(VkRenderFramework *renderFramework, bool isK
     }
 
     VkValidationFeatureEnableEXT enables[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT};
-    VkValidationFeatureDisableEXT disables[] = {VK_VALIDATION_FEATURE_DISABLE_ALL_EXT};
+    VkValidationFeatureDisableEXT disables[] = {
+        VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
+        VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT, VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
     VkValidationFeaturesEXT features = {};
     features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
     features.enabledValidationFeatureCount = 1;
     features.pEnabledValidationFeatures = enables;
+    features.disabledValidationFeatureCount = 4;
     features.pDisabledValidationFeatures = disables;
 
     VkValidationFeaturesEXT *enabled_features = need_gpu_validation ? &features : nullptr;
@@ -2118,12 +2116,14 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     }
 
     VkValidationFeatureEnableEXT validation_feature_enables[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT};
-    VkValidationFeatureDisableEXT validation_feature_disables[] = {VK_VALIDATION_FEATURE_DISABLE_ALL_EXT};
+    VkValidationFeatureDisableEXT validation_feature_disables[] = {
+        VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
+        VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT, VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
     VkValidationFeaturesEXT validation_features = {};
     validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
     validation_features.enabledValidationFeatureCount = 1;
     validation_features.pEnabledValidationFeatures = validation_feature_enables;
-    validation_features.disabledValidationFeatureCount = 1;
+    validation_features.disabledValidationFeatureCount = 4;
     validation_features.pDisabledValidationFeatures = validation_feature_disables;
     bool descriptor_indexing = CheckDescriptorIndexingSupportAndInitFramework(
         this, m_instance_extension_names, m_device_extension_names, gpu_assisted ? &validation_features : nullptr, m_errorMonitor);
@@ -2327,7 +2327,7 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     storage_buffer.init(*m_device, storage_buffer_size, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, {ray_tracing_queue_family_index});
 
-    VkDeviceSize shader_binding_table_buffer_size = ray_tracing_properties.shaderGroupHandleSize * 4ull;
+    VkDeviceSize shader_binding_table_buffer_size = ray_tracing_properties.shaderGroupBaseAlignment * 4ull;
     VkBufferObj shader_binding_table_buffer;
     shader_binding_table_buffer.init(*m_device, shader_binding_table_buffer_size,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -3085,11 +3085,60 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
                              shader_binding_table_buffer.handle(), ray_tracing_properties.shaderGroupBaseAlignment,
                              ray_tracing_properties.shaderGroupHandleSize,
                              /*width=*/1, /*height=*/1, /*depth=*/1);
+
             m_errorMonitor->VerifyFound();
+            const auto &limits = m_device->props.limits;
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdTraceRaysNV-width-02469");
+            uint32_t invalid_width = limits.maxComputeWorkGroupCount[0] + 1;
+            vkCmdTraceRaysNV(ray_tracing_command_buffer.handle(), shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment * 0ull, shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment * 1ull, ray_tracing_properties.shaderGroupHandleSize,
+                             shader_binding_table_buffer.handle(), ray_tracing_properties.shaderGroupBaseAlignment * 2ull,
+                             ray_tracing_properties.shaderGroupHandleSize, shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment, ray_tracing_properties.shaderGroupHandleSize,
+                             /*width=*/invalid_width, /*height=*/1, /*depth=*/1);
+            m_errorMonitor->VerifyFound();
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdTraceRaysNV-height-02470");
+            uint32_t invalid_height = limits.maxComputeWorkGroupCount[1] + 1;
+            vkCmdTraceRaysNV(ray_tracing_command_buffer.handle(), shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment * 0ull, shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment * 1ull, ray_tracing_properties.shaderGroupHandleSize,
+                             shader_binding_table_buffer.handle(), ray_tracing_properties.shaderGroupBaseAlignment * 2ull,
+                             ray_tracing_properties.shaderGroupHandleSize, shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment, ray_tracing_properties.shaderGroupHandleSize,
+                             /*width=*/1, /*height=*/invalid_height, /*depth=*/1);
+            m_errorMonitor->VerifyFound();
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdTraceRaysNV-depth-02471");
+            uint32_t invalid_depth = limits.maxComputeWorkGroupCount[2] + 1;
+            vkCmdTraceRaysNV(ray_tracing_command_buffer.handle(), shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment * 0ull, shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment * 1ull, ray_tracing_properties.shaderGroupHandleSize,
+                             shader_binding_table_buffer.handle(), ray_tracing_properties.shaderGroupBaseAlignment * 2ull,
+                             ray_tracing_properties.shaderGroupHandleSize, shader_binding_table_buffer.handle(),
+                             ray_tracing_properties.shaderGroupBaseAlignment, ray_tracing_properties.shaderGroupHandleSize,
+                             /*width=*/1, /*height=*/1, /*depth=*/invalid_depth);
+            m_errorMonitor->VerifyFound();
+
             ray_tracing_command_buffer.end();
         }
         vk::DestroyPipeline(m_device->handle(), pipeline, nullptr);
     }
+}
+
+void VkSyncValTest::InitSyncValFramework() {
+    // Enable synchronization validation
+    VkLayerSettingValueDataEXT sy_setting_string_value{};
+    sy_setting_string_value.arrayString.pCharArray = "VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION";
+    sy_setting_string_value.arrayString.count = sizeof(sy_setting_string_value.arrayString.pCharArray);
+    VkLayerSettingValueEXT sy_vendor_all_setting_val = {"enables", VK_LAYER_SETTING_VALUE_TYPE_STRING_ARRAY_EXT,
+                                                        sy_setting_string_value};
+    VkLayerSettingsEXT sy_settings{static_cast<VkStructureType>(VK_STRUCTURE_TYPE_INSTANCE_LAYER_SETTINGS_EXT), nullptr, 1,
+                                   &sy_vendor_all_setting_val};
+    features_.pNext = &sy_settings;
+    InitFramework(m_errorMonitor, &features_);
 }
 
 void print_android(const char *c) {
@@ -3293,9 +3342,13 @@ void android_main(struct android_app *app) {
 int main(int argc, char **argv) {
     int result;
 
-#if defined(_WIN32) && !defined(NDEBUG)
+#if defined(_WIN32)
+#if !defined(NDEBUG)
     _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
+    // Avoid "Abort, Retry, Ignore" dialog boxes
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
 
     ::testing::InitGoogleTest(&argc, argv);

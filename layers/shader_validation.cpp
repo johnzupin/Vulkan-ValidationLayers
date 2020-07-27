@@ -833,7 +833,8 @@ static std::vector<std::pair<uint32_t, interface_var>> CollectInterfaceByInputAt
     return out;
 }
 
-static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, uint32_t type_id, bool is_storage_buffer) {
+static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, const spirv_inst_iter &id_it, bool is_storage_buffer) {
+    uint32_t type_id = id_it.word(1);
     auto type = module->get_def(type_id);
 
     // Strip off any array or ptrs. Where we remove array levels, adjust the  descriptor count for each dimension.
@@ -844,12 +845,57 @@ static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, uint32_t
             type = module->get_def(type.word(3));  // Pointee type
         }
     }
-
     switch (type.opcode()) {
         case spv::OpTypeImage: {
             auto dim = type.word(3);
             auto sampled = type.word(7);
-            return sampled == 2 && dim != spv::DimSubpassData;
+            if (sampled == 2 && dim != spv::DimSubpassData) {
+                std::vector<unsigned> imagwrite_members;
+                std::unordered_map<unsigned, unsigned> load_members;
+                std::unordered_map<unsigned, unsigned> accesschain_members;
+                unsigned int id = id_it.word(2);
+
+                for (auto insn : *module) {
+                    switch (insn.opcode()) {
+                        case spv::OpImageWrite: {
+                            imagwrite_members.emplace_back(insn.word(1));  // Load id
+                            break;
+                        }
+                        case spv::OpLoad: {
+                            // 2: Load id, 3: object id or AccessChain id
+                            load_members.insert(std::make_pair(insn.word(2), insn.word(3)));
+                            break;
+                        }
+                        case spv::OpAccessChain: {
+                            // 2: AccessChain id, 3: object id
+                            if (insn.word(3) == id) {
+                                accesschain_members.insert(std::make_pair(insn.word(2), insn.word(3)));
+                            }
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+                }
+                if (imagwrite_members.empty() || load_members.empty()) {
+                    return false;
+                }
+                for (auto load_id : imagwrite_members) {
+                    auto load_it = load_members.find(load_id);
+                    if (load_it == load_members.end()) {
+                        continue;
+                    }
+                    if (load_it->second == id) {
+                        return true;
+                    }
+                    auto accesschain_it = accesschain_members.find(load_it->second);
+                    if (accesschain_it == accesschain_members.end()) {
+                        continue;
+                    }
+                    return true;
+                }
+            }
+            return false;
         }
 
         case spv::OpTypeStruct: {
@@ -864,7 +910,44 @@ static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, uint32_t
 
             // A buffer is writable if it's either flavor of storage buffer, and has any member not decorated
             // as nonwritable.
-            return is_storage_buffer && nonwritable_members.size() != type.len() - 2;
+            if (is_storage_buffer && nonwritable_members.size() != type.len() - 2) {
+                std::vector<unsigned> store_members;
+                std::unordered_map<unsigned, unsigned> accesschain_members;
+                unsigned int id = id_it.word(2);
+
+                for (auto insn : *module) {
+                    switch (insn.opcode()) {
+                        case spv::OpStore:
+                        case spv::OpAtomicStore: {
+                            if (insn.word(1) == id) {
+                                return true;
+                            }
+                            store_members.emplace_back(insn.word(1));  // object id or AccessChain id
+                            break;
+                        }
+                        case spv::OpAccessChain: {
+                            // 2: AccessChain id, 3: object id
+                            if (insn.word(3) == id) {
+                                accesschain_members.insert(std::make_pair(insn.word(2), insn.word(3)));
+                            }
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+                }
+                if (store_members.empty() || accesschain_members.empty()) {
+                    return false;
+                }
+                for (auto oid : store_members) {
+                    auto accesschain_it = accesschain_members.find(oid);
+                    if (accesschain_it == accesschain_members.end()) {
+                        continue;
+                    }
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -889,16 +972,72 @@ std::vector<std::pair<descriptor_slot_t, interface_var>> CollectInterfaceByDescr
             interface_var v = {};
             v.id = insn.word(2);
             v.type_id = insn.word(1);
-            out.emplace_back(std::make_pair(set, binding), v);
+            v.is_writable = false;
 
             if (!(d.flags & decoration_set::nonwritable_bit) &&
-                IsWritableDescriptorType(src, insn.word(1), insn.word(3) == spv::StorageClassStorageBuffer)) {
+                IsWritableDescriptorType(src, insn, insn.word(3) == spv::StorageClassStorageBuffer)) {
                 *has_writable_descriptor = true;
+                v.is_writable = true;
             }
+            out.emplace_back(std::make_pair(set, binding), v);
         }
     }
 
     return out;
+}
+
+std::unordered_set<uint32_t> CollectWritableOutputLocationinFS(const SHADER_MODULE_STATE &module,
+                                                               const VkPipelineShaderStageCreateInfo &stage_info) {
+    std::unordered_set<uint32_t> location_list;
+    if (stage_info.stage != VK_SHADER_STAGE_FRAGMENT_BIT) return location_list;
+    const auto entrypoint = FindEntrypoint(&module, stage_info.pName, stage_info.stage);
+    const auto outputs = CollectInterfaceByLocation(&module, entrypoint, spv::StorageClassOutput, false);
+    std::unordered_set<unsigned> store_members;
+    std::unordered_map<unsigned, unsigned> accesschain_members;
+
+    for (auto insn : module) {
+        switch (insn.opcode()) {
+            case spv::OpStore:
+            case spv::OpAtomicStore: {
+                store_members.insert(insn.word(1));  // object id or AccessChain id
+                break;
+            }
+            case spv::OpAccessChain: {
+                // 2: AccessChain id, 3: object id
+                if (insn.word(3)) accesschain_members.insert(std::make_pair(insn.word(2), insn.word(3)));
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    if (store_members.empty()) {
+        return location_list;
+    }
+    for (auto output : outputs) {
+        auto store_it = store_members.find(output.second.id);
+        if (store_it != store_members.end()) {
+            location_list.insert(output.first.first);
+            store_members.erase(store_it);
+            continue;
+        }
+        store_it = store_members.begin();
+        while (store_it != store_members.end()) {
+            auto accesschain_it = accesschain_members.find(*store_it);
+            if (accesschain_it == accesschain_members.end()) {
+                ++store_it;
+                continue;
+            }
+            if (accesschain_it->second == output.second.id) {
+                location_list.insert(output.first.first);
+                store_members.erase(store_it);
+                accesschain_members.erase(accesschain_it);
+                break;
+            }
+            ++store_it;
+        }
+    }
+    return location_list;
 }
 
 bool CoreChecks::ValidateViConsistency(VkPipelineVertexInputStateCreateInfo const *vi) const {
@@ -1267,8 +1406,9 @@ bool CoreChecks::ValidatePushConstantBlockAgainstPipeline(std::vector<VkPushCons
     for (auto insn : *src) {
         if (insn.opcode() == spv::OpMemberDecorate && insn.word(1) == type.word(1)) {
             if (insn.word(3) == spv::DecorationOffset) {
-                unsigned offset = insn.word(4);
-                auto size = 4;  // Bytes; TODO: calculate this based on the type
+                auto const member = insn.word(2);
+                auto const offset = insn.word(4);
+                auto const size = 4;  // Bytes; TODO: calculate this based on the type
 
                 bool found_range = false;
                 for (auto const &range : *push_constant_ranges) {
@@ -1282,7 +1422,8 @@ bool CoreChecks::ValidatePushConstantBlockAgainstPipeline(std::vector<VkPushCons
 
                 if (!found_range) {
                     skip |= LogError(device, kVUID_Core_Shader_PushConstantOutOfRange,
-                                     "Push constant range covering variable starting at offset %u not declared in layout", offset);
+                                     "Shader push-constant buffer member %u at offset %u is not declared in pipeline layout",
+                                     member, offset);
                 }
             }
         }
@@ -2910,13 +3051,7 @@ bool CoreChecks::ValidatePipelineShaderStage(VkPipelineShaderStageCreateInfo con
         }
 
         // Apply the specialization-constant values and revalidate the shader module.
-        spv_target_env spirv_environment;
-        if (api_version >= VK_API_VERSION_1_2)
-            spirv_environment = SPV_ENV_VULKAN_1_2;
-        else if (api_version >= VK_API_VERSION_1_1)
-            spirv_environment = SPV_ENV_VULKAN_1_1;
-        else
-            spirv_environment = SPV_ENV_VULKAN_1_0;
+        spv_target_env spirv_environment = PickSpirvEnv(api_version, (device_extensions.vk_khr_spirv_1_4 != kNotEnabled));
         spvtools::Optimizer optimizer(spirv_environment);
         spvtools::MessageConsumer consumer = [&skip, &module, &pStage, this](spv_message_level_t level, const char *source,
                                                                              const spv_position_t &position, const char *message) {
@@ -3387,16 +3522,7 @@ bool CoreChecks::PreCallValidateCreateShaderModule(VkDevice device, const VkShad
 
         // Use SPIRV-Tools validator to try and catch any issues with the module itself. If specialization constants are present,
         // the default values will be used during validation.
-        spv_target_env spirv_environment = SPV_ENV_VULKAN_1_0;
-        if (api_version >= VK_API_VERSION_1_2) {
-            spirv_environment = SPV_ENV_VULKAN_1_2;
-        } else if (api_version >= VK_API_VERSION_1_1) {
-            if (device_extensions.vk_khr_spirv_1_4) {
-                spirv_environment = SPV_ENV_VULKAN_1_1_SPIRV_1_4;
-            } else {
-                spirv_environment = SPV_ENV_VULKAN_1_1;
-            }
-        }
+        spv_target_env spirv_environment = PickSpirvEnv(api_version, (device_extensions.vk_khr_spirv_1_4 != kNotEnabled));
         spv_context ctx = spvContextCreate(spirv_environment);
         spv_const_binary_t binary{pCreateInfo->pCode, pCreateInfo->codeSize / sizeof(uint32_t)};
         spv_diagnostic diag = nullptr;
@@ -3483,4 +3609,17 @@ bool CoreChecks::ValidateComputeWorkGroupSizes(const SHADER_MODULE_STATE *shader
         }
     }
     return skip;
+}
+
+spv_target_env PickSpirvEnv(uint32_t api_version, bool spirv_1_4) {
+    if (api_version >= VK_API_VERSION_1_2) {
+        return SPV_ENV_VULKAN_1_2;
+    } else if (api_version >= VK_API_VERSION_1_1) {
+        if (spirv_1_4) {
+            return SPV_ENV_VULKAN_1_1_SPIRV_1_4;
+        } else {
+            return SPV_ENV_VULKAN_1_1;
+        }
+    }
+    return SPV_ENV_VULKAN_1_0;
 }

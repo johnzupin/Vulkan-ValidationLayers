@@ -35,6 +35,7 @@
 
 // clang-format off
 
+static const char DECORATE_UNUSED *kVUID_Core_Bound_Resource_FreedMemoryAccess = "UNASSIGNED-CoreValidation-BoundResourceFreedMemoryAccess";
 static const char DECORATE_UNUSED *kVUID_Core_MemTrack_FenceState = "UNASSIGNED-CoreValidation-MemTrack-FenceState";
 static const char DECORATE_UNUSED *kVUID_Core_MemTrack_InvalidMap = "UNASSIGNED-CoreValidation-MemTrack-InvalidMap";
 static const char DECORATE_UNUSED *kVUID_Core_MemTrack_InvalidState = "UNASSIGNED-CoreValidation-MemTrack-InvalidState";
@@ -253,6 +254,9 @@ static const char DECORATE_UNUSED *kVUID_Core_CmdBuildAccelNV_NoUpdateMemReqQuer
 
 static const char DECORATE_UNUSED *kVUID_Core_CreatInstance_Status = "UNASSIGNED-khronos-validation-createinstance-status-message";
 static const char DECORATE_UNUSED *kVUID_Core_CreateInstance_Debug_Warning = "UNASSIGNED-khronos-Validation-debug-build-warning-message";
+
+static const char DECORATE_UNUSED *kVUID_Core_ImageMemoryBarrier_SharingModeExclusiveSameFamily = "UNASSIGNED-CoreValidation-vkImageMemoryBarrier-sharing-mode-exclusive-same-family";
+static const char DECORATE_UNUSED *kVUID_Core_BufferMemoryBarrier_SharingModeExclusiveSameFamily = "UNASSIGNED-CoreValidation-vkBufferMemoryBarrier-sharing-mode-exclusive-same-family";
 
 // clang-format on
 

@@ -18,8 +18,14 @@
 
 void VkBestPracticesLayerTest::InitBestPracticesFramework() {
     // Enable all vendor-specific checks
-    SetEnvVar("VK_LAYER_ENABLES", "VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ALL");
-
+    VkLayerSettingValueDataEXT bp_setting_string_value{};
+    bp_setting_string_value.arrayString.pCharArray = "VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ALL";
+    bp_setting_string_value.arrayString.count = sizeof(bp_setting_string_value.arrayString.pCharArray);
+    VkLayerSettingValueEXT bp_vendor_all_setting_val = {"enables", VK_LAYER_SETTING_VALUE_TYPE_STRING_ARRAY_EXT,
+                                                        bp_setting_string_value};
+    VkLayerSettingsEXT bp_settings{static_cast<VkStructureType>(VK_STRUCTURE_TYPE_INSTANCE_LAYER_SETTINGS_EXT), nullptr, 1,
+                                   &bp_vendor_all_setting_val};
+    features_.pNext = &bp_settings;
     InitFramework(m_errorMonitor, &features_);
 }
 
@@ -477,6 +483,12 @@ TEST_F(VkBestPracticesLayerTest, AttachmentShouldNotBeTransient) {
     InitBestPracticesFramework();
     InitState();
 
+    if (IsPlatform(kPixel2XL) || IsPlatform(kPixel3) || IsPlatform(kPixel3aXL) || IsPlatform(kShieldTV) || IsPlatform(kShieldTVb) ||
+        IsPlatform(kNexusPlayer)) {
+        printf("%s This test seems super-picky on Android platforms\n", kSkipPrefix);
+        return;
+    }
+
     m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
                                          "UNASSIGNED-BestPractices-vkCreateFramebuffer-attachment-should-not-be-transient");
 
@@ -796,6 +808,10 @@ TEST_F(VkArmBestPracticesLayerTest, ManySmallIndexedDrawcalls) {
     InitBestPracticesFramework();
     InitState();
 
+    if (IsPlatform(kNexusPlayer) || IsPlatform(kShieldTV) || IsPlatform(kShieldTVb)) {
+        return;
+    }
+
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
                                          "UNASSIGNED-BestPractices-vkCmdDrawIndexed-many-small-indexed-drawcalls");
 
@@ -1066,4 +1082,317 @@ TEST_F(VkArmBestPracticesLayerTest, PostTransformVertexCacheThrashingIndicesTest
     m_commandBuffer->DrawIndexed(best_indices.size(), 0, 0, 0, 0);
     m_errorMonitor->VerifyNotFound();
     best_ibo.memory().unmap();
+}
+
+TEST_F(VkBestPracticesLayerTest, TripleBufferingTest) {
+    TEST_DESCRIPTION("Test for usage of triple buffering");
+
+    AddSurfaceInstanceExtension();
+    InitBestPracticesFramework();
+    AddSwapchainDeviceExtension();
+    InitState();
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+                                         "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-suboptimal-swapchain-image-count");
+    InitSurface();
+    VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    VkSurfaceCapabilitiesKHR capabilities;
+    vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_device->phy().handle(), m_surface, &capabilities);
+
+    uint32_t format_count;
+    vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), m_surface, &format_count, nullptr);
+    vector<VkSurfaceFormatKHR> formats;
+    if (format_count != 0) {
+        formats.resize(format_count);
+        vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), m_surface, &format_count, formats.data());
+    }
+
+    uint32_t present_mode_count;
+    vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), m_surface, &present_mode_count, nullptr);
+    vector<VkPresentModeKHR> present_modes;
+    if (present_mode_count != 0) {
+        present_modes.resize(present_mode_count);
+        vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), m_surface, &present_mode_count, present_modes.data());
+    }
+
+    VkSwapchainCreateInfoKHR swapchain_create_info = {};
+    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchain_create_info.pNext = 0;
+    swapchain_create_info.surface = m_surface;
+    swapchain_create_info.minImageCount = 2;
+    swapchain_create_info.imageFormat = formats[0].format;
+    swapchain_create_info.imageColorSpace = formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {capabilities.minImageExtent.width, capabilities.minImageExtent.height};
+    swapchain_create_info.imageArrayLayers = 1;
+    swapchain_create_info.imageUsage = imageUsage;
+    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_create_info.preTransform = preTransform;
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+#else
+    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+#endif
+    swapchain_create_info.presentMode = present_modes[0];
+    swapchain_create_info.clipped = VK_FALSE;
+    swapchain_create_info.oldSwapchain = 0;
+
+    VkResult err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+                                         "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-suboptimal-swapchain-image-count");
+    swapchain_create_info.minImageCount = 3;
+    err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+    m_errorMonitor->VerifyNotFound();
+    ASSERT_VK_SUCCESS(err)
+    DestroySwapchain();
+}
+
+TEST_F(VkArmBestPracticesLayerTest, PresentModeTest) {
+    TEST_DESCRIPTION("Test for usage of Presentation Modes");
+
+    AddSurfaceInstanceExtension();
+    InitBestPracticesFramework();
+    AddSwapchainDeviceExtension();
+    InitState();
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_WARNING_BIT_EXT,
+                                         "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-swapchain-presentmode-not-fifo");
+    InitSurface();
+    VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    VkSurfaceCapabilitiesKHR capabilities;
+    vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_device->phy().handle(), m_surface, &capabilities);
+
+    uint32_t format_count;
+    vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), m_surface, &format_count, nullptr);
+    vector<VkSurfaceFormatKHR> formats;
+    if (format_count != 0) {
+        formats.resize(format_count);
+        vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), m_surface, &format_count, formats.data());
+    }
+
+    uint32_t present_mode_count;
+    vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), m_surface, &present_mode_count, nullptr);
+    vector<VkPresentModeKHR> present_modes;
+    if (present_mode_count != 0) {
+        present_modes.resize(present_mode_count);
+        vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), m_surface, &present_mode_count, present_modes.data());
+    }
+
+    VkSwapchainCreateInfoKHR swapchain_create_info = {};
+    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchain_create_info.pNext = 0;
+    swapchain_create_info.surface = m_surface;
+    swapchain_create_info.minImageCount = capabilities.minImageCount;
+    swapchain_create_info.imageFormat = formats[0].format;
+    swapchain_create_info.imageColorSpace = formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {capabilities.minImageExtent.width, capabilities.minImageExtent.height};
+    swapchain_create_info.imageArrayLayers = 1;
+    swapchain_create_info.imageUsage = imageUsage;
+    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_create_info.preTransform = preTransform;
+    swapchain_create_info.clipped = VK_FALSE;
+    swapchain_create_info.oldSwapchain = 0;
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+#else
+    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+#endif
+    if (present_modes.size() <= 1) {
+        printf("TEST SKIPPED: Only %i presentation mode is available!", int(present_modes.size()));
+        return;
+    }
+
+    for (size_t i = 0; i < present_modes.size(); i++) {
+        if (present_modes[i] != VK_PRESENT_MODE_FIFO_KHR) {
+            swapchain_create_info.presentMode = present_modes[i];
+            break;
+        }
+    }
+
+    VkResult err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_WARNING_BIT_EXT,
+                                         "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-swapchain-presentmode-not-fifo");
+    swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+    m_errorMonitor->VerifyNotFound();
+    ASSERT_VK_SUCCESS(err)
+    DestroySwapchain();
+}
+
+TEST_F(VkArmBestPracticesLayerTest, PipelineDepthBiasZeroTest) {
+    TEST_DESCRIPTION("Test for unnecessary rasterization due to using 0 for depthBiasConstantFactor and depthBiasSlopeFactor");
+
+    InitBestPracticesFramework();
+    InitState();
+    ASSERT_NO_FATAL_FAILURE(InitViewport());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.rs_state_ci_.depthBiasEnable = VK_TRUE;
+    pipe.rs_state_ci_.depthBiasConstantFactor = 0.0f;
+    pipe.rs_state_ci_.depthBiasSlopeFactor = 0.0f;
+    pipe.InitState();
+
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+                                         "UNASSIGNED-BestPractices-vkCreatePipelines-depthbias-zero");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
+
+    pipe.rs_state_ci_.depthBiasEnable = VK_FALSE;
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+                                         "UNASSIGNED-BestPractices-vkCreatePipelines-depthbias-zero");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkArmBestPracticesLayerTest, RobustBufferAccessTest) {
+    TEST_DESCRIPTION("Test for appropriate warnings to be thrown when robustBufferAccess is enabled.");
+
+    InitBestPracticesFramework();
+
+    VkDevice local_device;
+    VkDeviceQueueCreateInfo queue_info = {};
+    queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_info.pNext = nullptr;
+    queue_info.queueFamilyIndex = 0;
+    queue_info.queueCount = 1;
+    queue_info.pQueuePriorities = nullptr;
+    VkDeviceCreateInfo dev_info = {};
+    dev_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    dev_info.pNext = nullptr;
+    dev_info.queueCreateInfoCount = 1;
+    dev_info.pQueueCreateInfos = &queue_info;
+    dev_info.enabledLayerCount = 0;
+    dev_info.ppEnabledLayerNames = nullptr;
+    dev_info.enabledExtensionCount = m_device_extension_names.size();
+    dev_info.ppEnabledExtensionNames = m_device_extension_names.data();
+
+    VkPhysicalDeviceFeatures supported_features;
+    vk::GetPhysicalDeviceFeatures(this->gpu(), &supported_features);
+    if (supported_features.robustBufferAccess) {
+        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+                                             "UNASSIGNED-BestPractices-vkCreateDevice-RobustBufferAccess");
+        VkPhysicalDeviceFeatures device_features = {};
+        device_features.robustBufferAccess = VK_TRUE;
+        dev_info.pEnabledFeatures = &device_features;
+        vk::CreateDevice(this->gpu(), &dev_info, nullptr, &local_device);
+        m_errorMonitor->VerifyFound();
+    } else {
+        printf("%s robustBufferAccess is not available, skipping test\n", kSkipPrefix);
+        return;
+    }
+}
+
+TEST_F(VkArmBestPracticesLayerTest, DepthPrePassUsage) {
+    InitBestPracticesFramework();
+    InitState();
+
+    if (IsPlatform(kNexusPlayer)) {
+        printf("%s This test crashes on the NexusPlayer platform\n", kSkipPrefix);
+        return;
+    }
+
+    InitRenderTarget();
+
+    VkAttachmentDescription attachment{};
+    attachment.samples = VK_SAMPLE_COUNT_4_BIT;
+    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkRenderPassCreateInfo rp_info{};
+    rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rp_info.attachmentCount = 1;
+    rp_info.pAttachments = &attachment;
+    rp_info.pNext = nullptr;
+
+    VkRenderPass rp = VK_NULL_HANDLE;
+    vk::CreateRenderPass(m_device->device(), &rp_info, nullptr, &rp);
+
+    // set up pipelines
+
+    VkPipelineColorBlendAttachmentState color_write_off = {};
+    VkPipelineColorBlendAttachmentState color_write_on = {};
+    color_write_on.colorWriteMask = 0xF;
+
+    VkPipelineColorBlendStateCreateInfo cb_depth_only_ci = {};
+    cb_depth_only_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    cb_depth_only_ci.attachmentCount = 1;
+    cb_depth_only_ci.pAttachments = &color_write_off;
+
+    VkPipelineColorBlendStateCreateInfo cb_depth_equal_ci = {};
+    cb_depth_equal_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    cb_depth_equal_ci.attachmentCount = 1;
+    cb_depth_equal_ci.pAttachments = &color_write_on;
+
+    VkPipelineDepthStencilStateCreateInfo ds_depth_only_ci = {};
+    ds_depth_only_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    ds_depth_only_ci.depthTestEnable = VK_TRUE;
+    ds_depth_only_ci.depthWriteEnable = VK_TRUE;
+    ds_depth_only_ci.depthCompareOp = VK_COMPARE_OP_LESS;
+
+    VkPipelineDepthStencilStateCreateInfo ds_depth_equal_ci = {};
+    ds_depth_equal_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    ds_depth_equal_ci.depthTestEnable = VK_TRUE;
+    ds_depth_equal_ci.depthWriteEnable = VK_FALSE;
+    ds_depth_equal_ci.depthCompareOp = VK_COMPARE_OP_EQUAL;
+
+    CreatePipelineHelper pipe_depth_only(*this);
+    pipe_depth_only.InitInfo();
+    pipe_depth_only.gp_ci_.pColorBlendState = &cb_depth_only_ci;
+    pipe_depth_only.gp_ci_.pDepthStencilState = &ds_depth_only_ci;
+    pipe_depth_only.InitState();
+    pipe_depth_only.CreateGraphicsPipeline();
+
+    CreatePipelineHelper pipe_depth_equal(*this);
+    pipe_depth_equal.InitInfo();
+    pipe_depth_equal.gp_ci_.pColorBlendState = &cb_depth_equal_ci;
+    pipe_depth_equal.gp_ci_.pDepthStencilState = &ds_depth_equal_ci;
+    pipe_depth_equal.InitState();
+    pipe_depth_equal.CreateGraphicsPipeline();
+
+    // create a simple index buffer
+
+    std::vector<uint32_t> indices = {};
+    indices.resize(3);
+
+    VkConstantBufferObj ibo(m_device, sizeof(uint32_t) * indices.size(), indices.data(), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BindIndexBuffer(&ibo, 0, VK_INDEX_TYPE_UINT32);
+
+    // record a command buffer which doesn't use enough depth pre-passes or geometry to matter
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_depth_only.pipeline_);
+    for (size_t i = 0; i < 30; i++) m_commandBuffer->DrawIndexed(indices.size(), 10, 0, 0, 0);
+
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_depth_equal.pipeline_);
+    for (size_t i = 0; i < 30; i++) m_commandBuffer->DrawIndexed(indices.size(), 10, 0, 0, 0);
+
+    m_commandBuffer->EndRenderPass();
+
+    m_errorMonitor->VerifyNotFound();
+
+    // record a command buffer which records a significant number of depth pre-passes
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
+                                         "UNASSIGNED-BestPractices-vkCmdEndRenderPass-depth-pre-pass-usage");
+
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_depth_only.pipeline_);
+    for (size_t i = 0; i < 30; i++) m_commandBuffer->DrawIndexed(indices.size(), 1000, 0, 0, 0);
+
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_depth_equal.pipeline_);
+    for (size_t i = 0; i < 30; i++) m_commandBuffer->DrawIndexed(indices.size(), 1000, 0, 0, 0);
+
+    m_commandBuffer->EndRenderPass();
+
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->end();
 }

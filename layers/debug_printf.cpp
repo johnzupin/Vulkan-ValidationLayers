@@ -87,7 +87,9 @@ void DebugPrintf::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     VkDescriptorSetLayoutBinding binding = {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
-                                            VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | kShaderStageAllRayTracing,
+                                            VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_MESH_BIT_NV |
+                                                VK_SHADER_STAGE_TASK_BIT_NV | VK_SHADER_STAGE_COMPUTE_BIT |
+                                                kShaderStageAllRayTracing,
                                             NULL};
     bindings.push_back(binding);
     UtilPostCallRecordCreateDevice(pCreateInfo, bindings, device_debug_printf, device_debug_printf->phys_dev_props);
@@ -262,8 +264,22 @@ bool DebugPrintf::InstrumentShader(const VkShaderModuleCreateInfo *pCreateInfo, 
     // Use the unique_shader_module_id as a shader ID so we can look up its handle later in the shader_map.
     // If descriptor indexing is enabled, enable length checks and updated descriptor checks
     using namespace spvtools;
-    spv_target_env target_env = SPV_ENV_VULKAN_1_1;
+    spv_target_env target_env = PickSpirvEnv(api_version, (device_extensions.vk_khr_spirv_1_4 != kNotEnabled));
     Optimizer optimizer(target_env);
+    const spvtools::MessageConsumer DebugPrintfConsoleMessageConsumer =
+        [this](spv_message_level_t level, const char *, const spv_position_t &position, const char *message) -> void {
+        switch (level) {
+            case SPV_MSG_FATAL:
+            case SPV_MSG_INTERNAL_ERROR:
+            case SPV_MSG_ERROR:
+                this->LogError(this->device, "UNASSIGNED-Debug-Printf", "Error during shader instrumentation: line %zu: %s",
+                               position.index, message);
+                break;
+            default:
+                break;
+        }
+    };
+    optimizer.SetMessageConsumer(DebugPrintfConsoleMessageConsumer);
     optimizer.RegisterPass(CreateInstDebugPrintfPass(desc_set_bind_index, unique_shader_module_id));
     bool pass = optimizer.Run(new_pgm.data(), new_pgm.size(), &new_pgm);
     if (!pass) {
@@ -615,6 +631,57 @@ void DebugPrintf::PreCallRecordCmdDispatch(VkCommandBuffer commandBuffer, uint32
 
 void DebugPrintf::PreCallRecordCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset) {
     AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE);
+}
+
+void DebugPrintf::PreCallRecordCmdDrawIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                       VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
+                                                       uint32_t stride) {
+    ValidationStateTracker::PreCallRecordCmdDrawIndirectCountKHR(commandBuffer, buffer, offset, countBuffer, countBufferOffset,
+                                                                 maxDrawCount, stride);
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+}
+
+void DebugPrintf::PreCallRecordCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                    VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
+                                                    uint32_t stride) {
+    ValidationStateTracker::PreCallRecordCmdDrawIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset,
+                                                              maxDrawCount, stride);
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+}
+
+void DebugPrintf::PreCallRecordCmdDrawIndexedIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                              VkBuffer countBuffer, VkDeviceSize countBufferOffset,
+                                                              uint32_t maxDrawCount, uint32_t stride) {
+    ValidationStateTracker::PreCallRecordCmdDrawIndexedIndirectCountKHR(commandBuffer, buffer, offset, countBuffer,
+                                                                        countBufferOffset, maxDrawCount, stride);
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+}
+
+void DebugPrintf::PreCallRecordCmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                           VkBuffer countBuffer, VkDeviceSize countBufferOffset,
+                                                           uint32_t maxDrawCount, uint32_t stride) {
+    ValidationStateTracker::PreCallRecordCmdDrawIndexedIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset,
+                                                                     maxDrawCount, stride);
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+}
+
+void DebugPrintf::PreCallRecordCmdDrawMeshTasksNV(VkCommandBuffer commandBuffer, uint32_t taskCount, uint32_t firstTask) {
+    ValidationStateTracker::PreCallRecordCmdDrawMeshTasksNV(commandBuffer, taskCount, firstTask);
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+}
+
+void DebugPrintf::PreCallRecordCmdDrawMeshTasksIndirectNV(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                          uint32_t drawCount, uint32_t stride) {
+    ValidationStateTracker::PreCallRecordCmdDrawMeshTasksIndirectNV(commandBuffer, buffer, offset, drawCount, stride);
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+}
+
+void DebugPrintf::PreCallRecordCmdDrawMeshTasksIndirectCountNV(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                               VkBuffer countBuffer, VkDeviceSize countBufferOffset,
+                                                               uint32_t maxDrawCount, uint32_t stride) {
+    ValidationStateTracker::PreCallRecordCmdDrawMeshTasksIndirectCountNV(commandBuffer, buffer, offset, countBuffer,
+                                                                         countBufferOffset, maxDrawCount, stride);
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 }
 
 void DebugPrintf::PreCallRecordCmdTraceRaysNV(VkCommandBuffer commandBuffer, VkBuffer raygenShaderBindingTableBuffer,

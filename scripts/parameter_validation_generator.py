@@ -67,6 +67,7 @@ class ParameterValidationGeneratorOptions(GeneratorOptions):
                  conventions = None,
                  filename = None,
                  directory = '.',
+                 genpath = None,
                  apiname = None,
                  profile = None,
                  versions = '.*',
@@ -85,9 +86,20 @@ class ParameterValidationGeneratorOptions(GeneratorOptions):
                  alignFuncParam = 0,
                  expandEnumerants = True,
                  valid_usage_path = ''):
-        GeneratorOptions.__init__(self, conventions, filename, directory, apiname, profile,
-                                  versions, emitversions, defaultExtensions,
-                                  addExtensions, removeExtensions, emitExtensions, sortProcedure)
+        GeneratorOptions.__init__(self,
+                conventions = conventions,
+                filename = filename,
+                directory = directory,
+                genpath = genpath,
+                apiname = apiname,
+                profile = profile,
+                versions = versions,
+                emitversions = emitversions,
+                defaultExtensions = defaultExtensions,
+                addExtensions = addExtensions,
+                removeExtensions = removeExtensions,
+                emitExtensions = emitExtensions,
+                sortProcedure = sortProcedure)
         self.prefixText      = prefixText
         self.apicall         = apicall
         self.apientry        = apientry
@@ -219,7 +231,10 @@ class ParameterValidationOutputGenerator(OutputGenerator):
             'vkCmdBuildAccelerationStructureIndirectKHR',
             'vkGetDeviceAccelerationStructureCompatibilityKHR',
             'vkBuildAccelerationStructureKHR',
-            'vkCmdBuildAccelerationStructureKHR'
+            'vkCmdBuildAccelerationStructureKHR',
+            'vkCmdSetViewportWithCountEXT',
+            'vkCmdSetScissorWithCountEXT',
+            'vkCmdBindVertexBuffers2EXT',
             ]
 
         # Commands to ignore

@@ -64,6 +64,7 @@ class LayerChassisDispatchGeneratorOptions(GeneratorOptions):
                  conventions = None,
                  filename = None,
                  directory = '.',
+                 genpath = None,
                  apiname = None,
                  profile = None,
                  versions = '.*',
@@ -84,9 +85,20 @@ class LayerChassisDispatchGeneratorOptions(GeneratorOptions):
                  indentFuncPointer = False,
                  alignFuncParam = 0,
                  expandEnumerants = True):
-        GeneratorOptions.__init__(self, conventions, filename, directory, apiname, profile,
-                                  versions, emitversions, defaultExtensions,
-                                  addExtensions, removeExtensions, emitExtensions, sortProcedure)
+        GeneratorOptions.__init__(self,
+                conventions = conventions,
+                filename = filename,
+                directory = directory,
+                genpath = genpath,
+                apiname = apiname,
+                profile = profile,
+                versions = versions,
+                emitversions = emitversions,
+                defaultExtensions = defaultExtensions,
+                addExtensions = addExtensions,
+                removeExtensions = removeExtensions,
+                emitExtensions = emitExtensions,
+                sortProcedure = sortProcedure)
         self.prefixText      = prefixText
         self.genFuncPointers = genFuncPointers
         self.protectFile     = protectFile
@@ -1133,9 +1145,7 @@ VkResult DispatchGetPhysicalDeviceToolPropertiesEXT(
             write('#include "chassis.h"', file=self.outFile)
             write('#include "layer_chassis_dispatch.h"', file=self.outFile)
             write('#include "vk_layer_utils.h"', file=self.outFile)
-            self.newline()
-            write('// This intentionally includes a cpp file', file=self.outFile)
-            write('#include "vk_safe_struct.cpp"', file=self.outFile)
+            write('#include "vk_safe_struct.h"', file=self.outFile)
             self.newline()
             write('ReadWriteLock dispatch_lock;', file=self.outFile)
             self.newline()

@@ -193,6 +193,17 @@ bool BestPractices::PreCallValidateCreateDevice(VkPhysicalDevice physicalDevice,
                            "vkCreateDevice() called before getting physical device features from vkGetPhysicalDeviceFeatures().");
     }
 
+    if ((VendorCheckEnabled(kBPVendorArm)) && (pCreateInfo->pEnabledFeatures != nullptr) &&
+        (pCreateInfo->pEnabledFeatures->robustBufferAccess == VK_TRUE)) {
+        skip |= LogPerformanceWarning(
+            device, kVUID_BestPractices_CreateDevice_RobustBufferAccess,
+            "%s vkCreateDevice() called with enabled robustBufferAccess. Use robustBufferAccess as a debugging tool during "
+            "development. Enabling it causes loss in performance for accesses to uniform buffers and shader storage "
+            "buffers. Disable robustBufferAccess in release builds. Only leave it enabled if the application use-case "
+            "requires the additional level of reliability due to the use of unverified user-supplied draw parameters.",
+            VendorSpecificTag(kBPVendorArm));
+    }
+
     return skip;
 }
 
@@ -282,6 +293,26 @@ bool BestPractices::PreCallValidateCreateSwapchainKHR(VkDevice device, const VkS
                        "Warning: A Swapchain is being created which specifies a sharing mode of VK_SHARING_MODE_EXCLUSIVE while "
                        "specifying multiple queues (queueFamilyIndexCount of %" PRIu32 ").",
                        pCreateInfo->queueFamilyIndexCount);
+    }
+
+    if (pCreateInfo->minImageCount == 2) {
+        skip |= LogPerformanceWarning(
+            device, kVUID_BestPractices_SuboptimalSwapchainImageCount,
+            "Warning: A Swapchain is being created with minImageCount set to %" PRIu32
+            ", which means double buffering is going "
+            "to be used. Using double buffering and vsync locks rendering to an integer fraction of the vsync rate. In turn, "
+            "reducing the performance of the application if rendering is slower than vsync. Consider setting minImageCount to "
+            "3 to use triple buffering to maximize performance in such cases.",
+            pCreateInfo->minImageCount);
+    }
+
+    if (VendorCheckEnabled(kBPVendorArm) && (pCreateInfo->presentMode != VK_PRESENT_MODE_FIFO_KHR)) {
+        skip |= LogWarning(device, kVUID_BestPractices_CreateSwapchain_PresentMode,
+                           "%s Warning: Swapchain is not being created with presentation mode \"VK_PRESENT_MODE_FIFO_KHR\". "
+                           "Prefer using \"VK_PRESENT_MODE_FIFO_KHR\" to avoid unnecessary CPU and GPU load and save power. "
+                           "Presentation modes which are not FIFO will present the latest available frame and discard other "
+                           "frame(s) if any.",
+                           VendorSpecificTag(kBPVendorArm));
     }
 
     return skip;
@@ -802,10 +833,54 @@ bool BestPractices::PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPi
             }
         }
 
+        if ((pCreateInfos[i].pRasterizationState->depthBiasEnable) &&
+            (pCreateInfos[i].pRasterizationState->depthBiasConstantFactor == 0.0f) &&
+            (pCreateInfos[i].pRasterizationState->depthBiasSlopeFactor == 0.0f)) {
+            skip |= VendorCheckEnabled(kBPVendorArm) &&
+                    LogPerformanceWarning(
+                        device, kVUID_BestPractices_CreatePipelines_DepthBias_Zero,
+                        "%s Performance Warning: This vkCreateGraphicsPipelines call is created with depthBiasEnable set to true "
+                        "and both depthBiasConstantFactor and depthBiasSlopeFactor are set to 0. This can cause reduced "
+                        "efficiency during rasterization. Consider disabling depthBias or increasing either "
+                        "depthBiasConstantFactor or depthBiasSlopeFactor.",
+                        VendorSpecificTag(kBPVendorArm));
+        }
+
         skip |= VendorCheckEnabled(kBPVendorArm) && ValidateMultisampledBlendingArm(createInfoCount, pCreateInfos);
     }
 
     return skip;
+}
+
+void BestPractices::ManualPostCallRecordCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
+                                                                const VkGraphicsPipelineCreateInfo* pCreateInfos,
+                                                                const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
+                                                                VkResult result, void* cgpl_state_data) {
+    for (size_t i = 0; i < count; i++) {
+        const auto* cgpl_state = reinterpret_cast<create_graphics_pipeline_api_state*>(cgpl_state_data);
+        const VkPipeline pipeline_handle = pPipelines[i];
+
+        // record depth stencil state and color blend states for depth pre-pass tracking purposes
+        auto gp_cis = graphicsPipelineCIs.find(pipeline_handle);
+
+        // add the tracking state if it doesn't exist
+        if (gp_cis == graphicsPipelineCIs.end()) {
+            auto result = graphicsPipelineCIs.emplace(std::make_pair(pipeline_handle, GraphicsPipelineCIs{}));
+
+            if (!result.second) continue;
+
+            gp_cis = result.first;
+        }
+
+        gp_cis->second.colorBlendStateCI =
+            cgpl_state->pCreateInfos[i].pColorBlendState
+                ? new safe_VkPipelineColorBlendStateCreateInfo(cgpl_state->pCreateInfos[i].pColorBlendState)
+                : nullptr;
+        gp_cis->second.depthStencilStateCI =
+            cgpl_state->pCreateInfos[i].pDepthStencilState
+                ? new safe_VkPipelineDepthStencilStateCreateInfo(cgpl_state->pCreateInfos[i].pDepthStencilState)
+                : nullptr;
+    }
 }
 
 bool BestPractices::PreCallValidateCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount,
@@ -957,6 +1032,57 @@ bool BestPractices::PreCallValidateCmdWriteTimestamp(VkCommandBuffer commandBuff
     return skip;
 }
 
+void BestPractices::PostCallRecordCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                                                  VkPipeline pipeline) {
+    StateTracker::PostCallRecordCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline);
+
+    if (pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS) {
+        // check for depth/blend state tracking
+        auto gp_cis = graphicsPipelineCIs.find(pipeline);
+        if (gp_cis != graphicsPipelineCIs.end()) {
+            auto prepass_state = cbDepthPrePassStates.find(commandBuffer);
+            if (prepass_state == cbDepthPrePassStates.end()) {
+                auto result = cbDepthPrePassStates.emplace(std::make_pair(commandBuffer, DepthPrePassState{}));
+
+                if (!result.second) return;
+
+                prepass_state = result.first;
+            }
+
+            const auto* blend_state = gp_cis->second.colorBlendStateCI;
+            const auto* stencil_state = gp_cis->second.depthStencilStateCI;
+
+            if (blend_state) {
+                // assume the pipeline is depth-only unless any of the attachments have color writes enabled
+                prepass_state->second.depthOnly = true;
+                for (size_t i = 0; i < blend_state->attachmentCount; i++) {
+                    if (blend_state->pAttachments[i].colorWriteMask != 0) {
+                        prepass_state->second.depthOnly = false;
+                    }
+                }
+            }
+
+            // check for depth value usage
+            prepass_state->second.depthEqualComparison = false;
+
+            if (stencil_state && stencil_state->depthTestEnable) {
+                switch (stencil_state->depthCompareOp) {
+                    case VK_COMPARE_OP_EQUAL:
+                    case VK_COMPARE_OP_GREATER_OR_EQUAL:
+                    case VK_COMPARE_OP_LESS_OR_EQUAL:
+                        prepass_state->second.depthEqualComparison = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+        } else {
+            // reset depth pre-pass tracking
+            cbDepthPrePassStates.emplace(std::make_pair(commandBuffer, DepthPrePassState{}));
+        }
+    }
+}
+
 static inline bool RenderPassUsesAttachmentOnTile(const safe_VkRenderPassCreateInfo2& createInfo, uint32_t attachment) {
     for (uint32_t subpass = 0; subpass < createInfo.subpassCount; subpass++) {
         auto& subpassInfo = createInfo.pSubpasses[subpass];
@@ -1037,21 +1163,71 @@ bool BestPractices::ValidateCmdBeginRenderPass(VkCommandBuffer commandBuffer, Re
 
 bool BestPractices::PreCallValidateCmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin,
                                                       VkSubpassContents contents) const {
-    bool skip = ValidateCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_1, pRenderPassBegin);
+    bool skip = StateTracker::PreCallValidateCmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
+    skip |= ValidateCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_1, pRenderPassBegin);
     return skip;
 }
 
 bool BestPractices::PreCallValidateCmdBeginRenderPass2KHR(VkCommandBuffer commandBuffer,
                                                           const VkRenderPassBeginInfo* pRenderPassBegin,
                                                           const VkSubpassBeginInfoKHR* pSubpassBeginInfo) const {
-    bool skip = ValidateCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_2, pRenderPassBegin);
+    bool skip = StateTracker::PreCallValidateCmdBeginRenderPass2KHR(commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
+    skip |= ValidateCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_2, pRenderPassBegin);
     return skip;
 }
 
 bool BestPractices::PreCallValidateCmdBeginRenderPass2(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin,
                                                        const VkSubpassBeginInfoKHR* pSubpassBeginInfo) const {
-    bool skip = ValidateCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_2, pRenderPassBegin);
+    bool skip = StateTracker::PreCallValidateCmdBeginRenderPass2(commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
+    skip |= ValidateCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_2, pRenderPassBegin);
     return skip;
+}
+
+void BestPractices::RecordCmdBeginRenderPass(VkCommandBuffer commandBuffer, RenderPassCreateVersion rp_version,
+                                             const VkRenderPassBeginInfo* pRenderPassBegin) {
+    auto prepass_state = cbDepthPrePassStates.find(commandBuffer);
+
+    // add the tracking state if it doesn't exist
+    if (prepass_state == cbDepthPrePassStates.end()) {
+        auto result = cbDepthPrePassStates.emplace(std::make_pair(commandBuffer, DepthPrePassState{}));
+
+        if (!result.second) return;
+
+        prepass_state = result.first;
+    }
+
+    // reset the renderpass state
+    prepass_state->second = {};
+
+    const auto* cb_state = GetCBState(commandBuffer);
+    const auto* rp_state = cb_state->activeRenderPass.get();
+
+    // track depth / color attachment usage within the renderpass
+    for (size_t i = 0; i < rp_state->createInfo.subpassCount; i++) {
+        // record if depth/color attachments are in use for this renderpass
+        if (rp_state->createInfo.pSubpasses[i].pDepthStencilAttachment != nullptr) prepass_state->second.depthAttachment = true;
+
+        if (rp_state->createInfo.pSubpasses[i].colorAttachmentCount > 0) prepass_state->second.colorAttachment = true;
+    }
+}
+
+void BestPractices::PostCallRecordCmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin,
+                                                     VkSubpassContents contents) {
+    StateTracker::PostCallRecordCmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
+    RecordCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_1, pRenderPassBegin);
+}
+
+void BestPractices::PostCallRecordCmdBeginRenderPass2(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin,
+                                                      const VkSubpassBeginInfo* pSubpassBeginInfo) {
+    StateTracker::PostCallRecordCmdBeginRenderPass2(commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
+    RecordCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_2, pRenderPassBegin);
+}
+
+void BestPractices::PostCallRecordCmdBeginRenderPass2KHR(VkCommandBuffer commandBuffer,
+                                                         const VkRenderPassBeginInfo* pRenderPassBegin,
+                                                         const VkSubpassBeginInfo* pSubpassBeginInfo) {
+    StateTracker::PostCallRecordCmdBeginRenderPass2KHR(commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
+    RecordCmdBeginRenderPass(commandBuffer, RENDER_PASS_VERSION_2, pRenderPassBegin);
 }
 
 // Generic function to handle validation for all CmdDraw* type functions
@@ -1078,6 +1254,21 @@ bool BestPractices::ValidateCmdDrawType(VkCommandBuffer cmd_buffer, const char* 
     return skip;
 }
 
+void BestPractices::RecordCmdDrawType(VkCommandBuffer cmd_buffer, uint32_t draw_count, const char* caller) {
+    if (VendorCheckEnabled(kBPVendorArm)) {
+        RecordCmdDrawTypeArm(cmd_buffer, draw_count, caller);
+    }
+}
+
+void BestPractices::RecordCmdDrawTypeArm(VkCommandBuffer cmd_buffer, uint32_t draw_count, const char* caller) {
+    auto prepass_state = cbDepthPrePassStates.find(cmd_buffer);
+    if (prepass_state != cbDepthPrePassStates.end() && draw_count >= kDepthPrePassMinDrawCountArm) {
+        if (prepass_state->second.depthOnly) prepass_state->second.numDrawCallsDepthOnly++;
+
+        if (prepass_state->second.depthEqualComparison) prepass_state->second.numDrawCallsDepthEqualCompare++;
+    }
+}
+
 bool BestPractices::PreCallValidateCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
                                            uint32_t firstVertex, uint32_t firstInstance) const {
     bool skip = false;
@@ -1089,6 +1280,12 @@ bool BestPractices::PreCallValidateCmdDraw(VkCommandBuffer commandBuffer, uint32
     }
 
     return skip;
+}
+
+void BestPractices::PostCallRecordCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
+                                          uint32_t firstVertex, uint32_t firstInstance) {
+    StateTracker::PostCallRecordCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
+    RecordCmdDrawType(commandBuffer, vertexCount * instanceCount, "vkCmdDraw()");
 }
 
 bool BestPractices::PreCallValidateCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount,
@@ -1286,6 +1483,12 @@ void BestPractices::PreCallRecordCmdDrawIndexed(VkCommandBuffer commandBuffer, u
     }
 }
 
+void BestPractices::PostCallRecordCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount,
+                                                 uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
+    StateTracker::PostCallRecordCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    RecordCmdDrawType(commandBuffer, indexCount * instanceCount, "vkCmdDrawIndexed()");
+}
+
 bool BestPractices::PreCallValidateCmdDrawIndexedIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer,
                                                                   VkDeviceSize offset, VkBuffer countBuffer,
                                                                   VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
@@ -1308,6 +1511,12 @@ bool BestPractices::PreCallValidateCmdDrawIndirect(VkCommandBuffer commandBuffer
     return skip;
 }
 
+void BestPractices::PostCallRecordCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                  uint32_t count, uint32_t stride) {
+    StateTracker::PostCallRecordCmdDrawIndirect(commandBuffer, buffer, offset, count, stride);
+    RecordCmdDrawType(commandBuffer, count, "vkCmdDrawIndirect()");
+}
+
 bool BestPractices::PreCallValidateCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                           uint32_t drawCount, uint32_t stride) const {
     bool skip = false;
@@ -1321,6 +1530,12 @@ bool BestPractices::PreCallValidateCmdDrawIndexedIndirect(VkCommandBuffer comman
     return skip;
 }
 
+void BestPractices::PostCallRecordCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                         uint32_t count, uint32_t stride) {
+    StateTracker::PostCallRecordCmdDrawIndexedIndirect(commandBuffer, buffer, offset, count, stride);
+    RecordCmdDrawType(commandBuffer, count, "vkCmdDrawIndexedIndirect()");
+}
+
 bool BestPractices::PreCallValidateCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY,
                                                uint32_t groupCountZ) const {
     bool skip = false;
@@ -1330,6 +1545,30 @@ bool BestPractices::PreCallValidateCmdDispatch(VkCommandBuffer commandBuffer, ui
                            "Warning: You are calling vkCmdDispatch() while one or more groupCounts are zero (groupCountX = %" PRIu32
                            ", groupCountY = %" PRIu32 ", groupCountZ = %" PRIu32 ").",
                            groupCountX, groupCountY, groupCountZ);
+    }
+
+    return skip;
+}
+
+bool BestPractices::PreCallValidateCmdEndRenderPass(VkCommandBuffer commandBuffer) const {
+    bool skip = false;
+
+    skip |= StateTracker::PreCallValidateCmdEndRenderPass(commandBuffer);
+
+    auto prepass_state = cbDepthPrePassStates.find(commandBuffer);
+
+    if (prepass_state == cbDepthPrePassStates.end()) return skip;
+
+    bool uses_depth = (prepass_state->second.depthAttachment || prepass_state->second.colorAttachment) &&
+                      prepass_state->second.numDrawCallsDepthEqualCompare >= kDepthPrePassNumDrawCallsArm &&
+                      prepass_state->second.numDrawCallsDepthOnly >= kDepthPrePassNumDrawCallsArm;
+    if (uses_depth) {
+        skip |= LogPerformanceWarning(
+            device, kVUID_BestPractices_EndRenderPass_DepthPrePassUsage,
+            "%s Depth pre-passes may be in use. In general, this is not recommended, as in Arm Mali GPUs since "
+            "Mali-T620, Forward Pixel Killing (FPK) can already perform automatic hidden surface removal; in which "
+            "case, using depth pre-passes for hidden surface removal may worsen performance.",
+            VendorSpecificTag(kBPVendorArm));
     }
 
     return skip;
@@ -1624,7 +1863,7 @@ bool BestPractices::PreCallValidateCmdClearAttachments(VkCommandBuffer commandBu
 
     // Check for uses of ClearAttachments along with LOAD_OP_LOAD,
     // as it can be more efficient to just use LOAD_OP_CLEAR
-    const RENDER_PASS_STATE* rp = cb_node->activeRenderPass;
+    const RENDER_PASS_STATE* rp = cb_node->activeRenderPass.get();
     if (rp) {
         const auto& subpass = rp->createInfo.pSubpasses[cb_node->activeSubpass];
 

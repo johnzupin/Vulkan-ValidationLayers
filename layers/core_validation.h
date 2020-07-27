@@ -20,6 +20,7 @@
  * Author: Chris Forbes <chrisf@ijw.co.nz>
  * Author: Mark Lobodzinski <mark@lunarg.com>
  * Author: Dave Houlton <daveh@lunarg.com>
+ * Author: Jeremy Kniager <jeremyk@lunarg.com>
  */
 
 #pragma once
@@ -41,7 +42,29 @@ struct DrawDispatchVuid {
     const char* render_pass_compatible;
     const char* subpass_index;
     const char* sample_location;
+    const char* linear_sampler;
+    const char* cubic_sampler;
+    const char* indirect_protected_cb;
+    const char* indirect_contiguous_memory;
+    const char* indirect_buffer_bit;
+    const char* viewport_count;
+    const char* scissor_count;
+    const char* viewport_scissor_count;
+    const char* primitive_topology;
+    const char* corner_sampled_address_mode;
 };
+
+typedef struct {
+    const char* vuid_queue_flags;
+    const char* vuid_queue_feedback;
+    const char* vuid_queue_occlusion;
+    const char* vuid_precise;
+    const char* vuid_query_count;
+    const char* vuid_profile_lock;
+    const char* vuid_scope_not_first;
+    const char* vuid_scope_in_rp;
+    const char* vuid_dup_query_type;
+} ValidateBeginQueryVuids;
 
 class CoreChecks : public ValidationStateTracker {
   public:
@@ -63,7 +86,6 @@ class CoreChecks : public ValidationStateTracker {
                                    bool optional) const;
     bool ValidateBindBufferMemory(VkBuffer buffer, VkDeviceMemory mem, VkDeviceSize memoryOffset, const char* api_name) const;
     bool ValidateGetImageMemoryRequirements2(const VkImageMemoryRequirementsInfo2* pInfo, const char* func_name) const;
-    bool ValidateGetBufferMemoryRequirements2(const VkBufferMemoryRequirementsInfo2* pInfo, const char* func_name) const;
     bool CheckCommandBuffersInFlight(const COMMAND_POOL_STATE* pPool, const char* action, const char* error_code) const;
     bool CheckCommandBufferInFlight(const CMD_BUFFER_STATE* cb_node, const char* action, const char* error_code) const;
     bool VerifyQueueStateToFence(VkFence fence) const;
@@ -116,10 +138,10 @@ class CoreChecks : public ValidationStateTracker {
     void EnqueueSubmitTimeValidateImageBarrierAttachment(const char* func_name, CMD_BUFFER_STATE* cb_state,
                                                          uint32_t imageMemBarrierCount,
                                                          const VkImageMemoryBarrier* pImageMemBarriers);
-    bool ValidateImageBarrierAttachment(const char* funcName, CMD_BUFFER_STATE const* cb_state, VkFramebuffer framebuffer,
-                                        uint32_t active_subpass, const safe_VkSubpassDescription2& sub_desc,
-                                        const VkRenderPass rp_handle, uint32_t img_index,
-                                        const VkImageMemoryBarrier& img_barrier) const;
+    bool ValidateImageBarrierAttachment(const char* funcName, CMD_BUFFER_STATE const* cb_state,
+                                        const FRAMEBUFFER_STATE* framebuffer, uint32_t active_subpass,
+                                        const safe_VkSubpassDescription2& sub_desc, const VkRenderPass rp_handle,
+                                        uint32_t img_index, const VkImageMemoryBarrier& img_barrier) const;
     static bool ValidateConcurrentBarrierAtSubmit(const ValidationStateTracker* state_data, const QUEUE_STATE* queue_data,
                                                   const char* func_name, const CMD_BUFFER_STATE* cb_state,
                                                   const VulkanTypedHandle& typed_handle, uint32_t src_queue_family,
@@ -194,8 +216,7 @@ class CoreChecks : public ValidationStateTracker {
                                          uint32_t perfPass, QueryMap* localQueryToStateMap);
     bool ValidateImportSemaphore(VkSemaphore semaphore, const char* caller_name) const;
     bool ValidateBeginQuery(const CMD_BUFFER_STATE* cb_state, const QueryObject& query_obj, VkFlags flags, CMD_TYPE cmd,
-                            const char* cmd_name, const char* vuid_queue_flags, const char* vuid_queue_feedback,
-                            const char* vuid_queue_occlusion, const char* vuid_precise, const char* vuid_query_count) const;
+                            const char* cmd_name, const ValidateBeginQueryVuids* vuids) const;
     bool ValidateCmdEndQuery(const CMD_BUFFER_STATE* cb_state, const QueryObject& query_obj, CMD_TYPE cmd, const char* cmd_name,
                              const char* vuid_queue_flags, const char* vuid_active_queries) const;
     bool ValidateCmdResetQuery(const CMD_BUFFER_STATE* cb_state, VkQueryPool queryPool, uint32_t firstQuery,
@@ -256,6 +277,7 @@ class CoreChecks : public ValidationStateTracker {
                                   const std::string& msgCode) const;
     bool ValidateCmdSubpassState(const CMD_BUFFER_STATE* pCB, const CMD_TYPE cmd_type) const;
     bool ValidateCmd(const CMD_BUFFER_STATE* cb_state, const CMD_TYPE cmd, const char* caller_name) const;
+    bool ValidateIndirectCmd(VkCommandBuffer command_buffer, VkBuffer buffer, CMD_TYPE cmd_type, const char* caller_name) const;
 
     template <typename T1>
     bool ValidateDeviceMaskToPhysicalDeviceCount(uint32_t deviceMask, const T1 object, const char* VUID) const;
@@ -267,7 +289,7 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateDeviceMaskToRenderPass(const CMD_BUFFER_STATE* pCB, uint32_t deviceMask, const char* VUID) const;
 
     bool ValidateDepthStencilResolve(const VkPhysicalDeviceVulkan12Properties& core12_props,
-                                     const VkRenderPassCreateInfo2* pCreateInfo) const;
+                                     const VkRenderPassCreateInfo2* pCreateInfo, const char* function_name) const;
 
     bool ValidateBindAccelerationStructureMemory(VkDevice device, const VkBindAccelerationStructureMemoryInfoKHR& info) const;
     // Prototypes for CoreChecks accessor functions
@@ -329,10 +351,10 @@ class CoreChecks : public ValidationStateTracker {
     // For given bindings validate state at time of draw is correct, returning false on error and writing error details into string*
     bool ValidateDrawState(const cvdescriptorset::DescriptorSet* descriptor_set, const std::map<uint32_t, descriptor_req>& bindings,
                            const std::vector<uint32_t>& dynamic_offsets, const CMD_BUFFER_STATE* cb_node, uint32_t setIndex,
-                           const char* caller) const;
+                           const char* caller, const DrawDispatchVuid& vuids) const;
     bool ValidateDescriptorSetBindingData(const CMD_BUFFER_STATE* cb_node, const cvdescriptorset::DescriptorSet* descriptor_set,
                                           const std::vector<uint32_t>& dynamic_offsets, uint32_t binding, descriptor_req reqs,
-                                          const char* caller) const;
+                                          const char* caller, const DrawDispatchVuid& vuids) const;
 
     // Validate contents of a CopyUpdate
     using DescriptorSet = cvdescriptorset::DescriptorSet;
@@ -677,16 +699,16 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateCreateImageANDROID(const debug_report_data* report_data, const VkImageCreateInfo* create_info) const;
     bool ValidateCreateImageViewANDROID(const VkImageViewCreateInfo* create_info) const;
     bool ValidateGetImageSubresourceLayoutANDROID(const VkImage image) const;
-    bool ValidateQueueFamilies(uint32_t queue_family_count, const uint32_t* queue_families, const char* cmd_name,
-                               const char* array_parameter_name, const char* unique_error_code, const char* valid_error_code,
-                               bool optional) const;
+    bool ValidatePhysicalDeviceQueueFamilies(uint32_t queue_family_count, const uint32_t* queue_families, const char* cmd_name,
+                                             const char* array_parameter_name, const char* vuid) const;
     bool ValidateAllocateMemoryANDROID(const VkMemoryAllocateInfo* alloc_info) const;
     bool ValidateGetImageMemoryRequirementsANDROID(const VkImage image, const char* func_name) const;
-    bool ValidateGetBufferMemoryRequirementsANDROID(const VkBuffer buffer, const char* func_name) const;
-    bool ValidateCreateSamplerYcbcrConversionANDROID(const char* func_name,
-                                                     const VkSamplerYcbcrConversionCreateInfo* create_info) const;
     bool ValidateGetPhysicalDeviceImageFormatProperties2ANDROID(const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
                                                                 const VkImageFormatProperties2* pImageFormatProperties) const;
+    bool ValidateBufferImportedHandleANDROID(const char* func_name, VkExternalMemoryHandleTypeFlags handleType,
+                                             VkDeviceMemory memory, VkBuffer buffer) const;
+    bool ValidateImageImportedHandleANDROID(const char* func_name, VkExternalMemoryHandleTypeFlags handleType,
+                                            VkDeviceMemory memory, VkImage image) const;
     bool PreCallValidateCreatePipelineCache(VkDevice device, const VkPipelineCacheCreateInfo* pCreateInfo,
                                             const VkAllocationCallbacks* pAllocator, VkPipelineCache* pPipelineCache) const;
     bool PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
@@ -808,12 +830,6 @@ class CoreChecks : public ValidationStateTracker {
                                                     VkMemoryRequirements2* pMemoryRequirements) const;
     bool PreCallValidateGetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2* pInfo,
                                                        VkMemoryRequirements2* pMemoryRequirements) const;
-    bool PreCallValidateGetBufferMemoryRequirements(VkDevice device, VkBuffer buffer,
-                                                    VkMemoryRequirements* pMemoryRequirements) const;
-    bool PreCallValidateGetBufferMemoryRequirements2(VkDevice device, const VkBufferMemoryRequirementsInfo2* pInfo,
-                                                     VkMemoryRequirements2* pMemoryRequirements) const;
-    bool PreCallValidateGetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2* pInfo,
-                                                        VkMemoryRequirements2* pMemoryRequirements) const;
     bool PreCallValidateGetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
                                                                 const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
                                                                 VkImageFormatProperties2* pImageFormatProperties) const;
@@ -1200,6 +1216,25 @@ class CoreChecks : public ValidationStateTracker {
                                                                 const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo) const;
     bool PreCallValidateCmdCopyMemoryToAccelerationStructureKHR(VkCommandBuffer commandBuffer,
                                                                 const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo) const;
+
+    bool PreCallValidateCmdSetCullModeEXT(VkCommandBuffer commandBuffer, VkCullModeFlags cullMode) const;
+    bool PreCallValidateCmdSetFrontFaceEXT(VkCommandBuffer commandBuffer, VkFrontFace frontFace) const;
+    bool PreCallValidateCmdSetPrimitiveTopologyEXT(VkCommandBuffer commandBuffer, VkPrimitiveTopology primitiveTopology) const;
+    bool PreCallValidateCmdSetViewportWithCountEXT(VkCommandBuffer commandBuffer, uint32_t viewportCount,
+                                                   const VkViewport* pViewports) const;
+    bool PreCallValidateCmdSetScissorWithCountEXT(VkCommandBuffer commandBuffer, uint32_t scissorCount,
+                                                  const VkRect2D* pScissors) const;
+    bool PreCallValidateCmdBindVertexBuffers2EXT(VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount,
+                                                 const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, const VkDeviceSize* pSizes,
+                                                 const VkDeviceSize* pStrides) const;
+    bool PreCallValidateCmdSetDepthTestEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthTestEnable) const;
+    bool PreCallValidateCmdSetDepthWriteEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthWriteEnable) const;
+    bool PreCallValidateCmdSetDepthCompareOpEXT(VkCommandBuffer commandBuffer, VkCompareOp depthCompareOp) const;
+    bool PreCallValidateCmdSetDepthBoundsTestEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthBoundsTestEnable) const;
+    bool PreCallValidateCmdSetStencilTestEnableEXT(VkCommandBuffer commandBuffer, VkBool32 stencilTestEnable) const;
+    bool PreCallValidateCmdSetStencilOpEXT(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, VkStencilOp failOp,
+                                           VkStencilOp passOp, VkStencilOp depthFailOp, VkCompareOp compareOp) const;
+
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
     bool PreCallValidateGetAndroidHardwareBufferPropertiesANDROID(VkDevice device, const struct AHardwareBuffer* buffer,
                                                                   VkAndroidHardwareBufferPropertiesANDROID* pProperties) const;

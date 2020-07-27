@@ -651,6 +651,107 @@ TEST_F(VkLayerTest, CreatePipelineLayoutExceedsSetLimit) {
     vk::DestroyDescriptorSetLayout(m_device->device(), ds_layout, NULL);
 }
 
+TEST_F(VkLayerTest, CreatePipelineExcessSubsampledPerStageDescriptors) {
+    TEST_DESCRIPTION("Attempt to create a pipeline layout where total subsampled descriptors exceed limits");
+
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    // Check extension support
+    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_FRAGMENT_DENSITY_MAP_2_EXTENSION_NAME)) {
+        printf("%s test requires %s extension. Skipping.\n", kSkipPrefix, VK_EXT_FRAGMENT_DENSITY_MAP_2_EXTENSION_NAME);
+        return;
+    }
+
+    m_device_extension_names.push_back(VK_EXT_FRAGMENT_DENSITY_MAP_2_EXTENSION_NAME);
+
+    PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
+        (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
+    VkPhysicalDeviceFragmentDensityMap2PropertiesEXT density_map2_properties =
+        lvl_init_struct<VkPhysicalDeviceFragmentDensityMap2PropertiesEXT>();
+    VkPhysicalDeviceProperties2KHR properties2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&density_map2_properties);
+    vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    uint32_t max_subsampled_samplers = density_map2_properties.maxDescriptorSetSubsampledSamplers;
+
+    // Note: Adding this check in case mock ICDs don't initialize min-max values correctly
+    if (max_subsampled_samplers == 0) {
+        printf("%s maxDescriptorSetSubsampledSamplers limit (%d) must be greater than 0. Skipping.\n", kSkipPrefix,
+               max_subsampled_samplers);
+        return;
+    }
+
+    if (max_subsampled_samplers >= properties2.properties.limits.maxDescriptorSetSamplers) {
+        printf("%s test assumes maxDescriptorSetSubsampledSamplers limit (%d) is less than overall sampler limit (%d). Skipping.\n",
+               kSkipPrefix, max_subsampled_samplers, properties2.properties.limits.maxDescriptorSetSamplers);
+        return;
+    }
+
+    VkDescriptorSetLayoutBinding dslb = {};
+    std::vector<VkDescriptorSetLayoutBinding> dslb_vec = {};
+    VkDescriptorSetLayout ds_layout = VK_NULL_HANDLE;
+    VkDescriptorSetLayoutCreateInfo ds_layout_ci = {};
+    ds_layout_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    ds_layout_ci.pNext = NULL;
+    VkPipelineLayoutCreateInfo pipeline_layout_ci = {};
+    pipeline_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipeline_layout_ci.pNext = NULL;
+    pipeline_layout_ci.setLayoutCount = 1;
+    pipeline_layout_ci.pSetLayouts = &ds_layout;
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+
+    VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
+    sampler_info.flags |= VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT;
+    VkSampler sampler = VK_NULL_HANDLE;
+    VkResult err = vk::CreateSampler(m_device->device(), &sampler_info, NULL, &sampler);
+    ASSERT_VK_SUCCESS(err);
+
+    // just make all the immutable samplers point to the same sampler
+    std::vector<VkSampler> immutableSamplers;
+    immutableSamplers.resize(max_subsampled_samplers);
+    for (uint32_t sampler_idx = 0; sampler_idx < max_subsampled_samplers; sampler_idx++) {
+        immutableSamplers[sampler_idx] = sampler;
+    }
+
+    // VU 03566 - too many subsampled sampler type descriptors across stages
+    dslb_vec.clear();
+    dslb.binding = 0;
+    dslb.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    dslb.descriptorCount = max_subsampled_samplers;
+    dslb.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    dslb.pImmutableSamplers = &immutableSamplers[0];
+    dslb_vec.push_back(dslb);
+    dslb.binding = 1;
+    dslb.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    dslb.descriptorCount = max_subsampled_samplers;
+    dslb.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    dslb_vec.push_back(dslb);
+
+    ds_layout_ci.bindingCount = dslb_vec.size();
+    ds_layout_ci.pBindings = dslb_vec.data();
+    err = vk::CreateDescriptorSetLayout(m_device->device(), &ds_layout_ci, NULL, &ds_layout);
+    ASSERT_VK_SUCCESS(err);
+
+    const char *max_sampler_vuid = "VUID-VkPipelineLayoutCreateInfo-pImmutableSamplers-03566";
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, max_sampler_vuid);
+
+    err = vk::CreatePipelineLayout(m_device->device(), &pipeline_layout_ci, NULL, &pipeline_layout);
+    m_errorMonitor->VerifyFound();
+    vk::DestroyPipelineLayout(m_device->device(), pipeline_layout, NULL);  // Unnecessary but harmless if test passed
+    pipeline_layout = VK_NULL_HANDLE;
+    vk::DestroyDescriptorSetLayout(m_device->device(), ds_layout, NULL);
+}
+
 TEST_F(VkLayerTest, CreatePipelineLayoutExcessPerStageDescriptors) {
     TEST_DESCRIPTION("Attempt to create a pipeline layout where total descriptors exceed per-stage limits");
 
@@ -3480,7 +3581,7 @@ TEST_F(VkLayerTest, CreatePipelineCheckShaderPushConstantNotDeclared) {
     pipe.pipeline_layout_ = VkPipelineLayoutObj(m_device, {}, {push_constant_range});
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "Push constant range covering variable starting at offset 0 not declared in layout");
+                                         "Shader push-constant buffer member 0 at offset 0 is not declared in pipeline layout");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
@@ -4938,7 +5039,7 @@ TEST_F(VkLayerTest, CreatePipelinePushConstantsNotInLayout) {
     pipe.InitState();
     pipe.pipeline_layout_ = VkPipelineLayoutObj(m_device, {});
     /* should have generated an error -- no push constant ranges provided! */
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "not declared in layout");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "not declared in pipeline layout");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
@@ -5311,6 +5412,12 @@ TEST_F(VkLayerTest, FramebufferMixedSamples) {
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
+    const VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
+    if (ds_format == VK_FORMAT_UNDEFINED) {
+        printf("%s No Depth + Stencil format found rest of tests skipped.\n", kSkipPrefix);
+        return;
+    }
+
     struct TestCase {
         VkSampleCountFlagBits color_samples;
         VkSampleCountFlagBits depth_samples;
@@ -5332,7 +5439,7 @@ TEST_F(VkLayerTest, FramebufferMixedSamples) {
         att[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         att[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        att[1].format = VK_FORMAT_D24_UNORM_S8_UINT;
+        att[1].format = ds_format;
         att[1].samples = test_case.depth_samples;
         att[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         att[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -8157,8 +8264,8 @@ TEST_F(VkLayerTest, PipelineStageConditionalRenderingWithWrongQueue) {
     imb.subresourceRange.baseArrayLayer = 0;
     imb.subresourceRange.layerCount = 1;
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcStageMask-01183");
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcStageMask-01183");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcStageMask-4098");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcStageMask-4098");
     vk::CmdPipelineBarrier(commandBuffer.handle(), VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
                            VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0, 0, nullptr, 0, nullptr, 1, &imb);
     m_errorMonitor->VerifyFound();
@@ -8438,7 +8545,15 @@ TEST_F(VkLayerTest, ValidateGetRayTracingCaptureReplayShaderGroupHandlesKHR) {
         m_errorMonitor->VerifyFound();
     }
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetRayTracingCaptureReplayShaderGroupHandlesKHR-firstGroup-03483");
+    // In CreateNVRayTracingPipelineHelper::InitKHRRayTracingPipelineInfo rp_ci_KHR_.groupCount = groups_KHR_.size();
     vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(m_device->handle(), rt_pipe.pipeline_, 2, rt_pipe.groups_KHR_.size(),
+                                                      (ray_tracing_properties.shaderGroupHandleCaptureReplaySize - 1), &buffer);
+    m_errorMonitor->VerifyFound();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetRayTracingCaptureReplayShaderGroupHandlesKHR-firstGroup-03483");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetRayTracingCaptureReplayShaderGroupHandlesKHR-firstGroup-04051");
+    // In CreateNVRayTracingPipelineHelper::InitKHRRayTracingPipelineInfo rp_ci_KHR_.groupCount = groups_KHR_.size();
+    uint32_t invalid_firstgroup = rt_pipe.groups_KHR_.size() + 1;
+    vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(m_device->handle(), rt_pipe.pipeline_, invalid_firstgroup, 0,
                                                       (ray_tracing_properties.shaderGroupHandleCaptureReplaySize - 1), &buffer);
     m_errorMonitor->VerifyFound();
 }

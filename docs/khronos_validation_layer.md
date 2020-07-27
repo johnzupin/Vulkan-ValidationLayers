@@ -14,16 +14,21 @@
 [4]: https://creativecommons.org/licenses/by-nd/4.0/
 The `VK_LAYER_KHRONOS_validation` layer supports the following validation coverage areas:
 
-- Thread safety validation 
-- Stateless parameter validation 
-- Object lifetime validation 
-- Core validation checks
-- GPU-Assisted validation
-- Best practices validation
-- Debug Printf functionality
-- Handle wrapping functionality
+- [Core validation](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/core_checks.md)
+- [Stateless parameter validation](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/stateless_validation.md)
+- [Object lifetime validation](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/object_lifetimes.md)
+- [GPU-Assisted validation](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/gpu_validation.md)
+- [Thread safety validation](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/thread_safety.md)
+- [Synchronization validation](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/synchronization_usage.md)
+- [Best practices validation](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/best_practices.md)
+- [Debug Printf functionality](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/debug_printf.md)
+- [Handle wrapping functionality](https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/docs/handle_wrapping.md)
 
+**Note:**
 
+* Most *Khronos Validation layer* features can be used simultaneously. However, this could result in noticeable performance degradation. The best practice is to run *Core validation*, *GPU-Assisted validation*, *Synchronization Validation* and *Best practices validation* features individually.
+
+* *Debug Printf functionality* and *GPU-Assisted validation* cannot be run at the same time.
 
 ## Layer Controls
 Layer behavior is controlled through either a layer settings file or an extension.
@@ -37,7 +42,7 @@ accessing and controlling feedback from the layers:
 |  [VK_EXT_debug_utils](#debugutils)  | allows application control and capture of debug reporting information   |
 
 
-See the [Layers Overview and Configuration](./layer_configuration.md) document for more detailed information on configuring Vulkan layers.
+See the [Layers Overview and Configuration](../LAYER_CONFIGURATION.md) document for more detailed information on configuring Vulkan layers.
 
 ### <a name="validationfeatures"></a>VK\_EXT\_validation\_features
 The preferred method for an application to programmatically control validation layer features is through the `VK_EXT_validation_features` extension.
