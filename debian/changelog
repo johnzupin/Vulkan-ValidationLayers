@@ -1,3 +1,10 @@
+vulkan-validationlayers (1.2.148.0-1ubuntu20.04-2) focal; urgency=medium
+
+  * control: grammer for description
+  * rules: build type is now RelWithDebInfo
+
+ -- John Zupin <john@odin>  Wed, 29 Jul 2020 18:13:52 -0600
+
 vulkan-validationlayers (1.2.148.0-1lunarg20.04-1) focal; urgency=medium
 
   [ Mark Lobodzinski ]
