@@ -1,3 +1,10 @@
+vulkan-validationlayers (1.2.148.0-1ubuntu18.04-2) bionic; urgency=medium
+
+  * control: grammer for description
+  * rules: build type is now RelWithDebInfo
+
+ -- John Zupin <john@odin>  Wed, 29 Jul 2020 18:12:07 -0600
+
 vulkan-validationlayers (1.2.148.0-1lunarg18.04-1) bionic; urgency=medium
 
   [ Mark Lobodzinski ]
