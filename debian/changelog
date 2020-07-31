@@ -1,3 +1,23 @@
+vulkan-validationlayers (1.2.148.0-1ubuntu18.04-4) bionic; urgency=medium
+
+  [ KarenGhavam-lunarG ]
+  * docs: Reference Vulkan Configurator
+
+  [ John Zulauf ]
+  * syncval: Update 'most recent' explanation
+  * syncval: Correct write_barrier 0 and layout in log
+
+  [ locke-lunarg ]
+  * syncval: Use floor instead of ceil
+
+  [ John Zulauf ]
+  * syncval: Fix typo in usage doc
+
+  [ John Zupin ]
+  * debian: remove README.Debian
+
+ -- John Zupin <john@odin>  Fri, 31 Jul 2020 17:11:59 -0600
+
 vulkan-validationlayers (1.2.148.0-1ubuntu18.04-3) bionic; urgency=medium
 
   * patch: update generated install locations
