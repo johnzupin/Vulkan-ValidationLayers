@@ -1,3 +1,9 @@
+vulkan-validationlayers (1.2.148.0-1ubuntu20.04-5) focal; urgency=medium
+
+  * rules: update to sub the BUILD_REV from the version
+
+ -- John Zupin <john@odin>  Wed, 19 Aug 2020 09:23:31 -0600
+
 vulkan-validationlayers (1.2.148.0-1ubuntu20.04-4) focal; urgency=medium
 
   [ KarenGhavam-lunarG ]
