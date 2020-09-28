@@ -1,3 +1,323 @@
+vulkan-validationlayers (1.2.154.0-1lunarg18.04-1) bionic; urgency=medium
+
+  [ Tony-LunarG ]
+  * gpu: Fix validator settings for instrumentation
+
+  [ Jonathan Glines ]
+  * Allow KHR extension for timeline semaphore
+
+  [ Sam Walls ]
+  * practices: add PerfDoc checks 18-20 with SPIRV analysis
+  * tests: add tests for PerfDoc checks 18-20
+
+  [ John Zulauf ]
+  * syncval: Update 'most recent' explanation
+
+  [ Mark Lobodzinski ]
+  * scripts: Remove unmaintained test results script
+
+  [ KarenGhavam-lunarG ]
+  * docs: Reference Vulkan Configurator
+
+  [ John Zulauf ]
+  * syncval: Correct write_barrier 0 and layout in log
+
+  [ locke-lunarg ]
+  * syncval: Use floor instead of ceil
+
+  [ John Zulauf ]
+  * syncval: Fix typo in usage doc
+
+  [ sfricke-samsung ]
+  * tests: Add depth stencil format check
+  * tests: Add format check for YCbCr swizzle
+
+  [ Kedarnath Thangudu ]
+  * layers: Add VUID 02722 for VK_NV_coverage_reduction_mode
+  * tests: Add VUID 02722 for VK_NV_coverage_reduction_mode
+
+  [ sfricke-samsung ]
+  * layers: Add query protected memory VUID
+  * tests: Add query protected memory VUID
+  * layers: Add protected resource in commands
+  * tests: Add protected resource in commands
+
+  [ jorgep31415 ]
+  * layers: Add renderpass compat checks for FDM and Multiview use
+  * tests: Add renderpass compat tests for FDM and Multiview use
+
+  [ David Neto ]
+  * stateless:  Fix warning -- ignored qualifiers in cast
+
+  [ Ricardo Garcia ]
+  * layers: Fix unexpected VK_AMD_mixed_attachment_samples error
+
+  [ sfricke-samsung ]
+  * layers: Add VUID 01655
+  * tests: Add VUID 01655
+  * layers: Add VUID 02825 and 02826
+  * tests: Add VUID 02825
+  * layers: Add vkCmdResolveImage size VUIDs
+  * tests: Add vkCmdResolveImage size VUIDs
+
+  [ Mark Lobodzinski ]
+  * corechecks: Add check for MultiInstance heaps in MapMemory
+  * tests: Add test for multiinstance mapmem VUID
+
+  [ jorgep31415 ]
+  * layers: Add check for VUID 00824
+  * tests: Add test for VUID 00824
+
+  [ Bob Ellison ]
+  * tests: avoid more dialog boxes
+
+  [ Yevhenii Kharchenko ]
+  * layers: Add check for VUID 01778
+  * tests: Add check for VUID 01778
+
+  [ sfricke-samsung ]
+  * layers: Add Protected clear attachment
+  * tests: Add Protected clear attachment
+
+  [ locke-lunarg ]
+  * layers: Fix wrong hazard log
+  * tests: Fix wrong hazard log
+
+  [ Mark Lobodzinski ]
+  * tests: Avoid ProtectedResources crash on ShieldTV
+  * tests: Revert "tests: Add check for VUID 01778"
+  * layers: Revert "layers: Add check for VUID 01778"
+
+  [ locke-lunarg ]
+  * layers: Add vkCmdDraw-None-02686
+  * tests: subpass input not bound descriptorSet
+
+  [ Mark Lobodzinski ]
+  * dispatch: Unwrap Set/GetPrivateDataEXT object handles
+  * tests: Add test for Set/GetPrivateData
+
+  [ Yevhenii Kharchenko ]
+  * layers: Add check for VUID 01778
+  * tests: Add tests for VUID 01778 check
+
+  [ Mark Lobodzinski ]
+  * layers: Clarify assumptions in layer settings text file
+
+  [ Tony-LunarG ]
+  * layers: Fix check for 00683
+
+  [ Maksym Wezdecki ]
+  * layers: Fix wrong if statement
+
+  [ Dorian Apanel ]
+  * layers: Fix vkconfig setting path lookup (Admin)
+
+  [ Lionel Landwerlin ]
+  * layers: Fix crash in vkAcquirePerformanceConfigurationINTEL
+
+  [ Mark Lobodzinski ]
+  * stateless: Add state and checks for out-of-version core APIs
+  * tests: Add test for Core API version checking
+  * utils: Add version-to-string helper function
+  * practices: Use utils version helper func
+  * stateless: Stringify integer api version values in output
+  * layers: Remove unused includes
+
+  [ Tony-LunarG ]
+  * layers: Add check for 01429
+  * tests: Add test for 01429
+
+  [ locke-lunarg ]
+  * layers: Add vuid 02691
+  * tests: Test storage image atomic op
+
+  [ Sam Walls ]
+  * practices: Fix index-buffer bug in Arm best practices
+  * tests: Add tests for index-buffer fix
+
+  [ locke-lunarg ]
+  * layers: Fix has_writable_descriptor
+
+  [ sfricke-samsung ]
+  * layers: Fix TransformFeedback size check
+
+  [ Mark Lobodzinski ]
+  * layers: Fix whitespace error in layer settings file
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.151 header
+
+  [ sfricke-samsung ]
+  * layers: Remove double destroy VUID
+
+  [ Mark Lobodzinski ]
+  * docs: Clarify use of BUILD_LAYER_SUPPORT_FILES
+
+  [ locke-lunarg ]
+  * layers: Add VUID-vkCmdDraw-None-02698
+  * layers: Add VUID-vkCmdDraw-None-02687
+  * tests: Push constants and image subresources
+
+  [ Mark Lobodzinski ]
+  * layers: Fixed multiview handling in RenderPass code
+
+  [ locke-lunarg ]
+  * layers: Fix wrong index
+  * tests: Binding and index are different
+
+  [ sfricke-samsung ]
+  * layers: Fix Descriptor ImageLayout check
+  * layers: Add VkCommandPool to COMMAND_POOL_STATE
+  * layers: Add Depth/Stencil BufferImageCopy VU
+  * tests: Add Depth/Stencil BufferImageCopy VU
+  * layers: Remove 03269 todo
+
+  [ Mark Lobodzinski ]
+  * stateless: Fix valid sType list for pMultisampleState pNext ptr
+  * stateless: Fix sType check string comparison
+  * tests: Fix TessDomainOrigin positive test
+  * tests: Fix InvalidGetDeviceQueue invalid struct
+  * tests: Fix error types for InvalidStructPnext tests
+  * tests: Fix error types in message limit tests
+  * tests: Fix error types for InvalidPipelineSamplePNext test
+  * tests: Fix AndroidHwBufferDepthStencil test
+  * tests: Fix FramebufferCreateErrors test
+  * stateless: Version check pNext sTypes
+  * tests: Add TessDomainOrigin pnext version check
+  * tests: Add test for version-checked pNext structs
+
+  [ locke-lunarg ]
+  * layers: Fix wrong overlap check
+  * tests: Test overlap and not overlap
+  * layers: Check NULL
+
+  [ sfricke-samsung ]
+  * layers: Label ValidateFenceForSubmit VUs
+  * layers: Label import fence VUs
+  * layers: Label bind2 protected VUs
+  * layers: Add ProtectedSubmitInfo VUs
+  * tests: Add ProtectedSubmitInfo VUs
+
+  [ locke-lunarg ]
+  * layers: Add has_atomic_descriptors
+  * tests: Check shader feature enable
+  * layers: Get imageview from imageless framebuffer
+
+  [ sfricke-samsung ]
+  * layers: Label VUID 04121
+  * layers: Label VUID 01260
+  * layers: Label pipeline stype-stype VUs
+  * layers: Label VUID 01413
+  * layers: Better timeline semaphore error messages
+  * layers: Label VUID 04145
+
+  [ Jamie Madill ]
+  * GN: Fix header dependencies.
+
+  [ John Zulauf ]
+  * syncval: Fix range computation for 3D images
+
+  [ Bob Ellison ]
+  * android: NDK 21d
+
+  [ locke-lunarg ]
+  * layers: Check push constant used in shader
+  * tests: Byte of push constants used in shader
+
+  [ John Zulauf ]
+  * syncval: Add extension enable support for sync val
+  * syncval: Update docs to reflect extension flag
+
+  [ Mark Lobodzinski ]
+  * layers: Fix for dev ext pdev struct usage
+  * tests: Add positive test for unabled dev ext struct use
+  * android: Force complete VLT information logging
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.152 header
+  * build: Address 152 VUID inconsistencies
+
+  [ jorgep31415 ]
+  * layers: Modify renderpass compat Multiview check for Vulkan 1.2
+  * tests: Modify renderpass compat Multiview test for Vulkan 1.2
+
+  [ baldurk ]
+  * layers: Add a couple of missing % to printf specifiers
+
+  [ sfricke-samsung ]
+  * layers: Removed incorrect cmdDraw warnings
+
+  [ Tony-LunarG ]
+  * gpu: Intercept CmdDispatchBase to allocate input buffers
+
+  [ Shannon McPherson ]
+  * build: Resolve last 1.2.152 VUID inconsistency
+  * build: Update known-good files for 1.2.153 header
+
+  [ locke-lunarg ]
+  * layers: Remove VUID-vkCmdDraw-None-02698
+
+  [ sfricke-samsung ]
+  * scripts: Add SPIRV-Tool option to stats
+
+  [ Lionel Landwerlin ]
+  * layers: CodeGen VkPerformanceConfigurationINTEL validation
+
+  [ Tony-LunarG ]
+  * gpu: Pass-through driver-returned PipelineFeedback data
+
+  [ John Zulauf ]
+  * syncval: Add missing WAW suppression
+
+  [ Mark Lobodzinski ]
+  * corechecks: Remove memory shadow copies
+
+  [ John Zulauf ]
+  * syncval: DRY/clean MakeRange computation
+
+  [ sfricke-samsung ]
+  * layers: label VUID 04448
+  * layers: Improve WSI related error messages
+
+  [ Tony-LunarG ]
+  * gpu: Handle KHR version of CmdDispatchBase
+
+  [ sfricke-samsung ]
+  * layers: label VUID 04441
+  * layers: label VUID 04151 and 04152
+  * tests: ToolingExtension devsim check
+  * tests: Fix UnsupportedPnextApiVersion on 1.0
+  * tests: DisabledProtectedMemory 1.1 check
+  * layers: Add function name to renderpass stateless
+  * layers: combine renderpass create logic
+  * tests: Add VUID 03311 and 03312
+
+  [ Lionel Landwerlin ]
+  * tests: Fix QueryPerformanceReleaseProfileLockBeforeSubmit test
+  * tests: Fix QueryPerformanceIncompletePasses
+  * tests: Fix QueryPerformanceResetAndBegin test
+  * corechecks: Fix validation of VU 03227
+
+  [ Tony-LunarG ]
+  * gpu: Move vma allocator destroy to after state tracker
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.154 header
+
+  [ Nathaniel Cesario ]
+  * tests: Refactor vklayertests_best_practices
+
+  [ John Zulauf ]
+  * syncval: Integrate quick start into usage doc
+  * syncval: Clarify debugging usage for all platforms
+  * syncval: Add multi subpass dep to state tracker
+  * syncval: Add multi subpass dep support
+
+  [ Shannon McPherson ]
+  * build: Update glslang commit for 154 SDK
+
+ -- John Zupin <john@odin>  Mon, 28 Sep 2020 17:26:33 -0600
+
 vulkan-validationlayers (1.2.148.0-1ubuntu18.04-5) bionic; urgency=medium
 
   * rules: update to sub the BUILD_REV from the version
