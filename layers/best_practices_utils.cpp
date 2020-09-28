@@ -20,23 +20,11 @@
 #include "best_practices_validation.h"
 #include "layer_chassis_dispatch.h"
 #include "best_practices_error_enums.h"
+#include "shader_validation.h"
 
 #include <string>
-#include <iomanip>
 #include <bitset>
-
-// get the API name is proper format
-std::string BestPractices::GetAPIVersionName(uint32_t version) const {
-    std::stringstream version_name;
-    uint32_t major = VK_VERSION_MAJOR(version);
-    uint32_t minor = VK_VERSION_MINOR(version);
-    uint32_t patch = VK_VERSION_PATCH(version);
-
-    version_name << major << "." << minor << "." << patch << " (0x" << std::setfill('0') << std::setw(8) << std::hex << version
-                 << ")";
-
-    return version_name.str();
-}
+#include <memory>
 
 struct VendorSpecificInfo {
     EnableFlags vendor_id;
@@ -169,8 +157,8 @@ bool BestPractices::PreCallValidateCreateDevice(VkPhysicalDevice physicalDevice,
 
     // check api versions and warn if instance api Version is higher than version on device.
     if (instance_api_version > device_api_version) {
-        std::string inst_api_name = GetAPIVersionName(instance_api_version);
-        std::string dev_api_name = GetAPIVersionName(device_api_version);
+        std::string inst_api_name = StringAPIVersion(instance_api_version);
+        std::string dev_api_name = StringAPIVersion(device_api_version);
 
         skip |= LogWarning(device, kVUID_BestPractices_CreateDevice_API_Mismatch,
                            "vkCreateDevice(): API Version of current instance, %s is higher than API Version on device, %s",
@@ -897,6 +885,83 @@ bool BestPractices::PreCallValidateCreateComputePipelines(VkDevice device, VkPip
             "pipeline cache, which may help with performance");
     }
 
+    if (VendorCheckEnabled(kBPVendorArm)) {
+        for (size_t i = 0; i < createInfoCount; i++) {
+            skip |= ValidateCreateComputePipelineArm(pCreateInfos[i]);
+        }
+    }
+
+    return skip;
+}
+
+bool BestPractices::ValidateCreateComputePipelineArm(const VkComputePipelineCreateInfo& createInfo) const {
+    bool skip = false;
+    auto* module = GetShaderModuleState(createInfo.stage.module);
+
+    uint32_t x = 1, y = 1, z = 1;
+    FindLocalSize(module, x, y, z);
+
+    uint32_t thread_count = x * y * z;
+
+    // Generate a priori warnings about work group sizes.
+    if (thread_count > kMaxEfficientWorkGroupThreadCountArm) {
+        skip |= LogPerformanceWarning(
+            device, kVUID_BestPractices_CreateComputePipelines_ComputeWorkGroupSize,
+            "%s vkCreateComputePipelines(): compute shader with work group dimensions (%u, %u, "
+            "%u) (%u threads total), has more threads than advised in a single work group. It is advised to use work "
+            "groups with less than %u threads, especially when using barrier() or shared memory.",
+            VendorSpecificTag(kBPVendorArm), x, y, z, thread_count, kMaxEfficientWorkGroupThreadCountArm);
+    }
+
+    if (thread_count == 1 || ((x > 1) && (x & (kThreadGroupDispatchCountAlignmentArm - 1))) ||
+        ((y > 1) && (y & (kThreadGroupDispatchCountAlignmentArm - 1))) ||
+        ((z > 1) && (z & (kThreadGroupDispatchCountAlignmentArm - 1)))) {
+        skip |= LogPerformanceWarning(device, kVUID_BestPractices_CreateComputePipelines_ComputeThreadGroupAlignment,
+                                      "%s vkCreateComputePipelines(): compute shader with work group dimensions (%u, "
+                                      "%u, %u) is not aligned to %u "
+                                      "threads. On Arm Mali architectures, not aligning work group sizes to %u may "
+                                      "leave threads idle on the shader "
+                                      "core.",
+                                      VendorSpecificTag(kBPVendorArm), x, y, z, kThreadGroupDispatchCountAlignmentArm,
+                                      kThreadGroupDispatchCountAlignmentArm);
+    }
+
+    // Generate warnings about work group sizes based on active resources.
+    auto entrypoint = FindEntrypoint(module, createInfo.stage.pName, createInfo.stage.stage);
+    if (entrypoint == module->end()) return false;
+
+    bool has_writeable_descriptors = false;
+    bool has_atomic_descriptors = false;
+    auto accessible_ids = MarkAccessibleIds(module, entrypoint);
+    auto descriptor_uses =
+        CollectInterfaceByDescriptorSlot(module, accessible_ids, &has_writeable_descriptors, &has_atomic_descriptors);
+
+    unsigned dimensions = 0;
+    if (x > 1) dimensions++;
+    if (y > 1) dimensions++;
+    if (z > 1) dimensions++;
+    // Here the dimension will really depend on the dispatch grid, but assume it's 1D.
+    dimensions = std::max(dimensions, 1u);
+
+    // If we're accessing images, we almost certainly want to have a 2D workgroup for cache reasons.
+    // There are some false positives here. We could simply have a shader that does this within a 1D grid,
+    // or we may have a linearly tiled image, but these cases are quite unlikely in practice.
+    bool accesses_2d = false;
+    for (const auto& usage : descriptor_uses) {
+        auto dim = GetShaderResourceDimensionality(module, usage.second);
+        if (dim < 0) continue;
+        auto spvdim = spv::Dim(dim);
+        if (spvdim != spv::Dim1D && spvdim != spv::DimBuffer) accesses_2d = true;
+    }
+
+    if (accesses_2d && dimensions < 2) {
+        LogPerformanceWarning(device, kVUID_BestPractices_CreateComputePipelines_ComputeSpatialLocality,
+                              "%s vkCreateComputePipelines(): compute shader has work group dimensions (%u, %u, %u), which "
+                              "suggests a 1D dispatch, but the shader is accessing 2D or 3D images. The shader may be "
+                              "exhibiting poor spatial locality with respect to one or more shader resources.",
+                              VendorSpecificTag(kBPVendorArm), x, y, z);
+    }
+
     return skip;
 }
 
@@ -1404,7 +1469,8 @@ bool BestPractices::ValidateIndexBufferArm(VkCommandBuffer commandBuffer, uint32
         }
 
         // if the max and min values were not set, then we either have no indices, or all primitive restarts, exit...
-        if (max_index < min_index) return skip;
+        // if the max and min are the same, then it implies all the indices are the same, then we don't need to do anything
+        if (max_index < min_index || max_index == min_index) return skip;
 
         if (max_index - min_index >= indexCount) {
             skip |= LogPerformanceWarning(
@@ -1419,9 +1485,15 @@ bool BestPractices::ValidateIndexBufferArm(VkCommandBuffer commandBuffer, uint32
 
         // use a dynamic vector of bitsets as a memory-compact representation of which indices are included in the draw call
         // each bit of the n-th bucket contains the inclusion information for indices (n*n_buckets) to ((n+1)*n_buckets)
-        const size_t n_buckets = 64;
-        std::vector<std::bitset<n_buckets>> vertex_reference_buckets;
-        vertex_reference_buckets.resize((max_index - min_index + 1) / n_buckets);
+        const size_t refs_per_bucket = 64;
+        std::vector<std::bitset<refs_per_bucket>> vertex_reference_buckets;
+
+        const uint32_t n_indices = max_index - min_index + 1;
+        const uint32_t n_buckets = (n_indices / static_cast<uint32_t>(refs_per_bucket)) +
+                                   ((n_indices % static_cast<uint32_t>(refs_per_bucket)) != 0 ? 1 : 0);
+
+        // there needs to be at least one bitset to store a set of indices smaller than n_buckets
+        vertex_reference_buckets.resize(std::max(1u, n_buckets));
 
         // To avoid using too much memory, we run over the indices again.
         // Knowing the size from the last scan allows us to record index usage with bitsets
@@ -1436,8 +1508,8 @@ bool BestPractices::ValidateIndexBufferArm(VkCommandBuffer commandBuffer, uint32
             }
             // keep track of the set of all indices used to reference vertices in the draw call
             size_t index_offset = scan_index - min_index;
-            size_t bitset_bucket_index = index_offset / n_buckets;
-            uint64_t used_indices = 1ull << ((index_offset % n_buckets) & 0xFFFFFFFFu);
+            size_t bitset_bucket_index = index_offset / refs_per_bucket;
+            uint64_t used_indices = 1ull << ((index_offset % refs_per_bucket) & 0xFFFFFFFFu);
             vertex_reference_buckets[bitset_bucket_index] |= used_indices;
         }
 

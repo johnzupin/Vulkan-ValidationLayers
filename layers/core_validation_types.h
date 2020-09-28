@@ -100,6 +100,7 @@ class BASE_NODE {
 
 // Track command pools and their command buffers
 struct COMMAND_POOL_STATE : public BASE_NODE {
+    VkCommandPool commandPool;
     VkCommandPoolCreateFlags createFlags;
     uint32_t queueFamilyIndex;
     bool unprotected;  // can't be used for protected memory
@@ -160,6 +161,8 @@ enum descriptor_req {
     DESCRIPTOR_REQ_COMPONENT_TYPE_FLOAT = DESCRIPTOR_REQ_MULTI_SAMPLE << 1,
     DESCRIPTOR_REQ_COMPONENT_TYPE_SINT = DESCRIPTOR_REQ_COMPONENT_TYPE_FLOAT << 1,
     DESCRIPTOR_REQ_COMPONENT_TYPE_UINT = DESCRIPTOR_REQ_COMPONENT_TYPE_SINT << 1,
+
+    DESCRIPTOR_REQ_VIEW_ATOMIC_OPERATION = DESCRIPTOR_REQ_COMPONENT_TYPE_UINT << 1,
 };
 
 extern unsigned DescriptorRequirementsBitsFromFormat(VkFormat fmt);
@@ -208,8 +211,9 @@ struct DEVICE_MEMORY_STATE : public BASE_NODE {
     VkImage dedicated_image;
     bool is_export;
     bool is_import;
-    bool is_import_ahb;  // The VUID check depends on if the imported memory is for AHB
-    bool unprotected;    // can't be used for protected memory
+    bool is_import_ahb;   // The VUID check depends on if the imported memory is for AHB
+    bool unprotected;     // can't be used for protected memory
+    bool multi_instance;  // Allocated from MULTI_INSTANCE heap or having more than one deviceMask bit set
     VkExternalMemoryHandleTypeFlags export_handle_type_flags;
     VkExternalMemoryHandleTypeFlags import_handle_type_flags;
     std::unordered_set<VulkanTypedHandle> obj_bindings;  // objects bound to this memory
@@ -238,6 +242,7 @@ struct DEVICE_MEMORY_STATE : public BASE_NODE {
           is_import(false),
           is_import_ahb(false),
           unprotected(true),
+          multi_instance(false),
           export_handle_type_flags(0),
           import_handle_type_flags(0),
           mapped_range{},
@@ -370,6 +375,7 @@ class BUFFER_VIEW_STATE : public BASE_NODE {
     VkBufferView buffer_view;
     VkBufferViewCreateInfo create_info;
     std::shared_ptr<BUFFER_STATE> buffer_state;
+    VkFormatFeatureFlags format_features;
     BUFFER_VIEW_STATE(const std::shared_ptr<BUFFER_STATE> &bf, VkBufferView bv, const VkBufferViewCreateInfo *ci)
         : buffer_view(bv), create_info(*ci), buffer_state(bf){};
     BUFFER_VIEW_STATE(const BUFFER_VIEW_STATE &rh_obj) = delete;
@@ -491,6 +497,8 @@ class IMAGE_VIEW_STATE : public BASE_NODE {
     std::shared_ptr<IMAGE_STATE> image_state;
     IMAGE_VIEW_STATE(const std::shared_ptr<IMAGE_STATE> &image_state, VkImageView iv, const VkImageViewCreateInfo *ci);
     IMAGE_VIEW_STATE(const IMAGE_VIEW_STATE &rh_obj) = delete;
+
+    bool OverlapSubresource(const IMAGE_VIEW_STATE &compare_view) const;
 };
 
 class ACCELERATION_STRUCTURE_STATE : public BINDABLE {
@@ -567,12 +575,12 @@ struct SubpassDependencyGraphNode {
         Dependency(const VkSubpassDependency2 *dependency_, const SubpassDependencyGraphNode *node_)
             : dependency(dependency_), node(node_) {}
     };
-    std::vector<Dependency> prev;
-    std::vector<Dependency> next;
+    std::map<const SubpassDependencyGraphNode *, std::vector<const VkSubpassDependency2 *>> prev;
+    std::map<const SubpassDependencyGraphNode *, std::vector<const VkSubpassDependency2 *>> next;
     std::vector<uint32_t> async;  // asynchronous subpasses with a lower subpass index
 
-    const VkSubpassDependency2 *barrier_from_external;
-    const VkSubpassDependency2 *barrier_to_external;
+    std::vector<const VkSubpassDependency2 *> barrier_from_external;
+    std::vector<const VkSubpassDependency2 *> barrier_to_external;
     std::unique_ptr<VkSubpassDependency2> implicit_barrier_from_external;
     std::unique_ptr<VkSubpassDependency2> implicit_barrier_to_external;
 };
@@ -794,11 +802,24 @@ struct interface_var {
     uint32_t id;
     uint32_t type_id;
     uint32_t offset;
+    int32_t input_index;  // index = -1 means that it's not input attachment.
     bool is_patch;
     bool is_block_member;
     bool is_relaxed_precision;
     bool is_writable;
+    bool is_atomic_operation;
     // TODO: collect the name, too? Isn't required to be present.
+
+    interface_var()
+        : id(0),
+          type_id(0),
+          offset(0),
+          input_index(-1),
+          is_patch(false),
+          is_block_member(false),
+          is_relaxed_precision(false),
+          is_writable(false),
+          is_atomic_operation(false) {}
 };
 typedef std::pair<unsigned, unsigned> descriptor_slot_t;
 
@@ -861,6 +882,7 @@ class PIPELINE_STATE : public BASE_NODE {
         std::unordered_set<uint32_t> accessible_ids;
         std::vector<std::pair<descriptor_slot_t, interface_var>> descriptor_uses;
         bool has_writable_descriptor;
+        bool has_atomic_descriptor;
         VkShaderStageFlagBits stage_flag;
     };
 
@@ -1178,12 +1200,19 @@ struct CMD_BUFFER_STATE : public BASE_NODE {
     std::map<uint32_t, LAST_BOUND_STATE> lastBound;
 
     struct BindingInfo {
+        uint32_t binding;
         descriptor_req requirements;
-        CMD_TYPE cmd_type;
     };
-    using Bindings = std::map<uint32_t, BindingInfo>;
-    using Pipelines_Bindings = std::map<VkPipeline, Bindings>;
-    std::unordered_map<VkDescriptorSet, Pipelines_Bindings> validate_descriptorsets_in_queuesubmit;
+
+    struct CmdDrawDispatchInfo {
+        CMD_TYPE cmd_type;
+        std::string function;
+        std::vector<BindingInfo> binding_infos;
+        VkFramebuffer framebuffer;
+        std::vector<VkImageView> attachment_views;  // vector index is attachment index. If the value is VK_NULL_HANDLE(0),
+                                                    // it means the attachment isn't used in this command.
+    };
+    std::unordered_map<VkDescriptorSet, std::vector<CmdDrawDispatchInfo>> validate_descriptorsets_in_queuesubmit;
 
     uint32_t viewportMask;
     uint32_t viewportWithCountMask;
@@ -1312,6 +1341,10 @@ class FRAMEBUFFER_STATE : public BASE_NODE {
     std::shared_ptr<const RENDER_PASS_STATE> rp_state;
     FRAMEBUFFER_STATE(VkFramebuffer fb, const VkFramebufferCreateInfo *pCreateInfo, std::shared_ptr<RENDER_PASS_STATE> &&rpstate)
         : framebuffer(fb), createInfo(pCreateInfo), rp_state(rpstate){};
+
+    // vector index is attachment index. If the value is VK_NULL_HANDLE(0), it means the attachment isn't used in this command.
+    std::vector<VkImageView> GetUsedAttachments(const safe_VkSubpassDescription2 &subpasses,
+                                                const std::vector<IMAGE_VIEW_STATE *> &imagelessFramebufferAttachments);
 };
 
 struct SHADER_MODULE_STATE;

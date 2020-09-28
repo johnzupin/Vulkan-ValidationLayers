@@ -814,8 +814,7 @@ static std::vector<std::pair<uint32_t, interface_var>> CollectInterfaceByInputAt
                 if (accessible_ids.count(id)) {
                     auto def = src->get_def(id);
                     assert(def != src->end());
-
-                    if (def.opcode() == spv::OpVariable && insn.word(3) == spv::StorageClassUniformConstant) {
+                    if (def.opcode() == spv::OpVariable && def.word(3) == spv::StorageClassUniformConstant) {
                         auto num_locations = GetLocationsConsumedByType(src, def.word(1), false);
                         for (unsigned int offset = 0; offset < num_locations; offset++) {
                             interface_var v = {};
@@ -833,7 +832,35 @@ static std::vector<std::pair<uint32_t, interface_var>> CollectInterfaceByInputAt
     return out;
 }
 
-static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, const spirv_inst_iter &id_it, bool is_storage_buffer) {
+static bool AtomicOperation(uint32_t opcode) {
+    switch (opcode) {
+        case spv::OpAtomicLoad:
+        case spv::OpAtomicStore:
+        case spv::OpAtomicExchange:
+        case spv::OpAtomicCompareExchange:
+        case spv::OpAtomicCompareExchangeWeak:
+        case spv::OpAtomicIIncrement:
+        case spv::OpAtomicIDecrement:
+        case spv::OpAtomicIAdd:
+        case spv::OpAtomicISub:
+        case spv::OpAtomicSMin:
+        case spv::OpAtomicUMin:
+        case spv::OpAtomicSMax:
+        case spv::OpAtomicUMax:
+        case spv::OpAtomicAnd:
+        case spv::OpAtomicOr:
+        case spv::OpAtomicXor:
+        case spv::OpAtomicFAddEXT:
+            return true;
+        default:
+            return false;
+    }
+    return false;
+}
+
+// Check writable, image atomic operation
+static void IsSpecificDescriptorType(SHADER_MODULE_STATE const *module, const spirv_inst_iter &id_it, bool is_storage_buffer,
+                                     bool is_check_writable, interface_var &out_interface_var) {
     uint32_t type_id = id_it.word(1);
     auto type = module->get_def(type_id);
 
@@ -851,14 +878,17 @@ static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, const sp
             auto sampled = type.word(7);
             if (sampled == 2 && dim != spv::DimSubpassData) {
                 std::vector<unsigned> imagwrite_members;
+                std::vector<unsigned> atomic_members;
                 std::unordered_map<unsigned, unsigned> load_members;
                 std::unordered_map<unsigned, unsigned> accesschain_members;
+                std::unordered_map<unsigned, unsigned> image_texel_pointer_members;
+
                 unsigned int id = id_it.word(2);
 
                 for (auto insn : *module) {
                     switch (insn.opcode()) {
                         case spv::OpImageWrite: {
-                            imagwrite_members.emplace_back(insn.word(1));  // Load id
+                            if (is_check_writable) imagwrite_members.emplace_back(insn.word(1));  // Load id
                             break;
                         }
                         case spv::OpLoad: {
@@ -873,29 +903,64 @@ static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, const sp
                             }
                             break;
                         }
-                        default:
+                        case spv::OpImageTexelPointer: {
+                            // 2: ImageTexelPointer id, 3: object id
+                            image_texel_pointer_members.insert(std::make_pair(insn.word(2), insn.word(3)));
                             break;
+                        }
+                        default: {
+                            if (AtomicOperation(insn.opcode())) {
+                                if (insn.opcode() == spv::OpAtomicStore) {
+                                    atomic_members.emplace_back(insn.word(1));  // ImageTexelPointer id
+                                } else {
+                                    atomic_members.emplace_back(insn.word(3));  // ImageTexelPointer id
+                                }
+                            }
+                            break;
+                        }
                     }
                 }
-                if (imagwrite_members.empty() || load_members.empty()) {
-                    return false;
-                }
+                out_interface_var.is_writable = false;
+                out_interface_var.is_atomic_operation = false;
+
                 for (auto load_id : imagwrite_members) {
                     auto load_it = load_members.find(load_id);
                     if (load_it == load_members.end()) {
                         continue;
                     }
                     if (load_it->second == id) {
-                        return true;
+                        out_interface_var.is_writable = true;
+                        break;
                     }
+
                     auto accesschain_it = accesschain_members.find(load_it->second);
                     if (accesschain_it == accesschain_members.end()) {
                         continue;
                     }
-                    return true;
+                    out_interface_var.is_writable = true;
+                    accesschain_members.erase(accesschain_it);
+                    break;
+                }
+
+                for (auto itp_id : atomic_members) {
+                    auto ltp_it = image_texel_pointer_members.find(itp_id);
+                    if (ltp_it == image_texel_pointer_members.end()) {
+                        continue;
+                    }
+                    if (ltp_it->second == id) {
+                        out_interface_var.is_atomic_operation = true;
+                        break;
+                    }
+
+                    auto accesschain_it = accesschain_members.find(ltp_it->second);
+                    if (accesschain_it == accesschain_members.end()) {
+                        continue;
+                    }
+                    out_interface_var.is_atomic_operation = true;
+                    break;
                 }
             }
-            return false;
+            return;
         }
 
         case spv::OpTypeStruct: {
@@ -913,16 +978,27 @@ static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, const sp
             if (is_storage_buffer && nonwritable_members.size() != type.len() - 2) {
                 std::vector<unsigned> store_members;
                 std::unordered_map<unsigned, unsigned> accesschain_members;
+                std::vector<unsigned> atomic_store_members;
+                std::unordered_map<unsigned, unsigned> image_texel_pointer_members;
                 unsigned int id = id_it.word(2);
 
                 for (auto insn : *module) {
                     switch (insn.opcode()) {
-                        case spv::OpStore:
-                        case spv::OpAtomicStore: {
+                        case spv::OpStore: {
                             if (insn.word(1) == id) {
-                                return true;
+                                out_interface_var.is_writable = true;
+                                return;
                             }
                             store_members.emplace_back(insn.word(1));  // object id or AccessChain id
+                            break;
+                        }
+                        case spv::OpAtomicStore: {
+                            atomic_store_members.emplace_back(insn.word(1));  // ImageTexelPointer id
+                            break;
+                        }
+                        case spv::OpImageTexelPointer: {
+                            // 2: ImageTexelPointer id, 3: object id
+                            image_texel_pointer_members.insert(std::make_pair(insn.word(2), insn.word(3)));
                             break;
                         }
                         case spv::OpAccessChain: {
@@ -936,26 +1012,42 @@ static bool IsWritableDescriptorType(SHADER_MODULE_STATE const *module, const sp
                             break;
                     }
                 }
-                if (store_members.empty() || accesschain_members.empty()) {
-                    return false;
-                }
+                out_interface_var.is_writable = false;
+
                 for (auto oid : store_members) {
                     auto accesschain_it = accesschain_members.find(oid);
                     if (accesschain_it == accesschain_members.end()) {
                         continue;
                     }
-                    return true;
+                    out_interface_var.is_writable = true;
+                    return;
+                }
+
+                for (auto itp_id : atomic_store_members) {
+                    auto ltp_it = image_texel_pointer_members.find(itp_id);
+                    if (ltp_it == image_texel_pointer_members.end()) {
+                        continue;
+                    }
+                    if (ltp_it->second == id) {
+                        out_interface_var.is_writable = true;
+                        return;
+                    }
+
+                    auto accesschain_it = accesschain_members.find(ltp_it->second);
+                    if (accesschain_it == accesschain_members.end()) {
+                        continue;
+                    }
+                    out_interface_var.is_writable = true;
+                    return;
                 }
             }
-            return false;
         }
     }
-
-    return false;
 }
 
 std::vector<std::pair<descriptor_slot_t, interface_var>> CollectInterfaceByDescriptorSlot(
-    SHADER_MODULE_STATE const *src, std::unordered_set<uint32_t> const &accessible_ids, bool *has_writable_descriptor) {
+    SHADER_MODULE_STATE const *src, std::unordered_set<uint32_t> const &accessible_ids, bool *has_writable_descriptor,
+    bool *has_atomic_descriptor) {
     std::vector<std::pair<descriptor_slot_t, interface_var>> out;
 
     for (auto id : accessible_ids) {
@@ -972,12 +1064,13 @@ std::vector<std::pair<descriptor_slot_t, interface_var>> CollectInterfaceByDescr
             interface_var v = {};
             v.id = insn.word(2);
             v.type_id = insn.word(1);
-            v.is_writable = false;
 
-            if (!(d.flags & decoration_set::nonwritable_bit) &&
-                IsWritableDescriptorType(src, insn, insn.word(3) == spv::StorageClassStorageBuffer)) {
-                *has_writable_descriptor = true;
-                v.is_writable = true;
+            IsSpecificDescriptorType(src, insn, insn.word(3) == spv::StorageClassStorageBuffer,
+                                     !(d.flags & decoration_set::nonwritable_bit), v);
+            if (v.is_writable) *has_writable_descriptor = true;
+            if (v.is_atomic_operation) *has_atomic_descriptor = true;
+            if (d.flags & decoration_set::input_attachment_index_bit) {
+                v.input_index = d.input_attachment_index;
             }
             out.emplace_back(std::make_pair(set, binding), v);
         }
@@ -1309,25 +1402,9 @@ std::unordered_set<uint32_t> MarkAccessibleIds(SHADER_MODULE_STATE const *src, s
                 while (++insn, insn.opcode() != spv::OpFunctionEnd) {
                     switch (insn.opcode()) {
                         case spv::OpLoad:
-                        case spv::OpAtomicLoad:
-                        case spv::OpAtomicExchange:
-                        case spv::OpAtomicCompareExchange:
-                        case spv::OpAtomicCompareExchangeWeak:
-                        case spv::OpAtomicIIncrement:
-                        case spv::OpAtomicIDecrement:
-                        case spv::OpAtomicIAdd:
-                        case spv::OpAtomicISub:
-                        case spv::OpAtomicSMin:
-                        case spv::OpAtomicUMin:
-                        case spv::OpAtomicSMax:
-                        case spv::OpAtomicUMax:
-                        case spv::OpAtomicAnd:
-                        case spv::OpAtomicOr:
-                        case spv::OpAtomicXor:
                             worklist.insert(insn.word(3));  // ptr
                             break;
                         case spv::OpStore:
-                        case spv::OpAtomicStore:
                             worklist.insert(insn.word(1));  // ptr
                             break;
                         case spv::OpAccessChain:
@@ -1383,6 +1460,17 @@ std::unordered_set<uint32_t> MarkAccessibleIds(SHADER_MODULE_STATE const *src, s
                                 worklist.insert(insn.word(i));  // Operands to ext inst
                             }
                             break;
+
+                        default: {
+                            if (AtomicOperation(insn.opcode())) {
+                                if (insn.opcode() == spv::OpAtomicStore) {
+                                    worklist.insert(insn.word(1));  // ptr
+                                } else {
+                                    worklist.insert(insn.word(3));  // ptr
+                                }
+                            }
+                            break;
+                        }
                     }
                 }
                 break;
@@ -1898,10 +1986,11 @@ bool CoreChecks::ValidateShaderCapabilities(SHADER_MODULE_STATE const *src, VkSh
     return skip;
 }
 
-bool CoreChecks::ValidateShaderStageWritableDescriptor(VkShaderStageFlagBits stage, bool has_writable_descriptor) const {
+bool CoreChecks::ValidateShaderStageWritableOrAtomicDescriptor(VkShaderStageFlagBits stage, bool has_writable_descriptor,
+                                                               bool has_atomic_descriptor) const {
     bool skip = false;
 
-    if (has_writable_descriptor) {
+    if (has_writable_descriptor || has_atomic_descriptor) {
         switch (stage) {
             case VK_SHADER_STAGE_COMPUTE_BIT:
             case VK_SHADER_STAGE_RAYGEN_BIT_NV:
@@ -2912,7 +3001,27 @@ static VkDescriptorSetLayoutBinding const *GetDescriptorBinding(PIPELINE_LAYOUT_
     return pipelineLayout->set_layouts[slot.first]->GetDescriptorSetLayoutBindingPtrFromBinding(slot.second);
 }
 
-static bool FindLocalSize(SHADER_MODULE_STATE const *src, uint32_t &local_size_x, uint32_t &local_size_y, uint32_t &local_size_z) {
+int32_t GetShaderResourceDimensionality(const SHADER_MODULE_STATE *module, const interface_var &resource) {
+    if (module == nullptr) return -1;
+
+    auto type = module->get_def(resource.type_id);
+    while (true) {
+        switch (type.opcode()) {
+            case spv::OpTypeSampledImage:
+                type = module->get_def(type.word(2));
+                break;
+            case spv::OpTypePointer:
+                type = module->get_def(type.word(3));
+                break;
+            case spv::OpTypeImage:
+                return type.word(3);
+            default:
+                return -1;
+        }
+    }
+}
+
+bool FindLocalSize(SHADER_MODULE_STATE const *src, uint32_t &local_size_x, uint32_t &local_size_y, uint32_t &local_size_z) {
     for (auto insn : *src) {
         if (insn.opcode() == spv::OpEntryPoint) {
             auto executionModel = insn.word(1);
@@ -3071,26 +3180,16 @@ bool CoreChecks::ValidatePipelineShaderStage(VkPipelineShaderStageCreateInfo con
             spv_context ctx = spvContextCreate(spirv_environment);
             spv_const_binary_t binary{specialized_spirv.data(), specialized_spirv.size()};
             spv_diagnostic diag = nullptr;
-            spv_validator_options options = spvValidatorOptionsCreate();
-            if (device_extensions.vk_khr_relaxed_block_layout) {
-                spvValidatorOptionsSetRelaxBlockLayout(options, true);
-            }
-            if (device_extensions.vk_khr_uniform_buffer_standard_layout &&
-                enabled_features.core12.uniformBufferStandardLayout == VK_TRUE) {
-                spvValidatorOptionsSetUniformBufferStandardLayout(options, true);
-            }
-            if (device_extensions.vk_ext_scalar_block_layout && enabled_features.core12.scalarBlockLayout == VK_TRUE) {
-                spvValidatorOptionsSetScalarBlockLayout(options, true);
-            }
+            spvtools::ValidatorOptions options;
+            AdjustValidatorOptions(device_extensions, enabled_features, options);
             auto const spv_valid = spvValidateWithOptions(ctx, options, &binary, &diag);
             if (spv_valid != SPV_SUCCESS) {
-                skip |= LogError(device, "VUID-VkPipelineShaderStageCreateInfo-module-parameter",
+                skip |= LogError(device, "VUID-VkPipelineShaderStageCreateInfo-module-04145",
                                  "After specialization was applied, %s does not contain valid spirv for stage %s.",
                                  report_data->FormatHandle(module->vk_shader_module).c_str(),
                                  string_VkShaderStageFlagBits(pStage->stage));
             }
 
-            spvValidatorOptionsDestroy(options);
             spvDiagnosticDestroy(diag);
             spvContextDestroy(ctx);
         }
@@ -3113,7 +3212,8 @@ bool CoreChecks::ValidatePipelineShaderStage(VkPipelineShaderStageCreateInfo con
 
     // Validate shader capabilities against enabled device features
     skip |= ValidateShaderCapabilities(module, pStage->stage);
-    skip |= ValidateShaderStageWritableDescriptor(pStage->stage, has_writable_descriptor);
+    skip |=
+        ValidateShaderStageWritableOrAtomicDescriptor(pStage->stage, has_writable_descriptor, stage_state.has_atomic_descriptor);
     skip |= ValidateShaderStageInputOutputLimits(module, pStage, pipeline, entrypoint);
     skip |= ValidateShaderStageMaxResources(pStage->stage, pipeline);
     skip |= ValidateShaderStageGroupNonUniform(module, pStage->stage);
@@ -3125,6 +3225,17 @@ bool CoreChecks::ValidatePipelineShaderStage(VkPipelineShaderStageCreateInfo con
     }
     skip |= ValidateCooperativeMatrix(module, pStage, pipeline);
 
+    std::string vuid_layout_mismatch;
+    if (pipeline->graphicsPipelineCI.sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO) {
+        vuid_layout_mismatch = "VUID-VkGraphicsPipelineCreateInfo-layout-00756";
+    } else if (pipeline->computePipelineCI.sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO) {
+        vuid_layout_mismatch = "VUID-VkComputePipelineCreateInfo-layout-00703";
+    } else if (pipeline->raytracingPipelineCI.sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR) {
+        vuid_layout_mismatch = "VUID-VkRayTracingPipelineCreateInfoKHR-layout-03427";
+    } else if (pipeline->raytracingPipelineCI.sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV) {
+        vuid_layout_mismatch = "VUID-VkRayTracingPipelineCreateInfoNV-layout-03427";
+    }
+
     // Validate descriptor use
     for (auto use : descriptor_uses) {
         // Verify given pipelineLayout has requested setLayout with requested binding
@@ -3133,20 +3244,20 @@ bool CoreChecks::ValidatePipelineShaderStage(VkPipelineShaderStageCreateInfo con
         std::set<uint32_t> descriptor_types = TypeToDescriptorTypeSet(module, use.second.type_id, required_descriptor_count);
 
         if (!binding) {
-            skip |= LogError(device, kVUID_Core_Shader_MissingDescriptor,
+            skip |= LogError(device, vuid_layout_mismatch,
                              "Shader uses descriptor slot %u.%u (expected `%s`) but not declared in pipeline layout",
                              use.first.first, use.first.second, string_descriptorTypes(descriptor_types).c_str());
         } else if (~binding->stageFlags & pStage->stage) {
-            skip |= LogError(device, kVUID_Core_Shader_DescriptorNotAccessibleFromStage,
+            skip |= LogError(device, vuid_layout_mismatch,
                              "Shader uses descriptor slot %u.%u but descriptor not accessible from stage %s", use.first.first,
                              use.first.second, string_VkShaderStageFlagBits(pStage->stage));
         } else if (descriptor_types.find(binding->descriptorType) == descriptor_types.end()) {
-            skip |= LogError(device, kVUID_Core_Shader_DescriptorTypeMismatch,
+            skip |= LogError(device, vuid_layout_mismatch,
                              "Type mismatch on descriptor slot %u.%u (expected `%s`) but descriptor of type %s", use.first.first,
                              use.first.second, string_descriptorTypes(descriptor_types).c_str(),
                              string_VkDescriptorType(binding->descriptorType));
         } else if (binding->descriptorCount < required_descriptor_count) {
-            skip |= LogError(device, kVUID_Core_Shader_DescriptorTypeMismatch,
+            skip |= LogError(device, vuid_layout_mismatch,
                              "Shader expects at least %u descriptors for binding %u.%u but only %u provided",
                              required_descriptor_count, use.first.first, use.first.second, binding->descriptorCount);
         }
@@ -3526,17 +3637,8 @@ bool CoreChecks::PreCallValidateCreateShaderModule(VkDevice device, const VkShad
         spv_context ctx = spvContextCreate(spirv_environment);
         spv_const_binary_t binary{pCreateInfo->pCode, pCreateInfo->codeSize / sizeof(uint32_t)};
         spv_diagnostic diag = nullptr;
-        spv_validator_options options = spvValidatorOptionsCreate();
-        if (device_extensions.vk_khr_relaxed_block_layout) {
-            spvValidatorOptionsSetRelaxBlockLayout(options, true);
-        }
-        if (device_extensions.vk_khr_uniform_buffer_standard_layout &&
-            enabled_features.core12.uniformBufferStandardLayout == VK_TRUE) {
-            spvValidatorOptionsSetUniformBufferStandardLayout(options, true);
-        }
-        if (device_extensions.vk_ext_scalar_block_layout && enabled_features.core12.scalarBlockLayout == VK_TRUE) {
-            spvValidatorOptionsSetScalarBlockLayout(options, true);
-        }
+        spvtools::ValidatorOptions options;
+        AdjustValidatorOptions(device_extensions, enabled_features, options);
         spv_valid = spvValidateWithOptions(ctx, options, &binary, &diag);
         if (spv_valid != SPV_SUCCESS) {
             if (!have_glsl_shader || (pCreateInfo->pCode[0] == spv::MagicNumber)) {
@@ -3554,7 +3656,6 @@ bool CoreChecks::PreCallValidateCreateShaderModule(VkDevice device, const VkShad
             }
         }
 
-        spvValidatorOptionsDestroy(options);
         spvDiagnosticDestroy(diag);
         spvContextDestroy(ctx);
     }
@@ -3622,4 +3723,17 @@ spv_target_env PickSpirvEnv(uint32_t api_version, bool spirv_1_4) {
         }
     }
     return SPV_ENV_VULKAN_1_0;
+}
+
+void AdjustValidatorOptions(const DeviceExtensions device_extensions, const DeviceFeatures enabled_features,
+                            spvtools::ValidatorOptions &options) {
+    if (device_extensions.vk_khr_relaxed_block_layout) {
+        options.SetRelaxBlockLayout(true);
+    }
+    if (device_extensions.vk_khr_uniform_buffer_standard_layout && enabled_features.core12.uniformBufferStandardLayout == VK_TRUE) {
+        options.SetUniformBufferStandardLayout(true);
+    }
+    if (device_extensions.vk_ext_scalar_block_layout && enabled_features.core12.scalarBlockLayout == VK_TRUE) {
+        options.SetScalarBlockLayout(true);
+    }
 }

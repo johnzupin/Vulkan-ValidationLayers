@@ -85,6 +85,19 @@ bool StatelessValidation::validate_instance_extensions(const VkInstanceCreateInf
     return skip;
 }
 
+bool StatelessValidation::SupportedByPdev(const VkPhysicalDevice physical_device, const std::string ext_name) const {
+    if (instance_extensions.vk_khr_get_physical_device_properties_2) {
+        // Struct is legal IF it's supported
+        const auto &dev_exts_enumerated = device_extensions_enumerated.find(physical_device);
+        if (dev_exts_enumerated == device_extensions_enumerated.end()) return true;
+        auto enum_iter = dev_exts_enumerated->second.find(ext_name);
+        if (enum_iter != dev_exts_enumerated->second.cend()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool StatelessValidation::validate_validation_features(const VkInstanceCreateInfo *pCreateInfo,
                                                        const VkValidationFeaturesEXT *validation_features) const {
     bool skip = false;
@@ -157,7 +170,38 @@ void StatelessValidation::PostCallRecordCreateInstance(const VkInstanceCreateInf
     // Copy extension data into local object
     if (result != VK_SUCCESS) return;
     this->instance_extensions = instance_data->instance_extensions;
+
+    uint32_t pdev_count = 0;
+    DispatchEnumeratePhysicalDevices(*pInstance, &pdev_count, nullptr);
+    std::vector<VkPhysicalDevice> physical_devices;
+    physical_devices.resize(pdev_count);
+    DispatchEnumeratePhysicalDevices(*pInstance, &pdev_count, physical_devices.data());
+
+    for (uint32_t i = 0; i < physical_devices.size(); i++) {
+        auto phys_dev_props = new VkPhysicalDeviceProperties;
+        DispatchGetPhysicalDeviceProperties(physical_devices[i], phys_dev_props);
+        physical_device_properties_map[physical_devices[i]] = phys_dev_props;
+
+        // Enumerate the Device Ext Properties to save the PhysicalDevice supported extension state
+        uint32_t ext_count = 0;
+        std::unordered_set<std::string> dev_exts_enumerated{};
+        std::vector<VkExtensionProperties> ext_props{};
+        instance_dispatch_table.EnumerateDeviceExtensionProperties(physical_devices[i], nullptr, &ext_count, nullptr);
+        ext_props.resize(ext_count);
+        instance_dispatch_table.EnumerateDeviceExtensionProperties(physical_devices[i], nullptr, &ext_count, ext_props.data());
+        for (uint32_t j = 0; j < ext_count; j++) {
+            dev_exts_enumerated.insert(ext_props[j].extensionName);
+        }
+        device_extensions_enumerated[physical_devices[i]] = std::move(dev_exts_enumerated);
+    }
 }
+
+void StatelessValidation::PreCallRecordDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator) {
+    for (auto it = physical_device_properties_map.begin(); it != physical_device_properties_map.end();) {
+        delete (it->second);
+        it = physical_device_properties_map.erase(it);
+    }
+};
 
 void StatelessValidation::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                                                      const VkAllocationCallbacks *pAllocator, VkDevice *pDevice, VkResult result) {
@@ -283,14 +327,6 @@ bool StatelessValidation::manual_PreCallValidateCreateDevice(VkPhysicalDevice ph
     }
 
     auto features2 = lvl_find_in_chain<VkPhysicalDeviceFeatures2>(pCreateInfo->pNext);
-    if (features2) {
-        if (!instance_extensions.vk_khr_get_physical_device_properties_2) {
-            skip |= LogError(device, kVUID_PVError_ExtensionNotEnabled,
-                             "VkDeviceCreateInfo->pNext includes a VkPhysicalDeviceFeatures2 struct, "
-                             "VK_KHR_get_physical_device_properties2 must be enabled when it creates an instance.");
-        }
-    }
-
     const VkPhysicalDeviceFeatures *features = features2 ? &features2->features : pCreateInfo->pEnabledFeatures;
     const auto *robustness2_features = lvl_find_in_chain<VkPhysicalDeviceRobustness2FeaturesEXT>(pCreateInfo->pNext);
     if (features && robustness2_features && robustness2_features->robustBufferAccess2 && !features->robustBufferAccess) {
@@ -306,20 +342,10 @@ bool StatelessValidation::manual_PreCallValidateCreateDevice(VkPhysicalDevice ph
     }
     auto vertex_attribute_divisor_features =
         lvl_find_in_chain<VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT>(pCreateInfo->pNext);
-    if (vertex_attribute_divisor_features) {
-        bool extension_found = false;
-        for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; ++i) {
-            if (0 == strncmp(pCreateInfo->ppEnabledExtensionNames[i], VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME,
-                             VK_MAX_EXTENSION_NAME_SIZE)) {
-                extension_found = true;
-                break;
-            }
-        }
-        if (!extension_found) {
-            skip |= LogError(device, kVUID_PVError_ExtensionNotEnabled,
-                             "VkDeviceCreateInfo->pNext includes a VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT "
-                             "struct, VK_EXT_vertex_attribute_divisor must be enabled when it creates a device.");
-        }
+    if (vertex_attribute_divisor_features && (!device_extensions.vk_ext_vertex_attribute_divisor)) {
+        skip |= LogError(device, kVUID_PVError_ExtensionNotEnabled,
+                         "VkDeviceCreateInfo->pNext includes a VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT "
+                         "struct, VK_EXT_vertex_attribute_divisor must be enabled when it creates a device.");
     }
 
     const auto *vulkan_11_features = lvl_find_in_chain<VkPhysicalDeviceVulkan11Features>(pCreateInfo->pNext);
@@ -734,7 +760,7 @@ bool StatelessValidation::manual_PreCallValidateCreateImage(VkDevice device, con
         if ((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) != 0) {
             // Linear tiling is unsupported
             if (VK_IMAGE_TILING_LINEAR == pCreateInfo->tiling) {
-                skip |= LogError(device, kVUID_PVError_InvalidUsage,
+                skip |= LogError(device, "VUID-VkImageCreateInfo-tiling-04121",
                                  "vkCreateImage: if pCreateInfo->flags contains VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT then image "
                                  "tiling of VK_IMAGE_TILING_LINEAR is not supported");
             }
@@ -2242,6 +2268,7 @@ bool StatelessValidation::manual_PreCallValidateCreateGraphicsPipelines(VkDevice
                                      i, i);
                 } else {
                     const VkStructureType valid_next_stypes[] = {LvlTypeMap<VkPipelineCoverageModulationStateCreateInfoNV>::kSType,
+                                                                 LvlTypeMap<VkPipelineCoverageReductionStateCreateInfoNV>::kSType,
                                                                  LvlTypeMap<VkPipelineCoverageToColorStateCreateInfoNV>::kSType,
                                                                  LvlTypeMap<VkPipelineSampleLocationsStateCreateInfoEXT>::kSType};
                     const char *valid_struct_names =
@@ -2250,7 +2277,7 @@ bool StatelessValidation::manual_PreCallValidateCreateGraphicsPipelines(VkDevice
                     skip |= validate_struct_pnext(
                         "vkCreateGraphicsPipelines",
                         ParameterName("pCreateInfos[%i].pMultisampleState->pNext", ParameterName::IndexVector{i}),
-                        valid_struct_names, pCreateInfos[i].pMultisampleState->pNext, 3, valid_next_stypes,
+                        valid_struct_names, pCreateInfos[i].pMultisampleState->pNext, 4, valid_next_stypes,
                         GeneratedVulkanHeaderVersion, "VUID-VkPipelineMultisampleStateCreateInfo-pNext-pNext",
                         "VUID-VkPipelineMultisampleStateCreateInfo-sType-unique");
 
@@ -2288,7 +2315,7 @@ bool StatelessValidation::manual_PreCallValidateCreateGraphicsPipelines(VkDevice
                         pCreateInfos[i].pMultisampleState->alphaToOneEnable);
 
                     if (pCreateInfos[i].pMultisampleState->sType != VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO) {
-                        skip |= LogError(device, kVUID_PVError_InvalidStructSType,
+                        skip |= LogError(device, "VUID-VkPipelineMultisampleStateCreateInfo-sType-sType",
                                          "vkCreateGraphicsPipelines: parameter pCreateInfos[%d].pMultisampleState->sType must be "
                                          "VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO",
                                          i);
@@ -2517,7 +2544,7 @@ bool StatelessValidation::manual_PreCallValidateCreateGraphicsPipelines(VkDevice
                         "VUID-VkPipelineDepthStencilStateCreateInfo-depthCompareOp-parameter");
 
                     if (pCreateInfos[i].pDepthStencilState->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO) {
-                        skip |= LogError(device, kVUID_PVError_InvalidStructSType,
+                        skip |= LogError(device, "VUID-VkPipelineDepthStencilStateCreateInfo-sType-sType",
                                          "vkCreateGraphicsPipelines: parameter pCreateInfos[%d].pDepthStencilState->sType must be "
                                          "VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO",
                                          i);
@@ -2628,7 +2655,7 @@ bool StatelessValidation::manual_PreCallValidateCreateGraphicsPipelines(VkDevice
                     }
 
                     if (pCreateInfos[i].pColorBlendState->sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO) {
-                        skip |= LogError(device, kVUID_PVError_InvalidStructSType,
+                        skip |= LogError(device, "VUID-VkPipelineColorBlendStateCreateInfo-sType-sType",
                                          "vkCreateGraphicsPipelines: parameter pCreateInfos[%d].pColorBlendState->sType must be "
                                          "VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO",
                                          i);
@@ -2693,7 +2720,7 @@ bool StatelessValidation::manual_PreCallValidateCreateGraphicsPipelines(VkDevice
                                      "if the extension VK_NV_fill_rectangle is not enabled.");
                     } else if ((pCreateInfos[i].pRasterizationState->polygonMode != VK_POLYGON_MODE_FILL) &&
                                (physical_device_features.fillModeNonSolid == false)) {
-                        skip |= LogError(device, kVUID_PVError_DeviceFeature,
+                        skip |= LogError(device, "VUID-VkPipelineRasterizationStateCreateInfo-polygonMode-01413",
                                          "vkCreateGraphicsPipelines parameter, VkPolygonMode "
                                          "pCreateInfos[%u]->pRasterizationState->polygonMode cannot be VK_POLYGON_MODE_POINT or "
                                          "VK_POLYGON_MODE_LINE if VkPhysicalDeviceFeatures->fillModeNonSolid is false.",
@@ -3115,7 +3142,7 @@ bool StatelessValidation::validate_WriteDescriptorSet(const char *vkCallingFunct
                                  pDescriptorWrites[i].pBufferInfo[descriptorIndex].range != VK_WHOLE_SIZE)) {
                                 skip |= LogError(device, "VUID-VkDescriptorBufferInfo-buffer-02999",
                                                  "%s(): if pDescriptorWrites[%d].buffer is VK_NULL_HANDLE, "
-                                                 "offset (" PRIu64 ") must be zero and range (" PRIu64 ") must be VK_WHOLE_SIZE.",
+                                                 "offset (%" PRIu64 ") must be zero and range (%" PRIu64 ") must be VK_WHOLE_SIZE.",
                                                  vkCallingFunction, i, pDescriptorWrites[i].pBufferInfo[descriptorIndex].offset,
                                                  pDescriptorWrites[i].pBufferInfo[descriptorIndex].range);
                             }
@@ -3400,23 +3427,6 @@ bool StatelessValidation::manual_PreCallValidateCmdSetLineWidth(VkCommandBuffer 
                          "VkPhysicalDeviceFeatures::wideLines is disabled, but lineWidth (=%f) is not 1.0.", lineWidth);
     }
 
-    return skip;
-}
-
-bool StatelessValidation::manual_PreCallValidateCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
-                                                        uint32_t firstVertex, uint32_t firstInstance) const {
-    bool skip = false;
-    if (vertexCount == 0) {
-        // TODO: Verify against Valid Usage section. I don't see a non-zero vertexCount listed, may need to add that and make
-        // this an error or leave as is.
-        skip |= LogWarning(device, kVUID_PVError_RequiredParameter, "vkCmdDraw parameter, uint32_t vertexCount, is 0");
-    }
-
-    if (instanceCount == 0) {
-        // TODO: Verify against Valid Usage section. I don't see a non-zero instanceCount listed, may need to add that and make
-        // this an error or leave as is.
-        skip |= LogWarning(device, kVUID_PVError_RequiredParameter, "vkCmdDraw parameter, uint32_t instanceCount, is 0");
-    }
     return skip;
 }
 
@@ -3769,7 +3779,7 @@ bool StatelessValidation::manual_PreCallValidateQueuePresentKHR(VkQueue queue, c
             skip |= require_device_extension(IsExtEnabled(device_extensions.vk_khr_incremental_present), "vkQueuePresentKHR",
                                              VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME);
             if (present_regions->swapchainCount != pPresentInfo->swapchainCount) {
-                skip |= LogError(device, kVUID_PVError_InvalidUsage,
+                skip |= LogError(device, "VUID-VkPresentRegionsKHR-swapchainCount-01260",
                                  "QueuePresentKHR(): pPresentInfo->swapchainCount has a value of %i but VkPresentRegionsKHR "
                                  "extension swapchainCount is %i. These values must be equal.",
                                  pPresentInfo->swapchainCount, present_regions->swapchainCount);
@@ -4654,7 +4664,7 @@ bool StatelessValidation::manual_PreCallValidateCreateRayTracingPipelinesNV(VkDe
                 }
             }
             if (pCreateInfos[i].basePipelineHandle == VK_NULL_HANDLE) {
-                if (static_cast<const uint32_t>(pCreateInfos[i].basePipelineIndex) >= createInfoCount) {
+                if (static_cast<uint32_t>(pCreateInfos[i].basePipelineIndex) >= createInfoCount) {
                     skip |=
                         LogError(device, "VUID-VkRayTracingPipelineCreateInfoNV-flags-03422",
                                  "vkCreateRayTracingPipelinesNV if flags contains the VK_PIPELINE_CREATE_DERIVATIVE_BIT and"
@@ -4803,7 +4813,7 @@ bool StatelessValidation::manual_PreCallValidateCreateRayTracingPipelinesKHR(VkD
                 }
             }
             if (pCreateInfos[i].basePipelineHandle == VK_NULL_HANDLE) {
-                if (static_cast<const uint32_t>(pCreateInfos[i].basePipelineIndex) >= createInfoCount) {
+                if (static_cast<uint32_t>(pCreateInfos[i].basePipelineIndex) >= createInfoCount) {
                     skip |= LogError(device, "VUID-VkRayTracingPipelineCreateInfoKHR-flags-03422",
                                      "vkCreateRayTracingPipelinesKHR if flags contains the VK_PIPELINE_CREATE_DERIVATIVE_BIT and"
                                      "basePipelineHandle is VK_NULL_HANDLE, basePipelineIndex (%d) must be a valid into the calling"
@@ -5132,14 +5142,15 @@ bool StatelessValidation::ValidateCreateSamplerYcbcrConversion(VkDevice device,
         }
     }
 
+    const VkFormat format = pCreateInfo->format;
     const VkComponentMapping components = pCreateInfo->components;
     // XChroma Subsampled is same as "the format has a _422 or _420 suffix" from spec
-    if (FormatIsXChromaSubsampled(pCreateInfo->format) == true) {
+    if (FormatIsXChromaSubsampled(format) == true) {
         if ((components.g != VK_COMPONENT_SWIZZLE_G) && (components.g != VK_COMPONENT_SWIZZLE_IDENTITY)) {
             skip |= LogError(device, "VUID-VkSamplerYcbcrConversionCreateInfo-components-02581",
                              "%s: When using a XChroma subsampled format (%s) the components.g needs to be VK_COMPONENT_SWIZZLE_G "
                              "or VK_COMPONENT_SWIZZLE_IDENTITY, but is %s.",
-                             apiName, string_VkFormat(pCreateInfo->format), string_VkComponentSwizzle(components.g));
+                             apiName, string_VkFormat(format), string_VkComponentSwizzle(components.g));
         }
 
         if ((components.a != VK_COMPONENT_SWIZZLE_A) && (components.a != VK_COMPONENT_SWIZZLE_IDENTITY) &&
@@ -5148,7 +5159,7 @@ bool StatelessValidation::ValidateCreateSamplerYcbcrConversion(VkDevice device,
                 LogError(device, "VUID-VkSamplerYcbcrConversionCreateInfo-components-02582",
                          "%s: When using a XChroma subsampled format (%s) the components.a needs to be VK_COMPONENT_SWIZZLE_A or "
                          "VK_COMPONENT_SWIZZLE_IDENTITY or VK_COMPONENT_SWIZZLE_ONE or VK_COMPONENT_SWIZZLE_ZERO, but is %s.",
-                         apiName, string_VkFormat(pCreateInfo->format), string_VkComponentSwizzle(components.a));
+                         apiName, string_VkFormat(format), string_VkComponentSwizzle(components.a));
         }
 
         if ((components.r != VK_COMPONENT_SWIZZLE_R) && (components.r != VK_COMPONENT_SWIZZLE_IDENTITY) &&
@@ -5156,7 +5167,7 @@ bool StatelessValidation::ValidateCreateSamplerYcbcrConversion(VkDevice device,
             skip |= LogError(device, "VUID-VkSamplerYcbcrConversionCreateInfo-components-02583",
                              "%s: When using a XChroma subsampled format (%s) the components.r needs to be VK_COMPONENT_SWIZZLE_R "
                              "or VK_COMPONENT_SWIZZLE_IDENTITY or VK_COMPONENT_SWIZZLE_B, but is %s.",
-                             apiName, string_VkFormat(pCreateInfo->format), string_VkComponentSwizzle(components.r));
+                             apiName, string_VkFormat(format), string_VkComponentSwizzle(components.r));
         }
 
         if ((components.b != VK_COMPONENT_SWIZZLE_B) && (components.b != VK_COMPONENT_SWIZZLE_IDENTITY) &&
@@ -5164,7 +5175,7 @@ bool StatelessValidation::ValidateCreateSamplerYcbcrConversion(VkDevice device,
             skip |= LogError(device, "VUID-VkSamplerYcbcrConversionCreateInfo-components-02584",
                              "%s: When using a XChroma subsampled format (%s) the components.b needs to be VK_COMPONENT_SWIZZLE_B "
                              "or VK_COMPONENT_SWIZZLE_IDENTITY or VK_COMPONENT_SWIZZLE_R, but is %s.",
-                             apiName, string_VkFormat(pCreateInfo->format), string_VkComponentSwizzle(components.b));
+                             apiName, string_VkFormat(format), string_VkComponentSwizzle(components.b));
         }
 
         // If one is identity, both need to be
@@ -5174,7 +5185,57 @@ bool StatelessValidation::ValidateCreateSamplerYcbcrConversion(VkDevice device,
             skip |= LogError(device, "VUID-VkSamplerYcbcrConversionCreateInfo-components-02585",
                              "%s: When using a XChroma subsampled format (%s) if either the components.r (%s) or components.b (%s) "
                              "are an identity swizzle, then both need to be an identity swizzle.",
-                             apiName, string_VkFormat(pCreateInfo->format), string_VkComponentSwizzle(components.r),
+                             apiName, string_VkFormat(format), string_VkComponentSwizzle(components.r),
+                             string_VkComponentSwizzle(components.b));
+        }
+    }
+
+    if (pCreateInfo->ycbcrModel != VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY) {
+        // Checks same VU multiple ways in order to give a more useful error message
+        const char *vuid = "VUID-VkSamplerYcbcrConversionCreateInfo-ycbcrModel-01655";
+        if ((components.r == VK_COMPONENT_SWIZZLE_ONE) || (components.r == VK_COMPONENT_SWIZZLE_ZERO) ||
+            (components.g == VK_COMPONENT_SWIZZLE_ONE) || (components.g == VK_COMPONENT_SWIZZLE_ZERO) ||
+            (components.b == VK_COMPONENT_SWIZZLE_ONE) || (components.b == VK_COMPONENT_SWIZZLE_ZERO)) {
+            skip |=
+                LogError(device, vuid,
+                         "%s: The ycbcrModel is not VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY so components.r (%s), "
+                         "components.g (%s), nor components.b (%s) can't be VK_COMPONENT_SWIZZLE_ZERO or VK_COMPONENT_SWIZZLE_ONE.",
+                         apiName, string_VkComponentSwizzle(components.r), string_VkComponentSwizzle(components.g),
+                         string_VkComponentSwizzle(components.b));
+        }
+
+        // "must not correspond to a channel which contains zero or one as a consequence of conversion to RGBA"
+        // 4 channel format = no issue
+        // 3 = no [a]
+        // 2 = no [b,a]
+        // 1 = no [g,b,a]
+        // depth/stencil = no [g,b,a] (shouldn't ever occur, but no VU preventing it)
+        const uint32_t channels = (FormatIsDepthOrStencil(format) == true) ? 1 : FormatChannelCount(format);
+
+        if ((channels < 4) && ((components.r == VK_COMPONENT_SWIZZLE_A) || (components.g == VK_COMPONENT_SWIZZLE_A) ||
+                               (components.b == VK_COMPONENT_SWIZZLE_A))) {
+            skip |= LogError(device, vuid,
+                             "%s: The ycbcrModel is not VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY so components.r (%s), "
+                             "components.g (%s), or components.b (%s) can't be VK_COMPONENT_SWIZZLE_A.",
+                             apiName, string_VkComponentSwizzle(components.r), string_VkComponentSwizzle(components.g),
+                             string_VkComponentSwizzle(components.b));
+        } else if ((channels < 3) &&
+                   ((components.r == VK_COMPONENT_SWIZZLE_B) || (components.g == VK_COMPONENT_SWIZZLE_B) ||
+                    (components.b == VK_COMPONENT_SWIZZLE_B) || (components.b == VK_COMPONENT_SWIZZLE_IDENTITY))) {
+            skip |= LogError(device, vuid,
+                             "%s: The ycbcrModel is not VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY so components.r (%s), "
+                             "components.g (%s), or components.b (%s) can't be VK_COMPONENT_SWIZZLE_B "
+                             "(components.b also can't be VK_COMPONENT_SWIZZLE_IDENTITY).",
+                             apiName, string_VkComponentSwizzle(components.r), string_VkComponentSwizzle(components.g),
+                             string_VkComponentSwizzle(components.b));
+        } else if ((channels < 2) &&
+                   ((components.r == VK_COMPONENT_SWIZZLE_G) || (components.g == VK_COMPONENT_SWIZZLE_G) ||
+                    (components.g == VK_COMPONENT_SWIZZLE_IDENTITY) || (components.b == VK_COMPONENT_SWIZZLE_G))) {
+            skip |= LogError(device, vuid,
+                             "%s: The ycbcrModel is not VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY so components.r (%s), "
+                             "components.g (%s), or components.b (%s) can't be VK_COMPONENT_SWIZZLE_G "
+                             "(components.g also can't be VK_COMPONENT_SWIZZLE_IDENTITY).",
+                             apiName, string_VkComponentSwizzle(components.r), string_VkComponentSwizzle(components.g),
                              string_VkComponentSwizzle(components.b));
         }
     }

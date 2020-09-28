@@ -97,6 +97,12 @@ void DebugPrintf::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
 
 void DebugPrintf::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) {
     UtilPreCallRecordDestroyDevice(this);
+    ValidationStateTracker::PreCallRecordDestroyDevice(device, pAllocator);
+    // State Tracker can end up making vma calls through callbacks - don't destroy allocator until ST is done
+    if (vmaAllocator) {
+        vmaDestroyAllocator(vmaAllocator);
+    }
+    desc_set_manager.reset();
 }
 
 // Modify the pipeline layout to include our debug descriptor set and any needed padding with the dummy descriptor set.
@@ -216,6 +222,8 @@ void DebugPrintf::PostCallRecordCreateGraphicsPipelines(VkDevice device, VkPipel
                                                         VkResult result, void *cgpl_state_data) {
     ValidationStateTracker::PostCallRecordCreateGraphicsPipelines(device, pipelineCache, count, pCreateInfos, pAllocator,
                                                                   pPipelines, result, cgpl_state_data);
+    create_graphics_pipeline_api_state *cgpl_state = reinterpret_cast<create_graphics_pipeline_api_state *>(cgpl_state_data);
+    UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, cgpl_state->printf_create_infos.data());
     UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_GRAPHICS, this);
 }
 
@@ -225,6 +233,8 @@ void DebugPrintf::PostCallRecordCreateComputePipelines(VkDevice device, VkPipeli
                                                        VkResult result, void *ccpl_state_data) {
     ValidationStateTracker::PostCallRecordCreateComputePipelines(device, pipelineCache, count, pCreateInfos, pAllocator, pPipelines,
                                                                  result, ccpl_state_data);
+    create_compute_pipeline_api_state *ccpl_state = reinterpret_cast<create_compute_pipeline_api_state *>(ccpl_state_data);
+    UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, ccpl_state->printf_create_infos.data());
     UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_COMPUTE, this);
 }
 
@@ -232,8 +242,10 @@ void DebugPrintf::PostCallRecordCreateRayTracingPipelinesNV(VkDevice device, VkP
                                                             const VkRayTracingPipelineCreateInfoNV *pCreateInfos,
                                                             const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
                                                             VkResult result, void *crtpl_state_data) {
+    auto *crtpl_state = reinterpret_cast<create_ray_tracing_pipeline_khr_api_state *>(crtpl_state_data);
     ValidationStateTracker::PostCallRecordCreateRayTracingPipelinesNV(device, pipelineCache, count, pCreateInfos, pAllocator,
                                                                       pPipelines, result, crtpl_state_data);
+    UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, crtpl_state->gpu_create_infos.data());
     UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, this);
 }
 
@@ -265,6 +277,8 @@ bool DebugPrintf::InstrumentShader(const VkShaderModuleCreateInfo *pCreateInfo, 
     // If descriptor indexing is enabled, enable length checks and updated descriptor checks
     using namespace spvtools;
     spv_target_env target_env = PickSpirvEnv(api_version, (device_extensions.vk_khr_spirv_1_4 != kNotEnabled));
+    spvtools::ValidatorOptions options;
+    AdjustValidatorOptions(device_extensions, enabled_features, options);
     Optimizer optimizer(target_env);
     const spvtools::MessageConsumer DebugPrintfConsoleMessageConsumer =
         [this](spv_message_level_t level, const char *, const spv_position_t &position, const char *message) -> void {
@@ -281,7 +295,7 @@ bool DebugPrintf::InstrumentShader(const VkShaderModuleCreateInfo *pCreateInfo, 
     };
     optimizer.SetMessageConsumer(DebugPrintfConsoleMessageConsumer);
     optimizer.RegisterPass(CreateInstDebugPrintfPass(desc_set_bind_index, unique_shader_module_id));
-    bool pass = optimizer.Run(new_pgm.data(), new_pgm.size(), &new_pgm);
+    bool pass = optimizer.Run(new_pgm.data(), new_pgm.size(), &new_pgm, options, false);
     if (!pass) {
         ReportSetupProblem(device, "Failure to instrument shader.  Proceeding with non-instrumented shader.");
     }
@@ -630,6 +644,18 @@ void DebugPrintf::PreCallRecordCmdDispatch(VkCommandBuffer commandBuffer, uint32
 }
 
 void DebugPrintf::PreCallRecordCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset) {
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE);
+}
+
+void DebugPrintf::PreCallRecordCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                               uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY,
+                                               uint32_t groupCountZ) {
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE);
+}
+
+void DebugPrintf::PreCallRecordCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                                  uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY,
+                                                  uint32_t groupCountZ) {
     AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE);
 }
 

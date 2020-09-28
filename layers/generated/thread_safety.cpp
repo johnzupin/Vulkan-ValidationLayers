@@ -4511,6 +4511,9 @@ void ThreadSafety::PostCallRecordBindImageMemory2KHR(
     FinishReadObjectParentInstance(device, "vkBindImageMemory2KHR");
 }
 
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
 void ThreadSafety::PreCallRecordGetDescriptorSetLayoutSupportKHR(
     VkDevice                                    device,
     const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
@@ -4800,6 +4803,90 @@ void ThreadSafety::PostCallRecordGetPipelineExecutableInternalRepresentationsKHR
 
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 #endif // VK_ENABLE_BETA_EXTENSIONS
+
+void ThreadSafety::PreCallRecordCmdCopyBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferInfo2KHR*                 pCopyBufferInfo) {
+    StartWriteObject(commandBuffer, "vkCmdCopyBuffer2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdCopyBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferInfo2KHR*                 pCopyBufferInfo) {
+    FinishWriteObject(commandBuffer, "vkCmdCopyBuffer2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdCopyImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageInfo2KHR*                  pCopyImageInfo) {
+    StartWriteObject(commandBuffer, "vkCmdCopyImage2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdCopyImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageInfo2KHR*                  pCopyImageInfo) {
+    FinishWriteObject(commandBuffer, "vkCmdCopyImage2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdCopyBufferToImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo) {
+    StartWriteObject(commandBuffer, "vkCmdCopyBufferToImage2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdCopyBufferToImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo) {
+    FinishWriteObject(commandBuffer, "vkCmdCopyBufferToImage2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdCopyImageToBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo) {
+    StartWriteObject(commandBuffer, "vkCmdCopyImageToBuffer2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdCopyImageToBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo) {
+    FinishWriteObject(commandBuffer, "vkCmdCopyImageToBuffer2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdBlitImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkBlitImageInfo2KHR*                  pBlitImageInfo) {
+    StartWriteObject(commandBuffer, "vkCmdBlitImage2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdBlitImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkBlitImageInfo2KHR*                  pBlitImageInfo) {
+    FinishWriteObject(commandBuffer, "vkCmdBlitImage2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdResolveImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkResolveImageInfo2KHR*               pResolveImageInfo) {
+    StartWriteObject(commandBuffer, "vkCmdResolveImage2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdResolveImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkResolveImageInfo2KHR*               pResolveImageInfo) {
+    FinishWriteObject(commandBuffer, "vkCmdResolveImage2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
 
 void ThreadSafety::PreCallRecordCreateDebugReportCallbackEXT(
     VkInstance                                  instance,
@@ -6481,13 +6568,17 @@ void ThreadSafety::PostCallRecordAcquirePerformanceConfigurationINTEL(
     VkPerformanceConfigurationINTEL*            pConfiguration,
     VkResult                                    result) {
     FinishReadObjectParentInstance(device, "vkAcquirePerformanceConfigurationINTEL");
+    if (result == VK_SUCCESS) {
+        CreateObject(*pConfiguration);
+    }
 }
 
 void ThreadSafety::PreCallRecordReleasePerformanceConfigurationINTEL(
     VkDevice                                    device,
     VkPerformanceConfigurationINTEL             configuration) {
     StartReadObjectParentInstance(device, "vkReleasePerformanceConfigurationINTEL");
-    StartReadObject(configuration, "vkReleasePerformanceConfigurationINTEL");
+    StartWriteObject(configuration, "vkReleasePerformanceConfigurationINTEL");
+    // Host access to configuration must be externally synchronized
 }
 
 void ThreadSafety::PostCallRecordReleasePerformanceConfigurationINTEL(
@@ -6495,7 +6586,9 @@ void ThreadSafety::PostCallRecordReleasePerformanceConfigurationINTEL(
     VkPerformanceConfigurationINTEL             configuration,
     VkResult                                    result) {
     FinishReadObjectParentInstance(device, "vkReleasePerformanceConfigurationINTEL");
-    FinishReadObject(configuration, "vkReleasePerformanceConfigurationINTEL");
+    FinishWriteObject(configuration, "vkReleasePerformanceConfigurationINTEL");
+    DestroyObject(configuration);
+    // Host access to configuration must be externally synchronized
 }
 
 void ThreadSafety::PreCallRecordQueueSetPerformanceConfigurationINTEL(
