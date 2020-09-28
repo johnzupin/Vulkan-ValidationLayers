@@ -204,12 +204,24 @@ inline VkDeviceSize GetRealWholeSize(VkDeviceSize offset, VkDeviceSize size, VkD
     return size;
 }
 
+static inline VkDeviceSize GetBufferWholeSize(const BUFFER_STATE &buf_state, VkDeviceSize offset, VkDeviceSize size) {
+    return GetRealWholeSize(offset, size, buf_state.createInfo.size);
+}
+
 template <typename T>
 static ResourceAccessRange MakeRange(const T &has_offset_and_size) {
     return ResourceAccessRange(has_offset_and_size.offset, (has_offset_and_size.offset + has_offset_and_size.size));
 }
 
 static ResourceAccessRange MakeRange(VkDeviceSize start, VkDeviceSize size) { return ResourceAccessRange(start, (start + size)); }
+
+static inline ResourceAccessRange MakeRange(const BUFFER_STATE &buffer, VkDeviceSize offset, VkDeviceSize size) {
+    return MakeRange(offset, GetBufferWholeSize(buffer, offset, size));
+}
+
+static inline ResourceAccessRange MakeRange(const BUFFER_VIEW_STATE &buf_view_state) {
+    return MakeRange(*buf_view_state.buffer_state.get(), buf_view_state.create_info.offset, buf_view_state.create_info.range);
+}
 
 // Expand the pipeline stage without regard to whether the are valid w.r.t. queue or extension
 VkPipelineStageFlags ExpandPipelineStages(VkQueueFlags queue_flags, VkPipelineStageFlags stage_mask) {
@@ -254,15 +266,16 @@ VkPipelineStageFlags WithLaterPipelineStages(VkPipelineStageFlags stage_mask) {
 
 static const ResourceAccessRange full_range(std::numeric_limits<VkDeviceSize>::min(), std::numeric_limits<VkDeviceSize>::max());
 
-void GetBufferRange(VkDeviceSize &range_start, VkDeviceSize &range_size, VkDeviceSize offset, VkDeviceSize buf_whole_size,
-                    uint32_t first_index, uint32_t count, VkDeviceSize stride) {
-    range_start = offset + first_index * stride;
-    range_size = 0;
+ResourceAccessRange GetBufferRange(VkDeviceSize offset, VkDeviceSize buf_whole_size, uint32_t first_index, uint32_t count,
+                                   VkDeviceSize stride) {
+    VkDeviceSize range_start = offset + first_index * stride;
+    VkDeviceSize range_size = 0;
     if (count == UINT32_MAX) {
         range_size = buf_whole_size - range_start;
     } else {
         range_size = count * stride;
     }
+    return MakeRange(range_start, range_size);
 }
 
 SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType descriptor_type, const interface_var &descriptor_data,
@@ -445,25 +458,23 @@ AccessContext::AccessContext(uint32_t subpass, VkQueueFlags queue_flags,
     prev_.reserve(subpass_dep.prev.size());
     prev_by_subpass_.resize(subpass, nullptr);  // Can't be more prevs than the subpass we're on
     for (const auto &prev_dep : subpass_dep.prev) {
-        assert(prev_dep.dependency);
-        const auto dep = *prev_dep.dependency;
-        prev_.emplace_back(const_cast<AccessContext *>(&contexts[dep.srcSubpass]), queue_flags, dep);
-        prev_by_subpass_[dep.srcSubpass] = &prev_.back();
+        const auto prev_pass = prev_dep.first->pass;
+        const auto &prev_barriers = prev_dep.second;
+        assert(prev_dep.second.size());
+        prev_.emplace_back(&contexts[prev_pass], queue_flags, prev_barriers);
+        prev_by_subpass_[prev_pass] = &prev_.back();
     }
 
     async_.reserve(subpass_dep.async.size());
     for (const auto async_subpass : subpass_dep.async) {
+        // TODO -- review why async is storing non-const
         async_.emplace_back(const_cast<AccessContext *>(&contexts[async_subpass]));
     }
-    if (subpass_dep.barrier_from_external) {
-        src_external_ = TrackBack(external_context, queue_flags, *subpass_dep.barrier_from_external);
-    } else {
-        src_external_ = TrackBack();
+    if (subpass_dep.barrier_from_external.size()) {
+        src_external_ = TrackBack(external_context, queue_flags, subpass_dep.barrier_from_external);
     }
-    if (subpass_dep.barrier_to_external) {
-        dst_external_ = TrackBack(this, queue_flags, *subpass_dep.barrier_to_external);
-    } else {
-        dst_external_ = TrackBack();
+    if (subpass_dep.barrier_to_external.size()) {
+        dst_external_ = TrackBack(this, queue_flags, subpass_dep.barrier_to_external);
     }
 }
 
@@ -551,7 +562,7 @@ HazardResult AccessContext::DetectAsyncHazard(AddressType type, const Detector &
 // Returns the last resolved entry
 static void ResolveMapToEntry(ResourceAccessRangeMap *dest, ResourceAccessRangeMap::iterator entry,
                               ResourceAccessRangeMap::const_iterator first, ResourceAccessRangeMap::const_iterator last,
-                              const SyncBarrier *barrier) {
+                              const std::vector<SyncBarrier> &barriers) {
     auto at = entry;
     for (auto pos = first; pos != last; ++pos) {
         // Every member of the input iterator range must fit within the remaining portion of entry
@@ -560,15 +571,23 @@ static void ResolveMapToEntry(ResourceAccessRangeMap *dest, ResourceAccessRangeM
         // Trim up at to the same size as the entry to resolve
         at = sparse_container::split(at, *dest, pos->first);
         auto access = pos->second;
-        if (barrier) {
-            access.ApplyBarrier(*barrier);
+        if (barriers.size()) {
+            access.ApplyBarriers(barriers);
         }
         at->second.Resolve(access);
         ++at;  // Go to the remaining unused section of entry
     }
 }
 
-void AccessContext::ResolveAccessRange(AddressType type, const ResourceAccessRange &range, const SyncBarrier *barrier,
+static SyncBarrier MergeBarriers(const std::vector<SyncBarrier> &barriers) {
+    SyncBarrier merged = {};
+    for (const auto &barrier : barriers) {
+        merged.Merge(barrier);
+    }
+    return merged;
+}
+
+void AccessContext::ResolveAccessRange(AddressType type, const ResourceAccessRange &range, const std::vector<SyncBarrier> &barriers,
                                        ResourceAccessRangeMap *resolve_map, const ResourceAccessState *infill_state,
                                        bool recur_to_infill) const {
     if (!range.non_empty()) return;
@@ -579,8 +598,8 @@ void AccessContext::ResolveAccessRange(AddressType type, const ResourceAccessRan
         if (current->pos_B->valid) {
             const auto &src_pos = current->pos_B->lower_bound;
             auto access = src_pos->second;
-            if (barrier) {
-                access.ApplyBarrier(*barrier);
+            if (barriers.size()) {
+                access.ApplyBarriers(barriers);
             }
             if (current->pos_A->valid) {
                 const auto trimmed = sparse_container::split(current->pos_A->lower_bound, *resolve_map, current_range);
@@ -597,14 +616,14 @@ void AccessContext::ResolveAccessRange(AddressType type, const ResourceAccessRan
                     // Dest is valid, so we need to accumulate along the DAG and then resolve... in an N-to-1 resolve operation
                     ResourceAccessRangeMap gap_map;
                     ResolvePreviousAccess(type, current_range, &gap_map, infill_state);
-                    ResolveMapToEntry(resolve_map, current->pos_A->lower_bound, gap_map.begin(), gap_map.end(), barrier);
+                    ResolveMapToEntry(resolve_map, current->pos_A->lower_bound, gap_map.begin(), gap_map.end(), barriers);
                 } else {
                     // There isn't anything in dest in current)range, so we can accumulate directly into it.
                     ResolvePreviousAccess(type, current_range, resolve_map, infill_state);
-                    if (barrier) {
+                    if (barriers.size()) {
                         // Need to apply the barrier to the accesses we accumulated, noting that we haven't updated current
                         for (auto pos = resolve_map->lower_bound(current_range); pos != current->pos_A->lower_bound; ++pos) {
-                            pos->second.ApplyBarrier(*barrier);
+                            pos->second.ApplyBarriers(barriers);
                         }
                     }
                 }
@@ -633,7 +652,7 @@ void AccessContext::ResolveAccessRange(AddressType type, const ResourceAccessRan
         const auto the_end = resolve_map->end();
         ResolvePreviousAccess(type, trailing_fill_range, &gap_map, infill_state);
         for (auto &access : gap_map) {
-            access.second.ApplyBarrier(*barrier);
+            access.second.ApplyBarriers(barriers);
             resolve_map->insert(the_end, access);
         }
     }
@@ -648,11 +667,11 @@ void AccessContext::ResolvePreviousAccess(AddressType type, const ResourceAccess
     } else {
         // Look for something to fill the gap further along.
         for (const auto &prev_dep : prev_) {
-            prev_dep.context->ResolveAccessRange(type, range, &prev_dep.barrier, descent_map, infill_state);
+            prev_dep.context->ResolveAccessRange(type, range, prev_dep.barriers, descent_map, infill_state);
         }
 
         if (src_external_.context) {
-            src_external_.context->ResolveAccessRange(type, range, &src_external_.barrier, descent_map, infill_state);
+            src_external_.context->ResolveAccessRange(type, range, src_external_.barriers, descent_map, infill_state);
         }
     }
 }
@@ -752,7 +771,12 @@ bool AccessContext::ValidateLoadOperation(const SyncValidator &sync_state, const
     const auto *attachment_ci = rp_state.createInfo.pAttachments;
     VkExtent3D extent = CastTo3D(render_area.extent);
     VkOffset3D offset = CastTo3D(render_area.offset);
-    const auto external_access_scope = src_external_.barrier.dst_access_scope;
+
+    SyncStageAccessFlags accumulate_access_scope = 0;
+    for (const auto &barrier : src_external_.barriers) {
+        accumulate_access_scope |= barrier.dst_access_scope;
+    }
+    const auto external_access_scope = accumulate_access_scope;
 
     for (uint32_t i = 0; i < rp_state.createInfo.attachmentCount; i++) {
         if (subpass == rp_state.attachment_first_subpass[i]) {
@@ -803,7 +827,7 @@ bool AccessContext::ValidateLoadOperation(const SyncValidator &sync_state, const
                     // Hazard vs. ILT
                     auto load_op_string = string_VkAttachmentLoadOp(checked_stencil ? ci.stencilLoadOp : ci.loadOp);
                     skip |=
-                        sync_state.LogError(rp_state.renderPass, string_SyncHazardVUID(hazard.hazard),
+                        sync_state.LogError(rp_state.renderPass, string_SyncHazardVUID(transition_hazard),
                                             "%s: Hazard %s vs. layout transition in subpass %" PRIu32 " for attachment %" PRIu32
                                             " aspect %s during load with loadOp %s.",
                                             func_name, string_SyncHazard(transition_hazard), subpass, i, aspect, load_op_string);
@@ -1160,7 +1184,7 @@ struct ApplyMemoryAccessBarrierFunctor {
 
     Iterator operator()(ResourceAccessRangeMap *accesses, Iterator pos) const {
         auto &access_state = pos->second;
-        access_state.ApplyMemoryAccessBarrier(src_exec_scope, src_access_scope, dst_exec_scope, dst_access_scope);
+        access_state.ApplyMemoryAccessBarrier(false, src_exec_scope, src_access_scope, dst_exec_scope, dst_access_scope);
         return pos;
     }
 
@@ -1342,7 +1366,7 @@ void AccessContext::ResolveChildContexts(const std::vector<AccessContext> &conte
     for (uint32_t subpass_index = 0; subpass_index < contexts.size(); subpass_index++) {
         auto &context = contexts[subpass_index];
         for (const auto address_type : kAddressTypes) {
-            context.ResolveAccessRange(address_type, full_range, &context.GetDstExternalTrackBack().barrier,
+            context.ResolveAccessRange(address_type, full_range, context.GetDstExternalTrackBack().barriers,
                                        &GetAccessStateMap(address_type), nullptr, false);
         }
     }
@@ -1388,14 +1412,17 @@ HazardResult AccessContext::DetectSubpassTransitionHazard(const TrackBack &track
     assert(track_back.context);
 
     // Do the detection against the specific prior context independent of other contexts.  (Synchronous only)
-    auto hazard = track_back.context->DetectImageBarrierHazard(*image_state, track_back.barrier.src_exec_scope,
-                                                               track_back.barrier.src_access_scope,
-                                                               attach_view->normalized_subresource_range, kDetectPrevious);
+    // Hazard detection for the transition can be against the merged of the barriers (it only uses src_...)
+    const auto merged_barrier = MergeBarriers(track_back.barriers);
+    HazardResult hazard =
+        track_back.context->DetectImageBarrierHazard(*image_state, merged_barrier.src_exec_scope, merged_barrier.src_access_scope,
+                                                     attach_view->normalized_subresource_range, kDetectPrevious);
     if (!hazard.hazard) {
         // The Async hazard check is against the current context's async set.
-        hazard = DetectImageBarrierHazard(*image_state, track_back.barrier.src_exec_scope, track_back.barrier.src_access_scope,
+        hazard = DetectImageBarrierHazard(*image_state, merged_barrier.src_exec_scope, merged_barrier.src_access_scope,
                                           attach_view->normalized_subresource_range, kDetectAsync);
     }
+
     return hazard;
 }
 
@@ -1528,10 +1555,7 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
                         auto buf_view_state = static_cast<const TexelDescriptor *>(descriptor)->GetBufferViewState();
                         if (!buf_view_state) continue;
                         const BUFFER_STATE *buf_state = buf_view_state->buffer_state.get();
-                        ResourceAccessRange range =
-                            MakeRange(buf_view_state->create_info.offset,
-                                      GetRealWholeSize(buf_view_state->create_info.offset, buf_view_state->create_info.range,
-                                                       buf_state->createInfo.size));
+                        const ResourceAccessRange range = MakeRange(*buf_view_state);
                         auto hazard = current_context_->DetectHazard(*buf_state, sync_index, range);
                         if (hazard.hazard && !sync_state_->SupressedBoundDescriptorWAW(hazard)) {
                             skip |= sync_state_->LogError(
@@ -1551,9 +1575,10 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
                         const auto *buffer_descriptor = static_cast<const BufferDescriptor *>(descriptor);
                         auto buf_state = buffer_descriptor->GetBufferState();
                         if (!buf_state) continue;
-                        ResourceAccessRange range = MakeRange(buffer_descriptor->GetOffset(), buffer_descriptor->GetRange());
+                        const ResourceAccessRange range =
+                            MakeRange(*buf_state, buffer_descriptor->GetOffset(), buffer_descriptor->GetRange());
                         auto hazard = current_context_->DetectHazard(*buf_state, sync_index, range);
-                        if (hazard.hazard) {
+                        if (hazard.hazard && !sync_state_->SupressedBoundDescriptorWAW(hazard)) {
                             skip |= sync_state_->LogError(
                                 buf_state->buffer, string_SyncHazardVUID(hazard.hazard),
                                 "%s: Hazard %s for %s in %s, %s, and %s, type: %s, binding #%d index %d. Access info %s.",
@@ -1639,8 +1664,7 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
                         auto buf_view_state = static_cast<const TexelDescriptor *>(descriptor)->GetBufferViewState();
                         if (!buf_view_state) continue;
                         const BUFFER_STATE *buf_state = buf_view_state->buffer_state.get();
-                        ResourceAccessRange range =
-                            MakeRange(buf_view_state->create_info.offset, buf_view_state->create_info.range);
+                        const ResourceAccessRange range = MakeRange(*buf_view_state);
                         current_context_->UpdateAccessState(*buf_state, sync_index, range, tag);
                         break;
                     }
@@ -1648,7 +1672,8 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
                         const auto *buffer_descriptor = static_cast<const BufferDescriptor *>(descriptor);
                         auto buf_state = buffer_descriptor->GetBufferState();
                         if (!buf_state) continue;
-                        ResourceAccessRange range = MakeRange(buffer_descriptor->GetOffset(), buffer_descriptor->GetRange());
+                        const ResourceAccessRange range =
+                            MakeRange(*buf_state, buffer_descriptor->GetOffset(), buffer_descriptor->GetRange());
                         current_context_->UpdateAccessState(*buf_state, sync_index, range, tag);
                         break;
                     }
@@ -1679,11 +1704,8 @@ bool CommandBufferAccessContext::ValidateDrawVertex(uint32_t vertexCount, uint32
             if (binding_buffer.buffer == VK_NULL_HANDLE) continue;
 
             auto *buf_state = sync_state_->Get<BUFFER_STATE>(binding_buffer.buffer);
-            VkDeviceSize range_start = 0;
-            VkDeviceSize range_size = 0;
-            GetBufferRange(range_start, range_size, binding_buffer.offset, buf_state->createInfo.size, firstVertex, vertexCount,
-                           binding_description.stride);
-            ResourceAccessRange range = MakeRange(range_start, range_size);
+            const ResourceAccessRange range = GetBufferRange(binding_buffer.offset, buf_state->createInfo.size, firstVertex,
+                                                             vertexCount, binding_description.stride);
             auto hazard = current_context_->DetectHazard(*buf_state, SYNC_VERTEX_INPUT_VERTEX_ATTRIBUTE_READ, range);
             if (hazard.hazard) {
                 skip |= sync_state_->LogError(
@@ -1712,11 +1734,8 @@ void CommandBufferAccessContext::RecordDrawVertex(uint32_t vertexCount, uint32_t
             if (binding_buffer.buffer == VK_NULL_HANDLE) continue;
 
             auto *buf_state = sync_state_->Get<BUFFER_STATE>(binding_buffer.buffer);
-            VkDeviceSize range_start = 0;
-            VkDeviceSize range_size = 0;
-            GetBufferRange(range_start, range_size, binding_buffer.offset, buf_state->createInfo.size, firstVertex, vertexCount,
-                           binding_description.stride);
-            ResourceAccessRange range = MakeRange(range_start, range_size);
+            const ResourceAccessRange range = GetBufferRange(binding_buffer.offset, buf_state->createInfo.size, firstVertex,
+                                                             vertexCount, binding_description.stride);
             current_context_->UpdateAccessState(*buf_state, SYNC_VERTEX_INPUT_VERTEX_ATTRIBUTE_READ, range, tag);
         }
     }
@@ -1728,11 +1747,8 @@ bool CommandBufferAccessContext::ValidateDrawVertexIndex(uint32_t indexCount, ui
 
     auto *index_buf_state = sync_state_->Get<BUFFER_STATE>(cb_state_->index_buffer_binding.buffer);
     const auto index_size = GetIndexAlignment(cb_state_->index_buffer_binding.index_type);
-    VkDeviceSize range_start = 0;
-    VkDeviceSize range_size = 0;
-    GetBufferRange(range_start, range_size, cb_state_->index_buffer_binding.offset, index_buf_state->createInfo.size, firstIndex,
-                   indexCount, index_size);
-    ResourceAccessRange range = MakeRange(range_start, range_size);
+    const ResourceAccessRange range = GetBufferRange(cb_state_->index_buffer_binding.offset, index_buf_state->createInfo.size,
+                                                     firstIndex, indexCount, index_size);
     auto hazard = current_context_->DetectHazard(*index_buf_state, SYNC_VERTEX_INPUT_INDEX_READ, range);
     if (hazard.hazard) {
         skip |= sync_state_->LogError(
@@ -1752,11 +1768,8 @@ void CommandBufferAccessContext::RecordDrawVertexIndex(uint32_t indexCount, uint
 
     auto *index_buf_state = sync_state_->Get<BUFFER_STATE>(cb_state_->index_buffer_binding.buffer);
     const auto index_size = GetIndexAlignment(cb_state_->index_buffer_binding.index_type);
-    VkDeviceSize range_start = 0;
-    VkDeviceSize range_size = 0;
-    GetBufferRange(range_start, range_size, cb_state_->index_buffer_binding.offset, index_buf_state->createInfo.size, firstIndex,
-                   indexCount, index_size);
-    ResourceAccessRange range = MakeRange(range_start, range_size);
+    const ResourceAccessRange range = GetBufferRange(cb_state_->index_buffer_binding.offset, index_buf_state->createInfo.size,
+                                                     firstIndex, indexCount, index_size);
     current_context_->UpdateAccessState(*index_buf_state, SYNC_VERTEX_INPUT_INDEX_READ, range, tag);
 
     // TODO: For now, we detect the whole vertex buffer. Index buffer could be changed until SubmitQueue.
@@ -2032,9 +2045,11 @@ bool RenderPassAccessContext::ValidateFinalSubpassLayoutTransitions(const SyncVa
             context = proxy_for_current.get();
         }
 
-        auto hazard = context->DetectImageBarrierHazard(
-            *attach_view->image_state, trackback.barrier.src_exec_scope, trackback.barrier.src_access_scope,
-            attach_view->normalized_subresource_range, AccessContext::DetectOptions::kDetectPrevious);
+        // Use the merged barrier for the hazard check (safe since it just considers the src (first) scope.
+        const auto merged_barrier = MergeBarriers(trackback.barriers);
+        auto hazard = context->DetectImageBarrierHazard(*attach_view->image_state, merged_barrier.src_exec_scope,
+                                                        merged_barrier.src_access_scope, attach_view->normalized_subresource_range,
+                                                        AccessContext::DetectOptions::kDetectPrevious);
         if (hazard.hazard) {
             skip |= sync_state.LogError(rp_state_->renderPass, string_SyncHazardVUID(hazard.hazard),
                                         "%s: Hazard %s with last use subpass %" PRIu32 " for attachment %" PRIu32
@@ -2058,18 +2073,21 @@ void RenderPassAccessContext::RecordLayoutTransitions(const ResourceUsageTag &ta
         const auto image = attachment_view->image_state.get();
         if (!image) continue;
 
-        const auto *barrier = subpass_context.GetTrackBackFromSubpass(transition.prev_pass);
+        const auto *trackback = subpass_context.GetTrackBackFromSubpass(transition.prev_pass);
+        assert(trackback);
+        const auto merged_barrier = MergeBarriers(trackback->barriers);
         auto insert_pair = view_seen.insert(attachment_view);
         if (insert_pair.second) {
             // We haven't recorded the transistion yet, so treat this as a normal barrier with transistion.
-            subpass_context.ApplyImageBarrier(*image, barrier->barrier, attachment_view->normalized_subresource_range, true, tag);
+            subpass_context.ApplyImageBarrier(*image, merged_barrier, attachment_view->normalized_subresource_range, true, tag);
 
         } else {
             // We've recorded the transition, but we need to added on the additional dest barriers, and rerecording the transition
             // would clear out the prior barrier flags, so apply this as a *non* transition barrier
-            auto barrier_to_transition = barrier->barrier;
+            auto barrier_to_transition = merged_barrier;
             barrier_to_transition.src_access_scope |= SYNC_IMAGE_LAYOUT_TRANSITION_BIT;
-            subpass_context.ApplyImageBarrier(*image, barrier->barrier, attachment_view->normalized_subresource_range, false, tag);
+            subpass_context.ApplyImageBarrier(*image, barrier_to_transition, attachment_view->normalized_subresource_range, false,
+                                              tag);
         }
     }
 }
@@ -2154,7 +2172,9 @@ void RenderPassAccessContext::RecordEndRenderPass(AccessContext *external_contex
         const auto &attachment = attachment_views_[transition.attachment];
         const auto &last_trackback = subpass_contexts_[transition.prev_pass].GetDstExternalTrackBack();
         assert(&subpass_contexts_[transition.prev_pass] == last_trackback.context);
-        external_context->ApplyImageBarrier(*attachment->image_state, last_trackback.barrier,
+        // Since this is a layout transition vs. a subpass, we can safely merge the barriers, as there are no
+        // chaining effects after the layout transition (write operation) nukes the prior depenency chains
+        external_context->ApplyImageBarrier(*attachment->image_state, MergeBarriers(last_trackback.barriers),
                                             attachment->normalized_subresource_range, true, tag);
     }
 }
@@ -2168,9 +2188,12 @@ SyncBarrier::SyncBarrier(VkQueueFlags queue_flags, const VkSubpassDependency2 &b
     dst_access_scope = SyncStageAccess::AccessScope(dst_stage_mask, barrier.dstAccessMask);
 }
 
-void ResourceAccessState::ApplyBarrier(const SyncBarrier &barrier) {
-    ApplyExecutionBarrier(barrier.src_exec_scope, barrier.dst_exec_scope);
-    ApplyMemoryAccessBarrier(barrier.src_exec_scope, barrier.src_access_scope, barrier.dst_exec_scope, barrier.dst_access_scope);
+void ResourceAccessState::ApplyBarriers(const std::vector<SyncBarrier> &barriers) {
+    for (const auto &barrier : barriers) {
+        ApplyMemoryAccessBarrier(true, barrier.src_exec_scope, barrier.src_access_scope, barrier.dst_exec_scope,
+                                 barrier.dst_access_scope);
+    }
+    ApplyExecutionBarriers(barriers);
 }
 
 HazardResult ResourceAccessState::DetectHazard(SyncStageAccessIndex usage_index) const {
@@ -2431,6 +2454,7 @@ void ResourceAccessState::Update(SyncStageAccessIndex usage_index, const Resourc
     }
 }
 
+// TODO: Leave "old style" execution barrier code until PipelineBarrier is corrected for true unordered barrier application
 void ResourceAccessState::ApplyExecutionBarrier(VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask) {
     // Execution Barriers only protect read operations
     for (uint32_t read_index = 0; read_index < last_read_count; read_index++) {
@@ -2451,13 +2475,60 @@ void ResourceAccessState::ApplyExecutionBarrier(VkPipelineStageFlags srcStageMas
     }
 }
 
-void ResourceAccessState::ApplyMemoryAccessBarrier(VkPipelineStageFlags src_exec_scope, SyncStageAccessFlags src_access_scope,
-                                                   VkPipelineStageFlags dst_exec_scope, SyncStageAccessFlags dst_access_scope) {
-    // Assuming we've applied the execution side of this barrier, we update just the write
+void ResourceAccessState::ApplyExecutionBarriers(const std::vector<SyncBarrier> &barriers) {
+    // Since all execution chains are unordered, apply before update, accumulating update in pending_
+    // s.t. we don't create unintended dependency chaings.
+    // For reads the barriers function as the dependency chain
+    VkPipelineStageFlags pending_write_chain = 0;
+    VkPipelineStageFlags pending_input_attacment_barriers = 0;
+    std::array<VkPipelineStageFlags, kStageCount> pending_read_barriers;
+    for (uint32_t read_index = 0; read_index < last_read_count; read_index++) {
+        pending_read_barriers[read_index] = 0;
+    }
+
+    for (const auto &barrier : barriers) {
+        const VkPipelineStageFlags src_scope = barrier.src_exec_scope;
+        const VkPipelineStageFlags dst_scope = barrier.dst_exec_scope;
+        // Execution Barriers only protect read operations
+        for (uint32_t read_index = 0; read_index < last_read_count; read_index++) {
+            const ReadState &access = last_reads[read_index];
+            // The | implements the "dependency chain" logic for this access, as the barriers field stores the second sync scope
+            if (src_scope & (access.stage | access.barriers)) {
+                pending_read_barriers[read_index] |= dst_scope;
+            }
+        }
+        if ((input_attachment_barriers != kNoAttachmentRead) &&
+            (src_scope & (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | input_attachment_barriers))) {
+            pending_input_attacment_barriers |= dst_scope;
+        }
+        if (InSourceScopeOrChain(src_scope, barrier.src_access_scope)) {
+            pending_write_chain |= dst_scope;
+        }
+    }
+
+    // Apply accumulated pending changes to the depenendency chains and barriers
+    for (uint32_t read_index = 0; read_index < last_read_count; read_index++) {
+        last_reads[read_index].barriers |= pending_read_barriers[read_index];
+        read_execution_barriers |= pending_read_barriers[read_index];
+    }
+    input_attachment_barriers |= pending_input_attacment_barriers;
+    read_execution_barriers |= pending_input_attacment_barriers;
+    write_dependency_chain |= pending_write_chain;
+}
+
+void ResourceAccessState::ApplyMemoryAccessBarrier(bool multi_dep, VkPipelineStageFlags src_exec_scope,
+                                                   SyncStageAccessFlags src_access_scope, VkPipelineStageFlags dst_exec_scope,
+                                                   SyncStageAccessFlags dst_access_scope) {
+    // We update just the write barrier side of the execution and memory barrier.  Updating the dependency chain would
+    // create chaining between batches of barriers, which isn't wasn't intended.
+    // The callers is responsible for coming back and updating the dependency chain information after the memory access
+    // batch is complete.
     // The || implements the "dependency chain" logic for this barrier
-    if ((src_access_scope & last_write) || (write_dependency_chain & src_exec_scope)) {
+    if (InSourceScopeOrChain(src_exec_scope, src_access_scope)) {
         write_barriers |= dst_access_scope;
-        write_dependency_chain |= dst_exec_scope;
+        if (!multi_dep) {
+            write_dependency_chain |= dst_exec_scope;
+        }
     }
 }
 
@@ -2508,11 +2579,11 @@ void SyncValidator::ApplyBufferBarriers(AccessContext *context, VkPipelineStageF
                                         SyncStageAccessFlags dst_stage_accesses, uint32_t barrier_count,
                                         const VkBufferMemoryBarrier *barriers) {
     for (uint32_t index = 0; index < barrier_count; index++) {
-        auto barrier = barriers[index];
+        auto barrier = barriers[index];  // barrier is a copy
         const auto *buffer = Get<BUFFER_STATE>(barrier.buffer);
         if (!buffer) continue;
-        barrier.size = GetRealWholeSize(barrier.offset, barrier.size, buffer->createInfo.size);
-        ResourceAccessRange range = MakeRange(barrier);
+        barrier.size = GetBufferWholeSize(*buffer, barrier.offset, barrier.size);
+        const ResourceAccessRange range = MakeRange(barrier);
         const auto src_access_scope = AccessScope(src_stage_accesses, barrier.srcAccessMask);
         const auto dst_access_scope = AccessScope(dst_stage_accesses, barrier.dstAccessMask);
         const ApplyMemoryAccessBarrierFunctor update_action(src_exec_scope, src_access_scope, dst_exec_scope, dst_access_scope);
@@ -2552,8 +2623,7 @@ bool SyncValidator::PreCallValidateCmdCopyBuffer(VkCommandBuffer commandBuffer, 
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &copy_region = pRegions[region];
         if (src_buffer) {
-            ResourceAccessRange src_range = MakeRange(
-                copy_region.srcOffset, GetRealWholeSize(copy_region.srcOffset, copy_region.size, src_buffer->createInfo.size));
+            const ResourceAccessRange src_range = MakeRange(*src_buffer, copy_region.srcOffset, copy_region.size);
             auto hazard = context->DetectHazard(*src_buffer, SYNC_TRANSFER_TRANSFER_READ, src_range);
             if (hazard.hazard) {
                 // TODO -- add tag information to log msg when useful.
@@ -2564,8 +2634,7 @@ bool SyncValidator::PreCallValidateCmdCopyBuffer(VkCommandBuffer commandBuffer, 
             }
         }
         if (dst_buffer && !skip) {
-            ResourceAccessRange dst_range = MakeRange(
-                copy_region.dstOffset, GetRealWholeSize(copy_region.dstOffset, copy_region.size, dst_buffer->createInfo.size));
+            const ResourceAccessRange dst_range = MakeRange(*dst_buffer, copy_region.dstOffset, copy_region.size);
             auto hazard = context->DetectHazard(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, dst_range);
             if (hazard.hazard) {
                 skip |= LogError(dstBuffer, string_SyncHazardVUID(hazard.hazard),
@@ -2592,13 +2661,11 @@ void SyncValidator::PreCallRecordCmdCopyBuffer(VkCommandBuffer commandBuffer, Vk
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &copy_region = pRegions[region];
         if (src_buffer) {
-            ResourceAccessRange src_range = MakeRange(
-                copy_region.srcOffset, GetRealWholeSize(copy_region.srcOffset, copy_region.size, src_buffer->createInfo.size));
+            const ResourceAccessRange src_range = MakeRange(*src_buffer, copy_region.srcOffset, copy_region.size);
             context->UpdateAccessState(*src_buffer, SYNC_TRANSFER_TRANSFER_READ, src_range, tag);
         }
         if (dst_buffer) {
-            ResourceAccessRange dst_range = MakeRange(
-                copy_region.dstOffset, GetRealWholeSize(copy_region.dstOffset, copy_region.size, dst_buffer->createInfo.size));
+            const ResourceAccessRange dst_range = MakeRange(*dst_buffer, copy_region.dstOffset, copy_region.size);
             context->UpdateAccessState(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, dst_range, tag);
         }
     }
@@ -3232,7 +3299,7 @@ bool SyncValidator::ValidateIndirectBuffer(const AccessContext &context, VkComma
     VkDeviceSize size = struct_size;
     if (drawCount == 1 || stride == size) {
         if (drawCount > 1) size *= drawCount;
-        ResourceAccessRange range = MakeRange(offset, size);
+        const ResourceAccessRange range = MakeRange(offset, size);
         auto hazard = context.DetectHazard(*buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range);
         if (hazard.hazard) {
             skip |= LogError(buf_state->buffer, string_SyncHazardVUID(hazard.hazard),
@@ -3242,7 +3309,7 @@ bool SyncValidator::ValidateIndirectBuffer(const AccessContext &context, VkComma
         }
     } else {
         for (uint32_t i = 0; i < drawCount; ++i) {
-            ResourceAccessRange range = MakeRange(offset + i * stride, size);
+            const ResourceAccessRange range = MakeRange(offset + i * stride, size);
             auto hazard = context.DetectHazard(*buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range);
             if (hazard.hazard) {
                 skip |= LogError(buf_state->buffer, string_SyncHazardVUID(hazard.hazard),
@@ -3263,11 +3330,11 @@ void SyncValidator::RecordIndirectBuffer(AccessContext &context, const ResourceU
     VkDeviceSize size = struct_size;
     if (drawCount == 1 || stride == size) {
         if (drawCount > 1) size *= drawCount;
-        ResourceAccessRange range = MakeRange(offset, size);
+        const ResourceAccessRange range = MakeRange(offset, size);
         context.UpdateAccessState(*buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range, tag);
     } else {
         for (uint32_t i = 0; i < drawCount; ++i) {
-            ResourceAccessRange range = MakeRange(offset + i * stride, size);
+            const ResourceAccessRange range = MakeRange(offset + i * stride, size);
             context.UpdateAccessState(*buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range, tag);
         }
     }
@@ -3278,7 +3345,7 @@ bool SyncValidator::ValidateCountBuffer(const AccessContext &context, VkCommandB
     bool skip = false;
 
     const auto *count_buf_state = Get<BUFFER_STATE>(buffer);
-    ResourceAccessRange range = MakeRange(offset, 4);
+    const ResourceAccessRange range = MakeRange(offset, 4);
     auto hazard = context.DetectHazard(*count_buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range);
     if (hazard.hazard) {
         skip |= LogError(count_buf_state->buffer, string_SyncHazardVUID(hazard.hazard),
@@ -3291,7 +3358,7 @@ bool SyncValidator::ValidateCountBuffer(const AccessContext &context, VkCommandB
 
 void SyncValidator::RecordCountBuffer(AccessContext &context, const ResourceUsageTag &tag, VkBuffer buffer, VkDeviceSize offset) {
     const auto *count_buf_state = Get<BUFFER_STATE>(buffer);
-    ResourceAccessRange range = MakeRange(offset, 4);
+    const ResourceAccessRange range = MakeRange(offset, 4);
     context.UpdateAccessState(*count_buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range, tag);
 }
 
@@ -3769,7 +3836,7 @@ bool SyncValidator::PreCallValidateCmdCopyQueryPoolResults(VkCommandBuffer comma
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
 
     if (dst_buffer) {
-        ResourceAccessRange range = MakeRange(dstOffset, stride * queryCount);
+        const ResourceAccessRange range = MakeRange(dstOffset, stride * queryCount);
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, range);
         if (hazard.hazard) {
             skip |=
@@ -3797,7 +3864,7 @@ void SyncValidator::PreCallRecordCmdCopyQueryPoolResults(VkCommandBuffer command
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
 
     if (dst_buffer) {
-        ResourceAccessRange range = MakeRange(dstOffset, stride * queryCount);
+        const ResourceAccessRange range = MakeRange(dstOffset, stride * queryCount);
         context->UpdateAccessState(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, range, tag);
     }
 
@@ -3818,7 +3885,7 @@ bool SyncValidator::PreCallValidateCmdFillBuffer(VkCommandBuffer commandBuffer, 
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
 
     if (dst_buffer) {
-        ResourceAccessRange range = MakeRange(dstOffset, size);
+        const ResourceAccessRange range = MakeRange(*dst_buffer, dstOffset, size);
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, range);
         if (hazard.hazard) {
             skip |= LogError(dstBuffer, string_SyncHazardVUID(hazard.hazard),
@@ -3841,7 +3908,7 @@ void SyncValidator::PreCallRecordCmdFillBuffer(VkCommandBuffer commandBuffer, Vk
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
 
     if (dst_buffer) {
-        ResourceAccessRange range = MakeRange(dstOffset, size);
+        const ResourceAccessRange range = MakeRange(*dst_buffer, dstOffset, size);
         context->UpdateAccessState(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, range, tag);
     }
 }
@@ -3931,7 +3998,8 @@ bool SyncValidator::PreCallValidateCmdUpdateBuffer(VkCommandBuffer commandBuffer
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
 
     if (dst_buffer) {
-        ResourceAccessRange range = MakeRange(dstOffset, dataSize);
+        // VK_WHOLE_SIZE not allowed
+        const ResourceAccessRange range = MakeRange(dstOffset, dataSize);
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, range);
         if (hazard.hazard) {
             skip |= LogError(dstBuffer, string_SyncHazardVUID(hazard.hazard),
@@ -3954,7 +4022,8 @@ void SyncValidator::PreCallRecordCmdUpdateBuffer(VkCommandBuffer commandBuffer, 
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
 
     if (dst_buffer) {
-        ResourceAccessRange range = MakeRange(dstOffset, dataSize);
+        // VK_WHOLE_SIZE not allowed
+        const ResourceAccessRange range = MakeRange(dstOffset, dataSize);
         context->UpdateAccessState(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, range, tag);
     }
 }
@@ -3973,7 +4042,7 @@ bool SyncValidator::PreCallValidateCmdWriteBufferMarkerAMD(VkCommandBuffer comma
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
 
     if (dst_buffer) {
-        ResourceAccessRange range = MakeRange(dstOffset, 4);
+        const ResourceAccessRange range = MakeRange(dstOffset, 4);
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, range);
         if (hazard.hazard) {
             skip |=
@@ -3997,7 +4066,7 @@ void SyncValidator::PreCallRecordCmdWriteBufferMarkerAMD(VkCommandBuffer command
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
 
     if (dst_buffer) {
-        ResourceAccessRange range = MakeRange(dstOffset, 4);
+        const ResourceAccessRange range = MakeRange(dstOffset, 4);
         context->UpdateAccessState(*dst_buffer, SYNC_TRANSFER_TRANSFER_WRITE, range, tag);
     }
 }

@@ -349,8 +349,14 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentReadOnlyButCleared) {
         maintenance2Supported = true;
     }
 
+    const VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
+    if (ds_format == VK_FORMAT_UNDEFINED) {
+        printf("%s No Depth + Stencil format found rest of tests skipped.\n", kSkipPrefix);
+        return;
+    }
+
     VkAttachmentDescription description = {0,
-                                           VK_FORMAT_D32_SFLOAT_S8_UINT,
+                                           ds_format,
                                            VK_SAMPLE_COUNT_1_BIT,
                                            VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // loadOp
                                            VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -975,21 +981,28 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentReferenceInvalidLayout) {
     }
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, (vkGetPhysicalDeviceFeatures2KHR) ? &features2 : nullptr));
 
+    const VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
+
     VkAttachmentDescription attach[] = {
         {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
          VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED,
          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {0, ds_format, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED,
+         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
     };
     VkAttachmentReference refs[] = {
-        {0, VK_IMAGE_LAYOUT_UNDEFINED},
+        {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},          // color
+        {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},  // depth stencil
     };
     VkSubpassDescription subpasses[] = {
-        {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 1, refs, nullptr, nullptr, 0, nullptr},
+        {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 1, &refs[0], nullptr, &refs[1], 0, nullptr},
     };
 
-    VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, 1, attach, 1, subpasses, 0, nullptr};
+    VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, 2, attach, 1, subpasses, 0, nullptr};
 
     // Use UNDEFINED layout
+    refs[0].layout = VK_IMAGE_LAYOUT_UNDEFINED;
     TestRenderPassCreate(m_errorMonitor, m_device->device(), &rpci, rp2Supported, "VUID-VkAttachmentReference-layout-00857",
                          "VUID-VkAttachmentReference2-layout-03077");
 
@@ -1002,51 +1015,81 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentReferenceInvalidLayout) {
         safe_VkRenderPassCreateInfo2 rpci2;
         ConvertVkRenderPassCreateInfoToV2KHR(rpci, &rpci2);
 
+        // set valid values to start
+        rpci2.pSubpasses[0].pColorAttachments[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        rpci2.pSubpasses[0].pDepthStencilAttachment->aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
+        TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(), "VUID-VkAttachmentReference2-attachment-03311");
+        rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
+        TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(), "VUID-VkAttachmentReference2-attachment-03311");
+        rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
+        TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(), "VUID-VkAttachmentReference2-attachment-03311");
+        rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
+        TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(), "VUID-VkAttachmentReference2-attachment-03311");
+        rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;  // reset
+
+        rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
+        TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(), "VUID-VkAttachmentReference2-attachment-03312");
+        rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;  // reset
+
         if (separate_depth_stencil_layouts_features.separateDepthStencilLayouts) {
-            rpci2.pSubpasses[0].pColorAttachments[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
             rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
+            m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-attachment-03314");
             rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
+            m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-attachment-03314");
             rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR;
+            m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-attachment-03314");
             rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR;
+            m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-attachment-03314");
 
-            rpci2.pSubpasses[0].pColorAttachments[0].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            // reset to valid layout
+            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-attachment-03315");
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
-            TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
-                                     "VUID-VkAttachmentReference2-attachment-03315");
-
-            rpci2.pSubpasses[0].pColorAttachments[0].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR;
-            TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
-                                     "VUID-VkAttachmentReference2-attachment-03315");
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-attachment-03315");
 
-            rpci2.pSubpasses[0].pColorAttachments[0].aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR;
+            TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
+                                     "VUID-VkAttachmentReference2-attachment-03316");
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR;
+            TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
+                                     "VUID-VkAttachmentReference2-attachment-03316");
+
+            rpci2.pSubpasses[0].pDepthStencilAttachment->aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-attachment-03317");
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-attachment-03317");
 
             auto attachment_reference_stencil_layout = lvl_init_struct<VkAttachmentReferenceStencilLayoutKHR>();
-            rpci2.pSubpasses[0].pColorAttachments[0].pNext = &attachment_reference_stencil_layout;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->pNext = &attachment_reference_stencil_layout;
 
             VkImageLayout forbidden_layouts[] = {VK_IMAGE_LAYOUT_PREINITIALIZED,
                                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -1057,26 +1100,29 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentReferenceInvalidLayout) {
                                                  VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL,
                                                  VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL,
                                                  VK_IMAGE_LAYOUT_PRESENT_SRC_KHR};
-            rpci2.pSubpasses[0].pColorAttachments[0].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
             for (size_t i = 0; i < (sizeof(forbidden_layouts) / sizeof(forbidden_layouts[0])); ++i) {
                 attachment_reference_stencil_layout.stencilLayout = forbidden_layouts[i];
                 TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                          "VUID-VkAttachmentReferenceStencilLayout-stencilLayout-03318");
             }
 
-            rpci2.pSubpasses[0].pColorAttachments[0].pNext = nullptr;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->pNext = nullptr;
         } else {
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-separateDepthStencilLayouts-03313");
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-separateDepthStencilLayouts-03313");
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR;
+
+            rpci2.pSubpasses[0].pDepthStencilAttachment->aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR;
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-separateDepthStencilLayouts-03313");
-            rpci2.pSubpasses[0].pColorAttachments[0].layout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR;
+            rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR;
             TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr(),
                                      "VUID-VkAttachmentReference2-separateDepthStencilLayouts-03313");
         }
@@ -2644,8 +2690,12 @@ TEST_F(VkLayerTest, FramebufferCreateErrors) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    bool push_fragment_density_support = false;
+    bool imageless_framebuffer_support = DeviceExtensionSupported(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
+    if (imageless_framebuffer_support) {
+        m_device_extension_names.push_back(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
+    }
 
+    bool push_fragment_density_support = false;
     if (push_physical_device_properties_2_support) {
         push_fragment_density_support = DeviceExtensionSupported(gpu(), nullptr, VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
         if (push_fragment_density_support) {
@@ -2853,8 +2903,9 @@ TEST_F(VkLayerTest, FramebufferCreateErrors) {
     }
 
     {
-        if (!push_fragment_density_support) {
-            printf("%s VK_EXT_fragment_density_map Extension not supported, skipping tests\n", kSkipPrefix);
+        if (!push_fragment_density_support || !imageless_framebuffer_support) {
+            printf("%s VK_EXT_fragment_density_map or VK_KHR_imageless_framebuffer extension not supported, skipping tests\n",
+                   kSkipPrefix);
         } else {
             uint32_t attachment_width = 512;
             uint32_t attachment_height = 512;
@@ -3434,7 +3485,7 @@ TEST_F(VkLayerTest, WriteDescriptorSetIntegrityCheck) {
     descriptor_write.dstBinding = 3;
     descriptor_write.descriptorCount = 1;
     descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkWriteDescriptorSet-descriptorType-01403");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkWriteDescriptorSet-descriptorType-04149");
     vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, NULL);
     m_errorMonitor->VerifyFound();
 
@@ -5785,6 +5836,421 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPass) {
     vk::DestroyRenderPass(m_device->device(), rp, NULL);
 }
 
+TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassFragmentDensityMap) {
+    TEST_DESCRIPTION(
+        "Hit RenderPass incompatible case: drawing with an active renderpass that's not compatible with the bound pipeline state "
+        "object's creation renderpass since only the former uses a Fragment Density Map.");
+
+    // Check for VK_KHR_get_physical_device_properties2
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    bool rp2Supported = CheckCreateRenderPass2Support(this, m_device_extension_names);
+    if (!rp2Supported) {
+        if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME)) {
+            m_device_extension_names.push_back(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
+        } else {
+            printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
+            return;
+        }
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    OneOffDescriptorSet descriptor_set(m_device, {
+                                                     {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                 });
+
+    const VkPipelineLayoutObj pipeline_layout(m_device, {&descriptor_set.layout_});
+
+    VkShaderObj vs(m_device, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkShaderObj fs(m_device, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT, this);  // We shouldn't need a fragment shader
+    // but add it to be able to run on more devices
+
+    VkAttachmentDescription attach[2];
+    attach[0].format = VK_FORMAT_B8G8R8A8_UNORM;
+    attach[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attach[0].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    attach[1].format = VK_FORMAT_R8G8_UNORM;
+    attach[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attach[1].finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentReference color_att = {};
+    color_att.attachment = 0;
+    color_att.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &color_att;
+
+    VkAttachmentReference ref = {};
+    ref.attachment = 1;
+    ref.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT rpfdmi = {};
+    rpfdmi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT;
+    rpfdmi.fragmentDensityMapAttachment = ref;
+
+    VkRenderPassCreateInfo rpci = {};
+    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpci.pNext = &rpfdmi;
+    rpci.attachmentCount = 2;
+    rpci.pAttachments = attach;
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+
+    // Create rp1 with FDM pNext and rp2 without FDM pNext
+    VkRenderPass rp1, rp2;
+    vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &rp1);
+    rpci.pNext = nullptr;
+    rpci.attachmentCount = 1;
+    vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &rp2);
+
+    // Create image views
+    VkImageObj image(m_device);
+    image.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
+    ASSERT_TRUE(image.initialized());
+
+    VkImageView iv[2];
+    VkImageViewCreateInfo ivci = {};
+    ivci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    ivci.image = image.handle();
+    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    ivci.format = VK_FORMAT_B8G8R8A8_UNORM;
+    ivci.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                       VK_COMPONENT_SWIZZLE_IDENTITY};
+    ivci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vk::CreateImageView(m_device->device(), &ivci, NULL, &iv[0]);
+    vk::CreateImageView(m_device->device(), &ivci, NULL, &iv[1]);
+
+    // Create a framebuffer with rp1
+    VkFramebufferCreateInfo fbci = {};
+    fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbci.renderPass = rp1;
+    fbci.attachmentCount = 2;
+    fbci.pAttachments = iv;
+    fbci.width = 128;
+    fbci.height = 128;
+    fbci.layers = 1;
+
+    VkFramebuffer fb;
+    vk::CreateFramebuffer(m_device->handle(), &fbci, nullptr, &fb);
+
+    VkRenderPassBeginInfo rp_begin = {};
+    rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rp_begin.renderPass = rp1;
+    rp_begin.framebuffer = fb;
+    rp_begin.renderArea = {{0, 0}, {128, 128}};
+
+    // Create a graphics pipeline with rp2
+    VkPipelineObj pipe(m_device);
+    pipe.AddShader(&vs);
+    pipe.AddShader(&fs);
+    pipe.AddDefaultColorAttachment();
+    VkViewport viewport = {0.0f, 0.0f, 64.0f, 64.0f, 0.0f, 1.0f};
+    m_viewports.push_back(viewport);
+    pipe.SetViewport(m_viewports);
+    VkRect2D rect = {{0, 0}, {64, 64}};
+    m_scissors.push_back(rect);
+    pipe.SetScissor(m_scissors);
+    pipe.CreateVKPipeline(pipeline_layout.handle(), rp2);
+
+    // Begin renderpass and bind to pipeline
+    VkCommandBufferInheritanceInfo cbii = {};
+    cbii.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+    cbii.renderPass = rp1;
+    cbii.subpass = 0;
+    VkCommandBufferBeginInfo cbbi = {};
+    cbbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cbbi.pInheritanceInfo = &cbii;
+    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cbbi);
+    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.handle());
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
+    // Render triangle (the error should trigger on the attempt to draw).
+    m_commandBuffer->Draw(3, 1, 0, 0);
+
+    // Finalize recording of the command buffer
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    m_errorMonitor->VerifyFound();
+
+    vk::DestroyRenderPass(m_device->device(), rp1, nullptr);
+    vk::DestroyRenderPass(m_device->device(), rp2, nullptr);
+    vk::DestroyFramebuffer(m_device->device(), fb, nullptr);
+    vk::DestroyImageView(m_device->device(), iv[0], nullptr);
+    vk::DestroyImageView(m_device->device(), iv[1], nullptr);
+}
+
+TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
+    TEST_DESCRIPTION(
+        "Hit RenderPass incompatible cases: drawing with an active renderpass that's not compatible with the bound pipeline state "
+        "object's creation renderpass since only the former uses Multiview.");
+
+    // Check for VK_KHR_get_physical_device_properties2
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    bool rp2Supported = CheckCreateRenderPass2Support(this, m_device_extension_names);
+    if (!rp2Supported) {
+        if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
+            m_device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
+        } else {
+            printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_MULTIVIEW_EXTENSION_NAME);
+            return;
+        }
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    OneOffDescriptorSet descriptor_set(m_device, {
+                                                     {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                 });
+
+    const VkPipelineLayoutObj pipeline_layout(m_device, {&descriptor_set.layout_});
+
+    VkShaderObj vs(m_device, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkShaderObj fs(m_device, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT, this);  // We shouldn't need a fragment shader
+    // but add it to be able to run on more devices
+
+    // Set up VkRenderPassCreateInfo struct used with VK_VERSION_1_0
+    VkAttachmentReference color_att = {};
+    color_att.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkAttachmentDescription attach = {};
+    attach.samples = VK_SAMPLE_COUNT_1_BIT;
+    attach.format = VK_FORMAT_B8G8R8A8_UNORM;
+    attach.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &color_att;
+
+    uint32_t viewMasks[] = {0x3u};
+    VkRenderPassMultiviewCreateInfo rpmvci = {};
+    rpmvci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
+    rpmvci.subpassCount = 1;
+    rpmvci.pViewMasks = viewMasks;
+
+    VkRenderPassCreateInfo rpci = {};
+    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpci.pNext = &rpmvci;
+    rpci.attachmentCount = 1;
+    rpci.pAttachments = &attach;
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+
+    // Set up VkRenderPassCreateInfo2 struct used with VK_VERSION_1_2
+    VkAttachmentReference2 color_att2 = {};
+    color_att2.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    color_att2.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkAttachmentDescription2 attach2 = {};
+    attach2.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
+    attach2.samples = VK_SAMPLE_COUNT_1_BIT;
+    attach2.format = VK_FORMAT_B8G8R8A8_UNORM;
+    attach2.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkSubpassDescription2 subpass2 = {};
+    subpass2.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
+    subpass2.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass2.viewMask = 0x3u;
+    subpass2.colorAttachmentCount = 1;
+    subpass2.pColorAttachments = &color_att2;
+
+    VkRenderPassCreateInfo2 rpci2 = {};
+    rpci2.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpci2.attachmentCount = 1;
+    rpci2.pAttachments = &attach2;
+    rpci2.subpassCount = 1;
+    rpci2.pSubpasses = &subpass2;
+
+    // Create render passes with VK_VERSION_1_0 struct and vkCreateRenderPass call
+    // Create rp[0] with Multiview pNext, rp[1] without Multiview pNext, rp[2] with Multiview pNext but another viewMask
+    VkRenderPass rp[3];
+    vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &rp[0]);
+    rpci.pNext = nullptr;
+    vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &rp[1]);
+    uint32_t viewMasks2[] = {0x1u};
+    rpmvci.pViewMasks = viewMasks2;
+    rpci.pNext = &rpmvci;
+    vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &rp[2]);
+
+    // Create render passes with VK_VERSION_1_2 struct and vkCreateRenderPass2KHR call
+    // Create rp2[0] with Multiview, rp2[1] without Multiview (zero viewMask), rp2[2] with Multiview but another viewMask
+    VkRenderPass rp2[3];
+    PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
+        (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCreateRenderPass2KHR");
+    vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[0]);
+    subpass2.viewMask = 0x0u;
+    rpci2.pSubpasses = &subpass2;
+    vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[1]);
+    subpass2.viewMask = 0x1u;
+    rpci2.pSubpasses = &subpass2;
+    vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[2]);
+
+    // Create image view
+    VkImageObj image(m_device);
+    image.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
+    ASSERT_TRUE(image.initialized());
+
+    VkImageView iv;
+    VkImageViewCreateInfo ivci = {};
+    ivci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    ivci.image = image.handle();
+    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    ivci.format = VK_FORMAT_B8G8R8A8_UNORM;
+    ivci.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                       VK_COMPONENT_SWIZZLE_IDENTITY};
+    ivci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vk::CreateImageView(m_device->device(), &ivci, NULL, &iv);
+
+    // Create framebuffers for rp[0] and rp2[0]
+    VkFramebufferCreateInfo fbci = {};
+    fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbci.renderPass = rp[0];
+    fbci.attachmentCount = 1;
+    fbci.pAttachments = &iv;
+    fbci.width = 128;
+    fbci.height = 128;
+    fbci.layers = 1;
+
+    VkFramebuffer fb, fb2;
+    vk::CreateFramebuffer(m_device->handle(), &fbci, nullptr, &fb);
+    fbci.renderPass = rp2[0];
+    vk::CreateFramebuffer(m_device->handle(), &fbci, nullptr, &fb2);
+
+    VkRenderPassBeginInfo rp_begin = {};
+    rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rp_begin.renderPass = rp[0];
+    rp_begin.framebuffer = fb;
+    rp_begin.renderArea = {{0, 0}, {128, 128}};
+
+    // Create a graphics pipeline with rp[1]
+    VkPipelineObj pipe_1(m_device);
+    pipe_1.AddShader(&vs);
+    pipe_1.AddShader(&fs);
+    pipe_1.AddDefaultColorAttachment();
+    VkViewport viewport = {0.0f, 0.0f, 64.0f, 64.0f, 0.0f, 1.0f};
+    m_viewports.push_back(viewport);
+    pipe_1.SetViewport(m_viewports);
+    VkRect2D rect = {{0, 0}, {64, 64}};
+    m_scissors.push_back(rect);
+    pipe_1.SetScissor(m_scissors);
+    pipe_1.CreateVKPipeline(pipeline_layout.handle(), rp[1]);
+
+    // Create a graphics pipeline with rp[2]
+    VkPipelineObj pipe_2(m_device);
+    pipe_2.AddShader(&vs);
+    pipe_2.AddShader(&fs);
+    pipe_2.AddDefaultColorAttachment();
+    m_viewports.push_back(viewport);
+    pipe_2.SetViewport(m_viewports);
+    m_scissors.push_back(rect);
+    pipe_2.SetScissor(m_scissors);
+    pipe_2.CreateVKPipeline(pipeline_layout.handle(), rp[2]);
+
+    // Create a graphics pipeline with rp2[1]
+    VkPipelineObj pipe2_1(m_device);
+    pipe2_1.AddShader(&vs);
+    pipe2_1.AddShader(&fs);
+    pipe2_1.AddDefaultColorAttachment();
+    m_viewports.push_back(viewport);
+    pipe2_1.SetViewport(m_viewports);
+    m_scissors.push_back(rect);
+    pipe2_1.SetScissor(m_scissors);
+    pipe2_1.CreateVKPipeline(pipeline_layout.handle(), rp2[1]);
+
+    // Create a graphics pipeline with rp2[2]
+    VkPipelineObj pipe2_2(m_device);
+    pipe2_2.AddShader(&vs);
+    pipe2_2.AddShader(&fs);
+    pipe2_2.AddDefaultColorAttachment();
+    m_viewports.push_back(viewport);
+    pipe2_2.SetViewport(m_viewports);
+    m_scissors.push_back(rect);
+    pipe2_2.SetScissor(m_scissors);
+    pipe2_2.CreateVKPipeline(pipeline_layout.handle(), rp2[2]);
+
+    VkCommandBufferInheritanceInfo cbii = {};
+    cbii.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+    cbii.renderPass = rp[0];
+    cbii.subpass = 0;
+    VkCommandBufferBeginInfo cbbi = {};
+    cbbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cbbi.pInheritanceInfo = &cbii;
+
+    // Begin rp[0] for VK_VERSION_1_0 test cases
+    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cbbi);
+    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+
+    // Bind rp[1]'s pipeline to command buffer
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_1.handle());
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
+    // Render triangle (error on Multiview usage should trigger on draw)
+    m_commandBuffer->Draw(3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    // Bind rp[2]'s pipeline to command buffer
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_2.handle());
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
+    // Render triangle (error on non-matching viewMasks for Multiview usage should trigger on draw)
+    m_commandBuffer->Draw(3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    // End rp[0]
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    // Begin rp2[0] for VK_VERSION_1_2 test cases
+    cbii.renderPass = rp2[0];
+    rp_begin.renderPass = rp2[0];
+    rp_begin.framebuffer = fb2;
+    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cbbi);
+    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+
+    // Bind rp2[1]'s pipeline to command buffer
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe2_1.handle());
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
+    // Render triangle (error on Multiview usage should trigger on draw)
+    m_commandBuffer->Draw(3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    // Bind rp2[2]'s pipeline to command buffer
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe2_2.handle());
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
+    // Render triangle (error on non-matching viewMasks for Multiview usage should trigger on draw)
+    m_commandBuffer->Draw(3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    // End rp2[0]
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    for (int i = 0; i < 3; i++) {
+        vk::DestroyRenderPass(m_device->device(), rp[i], nullptr);
+        vk::DestroyRenderPass(m_device->device(), rp2[i], nullptr);
+    }
+    vk::DestroyFramebuffer(m_device->device(), fb, nullptr);
+    vk::DestroyFramebuffer(m_device->device(), fb2, nullptr);
+    vk::DestroyImageView(m_device->device(), iv, nullptr);
+}
+
 TEST_F(VkLayerTest, Maint1BindingSliceOf3DImage) {
     TEST_DESCRIPTION(
         "Attempt to bind a slice of a 3D texture in a descriptor set. This is explicitly disallowed by KHR_maintenance1 to keep "
@@ -7526,4 +7992,296 @@ TEST_F(VkLayerTest, RenderPassCreatePotentialFormatFeatures) {
             }
         }
     }
+}
+
+TEST_F(VkLayerTest, SubpassInputNotBoundDescriptorSet) {
+    TEST_DESCRIPTION("Validate subpass input isn't bound to fragment shader or descriptor set");
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+    if (IsPlatform(kNexusPlayer)) {
+        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkImageUsageFlags usage_input =
+        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkImageObj image_input(m_device);
+    auto image_ci = VkImageObj::ImageCreateInfo2D(64, 64, 1, 1, format, usage_input, VK_IMAGE_TILING_OPTIMAL);
+    image_input.Init(image_ci);
+    VkImageView view_input = image_input.targetView(format);
+    VkImageView attachments[] = {view_input, view_input};
+
+    const VkAttachmentDescription inputAttachment = {
+        0u,
+        format,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_ATTACHMENT_LOAD_OP_LOAD,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL,
+    };
+    std::vector<VkAttachmentDescription> attachmentDescs;
+    attachmentDescs.push_back(inputAttachment);
+    attachmentDescs.push_back(inputAttachment);
+
+    VkAttachmentReference inputRef = {
+        0,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    std::vector<VkAttachmentReference> inputAttachments;
+    inputAttachments.push_back(inputRef);
+    // index 1 is not used in fragment shader, it causes a desired failure.
+    inputRef.attachment = 1;
+    inputAttachments.push_back(inputRef);
+
+    const VkSubpassDescription subpass = {
+        0u,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        static_cast<uint32_t>(inputAttachments.size()),
+        inputAttachments.data(),
+        0,
+        nullptr,
+        0u,
+        nullptr,
+        0u,
+        nullptr,
+    };
+    const std::vector<VkSubpassDescription> subpasses(1u, subpass);
+
+    const VkRenderPassCreateInfo renderPassInfo = {
+        VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        nullptr,
+        0u,
+        static_cast<uint32_t>(attachmentDescs.size()),
+        attachmentDescs.data(),
+        static_cast<uint32_t>(subpasses.size()),
+        subpasses.data(),
+        0u,
+        nullptr,
+    };
+    VkRenderPass rp;
+    ASSERT_VK_SUCCESS(vk::CreateRenderPass(device(), &renderPassInfo, nullptr, &rp));
+
+    const VkFramebufferCreateInfo fbci = {
+        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, 0, 0u, rp, 2u, attachments, 64, 64, 1u,
+    };
+    VkFramebuffer fb;
+    ASSERT_VK_SUCCESS(vk::CreateFramebuffer(device(), &fbci, nullptr, &fb));
+
+    VkSampler sampler = VK_NULL_HANDLE;
+    VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
+    vk::CreateSampler(m_device->device(), &sampler_info, NULL, &sampler);
+
+    // input index is wrong, it doesn't exist in supbass input attachments and the set and binding is undefined
+    // It causes desired failures.
+    char const *fsSource_fail =
+        "#version 450\n"
+        "layout(input_attachment_index=2, set=0, binding=1) uniform subpassInput x;\n"
+        "void main() {\n"
+        "   vec4 color = subpassLoad(x);\n"
+        "}\n";
+
+    VkShaderObj vs(m_device, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkShaderObj fs_fail(m_device, fsSource_fail, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+    CreatePipelineHelper g_pipe(*this);
+    g_pipe.InitInfo();
+    g_pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs_fail.GetStageCreateInfo()};
+    g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    g_pipe.gp_ci_.renderPass = rp;
+    g_pipe.InitState();
+
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "UNASSIGNED-CoreValidation-Shader-MissingInputAttachment");
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-VkGraphicsPipelineCreateInfo-layout-00756");
+    g_pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
+
+    char const *fsSource =
+        "#version 450\n"
+        "layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput x;\n"
+        "layout(input_attachment_index=2, set=0, binding=0) uniform subpassInput x2;\n"
+        "void main() {\n"
+        "   vec4 color = subpassLoad(x);\n"
+        "   color = subpassLoad(x2);\n"
+        "}\n";
+    VkShaderObj fs(m_device, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+    g_pipe.InitState();
+    g_pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    ASSERT_VK_SUCCESS(g_pipe.CreateGraphicsPipeline());
+
+    g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, view_input, sampler, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT);
+    g_pipe.descriptor_set_->UpdateDescriptorSets();
+
+    m_commandBuffer->begin();
+    m_renderPassBeginInfo.renderArea = {{0, 0}, {64, 64}};
+    m_renderPassBeginInfo.renderPass = rp;
+    m_renderPassBeginInfo.framebuffer = fb;
+
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_);
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(), 0, 1,
+                              &g_pipe.descriptor_set_->set_, 0, nullptr);
+
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-02686");
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-02686");
+    vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+}
+
+TEST_F(VkLayerTest, ImageSubresourceOverlapBetweenAttachmentsAndDescriptorSets) {
+    TEST_DESCRIPTION("Validate if attachments and descriptor set use the same image subresources");
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+    if (IsPlatform(kNexusPlayer)) {
+        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkImageUsageFlags usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkImageObj image(m_device);
+    auto image_ci = VkImageObj::ImageCreateInfo2D(64, 64, 1, 2, format, usage, VK_IMAGE_TILING_OPTIMAL);
+    image.Init(image_ci);
+    VkImageView view_input = image.targetView(format, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1, 1);
+    VkImageView attachments[] = {view_input};
+
+    VkImageViewCreateInfo createView = {};
+    createView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    createView.image = image.handle();
+    createView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    createView.format = format;
+    createView.components.r = VK_COMPONENT_SWIZZLE_R;
+    createView.components.g = VK_COMPONENT_SWIZZLE_G;
+    createView.components.b = VK_COMPONENT_SWIZZLE_B;
+    createView.components.a = VK_COMPONENT_SWIZZLE_A;
+    createView.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1, 1};
+    createView.flags = 0;
+    VkImageView view_sampler_overlap;
+    vk::CreateImageView(m_device->device(), &createView, NULL, &view_sampler_overlap);
+
+    createView.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VkImageView view_sampler_not_overlap;
+    vk::CreateImageView(m_device->device(), &createView, NULL, &view_sampler_not_overlap);
+
+    const VkAttachmentDescription inputAttachment = {
+        0u,
+        format,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_ATTACHMENT_LOAD_OP_LOAD,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL,
+    };
+    std::vector<VkAttachmentDescription> attachmentDescs;
+    attachmentDescs.push_back(inputAttachment);
+
+    VkAttachmentReference inputRef = {
+        0,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    std::vector<VkAttachmentReference> inputAttachments;
+    inputAttachments.push_back(inputRef);
+
+    const VkSubpassDescription subpass = {
+        0u,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        static_cast<uint32_t>(inputAttachments.size()),
+        inputAttachments.data(),
+        0,
+        nullptr,
+        0u,
+        nullptr,
+        0u,
+        nullptr,
+    };
+    const std::vector<VkSubpassDescription> subpasses(1u, subpass);
+
+    const VkRenderPassCreateInfo renderPassInfo = {
+        VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        nullptr,
+        0u,
+        static_cast<uint32_t>(attachmentDescs.size()),
+        attachmentDescs.data(),
+        static_cast<uint32_t>(subpasses.size()),
+        subpasses.data(),
+        0u,
+        nullptr,
+    };
+    VkRenderPass rp;
+    ASSERT_VK_SUCCESS(vk::CreateRenderPass(device(), &renderPassInfo, nullptr, &rp));
+
+    const VkFramebufferCreateInfo fbci = {
+        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, 0, 0u, rp, 1u, attachments, 64, 64, 1u,
+    };
+    VkFramebuffer fb;
+    ASSERT_VK_SUCCESS(vk::CreateFramebuffer(device(), &fbci, nullptr, &fb));
+
+    VkSampler sampler = VK_NULL_HANDLE;
+    VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
+    vk::CreateSampler(m_device->device(), &sampler_info, NULL, &sampler);
+
+    char const *fsSource =
+        "#version 450\n"
+        "layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput ia0;\n"
+        "layout(set=0, binding=1) uniform sampler2D ci1;\n"
+        "layout(set=0, binding=2) uniform sampler2D ci2;\n"
+        "layout(set=0, binding=3) uniform sampler2D ci3;\n"
+        "void main() {\n"
+        "   vec4 color = subpassLoad(ia0);\n"
+        "   color = texture(ci1, vec2(0));\n"
+        "   color = texture(ci2, vec2(0));\n"
+        "   color = texture(ci3, vec2(0));\n"
+        "}\n";
+
+    VkShaderObj fs(m_device, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+    CreatePipelineHelper g_pipe(*this);
+    g_pipe.InitInfo();
+    g_pipe.shader_stages_ = {g_pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                            {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                            {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                            {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    g_pipe.gp_ci_.renderPass = rp;
+    g_pipe.InitState();
+    ASSERT_VK_SUCCESS(g_pipe.CreateGraphicsPipeline());
+
+    g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, view_input, sampler, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT);
+    // input attachment and combined image sampler use the same view to cause DesiredFailure.
+    g_pipe.descriptor_set_->WriteDescriptorImageInfo(1, view_input, sampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    // image subresource of input attachment and combined image sampler overlap to cause DesiredFailure.
+    g_pipe.descriptor_set_->WriteDescriptorImageInfo(2, view_sampler_overlap, sampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    // image subresource of input attachment and combined image sampler don't overlap. It should not cause failure.
+    g_pipe.descriptor_set_->WriteDescriptorImageInfo(3, view_sampler_not_overlap, sampler,
+                                                     VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    g_pipe.descriptor_set_->UpdateDescriptorSets();
+
+    m_commandBuffer->begin();
+    m_renderPassBeginInfo.renderArea = {{0, 0}, {64, 64}};
+    m_renderPassBeginInfo.renderPass = rp;
+    m_renderPassBeginInfo.framebuffer = fb;
+
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_);
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(), 0, 1,
+                              &g_pipe.descriptor_set_->set_, 0, nullptr);
+
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-02687");
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-02687");
+    vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
 }

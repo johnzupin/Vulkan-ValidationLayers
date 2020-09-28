@@ -441,7 +441,13 @@ void ValidationStateTracker::PostCallRecordCreateBufferView(VkDevice device, con
                                                             VkResult result) {
     if (result != VK_SUCCESS) return;
     auto buffer_state = GetBufferShared(pCreateInfo->buffer);
-    bufferViewMap[*pView] = std::make_shared<BUFFER_VIEW_STATE>(buffer_state, *pView, pCreateInfo);
+    auto buffer_view_state = std::make_shared<BUFFER_VIEW_STATE>(buffer_state, *pView, pCreateInfo);
+
+    VkFormatProperties format_properties;
+    DispatchGetPhysicalDeviceFormatProperties(physical_device, pCreateInfo->format, &format_properties);
+    buffer_view_state->format_features = format_properties.bufferFeatures;
+
+    bufferViewMap.insert(std::make_pair(*pView, std::move(buffer_view_state)));
 }
 
 void ValidationStateTracker::PostCallRecordCreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo,
@@ -738,6 +744,17 @@ void ValidationStateTracker::AddMemObjInfo(void *object, const VkDeviceMemory me
         mem_info->export_handle_type_flags = export_info->handleTypes;
     }
 
+    auto alloc_flags = lvl_find_in_chain<VkMemoryAllocateFlagsInfo>(pAllocateInfo->pNext);
+    if (alloc_flags) {
+        auto dev_mask = alloc_flags->deviceMask;
+        if ((dev_mask != 0) && (dev_mask & (dev_mask - 1))) {
+            mem_info->multi_instance = true;
+        }
+    }
+    auto heap_index = phys_dev_mem_props.memoryTypes[mem_info->alloc_info.memoryTypeIndex].heapIndex;
+    mem_info->multi_instance |= (((phys_dev_mem_props.memoryHeaps[heap_index].flags & VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) != 0) &&
+                                 physical_device_count > 1);
+
     // Assumes validation already for only a single import operation in the pNext
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     auto win32_import = lvl_find_in_chain<VkImportMemoryWin32HandleInfoKHR>(pAllocateInfo->pNext);
@@ -949,7 +966,8 @@ bool ValidationStateTracker::SetSparseMemBinding(const VkDeviceMemory mem, const
     return skip;
 }
 
-void ValidationStateTracker::UpdateDrawState(CMD_BUFFER_STATE *cb_state, CMD_TYPE cmd_type, const VkPipelineBindPoint bind_point) {
+void ValidationStateTracker::UpdateDrawState(CMD_BUFFER_STATE *cb_state, CMD_TYPE cmd_type, const VkPipelineBindPoint bind_point,
+                                             const char *function) {
     auto &state = cb_state->lastBound[bind_point];
     PIPELINE_STATE *pPipe = state.pipeline_state;
     if (VK_NULL_HANDLE != state.pipeline_layout) {
@@ -994,9 +1012,9 @@ void ValidationStateTracker::UpdateDrawState(CMD_BUFFER_STATE *cb_state, CMD_TYP
                                         state.per_set[setIndex].validated_set_binding_req_map.begin(),
                                         state.per_set[setIndex].validated_set_binding_req_map.end(),
                                         std::inserter(delta_reqs, delta_reqs.begin()));
-                    descriptor_set->UpdateDrawState(this, cb_state, cmd_type, pPipe, delta_reqs);
+                    descriptor_set->UpdateDrawState(this, cb_state, cmd_type, pPipe, delta_reqs, function);
                 } else {
-                    descriptor_set->UpdateDrawState(this, cb_state, cmd_type, pPipe, binding_req_map);
+                    descriptor_set->UpdateDrawState(this, cb_state, cmd_type, pPipe, binding_req_map, function);
                 }
 
                 state.per_set[setIndex].validated_set = descriptor_set;
@@ -1474,8 +1492,12 @@ void ValidationStateTracker::PostCallRecordCreateDevice(VkPhysicalDevice gpu, co
     }
 
     const auto *device_group_ci = lvl_find_in_chain<VkDeviceGroupDeviceCreateInfo>(pCreateInfo->pNext);
-    state_tracker->physical_device_count =
-        device_group_ci && device_group_ci->physicalDeviceCount > 0 ? device_group_ci->physicalDeviceCount : 1;
+    if (device_group_ci) {
+        state_tracker->physical_device_count = device_group_ci->physicalDeviceCount;
+        state_tracker->device_group_create_info = *device_group_ci;
+    } else {
+        state_tracker->physical_device_count = 1;
+    }
 
     const auto *exclusive_scissor_features = lvl_find_in_chain<VkPhysicalDeviceExclusiveScissorFeaturesNV>(pCreateInfo->pNext);
     if (exclusive_scissor_features) {
@@ -2715,11 +2737,13 @@ void ValidationStateTracker::PostCallRecordCreateCommandPool(VkDevice device, co
                                                              const VkAllocationCallbacks *pAllocator, VkCommandPool *pCommandPool,
                                                              VkResult result) {
     if (VK_SUCCESS != result) return;
+    VkCommandPool command_pool = *pCommandPool;
     auto cmd_pool_state = std::make_shared<COMMAND_POOL_STATE>();
+    cmd_pool_state->commandPool = command_pool;
     cmd_pool_state->createFlags = pCreateInfo->flags;
     cmd_pool_state->queueFamilyIndex = pCreateInfo->queueFamilyIndex;
     cmd_pool_state->unprotected = ((pCreateInfo->flags & VK_COMMAND_POOL_CREATE_PROTECTED_BIT) == 0);
-    commandPoolMap[*pCommandPool] = std::move(cmd_pool_state);
+    commandPoolMap[command_pool] = std::move(cmd_pool_state);
 }
 
 void ValidationStateTracker::PostCallRecordCreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo *pCreateInfo,
@@ -4117,7 +4141,7 @@ void ValidationStateTracker::RecordRenderPassDAG(RenderPassCreateVersion rp_vers
         subpass_dependencies[i].pass = i;
     }
     for (uint32_t i = 0; i < pCreateInfo->dependencyCount; ++i) {
-        const VkSubpassDependency2KHR &dependency = pCreateInfo->pDependencies[i];
+        const auto &dependency = pCreateInfo->pDependencies[i];
         const auto srcSubpass = dependency.srcSubpass;
         const auto dstSubpass = dependency.dstSubpass;
         if ((dependency.srcSubpass != VK_SUBPASS_EXTERNAL) && (dependency.dstSubpass != VK_SUBPASS_EXTERNAL)) {
@@ -4130,13 +4154,13 @@ void ValidationStateTracker::RecordRenderPassDAG(RenderPassCreateVersion rp_vers
         }
         if (srcSubpass == VK_SUBPASS_EXTERNAL) {
             assert(dstSubpass != VK_SUBPASS_EXTERNAL);  // this is invalid per VUID-VkSubpassDependency-srcSubpass-00865
-            subpass_dependencies[dstSubpass].barrier_from_external = &dependency;
+            subpass_dependencies[dstSubpass].barrier_from_external.emplace_back(&dependency);
         } else if (dstSubpass == VK_SUBPASS_EXTERNAL) {
-            subpass_dependencies[srcSubpass].barrier_to_external = &dependency;
+            subpass_dependencies[srcSubpass].barrier_to_external.emplace_back(&dependency);
         } else if (dependency.srcSubpass != dependency.dstSubpass) {
             // ignore self dependencies in prev and next
-            subpass_dependencies[srcSubpass].next.emplace_back(&dependency, &subpass_dependencies[dstSubpass]);
-            subpass_dependencies[dstSubpass].prev.emplace_back(&dependency, &subpass_dependencies[srcSubpass]);
+            subpass_dependencies[srcSubpass].next[&subpass_dependencies[dstSubpass]].emplace_back(&dependency);
+            subpass_dependencies[dstSubpass].prev[&subpass_dependencies[srcSubpass]].emplace_back(&dependency);
         }
     }
 
@@ -4151,7 +4175,7 @@ void ValidationStateTracker::RecordRenderPassDAG(RenderPassCreateVersion rp_vers
         depends.resize(i);
         auto &subpass_dep = subpass_dependencies[i];
         for (const auto &prev : subpass_dep.prev) {
-            const auto prev_pass = prev.node->pass;
+            const auto prev_pass = prev.first->pass;
             const auto &prev_depends = pass_depends[prev_pass];
             for (uint32_t j = 0; j < prev_pass; j++) {
                 depends[j] = depends[j] | prev_depends[j];
@@ -4260,7 +4284,7 @@ void ValidationStateTracker::RecordCreateRenderPassState(RenderPassCreateVersion
                     last[attachment] = subpass;
 
                     for (const auto &prev : rp->subpass_dependencies[subpass].prev) {
-                        const auto prev_pass = prev.node->pass;
+                        const auto prev_pass = prev.first->pass;
                         const auto prev_layout = subpass_attachment_layout[prev_pass][attachment];
                         if ((prev_layout != kInvalidLayout) && (prev_layout != layout)) {
                             subpass_transitions[subpass].emplace_back(prev_pass, attachment, prev_layout, layout);
@@ -4298,21 +4322,21 @@ void ValidationStateTracker::RecordCreateRenderPassState(RenderPassCreateVersion
         const auto first_use = attachment_tracker.first[attachment];
         if (first_use != VK_SUBPASS_EXTERNAL) {
             auto &subpass_dep = render_pass->subpass_dependencies[first_use];
-            if (!subpass_dep.barrier_from_external) {
-                // Add implicit from barrier
+            if (subpass_dep.barrier_from_external.size() == 0) {
+                // Add implicit from barrier if they're aren't any
                 subpass_dep.implicit_barrier_from_external.reset(
                     new VkSubpassDependency2(ImplicitDependencyFromExternal(first_use)));
-                subpass_dep.barrier_from_external = subpass_dep.implicit_barrier_from_external.get();
+                subpass_dep.barrier_from_external.emplace_back(subpass_dep.implicit_barrier_from_external.get());
             }
         }
 
         const auto last_use = attachment_tracker.last[attachment];
         if (last_use != VK_SUBPASS_EXTERNAL) {
             auto &subpass_dep = render_pass->subpass_dependencies[last_use];
-            if (!render_pass->subpass_dependencies[last_use].barrier_to_external) {
-                // Add implicit to barrier
+            if (render_pass->subpass_dependencies[last_use].barrier_to_external.size() == 0) {
+                // Add implicit to barrier  if they're aren't any
                 subpass_dep.implicit_barrier_to_external.reset(new VkSubpassDependency2(ImplicitDependencyToExternal(last_use)));
-                subpass_dep.barrier_to_external = subpass_dep.implicit_barrier_to_external.get();
+                subpass_dep.barrier_to_external.emplace_back(subpass_dep.implicit_barrier_to_external.get());
             }
         }
     }
@@ -5506,35 +5530,36 @@ void ValidationStateTracker::PerformAllocateDescriptorSets(const VkDescriptorSet
 
 // Generic function to handle state update for all CmdDraw* and CmdDispatch* type functions
 void ValidationStateTracker::UpdateStateCmdDrawDispatchType(CMD_BUFFER_STATE *cb_state, CMD_TYPE cmd_type,
-                                                            VkPipelineBindPoint bind_point) {
-    UpdateDrawState(cb_state, cmd_type, bind_point);
+                                                            VkPipelineBindPoint bind_point, const char *function) {
+    UpdateDrawState(cb_state, cmd_type, bind_point, function);
     cb_state->hasDispatchCmd = true;
 }
 
 // Generic function to handle state update for all CmdDraw* type functions
-void ValidationStateTracker::UpdateStateCmdDrawType(CMD_BUFFER_STATE *cb_state, CMD_TYPE cmd_type, VkPipelineBindPoint bind_point) {
-    UpdateStateCmdDrawDispatchType(cb_state, cmd_type, bind_point);
+void ValidationStateTracker::UpdateStateCmdDrawType(CMD_BUFFER_STATE *cb_state, CMD_TYPE cmd_type, VkPipelineBindPoint bind_point,
+                                                    const char *function) {
+    UpdateStateCmdDrawDispatchType(cb_state, cmd_type, bind_point, function);
     cb_state->hasDrawCmd = true;
 }
 
 void ValidationStateTracker::PostCallRecordCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
                                                    uint32_t firstVertex, uint32_t firstInstance) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAW, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAW, VK_PIPELINE_BIND_POINT_GRAPHICS, "vkCmdDraw()");
 }
 
 void ValidationStateTracker::PostCallRecordCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount,
                                                           uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset,
                                                           uint32_t firstInstance) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDEXED, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDEXED, VK_PIPELINE_BIND_POINT_GRAPHICS, "vkCmdDrawIndexed()");
 }
 
 void ValidationStateTracker::PostCallRecordCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                            uint32_t count, uint32_t stride) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
     BUFFER_STATE *buffer_state = GetBufferState(buffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDIRECT, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDIRECT, VK_PIPELINE_BIND_POINT_GRAPHICS, "vkCmdDrawIndirect()");
     AddCommandBufferBindingBuffer(cb_state, buffer_state);
 }
 
@@ -5542,30 +5567,30 @@ void ValidationStateTracker::PostCallRecordCmdDrawIndexedIndirect(VkCommandBuffe
                                                                   VkDeviceSize offset, uint32_t count, uint32_t stride) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
     BUFFER_STATE *buffer_state = GetBufferState(buffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDEXEDINDIRECT, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDEXEDINDIRECT, VK_PIPELINE_BIND_POINT_GRAPHICS, "vkCmdDrawIndexedIndirect()");
     AddCommandBufferBindingBuffer(cb_state, buffer_state);
 }
 
 void ValidationStateTracker::PostCallRecordCmdDispatch(VkCommandBuffer commandBuffer, uint32_t x, uint32_t y, uint32_t z) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
-    UpdateStateCmdDrawDispatchType(cb_state, CMD_DISPATCH, VK_PIPELINE_BIND_POINT_COMPUTE);
+    UpdateStateCmdDrawDispatchType(cb_state, CMD_DISPATCH, VK_PIPELINE_BIND_POINT_COMPUTE, "vkCmdDispatch()");
 }
 
 void ValidationStateTracker::PostCallRecordCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer,
                                                                VkDeviceSize offset) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
-    UpdateStateCmdDrawDispatchType(cb_state, CMD_DISPATCHINDIRECT, VK_PIPELINE_BIND_POINT_COMPUTE);
+    UpdateStateCmdDrawDispatchType(cb_state, CMD_DISPATCHINDIRECT, VK_PIPELINE_BIND_POINT_COMPUTE, "vkCmdDispatchIndirect()");
     BUFFER_STATE *buffer_state = GetBufferState(buffer);
     AddCommandBufferBindingBuffer(cb_state, buffer_state);
 }
 
 void ValidationStateTracker::RecordCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                         VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
-                                                        uint32_t stride) {
+                                                        uint32_t stride, const char *function) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
     BUFFER_STATE *buffer_state = GetBufferState(buffer);
     BUFFER_STATE *count_buffer_state = GetBufferState(countBuffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDIRECTCOUNT, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDIRECTCOUNT, VK_PIPELINE_BIND_POINT_GRAPHICS, function);
     AddCommandBufferBindingBuffer(cb_state, buffer_state);
     AddCommandBufferBindingBuffer(cb_state, count_buffer_state);
 }
@@ -5574,22 +5599,24 @@ void ValidationStateTracker::PreCallRecordCmdDrawIndirectCountKHR(VkCommandBuffe
                                                                   VkDeviceSize offset, VkBuffer countBuffer,
                                                                   VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
                                                                   uint32_t stride) {
-    RecordCmdDrawIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+    RecordCmdDrawIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride,
+                               "vkCmdDrawIndirectCountKHR()");
 }
 
 void ValidationStateTracker::PreCallRecordCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                                VkBuffer countBuffer, VkDeviceSize countBufferOffset,
                                                                uint32_t maxDrawCount, uint32_t stride) {
-    RecordCmdDrawIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+    RecordCmdDrawIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride,
+                               "vkCmdDrawIndirectCount()");
 }
 
 void ValidationStateTracker::RecordCmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                                VkBuffer countBuffer, VkDeviceSize countBufferOffset,
-                                                               uint32_t maxDrawCount, uint32_t stride) {
+                                                               uint32_t maxDrawCount, uint32_t stride, const char *function) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
     BUFFER_STATE *buffer_state = GetBufferState(buffer);
     BUFFER_STATE *count_buffer_state = GetBufferState(countBuffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDEXEDINDIRECTCOUNT, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAWINDEXEDINDIRECTCOUNT, VK_PIPELINE_BIND_POINT_GRAPHICS, function);
     AddCommandBufferBindingBuffer(cb_state, buffer_state);
     AddCommandBufferBindingBuffer(cb_state, count_buffer_state);
 }
@@ -5598,26 +5625,29 @@ void ValidationStateTracker::PreCallRecordCmdDrawIndexedIndirectCountKHR(VkComma
                                                                          VkDeviceSize offset, VkBuffer countBuffer,
                                                                          VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
                                                                          uint32_t stride) {
-    RecordCmdDrawIndexedIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+    RecordCmdDrawIndexedIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride,
+                                      "vkCmdDrawIndexedIndirectCountKHR()");
 }
 
 void ValidationStateTracker::PreCallRecordCmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer,
                                                                       VkDeviceSize offset, VkBuffer countBuffer,
                                                                       VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
                                                                       uint32_t stride) {
-    RecordCmdDrawIndexedIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+    RecordCmdDrawIndexedIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride,
+                                      "vkCmdDrawIndexedIndirectCount()");
 }
 
 void ValidationStateTracker::PreCallRecordCmdDrawMeshTasksNV(VkCommandBuffer commandBuffer, uint32_t taskCount,
                                                              uint32_t firstTask) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAWMESHTASKSNV, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAWMESHTASKSNV, VK_PIPELINE_BIND_POINT_GRAPHICS, "vkCmdDrawMeshTasksNV()");
 }
 
 void ValidationStateTracker::PreCallRecordCmdDrawMeshTasksIndirectNV(VkCommandBuffer commandBuffer, VkBuffer buffer,
                                                                      VkDeviceSize offset, uint32_t drawCount, uint32_t stride) {
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAWMESHTASKSINDIRECTNV, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAWMESHTASKSINDIRECTNV, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                           "vkCmdDrawMeshTasksIndirectNV()");
     BUFFER_STATE *buffer_state = GetBufferState(buffer);
     if (buffer_state) {
         AddCommandBufferBindingBuffer(cb_state, buffer_state);
@@ -5631,7 +5661,8 @@ void ValidationStateTracker::PreCallRecordCmdDrawMeshTasksIndirectCountNV(VkComm
     CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
     BUFFER_STATE *buffer_state = GetBufferState(buffer);
     BUFFER_STATE *count_buffer_state = GetBufferState(countBuffer);
-    UpdateStateCmdDrawType(cb_state, CMD_DRAWMESHTASKSINDIRECTCOUNTNV, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    UpdateStateCmdDrawType(cb_state, CMD_DRAWMESHTASKSINDIRECTCOUNTNV, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                           "vkCmdDrawMeshTasksIndirectCountNV()");
     if (buffer_state) {
         AddCommandBufferBindingBuffer(cb_state, buffer_state);
     }
@@ -5671,14 +5702,15 @@ void ValidationStateTracker::RecordPipelineShaderStage(VkPipelineShaderStageCrea
     stage_state->accessible_ids = MarkAccessibleIds(module, entrypoint);
     ProcessExecutionModes(module, entrypoint, pipeline);
 
-    stage_state->descriptor_uses =
-        CollectInterfaceByDescriptorSlot(module, stage_state->accessible_ids, &stage_state->has_writable_descriptor);
+    stage_state->descriptor_uses = CollectInterfaceByDescriptorSlot(
+        module, stage_state->accessible_ids, &stage_state->has_writable_descriptor, &stage_state->has_atomic_descriptor);
     // Capture descriptor uses for the pipeline
     for (auto use : stage_state->descriptor_uses) {
         // While validating shaders capture which slots are used by the pipeline
         const uint32_t slot = use.first.first;
         auto &reqs = pipeline->active_slots[slot][use.first.second];
         reqs = descriptor_req(reqs | DescriptorTypeToReqs(module, use.second.type_id));
+        if (use.second.is_atomic_operation) reqs = descriptor_req(reqs | DESCRIPTOR_REQ_VIEW_ATOMIC_OPERATION);
         pipeline->max_active_slot = std::max(pipeline->max_active_slot, slot);
     }
 
