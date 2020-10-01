@@ -1,3 +1,10 @@
+vulkan-validationlayers (1.2.154.0-1lunarg20.04-3) focal; urgency=medium
+
+  [ Shannon McPherson ]
+  * build: Update Android known-good for 1.2.154 SDK
+
+ -- John Zupin <john@odin>  Thu, 01 Oct 2020 15:35:35 -0600
+
 vulkan-validationlayers (1.2.154.0-1lunarg20.04-2) focal; urgency=medium
 
   * package: update deps version
