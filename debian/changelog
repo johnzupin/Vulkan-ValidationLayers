@@ -1,3 +1,10 @@
+vulkan-validationlayers (1.2.154.0-1lunarg18.04-3) bionic; urgency=medium
+
+  [ Shannon McPherson ]
+  * build: Update Android known-good for 1.2.154 SDK
+
+ -- John Zupin <john@odin>  Thu, 01 Oct 2020 15:33:45 -0600
+
 vulkan-validationlayers (1.2.154.0-1lunarg18.04-2) bionic; urgency=medium
 
   * package: update deps version
