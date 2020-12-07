@@ -157,7 +157,6 @@ chassis_sources = [
   "layers/generated/chassis.h",
   "layers/generated/layer_chassis_dispatch.cpp",
   "layers/generated/layer_chassis_dispatch.h",
-  "layers/generated/thread_safety.h",
   "layers/generated/vk_dispatch_table_helper.h",
   "layers/generated/vk_extension_helper.h",
   "layers/generated/vk_safe_struct.cpp",
@@ -192,7 +191,20 @@ if (!is_android) {
       sources += [ "layers/json/$json_name.in" ]
       outputs += [ "$vulkan_data_dir/$json_name" ]
     }
+
+    if (is_linux) {
+      _platform = "Linux"
+    } else if (is_win) {
+      _platform = "Windows"
+    } else if (is_mac) {
+      _platform = "Darwin"
+    } else {
+      _platform = "Other"
+    }
+
     args = [
+             "--platform",
+             _platform,
              rebase_path("layers/json", root_build_dir),
              rebase_path(vulkan_data_dir, root_build_dir),
            ] + rebase_path(sources, root_build_dir)
@@ -211,6 +223,7 @@ source_set("vulkan_layer_utils") {
     "$vulkan_headers_dir/include/vulkan/vk_layer.h",
     "$vulkan_headers_dir/include/vulkan/vk_sdk_platform.h",
     "$vulkan_headers_dir/include/vulkan/vulkan.h",
+    "layers/android_ndk_types.h",
     "layers/cast_utils.h",
     "layers/generated/vk_enum_string_helper.h",
     "layers/generated/vk_layer_dispatch_table.h",

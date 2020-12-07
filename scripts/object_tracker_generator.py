@@ -442,6 +442,10 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         self.newline()
         self.otwrite('cpp', '#include "chassis.h"')
         self.otwrite('cpp', '#include "object_lifetime_validation.h"')
+        self.newline()
+        self.otwrite('cpp', 'read_lock_guard_t ObjectLifetimes::read_lock() { return read_lock_guard_t(validation_object_mutex, std::defer_lock); }')
+        self.otwrite('cpp', 'write_lock_guard_t ObjectLifetimes::write_lock() { return write_lock_guard_t(validation_object_mutex, std::defer_lock); }')
+
 
     #
     # Now that the data is all collected and complete, generate and output the object validation routines
@@ -476,17 +480,19 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
                 self.otwrite('both', '\n')
 
 
-        self.otwrite('hdr', 'void PostCallRecordDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);')
-        self.otwrite('hdr', 'void PreCallRecordResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties *pQueueFamilyProperties);')
-        self.otwrite('hdr', 'void PreCallRecordFreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer *pCommandBuffers);')
-        self.otwrite('hdr', 'void PreCallRecordFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2KHR *pQueueFamilyProperties);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2KHR *pQueueFamilyProperties);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount, VkDisplayPropertiesKHR *pProperties, VkResult result);')
-        self.otwrite('hdr', 'void PostCallRecordGetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t *pPropertyCount, VkDisplayModePropertiesKHR *pProperties, VkResult result);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount, VkDisplayProperties2KHR *pProperties, VkResult result);')
-        self.otwrite('hdr', 'void PostCallRecordGetDisplayModeProperties2KHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t *pPropertyCount, VkDisplayModeProperties2KHR *pProperties, VkResult result);')
+        self.otwrite('hdr', 'void PostCallRecordDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator) override;')
+        self.otwrite('hdr', 'void PreCallRecordResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties *pQueueFamilyProperties) override;')
+        self.otwrite('hdr', 'void PreCallRecordFreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer *pCommandBuffers) override;')
+        self.otwrite('hdr', 'void PreCallRecordFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2KHR *pQueueFamilyProperties) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2KHR *pQueueFamilyProperties) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount, VkDisplayPropertiesKHR *pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t *pPropertyCount, VkDisplayModePropertiesKHR *pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount, VkDisplayProperties2KHR *pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetDisplayModeProperties2KHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t *pPropertyCount, VkDisplayModeProperties2KHR *pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayPlaneProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlaneProperties2KHR* pProperties, VkResult result) override;')
         OutputGenerator.endFile(self)
     #
     # Processing point at beginning of each extension definition
@@ -774,11 +780,25 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         param_vuid = self.GetVuid(parent_name, param_suffix)
         parent_vuid = self.GetVuid(parent_name, parent_suffix)
 
-        # If no parent VUID for this member, look for a commonparent VUID
-        if parent_vuid == 'kVUIDUndefined':
-            parent_vuid = self.GetVuid(parent_name, 'commonparent')
-        if obj_count is not None:
+        # TODO: Revise object 'parent' handling.  Each object definition in the XML specifies a parent, this should
+        #       all be handled in codegen (or at least called out)
+        # These objects do not have a VkDevice as their (ultimate) parent objecs, so skip the current code-gen'd parent checks
+        parent_exception_list = [
+            'VkPhysicalDevice',
+            'VkSwapchainKHR',
+            'VkDisplayKHR',
+            'VkSurfaceKHR',
+            'VkDisplayModeKHR',
+            'VkDebugReportCallbackEXT',
+            'VkDebugUtilsMessengerEXT']
+        if obj_type in parent_exception_list:
+             parent_vuid = 'kVUIDUndefined'
+        else:
+            # If no parent VUID for this member, look for a commonparent VUID
+            if parent_vuid == 'kVUIDUndefined':
+                parent_vuid = self.GetVuid(parent_name, 'commonparent')
 
+        if obj_count is not None:
             pre_call_code += '%sif (%s%s) {\n' % (indent, prefix, obj_name)
             indent = self.incIndent(indent)
             pre_call_code += '%sfor (uint32_t %s = 0; %s < %s; ++%s) {\n' % (indent, index, index, obj_count, index)
@@ -996,19 +1016,22 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             result_type = cmdinfo.elem.find('proto/type')
 
             if 'object_tracker.h' in self.genOpts.filename:
+                decl_terminator = ';'
+                if 'ValidationCache' not in cmdname:
+                    decl_terminator = ' override;'
                 # Output PreCallValidateAPI prototype if necessary
                 if pre_call_validate:
-                    pre_cv_func_decl = 'bool PreCallValidate' + func_decl_template + ' const;'
+                    pre_cv_func_decl = 'bool PreCallValidate' + func_decl_template + ' const' + decl_terminator
                     self.appendSection('command', pre_cv_func_decl)
 
                 # Output PreCallRecordAPI prototype if necessary
                 if pre_call_record:
-                    pre_cr_func_decl = 'void PreCallRecord' + func_decl_template + ';'
+                    pre_cr_func_decl = 'void PreCallRecord' + func_decl_template + decl_terminator
                     self.appendSection('command', pre_cr_func_decl)
 
                 # Output PosCallRecordAPI prototype if necessary
                 if post_call_record:
-                    post_cr_func_decl = 'void PostCallRecord' + func_decl_template + ';'
+                    post_cr_func_decl = 'void PostCallRecord' + func_decl_template + decl_terminator
                     if result_type.text == 'VkResult':
                         post_cr_func_decl = post_cr_func_decl.replace(')', ',\n    VkResult                                    result)')
                     elif result_type.text == 'VkDeviceAddress':

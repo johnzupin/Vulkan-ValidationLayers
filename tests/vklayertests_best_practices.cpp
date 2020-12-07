@@ -113,6 +113,7 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedInstanceExtensions) {
 
     // Create a 1.1 vulkan instance and request an extension promoted to core in 1.1
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkCreateInstance-deprecated-extension");
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkCreateInstance-specialuse-extension");
     VkInstance dummy;
     auto features = features_;
     auto ici = GetInstanceCreateInfo();
@@ -184,6 +185,40 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedDeviceExtensions) {
     dev_info.ppEnabledExtensionNames = m_device_extension_names.data();
 
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkCreateDevice-deprecated-extension");
+    vk::CreateDevice(this->gpu(), &dev_info, NULL, &local_device);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkBestPracticesLayerTest, SpecialUseExtensions) {
+    TEST_DESCRIPTION("Create a device with a 'specialuse' extension.");
+
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME)) {
+        m_device_extension_names.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+    } else {
+        printf("%s %s Extension not supported, skipping test\n", kSkipPrefix, VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+        return;
+    }
+
+    VkDevice local_device;
+    VkDeviceCreateInfo dev_info = {};
+    VkDeviceQueueCreateInfo queue_info = {};
+    queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_info.pNext = NULL;
+    queue_info.queueFamilyIndex = 0;
+    queue_info.queueCount = 1;
+    queue_info.pQueuePriorities = nullptr;
+    dev_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    dev_info.pNext = nullptr;
+    dev_info.queueCreateInfoCount = 1;
+    dev_info.pQueueCreateInfos = &queue_info;
+    dev_info.enabledLayerCount = 0;
+    dev_info.ppEnabledLayerNames = NULL;
+    dev_info.enabledExtensionCount = m_device_extension_names.size();
+    dev_info.ppEnabledExtensionNames = m_device_extension_names.data();
+
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkCreateDevice-specialuse-extension");
     vk::CreateDevice(this->gpu(), &dev_info, NULL, &local_device);
     m_errorMonitor->VerifyFound();
 }
@@ -690,4 +725,72 @@ TEST_F(VkBestPracticesLayerTest, TripleBufferingTest) {
     m_errorMonitor->VerifyNotFound();
     ASSERT_VK_SUCCESS(err)
     DestroySwapchain();
+}
+
+TEST_F(VkBestPracticesLayerTest, ExpectedQueryDetails) {
+    TEST_DESCRIPTION("Check that GetPhysicalDeviceQueueFamilyProperties is working as expected");
+
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+    const vk_testing::PhysicalDevice phys_device_obj(gpu_);
+
+    std::vector<VkQueueFamilyProperties> queue_family_props;
+
+    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
+
+    // Ensure we can find a graphics queue family.
+    uint32_t queue_count = 0;
+    vk::GetPhysicalDeviceQueueFamilyProperties(phys_device_obj.handle(), &queue_count, nullptr);
+
+    queue_family_props.resize(queue_count);
+    vk::GetPhysicalDeviceQueueFamilyProperties(phys_device_obj.handle(), &queue_count, queue_family_props.data());
+
+    vk_testing::Device device(phys_device_obj.handle());
+    device.init();
+}
+
+TEST_F(VkBestPracticesLayerTest, MissingQueryDetails) {
+    TEST_DESCRIPTION("Check that GetPhysicalDeviceQueueFamilyProperties generates appropriate query warning");
+
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+    const vk_testing::PhysicalDevice phys_device_obj(gpu_);
+
+    std::vector<VkQueueFamilyProperties> queue_family_props(1);
+    uint32_t queue_count = static_cast<uint32_t>(queue_family_props.size());
+
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-CoreValidation-DevLimit-MissingQueryCount");
+    vk::GetPhysicalDeviceQueueFamilyProperties(phys_device_obj.handle(), &queue_count, queue_family_props.data());
+    m_errorMonitor->VerifyFound();
+
+    // Now get information correctly
+    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
+
+    vk_testing::QueueCreateInfoArray queue_info(phys_device_obj.queue_properties());
+    // Only request creation with queuefamilies that have at least one queue
+    std::vector<VkDeviceQueueCreateInfo> create_queue_infos;
+    auto qci = queue_info.data();
+    for (uint32_t j = 0; j < queue_info.size(); ++j) {
+        if (qci[j].queueCount) {
+            create_queue_infos.push_back(qci[j]);
+        }
+    }
+    m_errorMonitor->VerifyNotFound();
+
+    VkPhysicalDeviceFeatures all_features;
+    VkDeviceCreateInfo device_ci = {};
+    device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_ci.pNext = nullptr;
+    device_ci.queueCreateInfoCount = create_queue_infos.size();
+    device_ci.pQueueCreateInfos = create_queue_infos.data();
+    device_ci.enabledLayerCount = 0;
+    device_ci.ppEnabledLayerNames = NULL;
+    device_ci.enabledExtensionCount = 0;
+    device_ci.ppEnabledExtensionNames = nullptr;
+    device_ci.pEnabledFeatures = &all_features;
+
+    // vkGetPhysicalDeviceFeatures has not been called, so this should produce a warning
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit,
+                                         "UNASSIGNED-BestPractices-vkCreateDevice-physical-device-features-not-retrieved");
+    VkDevice device;
+    vk::CreateDevice(phys_device_obj.handle(), &device_ci, nullptr, &device);
+    m_errorMonitor->VerifyFound();
 }

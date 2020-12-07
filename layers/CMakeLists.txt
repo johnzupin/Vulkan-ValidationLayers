@@ -72,7 +72,7 @@ if(BUILD_LAYER_SUPPORT_FILES)
         generated/vk_object_types.h
         generated/vk_extension_helper.h
         generated/vk_typemap_helper.h)
-    install(FILES ${LAYER_UTIL_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(FILES ${LAYER_UTIL_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vulkan)
 endif()
 
 set(TARGET_NAMES
@@ -139,7 +139,7 @@ endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/generated ${VulkanHeaders_INCLUDE_DIR})
 
-if(WIN32)
+if(MSVC)
     # Applies to all configurations
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)
     # Avoid: fatal error C1128: number of sections exceeded object file format limit: compile with /bigobj

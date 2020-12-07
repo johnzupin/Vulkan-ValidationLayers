@@ -260,9 +260,6 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
         safe_VkRenderPassCreateInfo2 create_info2;
         ConvertVkRenderPassCreateInfoToV2KHR(*create_info, &create_info2);
 
-        // aspectMasks might never get set in ConvertVkRenderPassCreateInfoToV2KHR
-        error_monitor->SetUnexpectedError("VUID-VkAttachmentReference2-attachment-03311");
-        error_monitor->SetUnexpectedError("VUID-VkAttachmentReference2-attachment-03312");
         // Some tests mismatch attachment type with layout
         error_monitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
 
@@ -274,9 +271,6 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
         // For api version >= 1.2, try core entrypoint
         PFN_vkCreateRenderPass2 vkCreateRenderPass2 = (PFN_vkCreateRenderPass2)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2");
         if (vkCreateRenderPass2) {
-            // aspectMasks might never get set in ConvertVkRenderPassCreateInfoToV2KHR
-            error_monitor->SetUnexpectedError("VUID-VkAttachmentReference2-attachment-03311");
-            error_monitor->SetUnexpectedError("VUID-VkAttachmentReference2-attachment-03312");
             // Some tests mismatch attachment type with layout
             error_monitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
 
@@ -309,6 +303,19 @@ void PositiveTestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice de
         if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
         error_monitor->VerifyNotFound();
     }
+}
+
+void PositiveTestRenderPass2KHRCreate(ErrorMonitor *error_monitor, const VkDevice device,
+                                      const VkRenderPassCreateInfo2KHR *create_info) {
+    VkRenderPass render_pass = VK_NULL_HANDLE;
+    VkResult err;
+    PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
+        (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2KHR");
+
+    error_monitor->ExpectSuccess();
+    err = vkCreateRenderPass2KHR(device, create_info, nullptr, &render_pass);
+    if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
+    error_monitor->VerifyNotFound();
 }
 
 void TestRenderPass2KHRCreate(ErrorMonitor *error_monitor, const VkDevice device, const VkRenderPassCreateInfo2KHR *create_info,
@@ -550,7 +557,7 @@ void NegHeightViewportTests(VkDeviceObj *m_device, VkCommandBufferObj *m_command
                                          {{0.0, max_bound, 64.0, 1.0, 0.0, 1.0}, {"VUID-VkViewport-y-01233"}}};
 
     for (const auto &test_case : test_cases) {
-        for (const auto vuid : test_case.vuids) {
+        for (const auto &vuid : test_case.vuids) {
             if (vuid == "VUID-Undefined")
                 m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "is less than VkPhysicalDeviceLimits::viewportBoundsRange[0]");
             else
@@ -1333,6 +1340,13 @@ OneOffDescriptorSet::~OneOffDescriptorSet() {
 
 bool OneOffDescriptorSet::Initialized() { return pool_ != VK_NULL_HANDLE && layout_.initialized() && set_ != VK_NULL_HANDLE; }
 
+void OneOffDescriptorSet::Clear() {
+    buffer_infos.clear();
+    image_infos.clear();
+    buffer_views.clear();
+    descriptor_writes.clear();
+}
+
 void OneOffDescriptorSet::WriteDescriptorBufferInfo(int blinding, VkBuffer buffer, VkDeviceSize size,
                                                     VkDescriptorType descriptorType, uint32_t count) {
     const auto index = buffer_infos.size();
@@ -1850,7 +1864,7 @@ void CreateNVRayTracingPipelineHelper::InitNVRayTracingPipelineInfo() {
 
 void CreateNVRayTracingPipelineHelper::InitKHRRayTracingPipelineInfo() {
     rp_ci_KHR_.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV;
-    rp_ci_KHR_.maxRecursionDepth = 0;
+    rp_ci_KHR_.maxPipelineRayRecursionDepth = 0;
     rp_ci_KHR_.stageCount = shader_stages_.size();
     rp_ci_KHR_.pStages = shader_stages_.data();
     rp_ci_KHR_.groupCount = groups_KHR_.size();
@@ -1925,7 +1939,7 @@ VkResult CreateNVRayTracingPipelineHelper::CreateKHRRayTracingPipeline(bool impl
     }
     PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR =
         (PFN_vkCreateRayTracingPipelinesKHR)vk::GetInstanceProcAddr(layer_test_.instance(), "vkCreateRayTracingPipelinesKHR");
-    err = vkCreateRayTracingPipelinesKHR(layer_test_.device(), pipeline_cache_, 1, &rp_ci_KHR_, nullptr, &pipeline_);
+    err = vkCreateRayTracingPipelinesKHR(layer_test_.device(), 0, pipeline_cache_, 1, &rp_ci_KHR_, nullptr, &pipeline_);
     return err;
 }
 
@@ -2082,10 +2096,13 @@ bool InitFrameworkForRayTracingTest(VkRenderFramework *renderFramework, bool isK
     std::vector<const char *> required_device_extensions;
     required_device_extensions.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
     if (isKHR) {
-        required_device_extensions.push_back(VK_KHR_RAY_TRACING_EXTENSION_NAME);
+        required_device_extensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        required_device_extensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+        required_device_extensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
         required_device_extensions.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
         required_device_extensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
         required_device_extensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+        required_device_extensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
         required_device_extensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
         required_device_extensions.push_back(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
     } else {

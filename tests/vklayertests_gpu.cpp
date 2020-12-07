@@ -522,6 +522,347 @@ TEST_F(VkGpuAssistedLayerTest, GpuValidationArrayOOBGraphicsShaders) {
     return;
 }
 
+TEST_F(VkGpuAssistedLayerTest, GpuBufferOOB) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+
+    InitGpuAssistedFramework(false);
+    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+        printf("%s GPU-Assisted validation test requires a driver that can draw.\n", kSkipPrefix);
+        return;
+    }
+    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME)) {
+        printf("%s Extension %s not supported by device; skipped.\n", kSkipPrefix, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+        return;
+    }
+
+    m_device_extension_names.push_back(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+
+    auto robustness2_features = lvl_init_struct<VkPhysicalDeviceRobustness2FeaturesEXT>();
+    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&robustness2_features);
+
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+
+    if (!robustness2_features.nullDescriptor) {
+        printf("%s nullDescriptor feature not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+    features2.features.robustBufferAccess = VK_FALSE;
+    robustness2_features.robustBufferAccess2 = VK_FALSE;
+    VkCommandPoolCreateFlags pool_flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, pool_flags));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkBufferObj offset_buffer;
+    VkBufferObj write_buffer;
+    VkBufferObj uniform_texel_buffer;
+    VkBufferObj storage_texel_buffer;
+    VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    offset_buffer.init(*m_device, 4, reqs);
+    write_buffer.init_as_storage(*m_device, 16, reqs);
+
+    VkBufferCreateInfo buffer_create_info = {};
+    uint32_t queue_family_index = 0;
+    buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buffer_create_info.size = 16;
+    buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+    buffer_create_info.queueFamilyIndexCount = 1;
+    buffer_create_info.pQueueFamilyIndices = &queue_family_index;
+    uniform_texel_buffer.init(*m_device, buffer_create_info, reqs);
+    buffer_create_info.usage = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+    storage_texel_buffer.init(*m_device, buffer_create_info, reqs);
+    VkBufferView uniform_buffer_view;
+    VkBufferView storage_buffer_view;
+    VkBufferViewCreateInfo bvci = {};
+    bvci.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+    bvci.buffer = uniform_texel_buffer.handle();
+    bvci.format = VK_FORMAT_R32_SFLOAT;
+    bvci.range = VK_WHOLE_SIZE;
+    vk::CreateBufferView(m_device->device(), &bvci, NULL, &uniform_buffer_view);
+    bvci.buffer = storage_texel_buffer.handle();
+    vk::CreateBufferView(m_device->device(), &bvci, NULL, &storage_buffer_view);
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                  {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                  {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                  {3, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                  {4, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}});
+
+    const VkPipelineLayoutObj pipeline_layout(m_device, {&descriptor_set.layout_});
+    descriptor_set.WriteDescriptorBufferInfo(0, offset_buffer.handle(), 4);
+    descriptor_set.WriteDescriptorBufferInfo(1, write_buffer.handle(), 16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.WriteDescriptorBufferInfo(2, VK_NULL_HANDLE, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.WriteDescriptorBufferView(3, uniform_buffer_view, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
+    descriptor_set.WriteDescriptorBufferView(4, storage_buffer_view, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+    static const char vertshader[] =
+        "#version 450\n"
+        "layout(set = 0, binding = 0) uniform ufoo { uint index[]; } u_index;\n"      // index[1]
+        "layout(set = 0, binding = 1) buffer StorageBuffer { uint data[]; } Data;\n"  // data[4]
+        "layout(set = 0, binding = 2) buffer NullBuffer { uint data[]; } Null;\n"     // VK_NULL_HANDLE
+        "layout(set = 0, binding = 3) uniform samplerBuffer u_buffer;\n"              // texel_buffer[4]
+        "layout(set = 0, binding = 4, r32f) uniform imageBuffer s_buffer;\n"          // texel_buffer[4]
+        "void main() {\n"
+        "    vec4 x;\n"
+        "    if (u_index.index[0] == 8)\n"
+        "        Data.data[u_index.index[0]] = 0xdeadca71;\n"
+        "    else if (u_index.index[0] == 0)\n"
+        "        Data.data[0] = u_index.index[4];\n"
+        "    else if (u_index.index[0] == 1)\n"
+        "        Data.data[0] = Null.data[40];\n"  // No error
+        "    else if (u_index.index[0] == 2)\n"
+        "        x = texelFetch(u_buffer, 5);\n"
+        "    else if (u_index.index[0] == 3)\n"
+        "        x = imageLoad(s_buffer, 5);\n"
+        "    else if (u_index.index[0] == 4)\n"
+        "        imageStore(s_buffer, 5, x);\n"
+        "    else if (u_index.index[0] == 5)\n"  // No Error
+        "        imageStore(s_buffer, 0, x);\n"
+        "    else if (u_index.index[0] == 6)\n"  // No Error
+        "        x = imageLoad(s_buffer, 0);\n"
+        "}\n";
+
+    VkShaderObj vs(m_device, vertshader, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkPipelineObj pipe(m_device);
+    pipe.AddShader(&vs);
+    pipe.AddDefaultColorAttachment();
+    pipe.CreateVKPipeline(pipeline_layout.handle(), m_renderPass);
+    VkCommandBufferBeginInfo begin_info = {};
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    m_commandBuffer->begin(&begin_info);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.handle());
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    VkViewport viewport = {0, 0, 16, 16, 0, 1};
+    vk::CmdSetViewport(m_commandBuffer->handle(), 0, 1, &viewport);
+    VkRect2D scissor = {{0, 0}, {16, 16}};
+    vk::CmdSetScissor(m_commandBuffer->handle(), 0, 1, &scissor);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    vk::CmdEndRenderPass(m_commandBuffer->handle());
+    m_commandBuffer->end();
+    struct TestCase {
+        bool positive;
+        uint32_t index;
+        char const *expected_error;
+    };
+    std::vector<TestCase> tests;
+    tests.push_back({false, 8, "Descriptor size is 16 units (bytes or texels) and highest unit accessed was 35"});
+    // Uniform buffer stride rounded up to the alignment of a vec4 (16 bytes)
+    // so u_index.index[4] accesses bytes 64, 65, 66, and 67
+    tests.push_back({false, 0, "Descriptor size is 4 units (bytes or texels) and highest unit accessed was 67"});
+    tests.push_back({true, 1, ""});
+    tests.push_back({false, 2, "Descriptor size is 4 units (bytes or texels) and highest unit accessed was 5"});
+    tests.push_back({false, 3, "Descriptor size is 4 units (bytes or texels) and highest unit accessed was 5"});
+    tests.push_back({false, 4, "Descriptor size is 4 units (bytes or texels) and highest unit accessed was 5"});
+    tests.push_back({true, 5, ""});
+    tests.push_back({true, 6, ""});
+
+    for (const auto &test : tests) {
+        uint32_t *data = (uint32_t *)offset_buffer.memory().map();
+        *data = test.index;
+        offset_buffer.memory().unmap();
+        if (test.positive) {
+            m_errorMonitor->ExpectSuccess();
+        } else {
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, test.expected_error);
+        }
+        m_commandBuffer->QueueCommandBuffer();
+        if (test.positive) {
+            m_errorMonitor->VerifyNotFound();
+        } else {
+            m_errorMonitor->VerifyFound();
+        }
+        vk::QueueWaitIdle(m_device->m_queue);
+    }
+
+    vk::DestroyBufferView(m_device->handle(), uniform_buffer_view, nullptr);
+    vk::DestroyBufferView(m_device->handle(), storage_buffer_view, nullptr);
+}
+
+void VkGpuAssistedLayerTest::ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSize binding_offset, VkDeviceSize binding_range,
+                                                  VkDescriptorType descriptor_type, const char *fragment_shader,
+                                                  const char *expected_error) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    InitGpuAssistedFramework(false);
+    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+        printf("%s GPU-Assisted validation test requires a driver that can draw.\n", kSkipPrefix);
+        return;
+    }
+
+    if (IsPlatform(kGalaxyS10)) {
+        printf("%s This test should not run on Galaxy S10\n", kSkipPrefix);
+        return;
+    }
+
+    VkPhysicalDeviceFeatures features = {};  // Make sure robust buffer access is not enabled
+    ASSERT_NO_FATAL_FAILURE(InitState(&features));
+    ASSERT_NO_FATAL_FAILURE(InitViewport());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, expected_error);
+
+    OneOffDescriptorSet ds(m_device, {{0, descriptor_type, 1, VK_SHADER_STAGE_ALL, nullptr}});
+
+    const VkPipelineLayoutObj pipeline_layout(m_device, {&ds.layout_});
+
+    uint32_t qfi = 0;
+    VkBufferCreateInfo bci = {};
+    bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bci.usage = descriptor_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+                                                                     : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bci.size = buffer_size;
+    bci.queueFamilyIndexCount = 1;
+    bci.pQueueFamilyIndices = &qfi;
+    VkBufferObj buffer;
+    buffer.init(*m_device, bci);
+    VkPipelineObj pipe(m_device);
+
+    VkDescriptorBufferInfo buffer_info;
+    buffer_info.buffer = buffer.handle();
+    buffer_info.offset = binding_offset;
+    buffer_info.range = binding_range;
+
+    VkWriteDescriptorSet descriptor_write = {};
+    descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptor_write.dstSet = ds.set_;
+    descriptor_write.dstBinding = 0;
+    descriptor_write.descriptorCount = 1;
+    descriptor_write.descriptorType = descriptor_type;
+    descriptor_write.pBufferInfo = &buffer_info;
+
+    vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, NULL);
+
+    char const *vsSource =
+        "#version 450\n"
+        "vec2 vertices[3];\n"
+        "void main(){\n"
+        "      vertices[0] = vec2(-1.0, -1.0);\n"
+        "      vertices[1] = vec2( 1.0, -1.0);\n"
+        "      vertices[2] = vec2( 0.0,  1.0);\n"
+        "      gl_Position = vec4(vertices[gl_VertexIndex % 3], 0.0, 1.0);\n"
+        "}\n";
+
+    VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkShaderObj fs(m_device, fragment_shader, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+    pipe.AddShader(&vs);
+    pipe.AddShader(&fs);
+    pipe.AddDefaultColorAttachment();
+
+    VkResult err = pipe.CreateVKPipeline(pipeline_layout.handle(), renderPass());
+    ASSERT_VK_SUCCESS(err);
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.handle());
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1, &ds.set_,
+                              0, nullptr);
+
+    VkViewport viewport = {0, 0, 16, 16, 0, 1};
+    vk::CmdSetViewport(m_commandBuffer->handle(), 0, 1, &viewport);
+    VkRect2D scissor = {{0, 0}, {16, 16}};
+    vk::CmdSetScissor(m_commandBuffer->handle(), 0, 1, &scissor);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+    m_commandBuffer->QueueCommandBuffer(true);
+    m_errorMonitor->VerifyFound();
+    DestroyRenderTarget();
+}
+
+TEST_F(VkGpuAssistedLayerTest, DrawTimeShaderUniformBufferTooSmall) {
+    TEST_DESCRIPTION("Test that an error is produced when trying to access uniform buffer outside the bound region.");
+    char const *fsSource =
+        "#version 450\n"
+        "\n"
+        "layout(location=0) out vec4 x;\n"
+        "layout(set=0, binding=0) uniform readonly foo { int x; int y; } bar;\n"
+        "void main(){\n"
+        "   x = vec4(bar.x, bar.y, 0, 1);\n"
+        "}\n";
+
+    ShaderBufferSizeTest(4,  // buffer size
+                         0,  // binding offset
+                         4,  // binding range
+                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "Descriptor size is 4 units (bytes or texels) and highest unit accessed was 7");
+}
+TEST_F(VkGpuAssistedLayerTest, DrawTimeShaderStorageBufferTooSmall) {
+    TEST_DESCRIPTION("Test that an error is produced when trying to access storage buffer outside the bound region.");
+
+    char const *fsSource =
+        "#version 450\n"
+        "\n"
+        "layout(location=0) out vec4 x;\n"
+        "layout(set=0, binding=0) buffer readonly foo { int x; int y; } bar;\n"
+        "void main(){\n"
+        "   x = vec4(bar.x, bar.y, 0, 1);\n"
+        "}\n";
+
+    ShaderBufferSizeTest(4,  // buffer size
+                         0,  // binding offset
+                         4,  // binding range
+                         VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fsSource, "Descriptor size is 4 units (bytes or texels) and highest unit accessed was 7");
+}
+
+TEST_F(VkGpuAssistedLayerTest, DrawTimeShaderUniformBufferTooSmallArray) {
+    TEST_DESCRIPTION(
+        "Test that an error is produced when trying to access uniform buffer outside the bound region. Uses array in block "
+        "definition.");
+
+    char const *fsSource =
+        "#version 450\n"
+        "\n"
+        "layout(location=0) out vec4 x;\n"
+        "layout(set=0, binding=0) uniform readonly foo { int x[17]; } bar;\n"
+        "void main(){\n"
+        "   int y = 0;\n"
+        "   for (int i = 0; i < 17; i++)\n"
+        "       y += bar.x[i];\n"
+        "   x = vec4(y, 0, 0, 1);\n"
+        "}\n";
+
+    ShaderBufferSizeTest(64,  // buffer size
+                         0,   // binding offset
+                         64,  // binding range
+                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "Descriptor size is 64 units (bytes or texels) and highest unit accessed was 67");
+}
+
+TEST_F(VkGpuAssistedLayerTest, DrawTimeShaderUniformBufferTooSmallNestedStruct) {
+    TEST_DESCRIPTION(
+        "Test that an error is produced when trying to access uniform buffer outside the bound region. Uses nested struct in block "
+        "definition.");
+
+    char const *fsSource =
+        "#version 450\n"
+        "\n"
+        "struct S {\n"
+        "    int x;\n"
+        "    int y;\n"
+        "};\n"
+        "layout(location=0) out vec4 x;\n"
+        "layout(set=0, binding=0) uniform readonly foo { int a; S b; } bar;\n"
+        "void main(){\n"
+        "   x = vec4(bar.a, bar.b.x, bar.b.y, 1);\n"
+        "}\n";
+
+    ShaderBufferSizeTest(8,  // buffer size
+                         0,  // binding offset
+                         8,  // binding range
+                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "Descriptor size is 8 units (bytes or texels) and highest unit accessed was 19");
+}
+
 TEST_F(VkGpuAssistedLayerTest, GpuBufferDeviceAddressOOB) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     bool supported = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -570,7 +911,7 @@ TEST_F(VkGpuAssistedLayerTest, GpuBufferDeviceAddressOOB) {
     VkBufferCreateInfo bci = {};
     bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    bci.size = 8;
+    bci.size = 12;  // 64 bit pointer + int
     bci.queueFamilyIndexCount = 1;
     bci.pQueueFamilyIndices = &qfi;
     VkBufferObj buffer0;

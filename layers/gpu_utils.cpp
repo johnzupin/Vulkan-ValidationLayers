@@ -449,7 +449,7 @@ bool GetLineAndFilename(const std::string string, uint32_t *linenumber, std::str
         }
     }
     if (0 == line_index) return false;
-    *linenumber = std::stoul(tokens[line_index]);
+    *linenumber = static_cast<uint32_t>(std::stoul(tokens[line_index]));
     uint32_t filename_index = line_index + 1;
     // Remove enclosing double quotes around filename
     if (size > filename_index) filename = tokens[filename_index].substr(1, tokens[filename_index].size() - 2);
@@ -541,7 +541,10 @@ void UtilGenerateSourceMessages(const std::vector<unsigned int> &pgm, const uint
             }
         }
         if (!found_opstring) {
-            filename_stream << "Unable to find SPIR-V OpString for file id " << reported_file_id << " from OpLine instruction.";
+            filename_stream << "Unable to find SPIR-V OpString for file id " << reported_file_id << " from OpLine instruction."
+                            << std::endl;
+            filename_stream << "File ID = " << reported_file_id << ", Line Number = " << reported_line_number
+                            << ", Column = " << reported_column_number << std::endl;
         }
     }
     filename_msg = filename_stream.str();
