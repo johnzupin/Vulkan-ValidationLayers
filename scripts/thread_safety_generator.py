@@ -425,12 +425,8 @@ public:
 
     // Override chassis read/write locks for this validation object
     // This override takes a deferred lock. i.e. it is not acquired.
-    virtual read_lock_guard_t read_lock() {
-        return read_lock_guard_t(validation_object_mutex, std::defer_lock);
-    }
-    virtual write_lock_guard_t write_lock() {
-        return write_lock_guard_t(validation_object_mutex, std::defer_lock);
-    }
+    read_lock_guard_t read_lock() override;
+    write_lock_guard_t write_lock() override;
 
     // If this ThreadSafety is for a VkDevice, then parent_instance points to the
     // ThreadSafety object of its parent VkInstance. This is used to get to the counters
@@ -576,7 +572,7 @@ WRAPPER_PARENT_INSTANCE(uint64_t)
         if (iter != command_pool_map.end()) {
             VkCommandPool pool = iter->second;
             // We set up a read guard against the "Contents" counter to catch conflict vs. vkResetCommandPool and vkDestroyCommandPool
-            // while *not* establishing a read guard against the command pool counter itself to avoid false postives for
+            // while *not* establishing a read guard against the command pool counter itself to avoid false positive for
             // non-externally sync'd command buffers
             c_VkCommandPoolContents.StartRead(pool, api_name);
         }
@@ -591,28 +587,40 @@ WRAPPER_PARENT_INSTANCE(uint64_t)
         }
     }
 
+void PostCallRecordGetPhysicalDeviceDisplayPlanePropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlanePropertiesKHR*                pProperties,
+    VkResult                                    result) override;
+
+void PostCallRecordGetPhysicalDeviceDisplayPlaneProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlaneProperties2KHR*               pProperties,
+    VkResult                                    result) override;
+
 void PostCallRecordGetPhysicalDeviceDisplayPropertiesKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pPropertyCount,
     VkDisplayPropertiesKHR*                     pProperties,
-    VkResult                                    result);
+    VkResult                                    result) override;
 
 void PostCallRecordGetPhysicalDeviceDisplayProperties2KHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pPropertyCount,
     VkDisplayProperties2KHR*                    pProperties,
-    VkResult                                    result);
+    VkResult                                    result) override;
 
 void PreCallRecordGetDisplayPlaneCapabilities2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkDisplayPlaneInfo2KHR*               pDisplayPlaneInfo,
-    VkDisplayPlaneCapabilities2KHR*             pCapabilities);
+    VkDisplayPlaneCapabilities2KHR*             pCapabilities) override;
 
 void PostCallRecordGetDisplayPlaneCapabilities2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkDisplayPlaneInfo2KHR*               pDisplayPlaneInfo,
     VkDisplayPlaneCapabilities2KHR*             pCapabilities,
-    VkResult                                    result);
+    VkResult                                    result) override;
 
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
 
@@ -621,12 +629,20 @@ void PostCallRecordGetRandROutputDisplayEXT(
     Display*                                    dpy,
     RROutput                                    rrOutput,
     VkDisplayKHR*                               pDisplay,
-    VkResult                                    result);
+    VkResult                                    result) override;
 
 #endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT"""
 
 
     inline_custom_source_preamble = """
+read_lock_guard_t ThreadSafety::read_lock() {
+    return read_lock_guard_t(validation_object_mutex, std::defer_lock);
+}
+
+write_lock_guard_t ThreadSafety::write_lock() {
+    return write_lock_guard_t(validation_object_mutex, std::defer_lock);
+}
+
 void ThreadSafety::PreCallRecordAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo *pAllocateInfo,
                                                        VkCommandBuffer *pCommandBuffers) {
     StartReadObjectParentInstance(device, "vkAllocateCommandBuffers");
@@ -1070,13 +1086,13 @@ void ThreadSafety::PostCallRecordDestroyCommandPool(VkDevice device, VkCommandPo
 void ThreadSafety::PreCallRecordGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t *pSwapchainImageCount,
                                                       VkImage *pSwapchainImages) {
     StartReadObjectParentInstance(device, "vkGetSwapchainImagesKHR");
-    StartReadObject(swapchain, "vkGetSwapchainImagesKHR");
+    StartReadObjectParentInstance(swapchain, "vkGetSwapchainImagesKHR");
 }
 
 void ThreadSafety::PostCallRecordGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t *pSwapchainImageCount,
                                                        VkImage *pSwapchainImages, VkResult result) {
     FinishReadObjectParentInstance(device, "vkGetSwapchainImagesKHR");
-    FinishReadObject(swapchain, "vkGetSwapchainImagesKHR");
+    FinishReadObjectParentInstance(swapchain, "vkGetSwapchainImagesKHR");
     if (pSwapchainImages != NULL) {
         auto lock = write_lock_guard_t(thread_safety_lock);
         auto &wrapped_swapchain_image_handles = swapchain_wrapped_image_handle_map[swapchain];
@@ -1092,7 +1108,7 @@ void ThreadSafety::PreCallRecordDestroySwapchainKHR(
     VkSwapchainKHR                              swapchain,
     const VkAllocationCallbacks*                pAllocator) {
     StartReadObjectParentInstance(device, "vkDestroySwapchainKHR");
-    StartWriteObject(swapchain, "vkDestroySwapchainKHR");
+    StartWriteObjectParentInstance(swapchain, "vkDestroySwapchainKHR");
     // Host access to swapchain must be externally synchronized
     auto lock = read_lock_guard_t(thread_safety_lock);
     for (auto &image_handle : swapchain_wrapped_image_handle_map[swapchain]) {
@@ -1105,8 +1121,8 @@ void ThreadSafety::PostCallRecordDestroySwapchainKHR(
     VkSwapchainKHR                              swapchain,
     const VkAllocationCallbacks*                pAllocator) {
     FinishReadObjectParentInstance(device, "vkDestroySwapchainKHR");
-    FinishWriteObject(swapchain, "vkDestroySwapchainKHR");
-    DestroyObject(swapchain);
+    FinishWriteObjectParentInstance(swapchain, "vkDestroySwapchainKHR");
+    DestroyObjectParentInstance(swapchain);
     // Host access to swapchain must be externally synchronized
     auto lock = write_lock_guard_t(thread_safety_lock);
     for (auto &image_handle : swapchain_wrapped_image_handle_map[swapchain]) {
@@ -1194,6 +1210,32 @@ void ThreadSafety::PostCallRecordGetPhysicalDeviceDisplayProperties2KHR(
     if (pProperties) {
         for (uint32_t i = 0; i < *pPropertyCount; ++i) {
             CreateObject(pProperties[i].displayProperties.display);
+        }
+    }
+}
+
+void ThreadSafety::PostCallRecordGetPhysicalDeviceDisplayPlanePropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlanePropertiesKHR*                pProperties,
+    VkResult                                    result) {
+    if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) return;
+    if (pProperties) {
+        for (uint32_t i = 0; i < *pPropertyCount; ++i) {
+            CreateObject(pProperties[i].currentDisplay);
+        }
+    }
+}
+
+void ThreadSafety::PostCallRecordGetPhysicalDeviceDisplayPlaneProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlaneProperties2KHR*               pProperties,
+    VkResult                                    result) {
+    if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) return;
+    if (pProperties) {
+        for (uint32_t i = 0; i < *pPropertyCount; ++i) {
+            CreateObject(pProperties[i].displayPlaneProperties.currentDisplay);
         }
     }
 }
@@ -1295,7 +1337,26 @@ void ThreadSafety::PostCallRecordGetRandROutputDisplayEXT(
 
 #endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
 
+void ThreadSafety::PreCallRecordDeviceWaitIdle(
+    VkDevice                                    device) {
+    StartReadObjectParentInstance(device, "vkDeviceWaitIdle");
+    auto lock = read_lock_guard_t(thread_safety_lock);
+    const auto &queue_set = device_queues_map[device];
+    for (const auto &queue : queue_set) {
+        StartWriteObject(queue, "vkDeviceWaitIdle");
+    }
+}
 
+void ThreadSafety::PostCallRecordDeviceWaitIdle(
+    VkDevice                                    device,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkDeviceWaitIdle");
+    auto lock = read_lock_guard_t(thread_safety_lock);
+    const auto &queue_set = device_queues_map[device];
+    for (const auto &queue : queue_set) {
+        FinishWriteObject(queue, "vkDeviceWaitIdle");
+    }
+}
 """
 
 
@@ -1332,7 +1393,7 @@ void ThreadSafety::PostCallRecordGetRandROutputDisplayEXT(
         # Use 'in' to check the types, to handle suffixes and pointers, except for VkDevice
         # which can be confused with VkDeviceMemory
         suffix = ''
-        if 'VkSurface' in paramtype or 'VkDebugReportCallback' in paramtype or 'VkDebugUtilsMessenger' in paramtype or 'VkDevice' == paramtype or 'VkDevice*' == paramtype or 'VkInstance' in paramtype:
+        if 'VkSurface' in paramtype or 'VkSwapchainKHR' in paramtype or 'VkDebugReportCallback' in paramtype or 'VkDebugUtilsMessenger' in paramtype or 'VkDevice' == paramtype or 'VkDevice*' == paramtype or 'VkInstance' in paramtype:
             suffix = 'ParentInstance'
         return suffix
 
@@ -1370,7 +1431,7 @@ void ThreadSafety::PostCallRecordGetRandROutputDisplayEXT(
 
                             # XXX TODO: Can we do better to lookup types of externsync members?
                             suffix = ''
-                            if 'surface' in member:
+                            if 'surface' in member or 'swapchain' in member.lower():
                                 suffix = 'ParentInstance'
 
                             if '[]' in element:
@@ -1401,7 +1462,7 @@ void ThreadSafety::PostCallRecordGetRandROutputDisplayEXT(
                             member = str(member).replace(".", "->")
                             # XXX TODO: Can we do better to lookup types of externsync members?
                             suffix = ''
-                            if 'surface' in member:
+                            if 'surface' in member or 'swapchain' in member.lower():
                                 suffix = 'ParentInstance'
                             paramdecl += '    ' + functionprefix + 'WriteObject' + suffix + '(' + member + ', "' + name + '");\n'
                 elif self.paramIsPointer(param) and ('Create' in name or 'Allocate' in name or 'AcquirePerformanceConfigurationINTEL' in name) and functionprefix == 'Finish':
@@ -1492,7 +1553,7 @@ void ThreadSafety::PostCallRecordGetRandROutputDisplayEXT(
             return paramdecl
     def beginFile(self, genOpts):
         OutputGenerator.beginFile(self, genOpts)
-        
+
         # Initialize members that require the tree
         self.handle_types = GetHandleTypes(self.registry.tree)
         self.is_aliased_type = GetHandleAliased(self.registry.tree)
@@ -1527,7 +1588,7 @@ void ThreadSafety::PostCallRecordGetRandROutputDisplayEXT(
                 counter_class_defs += '    counter<%s> c_%s;\n' % (obj, obj)
                 obj_type = 'kVulkanObjectType' + obj[2:]
                 counter_class_instances += '          c_%s("%s", %s, this),\n' % (obj, obj, obj_type)
-                if 'VkSurface' in obj or 'VkDebugReportCallback' in obj or 'VkDebugUtilsMessenger' in obj:
+                if 'VkSurface' in obj or 'VkSwapchainKHR' in obj or 'VkDebugReportCallback' in obj or 'VkDebugUtilsMessenger' in obj:
                     counter_class_bodies += 'WRAPPER_PARENT_INSTANCE(%s)\n' % obj
                 else:
                     counter_class_bodies += 'WRAPPER(%s)\n' % obj
@@ -1629,6 +1690,7 @@ void ThreadSafety::PostCallRecordGetRandROutputDisplayEXT(
             'vkGetDisplayModeProperties2KHR',
             'vkGetDisplayPlaneCapabilities2KHR',
             'vkGetRandROutputDisplayEXT',
+            'vkDeviceWaitIdle',
         ]
         if name == 'vkQueuePresentKHR' or (name in special_functions and self.source_file):
             return
@@ -1684,7 +1746,10 @@ void ThreadSafety::PostCallRecordGetRandROutputDisplayEXT(
         if self.header_file:
             pre_decl = decls[0][:-1]
             pre_decl = pre_decl.split("VKAPI_CALL ")[1]
-            pre_decl = 'void PreCallRecord' + pre_decl + ';'
+            decl_terminator = ';'
+            if 'ValidationCache' not in pre_decl:
+                decl_terminator = ' override;'
+            pre_decl = 'void PreCallRecord' + pre_decl + decl_terminator
 
             # PreCallRecord
             self.appendSection('command', '')

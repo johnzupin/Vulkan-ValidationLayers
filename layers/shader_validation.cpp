@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2020 Valve Corporation
  * Copyright (c) 2015-2020 LunarG, Inc.
  * Copyright (C) 2015-2020 Google Inc.
+ * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +18,7 @@
  *
  * Author: Chris Forbes <chrisf@ijw.co.nz>
  * Author: Dave Houlton <daveh@lunarg.com>
+ * Author: Tobias Hector <tobias.hector@amd.com>
  */
 
 #include "shader_validation.h"
@@ -107,7 +109,17 @@ unsigned ExecutionModelToShaderStageFlagBits(unsigned mode);
 
 // SPIRV utility functions
 void SHADER_MODULE_STATE::BuildDefIndex() {
+    function_set func_set = {};
+    EntryPoint *entry_point = nullptr;
+
     for (auto insn : *this) {
+        // offset is not 0, it means it's updated and the offset is in a Function.
+        if (func_set.offset)
+            func_set.op_lists.insert({insn.opcode(), insn.offset()});
+        else if (entry_point) {
+            entry_point->decorate_list.insert({insn.opcode(), insn.offset()});
+        }
+
         switch (insn.opcode()) {
             // Types
             case spv::OpTypeVoid:
@@ -162,6 +174,9 @@ void SHADER_MODULE_STATE::BuildDefIndex() {
                 // Functions
             case spv::OpFunction:
                 def_index[insn.word(2)] = insn.offset();
+                func_set.id = insn.word(2);
+                func_set.offset = insn.offset();
+                func_set.op_lists.clear();
                 break;
 
                 // Decorations
@@ -180,7 +195,23 @@ void SHADER_MODULE_STATE::BuildDefIndex() {
                 auto entrypoint_name = (char const *)&insn.word(3);
                 auto execution_model = insn.word(1);
                 auto entrypoint_stage = ExecutionModelToShaderStageFlagBits(execution_model);
-                entry_points.emplace(entrypoint_name, EntryPoint{insn.offset(), entrypoint_stage});
+                entry_points.emplace(entrypoint_name,
+                                     EntryPoint{insn.offset(), static_cast<VkShaderStageFlagBits>(entrypoint_stage)});
+
+                auto range = entry_points.equal_range(entrypoint_name);
+                for (auto it = range.first; it != range.second; ++it) {
+                    if (it->second.offset == insn.offset()) {
+                        entry_point = &(it->second);
+                        break;
+                    }
+                }
+                assert(entry_point != nullptr);
+                break;
+            }
+            case spv::OpFunctionEnd: {
+                assert(entry_point != nullptr);
+                func_set.length = insn.offset() - func_set.offset;
+                entry_point->function_set_list.emplace_back(func_set);
                 break;
             }
 
@@ -224,6 +255,17 @@ unsigned ExecutionModelToShaderStageFlagBits(unsigned mode) {
         default:
             return 0;
     }
+}
+
+const SHADER_MODULE_STATE::EntryPoint *FindEntrypointStruct(SHADER_MODULE_STATE const *src, char const *name,
+                                                            VkShaderStageFlagBits stageBits) {
+    auto range = src->entry_points.equal_range(name);
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->second.stage == stageBits) {
+            return &(it->second);
+        }
+    }
+    return nullptr;
 }
 
 spirv_inst_iter FindEntrypoint(SHADER_MODULE_STATE const *src, char const *name, VkShaderStageFlagBits stageBits) {
@@ -858,106 +900,236 @@ static bool AtomicOperation(uint32_t opcode) {
     return false;
 }
 
+bool CheckObjectIDFromOpLoad(uint32_t object_id, const std::vector<unsigned> &operator_members,
+                             const std::unordered_map<unsigned, unsigned> &load_members,
+                             const std::unordered_map<unsigned, std::pair<unsigned, unsigned>> &accesschain_members) {
+    for (auto load_id : operator_members) {
+        if (object_id == load_id) return true;
+        auto load_it = load_members.find(load_id);
+        if (load_it == load_members.end()) {
+            continue;
+        }
+        if (load_it->second == object_id) {
+            return true;
+        }
+
+        auto accesschain_it = accesschain_members.find(load_it->second);
+        if (accesschain_it == accesschain_members.end()) {
+            continue;
+        }
+        if (accesschain_it->second.first == object_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool CheckImageOperandsBiasOffset(uint32_t type) {
+    return type & (spv::ImageOperandsBiasMask | spv::ImageOperandsConstOffsetMask | spv::ImageOperandsOffsetMask |
+                   spv::ImageOperandsConstOffsetsMask)
+               ? true
+               : false;
+}
+
+struct shader_module_used_operators {
+    bool updated;
+    std::vector<unsigned> imagwrite_members;
+    std::vector<unsigned> atomic_members;
+    std::vector<unsigned> store_members;
+    std::vector<unsigned> atomic_store_members;
+    std::vector<unsigned> sampler_implicitLod_dref_proj_members;  // sampler Load id
+    std::vector<unsigned> sampler_bias_offset_members;            // sampler Load id
+    std::vector<std::pair<unsigned, unsigned>> sampledImage_members;
+    std::unordered_map<unsigned, unsigned> load_members;
+    std::unordered_map<unsigned, std::pair<unsigned, unsigned>> accesschain_members;
+    std::unordered_map<unsigned, unsigned> image_texel_pointer_members;
+
+    shader_module_used_operators() : updated(false) {}
+
+    void update(SHADER_MODULE_STATE const *module) {
+        if (updated) return;
+        updated = true;
+
+        for (auto insn : *module) {
+            switch (insn.opcode()) {
+                case spv::OpImageSampleImplicitLod:
+                case spv::OpImageSampleProjImplicitLod:
+                case spv::OpImageSampleProjExplicitLod:
+                case spv::OpImageSparseSampleImplicitLod:
+                case spv::OpImageSparseSampleProjImplicitLod:
+                case spv::OpImageSparseSampleProjExplicitLod: {
+                    sampler_implicitLod_dref_proj_members.emplace_back(insn.word(3));  // Load id
+                    // ImageOperands in index: 5
+                    if (insn.len() > 5 && CheckImageOperandsBiasOffset(insn.word(5))) {
+                        sampler_bias_offset_members.emplace_back(insn.word(3));
+                    }
+                    break;
+                }
+                case spv::OpImageSampleDrefImplicitLod:
+                case spv::OpImageSampleDrefExplicitLod:
+                case spv::OpImageSampleProjDrefImplicitLod:
+                case spv::OpImageSampleProjDrefExplicitLod:
+                case spv::OpImageSparseSampleDrefImplicitLod:
+                case spv::OpImageSparseSampleDrefExplicitLod:
+                case spv::OpImageSparseSampleProjDrefImplicitLod:
+                case spv::OpImageSparseSampleProjDrefExplicitLod: {
+                    sampler_implicitLod_dref_proj_members.emplace_back(insn.word(3));  // Load id
+                    // ImageOperands in index: 6
+                    if (insn.len() > 6 && CheckImageOperandsBiasOffset(insn.word(6))) {
+                        sampler_bias_offset_members.emplace_back(insn.word(3));
+                    }
+                    break;
+                }
+                case spv::OpImageSampleExplicitLod:
+                case spv::OpImageSparseSampleExplicitLod: {
+                    // ImageOperands in index: 5
+                    if (insn.len() > 5 && CheckImageOperandsBiasOffset(insn.word(5))) {
+                        sampler_bias_offset_members.emplace_back(insn.word(3));
+                    }
+                    break;
+                }
+                case spv::OpStore: {
+                    store_members.emplace_back(insn.word(1));  // object id or AccessChain id
+                    break;
+                }
+                case spv::OpImageWrite: {
+                    imagwrite_members.emplace_back(insn.word(1));  // Load id
+                    break;
+                }
+                case spv::OpSampledImage: {
+                    // 3: image load id, 4: sampler load id
+                    sampledImage_members.emplace_back(std::pair<unsigned, unsigned>(insn.word(3), insn.word(4)));
+                    break;
+                }
+                case spv::OpLoad: {
+                    // 2: Load id, 3: object id or AccessChain id
+                    load_members.insert(std::make_pair(insn.word(2), insn.word(3)));
+                    break;
+                }
+                case spv::OpAccessChain: {
+                    if (insn.len() == 4) {
+                        // If it is for struct, the length is only 4.
+                        // 2: AccessChain id, 3: object id
+                        accesschain_members.insert(std::make_pair(insn.word(2), std::pair<unsigned, unsigned>(insn.word(3), 0)));
+                    } else {
+                        // 2: AccessChain id, 3: object id, 4: object id of array index
+                        accesschain_members.insert(
+                            std::make_pair(insn.word(2), std::pair<unsigned, unsigned>(insn.word(3), insn.word(4))));
+                    }
+                    break;
+                }
+                case spv::OpImageTexelPointer: {
+                    // 2: ImageTexelPointer id, 3: object id
+                    image_texel_pointer_members.insert(std::make_pair(insn.word(2), insn.word(3)));
+                    break;
+                }
+                default: {
+                    if (AtomicOperation(insn.opcode())) {
+                        if (insn.opcode() == spv::OpAtomicStore) {
+                            atomic_store_members.emplace_back(insn.word(1));  // ImageTexelPointer id
+                        } else {
+                            atomic_members.emplace_back(insn.word(3));  // ImageTexelPointer id
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+};
+
 // Check writable, image atomic operation
 static void IsSpecificDescriptorType(SHADER_MODULE_STATE const *module, const spirv_inst_iter &id_it, bool is_storage_buffer,
-                                     bool is_check_writable, interface_var &out_interface_var) {
+                                     bool is_check_writable, interface_var &out_interface_var,
+                                     shader_module_used_operators &used_operators) {
     uint32_t type_id = id_it.word(1);
+    unsigned int id = id_it.word(2);
+
     auto type = module->get_def(type_id);
 
     // Strip off any array or ptrs. Where we remove array levels, adjust the  descriptor count for each dimension.
-    while (type.opcode() == spv::OpTypeArray || type.opcode() == spv::OpTypePointer || type.opcode() == spv::OpTypeRuntimeArray) {
-        if (type.opcode() == spv::OpTypeArray || type.opcode() == spv::OpTypeRuntimeArray) {
+    while (type.opcode() == spv::OpTypeArray || type.opcode() == spv::OpTypePointer || type.opcode() == spv::OpTypeRuntimeArray ||
+           type.opcode() == spv::OpTypeSampledImage) {
+        if (type.opcode() == spv::OpTypeArray || type.opcode() == spv::OpTypeRuntimeArray ||
+            type.opcode() == spv::OpTypeSampledImage) {
             type = module->get_def(type.word(2));  // Element type
         } else {
-            type = module->get_def(type.word(3));  // Pointee type
+            type = module->get_def(type.word(3));  // Pointer type
         }
     }
     switch (type.opcode()) {
         case spv::OpTypeImage: {
             auto dim = type.word(3);
-            auto sampled = type.word(7);
-            if (sampled == 2 && dim != spv::DimSubpassData) {
-                std::vector<unsigned> imagwrite_members;
-                std::vector<unsigned> atomic_members;
-                std::unordered_map<unsigned, unsigned> load_members;
-                std::unordered_map<unsigned, unsigned> accesschain_members;
-                std::unordered_map<unsigned, unsigned> image_texel_pointer_members;
+            if (dim != spv::DimSubpassData) {
+                used_operators.update(module);
 
-                unsigned int id = id_it.word(2);
-
-                for (auto insn : *module) {
-                    switch (insn.opcode()) {
-                        case spv::OpImageWrite: {
-                            if (is_check_writable) imagwrite_members.emplace_back(insn.word(1));  // Load id
-                            break;
-                        }
-                        case spv::OpLoad: {
-                            // 2: Load id, 3: object id or AccessChain id
-                            load_members.insert(std::make_pair(insn.word(2), insn.word(3)));
-                            break;
-                        }
-                        case spv::OpAccessChain: {
-                            // 2: AccessChain id, 3: object id
-                            if (insn.word(3) == id) {
-                                accesschain_members.insert(std::make_pair(insn.word(2), insn.word(3)));
-                            }
-                            break;
-                        }
-                        case spv::OpImageTexelPointer: {
-                            // 2: ImageTexelPointer id, 3: object id
-                            image_texel_pointer_members.insert(std::make_pair(insn.word(2), insn.word(3)));
-                            break;
-                        }
-                        default: {
-                            if (AtomicOperation(insn.opcode())) {
-                                if (insn.opcode() == spv::OpAtomicStore) {
-                                    atomic_members.emplace_back(insn.word(1));  // ImageTexelPointer id
-                                } else {
-                                    atomic_members.emplace_back(insn.word(3));  // ImageTexelPointer id
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-                out_interface_var.is_writable = false;
-                out_interface_var.is_atomic_operation = false;
-
-                for (auto load_id : imagwrite_members) {
-                    auto load_it = load_members.find(load_id);
-                    if (load_it == load_members.end()) {
-                        continue;
-                    }
-                    if (load_it->second == id) {
-                        out_interface_var.is_writable = true;
-                        break;
-                    }
-
-                    auto accesschain_it = accesschain_members.find(load_it->second);
-                    if (accesschain_it == accesschain_members.end()) {
-                        continue;
-                    }
+                if (CheckObjectIDFromOpLoad(id, used_operators.imagwrite_members, used_operators.load_members,
+                                            used_operators.accesschain_members)) {
                     out_interface_var.is_writable = true;
-                    accesschain_members.erase(accesschain_it);
-                    break;
+                }
+                if (CheckObjectIDFromOpLoad(id, used_operators.sampler_implicitLod_dref_proj_members, used_operators.load_members,
+                                            used_operators.accesschain_members)) {
+                    out_interface_var.is_sampler_implicitLod_dref_proj = true;
+                }
+                if (CheckObjectIDFromOpLoad(id, used_operators.sampler_bias_offset_members, used_operators.load_members,
+                                            used_operators.accesschain_members)) {
+                    out_interface_var.is_sampler_bias_offset = true;
+                }
+                if (CheckObjectIDFromOpLoad(id, used_operators.atomic_members, used_operators.image_texel_pointer_members,
+                                            used_operators.accesschain_members) ||
+                    CheckObjectIDFromOpLoad(id, used_operators.atomic_store_members, used_operators.image_texel_pointer_members,
+                                            used_operators.accesschain_members)) {
+                    out_interface_var.is_atomic_operation = true;
                 }
 
-                for (auto itp_id : atomic_members) {
-                    auto ltp_it = image_texel_pointer_members.find(itp_id);
-                    if (ltp_it == image_texel_pointer_members.end()) {
+                for (auto &itp_id : used_operators.sampledImage_members) {
+                    // Find if image id match.
+                    uint32_t image_index = 0;
+                    auto load_it = used_operators.load_members.find(itp_id.first);
+                    if (load_it == used_operators.load_members.end()) {
                         continue;
+                    } else {
+                        if (load_it->second != id) {
+                            auto accesschain_it = used_operators.accesschain_members.find(load_it->second);
+                            if (accesschain_it == used_operators.accesschain_members.end()) {
+                                continue;
+                            } else {
+                                if (accesschain_it->second.first != id) {
+                                    continue;
+                                }
+                                if (used_operators.load_members.end() !=
+                                    used_operators.load_members.find(accesschain_it->second.second)) {
+                                    // image_index isn't a constant, skip.
+                                    break;
+                                }
+                                image_index = GetConstantValue(module, accesschain_it->second.second);
+                            }
+                        }
                     }
-                    if (ltp_it->second == id) {
-                        out_interface_var.is_atomic_operation = true;
-                        break;
-                    }
-
-                    auto accesschain_it = accesschain_members.find(ltp_it->second);
-                    if (accesschain_it == accesschain_members.end()) {
+                    // Find sampler's set binding.
+                    load_it = used_operators.load_members.find(itp_id.second);
+                    if (load_it == used_operators.load_members.end()) {
                         continue;
+                    } else {
+                        uint32_t sampler_id = load_it->second;
+                        uint32_t sampler_index = 0;
+                        auto accesschain_it = used_operators.accesschain_members.find(load_it->second);
+                        if (accesschain_it != used_operators.accesschain_members.end()) {
+                            if (used_operators.load_members.end() !=
+                                used_operators.load_members.find(accesschain_it->second.second)) {
+                                // sampler_index isn't a constant, skip.
+                                break;
+                            }
+                            sampler_id = accesschain_it->second.first;
+                            sampler_index = GetConstantValue(module, accesschain_it->second.second);
+                        }
+                        auto sampler_dec = module->get_decorations(sampler_id);
+                        if (image_index >= out_interface_var.samplers_used_by_image.size()) {
+                            out_interface_var.samplers_used_by_image.resize(image_index + 1);
+                        }
+                        out_interface_var.samplers_used_by_image[image_index].emplace(
+                            SamplerUsedByImage{descriptor_slot_t{sampler_dec.descriptor_set, sampler_dec.binding}, sampler_index});
                     }
-                    out_interface_var.is_atomic_operation = true;
-                    break;
                 }
             }
             return;
@@ -976,67 +1148,24 @@ static void IsSpecificDescriptorType(SHADER_MODULE_STATE const *module, const sp
             // A buffer is writable if it's either flavor of storage buffer, and has any member not decorated
             // as nonwritable.
             if (is_storage_buffer && nonwritable_members.size() != type.len() - 2) {
-                std::vector<unsigned> store_members;
-                std::unordered_map<unsigned, unsigned> accesschain_members;
-                std::vector<unsigned> atomic_store_members;
-                std::unordered_map<unsigned, unsigned> image_texel_pointer_members;
-                unsigned int id = id_it.word(2);
+                used_operators.update(module);
 
-                for (auto insn : *module) {
-                    switch (insn.opcode()) {
-                        case spv::OpStore: {
-                            if (insn.word(1) == id) {
-                                out_interface_var.is_writable = true;
-                                return;
-                            }
-                            store_members.emplace_back(insn.word(1));  // object id or AccessChain id
-                            break;
-                        }
-                        case spv::OpAtomicStore: {
-                            atomic_store_members.emplace_back(insn.word(1));  // ImageTexelPointer id
-                            break;
-                        }
-                        case spv::OpImageTexelPointer: {
-                            // 2: ImageTexelPointer id, 3: object id
-                            image_texel_pointer_members.insert(std::make_pair(insn.word(2), insn.word(3)));
-                            break;
-                        }
-                        case spv::OpAccessChain: {
-                            // 2: AccessChain id, 3: object id
-                            if (insn.word(3) == id) {
-                                accesschain_members.insert(std::make_pair(insn.word(2), insn.word(3)));
-                            }
-                            break;
-                        }
-                        default:
-                            break;
-                    }
-                }
-                out_interface_var.is_writable = false;
-
-                for (auto oid : store_members) {
-                    auto accesschain_it = accesschain_members.find(oid);
-                    if (accesschain_it == accesschain_members.end()) {
-                        continue;
-                    }
-                    out_interface_var.is_writable = true;
-                    return;
-                }
-
-                for (auto itp_id : atomic_store_members) {
-                    auto ltp_it = image_texel_pointer_members.find(itp_id);
-                    if (ltp_it == image_texel_pointer_members.end()) {
-                        continue;
-                    }
-                    if (ltp_it->second == id) {
+                for (auto oid : used_operators.store_members) {
+                    if (id == oid) {
                         out_interface_var.is_writable = true;
                         return;
                     }
-
-                    auto accesschain_it = accesschain_members.find(ltp_it->second);
-                    if (accesschain_it == accesschain_members.end()) {
+                    auto accesschain_it = used_operators.accesschain_members.find(oid);
+                    if (accesschain_it == used_operators.accesschain_members.end()) {
                         continue;
                     }
+                    if (accesschain_it->second.first == id) {
+                        out_interface_var.is_writable = true;
+                        return;
+                    }
+                }
+                if (CheckObjectIDFromOpLoad(id, used_operators.atomic_store_members, used_operators.image_texel_pointer_members,
+                                            used_operators.accesschain_members)) {
                     out_interface_var.is_writable = true;
                     return;
                 }
@@ -1049,6 +1178,7 @@ std::vector<std::pair<descriptor_slot_t, interface_var>> CollectInterfaceByDescr
     SHADER_MODULE_STATE const *src, std::unordered_set<uint32_t> const &accessible_ids, bool *has_writable_descriptor,
     bool *has_atomic_descriptor) {
     std::vector<std::pair<descriptor_slot_t, interface_var>> out;
+    shader_module_used_operators operators;
 
     for (auto id : accessible_ids) {
         auto insn = src->get_def(id);
@@ -1066,17 +1196,201 @@ std::vector<std::pair<descriptor_slot_t, interface_var>> CollectInterfaceByDescr
             v.type_id = insn.word(1);
 
             IsSpecificDescriptorType(src, insn, insn.word(3) == spv::StorageClassStorageBuffer,
-                                     !(d.flags & decoration_set::nonwritable_bit), v);
+                                     !(d.flags & decoration_set::nonwritable_bit), v, operators);
             if (v.is_writable) *has_writable_descriptor = true;
             if (v.is_atomic_operation) *has_atomic_descriptor = true;
-            if (d.flags & decoration_set::input_attachment_index_bit) {
-                v.input_index = d.input_attachment_index;
-            }
             out.emplace_back(std::make_pair(set, binding), v);
         }
     }
 
     return out;
+}
+
+void DefineStructMember(const SHADER_MODULE_STATE &src, const spirv_inst_iter &it,
+                        const std::vector<uint32_t> &memberDecorate_offsets, shader_struct_member &data) {
+    const auto struct_it = GetStructType(&src, it, false);
+    assert(struct_it != src.end());
+    data.size = 0;
+
+    shader_struct_member data1;
+    uint32_t i = 2;
+    uint32_t local_offset = 0;
+    std::vector<uint32_t> offsets;
+    offsets.resize(struct_it.len() - i);
+
+    // The members of struct in SPRIV_R aren't always sort, so we need to know their order.
+    for (const auto offset : memberDecorate_offsets) {
+        const auto member_decorate = src.at(offset);
+        if (member_decorate.word(1) != struct_it.word(1)) {
+            continue;
+        }
+
+        offsets[member_decorate.word(2)] = member_decorate.word(4);
+    }
+
+    for (const auto offset : offsets) {
+        local_offset = offset;
+        data1 = {};
+        data1.root = data.root;
+        data1.offset = local_offset;
+        auto def_member = src.get_def(struct_it.word(i));
+
+        // Array could be multi-dimensional
+        while (def_member.opcode() == spv::OpTypeArray) {
+            const auto len_id = def_member.word(3);
+            const auto def_len = src.get_def(len_id);
+            data1.array_length_hierarchy.emplace_back(def_len.word(3));  // array length
+            def_member = src.get_def(def_member.word(2));
+        }
+
+        if (def_member.opcode() == spv::OpTypeStruct || def_member.opcode() == spv::OpTypePointer) {
+            // If it's OpTypePointer. it means the member is a buffer, the type will be TypePointer, and then struct
+            DefineStructMember(src, def_member, memberDecorate_offsets, data1);
+        } else {
+            if (def_member.opcode() == spv::OpTypeMatrix) {
+                data1.array_length_hierarchy.emplace_back(def_member.word(3));  // matrix's columns. matrix's row is vector.
+                def_member = src.get_def(def_member.word(2));
+            }
+
+            if (def_member.opcode() == spv::OpTypeVector) {
+                data1.array_length_hierarchy.emplace_back(def_member.word(3));  // vector length
+                def_member = src.get_def(def_member.word(2));
+            }
+
+            // Get scalar type size. The value in SPRV-R is bit. It needs to translate to byte.
+            data1.size = (def_member.word(2) / 8);
+        }
+        const auto array_length_hierarchy_szie = data1.array_length_hierarchy.size();
+        if (array_length_hierarchy_szie > 0) {
+            data1.array_block_size.resize(array_length_hierarchy_szie, 1);
+
+            for (int i2 = static_cast<int>(array_length_hierarchy_szie - 1); i2 > 0; --i2) {
+                data1.array_block_size[i2 - 1] = data1.array_length_hierarchy[i2] * data1.array_block_size[i2];
+            }
+        }
+        data.struct_members.emplace_back(data1);
+        ++i;
+    }
+    uint32_t total_array_length = 1;
+    for (const auto length : data1.array_length_hierarchy) {
+        total_array_length *= length;
+    }
+    data.size = local_offset + data1.size * total_array_length;
+}
+
+uint32_t UpdateOffset(uint32_t offset, const std::vector<uint32_t> &array_indices, const shader_struct_member &data) {
+    int array_indices_size = static_cast<int>(array_indices.size());
+    if (array_indices_size) {
+        uint32_t array_index = 0;
+        uint32_t i = 0;
+        for (const auto index : array_indices) {
+            array_index += (data.array_block_size[i] * index);
+            ++i;
+        }
+        offset += (array_index * data.size);
+    }
+    return offset;
+}
+
+void SetUsedBytes(uint32_t offset, const std::vector<uint32_t> &array_indices, const shader_struct_member &data) {
+    int array_indices_size = static_cast<int>(array_indices.size());
+    uint32_t block_memory_size = data.size;
+    for (uint32_t i = static_cast<int>(array_indices_size); i < data.array_length_hierarchy.size(); ++i) {
+        block_memory_size *= data.array_length_hierarchy[i];
+    }
+
+    offset = UpdateOffset(offset, array_indices, data);
+
+    uint32_t end = offset + block_memory_size;
+    auto used_bytes = data.GetUsedbytes();
+    if (used_bytes->size() < end) {
+        used_bytes->resize(end, 0);
+    }
+    std::memset(used_bytes->data() + offset, true, static_cast<std::size_t>(block_memory_size));
+}
+
+void RunUsedArray(const SHADER_MODULE_STATE &src, uint32_t offset, std::vector<uint32_t> array_indices,
+                  uint32_t access_chain_word_index, spirv_inst_iter &access_chain_it, const shader_struct_member &data) {
+    if (access_chain_word_index < access_chain_it.len()) {
+        if (data.array_length_hierarchy.size() > array_indices.size()) {
+            auto def_it = src.get_def(access_chain_it.word(access_chain_word_index));
+            ++access_chain_word_index;
+
+            if (def_it != src.end() && def_it.opcode() == spv::OpConstant) {
+                array_indices.emplace_back(def_it.word(3));
+                RunUsedArray(src, offset, array_indices, access_chain_word_index, access_chain_it, data);
+            } else {
+                // If it is a variable, set the all array is used.
+                if (access_chain_word_index < access_chain_it.len()) {
+                    uint32_t array_length = data.array_length_hierarchy[array_indices.size()];
+                    for (uint32_t i = 0; i < array_length; ++i) {
+                        auto array_indices2 = array_indices;
+                        array_indices2.emplace_back(i);
+                        RunUsedArray(src, offset, array_indices2, access_chain_word_index, access_chain_it, data);
+                    }
+                } else {
+                    SetUsedBytes(offset, array_indices, data);
+                }
+            }
+        } else {
+            offset = UpdateOffset(offset, array_indices, data);
+            RunUsedStruct(src, offset, access_chain_word_index, access_chain_it, data);
+        }
+    } else {
+        SetUsedBytes(offset, array_indices, data);
+    }
+}
+
+void RunUsedStruct(const SHADER_MODULE_STATE &src, uint32_t offset, uint32_t access_chain_word_index,
+                   spirv_inst_iter &access_chain_it, const shader_struct_member &data) {
+    std::vector<uint32_t> array_indices_emptry;
+
+    if (access_chain_word_index < access_chain_it.len()) {
+        auto strcut_member_index = GetConstantValue(&src, access_chain_it.word(access_chain_word_index));
+        ++access_chain_word_index;
+
+        auto data1 = data.struct_members[strcut_member_index];
+        RunUsedArray(src, offset + data1.offset, array_indices_emptry, access_chain_word_index, access_chain_it, data1);
+    }
+}
+
+void SetUsedStructMember(const SHADER_MODULE_STATE &src, const uint32_t variable_id,
+                         const std::vector<function_set> &function_set_list, const shader_struct_member &data) {
+    for (const auto &func_set : function_set_list) {
+        auto range = func_set.op_lists.equal_range(spv::OpAccessChain);
+        for (auto it = range.first; it != range.second; ++it) {
+            auto access_chain = src.at(it->second);
+            if (access_chain.word(3) == variable_id) {
+                RunUsedStruct(src, 0, 4, access_chain, data);
+            }
+        }
+    }
+}
+
+void SetPushConstantUsedInShader(SHADER_MODULE_STATE &src) {
+    for (auto &entrypoint : src.entry_points) {
+        auto range = entrypoint.second.decorate_list.equal_range(spv::OpVariable);
+        for (auto it = range.first; it != range.second; ++it) {
+            const auto def_insn = src.at(it->second);
+
+            if (def_insn.word(3) == spv::StorageClassPushConstant) {
+                spirv_inst_iter type = src.get_def(def_insn.word(1));
+                const auto range2 = entrypoint.second.decorate_list.equal_range(spv::OpMemberDecorate);
+                std::vector<uint32_t> offsets;
+
+                for (auto it2 = range2.first; it2 != range2.second; ++it2) {
+                    auto member_decorate = src.at(it2->second);
+                    if (member_decorate.len() == 5 && member_decorate.word(3) == spv::DecorationOffset) {
+                        offsets.emplace_back(member_decorate.offset());
+                    }
+                }
+                entrypoint.second.push_constant_used_in_shader.root = &entrypoint.second.push_constant_used_in_shader;
+                DefineStructMember(src, type, offsets, entrypoint.second.push_constant_used_in_shader);
+                SetUsedStructMember(src, def_insn.word(2), entrypoint.second.function_set_list,
+                                    entrypoint.second.push_constant_used_in_shader);
+            }
+        }
+    }
 }
 
 std::unordered_set<uint32_t> CollectWritableOutputLocationinFS(const SHADER_MODULE_STATE &module,
@@ -1291,9 +1605,9 @@ bool CoreChecks::ValidateFsOutputsAgainstRenderPass(SHADER_MODULE_STATE const *f
     return skip;
 }
 
-// For PointSize analysis we need to know if the variable decorated with the PointSize built-in was actually written to.
+// For some built-in analysis we need to know if the variable decorated with as the built-in was actually written to.
 // This function examines instructions in the static call tree for a write to this variable.
-static bool IsPointSizeWritten(SHADER_MODULE_STATE const *src, spirv_inst_iter builtin_instr, spirv_inst_iter entrypoint) {
+static bool IsBuiltInWritten(SHADER_MODULE_STATE const *src, spirv_inst_iter builtin_instr, spirv_inst_iter entrypoint) {
     auto type = builtin_instr.opcode();
     uint32_t target_id = builtin_instr.word(1);
     bool init_complete = false;
@@ -1480,55 +1794,126 @@ std::unordered_set<uint32_t> MarkAccessibleIds(SHADER_MODULE_STATE const *src, s
     return ids;
 }
 
-bool CoreChecks::ValidatePushConstantBlockAgainstPipeline(std::vector<VkPushConstantRange> const *push_constant_ranges,
-                                                          SHADER_MODULE_STATE const *src, spirv_inst_iter type,
-                                                          VkShaderStageFlagBits stage) const {
+PushConstantByteState CoreChecks::ValidatePushConstantSetUpdate(const std::vector<uint8_t> &push_constant_data_update,
+                                                                const shader_struct_member &push_constant_used_in_shader,
+                                                                uint32_t &out_issue_index) const {
+    const auto *used_bytes = push_constant_used_in_shader.GetUsedbytes();
+    const auto used_bytes_size = used_bytes->size();
+    if (used_bytes_size == 0) return PC_Byte_Updated;
+
+    const auto push_constant_data_update_size = push_constant_data_update.size();
+    const auto *data = push_constant_data_update.data();
+    if ((*data == PC_Byte_Updated) && std::memcmp(data, data + 1, push_constant_data_update_size - 1) == 0) {
+        if (used_bytes_size <= push_constant_data_update_size) {
+            return PC_Byte_Updated;
+        }
+        const auto used_bytes_size1 = used_bytes_size - push_constant_data_update_size;
+
+        const auto *used_bytes_data1 = used_bytes->data() + push_constant_data_update_size;
+        if ((*used_bytes_data1 == 0) && std::memcmp(used_bytes_data1, used_bytes_data1 + 1, used_bytes_size1 - 1) == 0) {
+            return PC_Byte_Updated;
+        }
+    }
+
+    uint32_t i = 0;
+    for (const auto used : *used_bytes) {
+        if (used) {
+            if (i >= push_constant_data_update.size() || push_constant_data_update[i] == PC_Byte_Not_Set) {
+                out_issue_index = i;
+                return PC_Byte_Not_Set;
+            } else if (push_constant_data_update[i] == PC_Byte_Not_Updated) {
+                out_issue_index = i;
+                return PC_Byte_Not_Updated;
+            }
+        }
+        ++i;
+    }
+    return PC_Byte_Updated;
+}
+
+bool CoreChecks::ValidatePushConstantUsage(const PIPELINE_STATE &pipeline, SHADER_MODULE_STATE const *src,
+                                           VkPipelineShaderStageCreateInfo const *pStage) const {
     bool skip = false;
-
-    // Strip off ptrs etc
-    type = GetStructType(src, type, false);
-    assert(type != src->end());
-
     // Validate directly off the offsets. this isn't quite correct for arrays and matrices, but is a good first step.
-    // TODO: arrays, matrices, weird sizes
-    for (auto insn : *src) {
-        if (insn.opcode() == spv::OpMemberDecorate && insn.word(1) == type.word(1)) {
-            if (insn.word(3) == spv::DecorationOffset) {
-                auto const member = insn.word(2);
-                auto const offset = insn.word(4);
-                auto const size = 4;  // Bytes; TODO: calculate this based on the type
+    const auto *entrypoint = FindEntrypointStruct(src, pStage->pName, pStage->stage);
+    if (!entrypoint || !entrypoint->push_constant_used_in_shader.IsUsed()) {
+        return skip;
+    }
+    std::vector<VkPushConstantRange> const *push_constant_ranges = pipeline.pipeline_layout->push_constant_ranges.get();
 
-                bool found_range = false;
-                for (auto const &range : *push_constant_ranges) {
-                    if ((range.offset <= offset) && ((range.offset + range.size) >= (offset + size)) &&
-                        (range.stageFlags & stage)) {
-                        found_range = true;
+    bool found_stage = false;
+    for (auto const &range : *push_constant_ranges) {
+        if (range.stageFlags & pStage->stage) {
+            found_stage = true;
+            std::string location_desc;
+            std::vector<uint8_t> push_constant_bytes_set;
+            if (range.offset > 0) {
+                push_constant_bytes_set.resize(range.offset, PC_Byte_Not_Set);
+            }
+            push_constant_bytes_set.resize(range.offset + range.size, PC_Byte_Updated);
+            uint32_t issue_index = 0;
+            const auto ret =
+                ValidatePushConstantSetUpdate(push_constant_bytes_set, entrypoint->push_constant_used_in_shader, issue_index);
 
-                        break;
-                    }
-                }
-
-                if (!found_range) {
-                    skip |= LogError(device, kVUID_Core_Shader_PushConstantOutOfRange,
-                                     "Shader push-constant buffer member %u at offset %u is not declared in pipeline layout",
-                                     member, offset);
-                }
+            if (ret == PC_Byte_Not_Set) {
+                const auto loc_descr = entrypoint->push_constant_used_in_shader.GetLocationDesc(issue_index);
+                LogObjectList objlist(src->vk_shader_module);
+                objlist.add(pipeline.pipeline_layout->layout);
+                skip |= LogError(objlist, kVUID_Core_Shader_PushConstantOutOfRange,
+                                 "Push-constant buffer:%s in %s is out of range in %s.", loc_descr.c_str(),
+                                 string_VkShaderStageFlags(pStage->stage).c_str(),
+                                 report_data->FormatHandle(pipeline.pipeline_layout->layout).c_str());
+                break;
             }
         }
     }
 
+    if (!found_stage) {
+        LogObjectList objlist(src->vk_shader_module);
+        objlist.add(pipeline.pipeline_layout->layout);
+        skip |= LogError(
+            objlist, kVUID_Core_Shader_PushConstantOutOfRange, "Push constant is used in %s of %s. But %s doesn't set %s.",
+            string_VkShaderStageFlags(pStage->stage).c_str(), report_data->FormatHandle(src->vk_shader_module).c_str(),
+            report_data->FormatHandle(pipeline.pipeline_layout->layout).c_str(), string_VkShaderStageFlags(pStage->stage).c_str());
+    }
     return skip;
 }
 
-bool CoreChecks::ValidatePushConstantUsage(std::vector<VkPushConstantRange> const *push_constant_ranges,
-                                           SHADER_MODULE_STATE const *src, std::unordered_set<uint32_t> accessible_ids,
-                                           VkShaderStageFlagBits stage) const {
+bool CoreChecks::ValidateBuiltinLimits(SHADER_MODULE_STATE const *src, const std::unordered_set<uint32_t> &accessible_ids,
+                                       VkShaderStageFlagBits stage) const {
     bool skip = false;
 
-    for (auto id : accessible_ids) {
-        auto def_insn = src->get_def(id);
-        if (def_insn.opcode() == spv::OpVariable && def_insn.word(3) == spv::StorageClassPushConstant) {
-            skip |= ValidatePushConstantBlockAgainstPipeline(push_constant_ranges, src, src->get_def(def_insn.word(1)), stage);
+    // Currently all builtin tested are only found in fragment shaders
+    if (stage != VK_SHADER_STAGE_FRAGMENT_BIT) {
+        return skip;
+    }
+
+    for (const auto id : accessible_ids) {
+        auto insn = src->get_def(id);
+        const decoration_set decorations = src->get_decorations(insn.word(2));
+
+        // Built-ins are obtained from OpVariable
+        if (((decorations.flags & decoration_set::builtin_bit) != 0) && (insn.opcode() == spv::OpVariable)) {
+            auto type_pointer = src->get_def(insn.word(1));
+            assert(type_pointer.opcode() == spv::OpTypePointer);
+
+            auto type = src->get_def(type_pointer.word(3));
+            if (type.opcode() == spv::OpTypeArray) {
+                uint32_t length = static_cast<uint32_t>(GetConstantValue(src, type.word(3)));
+
+                switch (decorations.builtin) {
+                    case spv::BuiltInSampleMask:
+                        // Handles both the input and output sampleMask
+                        if (length > phys_dev_props.limits.maxSampleMaskWords) {
+                            skip |= LogError(device, "VUID-VkPipelineShaderStageCreateInfo-maxSampleMaskWords-00711",
+                                             "vkCreateGraphicsPipelines(): The BuiltIns SampleMask array sizes is %u which exceeds "
+                                             "maxSampleMaskWords of %u in %s.",
+                                             length, phys_dev_props.limits.maxSampleMaskWords,
+                                             report_data->FormatHandle(src->vk_shader_module).c_str());
+                        }
+                        break;
+                }
+            }
         }
     }
 
@@ -1566,7 +1951,8 @@ bool CoreChecks::ValidateSpecializationOffsets(VkPipelineShaderStageCreateInfo c
 }
 
 // TODO (jbolz): Can this return a const reference?
-static std::set<uint32_t> TypeToDescriptorTypeSet(SHADER_MODULE_STATE const *module, uint32_t type_id, unsigned &descriptor_count) {
+static std::set<uint32_t> TypeToDescriptorTypeSet(SHADER_MODULE_STATE const *module, uint32_t type_id, unsigned &descriptor_count,
+                                                  bool is_khr) {
     auto type = module->get_def(type_id);
     bool is_storage_buffer = false;
     descriptor_count = 1;
@@ -1661,7 +2047,8 @@ static std::set<uint32_t> TypeToDescriptorTypeSet(SHADER_MODULE_STATE const *mod
             }
         }
         case spv::OpTypeAccelerationStructureNV:
-            ret.insert(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV);
+            is_khr ? ret.insert(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR)
+                   : ret.insert(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV);
             return ret;
 
             // We shouldn't really see any other junk types -- but if we do, they're a mismatch.
@@ -1747,8 +2134,13 @@ bool CoreChecks::ValidateShaderCapabilities(SHADER_MODULE_STATE const *src, VkSh
             : IsEnabled([=](const DeviceFeatures &features) { return features.fragment_shader_interlock_features.*ptr; }) {}
         FeaturePointer(VkBool32 VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT::*ptr)
             : IsEnabled([=](const DeviceFeatures &features) { return features.demote_to_helper_invocation_features.*ptr; }) {}
-        FeaturePointer(VkBool32 VkPhysicalDeviceRayTracingFeaturesKHR::*ptr)
-            : IsEnabled([=](const DeviceFeatures &features) { return features.ray_tracing_features.*ptr; }) {}
+        FeaturePointer(VkBool32 VkPhysicalDeviceRayQueryFeaturesKHR::*ptr)
+            : IsEnabled([=](const DeviceFeatures &features) { return features.ray_query_features.*ptr; }) {}
+        FeaturePointer(VkBool32 VkPhysicalDeviceRayTracingPipelineFeaturesKHR::*ptr)
+            : IsEnabled([=](const DeviceFeatures &features) { return features.ray_tracing_pipeline_features.*ptr; }) {}
+        FeaturePointer(VkBool32 VkPhysicalDeviceAccelerationStructureFeaturesKHR::*ptr)
+            : IsEnabled([=](const DeviceFeatures &features) { return features.ray_tracing_acceleration_structure_features.*ptr; }) {
+        }
     };
 
     struct CapabilityInfo {
@@ -1857,9 +2249,9 @@ bool CoreChecks::ValidateShaderCapabilities(SHADER_MODULE_STATE const *src, VkSh
         // Should be non-EXT token, but Android SPIRV-Headers are out of date, and the token value is the same anyway
         {spv::CapabilityPhysicalStorageBufferAddressesEXT, {"VkPhysicalDeviceBufferDeviceAddressFeaturesEXT::bufferDeviceAddress", &VkPhysicalDeviceVulkan12Features::bufferDeviceAddress, &DeviceExtensions::vk_khr_buffer_device_address}},
 
-        {spv::CapabilityRayTracingProvisionalKHR, {"VkPhysicalDeviceRayTracingFeaturesKHR::rayTracing", &VkPhysicalDeviceRayTracingFeaturesKHR::rayTracing, &DeviceExtensions::vk_khr_ray_tracing}},
-        {spv::CapabilityRayQueryProvisionalKHR, {"VkPhysicalDeviceRayTracingFeaturesKHR::rayQuery", &VkPhysicalDeviceRayTracingFeaturesKHR::rayQuery, &DeviceExtensions::vk_khr_ray_tracing}},
-        {spv::CapabilityRayTraversalPrimitiveCullingProvisionalKHR, {"VkPhysicalDeviceRayTracingFeaturesKHR::rayTracingPrimitiveCulling", &VkPhysicalDeviceRayTracingFeaturesKHR::rayTracingPrimitiveCulling, &DeviceExtensions::vk_khr_ray_tracing}},
+        {spv::CapabilityRayTracingKHR, {"VkPhysicalDeviceRayTracingPipelineFeaturesKHR::rayTracingPipeline", &VkPhysicalDeviceRayTracingPipelineFeaturesKHR::rayTracingPipeline, &DeviceExtensions::vk_khr_ray_tracing_pipeline }},
+        {spv::CapabilityRayQueryKHR, {"VkPhysicalDeviceRayQueryFeaturesKHR::rayQuery", &VkPhysicalDeviceRayQueryFeaturesKHR::rayQuery, &DeviceExtensions::vk_khr_ray_query }},
+        {spv::CapabilityRayTraversalPrimitiveCullingKHR, {"VkPhysicalDeviceRayTracingPipelineFeaturesKHR::rayTracingPrimitiveCulling", &VkPhysicalDeviceRayTracingPipelineFeaturesKHR::rayTraversalPrimitiveCulling, &DeviceExtensions::vk_khr_ray_tracing_pipeline }},
     };
     // clang-format on
 
@@ -3099,13 +3491,13 @@ bool CoreChecks::ValidatePointListShaderState(const PIPELINE_STATE *pipeline, SH
         if (insn.opcode() == spv::OpMemberDecorate) {
             if (insn.word(3) == spv::DecorationBuiltIn) {
                 if (insn.word(4) == spv::BuiltInPointSize) {
-                    pointsize_written = IsPointSizeWritten(src, insn, entrypoint);
+                    pointsize_written = IsBuiltInWritten(src, insn, entrypoint);
                 }
             }
         } else if (insn.opcode() == spv::OpDecorate) {
             if (insn.word(2) == spv::DecorationBuiltIn) {
                 if (insn.word(3) == spv::BuiltInPointSize) {
-                    pointsize_written = IsPointSizeWritten(src, insn, entrypoint);
+                    pointsize_written = IsBuiltInWritten(src, insn, entrypoint);
                 }
             }
         }
@@ -3125,6 +3517,72 @@ bool CoreChecks::ValidatePointListShaderState(const PIPELINE_STATE *pipeline, SH
             LogError(pipeline->pipeline, kVUID_Core_Shader_MissingPointSizeBuiltIn,
                      "Pipeline topology is set to POINT_LIST, but PointSize is not written to in the shader corresponding to %s.",
                      string_VkShaderStageFlagBits(stage));
+    }
+    return skip;
+}
+
+bool CoreChecks::ValidatePrimitiveRateShaderState(const PIPELINE_STATE *pipeline, SHADER_MODULE_STATE const *src,
+                                                  spirv_inst_iter entrypoint, VkShaderStageFlagBits stage) const {
+    bool primitiverate_written = false;
+    bool viewportindex_written = false;
+    bool viewportmask_written = false;
+    bool skip = false;
+
+    // Check if the primitive shading rate is written
+    spirv_inst_iter insn = entrypoint;
+    while (!(primitiverate_written && viewportindex_written && viewportmask_written) && insn.opcode() != spv::OpFunction) {
+        if (insn.opcode() == spv::OpMemberDecorate) {
+            if (insn.word(3) == spv::DecorationBuiltIn) {
+                if (insn.word(4) == spv::BuiltInPrimitiveShadingRateKHR) {
+                    primitiverate_written = IsBuiltInWritten(src, insn, entrypoint);
+                } else if (insn.word(4) == spv::BuiltInViewportIndex) {
+                    viewportindex_written = IsBuiltInWritten(src, insn, entrypoint);
+                } else if (insn.word(4) == spv::BuiltInViewportMaskNV) {
+                    viewportmask_written = IsBuiltInWritten(src, insn, entrypoint);
+                }
+            }
+        } else if (insn.opcode() == spv::OpDecorate) {
+            if (insn.word(2) == spv::DecorationBuiltIn) {
+                if (insn.word(3) == spv::BuiltInPrimitiveShadingRateKHR) {
+                    primitiverate_written = IsBuiltInWritten(src, insn, entrypoint);
+                } else if (insn.word(3) == spv::BuiltInViewportIndex) {
+                    viewportindex_written = IsBuiltInWritten(src, insn, entrypoint);
+                } else if (insn.word(3) == spv::BuiltInViewportMaskNV) {
+                    viewportmask_written = IsBuiltInWritten(src, insn, entrypoint);
+                }
+            }
+        }
+
+        insn++;
+    }
+
+    if (!phys_dev_ext_props.fragment_shading_rate_props.primitiveFragmentShadingRateWithMultipleViewports) {
+        if (!IsDynamic(pipeline, VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT) &&
+            pipeline->graphicsPipelineCI.pViewportState->viewportCount > 1 && primitiverate_written) {
+            skip |= LogError(
+                pipeline->pipeline, "VUID-VkGraphicsPipelineCreateInfo-primitiveFragmentShadingRateWithMultipleViewports-04503",
+                "vkCreateGraphicsPipelines: %s shader statically writes to PrimitiveShadingRateKHR built-in, but multiple viewports "
+                "are used and the primitiveFragmentShadingRateWithMultipleViewports limit is not supported.",
+                string_VkShaderStageFlagBits(stage));
+        }
+
+        if (primitiverate_written && viewportindex_written) {
+            skip |= LogError(pipeline->pipeline,
+                             "VUID-VkGraphicsPipelineCreateInfo-primitiveFragmentShadingRateWithMultipleViewports-04504",
+                             "vkCreateGraphicsPipelines: %s shader statically writes to both PrimitiveShadingRateKHR and "
+                             "ViewportIndex built-ins,"
+                             "but the primitiveFragmentShadingRateWithMultipleViewports limit is not supported.",
+                             string_VkShaderStageFlagBits(stage));
+        }
+
+        if (primitiverate_written && viewportmask_written) {
+            skip |= LogError(pipeline->pipeline,
+                             "VUID-VkGraphicsPipelineCreateInfo-primitiveFragmentShadingRateWithMultipleViewports-04505",
+                             "vkCreateGraphicsPipelines: %s shader statically writes to both PrimitiveShadingRateKHR and "
+                             "ViewportMaskNV built-ins,"
+                             "but the primitiveFragmentShadingRateWithMultipleViewports limit is not supported.",
+                             string_VkShaderStageFlagBits(stage));
+        }
     }
     return skip;
 }
@@ -3219,11 +3677,15 @@ bool CoreChecks::ValidatePipelineShaderStage(VkPipelineShaderStageCreateInfo con
     skip |= ValidateShaderStageGroupNonUniform(module, pStage->stage);
     skip |= ValidateExecutionModes(module, entrypoint);
     skip |= ValidateSpecializationOffsets(pStage);
-    skip |= ValidatePushConstantUsage(pipeline->pipeline_layout->push_constant_ranges.get(), module, accessible_ids, pStage->stage);
+    skip |= ValidatePushConstantUsage(*pipeline, module, pStage);
     if (check_point_size && !pipeline->graphicsPipelineCI.pRasterizationState->rasterizerDiscardEnable) {
         skip |= ValidatePointListShaderState(pipeline, module, entrypoint, pStage->stage);
     }
+    skip |= ValidateBuiltinLimits(module, accessible_ids, pStage->stage);
     skip |= ValidateCooperativeMatrix(module, pStage, pipeline);
+    if (enabled_features.fragment_shading_rate_features.primitiveFragmentShadingRate) {
+        skip |= ValidatePrimitiveRateShaderState(pipeline, module, entrypoint, pStage->stage);
+    }
 
     std::string vuid_layout_mismatch;
     if (pipeline->graphicsPipelineCI.sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO) {
@@ -3241,7 +3703,9 @@ bool CoreChecks::ValidatePipelineShaderStage(VkPipelineShaderStageCreateInfo con
         // Verify given pipelineLayout has requested setLayout with requested binding
         const auto &binding = GetDescriptorBinding(pipeline->pipeline_layout.get(), use.first);
         unsigned required_descriptor_count;
-        std::set<uint32_t> descriptor_types = TypeToDescriptorTypeSet(module, use.second.type_id, required_descriptor_count);
+        bool is_khr = binding && binding->descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        std::set<uint32_t> descriptor_types =
+            TypeToDescriptorTypeSet(module, use.second.type_id, required_descriptor_count, is_khr);
 
         if (!binding) {
             skip |= LogError(device, vuid_layout_mismatch,
@@ -3412,7 +3876,6 @@ bool CoreChecks::ValidateGraphicsPipelineShaderState(const PIPELINE_STATE *pipel
     const SHADER_MODULE_STATE *shaders[32];
     memset(shaders, 0, sizeof(shaders));
     spirv_inst_iter entrypoints[32];
-    memset(entrypoints, 0, sizeof(entrypoints));
     bool skip = false;
 
     uint32_t pointlist_stage_mask = DetermineFinalGeomStage(pipeline, pCreateInfo);
@@ -3467,6 +3930,62 @@ bool CoreChecks::ValidateGraphicsPipelineShaderState(const PIPELINE_STATE *pipel
     return skip;
 }
 
+bool CoreChecks::ValidateGraphicsPipelineShaderDynamicState(const PIPELINE_STATE *pipeline, const CMD_BUFFER_STATE *pCB,
+                                                            const char *caller, const DrawDispatchVuid &vuid) const {
+    auto pCreateInfo = pipeline->graphicsPipelineCI.ptr();
+
+    const SHADER_MODULE_STATE *shaders[32];
+    memset(shaders, 0, sizeof(shaders));
+    spirv_inst_iter entrypoints[32];
+    memset(entrypoints, 0, sizeof(entrypoints));
+    bool skip = false;
+
+    for (uint32_t i = 0; i < pCreateInfo->stageCount; i++) {
+        auto pStage = &pCreateInfo->pStages[i];
+        auto stage_id = GetShaderStageId(pStage->stage);
+        shaders[stage_id] = GetShaderModuleState(pStage->module);
+        entrypoints[stage_id] = FindEntrypoint(shaders[stage_id], pStage->pName, pStage->stage);
+
+        if (pStage->stage == VK_SHADER_STAGE_VERTEX_BIT || pStage->stage == VK_SHADER_STAGE_GEOMETRY_BIT ||
+            pStage->stage == VK_SHADER_STAGE_MESH_BIT_NV) {
+            if (!phys_dev_ext_props.fragment_shading_rate_props.primitiveFragmentShadingRateWithMultipleViewports &&
+                IsDynamic(pipeline, VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT) && pCB->viewportWithCountCount != 1) {
+                spirv_inst_iter insn = entrypoints[stage_id];
+                bool primitiverate_written = false;
+
+                while (!primitiverate_written && (insn.opcode() != spv::OpFunction)) {
+                    if (insn.opcode() == spv::OpMemberDecorate) {
+                        if (insn.word(3) == spv::DecorationBuiltIn) {
+                            if (insn.word(4) == spv::BuiltInPrimitiveShadingRateKHR) {
+                                primitiverate_written = IsBuiltInWritten(shaders[stage_id], insn, entrypoints[stage_id]);
+                            }
+                        }
+                    } else if (insn.opcode() == spv::OpDecorate) {
+                        if (insn.word(2) == spv::DecorationBuiltIn) {
+                            if (insn.word(3) == spv::BuiltInPrimitiveShadingRateKHR) {
+                                primitiverate_written = IsBuiltInWritten(shaders[stage_id], insn, entrypoints[stage_id]);
+                            }
+                        }
+                    }
+
+                    insn++;
+                }
+
+                if (primitiverate_written) {
+                    skip |=
+                        LogError(pipeline->pipeline, vuid.viewport_count_primitive_shading_rate,
+                                 "%s: %s shader of currently bound pipeline statically writes to PrimitiveShadingRateKHR built-in"
+                                 "but multiple viewports are set by the last call to vkCmdSetViewportWithCountEXT,"
+                                 "and the primitiveFragmentShadingRateWithMultipleViewports limit is not supported.",
+                                 caller, string_VkShaderStageFlagBits(pStage->stage));
+                }
+            }
+        }
+    }
+
+    return skip;
+}
+
 bool CoreChecks::ValidateComputePipelineShaderState(PIPELINE_STATE *pipeline) const {
     const auto &stage = *pipeline->computePipelineCI.stage.ptr();
 
@@ -3476,42 +3995,77 @@ bool CoreChecks::ValidateComputePipelineShaderState(PIPELINE_STATE *pipeline) co
     return ValidatePipelineShaderStage(&stage, pipeline, pipeline->stage_state[0], module, entrypoint, false);
 }
 
-bool CoreChecks::ValidateRayTracingPipeline(PIPELINE_STATE *pipeline, bool isKHR) const {
+uint32_t CoreChecks::CalcShaderStageCount(const PIPELINE_STATE *pipeline, VkShaderStageFlagBits stageBit) const {
+    uint32_t total = 0;
+
+    const auto *stages = pipeline->raytracingPipelineCI.ptr()->pStages;
+    for (uint32_t stage_index = 0; stage_index < pipeline->raytracingPipelineCI.stageCount; stage_index++) {
+        if (stages[stage_index].stage == stageBit) {
+            total++;
+        }
+    }
+
+    if (pipeline->raytracingPipelineCI.pLibraryInfo) {
+        for (uint32_t i = 0; i < pipeline->raytracingPipelineCI.pLibraryInfo->libraryCount; ++i) {
+            const PIPELINE_STATE *library_pipeline = GetPipelineState(pipeline->raytracingPipelineCI.pLibraryInfo->pLibraries[i]);
+            total += CalcShaderStageCount(library_pipeline, stageBit);
+        }
+    }
+
+    return total;
+}
+
+bool CoreChecks::ValidateRayTracingPipeline(PIPELINE_STATE *pipeline, VkPipelineCreateFlags flags, bool isKHR) const {
     bool skip = false;
 
     if (isKHR) {
-        if (pipeline->raytracingPipelineCI.maxRecursionDepth > phys_dev_ext_props.ray_tracing_propsKHR.maxRecursionDepth) {
-            skip |= LogError(device, "VUID-VkRayTracingPipelineCreateInfoKHR-maxRecursionDepth-03464", ": %d > %d",
-                             pipeline->raytracingPipelineCI.maxRecursionDepth,
-                             phys_dev_ext_props.ray_tracing_propsKHR.maxRecursionDepth);
+        if (pipeline->raytracingPipelineCI.maxPipelineRayRecursionDepth >
+            phys_dev_ext_props.ray_tracing_propsKHR.maxRayRecursionDepth) {
+            skip |= LogError(device, "VUID-VkRayTracingPipelineCreateInfoKHR-maxPipelineRayRecursionDepth-03589",
+                             "vkCreateRayTracingPipelinesKHR: maxPipelineRayRecursionDepth (%d ) must be less than or equal to "
+                             "VkPhysicalDeviceRayTracingPipelinePropertiesKHR::maxRayRecursionDepth %d",
+                             pipeline->raytracingPipelineCI.maxPipelineRayRecursionDepth,
+                             phys_dev_ext_props.ray_tracing_propsKHR.maxRayRecursionDepth);
         }
-        for (uint32_t i = 0; i < pipeline->raytracingPipelineCI.libraries.libraryCount; ++i) {
-            const PIPELINE_STATE *pLibrary_pipelinestate = GetPipelineState(pipeline->raytracingPipelineCI.libraries.pLibraries[i]);
-            if (pLibrary_pipelinestate->raytracingPipelineCI.maxRecursionDepth !=
-                pipeline->raytracingPipelineCI.maxRecursionDepth) {
-                skip |= LogError(
-                    device, "VUID-VkRayTracingPipelineCreateInfoKHR-pLibraries-03467",
-                    "vkCreateRayTracingPipelinesKHR: Each element  (%d) of the pLibraries member of libraries must have been"
-                    "created with the value of maxRecursionDepth (%d) equal to that in this pipeline (%d) .",
-                    i, pLibrary_pipelinestate->raytracingPipelineCI.maxRecursionDepth,
-                    pipeline->raytracingPipelineCI.maxRecursionDepth);
-            }
-            if (pLibrary_pipelinestate->raytracingPipelineCI.pLibraryInterface->maxAttributeSize !=
-                    pipeline->raytracingPipelineCI.pLibraryInterface->maxAttributeSize ||
-                pLibrary_pipelinestate->raytracingPipelineCI.pLibraryInterface->maxPayloadSize !=
-                    pipeline->raytracingPipelineCI.pLibraryInterface->maxPayloadSize ||
-                pLibrary_pipelinestate->raytracingPipelineCI.pLibraryInterface->maxCallableSize !=
-                    pipeline->raytracingPipelineCI.pLibraryInterface->maxCallableSize) {
-                skip |=
-                    LogError(device, "VUID-VkRayTracingPipelineCreateInfoKHR-pLibraries-03469",
-                             "vkCreateRayTracingPipelinesKHR: Each element of the pLibraries member of libraries must have been "
-                             "created with values of the maxPayloadSize,"
-                             "maxAttributeSize, and maxCallableSize members of pLibraryInterface equal to those in this pipeline.");
+        if (pipeline->raytracingPipelineCI.pLibraryInfo) {
+            for (uint32_t i = 0; i < pipeline->raytracingPipelineCI.pLibraryInfo->libraryCount; ++i) {
+                const PIPELINE_STATE *pLibrary_pipelinestate =
+                    GetPipelineState(pipeline->raytracingPipelineCI.pLibraryInfo->pLibraries[i]);
+                if (pLibrary_pipelinestate->raytracingPipelineCI.maxPipelineRayRecursionDepth !=
+                    pipeline->raytracingPipelineCI.maxPipelineRayRecursionDepth) {
+                    skip |= LogError(
+                        device, "VUID-VkRayTracingPipelineCreateInfoKHR-pLibraries-03591",
+                        "vkCreateRayTracingPipelinesKHR: Each element  (%d) of the pLibraries member of libraries must have been"
+                        "created with the value of maxPipelineRayRecursionDepth (%d) equal to that in this pipeline (%d) .",
+                        i, pLibrary_pipelinestate->raytracingPipelineCI.maxPipelineRayRecursionDepth,
+                        pipeline->raytracingPipelineCI.maxPipelineRayRecursionDepth);
+                }
+                if (pLibrary_pipelinestate->raytracingPipelineCI.pLibraryInfo &&
+                    (pLibrary_pipelinestate->raytracingPipelineCI.pLibraryInterface->maxPipelineRayHitAttributeSize !=
+                         pipeline->raytracingPipelineCI.pLibraryInterface->maxPipelineRayHitAttributeSize ||
+                     pLibrary_pipelinestate->raytracingPipelineCI.pLibraryInterface->maxPipelineRayPayloadSize !=
+                         pipeline->raytracingPipelineCI.pLibraryInterface->maxPipelineRayPayloadSize)) {
+                    skip |= LogError(device, "VUID-VkRayTracingPipelineCreateInfoKHR-pLibraryInfo-03593",
+                                     "vkCreateRayTracingPipelinesKHR: If pLibraryInfo is not NULL, each element of its pLibraries "
+                                     "member must have been created with values of the maxPipelineRayPayloadSize and "
+                                     "maxPipelineRayHitAttributeSize members of pLibraryInterface equal to those in this pipeline");
+                }
+                if ((flags & VK_PIPELINE_CREATE_RAY_TRACING_SHADER_GROUP_HANDLE_CAPTURE_REPLAY_BIT_KHR) &&
+                    !(pLibrary_pipelinestate->raytracingPipelineCI.flags &
+                      VK_PIPELINE_CREATE_RAY_TRACING_SHADER_GROUP_HANDLE_CAPTURE_REPLAY_BIT_KHR)) {
+                    skip |= LogError(device, "VUID-VkRayTracingPipelineCreateInfoKHR-flags-03594",
+                                     "vkCreateRayTracingPipelinesKHR: If flags includes "
+                                     "VK_PIPELINE_CREATE_RAY_TRACING_SHADER_GROUP_HANDLE_CAPTURE_REPLAY_BIT_KHR, each element of "
+                                     "the pLibraries member of libraries must have been created with the "
+                                     "VK_PIPELINE_CREATE_RAY_TRACING_SHADER_GROUP_HANDLE_CAPTURE_REPLAY_BIT_KHR bit set");
+                }
             }
         }
     } else {
         if (pipeline->raytracingPipelineCI.maxRecursionDepth > phys_dev_ext_props.ray_tracing_propsNV.maxRecursionDepth) {
-            skip |= LogError(device, "VUID-VkRayTracingPipelineCreateInfoNV-maxRecursionDepth-03457", ": %d > %d",
+            skip |= LogError(device, "VUID-VkRayTracingPipelineCreateInfoNV-maxRecursionDepth-03457",
+                             "vkCreateRayTracingPipelinesNV: maxRecursionDepth (%d) must be less than or equal to "
+                             "VkPhysicalDeviceRayTracingPropertiesNV::maxRecursionDepth (%d)",
                              pipeline->raytracingPipelineCI.maxRecursionDepth,
                              phys_dev_ext_props.ray_tracing_propsNV.maxRecursionDepth);
         }
@@ -3519,7 +4073,6 @@ bool CoreChecks::ValidateRayTracingPipeline(PIPELINE_STATE *pipeline, bool isKHR
     const auto *stages = pipeline->raytracingPipelineCI.ptr()->pStages;
     const auto *groups = pipeline->raytracingPipelineCI.ptr()->pGroups;
 
-    uint32_t raygen_stages_found = 0;
     for (uint32_t stage_index = 0; stage_index < pipeline->raytracingPipelineCI.stageCount; stage_index++) {
         const auto &stage = stages[stage_index];
 
@@ -3527,16 +4080,16 @@ bool CoreChecks::ValidateRayTracingPipeline(PIPELINE_STATE *pipeline, bool isKHR
         const spirv_inst_iter entrypoint = FindEntrypoint(module, stage.pName, stage.stage);
 
         skip |= ValidatePipelineShaderStage(&stage, pipeline, pipeline->stage_state[stage_index], module, entrypoint, false);
-
-        if (stage.stage == VK_SHADER_STAGE_RAYGEN_BIT_NV) {
-            raygen_stages_found++;
-        }
     }
-    if (raygen_stages_found == 0) {
-        skip |= LogError(
-            device,
-            isKHR ? "VUID-VkRayTracingPipelineCreateInfoKHR-stage-03425" : "VUID-VkRayTracingPipelineCreateInfoNV-stage-03425",
-            " : zero raygen stages specified");
+
+    if ((pipeline->raytracingPipelineCI.flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) == 0) {
+        const uint32_t raygen_stages_count = CalcShaderStageCount(pipeline, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+        if (raygen_stages_count == 0) {
+            skip |= LogError(
+                device,
+                isKHR ? "VUID-VkRayTracingPipelineCreateInfoKHR-stage-03425" : "VUID-VkRayTracingPipelineCreateInfoNV-stage-03425",
+                " : The stage member of at least one element of pStages must be VK_SHADER_STAGE_RAYGEN_BIT_KHR.");
+        }
     }
 
     for (uint32_t group_index = 0; group_index < pipeline->raytracingPipelineCI.groupCount; group_index++) {

@@ -325,9 +325,10 @@ ImageRangeEncoder::ImageRangeEncoder(const IMAGE_STATE& image, const AspectParam
 
 IndexType ImageRangeEncoder::Encode(const VkImageSubresource& subres, uint32_t layer, VkOffset3D offset) const {
     const auto& subres_layout = SubresourceLayout(subres);
-    return static_cast<IndexType>(floor(layer * subres_layout.arrayPitch + offset.z * subres_layout.depthPitch +
-                                        offset.y * subres_layout.rowPitch +
-                                        offset.x * texel_sizes_[LowerBoundFromMask(subres.aspectMask)] + subres_layout.offset));
+    return static_cast<IndexType>(floor(static_cast<double>(layer * subres_layout.arrayPitch + offset.z * subres_layout.depthPitch +
+                                                            offset.y * subres_layout.rowPitch) +
+                                        offset.x * texel_sizes_[LowerBoundFromMask(subres.aspectMask)] +
+                                        static_cast<double>(subres_layout.offset)));
 }
 
 void ImageRangeEncoder::Decode(const VkImageSubresource& subres, const IndexType& encode, uint32_t& out_layer,
@@ -340,7 +341,7 @@ void ImageRangeEncoder::Decode(const VkImageSubresource& subres, const IndexType
     decode -= (out_offset.z * subres_layout.depthPitch);
     out_offset.y = static_cast<int32_t>(decode / subres_layout.rowPitch);
     decode -= (out_offset.y * subres_layout.rowPitch);
-    out_offset.x = static_cast<int32_t>(decode / texel_sizes_[LowerBoundFromMask(subres.aspectMask)]);
+    out_offset.x = static_cast<int32_t>(static_cast<double>(decode) / texel_sizes_[LowerBoundFromMask(subres.aspectMask)]);
 }
 
 const VkSubresourceLayout& ImageRangeEncoder::SubresourceLayout(const VkImageSubresource& subres) const {
@@ -358,10 +359,21 @@ inline VkImageSubresourceRange GetRemaining(const VkImageSubresourceRange& full_
     return subres_range;
 }
 
+static bool SubresourceRangeIsEmpty(const VkImageSubresourceRange& range) {
+    return (0 == range.aspectMask) || (0 == range.levelCount) || (0 == range.layerCount);
+}
+static bool ExtentIsEmpty(const VkExtent3D& extent) { return (0 == extent.width) || (0 == extent.height) || (0 == extent.width); }
+
 ImageRangeGenerator::ImageRangeGenerator(const ImageRangeEncoder& encoder, const VkImageSubresourceRange& subres_range,
                                          const VkOffset3D& offset, const VkExtent3D& extent)
     : encoder_(&encoder), subres_range_(GetRemaining(encoder.FullRange(), subres_range)), offset_(offset), extent_(extent) {
     assert(IsValid(*encoder_, subres_range_));
+    if (SubresourceRangeIsEmpty(subres_range) || ExtentIsEmpty(extent)) {
+        // Empty range forces empty position -- no operations other than deref for empty check are valid
+        pos_ = {0, 0};
+        return;
+    }
+
     mip_level_index_ = 0;
     aspect_index_ = encoder_->LowerBoundFromMask(subres_range_.aspectMask);
     if ((offset_.z + extent_.depth) == 1) {

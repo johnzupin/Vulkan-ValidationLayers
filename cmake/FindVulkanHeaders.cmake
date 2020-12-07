@@ -44,7 +44,7 @@ if(NOT DEFINED VULKAN_HEADERS_INSTALL_DIR)
   if (DEFINED ENV{VULKAN_HEADERS_INSTALL_DIR})
     set(VULKAN_HEADERS_INSTALL_DIR "$ENV{VULKAN_HEADERS_INSTALL_DIR}")
   elseif(DEFINED ENV{VULKAN_SDK})
-    set(VULKAN_HEADERS_INSTALL_DIR "$ENV{VULKAN_SDK}/include")
+    set(VULKAN_HEADERS_INSTALL_DIR "$ENV{VULKAN_SDK}")
   endif()
 endif()
 
@@ -79,8 +79,10 @@ include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(VulkanHeaders
     DEFAULT_MSG
     VulkanHeaders_INCLUDE_DIR)
+set(FPHSA_NAME_MISMATCHED TRUE)
 find_package_handle_standard_args(VulkanRegistry
     DEFAULT_MSG
     VulkanRegistry_DIR)
+unset(FPHSA_NAME_MISMATCHED)
 
 mark_as_advanced(VulkanHeaders_INCLUDE_DIR VulkanRegistry_DIR)
