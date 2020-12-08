@@ -1,3 +1,476 @@
+vulkan-validationlayers (1.2.162.0-1lunarg20.04-1) focal; urgency=medium
+
+  [ Jamie Madill ]
+  * layers: Fix duplicate header in GN build.
+
+  [ Tony-LunarG ]
+  * layers: Allow for sampler with null image view
+  * tests: Add test for sampler with null image view
+
+  [ Shannon McPherson ]
+  * build: Update Android known-good for 1.2.154 SDK
+
+  [ Jeremy Gebben ]
+  * state_tracker: Remove 'using std::*' statements
+
+  [ Jeff Leger ]
+  * Add fix for renderpass compatibility
+  * fix formatting error
+
+  [ Mark Lobodzinski ]
+  * chassis: Make gpuaf/debugprintf add'l parm void*
+
+  [ Brandon Tolsch ]
+  * layers: Fix validation object leaks
+
+  [ Benjamin Thaut ]
+  * layers: Fix false positives when importing AHardwareBuffers
+
+  [ Brandon Tolsch ]
+  * layers: Reorder conditions to avoid uninitialized values
+
+  [ Adrian Coca Lorente ]
+  * tracker: Retire work when checking Timeline Semaphore Value
+
+  [ Mark Lobodzinski ]
+  * chassis: Remove vestigial pound-define
+
+  [ Lionel Landwerlin ]
+  * tests: Keep QueryPerfIncompletePasses from triggering VU00817
+
+  [ Mark Lobodzinski ]
+  * readme: Update contact info
+
+  [ Nathaniel Cesario ]
+  * refactor: Move CALL_STATE into best_practices
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.156 header
+
+  [ Nathaniel Cesario ]
+  * layers: Fix ImageView format compatibility error
+
+  [ Mark Lobodzinski ]
+  * dispatch: Move CB APIs to manually generated
+  * dispatch: Add secondary commandbuffer tracking
+
+  [ Ricardo Garcia ]
+  * layers: Fix depth/stencil resolve false positives
+
+  [ Tony-LunarG ]
+  * layers: Use debug printf create infos
+
+  [ locke-lunarg ]
+  * layers: VUID-vkCmdDraw-None-02699
+  * layers: VUID-vkCmdDraw-None-02702
+  * layers: VUID-02703
+  * layers: VUID-02704
+  * layers: Reduce loop
+  * tests: UnnormalizedCoordinates Sampler
+
+  [ Nathaniel Cesario ]
+  * best_practices: Fix bug introduced in refactor
+
+  [ Jeff Leger ]
+  * layers: Add support for KHR_copy_commands2
+  * tests: Add tests for KHR_copy_commands2
+
+  [ Lionel Landwerlin ]
+  * tests: Fix QueryPerformanceIncompletePasses stride usage
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.157 header
+
+  [ Mark Lobodzinski ]
+  * stateless: Account for DynStateWithCount for multiViewport
+  * tests: Add multiViewport/ViewportWithCount positive test
+  * layers: Added some QueryPoolResults VUID checks
+  * test: Added tests for QueryPoolResults VUIDs
+  * corechecks: Fix QueryPoolIndex bug and remove query func
+
+  [ maltekliemann ]
+  * build: Fix Vulkan header/registry detection for SDK
+
+  [ locke-lunarg ]
+  * layers: Fixed 02686 bug
+  * tests: Fixed 02686 bug
+
+  [ Jeff Leger ]
+  * layers: Remove unneeded validation checks
+
+  [ Mark Lobodzinski ]
+  * stateless: Changed bool checks from warnings to errors
+
+  [ locke-lunarg ]
+  * layers: VUID-vkCmdDraw-None-02698
+  * tests: Push constant update
+
+  [ sfricke-samsung ]
+  * tests: Remove clang 10 warning for string copy
+  * layers: Improve ValidateCmdQueueFlags message
+  * layers: Label VUID 04477
+
+  [ locke-lunarg ]
+  * layers: Remove VUID-02686
+  * tests: Remove VUID-02686
+
+  [ John Bauman ]
+  * Revert "layers: Fix wrong if statement"
+
+  [ locke-lunarg ]
+  * layers: VUID-02721
+  * tests: Test Vertex Binding
+  * layers: VUID 02859
+  * tests: VerifyDynamicStateSettingCommands
+  * layers: Bug fixed
+  * layers: Pref improvement
+
+  [ sfricke-samsung ]
+  * layers: Remove redundant implicit check
+  * tests: Check clearAttachment implict VUs
+  * layers: Label copy2 00212
+
+  [ Mark Lobodzinski ]
+  * threading: Created GetPDDisplayPlaneProperties display objs
+  * lifetimes: Created GetPDDisplayPlaneProperties display objs
+  * tests: Create DisplayKHR objs with GetPDDisplayPlaneProps APIs
+
+  [ Mike Schuchardt ]
+  * scripts: Escape backslashes in C strings
+  * scripts: Rework PV array length handling
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.158 header
+
+  [ Tony Barbour ]
+  * layers: Tune image layout loop
+
+  [ sfricke-samsung ]
+  * layers: Add drm format aspect planes
+  * tests: Add drm format aspect planes
+
+  [ Biswapriyo Nath ]
+  * cmake: Check MSVC instead of WIN32 for MSVC compiler options
+
+  [ sfricke-samsung ]
+  * layers: Label VUID 02502 and 02503
+  * tests: Add VUID 02502 and 02503
+
+  [ kiroma ]
+  * stateless: Add a missing "not" to ValidateGreaterThan
+
+  [ Mark Lobodzinski ]
+  * corechecks: Added 4519 vuid for GetQueryPoolResults stride
+  * tests: Add invalid stride test for GetQueryPoolResults
+
+  [ Shannon McPherson ]
+  * build: Reconcile final 158 VUID inconsistencies
+
+  [ sfricke-samsung ]
+  * layers: Remove non-input aspectMask check
+  * tests: Add input attachment aspectMask/layout
+  * layers: Add missing 1.2 overload functions
+
+  [ Mark Lobodzinski ]
+  * readme: Updated for Travis migration
+  * contributing: Updated for Travis CI migration
+
+  [ sfricke-samsung ]
+  * layers: Add VK_EXT_4444_formats support
+  * layers: Add table for buffer image copy VUs
+  * layers: Add SampleMask Array Limit VUID
+  * tests: Add SampleMask Array Limit VUID
+  * layers: Add extra api names to errors
+
+  [ Nathaniel Cesario ]
+  * layers: Fix test error introduced by #2276
+
+  [ sfricke-samsung ]
+  * layers: Relabel vkCmdDrawIndirectByteCountEXT VUs
+
+  [ Jeremy Gebben ]
+  * syncval: Add override keyword to ValidationObject method overrides.
+
+  [ Tony-LunarG ]
+  * layers: Fix error message
+  * layers: Add validation for variable descriptor count
+  * tests: Add test for variable count descriptors
+  * gpu: Report OpLine info even if no source
+  * layers: Fix checks for 02502 and 02503
+
+  [ John Zulauf ]
+  * syncval: Cleanup input attachment read tracking
+  * syncval: vkCmdPipelineBarrier multidep support
+  * syncval: Simplify input attachment read tracking
+  * syncval: Multidep subpass layout transition rework
+  * tests: Add multi dependency syncval test
+  * syncval: Add dst scope barriers to all ILT
+  * syncval: Support range gen w/ empty subres ranges
+  * syncval: Remove unsafe/unused code path.
+  * syncval: Add layout transition info w/o prev access
+  * syncval: Add raster order rules to load op validation
+
+  [ Mark Lobodzinski ]
+  * stateless: Use correct VUIDs for drawCount check
+  * stateless: Remove warnings from viewport validation
+  * stateless: Remove non-VU pNext chain cycle check
+  * stateless: Output correct VUID for validate_string_array
+  * stateless: Comment out unused legacy vuids
+  * stateless: Fix clang-formatting issues
+  * tests: Add 2718 security VUID tests
+
+  [ Neel Bedekar ]
+  * layers: Remove unnecessary FDM tiling check
+
+  [ skkkk sdkfak ]
+  * layers: Fix checks for 01508 and 01509
+
+  [ Tony-LunarG ]
+  * docs: Fix enabling debug printf
+
+  [ sfricke-samsung ]
+  * layers: Add Android 24 and 25 support
+  * layers: Label 04101 and 04010
+  * layers: Add VUID 04113 and 04114
+  * tests: Add VUID 04113 and 04114
+  * layers: Add VUID 01591
+
+  [ orbea ]
+  * cmake: Add BUILD_WERROR
+  * cmake: Silence warnings
+
+  [ sfricke-samsung ]
+  * layers: Change copy2 VU from int to string
+
+  [ Courtney Goeltzenleuchter ]
+  * Fix missing source reference
+
+  [ Yilong Li ]
+  * build: Allow generating layers json file for cross-compiling
+
+  [ orbea ]
+  * cmake: Install the header files into the vulkan directory
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.159 header
+
+  [ Ricardo Garcia ]
+  * layers: Check nullDescriptor when validating vertex attributes
+
+  [ Marshall Drew-Brook ]
+  * layers: Fix queue retirement via waited-on timeline semaphores
+  * tests: Test queue retirement over timeline semaphores
+
+  [ Jeremy Gebben ]
+  * syncval: Change generated lookup tables to be const.
+  * syncval: Convert enum SyncStageAccessFlags to a std::bitset
+
+  [ Karl Schultz ]
+  * layers: Fix typedef and spelling
+
+  [ Mark Lobodzinski ]
+  * practices: Added specialuse extension table
+  * practices: Check for specialuse extensions and warn
+  * practices: Add checking of specialuse extensions
+  * tests: Added specialuse extension BP tests
+  * threading: Make swapchain objects traceable to parent
+  * tests: Add oldSwapchain-from-different-device test
+  * scripts: Add python format-checking script and update travis
+  * scripts: Remove format checking shell scripts
+  * scripts: Suppress warning for empty difflist
+
+  [ dpankratz ]
+  * layers: Removed duplicate type declaration
+
+  [ Mark Lobodzinski ]
+  * repo: Update issue templates
+  * repo: Update issue templates
+
+  [ Karl Schultz ]
+  * layers: Remove duplicate handles from Descriptor subclasses
+  * tests: Add test for destroyed buffer during draw validate
+
+  [ locke-lunarg ]
+  * layers: VUID 02687 to 04584
+  * tests: Using depth stencil image in both
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.160 header
+  * build: Reconcile VUIDs for 1.2.160 header
+
+  [ Mark Lobodzinski ]
+  * lifetimes: Correct for non-device parent objects
+
+  [ Jeremy Gebben ]
+  * syncval: Use correct raster order for depth/stencil resolve
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.161 header
+
+  [ Mark Young ]
+  * build: Fix clang warnings
+
+  [ Tony-LunarG ]
+  * layers: Fix spirv-headers known good
+
+  [ locke-lunarg ]
+  * layers: Protected command buffer
+  * layers: Save shared_ptr
+  * layers: Validate maxMultiviewInstanceIndex
+  * layers: Find Sampler in CmdBind
+  * layers: Change map lastBound into array
+  * layers: Move validation for both image and sampler
+  * layers: Set enum for push constat byte state
+  * layers: Validate filter cubic
+  * tests: Test protected, instance index, filter cubic
+  * layers: Attachment lifetime
+
+  [ Mark Lobodzinski ]
+  * cmddraw: Align non-CF'd source
+  * corechecks: Moved some #defines to static consts
+  * drawdispatch: Use named initializing for DrawDispatch structs
+  * corechecks: Use named initializing for vuid structs
+  * stateless: Calculate correct state for 02257, add 02259
+  * tests: Add some checks for imageFormatMaybeLinear & 02259
+
+  [ locke-lunarg ]
+  * layers: Skip some CMD_TYPE
+  * tests: Fix wrong descriptor type
+
+  [ sfricke-samsung ]
+  * layers: Label VU 04563
+
+  [ Mark Lobodzinski ]
+  * threading: Check DevWaitIdle ext sync on all device queues
+
+  [ Lionel Landwerlin ]
+  * layers: Add VK_EXT_image_drm_format_modifier flag VUID
+  * tests: Add  test for DRM_FORMAT_MOD 02248 check
+
+  [ Nathaniel Cesario ]
+  * layers: Initial VK_KHR_portability_subset support
+
+  [ sfricke-samsung ]
+  * layers: Label VUID 00094
+  * tests: Add VUID 00094
+
+  [ Mike Schuchardt ]
+  * scripts: Codegen fixes for RT header
+
+  [ sourav parmar ]
+  * layers: Add validation for KHR_ray_tracing
+  * tests: Update tests for KHR_ray_tracing
+
+  [ Ricardo Garcia ]
+  * layers: Fix several pipeline library errors
+  * layers: Allow null AS if nullDescriptor is enabled
+
+  [ sourav parmar ]
+  * layers: Fixes VUID-vkCmdTraceRaysNV-None-02699
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.162 header
+  * layers: Update `drawdispatch.cpp` for rt
+  * layers: Update function signatures for RT
+
+  [ Nathaniel Cesario ]
+  * layers: Portability validation for CreateImage
+
+  [ sfricke-samsung ]
+  * layers: Add VUID 01389
+  * tests: Add VUID 01389 dedicated test
+
+  [ Nathaniel Cesario ]
+  * layers: Portability validation for CreateImageView
+  * layers: Portability validation for CreateSampler
+
+  [ Ricardo Garcia ]
+  * layers: Fix warnings when using GCC or Clang
+
+  [ Nathaniel Cesario ]
+  * layers: Portability - CreateGraphicsPipelines
+
+  [ Mark Lobodzinski ]
+  * corechecks: Remove 'final' keyword from CreateEvents decl
+  * corechecks: Fix header-update clang-format error
+
+  [ sfricke-samsung ]
+  * tests: Fix VerifyFilterCubicSamplerInCmdDraw
+
+  [ Ricardo Garcia ]
+  * layer: Fix incorrect transformData check
+
+  [ Tony-LunarG ]
+  * layers: Add VUIDs 02719, 00539, and 00487
+  * tests: Add tests for VUIDs 02719, 00539, and 00487
+
+  [ Mark Lobodzinski ]
+  * corechecks: Fix clang-format errors in core_validation.cpp
+
+  [ Tobias Hector ]
+  * layers: Support VK_KHR_fragment_shading_rate
+  * tests: Check KHR_fragment_shading_rate validation
+
+  [ Mark Lobodzinski ]
+  * corechecks: Fixup FSR variable names
+
+  [ sourav parmar ]
+  * layers: Fix for VUID-vkCmdTraceRaysNV-None-02700
+
+  [ Tony-LunarG ]
+  * layers: Add VUIDs 02287 and 02288
+  * tests: Test for 02287 and 02288
+
+  [ Nathaniel Cesario ]
+  * layers: Portability VUID 04450
+
+  [ sourav parmar ]
+  * layers: Relax AS descriptor set VUID check
+
+  [ Mark Lobodzinski ]
+  * drawdispatch: Add 02693 VUID table entry
+  * corechecks: Fix clang-format errors in descriptor_sets.cpp
+  * corechecks: Add drawdispatch vuids check for 02693
+  * tests: Add unit test for drawdispatch vuid 02693
+  * appveyor: Update cmake package file location
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.162 SDK
+
+  [ Tony-LunarG ]
+  * tests: Fix size of buffer
+  * gpu: Add buffer out of bounds access validation
+  * tests: Add gpu-av test for buffer access OOB
+  * gpu: Stop using deprecated Run call
+  * layers: Remove old temporary enum
+  * docs: Document buffer oob gpu-av
+  * gpu: Add new settings to settings file
+  * gpu: Don't always allocate input buffers
+  * tests: Add tests from PR #799
+  * gpu: Add CmdDrawIndirectByteCountEXT
+
+  [ Mark Lobodzinski ]
+  * practices: Add override keywords to best_practices hdr files
+  * corechecks: Added override keywords to core_validation.h
+  * debugprintf: Add override keywords to debug_printf.h
+  * threading: Add override keywords to thread_safety files
+  * gpuval: Added override keywords to gpu_validation.h
+  * lifetimes: Added override keywords to object_tracker files
+  * stateless: Add override keywords to stateless validation files
+  * state_tracker: Added override keywords to stater_tracker.h
+
+  [ Tony-LunarG ]
+  * gpu: Add buffer OOB validation of texel buffers
+  * tests: Add test for texel buffers
+
+  [ sfricke-samsung ]
+  * layers: Fix incorrect VUID labels
+
+  [ John Zupin ]
+  * packaging: rebase patches
+
+ -- John Zupin <john@odin>  Tue, 08 Dec 2020 11:06:57 -0700
+
 vulkan-validationlayers (1.2.154.0-1lunarg20.04-3) focal; urgency=medium
 
   [ Shannon McPherson ]
