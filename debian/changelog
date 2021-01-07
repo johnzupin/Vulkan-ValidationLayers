@@ -1,3 +1,35 @@
+vulkan-validationlayers (1.2.162.1~rc1-1lunarg18.04-1) bionic; urgency=medium
+
+  [ John Zupin ]
+  * Docs: update closed issue links to the corresponding project links
+
+  [ Jeremy Gebben ]
+  * syncval: Restrict async hazard checking to subpass accesses
+  * syncval: Split tagging in VkCmdNextSubpass()
+  * tests: Separate syncval tests into a their own file
+  * tests: Add a syncval subpass dependency test
+
+  [ John Zulauf ]
+  * syncval: Add framework stubs for events support
+  * layers: Convert event state tracking to shared_ptr
+  * syncval: Refactor addresstype
+  * syncval: Add base address to range generation
+  * syncval: Refactor BarrierOps functors for events
+  * syncval: Events framework and initial support
+  * tests: Add events to test framework
+  * tests: Add syncval tests for Event Set/Wait
+  * tests: Add Event commands race condition tests
+  * tests: Add subcase testing WaitEvent in Subpass
+  * syncval: Comment cleanup for Events functionality
+  * syncval: Comment cleanup for Events functionality
+  * syncval: Reduce not supported in sync val to info
+  * syncval: Update usage docs to reflect syncval v1.0
+
+  [ John Zupin ]
+  * packaging: update vulkan headers deps version
+
+ -- John Zupin <john@odin>  Thu, 07 Jan 2021 11:24:26 -0700
+
 vulkan-validationlayers (1.2.162.0-1lunarg18.04-2) bionic; urgency=medium
 
   [ Karl Schultz ]
