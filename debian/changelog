@@ -1,3 +1,14 @@
+vulkan-validationlayers (1.2.162.1~rc2-1lunarg20.04-1) focal; urgency=medium
+
+  [ Mark Lobodzinski ]
+  * docs: Fix sync typos
+  * docs: Update sync doc copyright msg
+
+  [ Nathaniel Cesario ]
+  * layers: Remove device calls from CreateInstance
+
+ -- John Zupin <john@odin>  Tue, 12 Jan 2021 10:34:56 -0700
+
 vulkan-validationlayers (1.2.162.1~rc1-1lunarg20.04-1) focal; urgency=medium
 
   [ John Zupin ]
