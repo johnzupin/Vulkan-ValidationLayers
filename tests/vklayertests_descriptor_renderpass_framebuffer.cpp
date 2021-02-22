@@ -1,9 +1,9 @@
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google, Inc.
- * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google, Inc.
+ * Modifications Copyright (C) 2020-2021 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -454,8 +454,8 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentDescriptionInvalidFinalLayout) {
     }
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    auto separate_depth_stencil_layouts_features = lvl_init_struct<VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&separate_depth_stencil_layouts_features);
+    auto separate_depth_stencil_layouts_features = LvlInitStruct<VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&separate_depth_stencil_layouts_features);
     if (vkGetPhysicalDeviceFeatures2KHR) {
         vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
     } else {
@@ -638,7 +638,7 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentDescriptionInvalidFinalLayout) {
             attach_desc.format = depth_stencil_format;
             attach_desc.initialLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
 
-            auto attachment_description_stencil_layout = lvl_init_struct<VkAttachmentDescriptionStencilLayoutKHR>();
+            auto attachment_description_stencil_layout = LvlInitStruct<VkAttachmentDescriptionStencilLayoutKHR>();
             attachment_description_stencil_layout.stencilInitialLayout = VK_IMAGE_LAYOUT_GENERAL;
             attachment_description_stencil_layout.stencilFinalLayout = VK_IMAGE_LAYOUT_GENERAL;
             safe_VkRenderPassCreateInfo2 rpci2;
@@ -974,8 +974,8 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentReferenceInvalidLayout) {
     }
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    auto separate_depth_stencil_layouts_features = lvl_init_struct<VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&separate_depth_stencil_layouts_features);
+    auto separate_depth_stencil_layouts_features = LvlInitStruct<VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&separate_depth_stencil_layouts_features);
     if (vkGetPhysicalDeviceFeatures2KHR) {
         vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
     } else {
@@ -1073,7 +1073,7 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentReferenceInvalidLayout) {
             rpci2.pSubpasses[0].pDepthStencilAttachment->layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
             PositiveTestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), rpci2.ptr());
 
-            auto attachment_reference_stencil_layout = lvl_init_struct<VkAttachmentReferenceStencilLayoutKHR>();
+            auto attachment_reference_stencil_layout = LvlInitStruct<VkAttachmentReferenceStencilLayoutKHR>();
             rpci2.pSubpasses[0].pDepthStencilAttachment->pNext = &attachment_reference_stencil_layout;
 
             VkImageLayout forbidden_layouts[] = {VK_IMAGE_LAYOUT_PREINITIALIZED,
@@ -2169,8 +2169,8 @@ TEST_F(VkLayerTest, RenderPassBeginSampleLocationsInvalidIndicesEXT) {
     assert(vkGetPhysicalDeviceProperties2KHR != nullptr);
 
     VkPhysicalDeviceSampleLocationsPropertiesEXT sample_locations_props =
-        lvl_init_struct<VkPhysicalDeviceSampleLocationsPropertiesEXT>();
-    VkPhysicalDeviceProperties2KHR prop2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&sample_locations_props);
+        LvlInitStruct<VkPhysicalDeviceSampleLocationsPropertiesEXT>();
+    VkPhysicalDeviceProperties2KHR prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&sample_locations_props);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &prop2);
 
     if ((sample_locations_props.sampleLocationSampleCounts & VK_SAMPLE_COUNT_1_BIT) == 0) {
@@ -2286,8 +2286,8 @@ TEST_F(VkLayerTest, InvalidSampleLocations) {
     assert(vkCmdSetSampleLocationsEXT != nullptr);
 
     VkPhysicalDeviceSampleLocationsPropertiesEXT sample_locations_props =
-        lvl_init_struct<VkPhysicalDeviceSampleLocationsPropertiesEXT>();
-    VkPhysicalDeviceProperties2KHR prop2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&sample_locations_props);
+        LvlInitStruct<VkPhysicalDeviceSampleLocationsPropertiesEXT>();
+    VkPhysicalDeviceProperties2KHR prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&sample_locations_props);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &prop2);
 
     if ((sample_locations_props.sampleLocationSampleCounts & VK_SAMPLE_COUNT_1_BIT) == 0) {
@@ -2701,8 +2701,8 @@ TEST_F(VkLayerTest, FramebufferCreateErrors) {
         }
     }
 
-    VkPhysicalDeviceFragmentDensityMapFeaturesEXT fdm_features = lvl_init_struct<VkPhysicalDeviceFragmentDensityMapFeaturesEXT>();
-    VkPhysicalDeviceFeatures2 features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&fdm_features);
+    VkPhysicalDeviceFragmentDensityMapFeaturesEXT fdm_features = LvlInitStruct<VkPhysicalDeviceFragmentDensityMapFeaturesEXT>();
+    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&fdm_features);
     if (push_fragment_density_support) {
         fdm_features.fragmentDensityMap = true;
     }
@@ -3730,8 +3730,8 @@ TEST_F(VkLayerTest, WriteDescriptorSetYcbcr) {
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2Function =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2Function != nullptr);
-    auto ycbcr_features = lvl_init_struct<VkPhysicalDeviceSamplerYcbcrConversionFeatures>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&ycbcr_features);
+    auto ycbcr_features = LvlInitStruct<VkPhysicalDeviceSamplerYcbcrConversionFeatures>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&ycbcr_features);
     vkGetPhysicalDeviceFeatures2Function(gpu(), &features2);
     if (ycbcr_features.samplerYcbcrConversion == VK_FALSE) {
         printf("%s samplerYcbcrConversion feature not supported. Skipped.\n", kSkipPrefix);
@@ -5282,7 +5282,7 @@ TEST_F(VkLayerTest, DSBufferInfoErrors) {
     update_template_entry.offset = offsetof(SimpleTemplateData, buff_info);
     update_template_entry.stride = sizeof(SimpleTemplateData);
 
-    auto update_template_ci = lvl_init_struct<VkDescriptorUpdateTemplateCreateInfoKHR>();
+    auto update_template_ci = LvlInitStruct<VkDescriptorUpdateTemplateCreateInfoKHR>();
     update_template_ci.descriptorUpdateEntryCount = 1;
     update_template_ci.pDescriptorUpdateEntries = &update_template_entry;
     update_template_ci.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET;
@@ -5312,7 +5312,7 @@ TEST_F(VkLayerTest, DSBufferInfoErrors) {
 
         if (update_template_support) {
             ASSERT_NE(vkCmdPushDescriptorSetWithTemplateKHR, nullptr);
-            auto push_template_ci = lvl_init_struct<VkDescriptorUpdateTemplateCreateInfoKHR>();
+            auto push_template_ci = LvlInitStruct<VkDescriptorUpdateTemplateCreateInfoKHR>();
             push_template_ci.descriptorUpdateEntryCount = 1;
             push_template_ci.pDescriptorUpdateEntries = &update_template_entry;
             push_template_ci.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS_KHR;
@@ -6214,15 +6214,17 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
     // Create render passes with VK_VERSION_1_2 struct and vkCreateRenderPass2KHR call
     // Create rp2[0] with Multiview, rp2[1] without Multiview (zero viewMask), rp2[2] with Multiview but another viewMask
     VkRenderPass rp2[3];
-    PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
-        (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCreateRenderPass2KHR");
-    vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[0]);
-    subpass2.viewMask = 0x0u;
-    rpci2.pSubpasses = &subpass2;
-    vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[1]);
-    subpass2.viewMask = 0x1u;
-    rpci2.pSubpasses = &subpass2;
-    vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[2]);
+    if (rp2Supported) {
+        PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
+            (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCreateRenderPass2KHR");
+        vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[0]);
+        subpass2.viewMask = 0x0u;
+        rpci2.pSubpasses = &subpass2;
+        vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[1]);
+        subpass2.viewMask = 0x1u;
+        rpci2.pSubpasses = &subpass2;
+        vkCreateRenderPass2KHR(m_device->device(), &rpci2, nullptr, &rp2[2]);
+    }
 
     // Create image view
     VkImageObj image(m_device);
@@ -6250,10 +6252,13 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
     fbci.height = 128;
     fbci.layers = 1;
 
-    VkFramebuffer fb, fb2;
+    VkFramebuffer fb = VK_NULL_HANDLE;
+    VkFramebuffer fb2 = VK_NULL_HANDLE;
     vk::CreateFramebuffer(m_device->handle(), &fbci, nullptr, &fb);
-    fbci.renderPass = rp2[0];
-    vk::CreateFramebuffer(m_device->handle(), &fbci, nullptr, &fb2);
+    if (rp2Supported) {
+        fbci.renderPass = rp2[0];
+        vk::CreateFramebuffer(m_device->handle(), &fbci, nullptr, &fb2);
+    }
 
     VkRenderPassBeginInfo rp_begin = {};
     rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -6285,27 +6290,29 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
     pipe_2.SetScissor(m_scissors);
     pipe_2.CreateVKPipeline(pipeline_layout.handle(), rp[2]);
 
-    // Create a graphics pipeline with rp2[1]
     VkPipelineObj pipe2_1(m_device);
-    pipe2_1.AddShader(&vs);
-    pipe2_1.AddShader(&fs);
-    pipe2_1.AddDefaultColorAttachment();
-    m_viewports.push_back(viewport);
-    pipe2_1.SetViewport(m_viewports);
-    m_scissors.push_back(rect);
-    pipe2_1.SetScissor(m_scissors);
-    pipe2_1.CreateVKPipeline(pipeline_layout.handle(), rp2[1]);
-
-    // Create a graphics pipeline with rp2[2]
     VkPipelineObj pipe2_2(m_device);
-    pipe2_2.AddShader(&vs);
-    pipe2_2.AddShader(&fs);
-    pipe2_2.AddDefaultColorAttachment();
-    m_viewports.push_back(viewport);
-    pipe2_2.SetViewport(m_viewports);
-    m_scissors.push_back(rect);
-    pipe2_2.SetScissor(m_scissors);
-    pipe2_2.CreateVKPipeline(pipeline_layout.handle(), rp2[2]);
+    if (rp2Supported) {
+        // Create a graphics pipeline with rp2[1]
+        pipe2_1.AddShader(&vs);
+        pipe2_1.AddShader(&fs);
+        pipe2_1.AddDefaultColorAttachment();
+        m_viewports.push_back(viewport);
+        pipe2_1.SetViewport(m_viewports);
+        m_scissors.push_back(rect);
+        pipe2_1.SetScissor(m_scissors);
+        pipe2_1.CreateVKPipeline(pipeline_layout.handle(), rp2[1]);
+
+        // Create a graphics pipeline with rp2[2]
+        pipe2_2.AddShader(&vs);
+        pipe2_2.AddShader(&fs);
+        pipe2_2.AddDefaultColorAttachment();
+        m_viewports.push_back(viewport);
+        pipe2_2.SetViewport(m_viewports);
+        m_scissors.push_back(rect);
+        pipe2_2.SetScissor(m_scissors);
+        pipe2_2.CreateVKPipeline(pipeline_layout.handle(), rp2[2]);
+    }
 
     VkCommandBufferInheritanceInfo cbii = {};
     cbii.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -6340,38 +6347,44 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
     m_commandBuffer->end();
 
     // Begin rp2[0] for VK_VERSION_1_2 test cases
-    cbii.renderPass = rp2[0];
-    rp_begin.renderPass = rp2[0];
-    rp_begin.framebuffer = fb2;
-    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cbbi);
-    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+    if (rp2Supported) {
+        cbii.renderPass = rp2[0];
+        rp_begin.renderPass = rp2[0];
+        rp_begin.framebuffer = fb2;
+        vk::BeginCommandBuffer(m_commandBuffer->handle(), &cbbi);
+        vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Bind rp2[1]'s pipeline to command buffer
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe2_1.handle());
+        // Bind rp2[1]'s pipeline to command buffer
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe2_1.handle());
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
-    // Render triangle (error on Multiview usage should trigger on draw)
-    m_commandBuffer->Draw(3, 1, 0, 0);
-    m_errorMonitor->VerifyFound();
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
+        // Render triangle (error on Multiview usage should trigger on draw)
+        m_commandBuffer->Draw(3, 1, 0, 0);
+        m_errorMonitor->VerifyFound();
 
-    // Bind rp2[2]'s pipeline to command buffer
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe2_2.handle());
+        // Bind rp2[2]'s pipeline to command buffer
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe2_2.handle());
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
-    // Render triangle (error on non-matching viewMasks for Multiview usage should trigger on draw)
-    m_commandBuffer->Draw(3, 1, 0, 0);
-    m_errorMonitor->VerifyFound();
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
+        // Render triangle (error on non-matching viewMasks for Multiview usage should trigger on draw)
+        m_commandBuffer->Draw(3, 1, 0, 0);
+        m_errorMonitor->VerifyFound();
 
-    // End rp2[0]
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
+        // End rp2[0]
+        m_commandBuffer->EndRenderPass();
+        m_commandBuffer->end();
+    }
 
     for (int i = 0; i < 3; i++) {
         vk::DestroyRenderPass(m_device->device(), rp[i], nullptr);
-        vk::DestroyRenderPass(m_device->device(), rp2[i], nullptr);
+        if (rp2Supported) {
+            vk::DestroyRenderPass(m_device->device(), rp2[i], nullptr);
+        }
     }
     vk::DestroyFramebuffer(m_device->device(), fb, nullptr);
-    vk::DestroyFramebuffer(m_device->device(), fb2, nullptr);
+    if (rp2Supported) {
+        vk::DestroyFramebuffer(m_device->device(), fb2, nullptr);
+    }
     vk::DestroyImageView(m_device->device(), iv, nullptr);
 }
 
@@ -6647,7 +6660,7 @@ TEST_F(VkLayerTest, RenderPassMissingAttachment) {
     VkResult err = vk::CreateRenderPass(m_device->device(), &rpci, NULL, &rp);
     ASSERT_VK_SUCCESS(err);
 
-    auto createView = lvl_init_struct<VkImageViewCreateInfo>();
+    auto createView = LvlInitStruct<VkImageViewCreateInfo>();
     createView.image = m_renderTargets[0]->handle();
     createView.viewType = VK_IMAGE_VIEW_TYPE_2D;
     createView.format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -6661,7 +6674,7 @@ TEST_F(VkLayerTest, RenderPassMissingAttachment) {
     VkImageView iv;
     vk::CreateImageView(m_device->handle(), &createView, nullptr, &iv);
 
-    auto fb_info = lvl_init_struct<VkFramebufferCreateInfo>();
+    auto fb_info = LvlInitStruct<VkFramebufferCreateInfo>();
     fb_info.renderPass = rp;
     fb_info.attachmentCount = 1;
     fb_info.pAttachments = &iv;
@@ -6677,7 +6690,7 @@ TEST_F(VkLayerTest, RenderPassMissingAttachment) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassBeginInfo-framebuffer-parameter");
 
-    auto rpbi = lvl_init_struct<VkRenderPassBeginInfo>();
+    auto rpbi = LvlInitStruct<VkRenderPassBeginInfo>();
     rpbi.renderPass = rp;
     rpbi.framebuffer = fb;
     rpbi.renderArea = {{0, 0}, {32, 32}};
@@ -6837,7 +6850,7 @@ TEST_F(VkLayerTest, InvalidPushDescriptorSetLayout) {
 
     VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
 
-    auto ds_layout_ci = lvl_init_struct<VkDescriptorSetLayoutCreateInfo>();
+    auto ds_layout_ci = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>();
     ds_layout_ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
     ds_layout_ci.bindingCount = 1;
     ds_layout_ci.pBindings = &binding;
@@ -6999,7 +7012,7 @@ TEST_F(VkLayerTest, PushDescriptorSetLayoutWithoutExtension) {
 
     VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
 
-    auto ds_layout_ci = lvl_init_struct<VkDescriptorSetLayoutCreateInfo>();
+    auto ds_layout_ci = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>();
     ds_layout_ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
     ds_layout_ci.bindingCount = 1;
     ds_layout_ci.pBindings = &binding;
@@ -7021,10 +7034,10 @@ TEST_F(VkLayerTest, DescriptorIndexingSetLayoutWithoutExtension) {
     TEST_DESCRIPTION("Create an update_after_bind set layout without loading the needed extension.");
     ASSERT_NO_FATAL_FAILURE(Init());
 
-    auto ds_layout_ci = lvl_init_struct<VkDescriptorSetLayoutCreateInfo>();
+    auto ds_layout_ci = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>();
     ds_layout_ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
 
-    std::string error = "Attemped to use VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT in ";
+    std::string error = "Attemped to use VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT in ";
     error = error + "VkDescriptorSetLayoutCreateInfo::flags but its required extension ";
     error = error + VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME;
     error = error + " has not been enabled.";
@@ -7050,8 +7063,8 @@ TEST_F(VkLayerTest, DescriptorIndexingSetLayout) {
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
     // Create a device that enables all supported indexing features except descriptorBindingUniformBufferUpdateAfterBind
-    auto indexing_features = lvl_init_struct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
+    auto indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
 
     indexing_features.descriptorBindingUniformBufferUpdateAfterBind = VK_FALSE;
@@ -7060,12 +7073,12 @@ TEST_F(VkLayerTest, DescriptorIndexingSetLayout) {
 
     std::array<VkDescriptorBindingFlagsEXT, 2> flags = {
         {VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT}};
-    auto flags_create_info = lvl_init_struct<VkDescriptorSetLayoutBindingFlagsCreateInfoEXT>();
+    auto flags_create_info = LvlInitStruct<VkDescriptorSetLayoutBindingFlagsCreateInfoEXT>();
     flags_create_info.bindingCount = (uint32_t)flags.size();
     flags_create_info.pBindingFlags = flags.data();
 
     VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-    auto ds_layout_ci = lvl_init_struct<VkDescriptorSetLayoutCreateInfo>(&flags_create_info);
+    auto ds_layout_ci = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>(&flags_create_info);
     ds_layout_ci.bindingCount = 1;
     ds_layout_ci.pBindings = &binding;
     VkDescriptorSetLayout ds_layout = VK_NULL_HANDLE;
@@ -7095,7 +7108,7 @@ TEST_F(VkLayerTest, DescriptorIndexingSetLayout) {
     ASSERT_VK_SUCCESS(err);
 
     VkDescriptorPoolSize pool_size = {binding.descriptorType, binding.descriptorCount};
-    auto dspci = lvl_init_struct<VkDescriptorPoolCreateInfo>();
+    auto dspci = LvlInitStruct<VkDescriptorPoolCreateInfo>();
     dspci.poolSizeCount = 1;
     dspci.pPoolSizes = &pool_size;
     dspci.maxSets = 1;
@@ -7103,7 +7116,7 @@ TEST_F(VkLayerTest, DescriptorIndexingSetLayout) {
     err = vk::CreateDescriptorPool(m_device->handle(), &dspci, nullptr, &pool);
     ASSERT_VK_SUCCESS(err);
 
-    auto ds_alloc_info = lvl_init_struct<VkDescriptorSetAllocateInfo>();
+    auto ds_alloc_info = LvlInitStruct<VkDescriptorSetAllocateInfo>();
     ds_alloc_info.descriptorPool = pool;
     ds_alloc_info.descriptorSetCount = 1;
     ds_alloc_info.pSetLayouts = &ds_layout;
@@ -7126,20 +7139,20 @@ TEST_F(VkLayerTest, DescriptorIndexingSetLayout) {
         ASSERT_VK_SUCCESS(err);
 
         pool_size = {binding.descriptorType, 3};
-        dspci = lvl_init_struct<VkDescriptorPoolCreateInfo>();
+        dspci = LvlInitStruct<VkDescriptorPoolCreateInfo>();
         dspci.poolSizeCount = 1;
         dspci.pPoolSizes = &pool_size;
         dspci.maxSets = 2;
         err = vk::CreateDescriptorPool(m_device->handle(), &dspci, nullptr, &pool);
         ASSERT_VK_SUCCESS(err);
 
-        auto count_alloc_info = lvl_init_struct<VkDescriptorSetVariableDescriptorCountAllocateInfoEXT>();
+        auto count_alloc_info = LvlInitStruct<VkDescriptorSetVariableDescriptorCountAllocateInfoEXT>();
         count_alloc_info.descriptorSetCount = 1;
         // Set variable count larger than what was in the descriptor binding
         uint32_t variable_count = 2;
         count_alloc_info.pDescriptorCounts = &variable_count;
 
-        ds_alloc_info = lvl_init_struct<VkDescriptorSetAllocateInfo>(&count_alloc_info);
+        ds_alloc_info = LvlInitStruct<VkDescriptorSetAllocateInfo>(&count_alloc_info);
         ds_alloc_info.descriptorPool = pool;
         ds_alloc_info.descriptorSetCount = 1;
         ds_alloc_info.pSetLayouts = &ds_layout;
@@ -7208,8 +7221,8 @@ TEST_F(VkLayerTest, DescriptorIndexingUpdateAfterBind) {
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
     // Create a device that enables all supported indexing features except descriptorBindingUniformBufferUpdateAfterBind
-    auto indexing_features = lvl_init_struct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
+    auto indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
 
     indexing_features.descriptorBindingUniformBufferUpdateAfterBind = VK_FALSE;
@@ -7229,7 +7242,7 @@ TEST_F(VkLayerTest, DescriptorIndexingUpdateAfterBind) {
 
     VkDescriptorBindingFlagsEXT flags[3] = {0, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT,
                                             VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT};
-    auto flags_create_info = lvl_init_struct<VkDescriptorSetLayoutBindingFlagsCreateInfoEXT>();
+    auto flags_create_info = LvlInitStruct<VkDescriptorSetLayoutBindingFlagsCreateInfoEXT>();
     flags_create_info.bindingCount = 3;
     flags_create_info.pBindingFlags = &flags[0];
 
@@ -7239,7 +7252,7 @@ TEST_F(VkLayerTest, DescriptorIndexingUpdateAfterBind) {
         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
     };
-    auto ds_layout_ci = lvl_init_struct<VkDescriptorSetLayoutCreateInfo>(&flags_create_info);
+    auto ds_layout_ci = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>(&flags_create_info);
     ds_layout_ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
     ds_layout_ci.bindingCount = 3;
     ds_layout_ci.pBindings = &binding[0];
@@ -7252,7 +7265,7 @@ TEST_F(VkLayerTest, DescriptorIndexingUpdateAfterBind) {
         {binding[1].descriptorType, binding[1].descriptorCount},
         {binding[2].descriptorType, binding[2].descriptorCount},
     };
-    auto dspci = lvl_init_struct<VkDescriptorPoolCreateInfo>();
+    auto dspci = LvlInitStruct<VkDescriptorPoolCreateInfo>();
     dspci.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
     dspci.poolSizeCount = 3;
     dspci.pPoolSizes = &pool_sizes[0];
@@ -7261,7 +7274,7 @@ TEST_F(VkLayerTest, DescriptorIndexingUpdateAfterBind) {
     err = vk::CreateDescriptorPool(m_device->handle(), &dspci, nullptr, &pool);
     ASSERT_VK_SUCCESS(err);
 
-    auto ds_alloc_info = lvl_init_struct<VkDescriptorSetAllocateInfo>();
+    auto ds_alloc_info = LvlInitStruct<VkDescriptorSetAllocateInfo>();
     ds_alloc_info.descriptorPool = pool;
     ds_alloc_info.descriptorSetCount = 1;
     ds_alloc_info.pSetLayouts = &ds_layout;
@@ -7423,7 +7436,7 @@ TEST_F(VkLayerTest, AllocatePushDescriptorSet) {
     }
 
     VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-    auto ds_layout_ci = lvl_init_struct<VkDescriptorSetLayoutCreateInfo>();
+    auto ds_layout_ci = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>();
     ds_layout_ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
     ds_layout_ci.bindingCount = 1;
     ds_layout_ci.pBindings = &binding;
@@ -7432,7 +7445,7 @@ TEST_F(VkLayerTest, AllocatePushDescriptorSet) {
     ASSERT_VK_SUCCESS(err);
 
     VkDescriptorPoolSize pool_size = {binding.descriptorType, binding.descriptorCount};
-    auto dspci = lvl_init_struct<VkDescriptorPoolCreateInfo>();
+    auto dspci = LvlInitStruct<VkDescriptorPoolCreateInfo>();
     dspci.poolSizeCount = 1;
     dspci.pPoolSizes = &pool_size;
     dspci.maxSets = 1;
@@ -7440,7 +7453,7 @@ TEST_F(VkLayerTest, AllocatePushDescriptorSet) {
     err = vk::CreateDescriptorPool(m_device->handle(), &dspci, nullptr, &pool);
     ASSERT_VK_SUCCESS(err);
 
-    auto ds_alloc_info = lvl_init_struct<VkDescriptorSetAllocateInfo>();
+    auto ds_alloc_info = LvlInitStruct<VkDescriptorSetAllocateInfo>();
     ds_alloc_info.descriptorPool = pool;
     ds_alloc_info.descriptorSetCount = 1;
     ds_alloc_info.pSetLayouts = &ds_layout;
@@ -7611,11 +7624,11 @@ TEST_F(VkLayerTest, InlineUniformBlockEXT) {
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
-    auto descriptor_indexing_features = lvl_init_struct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
+    auto descriptor_indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
     void *pNext = supportsDescriptorIndexing ? &descriptor_indexing_features : nullptr;
     // Create a device that enables inline_uniform_block
-    auto inline_uniform_block_features = lvl_init_struct<VkPhysicalDeviceInlineUniformBlockFeaturesEXT>(pNext);
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&inline_uniform_block_features);
+    auto inline_uniform_block_features = LvlInitStruct<VkPhysicalDeviceInlineUniformBlockFeaturesEXT>(pNext);
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&inline_uniform_block_features);
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
 
     PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
@@ -7623,8 +7636,8 @@ TEST_F(VkLayerTest, InlineUniformBlockEXT) {
     assert(vkGetPhysicalDeviceProperties2KHR != nullptr);
 
     // Get the inline uniform block limits
-    auto inline_uniform_props = lvl_init_struct<VkPhysicalDeviceInlineUniformBlockPropertiesEXT>();
-    auto prop2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&inline_uniform_props);
+    auto inline_uniform_props = LvlInitStruct<VkPhysicalDeviceInlineUniformBlockPropertiesEXT>();
+    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&inline_uniform_props);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &prop2);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
@@ -7826,6 +7839,50 @@ TEST_F(VkLayerTest, InlineUniformBlockEXT) {
     vk::DestroyDescriptorSetLayout(m_device->device(), ds_layout, nullptr);
 }
 
+TEST_F(VkLayerTest, InlineUniformBlockEXTFeature) {
+    TEST_DESCRIPTION("Test VK_EXT_inline_uniform_block features.");
+
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    std::array<const char *, 2> required_device_extensions = {
+        {VK_KHR_MAINTENANCE1_EXTENSION_NAME, VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME}};
+    for (auto device_extension : required_device_extensions) {
+        if (DeviceExtensionSupported(gpu(), nullptr, device_extension)) {
+            m_device_extension_names.push_back(device_extension);
+        } else {
+            printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, device_extension);
+            return;
+        }
+    }
+
+    // Don't enable any features
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    VkDescriptorSetLayoutBinding dslb = {};
+    dslb.binding = 0;
+    dslb.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    dslb.descriptorCount = 1;
+    dslb.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo ds_layout_ci = {};
+    ds_layout_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    ds_layout_ci.pNext = nullptr;
+    ds_layout_ci.flags = 0;
+    ds_layout_ci.bindingCount = 1;
+    ds_layout_ci.pBindings = &dslb;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDescriptorSetLayoutBinding-descriptorType-04604");
+    VkDescriptorSetLayout ds_layout = {};
+    vk::CreateDescriptorSetLayout(m_device->device(), &ds_layout_ci, NULL, &ds_layout);
+    m_errorMonitor->VerifyFound();
+}
+
 TEST_F(VkLayerTest, WrongdstArrayElement) {
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -7972,8 +8029,8 @@ TEST_F(VkLayerTest, NullDescriptorsEnabled) {
 
     m_device_extension_names.push_back(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
 
-    auto robustness2_features = lvl_init_struct<VkPhysicalDeviceRobustness2FeaturesEXT>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&robustness2_features);
+    auto robustness2_features = LvlInitStruct<VkPhysicalDeviceRobustness2FeaturesEXT>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&robustness2_features);
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
@@ -8309,7 +8366,9 @@ TEST_F(VkLayerTest, ImageSubresourceOverlapBetweenAttachmentsAndDescriptorSets) 
         return;
     }
     VkDepthStencilObj ds_image(m_device);
-    ds_image.Init(m_device, 64, 64, ds_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    ds_image.Init(m_device, 64, 64, ds_format,
+                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                  VK_IMAGE_ASPECT_DEPTH_BIT);
     ASSERT_TRUE(ds_image.initialized());
     VkImageView ds_view = *ds_image.BindInfo();
 
@@ -8510,15 +8569,15 @@ TEST_F(VkLayerTest, InvalidFragmentShadingRateFramebufferUsage) {
         (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
     VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties =
-        lvl_init_struct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
-    VkPhysicalDeviceProperties2KHR properties2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
+        LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
+    VkPhysicalDeviceProperties2KHR properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = lvl_init_struct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
-    VkPhysicalDeviceFeatures2KHR features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
+    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
 
     if (fsr_features.attachmentFragmentShadingRate != VK_TRUE) {
@@ -8617,15 +8676,15 @@ TEST_F(VkLayerTest, InvalidFragmentShadingRateFramebufferDimensions) {
         (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
     VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties =
-        lvl_init_struct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
-    VkPhysicalDeviceProperties2KHR properties2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
+        LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
+    VkPhysicalDeviceProperties2KHR properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = lvl_init_struct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
-    VkPhysicalDeviceFeatures2KHR features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
+    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
 
     if (fsr_features.attachmentFragmentShadingRate != VK_TRUE) {
@@ -8779,15 +8838,15 @@ TEST_F(VkLayerTest, InvalidFragmentShadingRateAttachments) {
         (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
     VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties =
-        lvl_init_struct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
-    VkPhysicalDeviceProperties2KHR properties2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
+        LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
+    VkPhysicalDeviceProperties2KHR properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = lvl_init_struct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
-    VkPhysicalDeviceFeatures2KHR features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
+    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
 
     if (fsr_features.attachmentFragmentShadingRate != VK_TRUE) {
@@ -8836,12 +8895,10 @@ TEST_F(VkLayerTest, InvalidFragmentShadingRateAttachments) {
     vkCreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
     m_errorMonitor->VerifyFound();
     rpci.flags = 0;
-
     attach_desc.format =
         FindFormatWithoutFeatures(gpu(), VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
     if (attach_desc.format) {
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                             "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04523");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassCreateInfo2-pAttachments-04586");
         vkCreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
         m_errorMonitor->VerifyFound();
     }

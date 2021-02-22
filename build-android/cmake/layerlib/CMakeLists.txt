@@ -69,10 +69,15 @@ add_library(VkLayer_khronos_validation SHARED
         ${SRC_DIR}/layers/descriptor_sets.cpp
         ${SRC_DIR}/layers/buffer_validation.cpp
         ${SRC_DIR}/layers/shader_validation.cpp
+        ${SRC_DIR}/layers/generated/spirv_validation_helper.cpp
         ${SRC_DIR}/layers/gpu_validation.cpp
         ${SRC_DIR}/layers/gpu_utils.cpp
         ${SRC_DIR}/layers/debug_printf.cpp
         ${SRC_DIR}/layers/best_practices_utils.cpp
+        ${SRC_DIR}/layers/sync_utils.cpp
+        ${SRC_DIR}/layers/sync_vuid_maps.cpp
+        ${SRC_DIR}/layers/core_error_location.cpp
+        ${SRC_DIR}/layers/generated/synchronization_validation_types.cpp
         ${SRC_DIR}/layers/synchronization_validation.cpp
         ${COMMON_DIR}/include/layer_chassis_dispatch.cpp
         ${COMMON_DIR}/include/chassis.cpp

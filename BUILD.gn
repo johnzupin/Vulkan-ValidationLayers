@@ -1,5 +1,5 @@
-# Copyright (C) 2018-2020 The ANGLE Project Authors.
-# Copyright (C) 2019-2020 LunarG, Inc.
+# Copyright (C) 2018-2021 The ANGLE Project Authors.
+# Copyright (C) 2019-2021 LunarG, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,10 +21,7 @@ assert(!is_fuchsia)
 
 vulkan_undefine_configs = []
 if (is_win) {
-  vulkan_undefine_configs += [
-    "//build/config/win:nominmax",
-    "//build/config/win:unicode",
-  ]
+  vulkan_undefine_configs += [ "//build/config/win:unicode" ]
 }
 
 vulkan_gen_dir = "$target_gen_dir/$vulkan_gen_subdir"
@@ -56,8 +53,13 @@ config("vulkan_internal_config") {
     "API_NAME=\"Vulkan\"",
     "VK_ENABLE_BETA_EXTENSIONS",
   ]
+
+  cflags = []
   if (is_clang || !is_win) {
-    cflags = [ "-Wno-unused-function" ]
+    cflags += [ "-Wno-unused-function" ]
+  }
+  if (is_clang && is_mac) {
+    cflags += [ "-Wno-unguarded-availability-new" ]
   }
   if (is_linux) {
     defines += [
@@ -88,14 +90,25 @@ core_validation_sources = [
   "layers/core_validation.h",
   "layers/core_validation_error_enums.h",
   "layers/core_validation_types.h",
+  "layers/core_error_location.cpp",
+  "layers/core_error_location.h",
   "layers/descriptor_sets.cpp",
   "layers/descriptor_sets.h",
   "layers/drawdispatch.cpp",
+  "layers/generated/corechecks_optick_instrumentation.cpp",
+  "layers/generated/corechecks_optick_instrumentation.h",
+  "layers/generated/spirv_validation_helper.cpp",
+  "layers/generated/synchronization_validation_types.cpp",
   "layers/generated/synchronization_validation_types.h",
+  "layers/sync_utils.cpp",
+  "layers/sync_utils.h",
+  "layers/sync_vuid_maps.cpp",
+  "layers/sync_vuid_maps.h",
   "layers/gpu_utils.cpp",
   "layers/gpu_utils.h",
   "layers/gpu_validation.cpp",
   "layers/gpu_validation.h",
+  "layers/gpu_vuids.h",
   "layers/image_layout_map.cpp",
   "layers/image_layout_map.h",
   "layers/range_vector.h",
@@ -155,6 +168,7 @@ chassis_sources = [
   "$vulkan_headers_dir/include/vulkan/vulkan.h",
   "layers/generated/chassis.cpp",
   "layers/generated/chassis.h",
+  "layers/generated/chassis_dispatch_helper.h",
   "layers/generated/layer_chassis_dispatch.cpp",
   "layers/generated/layer_chassis_dispatch.h",
   "layers/generated/vk_dispatch_table_helper.h",
@@ -284,6 +298,7 @@ foreach(layer_info, layers) {
     defines = []
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
+    configs += [ "//build/config/compiler:rtti"]
     configs -= vulkan_undefine_configs
     public_configs = [ ":vulkan_layer_config" ]
     deps = [

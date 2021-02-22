@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -291,9 +291,9 @@ VkRenderFramework::VkRenderFramework()
       m_depth_clear_color(1.0),
       m_stencil_clear_color(0),
       m_depthStencil(NULL) {
-    m_framebuffer_info = lvl_init_struct<VkFramebufferCreateInfo>();
-    m_renderPass_info = lvl_init_struct<VkRenderPassCreateInfo>();
-    m_renderPassBeginInfo = lvl_init_struct<VkRenderPassBeginInfo>();
+    m_framebuffer_info = LvlInitStruct<VkFramebufferCreateInfo>();
+    m_renderPass_info = LvlInitStruct<VkRenderPassCreateInfo>();
+    m_renderPassBeginInfo = LvlInitStruct<VkRenderPassBeginInfo>();
 
     // clear the back buffer to dark grey
     m_clear_color.float32[0] = 0.25f;
@@ -656,6 +656,33 @@ bool VkRenderFramework::InitSurface(float width, float height) {
     return (m_surface == VK_NULL_HANDLE) ? false : true;
 }
 
+// Makes query to get information about swapchain needed to create a valid swapchain object each test creating a swapchain will need
+void VkRenderFramework::InitSwapchainInfo() {
+    const VkPhysicalDevice physicalDevice = gpu();
+
+    vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, m_surface, &m_surface_capabilities);
+
+    uint32_t format_count;
+    vk::GetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, m_surface, &format_count, nullptr);
+    if (format_count != 0) {
+        m_surface_formats.resize(format_count);
+        vk::GetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, m_surface, &format_count, m_surface_formats.data());
+    }
+
+    uint32_t present_mode_count;
+    vk::GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, m_surface, &present_mode_count, nullptr);
+    if (present_mode_count != 0) {
+        m_surface_present_modes.resize(present_mode_count);
+        vk::GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, m_surface, &present_mode_count, m_surface_present_modes.data());
+    }
+
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+    m_surface_composite_alpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+#else
+    m_surface_composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+#endif
+}
+
 bool VkRenderFramework::InitSwapchain(VkImageUsageFlags imageUsage, VkSurfaceTransformFlagBitsKHR preTransform) {
     if (InitSurface()) {
         return InitSwapchain(m_surface, imageUsage, preTransform);
@@ -665,43 +692,22 @@ bool VkRenderFramework::InitSwapchain(VkImageUsageFlags imageUsage, VkSurfaceTra
 
 bool VkRenderFramework::InitSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags imageUsage,
                                       VkSurfaceTransformFlagBitsKHR preTransform) {
-    VkSurfaceCapabilitiesKHR capabilities;
-    vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_device->phy().handle(), surface, &capabilities);
-
-    uint32_t format_count;
-    vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), surface, &format_count, nullptr);
-    vector<VkSurfaceFormatKHR> formats;
-    if (format_count != 0) {
-        formats.resize(format_count);
-        vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), surface, &format_count, formats.data());
-    }
-
-    uint32_t present_mode_count;
-    vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), surface, &present_mode_count, nullptr);
-    vector<VkPresentModeKHR> present_modes;
-    if (present_mode_count != 0) {
-        present_modes.resize(present_mode_count);
-        vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), surface, &present_mode_count, present_modes.data());
-    }
+    InitSwapchainInfo();
 
     VkSwapchainCreateInfoKHR swapchain_create_info = {};
     swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchain_create_info.pNext = 0;
     swapchain_create_info.surface = surface;
-    swapchain_create_info.minImageCount = capabilities.minImageCount;
-    swapchain_create_info.imageFormat = formats[0].format;
-    swapchain_create_info.imageColorSpace = formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {capabilities.minImageExtent.width, capabilities.minImageExtent.height};
+    swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
+    swapchain_create_info.imageFormat = m_surface_formats[0].format;
+    swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = imageUsage;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapchain_create_info.preTransform = preTransform;
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
-#else
-    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-#endif
-    swapchain_create_info.presentMode = present_modes[0];
+    swapchain_create_info.compositeAlpha = m_surface_composite_alpha;
+    swapchain_create_info.presentMode = m_surface_present_modes[0];
     swapchain_create_info.clipped = VK_FALSE;
     swapchain_create_info.oldSwapchain = 0;
 
@@ -1015,6 +1021,8 @@ int VkDescriptorSetObj::AppendSamplerTexture(VkSamplerObj *sampler, VkTextureObj
 }
 
 VkPipelineLayout VkDescriptorSetObj::GetPipelineLayout() const { return m_pipeline_layout.handle(); }
+
+VkDescriptorSetLayout VkDescriptorSetObj::GetDescriptorSetLayout() const { return m_layout.handle(); }
 
 VkDescriptorSet VkDescriptorSetObj::GetDescriptorSetHandle() const {
     if (m_set)
@@ -1685,9 +1693,8 @@ VkConstantBufferObj::VkConstantBufferObj(VkDeviceObj *device, VkDeviceSize alloc
 
 VkPipelineShaderStageCreateInfo const &VkShaderObj::GetStageCreateInfo() const { return m_stage_info; }
 
-VkShaderObj::VkShaderObj(VkDeviceObj *device, const char *shader_code, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                         char const *name, bool debug, VkSpecializationInfo *specInfo, uint32_t spirv_minor_version) {
-    m_device = device;
+VkShaderObj::VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char const *name, VkSpecializationInfo *specInfo)
+    : m_device(device) {
     m_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     m_stage_info.pNext = nullptr;
     m_stage_info.flags = 0;
@@ -1695,40 +1702,78 @@ VkShaderObj::VkShaderObj(VkDeviceObj *device, const char *shader_code, VkShaderS
     m_stage_info.module = VK_NULL_HANDLE;
     m_stage_info.pName = name;
     m_stage_info.pSpecializationInfo = specInfo;
+}
 
-    vector<unsigned int> spv;
-    framework->GLSLtoSPV(&device->props.limits, stage, shader_code, spv, debug, spirv_minor_version);
+VkShaderObj::VkShaderObj(VkDeviceObj *device, const char *shader_code, VkShaderStageFlagBits stage, VkRenderFramework *framework,
+                         char const *name, bool debug, VkSpecializationInfo *specInfo, uint32_t spirv_minor_version)
+    : VkShaderObj(*device, stage, name, specInfo) {
+    InitFromGLSL(*framework, shader_code, debug, spirv_minor_version);
+}
+
+bool VkShaderObj::InitFromGLSL(VkRenderFramework &framework, const char *shader_code, bool debug, uint32_t spirv_minor_version) {
+    std::vector<unsigned int> spv;
+    framework.GLSLtoSPV(&m_device.props.limits, m_stage_info.stage, shader_code, spv, debug, spirv_minor_version);
 
     VkShaderModuleCreateInfo moduleCreateInfo = {};
     moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     moduleCreateInfo.codeSize = spv.size() * sizeof(unsigned int);
     moduleCreateInfo.pCode = spv.data();
 
-    init(*m_device, moduleCreateInfo);
+    init(m_device, moduleCreateInfo);
     m_stage_info.module = handle();
+    return VK_NULL_HANDLE != handle();
+}
+
+// Because shaders are currently validated at pipeline creation time, there are test cases that might fail shader module creation
+// due to supplying an invalid/unknown SPIR-V capability/operation. This is called after VkShaderObj creation when tests are found
+// to crash on a CI device
+VkResult VkShaderObj::InitFromGLSLTry(VkRenderFramework &framework, const char *shader_code, bool debug,
+                                      uint32_t spirv_minor_version) {
+    std::vector<unsigned int> spv;
+    framework.GLSLtoSPV(&m_device.props.limits, m_stage_info.stage, shader_code, spv, debug, spirv_minor_version);
+
+    VkShaderModuleCreateInfo moduleCreateInfo = {};
+    moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    moduleCreateInfo.codeSize = spv.size() * sizeof(unsigned int);
+    moduleCreateInfo.pCode = spv.data();
+
+    const auto result = init_try(m_device, moduleCreateInfo);
+    m_stage_info.module = handle();
+    return result;
 }
 
 VkShaderObj::VkShaderObj(VkDeviceObj *device, const string spv_source, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                         char const *name, VkSpecializationInfo *specInfo) {
-    m_device = device;
-    m_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    m_stage_info.pNext = nullptr;
-    m_stage_info.flags = 0;
-    m_stage_info.stage = stage;
-    m_stage_info.module = VK_NULL_HANDLE;
-    m_stage_info.pName = name;
-    m_stage_info.pSpecializationInfo = specInfo;
+                         char const *name, VkSpecializationInfo *specInfo, const spv_target_env env)
+    : VkShaderObj(*device, stage, name, specInfo) {
+    InitFromASM(*framework, spv_source, env);
+}
 
+bool VkShaderObj::InitFromASM(VkRenderFramework &framework, const std::string &spv_source, const spv_target_env env) {
     vector<unsigned int> spv;
-    framework->ASMtoSPV(SPV_ENV_VULKAN_1_0, 0, spv_source.data(), spv);
+    framework.ASMtoSPV(env, 0, spv_source.data(), spv);
 
     VkShaderModuleCreateInfo moduleCreateInfo = {};
     moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     moduleCreateInfo.codeSize = spv.size() * sizeof(unsigned int);
     moduleCreateInfo.pCode = spv.data();
 
-    init(*m_device, moduleCreateInfo);
+    init(m_device, moduleCreateInfo);
     m_stage_info.module = handle();
+    return VK_NULL_HANDLE != handle();
+}
+
+VkResult VkShaderObj::InitFromASMTry(VkRenderFramework &framework, const std::string &spv_source) {
+    vector<unsigned int> spv;
+    framework.ASMtoSPV(SPV_ENV_VULKAN_1_0, 0, spv_source.data(), spv);
+
+    VkShaderModuleCreateInfo moduleCreateInfo = {};
+    moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    moduleCreateInfo.codeSize = spv.size() * sizeof(unsigned int);
+    moduleCreateInfo.pCode = spv.data();
+
+    const auto result = init_try(m_device, moduleCreateInfo);
+    m_stage_info.module = handle();
+    return result;
 }
 
 VkPipelineLayoutObj::VkPipelineLayoutObj(VkDeviceObj *device, const vector<const VkDescriptorSetLayoutObj *> &descriptor_layouts,
@@ -1963,6 +2008,14 @@ void VkCommandBufferObj::PipelineBarrier(VkPipelineStageFlags src_stages, VkPipe
                            bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
 }
 
+void VkCommandBufferObj::PipelineBarrier2KHR(const VkDependencyInfoKHR *pDependencyInfo) {
+    auto fpCmdPipelineBarrier2KHR =
+        (PFN_vkCmdPipelineBarrier2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdPipelineBarrier2KHR");
+    assert(fpCmdPipelineBarrier2KHR != nullptr);
+
+    fpCmdPipelineBarrier2KHR(handle(), pDependencyInfo);
+}
+
 void VkCommandBufferObj::ClearAllBuffers(const vector<std::unique_ptr<VkImageObj>> &color_objs, VkClearColorValue clear_color,
                                          VkDepthStencilObj *depth_stencil_obj, float depth_clear_value,
                                          uint32_t stencil_clear_value) {
@@ -2129,7 +2182,8 @@ VkImageView *VkDepthStencilObj::BindInfo() { return &m_attachmentBindInfo; }
 
 VkFormat VkDepthStencilObj::Format() const { return this->m_depth_stencil_fmt; }
 
-void VkDepthStencilObj::Init(VkDeviceObj *device, int32_t width, int32_t height, VkFormat format, VkImageUsageFlags usage) {
+void VkDepthStencilObj::Init(VkDeviceObj *device, int32_t width, int32_t height, VkFormat format, VkImageUsageFlags usage,
+                             VkImageAspectFlags aspect) {
     VkImageViewCreateInfo view_info = {};
 
     m_device = device;
@@ -2139,12 +2193,14 @@ void VkDepthStencilObj::Init(VkDeviceObj *device, int32_t width, int32_t height,
     /* create image */
     VkImageObj::Init(width, height, 1, m_depth_stencil_fmt, usage, VK_IMAGE_TILING_OPTIMAL);
 
-    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
-    if (FormatIsDepthOnly(format))
-        aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
-    else if (FormatIsStencilOnly(format))
-        aspect = VK_IMAGE_ASPECT_STENCIL_BIT;
-
+    // allows for overriding by caller
+    if (aspect == 0) {
+        aspect = VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (FormatIsDepthOnly(format))
+            aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+        else if (FormatIsStencilOnly(format))
+            aspect = VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
     SetLayout(aspect, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;

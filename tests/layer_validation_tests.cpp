@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -143,24 +143,24 @@ VkPhysicalDevicePushDescriptorPropertiesKHR GetPushDescriptorProperties(VkInstan
     assert(vkGetPhysicalDeviceProperties2KHR != nullptr);
 
     // Get the push descriptor limits
-    auto push_descriptor_prop = lvl_init_struct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
-    auto prop2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&push_descriptor_prop);
+    auto push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&push_descriptor_prop);
     vkGetPhysicalDeviceProperties2KHR(gpu, &prop2);
     return push_descriptor_prop;
 }
 
 VkPhysicalDeviceSubgroupProperties GetSubgroupProperties(VkInstance instance, VkPhysicalDevice gpu) {
-    auto subgroup_prop = lvl_init_struct<VkPhysicalDeviceSubgroupProperties>();
+    auto subgroup_prop = LvlInitStruct<VkPhysicalDeviceSubgroupProperties>();
 
-    auto prop2 = lvl_init_struct<VkPhysicalDeviceProperties2>(&subgroup_prop);
+    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&subgroup_prop);
     vk::GetPhysicalDeviceProperties2(gpu, &prop2);
     return subgroup_prop;
 }
 
 VkPhysicalDeviceDescriptorIndexingProperties GetDescriptorIndexingProperties(VkInstance instance, VkPhysicalDevice gpu) {
-    auto descriptor_indexing_prop = lvl_init_struct<VkPhysicalDeviceDescriptorIndexingProperties>();
+    auto descriptor_indexing_prop = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingProperties>();
 
-    auto prop2 = lvl_init_struct<VkPhysicalDeviceProperties2>(&descriptor_indexing_prop);
+    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&descriptor_indexing_prop);
     vk::GetPhysicalDeviceProperties2(gpu, &prop2);
     return descriptor_indexing_prop;
 }
@@ -384,6 +384,27 @@ void ValidOwnershipTransfer(ErrorMonitor *monitor, VkCommandBufferObj *cb_from, 
                             const VkBufferMemoryBarrier *buf_barrier, const VkImageMemoryBarrier *img_barrier) {
     ValidOwnershipTransferOp(monitor, cb_from, src_stages, dst_stages, buf_barrier, img_barrier);
     ValidOwnershipTransferOp(monitor, cb_to, src_stages, dst_stages, buf_barrier, img_barrier);
+}
+
+void ValidOwnershipTransferOp(ErrorMonitor *monitor, VkCommandBufferObj *cb, const VkBufferMemoryBarrier2KHR *buf_barrier,
+                              const VkImageMemoryBarrier2KHR *img_barrier) {
+    monitor->ExpectSuccess();
+    cb->begin();
+    auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    dep_info.bufferMemoryBarrierCount = (buf_barrier) ? 1 : 0;
+    dep_info.pBufferMemoryBarriers = buf_barrier;
+    dep_info.imageMemoryBarrierCount = (img_barrier) ? 1 : 0;
+    dep_info.pImageMemoryBarriers = img_barrier;
+    cb->PipelineBarrier2KHR(&dep_info);
+    cb->end();
+    cb->QueueCommandBuffer();  // Implicitly waits
+    monitor->VerifyNotFound();
+}
+
+void ValidOwnershipTransfer(ErrorMonitor *monitor, VkCommandBufferObj *cb_from, VkCommandBufferObj *cb_to,
+                            const VkBufferMemoryBarrier2KHR *buf_barrier, const VkImageMemoryBarrier2KHR *img_barrier) {
+    ValidOwnershipTransferOp(monitor, cb_from, buf_barrier, img_barrier);
+    ValidOwnershipTransferOp(monitor, cb_to, buf_barrier, img_barrier);
 }
 
 VkResult GPDIFPHelper(VkPhysicalDevice dev, const VkImageCreateInfo *ci, VkImageFormatProperties *limits) {
@@ -742,13 +763,27 @@ bool CheckTimelineSemaphoreSupportAndInitState(VkRenderFramework *renderFramewor
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(renderFramework->instance(),
                                                                      "vkGetPhysicalDeviceFeatures2KHR");
-    auto timeline_semaphore_features = lvl_init_struct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&timeline_semaphore_features);
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&timeline_semaphore_features);
     vkGetPhysicalDeviceFeatures2KHR(renderFramework->gpu(), &features2);
     if (!timeline_semaphore_features.timelineSemaphore) {
         return false;
     }
     renderFramework->InitState(nullptr, &features2);
+    return true;
+}
+
+bool CheckSynchronization2SupportAndInitState(VkRenderFramework *framework) {
+    PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
+        (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(framework->instance(),
+                                                                     "vkGetPhysicalDeviceFeatures2");
+    auto sync2_features = lvl_init_struct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
+    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&sync2_features);
+    vkGetPhysicalDeviceFeatures2(framework->gpu(), &features2);
+    if (!sync2_features.synchronization2) {
+        return false;
+    }
+    framework->InitState(nullptr, &features2,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     return true;
 }
 
@@ -993,6 +1028,10 @@ VkLayerTest::VkLayerTest() {
     } else {
         if (InstanceLayerSupported("VK_LAYER_LUNARG_device_profile_api"))
             instance_layers_.push_back("VK_LAYER_LUNARG_device_profile_api");
+    }
+
+    if (InstanceLayerSupported(kSynchronization2LayerName)) {
+        instance_layers_.push_back(kSynchronization2LayerName);
     }
 
     app_info_.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -1598,6 +1637,9 @@ void CreatePipelineHelper::LateBindPipelineInfo() {
     if ((gp_ci_.pDynamicState == nullptr) && IsValidVkStruct(dyn_state_ci_)) {
         gp_ci_.pDynamicState = &dyn_state_ci_;
     }
+    if ((gp_ci_.pDepthStencilState == nullptr) && IsValidVkStruct(ds_ci_)) {
+        gp_ci_.pDepthStencilState = &ds_ci_;
+    }
 }
 
 VkResult CreatePipelineHelper::CreateGraphicsPipeline(bool implicit_destroy, bool do_late_bind) {
@@ -1947,15 +1989,15 @@ namespace chain_util {
 const void *ExtensionChain::Head() const { return head_; }
 }  // namespace chain_util
 
-BarrierQueueFamilyTestHelper::QueueFamilyObjs::~QueueFamilyObjs() {
+BarrierQueueFamilyBase::QueueFamilyObjs::~QueueFamilyObjs() {
     delete command_buffer2;
     delete command_buffer;
     delete command_pool;
     delete queue;
 }
 
-void BarrierQueueFamilyTestHelper::QueueFamilyObjs::Init(VkDeviceObj *device, uint32_t qf_index, VkQueue qf_queue,
-                                                         VkCommandPoolCreateFlags cp_flags) {
+void BarrierQueueFamilyBase::QueueFamilyObjs::Init(VkDeviceObj *device, uint32_t qf_index, VkQueue qf_queue,
+                                                   VkCommandPoolCreateFlags cp_flags) {
     index = qf_index;
     queue = new VkQueueObj(qf_queue, qf_index);
     command_pool = new VkCommandPoolObj(device, qf_index, cp_flags);
@@ -1963,8 +2005,7 @@ void BarrierQueueFamilyTestHelper::QueueFamilyObjs::Init(VkDeviceObj *device, ui
     command_buffer2 = new VkCommandBufferObj(device, command_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, queue);
 };
 
-BarrierQueueFamilyTestHelper::Context::Context(VkLayerTest *test, const std::vector<uint32_t> &queue_family_indices)
-    : layer_test(test) {
+BarrierQueueFamilyBase::Context::Context(VkLayerTest *test, const std::vector<uint32_t> &queue_family_indices) : layer_test(test) {
     if (0 == queue_family_indices.size()) {
         return;  // This is invalid
     }
@@ -1979,15 +2020,12 @@ BarrierQueueFamilyTestHelper::Context::Context(VkLayerTest *test, const std::vec
     Reset();
 }
 
-void BarrierQueueFamilyTestHelper::Context::Reset() {
+void BarrierQueueFamilyBase::Context::Reset() {
     layer_test->DeviceObj()->wait();
     for (auto &qf : queue_families) {
         vk::ResetCommandPool(layer_test->device(), qf.second.command_pool->handle(), 0);
     }
 }
-
-BarrierQueueFamilyTestHelper::BarrierQueueFamilyTestHelper(Context *context)
-    : context_(context), image_(context->layer_test->DeviceObj()) {}
 
 void BarrierQueueFamilyTestHelper::Init(std::vector<uint32_t> *families, bool image_memory, bool buffer_memory) {
     VkDeviceObj *device_obj = context_->layer_test->DeviceObj();
@@ -2006,7 +2044,26 @@ void BarrierQueueFamilyTestHelper::Init(std::vector<uint32_t> *families, bool im
     buffer_barrier_ = buffer_.buffer_memory_barrier(VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0, VK_WHOLE_SIZE);
 }
 
-BarrierQueueFamilyTestHelper::QueueFamilyObjs *BarrierQueueFamilyTestHelper::GetQueueFamilyInfo(Context *context, uint32_t qfi) {
+void Barrier2QueueFamilyTestHelper::Init(std::vector<uint32_t> *families, bool image_memory, bool buffer_memory) {
+    VkDeviceObj *device_obj = context_->layer_test->DeviceObj();
+
+    image_.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0, families,
+                image_memory);
+
+    ASSERT_TRUE(image_.initialized());
+
+    image_barrier_ = image_.image_memory_barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                                 VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, image_.Layout(),
+                                                 image_.Layout(), image_.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1));
+
+    VkMemoryPropertyFlags mem_prop = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    buffer_.init_as_src_and_dst(*device_obj, 256, mem_prop, families, buffer_memory);
+    ASSERT_TRUE(buffer_.initialized());
+    buffer_barrier_ = buffer_.buffer_memory_barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                                    VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0, VK_WHOLE_SIZE);
+}
+
+BarrierQueueFamilyBase::QueueFamilyObjs *BarrierQueueFamilyBase::GetQueueFamilyInfo(Context *context, uint32_t qfi) {
     QueueFamilyObjs *qf;
 
     auto qf_it = context->queue_families.find(qfi);
@@ -2037,6 +2094,52 @@ void BarrierQueueFamilyTestHelper::operator()(std::string img_err, std::string b
         for (int repeat = 0; repeat < (mod == Modifier::DOUBLE_RECORD ? 2 : 1); repeat++) {
             vk::CmdPipelineBarrier(command_buffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 1, &buffer_barrier_, 1, &image_barrier_);
+        }
+        command_buffer->end();
+        command_buffer = qf->command_buffer2;  // Second pass (if any) goes to the secondary command_buffer.
+    }
+
+    if (queue_family_index != kInvalidQueueFamily) {
+        if (mod == Modifier::DOUBLE_COMMAND_BUFFER) {
+            // the Fence resolves to VK_NULL_HANLE... i.e. no fence
+            qf->queue->submit({{qf->command_buffer, qf->command_buffer2}}, vk_testing::Fence(), positive);
+        } else {
+            qf->command_buffer->QueueCommandBuffer(positive);  // Check for success on positive tests only
+        }
+    }
+
+    if (positive) {
+        monitor.VerifyNotFound();
+    } else {
+        monitor.VerifyFound();
+    }
+    context_->Reset();
+};
+
+void Barrier2QueueFamilyTestHelper::operator()(std::string img_err, std::string buf_err, uint32_t src, uint32_t dst, bool positive,
+                                               uint32_t queue_family_index, Modifier mod) {
+    auto &monitor = context_->layer_test->Monitor();
+    if (img_err.length()) monitor.SetDesiredFailureMsg(kErrorBit | kWarningBit, img_err);
+    if (buf_err.length()) monitor.SetDesiredFailureMsg(kErrorBit | kWarningBit, buf_err);
+
+    image_barrier_.srcQueueFamilyIndex = src;
+    image_barrier_.dstQueueFamilyIndex = dst;
+    buffer_barrier_.srcQueueFamilyIndex = src;
+    buffer_barrier_.dstQueueFamilyIndex = dst;
+
+    auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    dep_info.bufferMemoryBarrierCount = 1;
+    dep_info.pBufferMemoryBarriers = &buffer_barrier_;
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &image_barrier_;
+
+    QueueFamilyObjs *qf = GetQueueFamilyInfo(context_, queue_family_index);
+
+    VkCommandBufferObj *command_buffer = qf->command_buffer;
+    for (int cb_repeat = 0; cb_repeat < (mod == Modifier::DOUBLE_COMMAND_BUFFER ? 2 : 1); cb_repeat++) {
+        command_buffer->begin();
+        for (int repeat = 0; repeat < (mod == Modifier::DOUBLE_RECORD ? 2 : 1); repeat++) {
+            command_buffer->PipelineBarrier2KHR(&dep_info);
         }
         command_buffer->end();
         command_buffer = qf->command_buffer2;  // Second pass (if any) goes to the secondary command_buffer.
@@ -2202,13 +2305,13 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     }
 
     VkPhysicalDeviceFeatures2KHR features2 = {};
-    auto indexing_features = lvl_init_struct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
+    auto indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
     if (descriptor_indexing) {
         PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
             (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
         ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
-        features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
+        features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
         vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
 
         if (!indexing_features.runtimeDescriptorArray || !indexing_features.descriptorBindingPartiallyBound ||
@@ -2225,8 +2328,8 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
         (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
 
-    auto ray_tracing_properties = lvl_init_struct<VkPhysicalDeviceRayTracingPropertiesNV>();
-    auto properties2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&ray_tracing_properties);
+    auto ray_tracing_properties = LvlInitStruct<VkPhysicalDeviceRayTracingPropertiesNV>();
+    auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&ray_tracing_properties);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
     if (ray_tracing_properties.maxTriangleCount == 0) {
         printf("%s Did not find required ray tracing properties; skipped.\n", kSkipPrefix);
@@ -3316,6 +3419,23 @@ static void processCommand(struct android_app *app, int32_t cmd) {
     }
 }
 
+static void destroyActivity(struct android_app *app) {
+    ANativeActivity_finish(app->activity);
+
+    // Wait for APP_CMD_DESTROY
+    while (app->destroyRequested == 0) {
+        struct android_poll_source *source = nullptr;
+        int events = 0;
+        int result = ALooper_pollAll(-1, nullptr, &events, reinterpret_cast<void **>(&source));
+
+        if ((result >= 0) && (source)) {
+            source->process(app, source);
+        } else {
+            break;
+        }
+    }
+}
+
 void android_main(struct android_app *app) {
     app->onAppCmd = processCommand;
     app->onInputEvent = processInput;
@@ -3377,7 +3497,8 @@ void android_main(struct android_app *app) {
             fclose(stdout);
             fclose(stderr);
 
-            ANativeActivity_finish(app->activity);
+            destroyActivity(app);
+            raise(SIGTERM);
             return;
         }
     }

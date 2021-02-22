@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -149,8 +149,8 @@ TEST_F(VkPositiveLayerTest, ViewportWithCountNoMultiViewport) {
         return;
     }
 
-    auto extended_dynamic_state_features = lvl_init_struct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&extended_dynamic_state_features);
+    auto extended_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&extended_dynamic_state_features);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     if (!extended_dynamic_state_features.extendedDynamicState) {
         printf("%s Test requires (unsupported) extendedDynamicState, skipping\n", kSkipPrefix);
@@ -1081,6 +1081,8 @@ TEST_F(VkPositiveLayerTest, ThreadSafetyDisplayPlaneObjects) {
     uint32_t prop_count = 0;
     vkGetPhysicalDeviceDisplayPlanePropertiesKHR(gpu(), &prop_count, nullptr);
     if (prop_count != 0) {
+        // only grab first plane property
+        prop_count = 1;
         VkDisplayPlanePropertiesKHR display_plane_props = {};
         // Create a VkDisplayKHR object
         vkGetPhysicalDeviceDisplayPlanePropertiesKHR(gpu(), &prop_count, &display_plane_props);
@@ -1198,6 +1200,61 @@ TEST_F(VkPositiveLayerTest, OwnershipTranfersImage) {
                            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, nullptr, &image_barrier);
 }
 
+TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersImage) {
+    TEST_DESCRIPTION("Valid image ownership transfers that shouldn't create errors");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+        m_device_extension_names.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    } else {
+        printf("%s Synchronization2 not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    if (!CheckSynchronization2SupportAndInitState(this)) {
+        printf("%s Synchronization2 not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    uint32_t no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
+    if (no_gfx == UINT32_MAX) {
+        printf("%s Required queue families not present (non-graphics capable required).\n", kSkipPrefix);
+        return;
+    }
+    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx)[0].get();
+
+    VkCommandPoolObj no_gfx_pool(m_device, no_gfx, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBufferObj no_gfx_cb(m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
+
+    // Create an "exclusive" image owned by the graphics queue.
+    VkImageObj image(m_device);
+    VkFlags image_use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, image_use, VK_IMAGE_TILING_OPTIMAL, 0);
+    ASSERT_TRUE(image.initialized());
+    auto image_subres = image.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+    auto image_barrier = image.image_memory_barrier(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                                                    image.Layout(), image.Layout(), image_subres);
+    image_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
+    image_barrier.dstQueueFamilyIndex = no_gfx;
+
+    ValidOwnershipTransfer(m_errorMonitor, m_commandBuffer, &no_gfx_cb, nullptr, &image_barrier);
+
+    // Change layouts while changing ownership
+    image_barrier.srcQueueFamilyIndex = no_gfx;
+    image_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
+    image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR;
+    image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR;
+    image_barrier.oldLayout = image.Layout();
+    // Make sure the new layout is different from the old
+    if (image_barrier.oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        image_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    } else {
+        image_barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+
+    ValidOwnershipTransfer(m_errorMonitor, &no_gfx_cb, m_commandBuffer, nullptr, &image_barrier);
+}
+
 TEST_F(VkPositiveLayerTest, OwnershipTranfersBuffer) {
     TEST_DESCRIPTION("Valid buffer ownership transfers that shouldn't create errors");
     ASSERT_NO_FATAL_FAILURE(Init(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -1235,6 +1292,59 @@ TEST_F(VkPositiveLayerTest, OwnershipTranfersBuffer) {
     buffer_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
     ValidOwnershipTransfer(m_errorMonitor, &no_gfx_cb, m_commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, &buffer_barrier, nullptr);
+}
+
+TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersBuffer) {
+    TEST_DESCRIPTION("Valid buffer ownership transfers that shouldn't create errors");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+        m_device_extension_names.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    } else {
+        printf("%s Synchronization2 not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    if (!CheckSynchronization2SupportAndInitState(this)) {
+        printf("%s Synchronization2 not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    uint32_t no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
+    if (no_gfx == UINT32_MAX) {
+        printf("%s Required queue families not present (non-graphics capable required).\n", kSkipPrefix);
+        return;
+    }
+    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx)[0].get();
+
+    VkCommandPoolObj no_gfx_pool(m_device, no_gfx, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBufferObj no_gfx_cb(m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
+
+    // Create a buffer
+    const VkDeviceSize buffer_size = 256;
+    uint8_t data[buffer_size] = {0xFF};
+    VkConstantBufferObj buffer(m_device, buffer_size, data, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
+    ASSERT_TRUE(buffer.initialized());
+    auto buffer_barrier =
+        buffer.buffer_memory_barrier(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR, VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR,
+                                     VK_ACCESS_2_NONE_KHR, VK_ACCESS_2_NONE_KHR, 0, VK_WHOLE_SIZE);
+
+    // Let gfx own it.
+    buffer_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
+    buffer_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
+    ValidOwnershipTransferOp(m_errorMonitor, m_commandBuffer, &buffer_barrier, nullptr);
+
+    // Transfer it to non-gfx
+    buffer_barrier.dstQueueFamilyIndex = no_gfx;
+    ValidOwnershipTransfer(m_errorMonitor, m_commandBuffer, &no_gfx_cb, &buffer_barrier, nullptr);
+
+    // Transfer it to gfx
+    buffer_barrier.srcQueueFamilyIndex = no_gfx;
+    buffer_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
+    buffer_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR;
+    buffer_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR;
+
+    ValidOwnershipTransfer(m_errorMonitor, &no_gfx_cb, m_commandBuffer, &buffer_barrier, nullptr);
 }
 
 TEST_F(VkPositiveLayerTest, LayoutFromPresentWithoutAccessMemoryRead) {
@@ -1463,12 +1573,12 @@ TEST_F(VkPositiveLayerTest, ShaderUboStd430Layout) {
     PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
         (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
 
-    auto uniform_buffer_standard_layout_features = lvl_init_struct<VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR>(NULL);
+    auto uniform_buffer_standard_layout_features = LvlInitStruct<VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR>(NULL);
     uniform_buffer_standard_layout_features.uniformBufferStandardLayout = VK_TRUE;
-    auto query_features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&uniform_buffer_standard_layout_features);
+    auto query_features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&uniform_buffer_standard_layout_features);
     vkGetPhysicalDeviceFeatures2(gpu(), &query_features2);
 
-    auto set_features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&uniform_buffer_standard_layout_features);
+    auto set_features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&uniform_buffer_standard_layout_features);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &set_features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -1545,12 +1655,12 @@ TEST_F(VkPositiveLayerTest, ShaderScalarBlockLayout) {
     PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
         (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
 
-    auto scalar_block_features = lvl_init_struct<VkPhysicalDeviceScalarBlockLayoutFeaturesEXT>(NULL);
+    auto scalar_block_features = LvlInitStruct<VkPhysicalDeviceScalarBlockLayoutFeaturesEXT>(NULL);
     scalar_block_features.scalarBlockLayout = VK_TRUE;
-    auto query_features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&scalar_block_features);
+    auto query_features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&scalar_block_features);
     vkGetPhysicalDeviceFeatures2(gpu(), &query_features2);
 
-    auto set_features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&scalar_block_features);
+    auto set_features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&scalar_block_features);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &set_features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -1804,11 +1914,13 @@ TEST_F(VkPositiveLayerTest, CreatePipelineCheckShaderCapabilityExtension2of2) {
     TEST_DESCRIPTION("Create a shader in which uses a non-unique capability ID extension, 2 of 2");
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_NV_VIEWPORT_ARRAY2_EXTENSION_NAME)) {
-        printf("%s Extension %s not supported, skipping this pass. \n", kSkipPrefix, VK_NV_VIEWPORT_ARRAY2_EXTENSION_NAME);
+    // Need to use SPV_EXT_shader_viewport_index_layer
+    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME)) {
+        printf("%s Extension %s not supported, skipping this pass. \n", kSkipPrefix,
+               VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
         return;
     }
-    m_device_extension_names.push_back(VK_NV_VIEWPORT_ARRAY2_EXTENSION_NAME);
+    m_device_extension_names.push_back(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     // These tests require that the device support multiViewport
@@ -2085,7 +2197,7 @@ TEST_F(VkPositiveLayerTest, UncompressedToCompressedImageCopy) {
                      comp_10x10b_40x40t_image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
     // The next copy swaps source and dest s.t. we need an execution barrier on for the prior source and an access barrier for
     // prior dest
-    auto image_barrier = lvl_init_struct<VkImageMemoryBarrier>();
+    auto image_barrier = LvlInitStruct<VkImageMemoryBarrier>();
     image_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     image_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
@@ -3723,7 +3835,7 @@ TEST_F(VkPositiveLayerTest, BindSparseFreeMemory) {
 
     m_commandBuffer->begin();
 
-    auto img_barrier = lvl_init_struct<VkImageMemoryBarrier>();
+    auto img_barrier = LvlInitStruct<VkImageMemoryBarrier>();
     img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     img_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     img_barrier.image = image;
@@ -5903,6 +6015,62 @@ TEST_F(VkPositiveLayerTest, CreateComputePipelineMissingDescriptorUnusedPositive
     m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
+
+    char const *csSource =
+        "#version 450\n"
+        "\n"
+        "layout(local_size_x=1) in;\n"
+        "layout(set=0, binding=0) buffer block { vec4 x; };\n"
+        "void main(){\n"
+        "   // x is not used.\n"
+        "}\n";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.cs_.reset(new VkShaderObj(m_device, csSource, VK_SHADER_STAGE_COMPUTE_BIT, this));
+    pipe.InitState();
+    pipe.CreateComputePipeline();
+
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, CreateComputePipelineFragmentShadingRate) {
+    TEST_DESCRIPTION("Verify that pipeline validation accepts a compute pipeline with fragment shading rate extension enabled");
+    m_errorMonitor->ExpectSuccess();
+
+    // Enable KHR_fragment_shading_rate and all of its required extensions
+    bool fsr_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if (fsr_extensions) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE2_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MULTIVIEW_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    if (fsr_extensions) {
+        m_device_extension_names.push_back(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_MAINTENANCE2_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    } else {
+        printf("%s requires VK_KHR_fragment_shading_rate.\n", kSkipPrefix);
+        return;
+    }
+
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = {};
+    fsr_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    fsr_features.pipelineFragmentShadingRate = true;
+    fsr_features.primitiveFragmentShadingRate = true;
+
+    VkPhysicalDeviceFeatures2 device_features = {};
+    device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    device_features.pNext = &fsr_features;
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &device_features));
 
     char const *csSource =
         "#version 450\n"
@@ -8152,12 +8320,12 @@ TEST_F(VkPositiveLayerTest, Vulkan12Features) {
     }
 
     VkPhysicalDeviceFeatures2 features2 = {};
-    auto bda_features = lvl_init_struct<VkPhysicalDeviceBufferDeviceAddressFeatures>();
+    auto bda_features = LvlInitStruct<VkPhysicalDeviceBufferDeviceAddressFeatures>();
     PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
         (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2 != nullptr);
 
-    features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&bda_features);
+    features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&bda_features);
     vkGetPhysicalDeviceFeatures2(gpu(), &features2);
 
     if (!bda_features.bufferDeviceAddress) {
@@ -8250,7 +8418,7 @@ TEST_F(VkPositiveLayerTest, CmdCopySwapchainImage) {
         return;
     }
 
-    auto image_create_info = lvl_init_struct<VkImageCreateInfo>();
+    auto image_create_info = LvlInitStruct<VkImageCreateInfo>();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
     image_create_info.extent.width = 64;
@@ -8269,18 +8437,18 @@ TEST_F(VkPositiveLayerTest, CmdCopySwapchainImage) {
 
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-    auto image_swapchain_create_info = lvl_init_struct<VkImageSwapchainCreateInfoKHR>();
+    auto image_swapchain_create_info = LvlInitStruct<VkImageSwapchainCreateInfoKHR>();
     image_swapchain_create_info.swapchain = m_swapchain;
     image_create_info.pNext = &image_swapchain_create_info;
 
     VkImage image_from_swapchain;
     vk::CreateImage(device(), &image_create_info, NULL, &image_from_swapchain);
 
-    auto bind_swapchain_info = lvl_init_struct<VkBindImageMemorySwapchainInfoKHR>();
+    auto bind_swapchain_info = LvlInitStruct<VkBindImageMemorySwapchainInfoKHR>();
     bind_swapchain_info.swapchain = m_swapchain;
     bind_swapchain_info.imageIndex = 0;
 
-    auto bind_info = lvl_init_struct<VkBindImageMemoryInfo>(&bind_swapchain_info);
+    auto bind_info = LvlInitStruct<VkBindImageMemoryInfo>(&bind_swapchain_info);
     bind_info.image = image_from_swapchain;
     bind_info.memory = VK_NULL_HANDLE;
     bind_info.memoryOffset = 0;
@@ -8362,7 +8530,7 @@ TEST_F(VkPositiveLayerTest, TransferImageToSwapchainDeviceGroup) {
         return;
     }
 
-    auto image_create_info = lvl_init_struct<VkImageCreateInfo>();
+    auto image_create_info = LvlInitStruct<VkImageCreateInfo>();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
     image_create_info.extent.width = 64;
@@ -8382,25 +8550,25 @@ TEST_F(VkPositiveLayerTest, TransferImageToSwapchainDeviceGroup) {
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     image_create_info.flags = VK_IMAGE_CREATE_ALIAS_BIT;
 
-    auto image_swapchain_create_info = lvl_init_struct<VkImageSwapchainCreateInfoKHR>();
+    auto image_swapchain_create_info = LvlInitStruct<VkImageSwapchainCreateInfoKHR>();
     image_swapchain_create_info.swapchain = m_swapchain;
     image_create_info.pNext = &image_swapchain_create_info;
 
     VkImage peer_image;
     vk::CreateImage(device(), &image_create_info, NULL, &peer_image);
 
-    auto bind_devicegroup_info = lvl_init_struct<VkBindImageMemoryDeviceGroupInfo>();
+    auto bind_devicegroup_info = LvlInitStruct<VkBindImageMemoryDeviceGroupInfo>();
     bind_devicegroup_info.deviceIndexCount = 2;
     std::array<uint32_t, 2> deviceIndices = {{0, 0}};
     bind_devicegroup_info.pDeviceIndices = deviceIndices.data();
     bind_devicegroup_info.splitInstanceBindRegionCount = 0;
     bind_devicegroup_info.pSplitInstanceBindRegions = nullptr;
 
-    auto bind_swapchain_info = lvl_init_struct<VkBindImageMemorySwapchainInfoKHR>(&bind_devicegroup_info);
+    auto bind_swapchain_info = LvlInitStruct<VkBindImageMemorySwapchainInfoKHR>(&bind_devicegroup_info);
     bind_swapchain_info.swapchain = m_swapchain;
     bind_swapchain_info.imageIndex = 0;
 
-    auto bind_info = lvl_init_struct<VkBindImageMemoryInfo>(&bind_swapchain_info);
+    auto bind_info = LvlInitStruct<VkBindImageMemoryInfo>(&bind_swapchain_info);
     bind_info.image = peer_image;
     bind_info.memory = VK_NULL_HANDLE;
     bind_info.memoryOffset = 0;
@@ -8415,7 +8583,7 @@ TEST_F(VkPositiveLayerTest, TransferImageToSwapchainDeviceGroup) {
 
     m_commandBuffer->begin();
 
-    auto img_barrier = lvl_init_struct<VkImageMemoryBarrier>();
+    auto img_barrier = LvlInitStruct<VkImageMemoryBarrier>();
     img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     img_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     img_barrier.image = swapchain_images[0];
@@ -9040,7 +9208,40 @@ TEST_F(VkPositiveLayerTest, SwapchainImageLayout) {
 
 TEST_F(VkPositiveLayerTest, PipelineStageConditionalRendering) {
     TEST_DESCRIPTION("Create renderpass and CmdPipelineBarrier with VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT");
-    ASSERT_NO_FATAL_FAILURE(Init());
+
+    m_errorMonitor->ExpectSuccess();
+    if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME)) {
+        printf("%s Did not find required device extension %s; skipped.\n", kSkipPrefix,
+               VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
+        return;
+    }
+    m_device_extension_names.push_back(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
+
+    auto vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME)) {
+        printf("%s requires %s.\n", kSkipPrefix, VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
+        return;
+    }
+    auto cond_rendering_feature = LvlInitStruct<VkPhysicalDeviceConditionalRenderingFeaturesEXT>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&cond_rendering_feature);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    if (cond_rendering_feature.conditionalRendering == VK_FALSE) {
+        printf("%s conditionalRendering feature not supported.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     // A renderpass with a single subpass that declared a self-dependency
     VkAttachmentDescription attach[] = {
@@ -9185,8 +9386,8 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt8) {
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
-    auto float16int8_features = lvl_init_struct<VkPhysicalDeviceFloat16Int8FeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&float16int8_features);
+    auto float16int8_features = LvlInitStruct<VkPhysicalDeviceFloat16Int8FeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&float16int8_features);
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
     if (float16int8_features.shaderInt8 == VK_FALSE) {
         printf("%s shaderInt8 feature not supported.\n", kSkipPrefix);
@@ -9261,7 +9462,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt16) {
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
     if (features2.features.shaderInt16 == VK_FALSE) {
         printf("%s shaderInt16 feature not supported.\n", kSkipPrefix);
@@ -9390,7 +9591,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt64) {
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
     vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
     if (features2.features.shaderInt64 == VK_FALSE) {
         printf("%s shaderInt64 feature not supported.\n", kSkipPrefix);
@@ -9565,7 +9766,7 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
     vk::CreateRenderPass(m_device->device(), &renderPassCreateInfo, NULL, &renderPass);
 
     // Create an image to use in an imageless framebuffer.  Bind swapchain memory to it.
-    auto image_swapchain_create_info = lvl_init_struct<VkImageSwapchainCreateInfoKHR>();
+    auto image_swapchain_create_info = LvlInitStruct<VkImageSwapchainCreateInfoKHR>();
     image_swapchain_create_info.swapchain = m_swapchain;
     VkImageCreateInfo imageCreateInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                                          &image_swapchain_create_info,
@@ -9586,18 +9787,18 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
     VkImageObj image(m_device);
     image.init_no_mem(*m_device, imageCreateInfo);
 
-    auto bind_devicegroup_info = lvl_init_struct<VkBindImageMemoryDeviceGroupInfo>();
+    auto bind_devicegroup_info = LvlInitStruct<VkBindImageMemoryDeviceGroupInfo>();
     bind_devicegroup_info.deviceIndexCount = 2;
     std::array<uint32_t, 2> deviceIndices = {{0, 0}};
     bind_devicegroup_info.pDeviceIndices = deviceIndices.data();
     bind_devicegroup_info.splitInstanceBindRegionCount = 0;
     bind_devicegroup_info.pSplitInstanceBindRegions = nullptr;
 
-    auto bind_swapchain_info = lvl_init_struct<VkBindImageMemorySwapchainInfoKHR>(&bind_devicegroup_info);
+    auto bind_swapchain_info = LvlInitStruct<VkBindImageMemorySwapchainInfoKHR>(&bind_devicegroup_info);
     bind_swapchain_info.swapchain = m_swapchain;
     bind_swapchain_info.imageIndex = 0;
 
-    auto bind_info = lvl_init_struct<VkBindImageMemoryInfo>(&bind_swapchain_info);
+    auto bind_info = LvlInitStruct<VkBindImageMemoryInfo>(&bind_swapchain_info);
     bind_info.image = image.image();
     bind_info.memory = VK_NULL_HANDLE;
     bind_info.memoryOffset = 0;
@@ -9865,90 +10066,436 @@ TEST_F(VkPositiveLayerTest, SwapchainExclusiveModeQueueFamilyPropertiesReference
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
+    if (!InitSurface()) {
+        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
+        return;
+    }
+    InitSwapchainInfo();
 
-    if (InitSurface()) {
-        auto surface = m_surface;
-        VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    auto surface = m_surface;
+    VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
-        VkSurfaceCapabilitiesKHR capabilities;
-        vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_device->phy().handle(), surface, &capabilities);
+    VkSwapchainCreateInfoKHR swapchain_create_info = {};
+    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchain_create_info.pNext = 0;
+    swapchain_create_info.surface = surface;
+    swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
+    swapchain_create_info.imageFormat = m_surface_formats[0].format;
+    swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageArrayLayers = 1;
+    swapchain_create_info.imageUsage = imageUsage;
+    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_create_info.preTransform = preTransform;
+    swapchain_create_info.compositeAlpha = m_surface_composite_alpha;
+    swapchain_create_info.presentMode = m_surface_present_modes[0];
+    swapchain_create_info.clipped = VK_FALSE;
+    swapchain_create_info.oldSwapchain = 0;
 
-        uint32_t format_count;
-        vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), surface, &format_count, nullptr);
-        vector<VkSurfaceFormatKHR> formats;
-        if (format_count != 0) {
-            formats.resize(format_count);
-            vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), surface, &format_count, formats.data());
+    swapchain_create_info.queueFamilyIndexCount = 4094967295;  // This SHOULD get ignored
+    uint32_t bogus_int = 99;
+    swapchain_create_info.pQueueFamilyIndices = &bogus_int;
+
+    vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+
+    // Create another device, create another swapchain, and use this one for oldSwapchain
+    // It is legal to include an 'oldSwapchain' object that is from a different device
+    const float q_priority[] = {1.0f};
+    VkDeviceQueueCreateInfo queue_ci = {};
+    queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_ci.queueFamilyIndex = 0;
+    queue_ci.queueCount = 1;
+    queue_ci.pQueuePriorities = q_priority;
+
+    VkDeviceCreateInfo device_ci = {};
+    device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_ci.queueCreateInfoCount = 1;
+    device_ci.pQueueCreateInfos = &queue_ci;
+    device_ci.ppEnabledExtensionNames = m_device_extension_names.data();
+    device_ci.enabledExtensionCount = m_device_extension_names.size();
+
+    VkDevice test_device;
+    vk::CreateDevice(gpu(), &device_ci, nullptr, &test_device);
+
+    swapchain_create_info.oldSwapchain = m_swapchain;
+    VkSwapchainKHR new_swapchain;
+    vk::CreateSwapchainKHR(test_device, &swapchain_create_info, nullptr, &new_swapchain);
+
+    vk::DestroySwapchainKHR(test_device, new_swapchain, nullptr);
+
+    vk::DestroyDevice(test_device, nullptr);
+
+    if (m_surface != VK_NULL_HANDLE) {
+        vk::DestroySurfaceKHR(instance(), m_surface, nullptr);
+        m_surface = VK_NULL_HANDLE;
+    }
+}
+
+TEST_F(VkPositiveLayerTest, Storage8and16bit) {
+    TEST_DESCRIPTION("Test VK_KHR_8bit_storage and VK_KHR_16bit_storage");
+    m_errorMonitor->ExpectSuccess();
+
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    bool support_8_bit = DeviceExtensionSupported(gpu(), nullptr, VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+    bool support_16_bit = DeviceExtensionSupported(gpu(), nullptr, VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
+
+    if ((support_8_bit == false) && (support_16_bit == false)) {
+        printf("%s Extension %s and %s are not supported.\n", kSkipPrefix, VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
+               VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
+        return;
+    } else if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == false) {
+        // need for all shaders, but not guaranteed from driver to have support
+        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
+        return;
+    } else {
+        m_device_extension_names.push_back(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME);
+        if (support_8_bit == true) {
+            m_device_extension_names.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+        }
+        if (support_16_bit == true) {
+            m_device_extension_names.push_back(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
+        }
+    }
+
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+
+    auto storage_8_bit_features = LvlInitStruct<VkPhysicalDevice8BitStorageFeaturesKHR>();
+    auto storage_16_bit_features = LvlInitStruct<VkPhysicalDevice16BitStorageFeaturesKHR>(&storage_8_bit_features);
+    auto float_16_int_8_features = LvlInitStruct<VkPhysicalDeviceShaderFloat16Int8Features>(&storage_16_bit_features);
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&float_16_int_8_features);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    // 8 bit int test (not 8 bit float support in Vulkan)
+    if ((support_8_bit == true) && (float_16_int_8_features.shaderInt8 == VK_TRUE)) {
+        if (storage_8_bit_features.storageBuffer8BitAccess == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_8bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_int8: enable\n"
+                "layout(set = 0, binding = 0) buffer SSBO { int8_t x; } data;\n"
+                "void main(){\n"
+                "   int8_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
         }
 
-        uint32_t present_mode_count;
-        vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), surface, &present_mode_count, nullptr);
-        vector<VkPresentModeKHR> present_modes;
-        if (present_mode_count != 0) {
-            present_modes.resize(present_mode_count);
-            vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), surface, &present_mode_count,
-                                                        present_modes.data());
+        if (storage_8_bit_features.uniformAndStorageBuffer8BitAccess == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_8bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_int8: enable\n"
+                "layout(set = 0, binding = 0) uniform UBO { int8_t x; } data;\n"
+                "void main(){\n"
+                "   int8_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
         }
 
-        VkSwapchainCreateInfoKHR swapchain_create_info = {};
-        swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        swapchain_create_info.pNext = 0;
-        swapchain_create_info.surface = surface;
-        swapchain_create_info.minImageCount = capabilities.minImageCount;
-        swapchain_create_info.imageFormat = formats[0].format;
-        swapchain_create_info.imageColorSpace = formats[0].colorSpace;
-        swapchain_create_info.imageExtent = {capabilities.minImageExtent.width, capabilities.minImageExtent.height};
-        swapchain_create_info.imageArrayLayers = 1;
-        swapchain_create_info.imageUsage = imageUsage;
-        swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        swapchain_create_info.preTransform = preTransform;
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-        swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
-#else
-        swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-#endif
-        swapchain_create_info.presentMode = present_modes[0];
-        swapchain_create_info.clipped = VK_FALSE;
-        swapchain_create_info.oldSwapchain = 0;
+        if (storage_8_bit_features.storagePushConstant8 == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_8bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_int8: enable\n"
+                "layout(push_constant) uniform PushConstant { int8_t x; } data;\n"
+                "void main(){\n"
+                "   int8_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
 
-        swapchain_create_info.queueFamilyIndexCount = 4094967295;  // This SHOULD get ignored
-        uint32_t bogus_int = 99;
-        swapchain_create_info.pQueueFamilyIndices = &bogus_int;
-
-        vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
-
-        // Create another device, create another swapchain, and use this one for oldSwapchain
-        // It is legal to include an 'oldSwapchain' object that is from a different device
-        const float q_priority[] = {1.0f};
-        VkDeviceQueueCreateInfo queue_ci = {};
-        queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queue_ci.queueFamilyIndex = 0;
-        queue_ci.queueCount = 1;
-        queue_ci.pQueuePriorities = q_priority;
-
-        VkDeviceCreateInfo device_ci = {};
-        device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        device_ci.queueCreateInfoCount = 1;
-        device_ci.pQueueCreateInfos = &queue_ci;
-        device_ci.ppEnabledExtensionNames = m_device_extension_names.data();
-        device_ci.enabledExtensionCount = m_device_extension_names.size();
-
-        VkDevice test_device;
-        vk::CreateDevice(gpu(), &device_ci, nullptr, &test_device);
-
-        swapchain_create_info.oldSwapchain = m_swapchain;
-        VkSwapchainKHR new_swapchain;
-        vk::CreateSwapchainKHR(test_device, &swapchain_create_info, nullptr, &new_swapchain);
-
-        vk::DestroySwapchainKHR(test_device, new_swapchain, nullptr);
-
-        vk::DestroyDevice(test_device, nullptr);
-
-        if (m_surface != VK_NULL_HANDLE) {
-            vk::DestroySurfaceKHR(instance(), m_surface, nullptr);
-            m_surface = VK_NULL_HANDLE;
+            VkPushConstantRange push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 4};
+            VkPipelineLayoutCreateInfo pipeline_layout_info{
+                VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, &push_constant_range};
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.pipeline_layout_ci_ = pipeline_layout_info;
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
         }
+    }
+
+    // 16 bit float tests
+    if ((support_16_bit == true) && (float_16_int_8_features.shaderFloat16 == VK_TRUE)) {
+        if (storage_16_bit_features.storageBuffer16BitAccess == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_float16: enable\n"
+                "layout(set = 0, binding = 0) buffer SSBO { float16_t x; } data;\n"
+                "void main(){\n"
+                "   float16_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        }
+
+        if (storage_16_bit_features.uniformAndStorageBuffer16BitAccess == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_float16: enable\n"
+                "layout(set = 0, binding = 0) uniform UBO { float16_t x; } data;\n"
+                "void main(){\n"
+                "   float16_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        }
+
+        if (storage_16_bit_features.storagePushConstant16 == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_float16: enable\n"
+                "layout(push_constant) uniform PushConstant { float16_t x; } data;\n"
+                "void main(){\n"
+                "   float16_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            VkPushConstantRange push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 4};
+            VkPipelineLayoutCreateInfo pipeline_layout_info{
+                VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, &push_constant_range};
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.pipeline_layout_ci_ = pipeline_layout_info;
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        }
+
+        if (storage_16_bit_features.storageInputOutput16 == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_float16: enable\n"
+                "layout(location = 0) out float16_t outData;\n"
+                "void main(){\n"
+                "   outData = float16_t(1);\n"
+                "   gl_Position = vec4(0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            // Need to match in/out
+            char const *fsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_float16: enable\n"
+                "layout(location = 0) in float16_t x;\n"
+                "layout(location = 0) out vec4 uFragColor;\n"
+                "void main(){\n"
+                "   uFragColor = vec4(0,1,0,1);\n"
+                "}\n";
+            VkShaderObj fs(m_device, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        }
+    }
+
+    // 16 bit int tests
+    if ((support_16_bit == true) && (features2.features.shaderInt16 == VK_TRUE)) {
+        if (storage_16_bit_features.storageBuffer16BitAccess == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_int16: enable\n"
+                "layout(set = 0, binding = 0) buffer SSBO { int16_t x; } data;\n"
+                "void main(){\n"
+                "   int16_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        }
+
+        if (storage_16_bit_features.uniformAndStorageBuffer16BitAccess == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_int16: enable\n"
+                "layout(set = 0, binding = 0) uniform UBO { int16_t x; } data;\n"
+                "void main(){\n"
+                "   int16_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        }
+
+        if (storage_16_bit_features.storagePushConstant16 == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_int16: enable\n"
+                "layout(push_constant) uniform PushConstant { int16_t x; } data;\n"
+                "void main(){\n"
+                "   int16_t a = data.x + data.x;\n"
+                "   gl_Position = vec4(float(a) * 0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            VkPushConstantRange push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 4};
+            VkPipelineLayoutCreateInfo pipeline_layout_info{
+                VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, &push_constant_range};
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+                helper.pipeline_layout_ci_ = pipeline_layout_info;
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        }
+
+        if (storage_16_bit_features.storageInputOutput16 == VK_TRUE) {
+            char const *vsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_int16: enable\n"
+                "layout(location = 0) out int16_t outData;\n"
+                "void main(){\n"
+                "   outData = int16_t(1);\n"
+                "   gl_Position = vec4(0.0);\n"
+                "}\n";
+            VkShaderObj vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+            // Need to match in/out
+            char const *fsSource =
+                "#version 450\n"
+                "#extension GL_EXT_shader_16bit_storage: enable\n"
+                "#extension GL_EXT_shader_explicit_arithmetic_types_int16: enable\n"
+                "layout(location = 0) flat in int16_t x;\n"
+                "layout(location = 0) out vec4 uFragColor;\n"
+                "void main(){\n"
+                "   uFragColor = vec4(0,1,0,1);\n"
+                "}\n";
+            VkShaderObj fs(m_device, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+            const auto set_info = [&](CreatePipelineHelper &helper) {
+                helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            };
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        }
+    }
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, ReadShaderClock) {
+    TEST_DESCRIPTION("Test VK_KHR_shader_clock");
+
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SHADER_CLOCK_EXTENSION_NAME)) {
+        m_device_extension_names.push_back(VK_KHR_SHADER_CLOCK_EXTENSION_NAME);
+    } else {
+        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_SHADER_CLOCK_EXTENSION_NAME);
+        return;
+    }
+
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+
+    auto shader_clock_features = LvlInitStruct<VkPhysicalDeviceShaderClockFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&shader_clock_features);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+
+    if ((shader_clock_features.shaderDeviceClock == VK_FALSE) && (shader_clock_features.shaderSubgroupClock == VK_FALSE)) {
+        // shaderSubgroupClock should be supported, but extra check
+        printf("%s no support for shaderDeviceClock or shaderSubgroupClock.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    // Device scope using GL_EXT_shader_realtime_clock
+    char const *vsSourceDevice =
+        "#version 450\n"
+        "#extension GL_EXT_shader_realtime_clock: enable\n"
+        "void main(){\n"
+        "   uvec2 a = clockRealtime2x32EXT();\n"
+        "   gl_Position = vec4(float(a.x) * 0.0);\n"
+        "}\n";
+    VkShaderObj vs_device(m_device, vsSourceDevice, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+    // Subgroup scope using ARB_shader_clock
+    char const *vsSourceScope =
+        "#version 450\n"
+        "#extension GL_ARB_shader_clock: enable\n"
+        "void main(){\n"
+        "   uvec2 a = clock2x32ARB();\n"
+        "   gl_Position = vec4(float(a.x) * 0.0);\n"
+        "}\n";
+    VkShaderObj vs_subgroup(m_device, vsSourceScope, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+    if (shader_clock_features.shaderDeviceClock == VK_TRUE) {
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {vs_device.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    if (shader_clock_features.shaderSubgroupClock == VK_TRUE) {
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {vs_subgroup.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
     }
 }
 
@@ -10470,3 +11017,100 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExportImage) {
 }
 
 #endif  // AHB_VALIDATION_SUPPORT
+
+TEST_F(VkPositiveLayerTest, PhysicalStorageBuffer) {
+    TEST_DESCRIPTION("Reproduces Github issue #2467 and effectively #2465 as well.");
+
+    app_info_.apiVersion = VK_API_VERSION_1_2;
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    std::vector<const char *> exts = {
+        "VK_EXT_buffer_device_address",  // TODO (ncesario) why does VK_KHR_buffer_device_address not work?
+        "VK_KHR_shader_non_semantic_info",
+        "VK_EXT_scalar_block_layout",
+    };
+    for (const auto *ext : exts) {
+        if (DeviceExtensionSupported(gpu(), nullptr, ext)) {
+            m_device_extension_names.push_back(ext);
+        } else {
+            printf("%s %s extension not supported. Skipping.", kSkipPrefix, ext);
+            return;
+        }
+    }
+
+    auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&features12);
+    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+
+    if (VK_TRUE != features12.bufferDeviceAddress) {
+        printf("%s VkPhysicalDeviceVulkan12Features::bufferDeviceAddress not supported and is required. Skipping.", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    const char *vertex_source = R"glsl(
+#version 450
+
+#extension GL_EXT_buffer_reference : enable
+#extension GL_EXT_scalar_block_layout : enable
+
+layout(buffer_reference, buffer_reference_align=16, scalar) readonly buffer VectorBuffer {
+  vec3 v;
+};
+
+layout(push_constant, scalar) uniform pc {
+  VectorBuffer vb;
+} pcs;
+
+void main() {
+    gl_Position = vec4(pcs.vb.v, 1.0);
+}
+        )glsl";
+    const VkShaderObj vs(m_device, vertex_source, VK_SHADER_STAGE_VERTEX_BIT, this);
+
+    const char *fragment_source = R"glsl(
+#version 450
+
+#extension GL_EXT_buffer_reference : enable
+#extension GL_EXT_scalar_block_layout : enable
+
+layout(buffer_reference, buffer_reference_align=16, scalar) readonly buffer VectorBuffer {
+  vec3 v;
+};
+
+layout(push_constant, scalar) uniform pushConstants {
+  layout(offset=8) VectorBuffer vb;
+} pcs;
+
+layout(location=0) out vec4 o;
+void main() {
+    o = vec4(pcs.vb.v, 1.0);
+}
+    )glsl";
+    const VkShaderObj fs(m_device, fragment_source, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+    m_errorMonitor->ExpectSuccess();
+
+    std::array<VkPushConstantRange, 2> push_ranges;
+    push_ranges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    push_ranges[0].size = sizeof(uint64_t);
+    push_ranges[0].offset = 0;
+    push_ranges[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    push_ranges[1].size = sizeof(uint64_t);
+    push_ranges[1].offset = sizeof(uint64_t);
+
+    VkPipelineLayoutCreateInfo const pipeline_layout_info{
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr,           0, 0, nullptr,
+        static_cast<uint32_t>(push_ranges.size()),     push_ranges.data()};
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipe.pipeline_layout_ci_ = pipeline_layout_info;
+    pipe.InitState();
+    m_errorMonitor->ExpectSuccess();
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyNotFound();
+}

@@ -219,6 +219,9 @@ specific requirements for configuring and building these components.
   execution.
 - Please use `update_deps.py --help` to list additional options and read the
   internal documentation in `update_deps.py` for further information.
+- You can build against different C++ standards by setting the
+  `VVL_CPP_STANDARD` option at cmake generation time. Current code is writtent
+  to compile under C++11.
 
 ### Generated source code
 
@@ -247,7 +250,7 @@ on/off options currently supported by this repository:
 | BUILD_LAYER_SUPPORT_FILES | All | `OFF` | Controls whether or not layer support files are installed. |
 | BUILD_TESTS | All | `???` | Controls whether or not the validation layer tests are built. The default is `ON` when the Google Test repository is cloned into the `external` directory.  Otherwise, the default is `OFF`. |
 | INSTALL_TESTS | All | `OFF` | Controls whether or not the validation layer tests are installed. This option is only available when a copy of Google Test is available
-| BUILD_WERROR | Linux | `ON` | Controls whether or not to treat compiler warnings as errors. |
+| BUILD_WERROR | All | `ON` | Controls whether or not to treat compiler warnings as errors. |
 | BUILD_WSI_XCB_SUPPORT | Linux | `ON` | Build the components with XCB support. |
 | BUILD_WSI_XLIB_SUPPORT | Linux | `ON` | Build the components with Xlib support. |
 | BUILD_WSI_WAYLAND_SUPPORT | Linux | `ON` | Build the components with Wayland support. |

@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (C) 2015-2020 Google Inc.
+/* Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (C) 2015-2021 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -106,22 +106,22 @@ struct COMMAND_POOL_STATE : public BASE_NODE {
 
 // Utilities for barriers and the commmand pool
 template <typename Barrier>
-static bool IsTransferOp(const Barrier *barrier) {
-    return barrier->srcQueueFamilyIndex != barrier->dstQueueFamilyIndex;
+static bool IsTransferOp(const Barrier &barrier) {
+    return barrier.srcQueueFamilyIndex != barrier.dstQueueFamilyIndex;
 }
 
 template <typename Barrier, bool assume_transfer = false>
-static bool TempIsReleaseOp(const COMMAND_POOL_STATE *pool, const Barrier *barrier) {
-    return (assume_transfer || IsTransferOp(barrier)) && (pool->queueFamilyIndex == barrier->srcQueueFamilyIndex);
+static bool TempIsReleaseOp(const COMMAND_POOL_STATE *pool, const Barrier &barrier) {
+    return (assume_transfer || IsTransferOp(barrier)) && (pool->queueFamilyIndex == barrier.srcQueueFamilyIndex);
 }
 
 template <typename Barrier, bool assume_transfer = false>
-static bool IsAcquireOp(const COMMAND_POOL_STATE *pool, const Barrier *barrier) {
-    return (assume_transfer || IsTransferOp(barrier)) && (pool->queueFamilyIndex == barrier->dstQueueFamilyIndex);
+static bool IsAcquireOp(const COMMAND_POOL_STATE *pool, const Barrier &barrier) {
+    return (assume_transfer || IsTransferOp(barrier)) && (pool->queueFamilyIndex == barrier.dstQueueFamilyIndex);
 }
 
 static inline bool QueueFamilyIsExternal(const uint32_t queue_family_index) {
-    return (queue_family_index == VK_QUEUE_FAMILY_EXTERNAL_KHR) || (queue_family_index == VK_QUEUE_FAMILY_FOREIGN_EXT);
+    return (queue_family_index == VK_QUEUE_FAMILY_EXTERNAL) || (queue_family_index == VK_QUEUE_FAMILY_FOREIGN_EXT);
 }
 
 static inline bool QueueFamilyIsIgnored(uint32_t queue_family_index) { return queue_family_index == VK_QUEUE_FAMILY_IGNORED; }
@@ -393,7 +393,7 @@ class BUFFER_STATE : public BINDABLE {
             sparse = true;
         }
 
-        auto *externalMemoryInfo = lvl_find_in_chain<VkExternalMemoryBufferCreateInfo>(pCreateInfo->pNext);
+        auto *externalMemoryInfo = LvlFindInChain<VkExternalMemoryBufferCreateInfo>(pCreateInfo->pNext);
         if (externalMemoryInfo) {
             external_memory_handle = externalMemoryInfo->handleTypes;
         }
@@ -427,9 +427,9 @@ struct SAMPLER_STATE : public BASE_NODE {
     VkSamplerCustomBorderColorCreateInfoEXT customCreateInfo = {};
 
     SAMPLER_STATE(const VkSampler *ps, const VkSamplerCreateInfo *pci) : sampler(*ps), createInfo(*pci) {
-        auto *conversionInfo = lvl_find_in_chain<VkSamplerYcbcrConversionInfo>(pci->pNext);
+        auto *conversionInfo = LvlFindInChain<VkSamplerYcbcrConversionInfo>(pci->pNext);
         if (conversionInfo) samplerConversion = conversionInfo->conversion;
-        auto cbci = lvl_find_in_chain<VkSamplerCustomBorderColorCreateInfoEXT>(pci->pNext);
+        auto cbci = LvlFindInChain<VkSamplerCustomBorderColorCreateInfoEXT>(pci->pNext);
         if (cbci) customCreateInfo = *cbci;
     }
 };
@@ -534,6 +534,7 @@ class IMAGE_VIEW_STATE : public BASE_NODE {
     VkSamplerYcbcrConversion samplerConversion;  // Handle of the ycbcr sampler conversion the image was created with, if any
     VkFilterCubicImageViewImageFormatPropertiesEXT filter_cubic_props;
     VkFormatFeatureFlags format_features;
+    VkImageUsageFlags inherited_usage;  // from spec #resources-image-inherited-usage
     std::shared_ptr<IMAGE_STATE> image_state;
     IMAGE_VIEW_STATE(const std::shared_ptr<IMAGE_STATE> &image_state, VkImageView iv, const VkImageViewCreateInfo *ci);
     IMAGE_VIEW_STATE(const IMAGE_VIEW_STATE &rh_obj) = delete;
@@ -547,11 +548,11 @@ class ACCELERATION_STRUCTURE_STATE : public BINDABLE {
     safe_VkAccelerationStructureCreateInfoNV create_infoNV = {};
     safe_VkAccelerationStructureInfoNV build_info;
     bool memory_requirements_checked = false;
-    VkMemoryRequirements2KHR memory_requirements;
+    VkMemoryRequirements2 memory_requirements;
     bool build_scratch_memory_requirements_checked = false;
-    VkMemoryRequirements2KHR build_scratch_memory_requirements;
+    VkMemoryRequirements2 build_scratch_memory_requirements;
     bool update_scratch_memory_requirements_checked = false;
-    VkMemoryRequirements2KHR update_scratch_memory_requirements;
+    VkMemoryRequirements2 update_scratch_memory_requirements;
     bool built = false;
     uint64_t opaque_handle = 0;
     const VkAllocationCallbacks *allocator = NULL;
@@ -572,11 +573,11 @@ class ACCELERATION_STRUCTURE_STATE_KHR : public BINDABLE {
     safe_VkAccelerationStructureCreateInfoKHR create_infoKHR = {};
     safe_VkAccelerationStructureBuildGeometryInfoKHR build_info_khr;
     bool memory_requirements_checked = false;
-    VkMemoryRequirements2KHR memory_requirements;
+    VkMemoryRequirements2 memory_requirements;
     bool build_scratch_memory_requirements_checked = false;
-    VkMemoryRequirements2KHR build_scratch_memory_requirements;
+    VkMemoryRequirements2 build_scratch_memory_requirements;
     bool update_scratch_memory_requirements_checked = false;
-    VkMemoryRequirements2KHR update_scratch_memory_requirements;
+    VkMemoryRequirements2 update_scratch_memory_requirements;
     bool built = false;
     uint64_t opaque_handle = 0;
     const VkAllocationCallbacks *allocator = NULL;
@@ -607,8 +608,6 @@ class SWAPCHAIN_NODE : public BASE_NODE {
     SWAPCHAIN_NODE(const VkSwapchainCreateInfoKHR *pCreateInfo, VkSwapchainKHR swapchain)
         : createInfo(pCreateInfo), swapchain(swapchain) {}
 };
-
-extern bool ImageLayoutMatches(const VkImageAspectFlags aspect_mask, VkImageLayout a, VkImageLayout b);
 
 // Store the DAG.
 struct DAGNode {
@@ -657,7 +656,7 @@ struct RENDER_PASS_STATE : public BASE_NODE {
     std::vector<SubpassDependencyGraphNode> subpass_dependencies;
     std::vector<std::vector<AttachmentTransition>> subpass_transitions;
 
-    RENDER_PASS_STATE(VkRenderPassCreateInfo2KHR const *pCreateInfo) : createInfo(pCreateInfo) {}
+    RENDER_PASS_STATE(VkRenderPassCreateInfo2 const *pCreateInfo) : createInfo(pCreateInfo) {}
     RENDER_PASS_STATE(VkRenderPassCreateInfo const *pCreateInfo) {
         ConvertVkRenderPassCreateInfoToV2KHR(*pCreateInfo, &createInfo);
     }
@@ -974,6 +973,8 @@ class PIPELINE_STATE : public BASE_NODE {
     std::vector<VkDeviceSize> vertex_attribute_alignments_;
     std::unordered_map<uint32_t, uint32_t> vertex_binding_to_index_map_;
     std::vector<VkPipelineColorBlendAttachmentState> attachments;
+    std::unordered_set<VkShaderStageFlagBits, hash_util::HashCombiner::WrappedHash<VkShaderStageFlagBits>>
+        wrote_primitive_shading_rate;
     bool blendConstantsEnabled;  // Blend constants enabled for any attachments
     std::shared_ptr<const PIPELINE_LAYOUT_STATE> pipeline_layout;
     VkPrimitiveTopology topology_at_rasterizer;
@@ -1035,7 +1036,8 @@ class PIPELINE_STATE : public BASE_NODE {
             return graphicsPipelineCI.flags;
         else if (computePipelineCI.sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO)
             return computePipelineCI.flags;
-        else if (raytracingPipelineCI.sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV)
+        else if ((raytracingPipelineCI.sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV) ||
+                 (raytracingPipelineCI.sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR))
             return raytracingPipelineCI.flags;
         else
             return 0;
@@ -1109,20 +1111,16 @@ static inline bool CompatForSet(uint32_t set, const PIPELINE_LAYOUT_STATE *a, co
 // Types to store queue family ownership (QFO) Transfers
 
 // Common to image and buffer memory barriers
-template <typename Handle, typename Barrier>
+template <typename Handle>
 struct QFOTransferBarrierBase {
     using HandleType = Handle;
-    using BarrierType = Barrier;
-    struct Tag {};
-    HandleType handle = VK_NULL_HANDLE;
+    Handle handle = VK_NULL_HANDLE;
     uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
     QFOTransferBarrierBase() = default;
-    QFOTransferBarrierBase(const BarrierType &barrier, const HandleType &resource_handle)
-        : handle(resource_handle),
-          srcQueueFamilyIndex(barrier.srcQueueFamilyIndex),
-          dstQueueFamilyIndex(barrier.dstQueueFamilyIndex) {}
+    QFOTransferBarrierBase(const Handle &resource_handle, uint32_t src, uint32_t dst)
+        : handle(resource_handle), srcQueueFamilyIndex(src), dstQueueFamilyIndex(dst) {}
 
     hash_util::HashCombiner base_hash_combiner() const {
         hash_util::HashCombiner hc;
@@ -1130,26 +1128,27 @@ struct QFOTransferBarrierBase {
         return hc;
     }
 
-    bool operator==(const QFOTransferBarrierBase &rhs) const {
+    bool operator==(const QFOTransferBarrierBase<Handle> &rhs) const {
         return (srcQueueFamilyIndex == rhs.srcQueueFamilyIndex) && (dstQueueFamilyIndex == rhs.dstQueueFamilyIndex) &&
                (handle == rhs.handle);
     }
 };
 
-template <typename Barrier>
-struct QFOTransferBarrier {};
-
 // Image barrier specific implementation
-template <>
-struct QFOTransferBarrier<VkImageMemoryBarrier> : public QFOTransferBarrierBase<VkImage, VkImageMemoryBarrier> {
-    using BaseType = QFOTransferBarrierBase<VkImage, VkImageMemoryBarrier>;
+struct QFOImageTransferBarrier : public QFOTransferBarrierBase<VkImage> {
+    using BaseType = QFOTransferBarrierBase<VkImage>;
     VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageLayout newLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageSubresourceRange subresourceRange;
 
-    QFOTransferBarrier() = default;
-    QFOTransferBarrier(const BarrierType &barrier)
-        : BaseType(barrier, barrier.image),
+    QFOImageTransferBarrier() = default;
+    QFOImageTransferBarrier(const VkImageMemoryBarrier &barrier)
+        : BaseType(barrier.image, barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex),
+          oldLayout(barrier.oldLayout),
+          newLayout(barrier.newLayout),
+          subresourceRange(barrier.subresourceRange) {}
+    QFOImageTransferBarrier(const VkImageMemoryBarrier2KHR &barrier)
+        : BaseType(barrier.image, barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex),
           oldLayout(barrier.oldLayout),
           newLayout(barrier.newLayout),
           subresourceRange(barrier.subresourceRange) {}
@@ -1159,7 +1158,7 @@ struct QFOTransferBarrier<VkImageMemoryBarrier> : public QFOTransferBarrierBase<
         auto hc = base_hash_combiner() << subresourceRange;
         return hc.Value();
     }
-    bool operator==(const QFOTransferBarrier<BarrierType> &rhs) const {
+    bool operator==(const QFOImageTransferBarrier &rhs) const {
         // Ignoring layout w.r.t. equality. See comment in hash above.
         return (static_cast<BaseType>(*this) == static_cast<BaseType>(rhs)) && (subresourceRange == rhs.subresourceRange);
     }
@@ -1177,18 +1176,24 @@ struct QFOTransferBarrier<VkImageMemoryBarrier> : public QFOTransferBarrierBase<
 };
 
 // Buffer barrier specific implementation
-template <>
-struct QFOTransferBarrier<VkBufferMemoryBarrier> : public QFOTransferBarrierBase<VkBuffer, VkBufferMemoryBarrier> {
-    using BaseType = QFOTransferBarrierBase<VkBuffer, VkBufferMemoryBarrier>;
+struct QFOBufferTransferBarrier : public QFOTransferBarrierBase<VkBuffer> {
+    using BaseType = QFOTransferBarrierBase<VkBuffer>;
     VkDeviceSize offset = 0;
     VkDeviceSize size = 0;
-    QFOTransferBarrier(const VkBufferMemoryBarrier &barrier)
-        : BaseType(barrier, barrier.buffer), offset(barrier.offset), size(barrier.size) {}
+    QFOBufferTransferBarrier() = default;
+    QFOBufferTransferBarrier(const VkBufferMemoryBarrier &barrier)
+        : BaseType(barrier.buffer, barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex),
+          offset(barrier.offset),
+          size(barrier.size) {}
+    QFOBufferTransferBarrier(const VkBufferMemoryBarrier2KHR &barrier)
+        : BaseType(barrier.buffer, barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex),
+          offset(barrier.offset),
+          size(barrier.size) {}
     size_t hash() const {
         auto hc = base_hash_combiner() << offset << size;
         return hc.Value();
     }
-    bool operator==(const QFOTransferBarrier<BarrierType> &rhs) const {
+    bool operator==(const QFOBufferTransferBarrier &rhs) const {
         return (static_cast<BaseType>(*this) == static_cast<BaseType>(rhs)) && (offset == rhs.offset) && (size == rhs.size);
     }
     static const char *BarrierName() { return "VkBufferMemoryBarrier"; }
@@ -1203,16 +1208,17 @@ struct QFOTransferBarrier<VkBufferMemoryBarrier> : public QFOTransferBarrierBase
     static const char *ErrMsgMissingQFOReleaseInSubmit() { return "UNASSIGNED-VkBufferMemoryBarrier-buffer-00004"; }
 };
 
-template <typename Barrier>
-using QFOTransferBarrierHash = hash_util::HasHashMember<QFOTransferBarrier<Barrier>>;
+template <typename TransferBarrier>
+using QFOTransferBarrierHash = hash_util::HasHashMember<TransferBarrier>;
 
 // Command buffers store the set of barriers recorded
-template <typename Barrier>
-using QFOTransferBarrierSet = std::unordered_set<QFOTransferBarrier<Barrier>, QFOTransferBarrierHash<Barrier>>;
-template <typename Barrier>
+template <typename TransferBarrier>
+using QFOTransferBarrierSet = std::unordered_set<TransferBarrier, QFOTransferBarrierHash<TransferBarrier>>;
+
+template <typename TransferBarrier>
 struct QFOTransferBarrierSets {
-    QFOTransferBarrierSet<Barrier> release;
-    QFOTransferBarrierSet<Barrier> acquire;
+    QFOTransferBarrierSet<TransferBarrier> release;
+    QFOTransferBarrierSet<TransferBarrier> acquire;
     void Reset() {
         acquire.clear();
         release.clear();
@@ -1220,22 +1226,23 @@ struct QFOTransferBarrierSets {
 };
 
 // The layer_data stores the map of pending release barriers
-template <typename Barrier>
+template <typename TransferBarrier>
 using GlobalQFOTransferBarrierMap =
-    std::unordered_map<typename QFOTransferBarrier<Barrier>::HandleType, QFOTransferBarrierSet<Barrier>>;
+    std::unordered_map<typename TransferBarrier::HandleType, QFOTransferBarrierSet<TransferBarrier>>;
 
 // Submit queue uses the Scoreboard to track all release/acquire operations in a batch.
-template <typename Barrier>
+template <typename TransferBarrier>
 using QFOTransferCBScoreboard =
-    std::unordered_map<QFOTransferBarrier<Barrier>, const CMD_BUFFER_STATE *, QFOTransferBarrierHash<Barrier>>;
-template <typename Barrier>
+    std::unordered_map<TransferBarrier, const CMD_BUFFER_STATE *, QFOTransferBarrierHash<TransferBarrier>>;
+
+template <typename TransferBarrier>
 struct QFOTransferCBScoreboards {
-    QFOTransferCBScoreboard<Barrier> acquire;
-    QFOTransferCBScoreboard<Barrier> release;
+    QFOTransferCBScoreboard<TransferBarrier> acquire;
+    QFOTransferCBScoreboard<TransferBarrier> release;
 };
 
 typedef std::map<QueryObject, QueryState> QueryMap;
-typedef std::unordered_map<VkEvent, VkPipelineStageFlags> EventToStageMap;
+typedef std::unordered_map<VkEvent, VkPipelineStageFlags2KHR> EventToStageMap;
 typedef ImageSubresourceLayoutMap::LayoutMap GlobalImageLayoutRangeMap;
 typedef std::unordered_map<VkImage, std::unique_ptr<GlobalImageLayoutRangeMap>> GlobalImageLayoutMap;
 typedef std::unordered_map<VkImage, std::unique_ptr<ImageSubresourceLayoutMap>> CommandBufferImageLayoutMap;
@@ -1318,7 +1325,7 @@ struct CMD_BUFFER_STATE : public BASE_NODE {
     safe_VkRenderPassBeginInfo activeRenderPassBeginInfo;
     std::shared_ptr<RENDER_PASS_STATE> activeRenderPass;
     std::shared_ptr<std::vector<SUBPASS_INFO>> active_subpasses;
-    std::shared_ptr<std::vector<IMAGE_VIEW_STATE*>> active_attachments;
+    std::shared_ptr<std::vector<IMAGE_VIEW_STATE *>> active_attachments;
     std::set<std::shared_ptr<IMAGE_VIEW_STATE>> attachments_view_states;
 
     VkSubpassContents activeSubpassContents;
@@ -1331,8 +1338,8 @@ struct CMD_BUFFER_STATE : public BASE_NODE {
     std::vector<VulkanTypedHandle> object_bindings;
     std::vector<VulkanTypedHandle> broken_bindings;
 
-    QFOTransferBarrierSets<VkBufferMemoryBarrier> qfo_transfer_buffer_barriers;
-    QFOTransferBarrierSets<VkImageMemoryBarrier> qfo_transfer_image_barriers;
+    QFOTransferBarrierSets<QFOBufferTransferBarrier> qfo_transfer_buffer_barriers;
+    QFOTransferBarrierSets<QFOImageTransferBarrier> qfo_transfer_image_barriers;
 
     std::unordered_set<VkEvent> waitedEvents;
     std::vector<VkEvent> writeEventsBeforeWait;
@@ -1380,26 +1387,26 @@ struct CMD_BUFFER_STATE : public BASE_NODE {
     bool transform_feedback_active{false};
 };
 
-static inline const QFOTransferBarrierSets<VkImageMemoryBarrier> &GetQFOBarrierSets(
-    const CMD_BUFFER_STATE *cb, const QFOTransferBarrier<VkImageMemoryBarrier>::Tag &type_tag) {
+static inline const QFOTransferBarrierSets<QFOImageTransferBarrier> &GetQFOBarrierSets(const CMD_BUFFER_STATE *cb,
+                                                                                       const QFOImageTransferBarrier &type_tag) {
     return cb->qfo_transfer_image_barriers;
 }
-static inline const QFOTransferBarrierSets<VkBufferMemoryBarrier> &GetQFOBarrierSets(
-    const CMD_BUFFER_STATE *cb, const QFOTransferBarrier<VkBufferMemoryBarrier>::Tag &type_tag) {
+static inline const QFOTransferBarrierSets<QFOBufferTransferBarrier> &GetQFOBarrierSets(const CMD_BUFFER_STATE *cb,
+                                                                                        const QFOBufferTransferBarrier &type_tag) {
     return cb->qfo_transfer_buffer_barriers;
 }
-static inline QFOTransferBarrierSets<VkImageMemoryBarrier> &GetQFOBarrierSets(
-    CMD_BUFFER_STATE *cb, const QFOTransferBarrier<VkImageMemoryBarrier>::Tag &type_tag) {
+static inline QFOTransferBarrierSets<QFOImageTransferBarrier> &GetQFOBarrierSets(CMD_BUFFER_STATE *cb,
+                                                                                 const QFOImageTransferBarrier &type_tag) {
     return cb->qfo_transfer_image_barriers;
 }
-static inline QFOTransferBarrierSets<VkBufferMemoryBarrier> &GetQFOBarrierSets(
-    CMD_BUFFER_STATE *cb, const QFOTransferBarrier<VkBufferMemoryBarrier>::Tag &type_tag) {
+static inline QFOTransferBarrierSets<QFOBufferTransferBarrier> &GetQFOBarrierSets(CMD_BUFFER_STATE *cb,
+                                                                                  const QFOBufferTransferBarrier &type_tag) {
     return cb->qfo_transfer_buffer_barriers;
 }
 
 struct SEMAPHORE_WAIT {
     VkSemaphore semaphore;
-    VkSemaphoreTypeKHR type;
+    VkSemaphoreType type;
     VkQueue queue;
     uint64_t payload;
     uint64_t seq;
@@ -1412,15 +1419,8 @@ struct SEMAPHORE_SIGNAL {
 };
 
 struct CB_SUBMISSION {
-    CB_SUBMISSION(std::vector<VkCommandBuffer> const &cbs, std::vector<SEMAPHORE_WAIT> const &waitSemaphores,
-                  std::vector<SEMAPHORE_SIGNAL> const &signalSemaphores, std::vector<VkSemaphore> const &externalSemaphores,
-                  VkFence fence, uint32_t perf_submit_pass)
-        : cbs(cbs),
-          waitSemaphores(waitSemaphores),
-          signalSemaphores(signalSemaphores),
-          externalSemaphores(externalSemaphores),
-          fence(fence),
-          perf_submit_pass(perf_submit_pass) {}
+    CB_SUBMISSION()
+        : cbs(), waitSemaphores(), signalSemaphores(), externalSemaphores(), fence(VK_NULL_HANDLE), perf_submit_pass(0) {}
 
     std::vector<VkCommandBuffer> cbs;
     std::vector<SEMAPHORE_WAIT> waitSemaphores;
@@ -1493,6 +1493,16 @@ struct DeviceFeatures {
     VkPhysicalDeviceMultiviewFeatures multiview_features;
     VkPhysicalDevicePortabilitySubsetFeaturesKHR portability_subset_features;
     VkPhysicalDeviceFragmentShadingRateFeaturesKHR fragment_shading_rate_features;
+    VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL shader_integer_functions2_features;
+    VkPhysicalDeviceShaderSMBuiltinsFeaturesNV shader_sm_builtins_feature;
+    VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shader_atomic_float_feature;
+    VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT shader_image_atomic_int64_feature;
+    VkPhysicalDeviceShaderClockFeaturesKHR shader_clock_feature;
+    VkPhysicalDeviceConditionalRenderingFeaturesEXT conditional_rendering;
+    VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR workgroup_memory_explicit_layout_features;
+    VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2_features;
+    // If a new feature is added here that involves a SPIR-V capability add also in spirv_validation_generator.py
+    // This is known by checking the table in the spec or if the struct is in a <spirvcapability> in vk.xml
 };
 
 enum RenderPassCreateVersion { RENDER_PASS_VERSION_1 = 0, RENDER_PASS_VERSION_2 = 1 };
