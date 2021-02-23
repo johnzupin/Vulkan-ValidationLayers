@@ -1,3 +1,385 @@
+vulkan-validationlayers (1.2.170.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ sfricke-samsung ]
+  * layers: Add missing arrayLength VUs
+  * tests: Add implicit arrayLength test
+  * layers: Generate SPIR-V Capability/Extension
+
+  [ Mark Lobodzinski ]
+  * corechecks: Fix clang-format errors in buffer_validation.cpp
+
+  [ David McFarland ]
+  * layers: Check 3D ImageView base layer relative to baseMipLevel
+  * tests: Add 3D image view subresource range tests
+
+  [ Karl Schultz ]
+  * optick: Add Optick instrumentation to CoreChecks
+
+  [ Nathaniel Cesario ]
+  * layers: Portability Shader Validation
+
+  [ Karl Schultz ]
+  * build: Generate PDB file for Release builds
+
+  [ Tony-LunarG ]
+  * docs: Buffer robustness disables buffer oob checks
+
+  [ sfricke-samsung ]
+  * tests: Properly end android APK
+  * tests: Fix InvalidMemoryMapping
+  * tests: Fix DrawWithPipelineIncompatibleWithRenderPassMultiview
+  * tests: Fix use of invalid descriptor update
+
+  [ Jeremy Gebben ]
+  * syncval: Restrict async hazard checking to subpass accesses
+  * syncval: Split tagging in VkCmdNextSubpass()
+  * tests: Separate syncval tests into a their own file
+  * tests: Add a syncval subpass dependency test
+
+  [ Nathaniel Cesario ]
+  * layers: Github issue 2390
+
+  [ sfricke-samsung ]
+  * layers: Fix OpGroupNonUniformPartitionNV check
+
+  [ John Zupin ]
+  * Docs: update closed issue links to the corresponding project links
+
+  [ Nathaniel Cesario ]
+  * layers: Fix Github issue 2391
+
+  [ sfricke-samsung ]
+  * layers: Add VK_KHR_display VUs
+  * tests: Add VK_KHR_display VUs
+
+  [ Mark Lobodzinski ]
+  * layers: Account for quoted layer settings file strings
+
+  [ sfricke-samsung ]
+  * layers: Core alias name in stateless_validation
+
+  [ Nathaniel Cesario ]
+  * refactor: Use clang-tidy on layers/*.cpp files
+
+  [ Tony-LunarG ]
+  * layers: Add check for VUID 00427
+  * tests: Add test for VUID 00427
+
+  [ Mike Schuchardt ]
+  * layers: Replace promoted aliases in layer source
+
+  [ Tony-LunarG ]
+  * layers: Handle invalid pInheritanceInfo
+
+  [ sourav parmar ]
+  * layers: Fix acessmask to pipeline state mapping
+
+  [ Mark Lobodzinski ]
+  * actions: Add Github Actions Travis equivalents
+  * actions: Cleanup, use try/except for error handling
+
+  [ sfricke-samsung ]
+  * layers: Add missing core features tracking
+
+  [ John Zulauf ]
+  * syncval: Add framework stubs for events support
+  * layers: Convert event state tracking to shared_ptr
+  * syncval: Refactor addresstype
+  * syncval: Add base address to range generation
+  * syncval: Refactor BarrierOps functors for events
+  * syncval: Events framework and initial support
+  * tests: Add events to test framework
+  * tests: Add syncval tests for Event Set/Wait
+  * tests: Add Event commands race condition tests
+  * tests: Add subcase testing WaitEvent in Subpass
+  * syncval: Comment cleanup for Events functionality
+  * syncval: Comment cleanup for Events functionality
+  * syncval: Reduce not supported in sync val to info
+
+  [ Mark Lobodzinski ]
+  * practices: Update doc for ARM vendor enable
+
+  [ Tony-LunarG ]
+  * docs: Add buffer OOB checking to GPU-AV doc
+
+  [ John Zulauf ]
+  * syncval: Update usage docs to reflect syncval v1.0
+
+  [ Jamie Madill ]
+  * layers: Add missing 'override' keyword
+
+  [ Ali Emre Gülcü ]
+  * layers: Fixed a typo on VUID 03066/00848 error message
+
+  [ Mark Lobodzinski ]
+  * ci: Removed .travis.yml file
+  * docs: Update contrib doc for new CI
+  * scripts: Remove travis refs from code format script
+  * docs: Update readme with Github Actions repo status badge
+  * readme: Add Nate as repo owner
+  * corechecks: Add 2701 dispatch vuids
+
+  [ Nathaniel Cesario ]
+  * build: Fix format check on PRs
+
+  [ sourav parmar ]
+  * layers: Fix crash due to NULL pNext
+
+  [ Jeremy Gebben ]
+  * syncval: Consolidate ResourceUsageTag.index bit twiddling
+
+  [ Mark Lobodzinski ]
+  * corechecks: Add pStrides dynamic state check
+  * tests: Add a couple of tests for pStrides dynamic state checks
+  * scripts: Remove unused vars in helper generator
+  * scripts: Add compliant typemap helper functions
+  * scripts: Updated codegen with new typemap helper names
+  * layers: Changed lvl_find_in_chain function names
+  * layers: Rename lvl_init_struct function
+  * tests: Rename lvl_init_struct function
+
+  [ Marijn Suijten ]
+  * layers: Mark querypool slots as ENDED in CmdWriteASProperties
+  * layers: Check if queries are reset in CmdWriteASPropertiesKHR
+
+  [ sfricke-samsung ]
+  * layers: Clarify wording for linear sampling VU
+  * tests: Extra tests for 04553
+
+  [ John Zulauf ]
+  * syncval: Convert last_reads to small_vector
+
+  [ Jeremy Gebben ]
+  * syncval: Clean up execution scope data
+
+  [ Nathaniel Cesario ]
+  * layers: Update best practices CALL_STATE
+
+  [ Shannon McPherson ]
+  * build: Update copyright information
+  * build: Update known-good files for 1.2.165 SDK
+  * build: Resolve VUID inconsistencies for 1.2.165
+
+  [ Mark Lobodzinski ]
+  * layers: Updated FormatIsUnorm list with missing formats
+
+  [ Jamie Madill ]
+  * gn: Add "nominmax" config back to the Windows build
+
+  [ sfricke-samsung ]
+  * tests: Add 8bit and 16bit storage
+
+  [ Nathaniel Cesario ]
+  * layers: Refactor VkShaderObj
+
+  [ Tony-LunarG ]
+  * layers: Validation for vkCmdDrawIndirectCount-Offset-00407
+  * tests: Add test for VUID 00407
+
+  [ sfricke-samsung ]
+  * layers: Add VK_KHR_shader_clock support
+  * tests: Add VK_KHR_shader_clock support
+
+  [ Mark Lobodzinski ]
+  * docs: Fix sync typos
+  * docs: Update sync doc copyright msg
+
+  [ Tony-LunarG ]
+  * gpu: Fix features path when no app features
+
+  [ Mark Lobodzinski ]
+  * stateless: Fixed VU 3432 due to a spec change
+  * corechecks: Added missing CmdWriteAccelStructsPropsNV checks
+
+  [ Nathaniel Cesario ]
+  * layers: Remove device calls from CreateInstance
+
+  [ sfricke-samsung ]
+  * layers: Add VUID 04712 and 04713
+
+  [ Richard S. Wright Jr ]
+  * Typos: missing periods
+
+  [ Mark Lobodzinski ]
+  * docs: Clarify layer settings file usage warning in Sync
+
+  [ Gareth Webb ]
+  * practices: Add new BP VUID for common errors
+
+  [ Tony-LunarG ]
+  * printf: Fix CreateRayTracingPipelinesKHR
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.166 SDK
+  * build: Resolve VUID inconsistencies for 1.2.166
+
+  [ Nathaniel Cesario ]
+  * build: Fix Github actions CI
+
+  [ sfricke-samsung ]
+  * layers: Remove some unassigned labels
+  * layers: Add VUID 04476
+  * tests: Add VUID 04476
+  * layers: Label vkQueuePresentKHR VU
+  * layers: Fix inlineUniformBlock test
+  * tests: Fix inlineUniformBlock test
+  * layers: Label 02701 for viewport/scissor
+  * layers: Add privateData feature VUID
+  * tests: Add privateData feature VUID
+  * layers: Add inherited usage edge case
+  * tests: Add inherited usage edge case
+  * layers: Label VK_EXT_depth_range_unrestricted VUs
+
+  [ Tony-LunarG ]
+  * layers: Fix validation with fragment shading rate enabled
+  * tests: Pos test for comp pipeline w fragment shading rate
+
+  [ sfricke-samsung ]
+  * layers: Improve Image copy/create message
+  * layers: Add VUID 04132 and 04133
+  * tests: Add VUID 04132 and 04133
+  * layers: Add graphics pipeline flags VU
+  * tests: Add graphics pipeline flags VU
+  * layers: Add bufferOffset for copy bufferimage
+  * tests: Add bufferOffset for copy bufferimage
+  * layers: Add VK_EXT_depth_range_unrestricted
+  * tests: Add VK_EXT_depth_range_unrestricted
+
+  [ Tony-LunarG ]
+  * tests: Use spirv version 4 in RayTracingPipelineShaderGroupsKHR
+
+  [ Shahbaz Youssefi ]
+  * layers: Add XFB stage as valid for XFB_COUNTER_READ access
+
+  [ Tony-LunarG ]
+  * layers: Add VUIDs 01546 & 01547
+  * tests: Add test for VUIDs 01546 & 01547
+  * layers: Fix framebuffer width/height compares
+  * tests: Create framebuffer with view with mipLevel
+
+  [ Nathaniel Cesario ]
+  * layers: Fix references in push constants
+
+  [ John Zulauf ]
+  * layers: Disable layout check for update-after-bind
+
+  [ sourav parmar ]
+  * layers: Fix vkUpdateDescriptorSetWithTemplate crash
+
+  [ sfricke-samsung ]
+  * layers: Improved ValidateImageAspectMask wording
+  * layers: Add missing RayTracing KHR alias struct
+  * layers: Update 02023 to use potential format features
+  * layers: Add VUID 03578
+  * tests: Add VUID 03578
+  * tests: Add VK_DEVSIM_MODIFY_EXTENSION_LIST to docs
+  * tests: Fix various tests failing on MockICD
+
+  [ John Zulauf ]
+  * syncval: Add multi command buffer to usage tag
+  * syncval: Plumb ordering rules to state update
+  * syncval: Remove posible null deref path from copy
+  * syncval: Add resource state/tag data for phase2
+  * syncval: Encapsulate pipeline barier for replay
+  * syncval: Encapsulate WaitEvents to recordable obj
+  * syncval: Encapsulate sync event state in context
+
+  [ Jeremy Gebben ]
+  * layers: Consolidate PipelineStage and AccessMask bit operations
+
+  [ Nathaniel Cesario ]
+  * build: Fixes on higher C++ standards
+  * build: Fix clang errors
+  * layers: Add VUID 03559
+  * tests: Add test for VUID 03559
+
+  [ Corentin Wallez ]
+  * build: Suppress -Wunguarded-availability-new on macOS in GN
+
+  [ Ricardo Garcia ]
+  * layers: Fix crash with null pWaitDstStageMask
+
+  [ Marc Alcala Prieto ]
+  * layers: Fix segfault when querying DRM format modifiers
+
+  [ Tony-LunarG ]
+  * layers: Fix fragment shading rate validation
+  * tests: Destroy shader before draw in FragmentShadingRate test
+
+  [ John Zulauf ]
+  * layers: Correct VUID to the image version
+  * syncval: Guard image access of non-simple bindings
+
+  [ Shannon McPherson ]
+  * scripts: Update copyright in ext revision gen
+  * build: Update known-good files for 1.2.169 header
+
+  [ sfricke-samsung ]
+  * tests: Add swapchain query function
+
+  [ John Zulauf ]
+  * syncval: Encapsulate Event Set/Reset operation
+  * syncval: Store CMD_TYPE in SyncOp
+  * syncval: Encapsulate RenderPass operations
+
+  [ Mark Lobodzinski ]
+  * cmake: Enable/reenable compilation with RTTI
+  * chassis: Remove un-overridden VOs from dispatch vectors
+
+  [ Caio Marcelo de Oliveira Filho ]
+  * layers: Set workgroup scalar block layout in SPIR-V validator
+
+  [ sfricke-samsung ]
+  * layers: Silent clang warning
+
+  [ Jeremy Gebben ]
+  * layers: Sync syncval snippet tables with spec v1.2.169
+
+  [ Tony-LunarG ]
+  * gpu: Use VUIDs for buffer oob errors
+
+  [ Shahbaz Youssefi ]
+  * build: Fix gn
+
+  [ Nathaniel Cesario ]
+  * build: Fix clang release build
+
+  [ Jeremy Gebben ]
+  * build: Update known-good files for 1.2.170 header
+
+  [ SpaceIm ]
+  * mingw: Fix InitOnceExecuteOnce not declared
+  * mingw: Fix error too many sections
+  * cmake: Also use BUILD_WERROR option for msvc
+
+  [ Jeremy Gebben ]
+  * layers: Update ValidationStateTracker for synchronization2
+  * syncval: Use sync2 stage and mask bits for internal state
+  * syncval: Add SYNC_ACCESS_INDEX_NONE
+  * scripts: Fix spec version for syncval codegen
+  * syncval: Add support for synchronization2 barriers
+  * tests: Add basic syncval tests for synchronization2
+
+  [ John Zulauf ]
+  * syncval: Add full exec scope info to barriers
+  * syncval: Implement Sync2 events
+
+  [ Jeremy Gebben ]
+  * layers: Add sync2 support to simple validators
+  * corechecks: Reorganize barrier related code
+  * corechecks: Add validation of synchronization2 entry points
+  * corechecks: Handle synchronization2 Image Layouts
+  * corechecks: Validate memory barriers attached to a subpass dep
+  * tests: Add tests for synchronization2
+  * layers: Fix allowed stages for ACCELERATION_STRUCTURE_READ_BIT
+  * syncval: Update documentation for synchronization2
+  * build: Update known_good files for 1.2.170 SDK
+
+  [ John Zupin ]
+  * packaging: updated control version deps to 170
+
+ -- John Zupin <john@odin>  Mon, 22 Feb 2021 17:54:33 -0700
+
 vulkan-validationlayers (1.2.162.1~rc2-1lunarg20.04-1) focal; urgency=medium
 
   [ Mark Lobodzinski ]
