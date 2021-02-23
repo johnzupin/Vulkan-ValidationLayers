@@ -62,6 +62,9 @@ def makeGenOpts(args):
     # Features to include (list of features)
     features = args.feature
 
+    # Spirv elements to emit (list of extensions and capabilities)
+    emitSpirv = args.emitSpirv
+
     # Whether to disable inclusion protect in headers
     protect = args.protect
 
@@ -73,14 +76,15 @@ def makeGenOpts(args):
 
     # Descriptive names for various regexp patterns used to select
     # versions and extensions
-    allFeatures     = allExtensions = '.*'
-    noFeatures      = noExtensions = None
+    allFeatures     = allExtensions = allSpirv = '.*'
+    noFeatures      = noExtensions = noSpirv = None
 
     # Turn lists of names/patterns into matching regular expressions
     addExtensionsPat     = makeREstring(extensions, None)
     removeExtensionsPat  = makeREstring(removeExtensions, None)
     emitExtensionsPat    = makeREstring(emitExtensions, allExtensions)
     featuresPat          = makeREstring(features, allFeatures)
+    emitSpirvPat         = makeREstring(emitSpirv, allSpirv)
 
     # Copyright text prefixing all headers (list of strings).
     prefixStrings = [
@@ -134,6 +138,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -159,6 +164,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -184,6 +190,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -209,6 +216,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -234,6 +242,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -260,6 +269,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -286,6 +296,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -310,6 +321,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -335,6 +347,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -360,6 +373,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -384,6 +398,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -409,6 +424,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -434,6 +450,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -459,6 +476,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -484,6 +502,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -509,6 +528,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -517,6 +537,56 @@ def makeGenOpts(args):
             alignFuncParam    = 48,
             expandEnumerants  = False,
             helper_file_type  = 'typemap_helper_header')
+        ]
+
+    # Helper file generator options for corechecks_optick_instrumentation.h
+    genOpts['corechecks_optick_instrumentation.h'] = [
+          HelperFileOutputGenerator,
+          HelperFileOutputGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'corechecks_optick_instrumentation.h',
+            directory         = directory,
+            genpath           = None,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False,
+            helper_file_type  = 'optick_instrumentation_header')
+        ]
+
+    # Helper file generator options for corechecks_optick_instrumentation.cpp
+    genOpts['corechecks_optick_instrumentation.cpp'] = [
+          HelperFileOutputGenerator,
+          HelperFileOutputGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'corechecks_optick_instrumentation.cpp',
+            directory         = directory,
+            genpath           = None,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False,
+            helper_file_type  = 'optick_instrumentation_source')
         ]
 
     # Layer chassis related generation structs
@@ -536,6 +606,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -561,6 +632,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -569,6 +641,35 @@ def makeGenOpts(args):
             helper_file_type  = 'layer_chassis_source',
             expandEnumerants = False)
         ]
+
+    # Layer chassis related generation structs
+    # Options for layer chassis header
+    genOpts['chassis_dispatch_helper.h'] = [
+          LayerChassisOutputGenerator,
+          LayerChassisGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'chassis_dispatch_helper.h',
+            directory         = directory,
+            genpath           = None,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            helper_file_type  = 'layer_chassis_helper_header',
+            expandEnumerants = False)
+        ]
+
+
 
     # Options for layer chassis dispatch source file
     genOpts['layer_chassis_dispatch.cpp'] = [
@@ -586,6 +687,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -611,6 +713,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -636,6 +739,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -661,6 +765,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -686,6 +791,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -711,6 +817,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -737,6 +844,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -745,6 +853,57 @@ def makeGenOpts(args):
             alignFuncParam    = 48,
             expandEnumerants  = False,
             helper_file_type  = 'synchronization_helper_header')
+        ]
+
+    genOpts['synchronization_validation_types.cpp'] = [
+          HelperFileOutputGenerator,
+          HelperFileOutputGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'synchronization_validation_types.cpp',
+            directory         = directory,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            protectFeature    = False,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False,
+            helper_file_type  = 'synchronization_helper_source')
+        ]
+
+    # Options for spirv_validation_helper code-generated header
+    genOpts['spirv_validation_helper.cpp'] = [
+          SpirvValidationHelperOutputGenerator,
+          SpirvValidationHelperOutputGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'spirv_validation_helper.cpp',
+            directory         = directory,
+            genpath           = None,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            emitSpirv         = emitSpirvPat,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            protectFeature    = False,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False)
         ]
 
 # Generate a target based on the options in the matching genOpts{} object.
@@ -774,6 +933,7 @@ def genTarget(args):
             write('* options.addExtensions     =', options.addExtensions, file=sys.stderr)
             write('* options.removeExtensions  =', options.removeExtensions, file=sys.stderr)
             write('* options.emitExtensions    =', options.emitExtensions, file=sys.stderr)
+            write('* options.emitSpirv         =', options.emitSpirv, file=sys.stderr)
 
         gen = createGenerator(errFile=errWarn,
                               warnFile=errWarn,
@@ -808,6 +968,9 @@ if __name__ == '__main__':
     parser.add_argument('-feature', action='append',
                         default=[],
                         help='Specify a core API feature name or names to add to targets')
+    parser.add_argument('-emitSpirv', action='append',
+                        default=[],
+                        help='Specify spirv extensions or capabilities to emit in targets')
     parser.add_argument('-debug', action='store_true',
                         help='Enable debugging')
     parser.add_argument('-dump', action='store_true',
@@ -871,6 +1034,7 @@ if __name__ == '__main__':
     from lvt_file_generator import LvtFileOutputGenerator, LvtFileOutputGeneratorOptions
     from command_counter_generator import CommandCounterOutputGenerator, CommandCounterOutputGeneratorOptions
     from best_practices_generator import BestPracticesOutputGenerator, BestPracticesOutputGeneratorOptions
+    from spirv_validation_generator import SpirvValidationHelperOutputGenerator, SpirvValidationHelperOutputGeneratorOptions
 
     # Temporary workaround for vkconventions python2 compatibility
     import abc; abc.ABC = abc.ABCMeta('ABC', (object,), {})

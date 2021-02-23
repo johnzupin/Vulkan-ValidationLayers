@@ -1,8 +1,8 @@
-/* Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (C) 2015-2020 Google Inc.
- * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
+/* Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (C) 2015-2021 Google Inc.
+ * Modifications Copyright (C) 2020-2021 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -208,6 +208,7 @@ struct DispatchVuidsCmdDispatch : DrawDispatchVuid {
         queue_flag                         = "VUID-vkCmdDispatch-commandBuffer-cmdpool";
         inside_renderpass                  = "VUID-vkCmdDispatch-renderpass";
         pipeline_bound                     = "VUID-vkCmdDispatch-None-02700";
+        dynamic_state                      = "VUID-vkCmdDispatch-commandBuffer-02701";
         compatible_pipeline                = "VUID-vkCmdDispatch-None-02697";
         linear_sampler                     = "VUID-vkCmdDispatch-magFilter-04553";
         cubic_sampler                      = "VUID-vkCmdDispatch-None-02692";
@@ -232,6 +233,7 @@ struct DispatchVuidsCmdDispatchIndirect : DrawDispatchVuid {
         queue_flag                         = "VUID-vkCmdDispatchIndirect-commandBuffer-cmdpool";
         inside_renderpass                  = "VUID-vkCmdDispatchIndirect-renderpass";
         pipeline_bound                     = "VUID-vkCmdDispatchIndirect-None-02700";
+        dynamic_state                      = "VUID-vkCmdDispatchIndirect-commandBuffer-02701";
         compatible_pipeline                = "VUID-vkCmdDispatchIndirect-None-02697";
         linear_sampler                     = "VUID-vkCmdDispatchIndirect-magFilter-04553";
         cubic_sampler                      = "VUID-vkCmdDispatchIndirect-None-02692";
@@ -353,7 +355,7 @@ struct DispatchVuidsCmdTraceRaysNV: DrawDispatchVuid {
         sampler_bias_offset                = "VUID-vkCmdTraceRaysNV-None-02704";
         dynamic_state_setting_commands     = "VUID-vkCmdTraceRaysNV-None-02859";
         unprotected_command_buffer         = "VUID-vkCmdTraceRaysNV-commandBuffer-02707";
-        protected_command_buffer           = "VUID-vkCmdTraceRaysNV-commandBuffer-02712";
+        protected_command_buffer           = "VUID-vkCmdTraceRaysNV-commandBuffer-04624";
         img_filter_cubic                   = "VUID-vkCmdTraceRaysNV-None-02693";
         filter_cubic                       = "VUID-vkCmdTraceRaysNV-filterCubic-02694";
         filter_cubic_min_max               = "VUID-vkCmdTraceRaysNV-filterCubicMinmax-02695";
@@ -378,7 +380,7 @@ struct DispatchVuidsCmdTraceRaysKHR: DrawDispatchVuid {
         sampler_bias_offset                = "VUID-vkCmdTraceRaysKHR-None-02704";
         dynamic_state_setting_commands     = "VUID-vkCmdTraceRaysKHR-None-02859";
         unprotected_command_buffer         = "VUID-vkCmdTraceRaysKHR-commandBuffer-02707";
-        protected_command_buffer           = "VUID-vkCmdTraceRaysKHR-commandBuffer-02712";
+        protected_command_buffer           = "VUID-vkCmdTraceRaysKHR-commandBuffer-04625";
         img_filter_cubic                   = "VUID-vkCmdTraceRaysKHR-None-02693";
         filter_cubic                       = "VUID-vkCmdTraceRaysKHR-filterCubic-02694";
         filter_cubic_min_max               = "VUID-vkCmdTraceRaysKHR-filterCubicMinmax-02695";
@@ -394,9 +396,9 @@ struct DispatchVuidsCmdTraceRaysIndirectKHR: DrawDispatchVuid {
         compatible_pipeline                = "VUID-vkCmdTraceRaysIndirectKHR-None-02697";
         linear_sampler                     = "VUID-vkCmdTraceRaysIndirectKHR-magFilter-04553";
         cubic_sampler                      = "VUID-vkCmdTraceRaysIndirectKHR-None-02692";
-        indirect_protected_cb              = "VUID-vkCmdTraceRaysIndirectKHR-commandBuffer-02711";
-        indirect_contiguous_memory         = "VUID-vkCmdTraceRaysIndirectKHR-buffer-02708";
-        indirect_buffer_bit                = "VUID-vkCmdTraceRaysIndirectKHR-buffer-02709";
+        indirect_protected_cb              = "VUID-vkCmdTraceRaysIndirectKHR-commandBuffer-03635";
+        indirect_contiguous_memory         = "VUID-vkCmdTraceRaysIndirectKHR-indirectDeviceAddress-03632";
+        indirect_buffer_bit                = "VUID-vkCmdTraceRaysIndirectKHR-indirectDeviceAddress-03633";
         corner_sampled_address_mode        = "VUID-vkCmdTraceRaysIndirectKHR-flags-02696";
         imageview_atomic                   = "VUID-vkCmdTraceRaysIndirectKHR-None-02691";
         push_constants_set                 = "VUID-vkCmdTraceRaysIndirectKHR-None-02698";
@@ -569,6 +571,7 @@ struct DispatchVuidsCmdDispatchBase: DrawDispatchVuid {
         queue_flag                         = "VUID-vkCmdDispatchBase-commandBuffer-cmdpool";
         inside_renderpass                  = "VUID-vkCmdDispatchBase-renderpass";
         pipeline_bound                     = "VUID-vkCmdDispatchBase-None-02700";
+        dynamic_state                      = "VUID-vkCmdDispatchBase-commandBuffer-02701";
         compatible_pipeline                = "VUID-vkCmdDispatchBase-None-02697";
         linear_sampler                     = "VUID-vkCmdDispatchBase-magFilter-04553";
         cubic_sampler                      = "VUID-vkCmdDispatchBase-None-02692";
@@ -588,7 +591,7 @@ struct DispatchVuidsCmdDispatchBase: DrawDispatchVuid {
 };
 
 // This LUT is created to allow a static listing of each VUID that is covered by drawdispatch commands
-static const std::map<CMD_TYPE, DrawDispatchVuid> drawdispatch_vuid = {
+static const std::map<CMD_TYPE, DrawDispatchVuid> kDrawdispatchVuid = {
     {CMD_DRAW, DispatchVuidsCmdDraw()},
     {CMD_DRAWINDEXED, DispatchVuidsCmdDrawIndexed()},
     {CMD_DRAWINDIRECT, DispatchVuidsCmdDrawIndirect()},
@@ -612,10 +615,10 @@ static const std::map<CMD_TYPE, DrawDispatchVuid> drawdispatch_vuid = {
 
 // Getter function to provide kVUIDUndefined in case an invalid cmd_type is passed in
 const DrawDispatchVuid &CoreChecks::GetDrawDispatchVuid(CMD_TYPE cmd_type) const {
-    if (drawdispatch_vuid.find(cmd_type) != drawdispatch_vuid.cend()) {
-        return drawdispatch_vuid.at(cmd_type);
+    if (kDrawdispatchVuid.find(cmd_type) != kDrawdispatchVuid.cend()) {
+        return kDrawdispatchVuid.at(cmd_type);
     } else {
-        return drawdispatch_vuid.at(CMD_NONE);
+        return kDrawdispatchVuid.at(CMD_NONE);
     }
 }
 
@@ -682,7 +685,7 @@ bool CoreChecks::PreCallValidateCmdDrawIndexed(VkCommandBuffer commandBuffer, ui
         } else if (index_buffer_binding.index_type == VK_INDEX_TYPE_UINT8_EXT) {
             index_size = 1;
         }
-        VkDeviceSize end_offset = (index_size * ((VkDeviceSize)firstIndex + indexCount)) + index_buffer_binding.offset;
+        VkDeviceSize end_offset = (index_size * (static_cast<VkDeviceSize>(firstIndex) + indexCount)) + index_buffer_binding.offset;
         if (end_offset > index_buffer_binding.size) {
             skip |=
                 LogError(index_buffer_binding.buffer_state->buffer, "VUID-vkCmdDrawIndexed-indexSize-00463",
@@ -750,12 +753,30 @@ bool CoreChecks::PreCallValidateCmdDispatch(VkCommandBuffer commandBuffer, uint3
     return skip;
 }
 
+bool CoreChecks::ValidateBaseGroups(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY, uint32_t baseGroupZ,
+                                    const char *apiName) const {
+    bool skip = false;
+    if (baseGroupX || baseGroupY || baseGroupZ) {
+        const CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
+        const auto lv_bind_point = ConvertToLvlBindPoint(VK_PIPELINE_BIND_POINT_COMPUTE);
+        const PIPELINE_STATE *pipeline_state = cb_state->lastBound[lv_bind_point].pipeline_state;
+        if (pipeline_state && !(pipeline_state->computePipelineCI.flags & VK_PIPELINE_CREATE_DISPATCH_BASE)) {
+            skip |= LogError(commandBuffer, "VUID-vkCmdDispatchBase-baseGroupX-00427",
+                             "%s(): If any of baseGroupX, baseGroupY, or baseGroupZ are not zero, then the bound compute pipeline "
+                             "must have been created with the VK_PIPELINE_CREATE_DISPATCH_BASE flag",
+                             apiName);
+        }
+    }
+    return skip;
+}
+
 bool CoreChecks::PreCallValidateCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
                                                 uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY,
                                                 uint32_t groupCountZ) const {
     bool skip = false;
     skip |= ValidateCmdDrawType(commandBuffer, false, VK_PIPELINE_BIND_POINT_COMPUTE, CMD_DISPATCHBASE, "vkCmdDispatchBase()",
                                 VK_QUEUE_COMPUTE_BIT);
+    skip |= ValidateBaseGroups(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, "vkCmdDispatchBase()");
     return skip;
 }
 
@@ -765,6 +786,7 @@ bool CoreChecks::PreCallValidateCmdDispatchBaseKHR(VkCommandBuffer commandBuffer
     bool skip = false;
     skip |= ValidateCmdDrawType(commandBuffer, false, VK_PIPELINE_BIND_POINT_COMPUTE, CMD_DISPATCHBASE, "vkCmdDispatchBaseKHR()",
                                 VK_QUEUE_COMPUTE_BIT);
+    skip |= ValidateBaseGroups(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, "vkCmdDispatchBaseKHR()");
     return skip;
 }
 
@@ -772,6 +794,12 @@ bool CoreChecks::PreCallValidateCmdDispatchIndirect(VkCommandBuffer commandBuffe
     bool skip = ValidateCmdDrawType(commandBuffer, false, VK_PIPELINE_BIND_POINT_COMPUTE, CMD_DISPATCHINDIRECT,
                                     "vkCmdDispatchIndirect()", VK_QUEUE_COMPUTE_BIT);
     skip |= ValidateIndirectCmd(commandBuffer, buffer, CMD_DISPATCHINDIRECT, "vkCmdDispatchIndirect()");
+    const BUFFER_STATE *buffer_state = GetBufferState(buffer);
+    if ((offset + sizeof(VkDispatchIndirectCommand)) > buffer_state->createInfo.size) {
+        skip |= LogError(commandBuffer, "VUID-vkCmdDispatchIndirect-offset-00407",
+                         "vkCmdDispatchIndirect(): The sum of offset and the size of VkDispatchIndirectCommand is greater than the "
+                         "size of the buffer");
+    }
     return skip;
 }
 bool CoreChecks::ValidateCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -893,28 +921,28 @@ bool CoreChecks::PreCallValidateCmdTraceRaysNV(VkCommandBuffer commandBuffer, Vk
                                     "vkCmdTraceRaysNV()", VK_QUEUE_COMPUTE_BIT);
     const CMD_BUFFER_STATE *cb_state = GetCBState(commandBuffer);
     skip |= InsideRenderPass(cb_state, "vkCmdTraceRaysNV()", "VUID-vkCmdTraceRaysNV-renderpass");
-    auto callable_shader_buffer_state = (BUFFER_STATE *)GetBufferState(callableShaderBindingTableBuffer);
+    auto callable_shader_buffer_state = const_cast<BUFFER_STATE *>(GetBufferState(callableShaderBindingTableBuffer));
     if (callable_shader_buffer_state && callableShaderBindingOffset >= callable_shader_buffer_state->createInfo.size) {
         skip |= LogError(commandBuffer, "VUID-vkCmdTraceRaysNV-callableShaderBindingOffset-02461",
                          "vkCmdTraceRaysNV: callableShaderBindingOffset %" PRIu64
                          " must be less than the size of callableShaderBindingTableBuffer %" PRIu64 " .",
                          callableShaderBindingOffset, callable_shader_buffer_state->createInfo.size);
     }
-    auto hit_shader_buffer_state = (BUFFER_STATE *)GetBufferState(hitShaderBindingTableBuffer);
+    auto hit_shader_buffer_state = const_cast<BUFFER_STATE *>(GetBufferState(hitShaderBindingTableBuffer));
     if (hit_shader_buffer_state && hitShaderBindingOffset >= hit_shader_buffer_state->createInfo.size) {
         skip |= LogError(commandBuffer, "VUID-vkCmdTraceRaysNV-hitShaderBindingOffset-02459",
                          "vkCmdTraceRaysNV: hitShaderBindingOffset %" PRIu64
                          " must be less than the size of hitShaderBindingTableBuffer %" PRIu64 " .",
                          hitShaderBindingOffset, hit_shader_buffer_state->createInfo.size);
     }
-    auto miss_shader_buffer_state = (BUFFER_STATE *)GetBufferState(missShaderBindingTableBuffer);
+    auto miss_shader_buffer_state = const_cast<BUFFER_STATE *>(GetBufferState(missShaderBindingTableBuffer));
     if (miss_shader_buffer_state && missShaderBindingOffset >= miss_shader_buffer_state->createInfo.size) {
         skip |= LogError(commandBuffer, "VUID-vkCmdTraceRaysNV-missShaderBindingOffset-02457",
                          "vkCmdTraceRaysNV: missShaderBindingOffset %" PRIu64
                          " must be less than the size of missShaderBindingTableBuffer %" PRIu64 " .",
                          missShaderBindingOffset, miss_shader_buffer_state->createInfo.size);
     }
-    auto raygen_shader_buffer_state = (BUFFER_STATE *)GetBufferState(raygenShaderBindingTableBuffer);
+    auto raygen_shader_buffer_state = const_cast<BUFFER_STATE *>(GetBufferState(raygenShaderBindingTableBuffer));
     if (raygenShaderBindingOffset >= raygen_shader_buffer_state->createInfo.size) {
         skip |= LogError(commandBuffer, "VUID-vkCmdTraceRaysNV-raygenShaderBindingOffset-02455",
                          "vkCmdTraceRaysNV: raygenShaderBindingOffset %" PRIu64
@@ -989,12 +1017,6 @@ bool CoreChecks::PreCallValidateCmdTraceRaysKHR(VkCommandBuffer commandBuffer,
             }
         }
         if (pipeline_state->raytracingPipelineCI.flags & VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR) {
-            if (!pHitShaderBindingTable->deviceAddress) {
-                skip |= LogError(device, "VUID-vkCmdTraceRaysKHR-flags-03695",
-                                 "vkCmdTraceRaysKHR: If the currently bound ray tracing pipeline was created with flags "
-                                 "that included VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_CLOSEST_HIT_SHADERS_BIT_KHR, the "
-                                 "deviceAddress member of pHitShaderBindingTable must not be zero.");
-            }
             if (!pHitShaderBindingTable || pHitShaderBindingTable->size == 0 || pHitShaderBindingTable->stride == 0) {
                 skip |= LogError(device, "VUID-vkCmdTraceRaysKHR-flags-03512",
                                  "vkCmdTraceRaysKHR: If the currently bound ray tracing pipeline was created with "
@@ -1065,12 +1087,6 @@ bool CoreChecks::PreCallValidateCmdTraceRaysIndirectKHR(VkCommandBuffer commandB
             }
         }
         if (pipeline_state->raytracingPipelineCI.flags & VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR) {
-            if (!pHitShaderBindingTable || pHitShaderBindingTable->deviceAddress == 0) {
-                skip |= LogError(device, "VUID-vkCmdTraceRaysIndirectKHR-flags-03695",
-                                 "vkCmdTraceRaysIndirectKHR: If the currently bound ray tracing pipeline was created with "
-                                 "flags that included VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR, the "
-                                 "deviceAddress member of pHitShaderBindingTable must not be zero.");
-            }
             if (!pHitShaderBindingTable || pHitShaderBindingTable->size == 0 || pHitShaderBindingTable->stride == 0) {
                 skip |= LogError(device, "VUID-vkCmdTraceRaysIndirectKHR-flags-03512",
                                  "vkCmdTraceRaysIndirectKHR: If the currently bound ray tracing pipeline was created with "

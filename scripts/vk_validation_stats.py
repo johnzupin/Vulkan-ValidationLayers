@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# Copyright (c) 2015-2020 The Khronos Group Inc.
-# Copyright (c) 2015-2020 Valve Corporation
-# Copyright (c) 2015-2020 LunarG, Inc.
-# Copyright (c) 2015-2020 Google Inc.
+# Copyright (c) 2015-2021 The Khronos Group Inc.
+# Copyright (c) 2015-2021 Valve Corporation
+# Copyright (c) 2015-2021 LunarG, Inc.
+# Copyright (c) 2015-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import time
 import unicodedata
 import subprocess
 from collections import defaultdict
+from collections import OrderedDict
 
 verbose_mode = False
 txt_db = False
@@ -59,8 +60,11 @@ layer_source_files = [common_codegen.repo_relative(path) for path in [
     'layers/object_tracker_utils.cpp',
     'layers/shader_validation.cpp',
     'layers/stateless_validation.h',
+    'layers/synchronization_validation.cpp',
+    'layers/sync_vuid_maps.cpp',
     'layers/generated/parameter_validation.cpp',
     'layers/generated/object_tracker.cpp',
+    'layers/generated/spirv_validation_helper.cpp',
 ]]
 
 test_source_files = glob.glob(os.path.join(common_codegen.repo_relative('tests'), '*.cpp'))
@@ -174,7 +178,7 @@ class ValidationJSON:
         self.json_dict = {}
         if os.path.isfile(self.filename):
             json_file = open(self.filename, 'r', encoding='utf-8')
-            self.json_dict = json.load(json_file)
+            self.json_dict = json.load(json_file, object_pairs_hook=OrderedDict)
             json_file.close()
         if len(self.json_dict) == 0:
             print("Error: Error loading validusage.json file <%s>" % self.filename)
@@ -469,8 +473,8 @@ class OutputDatabase:
 /*
  * Vulkan
  *
- * Copyright (c) 2016-2020 Google Inc.
- * Copyright (c) 2016-2020 LunarG, Inc.
+ * Copyright (c) 2016-2021 Google Inc.
+ * Copyright (c) 2016-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -695,8 +699,7 @@ static const vuid_spec_text_pair vuid_spec_text[] = {
                 hfile.write('    {"%s", "%s", "%s"},\n' % (vuid, db_text, spec_url_id))
                 # For multiply-defined VUIDs, include versions with extension appended
                 if len(self.vj.vuid_db[vuid]) > 1:
-                    print('Error: Found a duplicate VUID: %s' % vuid)
-                    sys.exit(-1)
+                    print('Warning: Found a duplicate VUID: %s' % vuid)
                 if 'commandBuffer must be in the recording state' in db_text:
                     cmd_dict[vuid] = db_text
             hfile.write(self.header_postamble)

@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2020 The Khronos Group Inc.
-# Copyright (c) 2015-2020 Valve Corporation
-# Copyright (c) 2015-2020 LunarG, Inc.
-# Copyright (c) 2015-2020 Google Inc.
+# Copyright (c) 2015-2021 The Khronos Group Inc.
+# Copyright (c) 2015-2021 Valve Corporation
+# Copyright (c) 2015-2021 LunarG, Inc.
+# Copyright (c) 2015-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ class HelperFileOutputGeneratorOptions(GeneratorOptions):
                  addExtensions = None,
                  removeExtensions = None,
                  emitExtensions = None,
+                 emitSpirv = None,
                  sortProcedure = regSortFeatures,
                  prefixText = "",
                  genFuncPointers = True,
@@ -69,6 +70,7 @@ class HelperFileOutputGeneratorOptions(GeneratorOptions):
                 addExtensions = addExtensions,
                 removeExtensions = removeExtensions,
                 emitExtensions = emitExtensions,
+                emitSpirv = emitSpirv,
                 sortProcedure = sortProcedure)
         self.prefixText       = prefixText
         self.genFuncPointers  = genFuncPointers
@@ -105,6 +107,8 @@ class HelperFileOutputGenerator(OutputGenerator):
         self.instance_extension_info = dict()             # Dict of instance extension name defines and ifdef values
         self.structextends_list = []                      # List of structs which extend another struct via pNext
         self.structOrUnion = dict()                       # Map of Vulkan typename to 'struct' or 'union'
+        self.inst_header_decls = ''                       # String of instrumentation function declarations
+        self.inst_source_funcs = ''                       # String of instrumentation function definitions
 
 
         # Named tuples to store struct and command data
@@ -120,6 +124,41 @@ class HelperFileOutputGenerator(OutputGenerator):
             'VkPipelineViewportStateCreateInfo' :
                 ', const bool is_dynamic_viewports, const bool is_dynamic_scissors',
         }
+
+        # Note that adding an API here requires that all three pre/post routines be added to inline_corechecks_instrumentation_source.
+        self.inst_manually_written_functions = [
+            'vkQueuePresentKHR',
+            ]
+
+    inline_corechecks_instrumentation_source = """
+
+#include "core_validation.h"
+#include "corechecks_optick_instrumentation.h"
+
+#ifdef INSTRUMENT_OPTICK
+
+// Manually written intercepts
+void CoreChecksOptickInstrumented::PostCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo, VkResult result) {
+    OPTICK_FRAME("CPU FRAME");
+    OPTICK_EVENT();
+    CoreChecks::PostCallRecordQueuePresentKHR(queue, pPresentInfo, result);
+};
+
+bool CoreChecksOptickInstrumented::PreCallValidateQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) const {
+    OPTICK_EVENT();
+    auto result = CoreChecks::PreCallValidateQueuePresentKHR(queue, pPresentInfo);
+    return result;
+};
+
+void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) {
+    OPTICK_EVENT();
+    CoreChecks::PreCallRecordQueuePresentKHR(queue, pPresentInfo);
+};
+
+// Code-generated intercepts
+"""
+
+
     #
     # Called once at the beginning of each run
     def beginFile(self, genOpts):
@@ -138,10 +177,10 @@ class HelperFileOutputGenerator(OutputGenerator):
         copyright += '\n'
         copyright += '/***************************************************************************\n'
         copyright += ' *\n'
-        copyright += ' * Copyright (c) 2015-2020 The Khronos Group Inc.\n'
-        copyright += ' * Copyright (c) 2015-2020 Valve Corporation\n'
-        copyright += ' * Copyright (c) 2015-2020 LunarG, Inc.\n'
-        copyright += ' * Copyright (c) 2015-2020 Google Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 The Khronos Group Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 Valve Corporation\n'
+        copyright += ' * Copyright (c) 2015-2021 LunarG, Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 Google Inc.\n'
         copyright += ' *\n'
         copyright += ' * Licensed under the Apache License, Version 2.0 (the "License");\n'
         copyright += ' * you may not use this file except in compliance with the License.\n'
@@ -171,7 +210,7 @@ class HelperFileOutputGenerator(OutputGenerator):
         # Remove blank lines at EOF
         if dest_file.endswith('\n'):
             dest_file = dest_file[:-1]
-        write(dest_file, file=self.outFile);
+        write(dest_file, file=self.outFile)
         # Finish processing in superclass
         OutputGenerator.endFile(self)
     #
@@ -212,6 +251,7 @@ class HelperFileOutputGenerator(OutputGenerator):
     def genGroup(self, groupinfo, groupName, alias):
         OutputGenerator.genGroup(self, groupinfo, groupName, alias)
         groupElem = groupinfo.elem
+        bitwidth = int(groupElem.get('bitwidth','32'))
         # For enum_string_header
         if self.helper_file_type == 'enum_string_header':
             value_set = set()
@@ -219,7 +259,7 @@ class HelperFileOutputGenerator(OutputGenerator):
                 if elem.get('supported') != 'disabled' and elem.get('alias') is None:
                     value_set.add(elem.get('name'))
             if value_set != set():
-                self.enum_output += self.GenerateEnumStringConversion(groupName, value_set)
+                self.enum_output += self.GenerateEnumStringConversion(groupName, value_set, bitwidth)
         elif self.helper_file_type == 'object_types_header':
             if groupName == 'VkDebugReportObjectTypeEXT':
                 for elem in groupElem.findall('enum'):
@@ -234,7 +274,7 @@ class HelperFileOutputGenerator(OutputGenerator):
                         if elem.get('alias') is None: # TODO: Strangely the "alias" fn parameter does not work
                             item_name = elem.get('name')
                             self.core_object_types.append(item_name)
-        elif self.helper_file_type == 'synchronization_helper_header':
+        elif self.helper_file_type == 'synchronization_helper_header' or self.helper_file_type == 'synchronization_helper_source':
             if groupName in sync_val_gen.sync_enum_types:
                 self.sync_enum[groupName] = []
                 for elem in groupElem.findall('enum'):
@@ -263,6 +303,142 @@ class HelperFileOutputGenerator(OutputGenerator):
                 self.structOrUnion[name] = 'union'
             else:
                 self.structOrUnion[name] = 'struct'
+    #
+    # Command generation
+    def genCmd(self, cmdInfo, name, alias):
+        if 'optick_instrumentation' not in self.helper_file_type:
+            return
+        header_ignore_functions = [
+            'vkEnumerateInstanceVersion',
+            'vkGetDeviceProcAddr',
+            'vkGetInstanceProcAddr',
+            'vkGetPhysicalDeviceProcAddr',
+        ]
+
+        if self.helper_file_type == 'optick_instrumentation_header':
+            if name in header_ignore_functions:
+                return
+            if self.featureExtraProtect != None:
+                self.inst_header_decls += '#ifdef %s\n' % self.featureExtraProtect
+            if 'ValidationCache' not in name:
+                self.inst_header_decls += self.InstBaseClassCdecl(cmdInfo, name)
+            if self.featureExtraProtect != None:
+                self.inst_header_decls += '#endif // %s\n' % self.featureExtraProtect
+            return
+        elif self.helper_file_type == 'optick_instrumentation_source':
+            if name in header_ignore_functions:
+                return
+            if self.featureExtraProtect != None:
+                self.inst_source_funcs += '#ifdef %s\n' % self.featureExtraProtect
+            if 'ValidationCache' not in name:
+                self.inst_source_funcs += self.InstBaseClassCdecl(cmdInfo, name)
+            if self.featureExtraProtect != None:
+                self.inst_source_funcs += '#endif // %s\n' % self.featureExtraProtect
+            return
+    #
+    # Get parameters from function definition
+    def GetParameterList(self, func_call):
+        parm_list = ''
+        parms = func_call.split("(")[1]
+        parms = parms.split(")")[0]
+        parm_defs = parms.split(",")
+        for parm_def in parm_defs:
+            parm_name = parm_def.split(" ")[-1]
+            parm_name = parm_name.split("[")[0]
+            parm_list += parm_name + ', '
+        parm_list = parm_list[:-2]
+        return parm_list
+    #
+    # Customize Cdecl for corechecks instrumentation header base class
+    def InstBaseClassCdecl(self, cmdinfo, name):
+
+        if name in self.inst_manually_written_functions and self.helper_file_type == "optick_instrumentation_source":
+            return ''
+
+        # These APIs are special-cased by the chassis and include an extra void* for a final parameter
+        inst_overloaded_apis = [
+            'PreCallValidateCreateGraphicsPipelines',
+            'PreCallRecordCreateGraphicsPipelines',
+            'PostCallRecordCreateGraphicsPipelines',
+            'PreCallValidateCreateComputePipelines',
+            'PreCallRecordCreateComputePipelines',
+            'PostCallRecordCreateComputePipelines',
+            'PreCallValidateCreateRayTracingPipelinesNV',
+            'PreCallRecordCreateRayTracingPipelinesNV',
+            'PostCallRecordCreateRayTracingPipelinesNV',
+            'PreCallValidateCreateRayTracingPipelinesKHR',
+            'PreCallRecordCreateRayTracingPipelinesKHR',
+            'PostCallRecordCreateRayTracingPipelinesKHR',
+            'PreCallRecordCreatePipelineLayout',
+            'PreCallRecordCreateShaderModule',
+            'PostCallRecordCreateShaderModule',
+            'PreCallValidateAllocateDescriptorSets',
+            'PostCallRecordAllocateDescriptorSets',
+            'PreCallRecordCreateBuffer',
+            'PreCallRecordCreateDevice',
+            ]
+
+        raw = self.makeCDecls(cmdinfo.elem)[1]
+        prototype = raw.split("VKAPI_PTR *PFN_vk")[1]
+        prototype = prototype.replace(")", "", 1)
+
+        decl_terminator = ';'
+        if self.helper_file_type == 'optick_instrumentation_header':
+            decl_terminator = ' override;'
+
+        # Build up pre/post call function declarations
+        pre_call_validate = 'bool PreCallValidate' + prototype
+        pre_call_validate = pre_call_validate.replace(");", ") const" + decl_terminator)
+        if 'PreCallValidate' + name[2:] in inst_overloaded_apis:
+            pre_call_validate = pre_call_validate.replace(")", ", void* extra_data)")
+
+        pre_call_record = 'void PreCallRecord' + prototype
+        pre_call_record = pre_call_record.replace(");", ")" + decl_terminator)
+        if 'PreCallRecord' + name[2:] in inst_overloaded_apis:
+            pre_call_record = pre_call_record.replace(")", ", void* extra_data)")
+
+        post_call_record = 'void PostCallRecord' + prototype
+        resulttype = cmdinfo.elem.find('proto/type')
+        if resulttype.text == 'VkResult':
+            post_call_record = post_call_record.replace(');', ', VkResult result);')
+        elif resulttype.text == 'VkDeviceAddress':
+            post_call_record = post_call_record.replace(');', ', VkDeviceAddress result);')
+        post_call_record = post_call_record.replace(');', ')' + decl_terminator)
+        if 'PostCallRecord' + name[2:] in inst_overloaded_apis:
+            post_call_record = post_call_record.replace(")", ", void* extra_data)")
+
+        # If creating header, done
+        if self.helper_file_type == 'optick_instrumentation_header':
+            return '    %s\n    %s\n    %s\n' % (pre_call_validate, pre_call_record, post_call_record)
+
+        optick_event = "    OPTICK_EVENT();\n"
+
+        # Create PreCallValidate Function
+        pre_call_validate_sig = pre_call_validate.replace("bool ", "bool CoreChecksOptickInstrumented::")
+        pre_call_validate_sig = pre_call_validate_sig.replace(";", " {\n")
+        pre_call_validate_func = pre_call_validate.replace("bool ", "    auto result = CoreChecks::")
+        pre_call_validate_func = pre_call_validate_func.split("(")[0] + "(" + self.GetParameterList(pre_call_validate) + ")" + pre_call_validate_func.split(")")[1]
+        pre_call_validate_func = pre_call_validate_func.replace(" const;", ";\n")
+        pre_call_validate = pre_call_validate_sig + optick_event + pre_call_validate_func + '    return result;\n}\n'
+
+        # Create PreCallRecord Function
+        pre_call_record_sig = pre_call_record.replace("void ", "void CoreChecksOptickInstrumented::")
+        pre_call_record_sig = pre_call_record_sig.replace(";", " {\n")
+        pre_call_record_func = pre_call_record.replace("void ", "    CoreChecks::")
+        pre_call_record_func = pre_call_record_func.split("(")[0] + "(" + self.GetParameterList(pre_call_record) + ")" + pre_call_record_func.split(")")[1]
+        pre_call_record_func = pre_call_record_func.replace(";", ";\n")
+        pre_call_record = pre_call_record_sig +  optick_event + pre_call_record_func + '}\n'
+
+        # Create PostCallRecord Function
+        post_call_record_sig = post_call_record.replace("void ", "void CoreChecksOptickInstrumented::")
+        post_call_record_sig = post_call_record_sig.replace(";", " {\n")
+        post_call_record_func = post_call_record.replace("void ", "    CoreChecks::")
+        post_call_record_func = post_call_record_func.split("(")[0] + "(" + self.GetParameterList(post_call_record) + ")" + post_call_record_func.split(")")[1]
+        post_call_record_func = post_call_record_func.replace(";", ";\n")
+        post_call_record = post_call_record_sig + optick_event + post_call_record_func + '}\n'
+
+        return '%s\n%s\n%s\n' %  (pre_call_validate, pre_call_record, post_call_record)
+
     #
     # Check if the parameter passed in is a pointer
     def paramIsPointer(self, param):
@@ -359,7 +535,6 @@ class HelperFileOutputGenerator(OutputGenerator):
                     self.structTypes[typeName] = self.StructType(name=name, value=value)
             # Store pointer/array/string info
             isstaticarray = self.paramIsStaticArray(member)
-            structextends = False
             membersInfo.append(self.CommandParam(type=type,
                                                  name=name,
                                                  ispointer=self.paramIsPointer(member),
@@ -375,13 +550,15 @@ class HelperFileOutputGenerator(OutputGenerator):
         self.structMembers.append(self.StructMemberData(name=typeName, members=membersInfo, ifdef_protect=self.featureExtraProtect))
     #
     # Enum_string_header: Create a routine to convert an enumerated value into a string
-    def GenerateEnumStringConversion(self, groupName, value_list):
+    def GenerateEnumStringConversion(self, groupName, value_list, bitwidth):
         outstring = '\n'
         if self.featureExtraProtect is not None:
             outstring += '\n#ifdef %s\n\n' % self.featureExtraProtect
-        outstring += 'static inline const char* string_%s(%s input_value)\n' % (groupName, groupName)
+        groupType = 'uint64_t' if bitwidth == 64 else groupName
+
+        outstring += 'static inline const char* string_%s(%s input_value)\n' % (groupName, groupType)
         outstring += '{\n'
-        outstring += '    switch ((%s)input_value)\n' % groupName
+        outstring += '    switch (input_value)\n'
         outstring += '    {\n'
         # Emit these in a repeatable order so file is generated with the same contents each time.
         # This helps compiler caching systems like ccache.
@@ -397,6 +574,7 @@ class HelperFileOutputGenerator(OutputGenerator):
         if (bitsIndex != -1):
             outstring += '\n'
             flagsName = groupName[0:bitsIndex] + "s" +  groupName[bitsIndex+4:]
+            intsuffix = 'ULL' if bitwidth == 64 else 'U'
             outstring += 'static inline std::string string_%s(%s input_value)\n' % (flagsName, flagsName)
             outstring += '{\n'
             outstring += '    std::string ret;\n'
@@ -404,12 +582,12 @@ class HelperFileOutputGenerator(OutputGenerator):
             outstring += '    while(input_value) {\n'
             outstring += '        if (input_value & 1) {\n'
             outstring += '            if( !ret.empty()) ret.append("|");\n'
-            outstring += '            ret.append(string_%s(static_cast<%s>(1 << index)));\n' % (groupName, groupName)
+            outstring += '            ret.append(string_%s(static_cast<%s>(1%s << index)));\n' % (groupName, groupType, intsuffix)
             outstring += '        }\n'
             outstring += '        ++index;\n'
             outstring += '        input_value >>= 1;\n'
             outstring += '    }\n'
-            outstring += '    if( ret.empty()) ret.append(string_%s(static_cast<%s>(0)));\n' % (groupName, groupName)
+            outstring += '    if( ret.empty()) ret.append(string_%s(static_cast<%s>(0)));\n' % (groupName, groupType)
             outstring += '    return ret;\n'
             outstring += '}\n'
 
@@ -507,12 +685,33 @@ class HelperFileOutputGenerator(OutputGenerator):
                     safe_struct_header += '#endif // %s\n' % item.ifdef_protect
         return safe_struct_header
     #
+    # Combine helper preamble with instrumented function declarations
+    def GenerateCcOptickInstrumentationHelperHeader(self):
+        header = ''
+        header += '#pragma once\n'
+        header += '\n'
+        header += '#ifdef INSTRUMENT_OPTICK\n'
+        header += '#include "optick.h"\n'
+        header += '#endif // INSTRUMENT_OPTICK\n'
+        header += '\n'
+        header += 'class CoreChecksOptickInstrumented : public CoreChecks {\n'
+        header += '  public:\n'
+        header += '#ifdef INSTRUMENT_OPTICK\n'
+        header += self.inst_header_decls
+        header += '#endif // INSTRUMENT_OPTICK\n'
+        header += '\n'
+        header += '};\n'
+        return header
+    #
+    # Combine helper preamble with instrumented function definitions
+    def GenerateCcOptickInstrumentationHelperSource(self):
+        source = self.inline_corechecks_instrumentation_source
+        source += self.inst_source_funcs
+        source += '#endif // INSTRUMENT_OPTICK'
+        return source
+    #
     # Generate extension helper header file
     def GenerateExtensionHelperHeader(self):
-
-        V_1_1_level_feature_set = [
-            'VK_VERSION_1_1',
-            ]
 
         V_1_0_instance_extensions_promoted_to_V_1_1_core = [
             'vk_khr_device_group_creation',
@@ -541,10 +740,6 @@ class HelperFileOutputGenerator(OutputGenerator):
             'vk_khr_shader_draw_parameters',
             'vk_khr_storage_buffer_storage_class',
             'vk_khr_variable_pointers',
-            ]
-
-        V_1_2_level_feature_set = [
-            'VK_VERSION_1_2',
             ]
 
         V_1_1_instance_extensions_promoted_to_V_1_2_core = [
@@ -798,7 +993,7 @@ class HelperFileOutputGenerator(OutputGenerator):
         object_types_header += 'typedef enum VulkanObjectType {\n'
         object_types_header += '    kVulkanObjectTypeUnknown = 0,\n'
         enum_num = 1
-        type_list = [];
+        type_list = []
         enum_entry_map = {}
         non_dispatchable = {}
         dispatchable = {}
@@ -1578,17 +1773,12 @@ class HelperFileOutputGenerator(OutputGenerator):
     # Generate the type map
     def GenerateTypeMapHelperHeader(self):
         prefix = 'Lvl'
-        fprefix = 'lvl_'
         typemap = prefix + 'TypeMap'
         idmap = prefix + 'STypeMap'
         type_member = 'Type'
         id_member = 'kSType'
         id_decl = 'static const VkStructureType '
         generic_header = 'VkBaseOutStructure'
-        typename_func = fprefix + 'typename'
-        idname_func = fprefix + 'stype_name'
-        find_func = fprefix + 'find_in_chain'
-        init_func = fprefix + 'init_struct'
 
         explanatory_comment = '\n'.join((
                 '// These empty generic templates are specialized for each type with sType',
@@ -1668,11 +1858,21 @@ class HelperFileOutputGenerator(OutputGenerator):
             if item.ifdef_protect is not None:
                 code.append('#endif // %s' % item.ifdef_protect)
 
-        # Generate utilities for all types
+        # Generate Generate utilities for all types
+        find_func = 'LvlFindInChain'
+        init_func = 'LvlInitStruct'
         code.append('\n'.join((
-            utilities_format.format(id_member=id_member, id_map=idmap, type_map=typemap,
-                type_member=type_member, header=generic_header, typename_func=typename_func, idname_func=idname_func,
-                find_func=find_func, init_func=init_func), ''
+            utilities_format.format(id_member=id_member, type_map=typemap,
+                header=generic_header, find_func=find_func, init_func=init_func), ''
+            )))
+
+        # Generate utilities using legacy names for backwards compatibility
+        fprefix = 'lvl_'
+        find_func = fprefix + 'find_in_chain'
+        init_func = fprefix + 'init_struct'
+        code.append('\n'.join((
+            utilities_format.format(id_member=id_member, type_map=typemap,
+                header=generic_header, find_func=find_func, init_func=init_func), ''
             )))
 
         return "\n".join(code)
@@ -1680,7 +1880,10 @@ class HelperFileOutputGenerator(OutputGenerator):
     #
     # Generate the type map
     def GenerateSyncHelperHeader(self):
-        return sync_val_gen.GenSyncTypeHelper(self)
+        return sync_val_gen.GenSyncTypeHelper(self, False)
+
+    def GenerateSyncHelperSource(self):
+        return sync_val_gen.GenSyncTypeHelper(self, True)
 
     #
     # Create a helper file and return it as a string
@@ -1699,5 +1902,11 @@ class HelperFileOutputGenerator(OutputGenerator):
             return self.GenerateTypeMapHelperHeader()
         elif self.helper_file_type == 'synchronization_helper_header':
             return self.GenerateSyncHelperHeader()
+        elif self.helper_file_type == 'synchronization_helper_source':
+            return self.GenerateSyncHelperSource()
+        elif self.helper_file_type == 'optick_instrumentation_header':
+            return self.GenerateCcOptickInstrumentationHelperHeader()
+        elif self.helper_file_type == 'optick_instrumentation_source':
+            return self.GenerateCcOptickInstrumentationHelperSource()
         else:
             return 'Bad Helper File Generator Option %s' % self.helper_file_type

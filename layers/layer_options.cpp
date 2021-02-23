@@ -161,6 +161,14 @@ std::string GetNextToken(std::string *token_list, const std::string &delimiter, 
         token = *token_list;
     }
     token_list->erase(0, *pos + delimiter.length());
+
+    // Remove quotes from quoted strings
+    if ((token.length() > 0) && (token[0] == '\"')) {
+        token.erase(token.begin());
+        if ((token.length() > 0) && (token[token.length() - 1] == '\"')) {
+            token.erase(--token.end());
+        }
+    }
     return token;
 }
 
@@ -262,16 +270,16 @@ void SetCustomStypeInfo(std::string raw_id_list, std::string delimiter) {
 
 uint32_t SetMessageDuplicateLimit(std::string &config_message_limit, std::string &env_message_limit) {
     uint32_t limit = 0;
-    auto GetNum = [](std::string &source_string) {
+    auto get_num = [](std::string &source_string) {
         uint32_t limit = 0;
         int radix = ((source_string.find("0x") == 0) ? 16 : 10);
         limit = static_cast<uint32_t>(std::strtoul(source_string.c_str(), nullptr, radix));
         return limit;
     };
     // ENV var takes precedence over settings file
-    limit = GetNum(env_message_limit);
+    limit = get_num(env_message_limit);
     if (limit == 0) {
-        limit = GetNum(config_message_limit);
+        limit = get_num(config_message_limit);
     }
     return limit;
 }
@@ -330,11 +338,11 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
             }
         }
     }
-    const auto *validation_features_ext = lvl_find_in_chain<VkValidationFeaturesEXT>(settings_data->pnext_chain);
+    const auto *validation_features_ext = LvlFindInChain<VkValidationFeaturesEXT>(settings_data->pnext_chain);
     if (validation_features_ext) {
         SetValidationFeatures(settings_data->disables, settings_data->enables, validation_features_ext);
     }
-    const auto *validation_flags_ext = lvl_find_in_chain<VkValidationFlagsEXT>(settings_data->pnext_chain);
+    const auto *validation_flags_ext = LvlFindInChain<VkValidationFlagsEXT>(settings_data->pnext_chain);
     if (validation_flags_ext) {
         SetValidationFlags(settings_data->disables, validation_flags_ext);
     }

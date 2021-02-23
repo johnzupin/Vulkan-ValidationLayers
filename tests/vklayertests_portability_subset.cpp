@@ -14,6 +14,7 @@
 
 #include "cast_utils.h"
 #include "layer_validation_tests.h"
+#include "core_validation_error_enums.h"
 
 class VkPortabilitySubsetTest : public VkLayerTest {
   public:
@@ -80,8 +81,8 @@ TEST_F(VkPortabilitySubsetTest, PortabilityCreateEvent) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     portability_feature.events = VK_FALSE;  // Make sure events are disabled
 
@@ -106,8 +107,8 @@ TEST_F(VkPortabilitySubsetTest, CreateImage) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     // Make sure image features are disabled via portability extension
     portability_feature.imageView2DOn3DImage = VK_FALSE;
@@ -154,8 +155,8 @@ TEST_F(VkPortabilitySubsetTest, CreateImageView) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     // Make sure image features are disabled via portability extension
     portability_feature.imageViewFormatSwizzle = VK_FALSE;
@@ -226,8 +227,8 @@ TEST_F(VkPortabilitySubsetTest, CreateSampler) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     // Make sure image features are disabled via portability extension
     portability_feature.samplerMipLodBias = VK_FALSE;
@@ -251,8 +252,8 @@ TEST_F(VkPortabilitySubsetTest, CreateGraphicsPipelinesTriangleFans) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     // Make sure image features are disabled via portability extension
     portability_feature.triangleFans = VK_FALSE;
@@ -287,8 +288,8 @@ TEST_F(VkPortabilitySubsetTest, CreateGraphicsPipelinesVertexInputStride) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
@@ -297,8 +298,8 @@ TEST_F(VkPortabilitySubsetTest, CreateGraphicsPipelinesVertexInputStride) {
     ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
 
     // Get the current vertex stride to ensure we pass an incorrect value when creating the graphics pipeline
-    auto portability_properties = lvl_init_struct<VkPhysicalDevicePortabilitySubsetPropertiesKHR>();
-    auto prop2 = lvl_init_struct<VkPhysicalDeviceProperties2KHR>(&portability_properties);
+    auto portability_properties = LvlInitStruct<VkPhysicalDevicePortabilitySubsetPropertiesKHR>();
+    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&portability_properties);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &prop2);
     ASSERT_TRUE(portability_properties.minVertexInputBindingStrideAlignment > 0);
     auto vertex_stride = portability_properties.minVertexInputBindingStrideAlignment - 1;
@@ -339,8 +340,8 @@ TEST_F(VkPortabilitySubsetTest, CreateGraphicsPipelinesVertexAttributes) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     // Make sure image features are disabled via portability extension
     portability_feature.vertexAttributeAccessBeyondStride = VK_FALSE;
@@ -387,8 +388,8 @@ TEST_F(VkPortabilitySubsetTest, CreateGraphicsPipelinesRasterizationState) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     // Make sure point polygons are disabled
     portability_feature.pointPolygons = VK_FALSE;
@@ -441,8 +442,8 @@ TEST_F(VkPortabilitySubsetTest, CreateGraphicsPipelinesDepthStencilState) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     portability_feature.separateStencilMaskRef = VK_FALSE;
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
@@ -452,7 +453,7 @@ TEST_F(VkPortabilitySubsetTest, CreateGraphicsPipelinesDepthStencilState) {
     m_depthStencil->Init(m_device, static_cast<int32_t>(m_width), static_cast<int32_t>(m_height), m_depth_stencil_fmt);
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget(m_depthStencil->BindInfo()));
 
-    auto depth_stencil_ci = lvl_init_struct<VkPipelineDepthStencilStateCreateInfo>();
+    auto depth_stencil_ci = LvlInitStruct<VkPipelineDepthStencilStateCreateInfo>();
     depth_stencil_ci.stencilTestEnable = VK_TRUE;
     depth_stencil_ci.front.reference = 1;
     depth_stencil_ci.back.reference = depth_stencil_ci.front.reference + 1;
@@ -482,8 +483,8 @@ TEST_F(VkPortabilitySubsetTest, CreateGraphicsPipelinesColorBlendAttachmentState
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     portability_feature.constantAlphaColorBlendFactors = VK_FALSE;
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
@@ -536,8 +537,8 @@ TEST_F(VkPortabilitySubsetTest, UpdateDescriptorSets) {
     }
     m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    auto portability_feature = lvl_init_struct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     // Make sure image features are disabled via portability extension
     portability_feature.mutableComparisonSamplers = VK_FALSE;
@@ -579,4 +580,109 @@ TEST_F(VkPortabilitySubsetTest, UpdateDescriptorSets) {
     m_errorMonitor->VerifyFound();
 
     vk::DestroySampler(m_device->device(), sampler, nullptr);
+}
+
+TEST_F(VkPortabilitySubsetTest, ShaderValidation) {
+    TEST_DESCRIPTION("Attempt to use shader features that are not supported via portability");
+
+    ASSERT_NO_FATAL_FAILURE(InitPortabilitySubsetFramework());
+
+    bool portability_supported = DeviceExtensionSupported(gpu(), nullptr, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+    if (!portability_supported) {
+        printf("%s Test requires VK_KHR_portability_subset, skipping\n", kSkipPrefix);
+        return;
+    }
+    m_device_extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+
+    auto portability_feature = LvlInitStruct<VkPhysicalDevicePortabilitySubsetFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&portability_feature);
+    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    portability_feature.tessellationIsolines = VK_FALSE;                    // Make sure IsoLines are disabled
+    portability_feature.tessellationPointMode = VK_FALSE;                   // Make sure PointMode is disabled
+    portability_feature.shaderSampleRateInterpolationFunctions = VK_FALSE;  // Make sure interpolation functions are disabled
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitViewport());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkShaderObj tsc_obj(DeviceObj(), bindStateTscShaderText, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, this);
+
+    VkPipelineInputAssemblyStateCreateInfo iasci{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, nullptr, 0,
+                                                 VK_PRIMITIVE_TOPOLOGY_PATCH_LIST, VK_FALSE};
+    VkPipelineTessellationStateCreateInfo tsci{VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO, nullptr, 0, 3};
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.ia_ci_ = iasci;
+    pipe.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
+    pipe.tess_ci_ = tsci;
+    pipe.shader_stages_.emplace_back(tsc_obj.GetStageCreateInfo());
+    pipe.InitState();
+
+    // Attempt to use isolines in the TES shader when not available
+    {
+        static const char *tes_source = R"glsl(#version 450
+            layout(isolines, equal_spacing, cw) in;
+            void main() {
+                gl_Position = vec4(1);
+            }
+        )glsl";
+        VkShaderObj tes_obj(DeviceObj(), tes_source, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, this);
+        pipe.shader_stages_.emplace_back(tes_obj.GetStageCreateInfo());
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, kVUID_Portability_Tessellation_Isolines);
+        pipe.CreateGraphicsPipeline();
+        m_errorMonitor->VerifyFound();
+    }
+
+    // Attempt to use point_mode in the TES shader when not available
+    {
+        static const char *tes_source = R"glsl(#version 450
+            layout(triangles, point_mode) in;
+            void main() {
+                gl_Position = vec4(1);
+            }
+        )glsl";
+
+        // Reset TES shader stage
+        pipe.InitShaderInfo();
+        pipe.shader_stages_.emplace_back(tsc_obj.GetStageCreateInfo());
+        VkShaderObj tes_obj(DeviceObj(), tes_source, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, this);
+        pipe.shader_stages_.emplace_back(tes_obj.GetStageCreateInfo());
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, kVUID_Portability_Tessellation_PointMode);
+        pipe.CreateGraphicsPipeline();
+        m_errorMonitor->VerifyFound();
+    }
+
+    // Attempt to use interpolation functions when not supported
+    {
+        static const char *vs_source = R"glsl(#version 450
+            layout(location = 0) out vec4 c;
+            void main() {
+                c = vec4(1);
+                gl_Position = vec4(1);
+            }
+        )glsl";
+        static const char *fs_source = R"glsl(#version 450
+            layout(location = 0) in vec4 c;
+            layout(location = 0) out vec4 frag_out;
+            void main() {
+                frag_out = interpolateAtCentroid(c);
+            }
+        )glsl";
+
+        // Reset shader stages
+        pipe.shader_stages_.clear();
+        VkShaderObj vs_obj(DeviceObj(), vs_source, VK_SHADER_STAGE_VERTEX_BIT, this);
+        pipe.shader_stages_.emplace_back(vs_obj.GetStageCreateInfo());
+        VkShaderObj fs_obj(DeviceObj(), fs_source, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+        pipe.shader_stages_.emplace_back(fs_obj.GetStageCreateInfo());
+
+        iasci.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        pipe.ia_ci_ = iasci;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, kVUID_Portability_InterpolationFunction);
+        pipe.CreateGraphicsPipeline();
+        m_errorMonitor->VerifyFound();
+    }
 }

@@ -1,6 +1,6 @@
-/* Copyright (c) 2020 The Khronos Group Inc.
- * Copyright (c) 2020 Valve Corporation
- * Copyright (c) 2020 LunarG, Inc.
+/* Copyright (c) 2020-2021 The Khronos Group Inc.
+ * Copyright (c) 2020-2021 Valve Corporation
+ * Copyright (c) 2020-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -330,10 +330,10 @@ void UtilPostCallRecordPipelineCreations(const uint32_t count, const CreateInfo 
 template <typename CreateInfos, typename SafeCreateInfos>
 void UtilCopyCreatePipelineFeedbackData(const uint32_t count, CreateInfos *pCreateInfos, SafeCreateInfos *pSafeCreateInfos) {
     for (uint32_t i = 0; i < count; i++) {
-        auto src_feedback_struct = lvl_find_in_chain<VkPipelineCreationFeedbackCreateInfoEXT>(pSafeCreateInfos[i].pNext);
+        auto src_feedback_struct = LvlFindInChain<VkPipelineCreationFeedbackCreateInfoEXT>(pSafeCreateInfos[i].pNext);
         if (!src_feedback_struct) return;
         auto dst_feedback_struct = const_cast<VkPipelineCreationFeedbackCreateInfoEXT *>(
-            lvl_find_in_chain<VkPipelineCreationFeedbackCreateInfoEXT>(pCreateInfos[i].pNext));
+            LvlFindInChain<VkPipelineCreationFeedbackCreateInfoEXT>(pCreateInfos[i].pNext));
         *dst_feedback_struct->pPipelineCreationFeedback = *src_feedback_struct->pPipelineCreationFeedback;
         for (uint32_t j = 0; j < src_feedback_struct->pipelineStageCreationFeedbackCount; j++) {
             dst_feedback_struct->pPipelineStageCreationFeedbacks[j] = src_feedback_struct->pPipelineStageCreationFeedbacks[j];
@@ -366,7 +366,7 @@ void UtilProcessInstrumentationBuffer(VkQueue queue, CMD_BUFFER_STATE *cb_node, 
 
             VkResult result = vmaMapMemory(object_ptr->vmaAllocator, buffer_info.output_mem_block.allocation, (void **)&pData);
             if (result == VK_SUCCESS) {
-                object_ptr->AnalyzeAndGenerateMessages(cb_node->commandBuffer, queue, buffer_info.pipeline_bind_point,
+                object_ptr->AnalyzeAndGenerateMessages(cb_node->commandBuffer, queue, buffer_info,
                                                        operation_index, (uint32_t *)pData);
                 vmaUnmapMemory(object_ptr->vmaAllocator, buffer_info.output_mem_block.allocation);
             }

@@ -27,7 +27,7 @@
 
 static safe_VkAttachmentDescription2 ToV2KHR(const VkAttachmentDescription& in_struct) {
     safe_VkAttachmentDescription2 v2;
-    v2.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2_KHR;
+    v2.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     v2.pNext = nullptr;
     v2.flags = in_struct.flags;
     v2.format = in_struct.format;
@@ -44,7 +44,7 @@ static safe_VkAttachmentDescription2 ToV2KHR(const VkAttachmentDescription& in_s
 
 static safe_VkAttachmentReference2 ToV2KHR(const VkAttachmentReference& in_struct, const VkImageAspectFlags aspectMask = 0) {
     safe_VkAttachmentReference2 v2;
-    v2.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
+    v2.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
     v2.pNext = nullptr;
     v2.attachment = in_struct.attachment;
     v2.layout = in_struct.layout;
@@ -56,7 +56,7 @@ static safe_VkAttachmentReference2 ToV2KHR(const VkAttachmentReference& in_struc
 static safe_VkSubpassDescription2 ToV2KHR(const VkSubpassDescription& in_struct, const uint32_t viewMask,
                                           const VkImageAspectFlags* input_attachment_aspect_masks) {
     safe_VkSubpassDescription2 v2;
-    v2.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2_KHR;
+    v2.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
     v2.pNext = nullptr;
     v2.flags = in_struct.flags;
     v2.pipelineBindPoint = in_struct.pipelineBindPoint;
@@ -105,7 +105,7 @@ static safe_VkSubpassDescription2 ToV2KHR(const VkSubpassDescription& in_struct,
 
 static safe_VkSubpassDependency2 ToV2KHR(const VkSubpassDependency& in_struct, int32_t viewOffset = 0) {
     safe_VkSubpassDependency2 v2;
-    v2.sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2_KHR;
+    v2.sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
     v2.pNext = nullptr;
     v2.srcSubpass = in_struct.srcSubpass;
     v2.dstSubpass = in_struct.dstSubpass;
@@ -121,12 +121,12 @@ static safe_VkSubpassDependency2 ToV2KHR(const VkSubpassDependency& in_struct, i
 
 void ConvertVkRenderPassCreateInfoToV2KHR(const VkRenderPassCreateInfo& in_struct, safe_VkRenderPassCreateInfo2* out_struct) {
     using std::vector;
-    const auto multiview_info = lvl_find_in_chain<VkRenderPassMultiviewCreateInfo>(in_struct.pNext);
-    const auto* input_attachment_aspect_info = lvl_find_in_chain<VkRenderPassInputAttachmentAspectCreateInfo>(in_struct.pNext);
-    const auto fragment_density_map_info = lvl_find_in_chain<VkRenderPassFragmentDensityMapCreateInfoEXT>(in_struct.pNext);
+    const auto multiview_info = LvlFindInChain<VkRenderPassMultiviewCreateInfo>(in_struct.pNext);
+    const auto* input_attachment_aspect_info = LvlFindInChain<VkRenderPassInputAttachmentAspectCreateInfo>(in_struct.pNext);
+    const auto fragment_density_map_info = LvlFindInChain<VkRenderPassFragmentDensityMapCreateInfoEXT>(in_struct.pNext);
 
     out_struct->~safe_VkRenderPassCreateInfo2();
-    out_struct->sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2_KHR;
+    out_struct->sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2;
 
     // Fixup RPCI2 pNext chain.  Only FDM2 is valid on both chains.
     if (fragment_density_map_info) {
@@ -188,30 +188,30 @@ void ConvertVkRenderPassCreateInfoToV2KHR(const VkRenderPassCreateInfo& in_struc
         for (uint32_t i = 0; i < input_attachment_aspect_info->aspectReferenceCount; ++i) {
             const uint32_t subpass = input_attachment_aspect_info->pAspectReferences[i].subpass;
             const uint32_t input_attachment = input_attachment_aspect_info->pAspectReferences[i].inputAttachmentIndex;
-            const VkImageAspectFlags aspectMask = input_attachment_aspect_info->pAspectReferences[i].aspectMask;
+            const VkImageAspectFlags aspect_mask = input_attachment_aspect_info->pAspectReferences[i].aspectMask;
 
             if (subpass < input_attachment_aspect_masks.size() &&
                 input_attachment < input_attachment_aspect_masks[subpass].size()) {
-                input_attachment_aspect_masks[subpass][input_attachment] = aspectMask;
+                input_attachment_aspect_masks[subpass][input_attachment] = aspect_mask;
             }
         }
     }
 
-    const bool has_viewMask = multiview_info && multiview_info->subpassCount && multiview_info->pViewMasks;
+    const bool has_view_mask = multiview_info && multiview_info->subpassCount && multiview_info->pViewMasks;
     if (out_struct->subpassCount && in_struct.pSubpasses) {
         out_struct->pSubpasses = new safe_VkSubpassDescription2[out_struct->subpassCount];
         for (uint32_t i = 0; i < out_struct->subpassCount; ++i) {
-            const uint32_t viewMask = has_viewMask ? multiview_info->pViewMasks[i] : 0;
-            out_struct->pSubpasses[i] = ToV2KHR(in_struct.pSubpasses[i], viewMask, input_attachment_aspect_masks[i].data());
+            const uint32_t view_mask = has_view_mask ? multiview_info->pViewMasks[i] : 0;
+            out_struct->pSubpasses[i] = ToV2KHR(in_struct.pSubpasses[i], view_mask, input_attachment_aspect_masks[i].data());
         }
     }
 
-    const bool has_viewOffset = multiview_info && multiview_info->dependencyCount && multiview_info->pViewOffsets;
+    const bool has_view_offset = multiview_info && multiview_info->dependencyCount && multiview_info->pViewOffsets;
     if (out_struct->dependencyCount && in_struct.pDependencies) {
         out_struct->pDependencies = new safe_VkSubpassDependency2[out_struct->dependencyCount];
         for (uint32_t i = 0; i < out_struct->dependencyCount; ++i) {
-            const int32_t viewOffset = has_viewOffset ? multiview_info->pViewOffsets[i] : 0;
-            out_struct->pDependencies[i] = ToV2KHR(in_struct.pDependencies[i], viewOffset);
+            const int32_t view_offset = has_view_offset ? multiview_info->pViewOffsets[i] : 0;
+            out_struct->pDependencies[i] = ToV2KHR(in_struct.pDependencies[i], view_offset);
         }
     }
 

@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2020 The Khronos Group Inc.
-# Copyright (c) 2015-2020 Valve Corporation
-# Copyright (c) 2015-2020 LunarG, Inc.
-# Copyright (c) 2015-2020 Google Inc.
+# Copyright (c) 2015-2021 The Khronos Group Inc.
+# Copyright (c) 2015-2021 Valve Corporation
+# Copyright (c) 2015-2021 LunarG, Inc.
+# Copyright (c) 2015-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ class LayerDispatchTableGeneratorOptions(GeneratorOptions):
                  addExtensions = None,
                  removeExtensions = None,
                  emitExtensions = None,
+                 emitSpirv = None,
                  sortProcedure = regSortFeatures,
                  prefixText = "",
                  genFuncPointers = True,
@@ -72,6 +73,7 @@ class LayerDispatchTableGeneratorOptions(GeneratorOptions):
                 addExtensions = addExtensions,
                 removeExtensions = removeExtensions,
                 emitExtensions = emitExtensions,
+                emitSpirv = emitSpirv,
                 sortProcedure = sortProcedure)
         self.prefixText      = prefixText
         self.prefixText      = None
@@ -120,9 +122,9 @@ class LayerDispatchTableOutputGenerator(OutputGenerator):
 
         # Copyright Notice
         copyright =  '/*\n'
-        copyright += ' * Copyright (c) 2015-2020 The Khronos Group Inc.\n'
-        copyright += ' * Copyright (c) 2015-2020 Valve Corporation\n'
-        copyright += ' * Copyright (c) 2015-2020 LunarG, Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 The Khronos Group Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 Valve Corporation\n'
+        copyright += ' * Copyright (c) 2015-2021 LunarG, Inc.\n'
         copyright += ' *\n'
         copyright += ' * Licensed under the Apache License, Version 2.0 (the "License");\n'
         copyright += ' * you may not use this file except in compliance with the License.\n'

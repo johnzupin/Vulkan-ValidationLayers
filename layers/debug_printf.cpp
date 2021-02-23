@@ -1,6 +1,6 @@
-/* Copyright (c) 2020 The Khronos Group Inc.
- * Copyright (c) 2020 Valve Corporation
- * Copyright (c) 2020 LunarG, Inc.
+/* Copyright (c) 2020-2021 The Khronos Group Inc.
+ * Copyright (c) 2020-2021 Valve Corporation
+ * Copyright (c) 2020-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 #include "spirv-tools/instrument.hpp"
 #include <iostream>
 #include "layer_chassis_dispatch.h"
+#include "sync_utils.h"
 
 static const VkShaderStageFlags kShaderStageAllRayTracing =
     VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
@@ -169,6 +170,24 @@ bool DebugPrintf::PreCallValidateCmdWaitEvents(VkCommandBuffer commandBuffer, ui
     return false;
 }
 
+bool DebugPrintf::PreCallValidateCmdWaitEvents2KHR(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent *pEvents,
+                                                   const VkDependencyInfoKHR *pDependencyInfos) const {
+    VkPipelineStageFlags2KHR srcStageMask = 0;
+
+    for (uint32_t i = 0; i < eventCount; i++) {
+        auto stage_masks = sync_utils::GetGlobalStageMasks(pDependencyInfos[i]);
+        srcStageMask = stage_masks.src;
+    }
+
+    if (srcStageMask & VK_PIPELINE_STAGE_HOST_BIT) {
+        ReportSetupProblem(commandBuffer,
+                           "CmdWaitEvents2KHR recorded with VK_PIPELINE_STAGE_HOST_BIT set. "
+                           "Debug Printf waits on queue completion. "
+                           "This wait could block the host's signaling of this event, resulting in deadlock.");
+    }
+    return false;
+}
+
 void DebugPrintf::PreCallRecordCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
                                                        const VkGraphicsPipelineCreateInfo *pCreateInfos,
                                                        const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
@@ -251,6 +270,18 @@ void DebugPrintf::PostCallRecordCreateRayTracingPipelinesNV(VkDevice device, VkP
     UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, this);
 }
 
+void DebugPrintf::PostCallRecordCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
+                                                             VkPipelineCache pipelineCache, uint32_t count,
+                                                             const VkRayTracingPipelineCreateInfoKHR *pCreateInfos,
+                                                             const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
+                                                             VkResult result, void *crtpl_state_data) {
+    auto *crtpl_state = reinterpret_cast<create_ray_tracing_pipeline_khr_api_state *>(crtpl_state_data);
+    ValidationStateTracker::PostCallRecordCreateRayTracingPipelinesKHR(
+        device, deferredOperation, pipelineCache, count, pCreateInfos, pAllocator, pPipelines, result, crtpl_state_data);
+    UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, crtpl_state->printf_create_infos.data());
+    UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, this);
+}
+
 // Remove all the shader trackers associated with this destroyed pipeline.
 void DebugPrintf::PreCallRecordDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks *pAllocator) {
     for (auto it = shader_map.begin(); it != shader_map.end();) {
@@ -285,7 +316,7 @@ bool DebugPrintf::InstrumentShader(const VkShaderModuleCreateInfo *pCreateInfo, 
     opt_options.set_run_validator(true);
     opt_options.set_validator_options(val_options);
     Optimizer optimizer(target_env);
-    const spvtools::MessageConsumer DebugPrintfConsoleMessageConsumer =
+    const spvtools::MessageConsumer debug_printf_console_message_consumer =
         [this](spv_message_level_t level, const char *, const spv_position_t &position, const char *message) -> void {
         switch (level) {
             case SPV_MSG_FATAL:
@@ -298,7 +329,7 @@ bool DebugPrintf::InstrumentShader(const VkShaderModuleCreateInfo *pCreateInfo, 
                 break;
         }
     };
-    optimizer.SetMessageConsumer(DebugPrintfConsoleMessageConsumer);
+    optimizer.SetMessageConsumer(debug_printf_console_message_consumer);
     optimizer.RegisterPass(CreateInstDebugPrintfPass(desc_set_bind_index, unique_shader_module_id));
     bool pass = optimizer.Run(new_pgm.data(), new_pgm.size(), &new_pgm, opt_options);
     if (!pass) {
@@ -372,10 +403,10 @@ std::vector<DPFSubstring> DebugPrintf::ParseFormatString(const std::string forma
         }
         // Find the type of the value
         pos = format_string.find_first_of(types, pos);
-        if (pos == format_string.npos)
+        if (pos == format_string.npos) {
             // This really shouldn't happen with a legal value string
             pos = format_string.length();
-        else {
+        } else {
             char tempstring[32];
             int count = 0;
             std::string specifier = {};
@@ -472,7 +503,7 @@ void snprintf_with_malloc(std::stringstream &shader_message, DPFSubstring substr
     free(buffer);
 }
 
-void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQueue queue, VkPipelineBindPoint pipeline_bind_point,
+void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQueue queue, DPFBufferInfo &buffer_info,
                                              uint32_t operation_index, uint32_t *const debug_output_buffer) {
     // Word         Content
     //    0         Size of output record, including this word
@@ -537,13 +568,14 @@ void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQ
                             break;
                     }
                     values = static_cast<uint32_t *>(values) + 1;
-                } else
+                } else {
                     needed = snprintf(temp_string, static_size, substring.string.c_str());
+                }
             }
 
-            if (needed < static_size)
+            if (needed < static_size) {
                 shader_message << temp_string;
-            else {
+            } else {
                 // Static buffer not big enough for message, use malloc to get enough
                 snprintf_with_malloc(shader_message, substring, needed, values);
             }
@@ -556,7 +588,7 @@ void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQ
             std::string source_message;
             UtilGenerateStageMessage(&debug_output_buffer[index], stage_message);
             UtilGenerateCommonMessage(report_data, command_buffer, &debug_output_buffer[index], shader_module_handle,
-                                      pipeline_handle, pipeline_bind_point, operation_index, common_message);
+                                      pipeline_handle, buffer_info.pipeline_bind_point, operation_index, common_message);
             UtilGenerateSourceMessages(pgm, &debug_output_buffer[index], true, filename_message, source_message);
             if (use_stdout) {
                 std::cout << "UNASSIGNED-DEBUG-PRINTF " << common_message.c_str() << " " << stage_message.c_str() << " "
@@ -586,6 +618,28 @@ void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQ
 #pragma GCC diagnostic pop
 #endif
 
+bool DebugPrintf::CommandBufferNeedsProcessing(VkCommandBuffer command_buffer) {
+    bool buffers_present = false;
+    auto cb_node = GetCBState(command_buffer);
+    if (GetBufferInfo(cb_node->commandBuffer).size()) {
+        buffers_present = true;
+    }
+    for (auto secondaryCmdBuffer : cb_node->linkedCommandBuffers) {
+        if (GetBufferInfo(secondaryCmdBuffer->commandBuffer).size()) {
+            buffers_present = true;
+        }
+    }
+    return buffers_present;
+}
+
+void DebugPrintf::ProcessCommandBuffer(VkQueue queue, VkCommandBuffer command_buffer) {
+    auto cb_node = GetCBState(command_buffer);
+    UtilProcessInstrumentationBuffer(queue, cb_node, this);
+    for (auto secondary_cmd_buffer : cb_node->linkedCommandBuffers) {
+        UtilProcessInstrumentationBuffer(queue, secondary_cmd_buffer, this);
+    }
+}
+
 // Issue a memory barrier to make GPU-written data available to host.
 // Wait for the queue to complete execution.
 // Check the debug buffers for all the command buffers that were submitted.
@@ -599,11 +653,7 @@ void DebugPrintf::PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount,
     for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
         const VkSubmitInfo *submit = &pSubmits[submit_idx];
         for (uint32_t i = 0; i < submit->commandBufferCount; i++) {
-            auto cb_node = GetCBState(submit->pCommandBuffers[i]);
-            if (GetBufferInfo(cb_node->commandBuffer).size()) buffers_present = true;
-            for (auto secondaryCmdBuffer : cb_node->linkedCommandBuffers) {
-                if (GetBufferInfo(secondaryCmdBuffer->commandBuffer).size()) buffers_present = true;
-            }
+            buffers_present |= CommandBufferNeedsProcessing(submit->pCommandBuffers[i]);
         }
     }
     if (!buffers_present) return;
@@ -615,11 +665,34 @@ void DebugPrintf::PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount,
     for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
         const VkSubmitInfo *submit = &pSubmits[submit_idx];
         for (uint32_t i = 0; i < submit->commandBufferCount; i++) {
-            auto cb_node = GetCBState(submit->pCommandBuffers[i]);
-            UtilProcessInstrumentationBuffer(queue, cb_node, this);
-            for (auto secondaryCmdBuffer : cb_node->linkedCommandBuffers) {
-                UtilProcessInstrumentationBuffer(queue, secondaryCmdBuffer, this);
-            }
+            ProcessCommandBuffer(queue, submit->pCommandBuffers[i]);
+        }
+    }
+}
+
+void DebugPrintf::PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
+                                                VkFence fence, VkResult result) {
+    ValidationStateTracker::PostCallRecordQueueSubmit2KHR(queue, submitCount, pSubmits, fence, result);
+
+    if (aborted || (result != VK_SUCCESS)) return;
+    bool buffers_present = false;
+    // Don't QueueWaitIdle if there's nothing to process
+    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
+        const auto *submit = &pSubmits[submit_idx];
+        for (uint32_t i = 0; i < submit->commandBufferInfoCount; i++) {
+            buffers_present |= CommandBufferNeedsProcessing(submit->pCommandBufferInfos[i].commandBuffer);
+        }
+    }
+    if (!buffers_present) return;
+
+    UtilSubmitBarrier(queue, this);
+
+    DispatchQueueWaitIdle(queue);
+
+    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
+        const VkSubmitInfo2KHR *submit = &pSubmits[submit_idx];
+        for (uint32_t i = 0; i < submit->commandBufferInfoCount; i++) {
+            ProcessCommandBuffer(queue, submit->pCommandBufferInfos[i].commandBuffer);
         }
     }
 }
@@ -814,12 +887,12 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
 
     // Allocate memory for the output block that the gpu will use to return values for printf
     DPFDeviceMemoryBlock output_block = {};
-    VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufferInfo.size = output_buffer_size;
-    bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    VmaAllocationCreateInfo allocInfo = {};
-    allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
-    result = vmaCreateBuffer(vmaAllocator, &bufferInfo, &allocInfo, &output_block.buffer, &output_block.allocation, nullptr);
+    VkBufferCreateInfo buffer_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    buffer_info.size = output_buffer_size;
+    buffer_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VmaAllocationCreateInfo alloc_info = {};
+    alloc_info.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+    result = vmaCreateBuffer(vmaAllocator, &buffer_info, &alloc_info, &output_block.buffer, &output_block.allocation, nullptr);
     if (result != VK_SUCCESS) {
         ReportSetupProblem(device, "Unable to allocate device memory.  Device could become unstable.");
         aborted = true;
@@ -827,10 +900,10 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
     }
 
     // Clear the output block to zeros so that only printf values from the gpu will be present
-    uint32_t *pData;
-    result = vmaMapMemory(vmaAllocator, output_block.allocation, (void **)&pData);
+    uint32_t *data;
+    result = vmaMapMemory(vmaAllocator, output_block.allocation, reinterpret_cast<void **>(&data));
     if (result == VK_SUCCESS) {
-        memset(pData, 0, output_buffer_size);
+        memset(data, 0, output_buffer_size);
         vmaUnmapMemory(vmaAllocator, output_block.allocation);
     }
 

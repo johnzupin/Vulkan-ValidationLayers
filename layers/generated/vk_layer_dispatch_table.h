@@ -2,9 +2,9 @@
 // See layer_dispatch_table_generator.py for modifications
 
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -236,6 +236,14 @@ typedef struct VkLayerInstanceDispatchTable_ {
 
     // ---- VK_EXT_headless_surface extension commands
     PFN_vkCreateHeadlessSurfaceEXT CreateHeadlessSurfaceEXT;
+
+    // ---- VK_NV_acquire_winrt_display extension commands
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    PFN_vkAcquireWinrtDisplayNV AcquireWinrtDisplayNV;
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    PFN_vkGetWinrtDisplayNV GetWinrtDisplayNV;
+#endif // VK_USE_PLATFORM_WIN32_KHR
 
     // ---- VK_EXT_directfb_surface extension commands
 #ifdef VK_USE_PLATFORM_DIRECTFB_EXT
@@ -528,6 +536,16 @@ typedef struct VkLayerDispatchTable_ {
     PFN_vkGetPipelineExecutablePropertiesKHR GetPipelineExecutablePropertiesKHR;
     PFN_vkGetPipelineExecutableStatisticsKHR GetPipelineExecutableStatisticsKHR;
     PFN_vkGetPipelineExecutableInternalRepresentationsKHR GetPipelineExecutableInternalRepresentationsKHR;
+
+    // ---- VK_KHR_synchronization2 extension commands
+    PFN_vkCmdSetEvent2KHR CmdSetEvent2KHR;
+    PFN_vkCmdResetEvent2KHR CmdResetEvent2KHR;
+    PFN_vkCmdWaitEvents2KHR CmdWaitEvents2KHR;
+    PFN_vkCmdPipelineBarrier2KHR CmdPipelineBarrier2KHR;
+    PFN_vkCmdWriteTimestamp2KHR CmdWriteTimestamp2KHR;
+    PFN_vkQueueSubmit2KHR QueueSubmit2KHR;
+    PFN_vkCmdWriteBufferMarker2AMD CmdWriteBufferMarker2AMD;
+    PFN_vkGetQueueCheckpointData2NV GetQueueCheckpointData2NV;
 
     // ---- VK_KHR_copy_commands2 extension commands
     PFN_vkCmdCopyBuffer2KHR CmdCopyBuffer2KHR;

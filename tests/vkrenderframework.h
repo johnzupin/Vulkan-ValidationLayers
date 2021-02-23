@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -248,6 +248,7 @@ class VkRenderFramework : public VkTestFramework {
     void InitViewport();
     bool InitSurface();
     bool InitSurface(float width, float height);
+    void InitSwapchainInfo();
     bool InitSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                        VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR);
     bool InitSwapchain(VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -305,8 +306,14 @@ class VkRenderFramework : public VkTestFramework {
     VkFramebufferCreateInfo m_framebuffer_info;
     std::vector<VkImageView> m_framebuffer_attachments;
 
+    // WSI items
     VkSurfaceKHR m_surface;
     VkSwapchainKHR m_swapchain;
+    VkSurfaceCapabilitiesKHR m_surface_capabilities;
+    std::vector<VkSurfaceFormatKHR> m_surface_formats;
+    std::vector<VkPresentModeKHR> m_surface_present_modes;
+    VkCompositeAlphaFlagBitsKHR m_surface_composite_alpha;
+
     std::vector<VkViewport> m_viewports;
     std::vector<VkRect2D> m_scissors;
     float m_lineWidth;
@@ -356,6 +363,7 @@ class VkCommandBufferObj : public vk_testing::CommandBuffer {
                          uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers, uint32_t bufferMemoryBarrierCount,
                          const VkBufferMemoryBarrier *pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount,
                          const VkImageMemoryBarrier *pImageMemoryBarriers);
+    void PipelineBarrier2KHR(const VkDependencyInfoKHR *pDependencyInfo);
     void ClearAllBuffers(const std::vector<std::unique_ptr<VkImageObj>> &color_objs, VkClearColorValue clear_color,
                          VkDepthStencilObj *depth_stencil_obj, float depth_clear_value, uint32_t stencil_clear_value);
     void PrepareAttachments(const std::vector<std::unique_ptr<VkImageObj>> &color_atts, VkDepthStencilObj *depth_stencil_att);
@@ -522,7 +530,7 @@ class VkDepthStencilObj : public VkImageObj {
   public:
     VkDepthStencilObj(VkDeviceObj *device);
     void Init(VkDeviceObj *device, int32_t width, int32_t height, VkFormat format,
-              VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+              VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VkImageAspectFlags aspect = 0);
     bool Initialized();
     VkImageView *BindInfo();
 
@@ -571,6 +579,7 @@ class VkDescriptorSetObj : public vk_testing::DescriptorPool {
 
     VkDescriptorSet GetDescriptorSetHandle() const;
     VkPipelineLayout GetPipelineLayout() const;
+    VkDescriptorSetLayout GetDescriptorSetLayout() const;
 
   protected:
     VkDeviceObj *m_device;
@@ -588,16 +597,24 @@ class VkDescriptorSetObj : public vk_testing::DescriptorPool {
 
 class VkShaderObj : public vk_testing::ShaderModule {
   public:
+    VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char const *name = "main",
+                VkSpecializationInfo *specInfo = nullptr);
     VkShaderObj(VkDeviceObj *device, const char *shaderText, VkShaderStageFlagBits stage, VkRenderFramework *framework,
                 char const *name = "main", bool debug = false, VkSpecializationInfo *specInfo = nullptr,
                 uint32_t spirv_minor_version = 0);
     VkShaderObj(VkDeviceObj *device, const std::string spv_source, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                char const *name = "main", VkSpecializationInfo *specInfo = nullptr);
+                char const *name = "main", VkSpecializationInfo *specInfo = nullptr, const spv_target_env env = SPV_ENV_VULKAN_1_0);
     VkPipelineShaderStageCreateInfo const &GetStageCreateInfo() const;
+
+    bool InitFromGLSL(VkRenderFramework &framework, const char *shader_code, bool debug = false, uint32_t spirv_minor_version = 0);
+    VkResult InitFromGLSLTry(VkRenderFramework &framework, const char *shader_code, bool debug = false,
+                             uint32_t spirv_minor_version = 0);
+    bool InitFromASM(VkRenderFramework &framework, const std::string &spv_source, const spv_target_env env = SPV_ENV_VULKAN_1_0);
+    VkResult InitFromASMTry(VkRenderFramework &framework, const std::string &spv_source);
 
   protected:
     VkPipelineShaderStageCreateInfo m_stage_info;
-    VkDeviceObj *m_device;
+    VkDeviceObj &m_device;
 };
 
 class VkPipelineLayoutObj : public vk_testing::PipelineLayout {

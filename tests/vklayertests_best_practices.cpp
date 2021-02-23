@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -672,46 +672,28 @@ TEST_F(VkBestPracticesLayerTest, TripleBufferingTest) {
     InitState();
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
                                          "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-suboptimal-swapchain-image-count");
-    InitSurface();
+    if (!InitSurface()) {
+        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
+        return;
+    }
+    InitSwapchainInfo();
     VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    VkSurfaceCapabilitiesKHR capabilities;
-    vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_device->phy().handle(), m_surface, &capabilities);
-
-    uint32_t format_count;
-    vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), m_surface, &format_count, nullptr);
-    vector<VkSurfaceFormatKHR> formats;
-    if (format_count != 0) {
-        formats.resize(format_count);
-        vk::GetPhysicalDeviceSurfaceFormatsKHR(m_device->phy().handle(), m_surface, &format_count, formats.data());
-    }
-
-    uint32_t present_mode_count;
-    vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), m_surface, &present_mode_count, nullptr);
-    vector<VkPresentModeKHR> present_modes;
-    if (present_mode_count != 0) {
-        present_modes.resize(present_mode_count);
-        vk::GetPhysicalDeviceSurfacePresentModesKHR(m_device->phy().handle(), m_surface, &present_mode_count, present_modes.data());
-    }
 
     VkSwapchainCreateInfoKHR swapchain_create_info = {};
     swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchain_create_info.pNext = 0;
     swapchain_create_info.surface = m_surface;
     swapchain_create_info.minImageCount = 2;
-    swapchain_create_info.imageFormat = formats[0].format;
-    swapchain_create_info.imageColorSpace = formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {capabilities.minImageExtent.width, capabilities.minImageExtent.height};
+    swapchain_create_info.imageFormat = m_surface_formats[0].format;
+    swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = imageUsage;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapchain_create_info.preTransform = preTransform;
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
-#else
-    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-#endif
-    swapchain_create_info.presentMode = present_modes[0];
+    swapchain_create_info.compositeAlpha = m_surface_composite_alpha;
+    swapchain_create_info.presentMode = m_surface_present_modes[0];
     swapchain_create_info.clipped = VK_FALSE;
     swapchain_create_info.oldSwapchain = 0;
 
@@ -730,6 +712,10 @@ TEST_F(VkBestPracticesLayerTest, TripleBufferingTest) {
 TEST_F(VkBestPracticesLayerTest, ExpectedQueryDetails) {
     TEST_DESCRIPTION("Check that GetPhysicalDeviceQueueFamilyProperties is working as expected");
 
+    // Vulkan 1.1 required to test vkGetPhysicalDeviceQueueFamilyProperties2
+    app_info_.apiVersion = VK_API_VERSION_1_1;
+    // VK_KHR_get_physical_device_properties2 required to test vkGetPhysicalDeviceQueueFamilyProperties2KHR
+    instance_extensions_.emplace_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
     const vk_testing::PhysicalDevice phys_device_obj(gpu_);
 
@@ -743,6 +729,24 @@ TEST_F(VkBestPracticesLayerTest, ExpectedQueryDetails) {
 
     queue_family_props.resize(queue_count);
     vk::GetPhysicalDeviceQueueFamilyProperties(phys_device_obj.handle(), &queue_count, queue_family_props.data());
+
+    // Now  for GetPhysicalDeviceQueueFamilyProperties2
+    std::vector<VkQueueFamilyProperties2> queue_family_props2;
+    vk::GetPhysicalDeviceQueueFamilyProperties2(phys_device_obj.handle(), &queue_count, nullptr);
+
+    queue_family_props2.resize(queue_count);
+    vk::GetPhysicalDeviceQueueFamilyProperties2(phys_device_obj.handle(), &queue_count, queue_family_props2.data());
+
+    // And for GetPhysicalDeviceQueueFamilyProperties2KHR
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties2KHR vkGetPhysicalDeviceQueueFamilyProperties2KHR =
+        reinterpret_cast<PFN_vkGetPhysicalDeviceQueueFamilyProperties2KHR>(
+            vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceQueueFamilyProperties2KHR"));
+    if (vkGetPhysicalDeviceQueueFamilyProperties2KHR) {
+        vkGetPhysicalDeviceQueueFamilyProperties2KHR(phys_device_obj.handle(), &queue_count, nullptr);
+
+        queue_family_props2.resize(queue_count);
+        vkGetPhysicalDeviceQueueFamilyProperties2KHR(phys_device_obj.handle(), &queue_count, queue_family_props2.data());
+    }
 
     vk_testing::Device device(phys_device_obj.handle());
     device.init();

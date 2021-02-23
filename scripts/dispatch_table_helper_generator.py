@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2020 The Khronos Group Inc.
-# Copyright (c) 2015-2020 Valve Corporation
-# Copyright (c) 2015-2020 LunarG, Inc.
-# Copyright (c) 2015-2020 Google Inc.
+# Copyright (c) 2015-2021 The Khronos Group Inc.
+# Copyright (c) 2015-2021 Valve Corporation
+# Copyright (c) 2015-2021 LunarG, Inc.
+# Copyright (c) 2015-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ class DispatchTableHelperOutputGeneratorOptions(GeneratorOptions):
                  addExtensions = None,
                  removeExtensions = None,
                  emitExtensions = None,
+                 emitSpirv = None,
                  sortProcedure = regSortFeatures,
                  prefixText = "",
                  genFuncPointers = True,
@@ -62,6 +63,7 @@ class DispatchTableHelperOutputGeneratorOptions(GeneratorOptions):
                 addExtensions = addExtensions,
                 removeExtensions = removeExtensions,
                 emitExtensions = emitExtensions,
+                emitSpirv = emitSpirv,
                 sortProcedure = sortProcedure)
         self.prefixText      = prefixText
         self.genFuncPointers = genFuncPointers
@@ -91,7 +93,7 @@ class DispatchTableHelperOutputGenerator(OutputGenerator):
     # Called once at the beginning of each run
     def beginFile(self, genOpts):
         OutputGenerator.beginFile(self, genOpts)
-        
+
         # Initialize members that require the tree
         self.handle_types = GetHandleTypes(self.registry.tree)
 
@@ -106,9 +108,9 @@ class DispatchTableHelperOutputGenerator(OutputGenerator):
         write(file_comment, file=self.outFile)
         # Copyright Notice
         copyright =  '/*\n'
-        copyright += ' * Copyright (c) 2015-2020 The Khronos Group Inc.\n'
-        copyright += ' * Copyright (c) 2015-2020 Valve Corporation\n'
-        copyright += ' * Copyright (c) 2015-2020 LunarG, Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 The Khronos Group Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 Valve Corporation\n'
+        copyright += ' * Copyright (c) 2015-2021 LunarG, Inc.\n'
         copyright += ' *\n'
         copyright += ' * Licensed under the Apache License, Version 2.0 (the "License");\n'
         copyright += ' * you may not use this file except in compliance with the License.\n'
@@ -246,6 +248,10 @@ class DispatchTableHelperOutputGenerator(OutputGenerator):
         for feature in features:
             feature_name = feature.get('name')
             if 'VK_VERSION_1_0' == feature_name:
+                continue
+            feature_supported = feature.get('supported')
+            # If feature is not yet supported, skip it
+            if feature_supported == 'disabled':
                 continue
             for require_element in feature.findall('require'):
                 for command in require_element.findall('command'):

@@ -2,10 +2,10 @@
 // This file is ***GENERATED***.  Do Not Edit.
 // See thread_safety_generator.py for modifications.
 
-/* Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google Inc.
+/* Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,10 +77,10 @@ void ThreadSafety::PostCallRecordCreateDescriptorSetLayout(
 
         // Check whether any binding uses UPDATE_AFTER_BIND
         bool update_after_bind = false;
-        const auto *flags_create_info = lvl_find_in_chain<VkDescriptorSetLayoutBindingFlagsCreateInfoEXT>(pCreateInfo->pNext);
+        const auto *flags_create_info = LvlFindInChain<VkDescriptorSetLayoutBindingFlagsCreateInfo>(pCreateInfo->pNext);
         if (flags_create_info) {
             for (uint32_t i = 0; i < flags_create_info->bindingCount; ++i) {
-                if (flags_create_info->pBindingFlags[i] & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT) {
+                if (flags_create_info->pBindingFlags[i] & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT) {
                     update_after_bind = true;
                     break;
                 }
@@ -4854,6 +4854,163 @@ void ThreadSafety::PostCallRecordGetPipelineExecutableInternalRepresentationsKHR
     FinishReadObjectParentInstance(device, "vkGetPipelineExecutableInternalRepresentationsKHR");
 }
 
+void ThreadSafety::PreCallRecordCmdSetEvent2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkEvent                                     event,
+    const VkDependencyInfoKHR*                  pDependencyInfo) {
+    StartWriteObject(commandBuffer, "vkCmdSetEvent2KHR");
+    StartReadObject(event, "vkCmdSetEvent2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdSetEvent2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkEvent                                     event,
+    const VkDependencyInfoKHR*                  pDependencyInfo) {
+    FinishWriteObject(commandBuffer, "vkCmdSetEvent2KHR");
+    FinishReadObject(event, "vkCmdSetEvent2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdResetEvent2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkEvent                                     event,
+    VkPipelineStageFlags2KHR                    stageMask) {
+    StartWriteObject(commandBuffer, "vkCmdResetEvent2KHR");
+    StartReadObject(event, "vkCmdResetEvent2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdResetEvent2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkEvent                                     event,
+    VkPipelineStageFlags2KHR                    stageMask) {
+    FinishWriteObject(commandBuffer, "vkCmdResetEvent2KHR");
+    FinishReadObject(event, "vkCmdResetEvent2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdWaitEvents2KHR(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    eventCount,
+    const VkEvent*                              pEvents,
+    const VkDependencyInfoKHR*                  pDependencyInfos) {
+    StartWriteObject(commandBuffer, "vkCmdWaitEvents2KHR");
+    if (pEvents) {
+        for (uint32_t index = 0; index < eventCount; index++) {
+            StartReadObject(pEvents[index], "vkCmdWaitEvents2KHR");
+        }
+    }
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdWaitEvents2KHR(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    eventCount,
+    const VkEvent*                              pEvents,
+    const VkDependencyInfoKHR*                  pDependencyInfos) {
+    FinishWriteObject(commandBuffer, "vkCmdWaitEvents2KHR");
+    if (pEvents) {
+        for (uint32_t index = 0; index < eventCount; index++) {
+            FinishReadObject(pEvents[index], "vkCmdWaitEvents2KHR");
+        }
+    }
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdPipelineBarrier2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkDependencyInfoKHR*                  pDependencyInfo) {
+    StartWriteObject(commandBuffer, "vkCmdPipelineBarrier2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdPipelineBarrier2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkDependencyInfoKHR*                  pDependencyInfo) {
+    FinishWriteObject(commandBuffer, "vkCmdPipelineBarrier2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdWriteTimestamp2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineStageFlags2KHR                    stage,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    query) {
+    StartWriteObject(commandBuffer, "vkCmdWriteTimestamp2KHR");
+    StartReadObject(queryPool, "vkCmdWriteTimestamp2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdWriteTimestamp2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineStageFlags2KHR                    stage,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    query) {
+    FinishWriteObject(commandBuffer, "vkCmdWriteTimestamp2KHR");
+    FinishReadObject(queryPool, "vkCmdWriteTimestamp2KHR");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordQueueSubmit2KHR(
+    VkQueue                                     queue,
+    uint32_t                                    submitCount,
+    const VkSubmitInfo2KHR*                     pSubmits,
+    VkFence                                     fence) {
+    StartWriteObject(queue, "vkQueueSubmit2KHR");
+    StartWriteObject(fence, "vkQueueSubmit2KHR");
+    // Host access to queue must be externally synchronized
+    // Host access to fence must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordQueueSubmit2KHR(
+    VkQueue                                     queue,
+    uint32_t                                    submitCount,
+    const VkSubmitInfo2KHR*                     pSubmits,
+    VkFence                                     fence,
+    VkResult                                    result) {
+    FinishWriteObject(queue, "vkQueueSubmit2KHR");
+    FinishWriteObject(fence, "vkQueueSubmit2KHR");
+    // Host access to queue must be externally synchronized
+    // Host access to fence must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdWriteBufferMarker2AMD(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineStageFlags2KHR                    stage,
+    VkBuffer                                    dstBuffer,
+    VkDeviceSize                                dstOffset,
+    uint32_t                                    marker) {
+    StartWriteObject(commandBuffer, "vkCmdWriteBufferMarker2AMD");
+    StartReadObject(dstBuffer, "vkCmdWriteBufferMarker2AMD");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdWriteBufferMarker2AMD(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineStageFlags2KHR                    stage,
+    VkBuffer                                    dstBuffer,
+    VkDeviceSize                                dstOffset,
+    uint32_t                                    marker) {
+    FinishWriteObject(commandBuffer, "vkCmdWriteBufferMarker2AMD");
+    FinishReadObject(dstBuffer, "vkCmdWriteBufferMarker2AMD");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordGetQueueCheckpointData2NV(
+    VkQueue                                     queue,
+    uint32_t*                                   pCheckpointDataCount,
+    VkCheckpointData2NV*                        pCheckpointData) {
+    StartReadObject(queue, "vkGetQueueCheckpointData2NV");
+}
+
+void ThreadSafety::PostCallRecordGetQueueCheckpointData2NV(
+    VkQueue                                     queue,
+    uint32_t*                                   pCheckpointDataCount,
+    VkCheckpointData2NV*                        pCheckpointData) {
+    FinishReadObject(queue, "vkGetQueueCheckpointData2NV");
+}
+
 void ThreadSafety::PreCallRecordCmdCopyBuffer2KHR(
     VkCommandBuffer                             commandBuffer,
     const VkCopyBufferInfo2KHR*                 pCopyBufferInfo) {
@@ -7178,6 +7335,22 @@ void ThreadSafety::PostCallRecordCmdSetFragmentShadingRateEnumNV(
     FinishWriteObject(commandBuffer, "vkCmdSetFragmentShadingRateEnumNV");
     // Host access to commandBuffer must be externally synchronized
 }
+
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+
+void ThreadSafety::PreCallRecordAcquireWinrtDisplayNV(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display) {
+    StartReadObject(display, "vkAcquireWinrtDisplayNV");
+}
+
+void ThreadSafety::PostCallRecordAcquireWinrtDisplayNV(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display,
+    VkResult                                    result) {
+    FinishReadObject(display, "vkAcquireWinrtDisplayNV");
+}
+#endif // VK_USE_PLATFORM_WIN32_KHR
 
 #ifdef VK_USE_PLATFORM_DIRECTFB_EXT
 

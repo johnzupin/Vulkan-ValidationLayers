@@ -1,10 +1,10 @@
 #!/usr/bin/python3 -i
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2020 The Khronos Group Inc.
-# Copyright (c) 2015-2020 Valve Corporation
-# Copyright (c) 2015-2020 LunarG, Inc.
-# Copyright (c) 2015-2020 Google Inc.
+# Copyright (c) 2015-2021 The Khronos Group Inc.
+# Copyright (c) 2015-2021 Valve Corporation
+# Copyright (c) 2015-2021 LunarG, Inc.
+# Copyright (c) 2015-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,6 +72,7 @@ class ThreadGeneratorOptions(GeneratorOptions):
                  addExtensions = None,
                  removeExtensions = None,
                  emitExtensions = None,
+                 emitSpirv = None,
                  sortProcedure = regSortFeatures,
                  prefixText = "",
                  genFuncPointers = True,
@@ -97,6 +98,7 @@ class ThreadGeneratorOptions(GeneratorOptions):
                 addExtensions = addExtensions,
                 removeExtensions = removeExtensions,
                 emitExtensions = emitExtensions,
+                emitSpirv = emitSpirv,
                 sortProcedure = sortProcedure)
         self.prefixText      = prefixText
         self.genFuncPointers = genFuncPointers
@@ -134,10 +136,10 @@ class ThreadOutputGenerator(OutputGenerator):
 // This file is ***GENERATED***.  Do Not Edit.
 // See thread_safety_generator.py for modifications.
 
-/* Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google Inc.
+/* Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -687,10 +689,10 @@ void ThreadSafety::PostCallRecordCreateDescriptorSetLayout(
 
         // Check whether any binding uses UPDATE_AFTER_BIND
         bool update_after_bind = false;
-        const auto *flags_create_info = lvl_find_in_chain<VkDescriptorSetLayoutBindingFlagsCreateInfoEXT>(pCreateInfo->pNext);
+        const auto *flags_create_info = LvlFindInChain<VkDescriptorSetLayoutBindingFlagsCreateInfo>(pCreateInfo->pNext);
         if (flags_create_info) {
             for (uint32_t i = 0; i < flags_create_info->bindingCount; ++i) {
-                if (flags_create_info->pBindingFlags[i] & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT) {
+                if (flags_create_info->pBindingFlags[i] & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT) {
                     update_after_bind = true;
                     break;
                 }
