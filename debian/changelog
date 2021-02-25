@@ -1,3 +1,45 @@
+vulkan-validationlayers (1.2.170.0~rc2-1lunarg18.04-1) bionic; urgency=medium
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix Android QueueSubmitBinarySemaphoreNotSignaled
+
+  [ John Zulauf ]
+  * layers: Add queue support flags for TRANSFER stage
+
+  [ sfricke-samsung ]
+  * layers: Fix using wrong extent for 03212
+
+  [ Nathaniel Cesario ]
+  * layers: Fix missing OpCopyObject definition
+  * layers: Fix incorrect static_cast
+  * tests: Add test for trace crash
+
+  [ Jeremy Gebben ]
+  * docs: Update syncval usage document for synchronization2
+  * corechecks: Prebuild image barrier SubresourceRangeErrorCodes
+  * corechecks: Do not pass loc.Message() to ValidateImageAspect
+
+  [ John Zulauf ]
+  * layers: Make image barrier VUID lookup lazier
+  * layers: Remove field duplication from error loc
+  * layers: Convert LogObjectList to small_vector
+
+  [ Nathaniel Cesario ]
+  * build: Add NOMINMAX for older VS builds
+  * layers: Use uint32_t for LogObjectList size_type
+
+  [ John Zulauf ]
+  * layers: Lazy intitialize big and small maps
+  * layers: Convert layout maps to optional/emplace
+
+  [ John Zupin ]
+  * packaging: updated LunarG's copyrights
+
+  [ Jeremy Gebben ]
+  * corechecks: Add license header to core_error_location.cpp
+
+ -- John Zupin <john@odin>  Thu, 25 Feb 2021 14:23:09 -0700
+
 vulkan-validationlayers (1.2.170.0~rc1-1lunarg18.04-1) bionic; urgency=medium
 
   [ sfricke-samsung ]
