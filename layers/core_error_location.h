@@ -139,56 +139,62 @@ struct CoreErrorLocation {
     Field field_name;
     // optional index if checking an array.
     uint32_t index;
-
-    // tracking for how we walk down into arrays of structures
-    struct Path {
-        Path() : field(Field::Empty), index(kNoIndex) {}
-        Path(Field f, uint32_t i) : field(f), index(i) {}
-        Field field;
-        uint32_t index;
-    };
-    // should be sized to cover the common struct nesting depths without allocating.
-    small_vector<Path, 3> field_path;
+    const CoreErrorLocation *prev;
 
     CoreErrorLocation(ErrFunc func, RefPage ref, Field f = Field::Empty, uint32_t i = kNoIndex)
-        : func_name(func), refpage(ref), field_name(f), index(i) {}
+        : func_name(func), refpage(ref), field_name(f), index(i), prev(nullptr) {}
+    CoreErrorLocation(const CoreErrorLocation &prev_loc, Field f, uint32_t i)
+        : func_name(prev_loc.func_name), refpage(prev_loc.refpage), field_name(f), index(i), prev(&prev_loc) {}
 
+    void AppendFields(std::stringstream *out) const;
     std::string Message() const {
         std::stringstream out;
         out << StringFuncName() << "(): ";
-        for (const auto &f : field_path) {
-            out << String(f.field);
-            if (f.index != kNoIndex) {
-                out << "[" << f.index << "]";
-            }
-            out << ".";
-        }
-        out << String(field_name);
-        if (index != kNoIndex) {
-            out << "[" << index << "]";
-        }
+        AppendFields(&out);
         return out.str();
     }
 
     // the dot() method is for walking down into a structure that is being validated
     // eg:  loc.dot(Field::pMemoryBarriers, 5).dot(Field::srcStagemask)
     CoreErrorLocation dot(Field sub_field, uint32_t sub_index = kNoIndex) const {
-        CoreErrorLocation result(this->func_name, this->refpage);
-        result.field_path.reserve(this->field_path.size() + 1);
-        result.field_path = this->field_path;
-        if (this->field_name != Field::Empty) {
-            result.field_path.emplace_back(Path{this->field_name, this->index});
-        }
-        result.field_name = sub_field;
-        result.index = sub_index;
+        CoreErrorLocation result(*this, sub_field, sub_index);
         return result;
     }
 
-    static const std::string &String(ErrFunc func);
-    static const std::string &String(RefPage refpage);
-    static const std::string &String(Field field);
+    static const std::string& String(ErrFunc func);
+    static const std::string& String(RefPage refpage);
+    static const std::string& String(Field field);
 
-    const std::string &StringFuncName() const { return String(func_name); }
-    const std::string &StringRefPage() const { return String(refpage); }
-    const std::string &StringField() const { return String(field_name); }
+    const std::string& StringFuncName() const { return String(func_name); }
+    const std::string& StringRefPage() const { return String(refpage); }
+    const std::string& StringField() const { return String(field_name); }
+};
+
+template <typename VuidFunctor>
+struct CoreErrorLocationVuidAdapter {
+    const CoreErrorLocation loc;
+    VuidFunctor vuid_functor;
+    const char* FuncName() const {
+        // the returned reference from loc must be valid for lifespan of loc, at least.
+        const std::string& func_name = loc.StringFuncName();
+        return func_name.c_str();
+    }
+    const char* Vuid() const {
+        // the returned reference from functor must be valid for lifespan of vuid_functor, at least.
+        const std::string& vuid = vuid_functor(loc);
+        return vuid.c_str();
+    }
+    template <typename... Args>
+    CoreErrorLocationVuidAdapter(const CoreErrorLocation& loc_, const Args&... args) : loc(loc_), vuid_functor(args...) {}
+};
+
+struct CoreErrorLocationCapture {
+    CoreErrorLocationCapture(const CoreErrorLocation &loc);
+    const CoreErrorLocation &Get() const { return capture.back(); }
+
+  protected:
+    // TODO: Optimize this for "new" minimization
+    using CaptureStore = small_vector<CoreErrorLocation, 2>;
+    const CoreErrorLocation *Capture(const CoreErrorLocation &loc, CaptureStore::size_type depth);
+    CaptureStore capture;
 };
