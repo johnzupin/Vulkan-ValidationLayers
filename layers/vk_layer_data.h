@@ -38,7 +38,7 @@
 //       MoveAssignable and MoveConstructable
 // NOTE: Unlike std::vector, iterators are invalidated by move assignment between small_vector objects effectively the
 //       "small string" allocation functions as an incompatible allocator.
-template <typename T, size_t N, typename size_type = uint8_t>
+template <typename T, size_t N, typename SizeType = uint8_t>
 class small_vector {
   public:
     using value_type = T;
@@ -48,6 +48,7 @@ class small_vector {
     using const_pointer = const value_type *;
     using iterator = pointer;
     using const_iterator = const_pointer;
+    using size_type = SizeType;
     static const size_type kSmallCapacity = N;
     static const size_type kMaxCapacity = std::numeric_limits<size_type>::max();
     static_assert(N <= kMaxCapacity, "size must be less than size_type::max");
@@ -625,4 +626,48 @@ void FreeLayerDataPtr(void *data_key, std::unordered_map<void *, DATA_T *> &laye
     layer_data_map.erase(got);
 }
 
+// A C++11 approximation of std::optional
+template <typename T>
+struct Optional {
+  protected:
+    union Store {
+        Store(){};   // Do nothing.  That's the point.
+        ~Store(){};  // Not safe to destroy this object outside of it's stateful contain to clean up T if any.
+        typename std::aligned_storage<sizeof(T), alignof(T)>::type backing;
+        T obj;
+    };
+
+  public:
+    Optional() : init_(false) {}
+    ~Optional() {
+        if (init_) store_.obj.~T();
+    }
+    template <typename... Args>
+    T &emplace(const Args &...args) {
+        init_ = true;
+        new (&store_.backing) T(args...);
+        return store_.obj;
+    }
+    T *operator&() {
+        if (init_) return &store_.obj;
+        return nullptr;
+    }
+    const T *operator&() const {
+        if (init_) return &store_.obj;
+        return nullptr;
+    }
+    T *operator->() {
+        if (init_) return &store_.obj;
+        return nullptr;
+    }
+    const T *operator->() const {
+        if (init_) return &store_.obj;
+        return nullptr;
+    }
+    operator bool() const { return init_; }
+
+  protected:
+    Store store_;
+    bool init_;
+};
 #endif  // LAYER_DATA_H

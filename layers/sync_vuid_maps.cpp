@@ -19,6 +19,7 @@
  */
 #include "sync_vuid_maps.h"
 #include "core_error_location.h"
+#include "state_tracker.h"
 #include <cassert>
 #include <algorithm>
 #include <array>
@@ -737,14 +738,6 @@ static const std::map<ImageError, std::vector<std::string>> kImageErrors{
     {ImageError::kNotDepthAndStencilAspect, {"VUID-VkImageMemoryBarrier-image-01207", "VUID-VkImageMemoryBarrier2KHR-image-01207"}},
     {ImageError::kNotSeparateDepthAndStencilAspect,
      {"VUID-VkImageMemoryBarrier-image-03320", "VUID-VkImageMemoryBarrier2KHR-image-03320"}},
-    {ImageError::kBadBaseMip,
-     {"VUID-VkImageMemoryBarrier-subresourceRange-01486", "VUID-VkImageMemoryBarrier2KHR-subresourceRange-01486"}},
-    {ImageError::kBadMipCount,
-     {"VUID-VkImageMemoryBarrier-subresourceRange-01724", "VUID-VkImageMemoryBarrier2KHR-subresourceRange-01724"}},
-    {ImageError::kBadBaseLayer,
-     {"VUID-VkImageMemoryBarrier-subresourceRange-01488", "VUID-VkImageMemoryBarrier2KHR-subresourceRange-01488"}},
-    {ImageError::kBadLayerCount,
-     {"VUID-VkImageMemoryBarrier-subresourceRange-01725", "VUID-VkImageMemoryBarrier2KHR-subresourceRange-01725"}},
     {ImageError::kRenderPassMismatch, {"VUID-vkCmdPipelineBarrier-image-04073", "VUID-vkCmdPipelineBarrier2KHR-image-04073"}},
     {ImageError::kRenderPassLayoutChange,
      {"VUID-vkCmdPipelineBarrier-oldLayout-01181", "VUID-vkCmdPipelineBarrier2KHR-oldLayout-01181"}},
@@ -765,6 +758,22 @@ const std::string &GetImageBarrierVUID(const CoreErrorLocation &loc, ImageError 
     return result2;
 }
 
+const SubresourceRangeErrorCodes& GetSubResourceVUIDs(const CoreErrorLocation &loc) {
+    static const SubresourceRangeErrorCodes v1 {
+        "VUID-VkImageMemoryBarrier-subresourceRange-01486",
+        "VUID-VkImageMemoryBarrier-subresourceRange-01724",
+        "VUID-VkImageMemoryBarrier-subresourceRange-01488",
+        "VUID-VkImageMemoryBarrier-subresourceRange-01725",
+    };
+    static const SubresourceRangeErrorCodes v2 {
+        "VUID-VkImageMemoryBarrier2KHR-subresourceRange-01486",
+        "VUID-VkImageMemoryBarrier2KHR-subresourceRange-01724",
+        "VUID-VkImageMemoryBarrier2KHR-subresourceRange-01488"
+        "VUID-VkImageMemoryBarrier2KHR-subresourceRange-01725",
+    };
+    return (loc.refpage == RefPage::VkImageMemoryBarrier2KHR) ? v2 : v1;
+}
+
 static const std::map<SubmitError, std::vector<std::string>> kSubmitErrors{
     {SubmitError::kTimelineSemSmallValue,
      {
@@ -780,10 +789,15 @@ static const std::map<SubmitError, std::vector<std::string>> kSubmitErrors{
          "VUID-vkQueueBindSparse-pSignalSemaphores-01115",
          "VUID-vkQueueSubmit2KHR-semaphore-03868",
      }},
-    {SubmitError::kSemCannotBeSignalled,
+    {SubmitError::kBinaryCannotBeSignalled,
      {
-         "VUID-vkQueueSubmit-pWaitSemaphores-03238"
+         "VUID-vkQueueSubmit-pWaitSemaphores-00069",
          "VUID-vkQueueSubmit2KHR-semaphore-03872",
+     }},
+    {SubmitError::kTimelineCannotBeSignalled,
+     {
+         "VUID-vkQueueSubmit-pWaitSemaphores-03238",
+         "VUID-vkQueueSubmit2KHR-semaphore-03873",
      }},
     {SubmitError::kTimelineSemMaxDiff,
      {

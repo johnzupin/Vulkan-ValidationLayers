@@ -130,32 +130,23 @@ using std::unordered_map;
 using std::unordered_set;
 using std::vector;
 
-static std::unique_ptr<ImageSubresourceLayoutMap> LayoutMapFactory(const IMAGE_STATE &image_state) {
-    std::unique_ptr<ImageSubresourceLayoutMap> map(new ImageSubresourceLayoutMap(image_state));
-    return map;
-}
-
 // The const variant only need the image as it is the key for the map
 const ImageSubresourceLayoutMap *GetImageSubresourceLayoutMap(const CMD_BUFFER_STATE *cb_state, VkImage image) {
     auto it = cb_state->image_layout_map.find(image);
     if (it == cb_state->image_layout_map.cend()) {
         return nullptr;
     }
-    return it->second.get();
+    return &it->second;
 }
 
 // The non-const variant only needs the image state, as the factory requires it to construct a new entry
 ImageSubresourceLayoutMap *GetImageSubresourceLayoutMap(CMD_BUFFER_STATE *cb_state, const IMAGE_STATE &image_state) {
-    auto it = cb_state->image_layout_map.find(image_state.image);
-    if (it == cb_state->image_layout_map.end()) {
-        // Empty slot... fill it in.
-        auto insert_pair = cb_state->image_layout_map.insert(std::make_pair(image_state.image, LayoutMapFactory(image_state)));
-        assert(insert_pair.second);
-        ImageSubresourceLayoutMap *new_map = insert_pair.first->second.get();
-        assert(new_map);
-        return new_map;
+    auto &layout_map = cb_state->image_layout_map[image_state.image];
+    if (!layout_map) {
+        // Was an empty slot... fill it in.
+        layout_map.emplace(image_state);
     }
-    return it->second.get();
+    return &layout_map;
 }
 
 void AddInitialLayoutintoImageLayoutMap(const IMAGE_STATE &image_state, GlobalImageLayoutMap &image_layout_map) {
@@ -188,43 +179,60 @@ template <typename T1>
 bool CoreChecks::VerifyBoundMemoryIsValid(const DEVICE_MEMORY_STATE *mem_state, const T1 object,
                                           const VulkanTypedHandle &typed_handle, const char *api_name,
                                           const char *error_code) const {
+    return VerifyBoundMemoryIsValid<T1, SimpleErrorLocation>(mem_state, object, typed_handle, {api_name, error_code});
+}
+
+template <typename T1, typename Location>
+bool CoreChecks::VerifyBoundMemoryIsValid(const DEVICE_MEMORY_STATE *mem_state, const T1 object,
+                                          const VulkanTypedHandle &typed_handle, const Location &location) const {
     bool result = false;
     auto type_name = object_string[typed_handle.type];
     if (!mem_state) {
-        result |=
-            LogError(object, error_code, "%s: %s used with no memory bound. Memory should be bound by calling vkBind%sMemory().",
-                     api_name, report_data->FormatHandle(typed_handle).c_str(), type_name + 2);
+        result |= LogError(object, location.Vuid(),
+                           "%s: %s used with no memory bound. Memory should be bound by calling vkBind%sMemory().",
+                           location.FuncName(), report_data->FormatHandle(typed_handle).c_str(), type_name + 2);
     } else if (mem_state->destroyed) {
-        result |= LogError(object, error_code,
+        result |= LogError(object, location.Vuid(),
                            "%s: %s used with no memory bound and previously bound memory was freed. Memory must not be freed "
                            "prior to this operation.",
-                           api_name, report_data->FormatHandle(typed_handle).c_str());
+                           location.FuncName(), report_data->FormatHandle(typed_handle).c_str());
     }
     return result;
 }
 
 // Check to see if memory was ever bound to this image
+
+bool CoreChecks::ValidateMemoryIsBoundToImage(const IMAGE_STATE *image_state, const CoreErrorLocation &loc) const {
+    using LocationAdapter = CoreErrorLocationVuidAdapter<sync_vuid_maps::GetImageBarrierVUIDFunctor>;
+    return ValidateMemoryIsBoundToImage<LocationAdapter>(image_state, LocationAdapter(loc, sync_vuid_maps::ImageError::kNoMemory));
+}
+
 bool CoreChecks::ValidateMemoryIsBoundToImage(const IMAGE_STATE *image_state, const char *api_name, const char *error_code) const {
+    return ValidateMemoryIsBoundToImage<SimpleErrorLocation>(image_state, SimpleErrorLocation(api_name, error_code));
+}
+
+template <typename Location>
+bool CoreChecks::ValidateMemoryIsBoundToImage(const IMAGE_STATE *image_state, const Location &location) const {
     bool result = false;
     if (image_state->create_from_swapchain != VK_NULL_HANDLE) {
         if (image_state->bind_swapchain == VK_NULL_HANDLE) {
             LogObjectList objlist(image_state->image);
             objlist.add(image_state->create_from_swapchain);
             result |= LogError(
-                objlist, error_code,
+                objlist, location.Vuid(),
                 "%s: %s is created by %s, and the image should be bound by calling vkBindImageMemory2(), and the pNext chain "
                 "includes VkBindImageMemorySwapchainInfoKHR.",
-                api_name, report_data->FormatHandle(image_state->image).c_str(),
+                location.FuncName(), report_data->FormatHandle(image_state->image).c_str(),
                 report_data->FormatHandle(image_state->create_from_swapchain).c_str());
         } else if (image_state->create_from_swapchain != image_state->bind_swapchain) {
             LogObjectList objlist(image_state->image);
             objlist.add(image_state->create_from_swapchain);
             objlist.add(image_state->bind_swapchain);
             result |=
-                LogError(objlist, error_code,
+                LogError(objlist, location.Vuid(),
                          "%s: %s is created by %s, but the image is bound by %s. The image should be created and bound by the same "
                          "swapchain",
-                         api_name, report_data->FormatHandle(image_state->image).c_str(),
+                         location.FuncName(), report_data->FormatHandle(image_state->image).c_str(),
                          report_data->FormatHandle(image_state->create_from_swapchain).c_str(),
                          report_data->FormatHandle(image_state->bind_swapchain).c_str());
         }
@@ -232,7 +240,7 @@ bool CoreChecks::ValidateMemoryIsBoundToImage(const IMAGE_STATE *image_state, co
         // TODO look into how to properly check for a valid bound memory for an external AHB
     } else if (0 == (static_cast<uint32_t>(image_state->createInfo.flags) & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)) {
         result |= VerifyBoundMemoryIsValid(image_state->binding.mem_state.get(), image_state->image,
-                                           VulkanTypedHandle(image_state->image, kVulkanObjectTypeImage), api_name, error_code);
+                                           VulkanTypedHandle(image_state->image, kVulkanObjectTypeImage), location);
     }
     return result;
 }
@@ -2895,7 +2903,8 @@ struct SemaphoreSubmitState {
             (pSemaphore->scope == kSyncScopeInternal || internal_semaphores.count(semaphore))) {
             if (unsignaled_semaphores.count(semaphore) ||
                 (!(signaled_semaphores.count(semaphore)) && !(pSemaphore->signaled) && !core->SemaphoreWasSignaled(semaphore))) {
-                const auto &vuid = GetQueueSubmitVUID(loc, SubmitError::kSemCannotBeSignalled);
+                auto error = core->device_extensions.vk_khr_timeline_semaphore ? SubmitError::kTimelineCannotBeSignalled : SubmitError::kBinaryCannotBeSignalled;
+                const auto &vuid = GetQueueSubmitVUID(loc, error);
                 skip |= core->LogError(
                     objlist, pSemaphore->scope == kSyncScopeInternal ? vuid : kVUID_Core_DrawState_QueueForwardProgress,
                     "%s Queue %s is waiting on semaphore (%s) that has no way to be signaled.", loc.Message().c_str(),
@@ -7478,7 +7487,7 @@ bool CoreChecks::ValidateStageMasksAgainstQueueCapabilities(const LogObjectList 
 
     static const std::map<VkPipelineStageFlags2KHR, VkQueueFlags> metaFlags{
         {VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR, VK_QUEUE_GRAPHICS_BIT},
-        {VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR, VK_QUEUE_TRANSFER_BIT},
+        {VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT},
         {VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR, VK_QUEUE_GRAPHICS_BIT},
         {VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT_KHR, VK_QUEUE_GRAPHICS_BIT},
     };
@@ -10760,7 +10769,8 @@ bool CoreChecks::VerifyFramebufferAndRenderPassImageViews(const VkRenderPassBegi
                                          func_name, i, view_width, i, framebuffer_attachment_image_info->width);
                     }
 
-                    uint32_t view_height = image_create_info->extent.width >> image_view_create_info->subresourceRange.baseMipLevel;
+                    uint32_t view_height =
+                        image_create_info->extent.height >> image_view_create_info->subresourceRange.baseMipLevel;
                     if (framebuffer_attachment_image_info->height != view_height) {
                         skip |= LogError(pRenderPassBeginInfo->renderPass, "VUID-VkRenderPassBeginInfo-framebuffer-03212",
                                          "%s: Image view #%u created from an image subresource with height set as %u, "
@@ -11369,7 +11379,7 @@ bool CoreChecks::PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuffer
             // Const getter can be null in which case we have nothing to check against for this image...
             if (!cb_subres_map) continue;
 
-            const auto &sub_cb_subres_map = sub_layout_map_entry.second;
+            const auto *sub_cb_subres_map = &sub_layout_map_entry.second;
             // Validate the initial_uses, that they match the current state of the primary cb, or absent a current state,
             // that the match any initial_layout.
             for (const auto &subres_layout : *sub_cb_subres_map) {
