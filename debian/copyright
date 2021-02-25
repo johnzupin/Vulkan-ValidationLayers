@@ -3,7 +3,7 @@ Upstream-Name: vulkan-validationlayers
 Source: https://github.com/KhronosGroup/Vulkan-ValidationLayers
 
 Files: *
-Copyright: Copyright 2020 LunarG Inc.
+Copyright: Copyright 2021 LunarG Inc.
 License: Apache-2.0
 
 Files: debian/*
