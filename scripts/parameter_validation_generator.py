@@ -176,6 +176,7 @@ class ParameterValidationOutputGenerator(OutputGenerator):
             'vkCmdUpdateBuffer',
             'vkCmdFillBuffer',
             'vkCreateSwapchainKHR',
+            'vkCreateSharedSwapchainsKHR',
             'vkQueuePresentKHR',
             'vkCreateDescriptorPool',
             'vkCmdDispatch',
@@ -240,7 +241,8 @@ class ParameterValidationOutputGenerator(OutputGenerator):
             'vkGetAccelerationStructureBuildSizesKHR',
             'vkCmdWriteAccelerationStructuresPropertiesNV',
             'vkCreateDisplayModeKHR',
-            'vkCreatePrivateDataSlotEXT'
+            'vkCreatePrivateDataSlotEXT',
+            'vkCmdSetVertexInputEXT'
             ]
 
         # Commands to ignore

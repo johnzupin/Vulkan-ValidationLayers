@@ -26,6 +26,7 @@
 
 #include "layer_validation_tests.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <memory>
@@ -2868,7 +2869,7 @@ TEST_F(VkPositiveLayerTest, PushDescriptorUnboundSetTest) {
     VkConstantBufferObj buffer(m_device, sizeof(bo_data), (const void *)&bo_data, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     // Update descriptor set
-    descriptor_set.WriteDescriptorBufferInfo(2, buffer.handle(), sizeof(bo_data));
+    descriptor_set.WriteDescriptorBufferInfo(2, buffer.handle(), 0, sizeof(bo_data));
     descriptor_set.UpdateDescriptorSets();
 
     PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR =
@@ -2892,6 +2893,137 @@ TEST_F(VkPositiveLayerTest, PushDescriptorUnboundSetTest) {
 
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
+}
+
+// This is a positive test. No failures are expected.
+TEST_F(VkPositiveLayerTest, BindingPartiallyBound) {
+    TEST_DESCRIPTION("Ensure that no validation errors for invalid descriptors if binding is PARTIALLY_BOUND");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+
+    InitFramework(m_errorMonitor);
+
+    bool descriptor_indexing = DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE3_EXTENSION_NAME);
+    descriptor_indexing =
+        descriptor_indexing && DeviceExtensionSupported(gpu(), nullptr, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    if (descriptor_indexing) {
+        m_device_extension_names.push_back(VK_KHR_MAINTENANCE3_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    } else {
+        printf("%s %s and/or %s Extension not supported, skipping tests\n", kSkipPrefix, VK_KHR_MAINTENANCE3_EXTENSION_NAME,
+               VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+        return;
+    }
+    VkPhysicalDeviceFeatures2KHR features2 = {};
+    auto indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
+
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+    features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    if (!indexing_features.descriptorBindingPartiallyBound) {
+        printf("Partially bound bindings not supported, skipping test\n");
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitViewport());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    m_errorMonitor->ExpectSuccess();
+
+    VkDescriptorBindingFlagsEXT ds_binding_flags[2] = {};
+    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT layout_createinfo_binding_flags = {};
+    ds_binding_flags[0] = 0;
+    // No Error
+    ds_binding_flags[1] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+    // Uncomment for Error
+    // ds_binding_flags[1] = 0;
+
+    layout_createinfo_binding_flags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+    layout_createinfo_binding_flags.pNext = NULL;
+    layout_createinfo_binding_flags.bindingCount = 2;
+    layout_createinfo_binding_flags.pBindingFlags = ds_binding_flags;
+
+    // Prepare descriptors
+    OneOffDescriptorSet descriptor_set(m_device,
+                                       {
+                                           {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                           {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                       },
+                                       0, &layout_createinfo_binding_flags, 0);
+    const VkPipelineLayoutObj pipeline_layout(m_device, {&descriptor_set.layout_});
+    uint32_t qfi = 0;
+    VkBufferCreateInfo buffer_create_info = {};
+    buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buffer_create_info.size = 32;
+    buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    buffer_create_info.queueFamilyIndexCount = 1;
+    buffer_create_info.pQueueFamilyIndices = &qfi;
+
+    VkBufferObj buffer;
+    buffer.init(*m_device, buffer_create_info);
+
+    VkDescriptorBufferInfo buffer_info[2] = {};
+    buffer_info[0].buffer = buffer.handle();
+    buffer_info[0].offset = 0;
+    buffer_info[0].range = sizeof(uint32_t);
+
+    VkBufferCreateInfo index_buffer_create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    index_buffer_create_info.size = sizeof(uint32_t);
+    index_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    VkBufferObj index_buffer;
+    index_buffer.init(*m_device, index_buffer_create_info);
+
+    // Only update binding 0
+    VkWriteDescriptorSet descriptor_writes[2] = {};
+    descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptor_writes[0].dstSet = descriptor_set.set_;
+    descriptor_writes[0].dstBinding = 0;
+    descriptor_writes[0].descriptorCount = 1;
+    descriptor_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptor_writes[0].pBufferInfo = buffer_info;
+    vk::UpdateDescriptorSets(m_device->device(), 1, descriptor_writes, 0, NULL);
+
+    char const *shader_source = R"glsl(
+        #version 450
+        layout(set = 0, binding = 0) uniform foo_0 { int val; } doit;
+        layout(set = 0, binding = 1) uniform foo_1 { int val; } readit;
+        void main() {
+            if (doit.val == 0)
+                gl_Position = vec4(0.0);
+            else
+                gl_Position = vec4(readit.val);
+        })glsl";
+
+    VkShaderObj vs(m_device, shader_source, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkPipelineObj pipe(m_device);
+    pipe.AddShader(&vs);
+    pipe.AddDefaultColorAttachment();
+    pipe.CreateVKPipeline(pipeline_layout.handle(), m_renderPass);
+    VkCommandBufferBeginInfo begin_info = {};
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    m_commandBuffer->begin(&begin_info);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.handle());
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdBindIndexBuffer(m_commandBuffer->handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
+    VkViewport viewport = {0, 0, 16, 16, 0, 1};
+    vk::CmdSetViewport(m_commandBuffer->handle(), 0, 1, &viewport);
+    VkRect2D scissor = {{0, 0}, {16, 16}};
+    vk::CmdSetScissor(m_commandBuffer->handle(), 0, 1, &scissor);
+    vk::CmdDrawIndexed(m_commandBuffer->handle(), 1, 1, 0, 0, 0);
+    vk::CmdEndRenderPass(m_commandBuffer->handle());
+    m_commandBuffer->end();
+    m_commandBuffer->QueueCommandBuffer();
+    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, PushDescriptorSetUpdatingSetNumber) {
@@ -8413,22 +8545,22 @@ TEST_F(VkPositiveLayerTest, CmdCopySwapchainImage) {
 
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-    if (!InitSwapchain()) {
+    if (!InitSwapchain(VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
         printf("%s Cannot create surface or swapchain, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
         return;
     }
 
     auto image_create_info = LvlInitStruct<VkImageCreateInfo>();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image_create_info.extent.width = 64;
-    image_create_info.extent.height = 64;
+    image_create_info.format = m_surface_formats[0].format;
+    image_create_info.extent.width = m_surface_capabilities.minImageExtent.width;
+    image_create_info.extent.height = m_surface_capabilities.minImageExtent.height;
     image_create_info.extent.depth = 1;
     image_create_info.mipLevels = 1;
     image_create_info.arrayLayers = 1;
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -8466,7 +8598,8 @@ TEST_F(VkPositiveLayerTest, CmdCopySwapchainImage) {
     copy_region.dstSubresource.layerCount = 1;
     copy_region.srcOffset = {0, 0, 0};
     copy_region.dstOffset = {0, 0, 0};
-    copy_region.extent = {10, 10, 1};
+    copy_region.extent = {std::min(10u, m_surface_capabilities.minImageExtent.width),
+                          std::min(10u, m_surface_capabilities.minImageExtent.height), 1};
 
     m_commandBuffer->begin();
 
@@ -8532,15 +8665,15 @@ TEST_F(VkPositiveLayerTest, TransferImageToSwapchainDeviceGroup) {
 
     auto image_create_info = LvlInitStruct<VkImageCreateInfo>();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image_create_info.extent.width = 64;
-    image_create_info.extent.height = 64;
+    image_create_info.format = m_surface_formats[0].format;
+    image_create_info.extent.width = m_surface_capabilities.minImageExtent.width;
+    image_create_info.extent.height = m_surface_capabilities.minImageExtent.height;
     image_create_info.extent.depth = 1;
     image_create_info.mipLevels = 1;
     image_create_info.arrayLayers = 1;
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -8548,7 +8681,6 @@ TEST_F(VkPositiveLayerTest, TransferImageToSwapchainDeviceGroup) {
     src_Image.init(&image_create_info);
 
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    image_create_info.flags = VK_IMAGE_CREATE_ALIAS_BIT;
 
     auto image_swapchain_create_info = LvlInitStruct<VkImageSwapchainCreateInfoKHR>();
     image_swapchain_create_info.swapchain = m_swapchain;
@@ -9362,6 +9494,437 @@ TEST_F(VkPositiveLayerTest, CreatePipelineOverlappingPushConstantRange) {
     m_errorMonitor->VerifyNotFound();
 }
 
+TEST_F(VkPositiveLayerTest, MultipleEntryPointPushConstantVertNormalFrag) {
+    TEST_DESCRIPTION("Test push-constant only being used by single entrypoint.");
+
+    m_errorMonitor->ExpectSuccess();
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    // #version 450
+    // layout(push_constant, std430) uniform foo { float x; } consts;
+    // void main(){
+    //    gl_Position = vec4(consts.x);
+    // }
+    //
+    // #version 450
+    // layout(location=0) out vec4 o;
+    // void main(){
+    //    o = vec4(1.0);
+    // }
+    const std::string source_body = R"(
+                            OpExecutionMode %main_f OriginUpperLeft
+                            OpSource GLSL 450
+                            OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
+                            OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
+                            OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
+                            OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
+                            OpDecorate %gl_PerVertex Block
+                            OpMemberDecorate %foo 0 Offset 0
+                            OpDecorate %foo Block
+                            OpDecorate %out_frag Location 0
+                    %void = OpTypeVoid
+                       %3 = OpTypeFunction %void
+                   %float = OpTypeFloat 32
+                 %v4float = OpTypeVector %float 4
+                    %uint = OpTypeInt 32 0
+                  %uint_1 = OpConstant %uint 1
+       %_arr_float_uint_1 = OpTypeArray %float %uint_1
+            %gl_PerVertex = OpTypeStruct %v4float %float %_arr_float_uint_1 %_arr_float_uint_1
+%_ptr_Output_gl_PerVertex = OpTypePointer Output %gl_PerVertex
+                %out_vert = OpVariable %_ptr_Output_gl_PerVertex Output
+                     %int = OpTypeInt 32 1
+                   %int_0 = OpConstant %int 0
+                     %foo = OpTypeStruct %float
+   %_ptr_PushConstant_foo = OpTypePointer PushConstant %foo
+                  %consts = OpVariable %_ptr_PushConstant_foo PushConstant
+ %_ptr_PushConstant_float = OpTypePointer PushConstant %float
+     %_ptr_Output_v4float = OpTypePointer Output %v4float
+                %out_frag = OpVariable %_ptr_Output_v4float Output
+                 %float_1 = OpConstant %float 1
+                 %vec_1_0 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
+                  %main_v = OpFunction %void None %3
+                 %label_v = OpLabel
+                      %20 = OpAccessChain %_ptr_PushConstant_float %consts %int_0
+                      %21 = OpLoad %float %20
+                      %22 = OpCompositeConstruct %v4float %21 %21 %21 %21
+                      %24 = OpAccessChain %_ptr_Output_v4float %out_vert %int_0
+                            OpStore %24 %22
+                            OpReturn
+                            OpFunctionEnd
+                  %main_f = OpFunction %void None %3
+                 %label_f = OpLabel
+                            OpStore %out_frag %vec_1_0
+                            OpReturn
+                            OpFunctionEnd
+    )";
+
+    std::string vert_first = R"(
+        OpCapability Shader
+        OpMemoryModel Logical GLSL450
+        OpEntryPoint Vertex %main_v "main_v" %out_vert
+        OpEntryPoint Fragment %main_f "main_f" %out_frag
+    )" + source_body;
+
+    std::string frag_first = R"(
+        OpCapability Shader
+        OpMemoryModel Logical GLSL450
+        OpEntryPoint Fragment %main_f "main_f" %out_frag
+        OpEntryPoint Vertex %main_v "main_v" %out_vert
+    )" + source_body;
+
+    VkPushConstantRange push_constant_ranges[1]{{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float)}};
+    VkPipelineLayoutCreateInfo const pipeline_layout_info{
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, push_constant_ranges};
+
+    // Vertex entry point first
+    {
+        VkShaderObj const vs(m_device, vert_first, VK_SHADER_STAGE_VERTEX_BIT, this, "main_v");
+        VkShaderObj const fs(m_device, vert_first, VK_SHADER_STAGE_FRAGMENT_BIT, this, "main_f");
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.pipeline_layout_ci_ = pipeline_layout_info;
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    // Fragment entry point first
+    {
+        VkShaderObj const vs(m_device, frag_first, VK_SHADER_STAGE_VERTEX_BIT, this, "main_v");
+        VkShaderObj const fs(m_device, frag_first, VK_SHADER_STAGE_FRAGMENT_BIT, this, "main_f");
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.pipeline_layout_ci_ = pipeline_layout_info;
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, MultipleEntryPointNormalVertPushConstantFrag) {
+    TEST_DESCRIPTION("Test push-constant only being used by single entrypoint.");
+
+    m_errorMonitor->ExpectSuccess();
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    // #version 450
+    // void main(){
+    //    gl_Position = vec4(1.0);
+    // }
+    //
+    // #version 450
+    // layout(push_constant, std430) uniform foo { float x; } consts;
+    // layout(location=0) out vec4 o;
+    // void main(){
+    //    o = vec4(consts.x);
+    // }
+    const std::string source_body = R"(
+                            OpExecutionMode %main_f OriginUpperLeft
+                            OpSource GLSL 450
+                            OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
+                            OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
+                            OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
+                            OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
+                            OpDecorate %gl_PerVertex Block
+                            OpDecorate %out_frag Location 0
+                            OpMemberDecorate %foo 0 Offset 0
+                            OpDecorate %foo Block
+                    %void = OpTypeVoid
+                       %3 = OpTypeFunction %void
+                   %float = OpTypeFloat 32
+                 %v4float = OpTypeVector %float 4
+                    %uint = OpTypeInt 32 0
+                  %uint_1 = OpConstant %uint 1
+       %_arr_float_uint_1 = OpTypeArray %float %uint_1
+            %gl_PerVertex = OpTypeStruct %v4float %float %_arr_float_uint_1 %_arr_float_uint_1
+%_ptr_Output_gl_PerVertex = OpTypePointer Output %gl_PerVertex
+                %out_vert = OpVariable %_ptr_Output_gl_PerVertex Output
+                     %int = OpTypeInt 32 1
+                   %int_0 = OpConstant %int 0
+                 %float_1 = OpConstant %float 1
+                      %17 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
+     %_ptr_Output_v4float = OpTypePointer Output %v4float
+                %out_frag = OpVariable %_ptr_Output_v4float Output
+                     %foo = OpTypeStruct %float
+   %_ptr_PushConstant_foo = OpTypePointer PushConstant %foo
+                  %consts = OpVariable %_ptr_PushConstant_foo PushConstant
+ %_ptr_PushConstant_float = OpTypePointer PushConstant %float
+                  %main_v = OpFunction %void None %3
+                 %label_v = OpLabel
+                      %19 = OpAccessChain %_ptr_Output_v4float %out_vert %int_0
+                            OpStore %19 %17
+                            OpReturn
+                            OpFunctionEnd
+                  %main_f = OpFunction %void None %3
+                 %label_f = OpLabel
+                      %26 = OpAccessChain %_ptr_PushConstant_float %consts %int_0
+                      %27 = OpLoad %float %26
+                      %28 = OpCompositeConstruct %v4float %27 %27 %27 %27
+                            OpStore %out_frag %28
+                            OpReturn
+                            OpFunctionEnd
+    )";
+
+    std::string vert_first = R"(
+        OpCapability Shader
+        OpMemoryModel Logical GLSL450
+        OpEntryPoint Vertex %main_v "main_v" %out_vert
+        OpEntryPoint Fragment %main_f "main_f" %out_frag
+    )" + source_body;
+
+    std::string frag_first = R"(
+        OpCapability Shader
+        OpMemoryModel Logical GLSL450
+        OpEntryPoint Fragment %main_f "main_f" %out_frag
+        OpEntryPoint Vertex %main_v "main_v" %out_vert
+    )" + source_body;
+
+    VkPushConstantRange push_constant_ranges[1]{{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float)}};
+    VkPipelineLayoutCreateInfo const pipeline_layout_info{
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, push_constant_ranges};
+
+    // Vertex entry point first
+    {
+        VkShaderObj const vs(m_device, vert_first, VK_SHADER_STAGE_VERTEX_BIT, this, "main_v");
+        VkShaderObj const fs(m_device, vert_first, VK_SHADER_STAGE_FRAGMENT_BIT, this, "main_f");
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.pipeline_layout_ci_ = pipeline_layout_info;
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    // Fragment entry point first
+    {
+        VkShaderObj const vs(m_device, frag_first, VK_SHADER_STAGE_VERTEX_BIT, this, "main_v");
+        VkShaderObj const fs(m_device, frag_first, VK_SHADER_STAGE_FRAGMENT_BIT, this, "main_f");
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.pipeline_layout_ci_ = pipeline_layout_info;
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, PushConstantsCompatibilityGraphicsOnly) {
+    TEST_DESCRIPTION("Based on verified valid examples from internal Vulkan Spec issue #2168");
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    ASSERT_NO_FATAL_FAILURE(InitViewport());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    m_errorMonitor->ExpectSuccess();
+
+    char const *const vsSource =
+        "#version 450\n"
+        "layout(push_constant, std430) uniform foo { float x[16]; } constants;\n"
+        "void main(){\n"
+        "   gl_Position = vec4(constants.x[4]);\n"
+        "}\n";
+
+    VkShaderObj const vs(m_device, vsSource, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkShaderObj const fs(m_device, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+    // range A and B are the same while range C is different
+    const uint32_t pc_size = 32;
+    VkPushConstantRange range_a = {VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size};
+    VkPushConstantRange range_b = {VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size};
+    VkPushConstantRange range_c = {VK_SHADER_STAGE_VERTEX_BIT, 16, pc_size};
+
+    VkPipelineLayoutCreateInfo pipeline_layout_info_a = {
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, &range_a};
+    VkPipelineLayoutCreateInfo pipeline_layout_info_b = {
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, &range_b};
+    VkPipelineLayoutCreateInfo pipeline_layout_info_c = {
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, &range_c};
+
+    CreatePipelineHelper pipeline_helper_a(*this);  // layout_a and range_a
+    CreatePipelineHelper pipeline_helper_b(*this);  // layout_b and range_b
+    CreatePipelineHelper pipeline_helper_c(*this);  // layout_c and range_c
+    pipeline_helper_a.InitInfo();
+    pipeline_helper_a.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipeline_helper_a.pipeline_layout_ci_ = pipeline_layout_info_a;
+    pipeline_helper_a.InitState();
+    pipeline_helper_a.CreateGraphicsPipeline();
+    pipeline_helper_b.InitInfo();
+    pipeline_helper_b.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipeline_helper_b.pipeline_layout_ci_ = pipeline_layout_info_b;
+    pipeline_helper_b.InitState();
+    pipeline_helper_b.CreateGraphicsPipeline();
+    pipeline_helper_c.InitInfo();
+    pipeline_helper_c.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipeline_helper_c.pipeline_layout_ci_ = pipeline_layout_info_c;
+    pipeline_helper_c.InitState();
+    pipeline_helper_c.CreateGraphicsPipeline();
+
+    // Easier to see in command buffers
+    const VkPipelineLayout layout_a = pipeline_helper_a.pipeline_layout_.handle();
+    const VkPipelineLayout layout_b = pipeline_helper_b.pipeline_layout_.handle();
+    const VkPipelineLayout layout_c = pipeline_helper_c.pipeline_layout_.handle();
+    const VkPipeline pipeline_a = pipeline_helper_a.pipeline_;
+    const VkPipeline pipeline_b = pipeline_helper_b.pipeline_;
+    const VkPipeline pipeline_c = pipeline_helper_c.pipeline_;
+
+    const float data[16] = {};  // dummy data to match shader size
+    const float vbo_data[3] = {1.f, 0.f, 1.f};
+    VkConstantBufferObj vbo(m_device, sizeof(vbo_data), (const void *)&vbo_data, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+    // case 1 - bind different layout with the same range
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_b);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    // case 2 - bind layout with same range then push different range
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_b, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_b);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    // case 3 - same range same layout then same range from a different layout and same range from the same layout
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_a);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_b, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    // case 4 - same range same layout then diff range and same range update
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_a);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_c, VK_SHADER_STAGE_VERTEX_BIT, 16, pc_size, data);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    // case 5 - update push constant bind different layout with the same range then bind correct layout
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_b);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_a);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    // case 6 - update push constant then bind different layout with overlapping range then bind correct layout
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_c);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_a);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    // case 7 - bind different layout with different range then update push constant and bind correct layout
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_c);
+    vk::CmdPushConstants(m_commandBuffer->handle(), layout_a, VK_SHADER_STAGE_VERTEX_BIT, 0, pc_size, data);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_a);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, PushConstantsStaticallyUnused) {
+    TEST_DESCRIPTION("Test cases where creating pipeline with no use of push constants but still has ranges in layout");
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    ASSERT_NO_FATAL_FAILURE(InitViewport());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    m_errorMonitor->ExpectSuccess();
+
+    // Create set of Pipeline Layouts that cover variations of ranges
+    VkPushConstantRange push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 4};
+    VkPipelineLayoutCreateInfo pipeline_layout_info = {
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, &push_constant_range};
+
+    char const *vsSourceUnused =
+        "#version 450\n"
+        "layout(push_constant, std430) uniform foo { float x; } consts;\n"
+        "void main(){\n"
+        "   gl_Position = vec4(1.0);\n"
+        "}\n";
+
+    char const *vsSourceEmpty =
+        "#version 450\n"
+        "void main(){\n"
+        "   gl_Position = vec4(1.0);\n"
+        "}\n";
+
+    VkShaderObj vsUnused(m_device, vsSourceUnused, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkShaderObj vsEmpty(m_device, vsSourceEmpty, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkShaderObj fs(m_device, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+    // Just in layout
+    CreatePipelineHelper pipeline_unused(*this);
+    pipeline_unused.InitInfo();
+    pipeline_unused.shader_stages_ = {vsUnused.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipeline_unused.pipeline_layout_ci_ = pipeline_layout_info;
+    pipeline_unused.InitState();
+    pipeline_unused.CreateGraphicsPipeline();
+
+    // Shader never had a reference
+    CreatePipelineHelper pipeline_empty(*this);
+    pipeline_empty.InitInfo();
+    pipeline_empty.shader_stages_ = {vsEmpty.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipeline_empty.pipeline_layout_ci_ = pipeline_layout_info;
+    pipeline_empty.InitState();
+    pipeline_empty.CreateGraphicsPipeline();
+
+    const float vbo_data[3] = {1.f, 0.f, 1.f};
+    VkConstantBufferObj vbo(m_device, sizeof(vbo_data), (const void *)&vbo_data, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+    // Draw without ever pushing to the unused and empty pipelines
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_unused.pipeline_);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_commandBuffer->BindVertexBuffer(&vbo, 0, 1);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_empty.pipeline_);
+    m_commandBuffer->Draw(1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    m_errorMonitor->VerifyNotFound();
+}
+
 TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt8) {
     TEST_DESCRIPTION("Test int8 specialization.");
 
@@ -9745,13 +10308,13 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
     create_device_pnext.pNext = &physicalDeviceFeatures2;
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &create_device_pnext, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
-    if (!InitSwapchain(VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+    if (!InitSwapchain(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) {
         printf("%s Cannot create surface or swapchain, skipping test\n", kSkipPrefix);
         return;
     }
-    uint32_t attachmentWidth = 64;
-    uint32_t attachmentHeight = 64;
-    VkFormat attachmentFormat = VK_FORMAT_R8G8B8A8_UNORM;
+    uint32_t attachmentWidth = m_surface_capabilities.minImageExtent.width;
+    uint32_t attachmentHeight = m_surface_capabilities.minImageExtent.height;
+    VkFormat attachmentFormat = m_surface_formats[0].format;
     VkAttachmentDescription attachmentDescription[] = {{0, attachmentFormat, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                                         VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                                         VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED,
@@ -9770,7 +10333,7 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
     image_swapchain_create_info.swapchain = m_swapchain;
     VkImageCreateInfo imageCreateInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                                          &image_swapchain_create_info,
-                                         VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
+                                         0,
                                          VK_IMAGE_TYPE_2D,
                                          attachmentFormat,
                                          {attachmentWidth, attachmentHeight, 1},
@@ -9820,7 +10383,7 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
     VkImageView imageView = image.targetView(attachmentFormat);
     VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfo = {VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO_KHR,
                                                                           nullptr,
-                                                                          VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
+                                                                          0,
                                                                           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                                                                           attachmentWidth,
                                                                           attachmentHeight,
@@ -10071,6 +10634,14 @@ TEST_F(VkPositiveLayerTest, SwapchainExclusiveModeQueueFamilyPropertiesReference
         return;
     }
     InitSwapchainInfo();
+    m_errorMonitor->ExpectSuccess();
+
+    VkBool32 supported;
+    vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), m_device->graphics_queue_node_index_, m_surface, &supported);
+    if (!supported) {
+        printf("%s Graphics queue does not support present, skipping test\n", kSkipPrefix);
+        return;
+    }
 
     auto surface = m_surface;
     VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -10130,6 +10701,163 @@ TEST_F(VkPositiveLayerTest, SwapchainExclusiveModeQueueFamilyPropertiesReference
         vk::DestroySurfaceKHR(instance(), m_surface, nullptr);
         m_surface = VK_NULL_HANDLE;
     }
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, ShaderFloatControl) {
+    TEST_DESCRIPTION("Test VK_KHR_float_controls");
+    m_errorMonitor->ExpectSuccess();
+
+    // Need 1.1 to get SPIR-V 1.3 since OpExecutionModeId was added in SPIR-V 1.2
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        printf("%s test requires Vulkan 1.1+, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    // The issue with revision 4 of this extension should not be an issue with the tests
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)) {
+        m_device_extension_names.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+    } else {
+        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
+        (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
+
+    auto shader_float_control = LvlInitStruct<VkPhysicalDeviceFloatControlsProperties>();
+    auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&shader_float_control);
+    vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
+
+    bool signed_zero_inf_nan_preserve = (shader_float_control.shaderSignedZeroInfNanPreserveFloat32 == VK_TRUE);
+    bool denorm_preserve = (shader_float_control.shaderDenormPreserveFloat32 == VK_TRUE);
+    bool denorm_flush_to_zero = (shader_float_control.shaderDenormFlushToZeroFloat32 == VK_TRUE);
+    bool rounding_mode_rte = (shader_float_control.shaderRoundingModeRTEFloat32 == VK_TRUE);
+    bool rounding_mode_rtz = (shader_float_control.shaderRoundingModeRTZFloat32 == VK_TRUE);
+
+    // same body for each shader, only the start is different
+    // this is just "float a = 1.0 + 2.0;" in SPIR-V
+    const std::string source_body = R"(
+             OpExecutionMode %main LocalSize 1 1 1
+             OpSource GLSL 450
+             OpName %main "main"
+     %void = OpTypeVoid
+        %3 = OpTypeFunction %void
+    %float = OpTypeFloat 32
+%pFunction = OpTypePointer Function %float
+  %float_3 = OpConstant %float 3
+     %main = OpFunction %void None %3
+        %5 = OpLabel
+        %6 = OpVariable %pFunction Function
+             OpStore %6 %float_3
+             OpReturn
+             OpFunctionEnd
+)";
+
+    if (signed_zero_inf_nan_preserve) {
+        const std::string spv_source = R"(
+            OpCapability Shader
+            OpCapability SignedZeroInfNanPreserve
+            OpExtension "SPV_KHR_float_controls"
+       %1 = OpExtInstImport "GLSL.std.450"
+            OpMemoryModel Logical GLSL450
+            OpEntryPoint GLCompute %main "main"
+            OpExecutionMode %main SignedZeroInfNanPreserve 32
+)" + source_body;
+
+        const auto set_info = [&](CreateComputePipelineHelper &helper) {
+            helper.cs_.reset(
+                new VkShaderObj(m_device, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, this, "main", nullptr, SPV_ENV_VULKAN_1_1));
+        };
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    if (denorm_preserve) {
+        const std::string spv_source = R"(
+            OpCapability Shader
+            OpCapability DenormPreserve
+            OpExtension "SPV_KHR_float_controls"
+       %1 = OpExtInstImport "GLSL.std.450"
+            OpMemoryModel Logical GLSL450
+            OpEntryPoint GLCompute %main "main"
+            OpExecutionMode %main DenormPreserve 32
+)" + source_body;
+
+        const auto set_info = [&](CreateComputePipelineHelper &helper) {
+            helper.cs_.reset(
+                new VkShaderObj(m_device, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, this, "main", nullptr, SPV_ENV_VULKAN_1_1));
+        };
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    if (denorm_flush_to_zero) {
+        const std::string spv_source = R"(
+            OpCapability Shader
+            OpCapability DenormFlushToZero
+            OpExtension "SPV_KHR_float_controls"
+       %1 = OpExtInstImport "GLSL.std.450"
+            OpMemoryModel Logical GLSL450
+            OpEntryPoint GLCompute %main "main"
+            OpExecutionMode %main DenormFlushToZero 32
+)" + source_body;
+
+        const auto set_info = [&](CreateComputePipelineHelper &helper) {
+            helper.cs_.reset(
+                new VkShaderObj(m_device, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, this, "main", nullptr, SPV_ENV_VULKAN_1_1));
+        };
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    if (rounding_mode_rte) {
+        const std::string spv_source = R"(
+            OpCapability Shader
+            OpCapability RoundingModeRTE
+            OpExtension "SPV_KHR_float_controls"
+       %1 = OpExtInstImport "GLSL.std.450"
+            OpMemoryModel Logical GLSL450
+            OpEntryPoint GLCompute %main "main"
+            OpExecutionMode %main RoundingModeRTE 32
+)" + source_body;
+
+        const auto set_info = [&](CreateComputePipelineHelper &helper) {
+            helper.cs_.reset(
+                new VkShaderObj(m_device, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, this, "main", nullptr, SPV_ENV_VULKAN_1_1));
+        };
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    if (rounding_mode_rtz) {
+        const std::string spv_source = R"(
+            OpCapability Shader
+            OpCapability RoundingModeRTZ
+            OpExtension "SPV_KHR_float_controls"
+       %1 = OpExtInstImport "GLSL.std.450"
+            OpMemoryModel Logical GLSL450
+            OpEntryPoint GLCompute %main "main"
+            OpExecutionMode %main RoundingModeRTZ 32
+)" + source_body;
+
+        const auto set_info = [&](CreateComputePipelineHelper &helper) {
+            helper.cs_.reset(
+                new VkShaderObj(m_device, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, this, "main", nullptr, SPV_ENV_VULKAN_1_1));
+        };
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    }
+
+    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, Storage8and16bit) {
@@ -11178,5 +11906,453 @@ void main() {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     m_errorMonitor->ExpectSuccess();
     pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, InitSwapchain) {
+    TEST_DESCRIPTION("Make sure InitSwapchain is not producing anying invalid usage");
+
+    if (!AddSurfaceInstanceExtension()) {
+        printf("%s surface extensions not supported, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AddSwapchainDeviceExtension()) {
+        printf("%s swapchain extensions not supported, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    m_errorMonitor->ExpectSuccess();
+    if (InitSwapchain()) {
+        DestroySwapchain();
+    }
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
+    TEST_DESCRIPTION(
+        "Make sure images from protected swapchain are considered protected image when writing to it as a color attachment");
+
+#if !defined(ANDROID)
+    // Protected swapchains are guaranteed in Android Loader
+    // VK_KHR_surface_protected_capabilities is needed for other platforms
+    // Without device to test with, blocking this test from non-Android platforms for now
+    printf("%s VK_KHR_surface_protected_capabilities test logic not implemented, skipping test for non-Android\n", kSkipPrefix);
+    return;
+#endif
+
+    m_errorMonitor->ExpectSuccess();
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    if (!AddSurfaceInstanceExtension()) {
+        printf("%s surface extensions not supported, skipping ProtectedSwapchainImageColorAttachment test\n", kSkipPrefix);
+        return;
+    }
+
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AddSwapchainDeviceExtension()) {
+        printf("%s swapchain extensions not supported, skipping ProtectedSwapchainImageColorAttachment test\n", kSkipPrefix);
+        return;
+    }
+
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+
+    auto protected_memory_features = LvlInitStruct<VkPhysicalDeviceProtectedMemoryFeatures>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&protected_memory_features);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+
+    if (protected_memory_features.protectedMemory == VK_FALSE) {
+        printf("%s protectedMemory feature not supported, skipped.\n", kSkipPrefix);
+        return;
+    };
+
+    // Turns m_commandBuffer into a unprotected command buffer
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        printf("%s Tests requires Vulkan 1.1+, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    if (!InitSurface()) {
+        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
+        return;
+    }
+    InitSwapchainInfo();
+
+    // Create protected swapchain
+    VkBool32 supported;
+    vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), m_device->graphics_queue_node_index_, m_surface, &supported);
+    if (!supported) {
+        printf("%s Graphics queue does not support present, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    auto surface = m_surface;
+    VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+    VkSwapchainCreateInfoKHR swapchain_create_info = {};
+    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchain_create_info.pNext = 0;
+    swapchain_create_info.flags = VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR;
+    swapchain_create_info.surface = surface;
+    swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
+    swapchain_create_info.imageFormat = m_surface_formats[0].format;
+    swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageArrayLayers = 1;
+    swapchain_create_info.imageUsage = imageUsage;
+    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_create_info.preTransform = preTransform;
+    swapchain_create_info.compositeAlpha = m_surface_composite_alpha;
+    swapchain_create_info.presentMode = m_surface_present_modes[0];
+    swapchain_create_info.clipped = VK_FALSE;
+    swapchain_create_info.oldSwapchain = 0;
+    swapchain_create_info.queueFamilyIndexCount = 4094967295;  // This SHOULD get ignored
+    uint32_t bogus_int = 99;
+    swapchain_create_info.pQueueFamilyIndices = &bogus_int;
+    ASSERT_VK_SUCCESS(vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain));
+
+    // Get VkImage from swapchain which should be protected
+    PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR =
+        (PFN_vkGetSwapchainImagesKHR)vk::GetDeviceProcAddr(m_device->handle(), "vkGetSwapchainImagesKHR");
+    ASSERT_TRUE(vkGetSwapchainImagesKHR != nullptr);
+    uint32_t image_count;
+    std::vector<VkImage> swapchain_images;
+    vkGetSwapchainImagesKHR(device(), m_swapchain, &image_count, nullptr);
+    swapchain_images.resize(image_count, VK_NULL_HANDLE);
+    vkGetSwapchainImagesKHR(device(), m_swapchain, &image_count, swapchain_images.data());
+    VkImage protected_image = swapchain_images.at(0);  // only need 1 image to test
+
+    // Create a protected image view
+    VkImageView image_view;
+    VkImageViewCreateInfo image_view_create_info = {
+        VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        nullptr,
+        0,
+        protected_image,
+        VK_IMAGE_VIEW_TYPE_2D,
+        swapchain_create_info.imageFormat,
+        {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+         VK_COMPONENT_SWIZZLE_IDENTITY},
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
+    ASSERT_VK_SUCCESS(vk::CreateImageView(device(), &image_view_create_info, nullptr, &image_view));
+
+    // A renderpass and framebuffer that contains a protected color image view
+    VkAttachmentDescription attachments[1] = {{0, swapchain_create_info.imageFormat, VK_SAMPLE_COUNT_1_BIT,
+                                               VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                               VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                               VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+    VkAttachmentReference references[1] = {{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+    VkSubpassDescription subpass = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 1, references, nullptr, nullptr, 0, nullptr};
+    VkSubpassDependency dependency = {0,
+                                      0,
+                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                      VK_ACCESS_SHADER_WRITE_BIT,
+                                      VK_ACCESS_SHADER_WRITE_BIT,
+                                      VK_DEPENDENCY_BY_REGION_BIT};
+    // Use framework render pass and framebuffer so pipeline helper uses it
+    m_renderPass_info = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, 1, attachments, 1, &subpass, 1, &dependency};
+    ASSERT_VK_SUCCESS(vk::CreateRenderPass(device(), &m_renderPass_info, nullptr, &m_renderPass));
+    m_framebuffer_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                          nullptr,
+                          0,
+                          m_renderPass,
+                          1,
+                          &image_view,
+                          swapchain_create_info.imageExtent.width,
+                          swapchain_create_info.imageExtent.height,
+                          1};
+    ASSERT_VK_SUCCESS(vk::CreateFramebuffer(device(), &m_framebuffer_info, nullptr, &m_framebuffer));
+
+    // basic pipeline to allow for a valid vkCmdDraw()
+    VkShaderObj vs(m_device, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT, this);
+    VkShaderObj fs(m_device, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipe.InitState();
+    pipe.CreateGraphicsPipeline();
+
+    // Create a protected command buffer/pool to use
+    VkCommandPoolObj protectedCommandPool(m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_PROTECTED_BIT);
+    VkCommandBufferObj protectedCommandBuffer(m_device, &protectedCommandPool);
+
+    protectedCommandBuffer.begin();
+    VkRect2D render_area = {{0, 0}, swapchain_create_info.imageExtent};
+    VkRenderPassBeginInfo render_pass_begin = {
+        VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, nullptr, m_renderPass, m_framebuffer, render_area, 0, nullptr};
+    vk::CmdBeginRenderPass(protectedCommandBuffer.handle(), &render_pass_begin, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CmdBindPipeline(protectedCommandBuffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    // This should be valid since the framebuffer color attachment is a protected swapchain image
+    vk::CmdDraw(protectedCommandBuffer.handle(), 3, 1, 0, 0);
+    vk::CmdEndRenderPass(protectedCommandBuffer.handle());
+    protectedCommandBuffer.end();
+
+    DestroySwapchain();
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, ImageDrmFormatModifier) {
+    // See https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/2610
+    TEST_DESCRIPTION("Create image and imageView using VK_EXT_image_drm_format_modifier");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1); // for extension dependencies
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (IsPlatform(kMockICD)) {
+        printf("%s Test not supported by MockICD, skipping tests\n", kSkipPrefix);
+        return;
+    }
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        printf("%s Vulkan 1.1 not supported but required. Skipping\n",
+            kSkipPrefix);
+        return;
+    }
+
+    if (!DeviceExtensionSupported(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME)) {
+        printf("%s VK_EXT_image_drm_format_modifier is not supported but required. Skipping\n",
+            kSkipPrefix);
+        return;
+    }
+
+    m_device_extension_names.push_back(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    // we just hope that one of these formats supports modifiers
+    // for more detailed checking, we could also check multi-planar formats.
+    auto format_list = {
+        VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_B8G8R8A8_SRGB,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_R8G8B8A8_SRGB,
+    };
+
+    for(auto format : format_list) {
+        std::vector<uint64_t> mods;
+
+        // get general features and modifiers
+        VkDrmFormatModifierPropertiesListEXT modp = {};
+        modp.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+        auto fmtp = LvlInitStruct<VkFormatProperties2>(&modp);
+
+        vk::GetPhysicalDeviceFormatProperties2(gpu(), format, &fmtp);
+
+        if (modp.drmFormatModifierCount > 0) {
+            // the first call to vkGetPhysicalDeviceFormatProperties2 did only
+            // retrieve the number of modifiers, we now have to retrieve
+            // the modifiers
+            std::vector<VkDrmFormatModifierPropertiesEXT> mod_props(modp.drmFormatModifierCount);
+            modp.pDrmFormatModifierProperties = mod_props.data();
+
+            vk::GetPhysicalDeviceFormatProperties2(gpu(), format, &fmtp);
+
+            for (auto i = 0u; i < modp.drmFormatModifierCount; ++i) {
+                auto& mod = modp.pDrmFormatModifierProperties[i];
+                auto features = VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+
+                if ((mod.drmFormatModifierTilingFeatures & features) != features) {
+                    continue;
+                }
+
+                mods.push_back(mod.drmFormatModifier);
+            }
+        }
+
+        if (mods.empty()) {
+            continue;
+        }
+
+        // create image
+        auto ci = LvlInitStruct<VkImageCreateInfo>();
+        ci.flags = 0;
+        ci.imageType = VK_IMAGE_TYPE_2D;
+        ci.format = format;
+        ci.extent = {128, 128, 1};
+        ci.mipLevels = 1;
+        ci.arrayLayers = 1;
+        ci.samples = VK_SAMPLE_COUNT_1_BIT;
+        ci.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+        ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        VkImageDrmFormatModifierListCreateInfoEXT mod_list = {};
+        mod_list.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT;
+        mod_list.pDrmFormatModifiers = mods.data();
+        mod_list.drmFormatModifierCount = mods.size();
+        ci.pNext = &mod_list;
+
+        VkImage image;
+        m_errorMonitor->ExpectSuccess();
+        VkResult err = vk::CreateImage(device(), &ci, nullptr, &image);
+        ASSERT_VK_SUCCESS(err);
+        m_errorMonitor->VerifyNotFound();
+
+        // bind memory
+        VkPhysicalDeviceMemoryProperties phys_mem_props;
+        vk::GetPhysicalDeviceMemoryProperties(gpu(), &phys_mem_props);
+        VkMemoryRequirements mem_reqs;
+        vk::GetImageMemoryRequirements(device(), image, &mem_reqs);
+        VkDeviceMemory mem_obj = VK_NULL_HANDLE;
+        VkMemoryPropertyFlagBits mem_props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        for (uint32_t type = 0; type < phys_mem_props.memoryTypeCount; type++) {
+            if ((mem_reqs.memoryTypeBits & (1 << type)) &&
+                ((phys_mem_props.memoryTypes[type].propertyFlags & mem_props) == mem_props)) {
+                VkMemoryAllocateInfo alloc_info = {};
+                alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                alloc_info.allocationSize = mem_reqs.size;
+                alloc_info.memoryTypeIndex = type;
+                ASSERT_VK_SUCCESS(vk::AllocateMemory(device(), &alloc_info, nullptr, &mem_obj));
+                break;
+            }
+        }
+
+        ASSERT_NE((VkDeviceMemory) VK_NULL_HANDLE, mem_obj);
+        ASSERT_VK_SUCCESS(vk::BindImageMemory(device(), image, mem_obj, 0));
+
+        // create image view
+        VkImageViewCreateInfo ivci = {
+            VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            nullptr,
+            0,
+            image,
+            VK_IMAGE_VIEW_TYPE_2D,
+            format,
+            {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+             VK_COMPONENT_SWIZZLE_IDENTITY},
+            {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+        };
+
+        CreateImageViewTest(*this, &ivci);
+
+        // for more detailed checking, we could export the image to dmabuf
+        // and then import it again (using VkImageDrmFormatModifierExplicitCreateInfoEXT)
+
+        vk::FreeMemory(device(), mem_obj, nullptr);
+        vk::DestroyImage(device(), image, nullptr);
+    }
+}
+
+TEST_F(VkPositiveLayerTest, AllowedDuplicateStype) {
+    TEST_DESCRIPTION("Pass duplicate structs to whose vk.xml definition contains allowduplicate=true");
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    VkInstance instance;
+
+    VkInstanceCreateInfo ici = {};
+    ici.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    ici.enabledLayerCount = instance_layers_.size();
+    ici.ppEnabledLayerNames = instance_layers_.data();
+
+    auto dbgUtils0 = LvlInitStruct<VkDebugUtilsMessengerCreateInfoEXT>();
+    auto dbgUtils1 = LvlInitStruct<VkDebugUtilsMessengerCreateInfoEXT>(&dbgUtils0);
+    ici.pNext = &dbgUtils1;
+
+    m_errorMonitor->ExpectSuccess();
+    ASSERT_VK_SUCCESS(vk::CreateInstance(&ici, nullptr, &instance));
+    m_errorMonitor->VerifyNotFound();
+
+    ASSERT_NO_FATAL_FAILURE(vk::DestroyInstance(instance, nullptr));
+}
+
+TEST_F(VkPositiveLayerTest, MeshShaderOnly) {
+    TEST_DESCRIPTION("Test using a mesh shader without a vertex shader.");
+
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    std::array<const char *, 2> required_device_extensions = {
+        {VK_NV_MESH_SHADER_EXTENSION_NAME, VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME}};
+    for (auto device_extension : required_device_extensions) {
+        if (DeviceExtensionSupported(gpu(), nullptr, device_extension)) {
+            m_device_extension_names.push_back(device_extension);
+        } else {
+            printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, device_extension);
+            return;
+        }
+    }
+
+    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+        printf("%sNot suppored by MockICD, skipping tests\n", kSkipPrefix);
+        return;
+    }
+
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+
+    // Create a device that enables mesh_shader
+    auto mesh_shader_features = LvlInitStruct<VkPhysicalDeviceMeshShaderFeaturesNV>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&mesh_shader_features);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    if (mesh_shader_features.meshShader != VK_TRUE) {
+        printf("%sMesh shader feature not supported\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    static const char meshShaderText[] = R"glsl(
+        #version 450
+        #extension GL_NV_mesh_shader : require
+        layout(local_size_x = 1) in;
+        layout(max_vertices = 3) out;
+        layout(max_primitives = 1) out;
+        layout(triangles) out;
+        void main() {
+              gl_MeshVerticesNV[0].gl_Position = vec4(-1.0, -1.0, 0, 1);
+              gl_MeshVerticesNV[1].gl_Position = vec4( 1.0, -1.0, 0, 1);
+              gl_MeshVerticesNV[2].gl_Position = vec4( 0.0,  1.0, 0, 1);
+              gl_PrimitiveIndicesNV[0] = 0;
+              gl_PrimitiveIndicesNV[1] = 1;
+              gl_PrimitiveIndicesNV[2] = 2;
+              gl_PrimitiveCountNV = 1;
+        }
+    )glsl";
+
+    VkShaderObj ms(m_device, meshShaderText, VK_SHADER_STAGE_MESH_BIT_NV, this);
+    VkShaderObj fs(m_device, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT, this);
+
+    CreatePipelineHelper helper(*this);
+    helper.InitInfo();
+    helper.shader_stages_ = {ms.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+
+    // Ensure pVertexInputState and pInputAssembly state are null, as these should be ignored.
+    helper.gp_ci_.pVertexInputState = nullptr;
+    helper.gp_ci_.pInputAssemblyState = nullptr;
+
+    helper.InitState();
+
+    m_errorMonitor->ExpectSuccess();
+    helper.CreateGraphicsPipeline();
     m_errorMonitor->VerifyNotFound();
 }
