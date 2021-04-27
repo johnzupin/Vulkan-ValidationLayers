@@ -13,7 +13,8 @@ Build-Depends: debhelper (>= 10),
  libx11-dev,
  libxcb1-dev,
  libxrandr-dev,
- pkg-config
+ pkg-config,
+ robin-hood-hashing
 Standards-Version: 4.1.2
 Homepage: https://github.com/KhronosGroup/Vulkan-ValidationLayers
 Vcs-Git: https://github.com/KhronosGroup/Vulkan-ValidationLayers
