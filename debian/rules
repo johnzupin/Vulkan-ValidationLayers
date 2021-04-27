@@ -28,4 +28,5 @@ override_dh_auto_configure:
 				-DBUILD_TESTS="OFF" \
 				-DBUILD_LAYER_SUPPORT_FILES="ON" \
 				-DSPIRV_HEADERS_INSTALL_DIR="/usr" \
+				-DROBIN_HOOD_HASHING_INSTALL_DIR="/usr/include/robin-hood-hashing" \
 				-DANNOTATED_SPEC_LINK="\"https://vulkan.lunarg.com/doc/view/_MAGIC_VERSION_ID_.$(BUILD_REV)/linux/_MAGIC_ANNOTATED_SPEC_TYPE_/vkspec.html\"" ..
