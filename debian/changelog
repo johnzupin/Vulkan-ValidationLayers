@@ -1,3 +1,322 @@
+vulkan-validationlayers (1.2.176.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ sfricke-samsung ]
+  * layers: Reduce shader validation passes
+  * layers: Reduce looping shader for decoration
+
+  [ SpaceIm ]
+  * cmake: Factorize AddVkLayer macro
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix sync2 queue caps vs pipeline stage checks
+  * tests: Fix queue capabilities vs pipeline stage tests
+
+  [ Mike Schuchardt ]
+  * scripts: Exit CI script if codegen check fails
+
+  [ sfricke-samsung ]
+  * layers: Move pDynamicOffset to bind time
+  * tests: Add more pDynamicOffset test
+  * layers: Check all properties for SPIR-V gen
+  * layers: Add better OpExecutionMode logic
+  * tests: Add VK_KHR_float_controls tests
+
+  [ Jeremy Gebben ]
+  * corechecks: Correct VUID strings for synchronization APIS
+
+  [ Brian Paul ]
+  * layers: Handle nested transform feedback queries
+
+  [ John Zulauf ]
+  * layers: Two measureable, many minor perf fixes
+
+  [ Ricardo Garcia ]
+  * layers: Fix VUID-VkMappedMemoryRange-size-01389/90
+
+  [ sfricke-samsung ]
+  * layers: Fix binding index bug for dynamic offsets
+  * tests: Improve dynamic descriptor offset testings
+
+  [ Martin Freebody ]
+  * layers: Correct drm_format_mod_explicit nullptr check
+
+  [ sfricke-samsung ]
+  * layers: Fix zero descriptorCount bindings being checked
+  * tests: Improve InvalidDynamicDescriptorSet with arrays
+
+  [ John Zulauf ]
+  * layers: Dehandle image in swapchain state
+  * layers: Dehandle alias/bound image store
+  * syncval: Add swapchain image validation support
+  * layers: Demote unneeded shared_ptr to plain ptr
+
+  [ Shannon McPherson ]
+  * scripts: Update copyright in `common_codegen.py`
+  * build: Update known-good files for 1.2.171 header
+
+  [ sfricke-samsung ]
+  * layers: Improve descriptor_sets.cpp logs
+  * tests: Add vkGetPhysicalDeviceSurfaceSupportKHR check
+  * layers: ValidateCooperativeMatrix only if support
+  * layers: Reduce looping for builtins
+
+  [ John Zulauf ]
+  * syncval: Cleanup vkPipelineBarrier2 validation
+
+  [ Jeremy Gebben ]
+  * corechecks: Cleanup core_error_location.h naming
+
+  [ Shannon McPherson ]
+  * build: Update known-good files for 1.2.172 header
+
+  [ Mike Schuchardt ]
+  * ci: Set GN build os to ubuntu-18.04
+
+  [ sfricke-samsung ]
+  * layers: Add VK_KHR_image_format_list for swapchain
+  * tests: Add VK_KHR_image_format_list for swapchain
+  * scripts: Handle XML spirvcapability using alias
+
+  [ nyorain ]
+  * layers: Fix VK_EXT_image_drm_format_modifier validation
+  * tests: Add positive VK_EXT_image_drm_format_modifier test
+  * tests: Fix style issues with ImageDrmModifier test
+
+  [ sfricke-samsung ]
+  * layers: Remove unnecessary descriptor_sets functions
+  * layers: Add inline function back for some areas
+  * layers: Made more DRY
+
+  [ Jeremy Gebben ]
+  * corechecks: Descriptor::GetClass() shouldn't be virtual
+  * layers: Fix recording of VkTimelineSemaphoreSubmitInfo
+  * tests: Add VkLayerTest.MixedTimelineAndBinarySemaphores
+
+  [ John Zupin ]
+  * packaging: updated debian/copyright file
+
+  [ sfricke-samsung ]
+  * layers: Fix missing pNext and sType
+
+  [ Jeremy Gebben ]
+  * corechecks: Improve core_error::Location to VUID lookups
+
+  [ sfricke-samsung ]
+  * layers: Fix CompatibilityClass edge case
+  * tests: Add depth CompatibilityClass edge case
+
+  [ Jeremy Gebben ]
+  * corechecks: Remove unique_ptr from image layout states vector
+
+  [ Mike Schuchardt ]
+  * scripts: Make gn script tolerate consecutive runs
+  * build: Sync GN DEPS with ANGLE project
+
+  [ Jeremy Gebben ]
+  * layers: Add 'using' wrappers for map and set types
+  * layers: Use robin_hood unordered map and set
+  * layers: Remove small_unordered_map from BASE_NODE::cb_bindings
+
+  [ Zach Johnston ]
+  * corechecks: Fixed a typo in descriptor set check
+
+  [ Tony-LunarG ]
+  * tests: Pos test for PARTIALLY_BOUND descriptor
+
+  [ Nathaniel Cesario ]
+  * build: Disable robin-hood-hashing for GN
+
+  [ Jeremy Gebben ]
+  * layers: Use emplace() instead of insert() for map insertions
+  * layers: Fix possible accidental copies
+
+  [ ZaOniRinku ]
+  * layers: Fix missing parenthesis in sync validation
+
+  [ Jeremy Gebben ]
+  * build: Set robin-hood path when building only layer utils
+
+  [ Mike Schuchardt ]
+  * build: Update known-good for 1.2.173 header
+
+  [ xantares ]
+  * layers: Fix winsock include on case-sensitive fs
+  * layers: Bump vk_loader_platform.h copyright
+
+  [ sfricke-samsung ]
+  * layers: Temp fix for multi-EntryPoint pc
+  * layers: Fix VK_KHR_timeline_semaphore feature bug
+  * tests: Add VkSemaphoreTypeCreateInfo tests
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.174
+
+  [ Neel Bedekar ]
+  * layers: Add an Android default log force option via setprop
+  * layers: PR review fixes + docs
+  * layers: Forgot to run clang-format, fixing
+  * layers: Fix Khronos documentation copyright message
+
+  [ sfricke-samsung ]
+  * tests: Use guarantee sample bit count
+
+  [ KarenGhavam-lunarG ]
+  * Update LICENSE.txt
+
+  [ sfricke-samsung ]
+  * layers: Fix protected swapchain images
+  * tests: Add protected swapchain image write
+
+  [ KarenGhavam-lunarG ]
+  * docs: Remove Creative Commons License
+
+  [ Shannon McPherson ]
+  * layers: Remove warning if present mode is FIFO_KHR
+  * tests: Create test for swapchain creation
+
+  [ sfricke-samsung ]
+  * layers: Label rasterizationSamples VU
+
+  [ Karl Schultz ]
+  * perf: Avoid redundant image layout checks
+
+  [ Nathaniel Cesario ]
+  * layers: Allow duplicate pNext structs
+  * tests: Add test for allowduplicate pNext structs
+
+  [ sfricke-samsung ]
+  * layers: Fix PushConstants drawtime compatibility
+  * tests: Add regression tests for PushConstants
+
+  [ Tony-LunarG ]
+  * tests: Fix up issues found on igfx & RADV
+
+  [ Jeremy Gebben ]
+  * layers: Check for disabled log messages more efficiently
+  * corechecks: Make InitialLayoutStates be a small_vector
+
+  [ Tony-LunarG ]
+  * layers: Add compatibility validation for mutable descriptors
+
+  [ Jeremy Gebben ]
+  * corecheck: Explicitly instantiate ComputeBarrierOperationsType()
+
+  [ Mark Lobodzinski ]
+  * corechecks: Fix CreateFrameBuffer w/h check typos
+
+  [ Nathaniel Cesario ]
+  * tests: Choose device based on type
+  * tests: Fix DeviceValidationVersion call order
+
+  [ sfricke-samsung ]
+  * layers: Add VK_KHR_image_format_list
+  * tests: Add VK_KHR_image_format_list
+
+  [ Tony-LunarG ]
+  * tests: Add EnvVar to print driver info
+
+  [ Nathaniel Cesario ]
+  * layers: Fix mesh pipeline validation
+  * tests: Add test for creating mesh-only shader
+
+  [ David Neto ]
+  * build: BUILD.md: Restore XCode SPIRV-Tools config line
+
+  [ nyorain ]
+  * layers: Fix drm_format_modifier tiling subresource querying
+
+  [ KarenGhavam-lunarG ]
+  * docs: Update to current operating model
+
+  [ Ricardo Garcia ]
+  * layers: Fix mutable descriptor false positives
+
+  [ sfricke-samsung ]
+  * layers: Label push constant pipeline VU
+
+  [ Nathaniel Cesario ]
+  * layers: Portability: Fix null depth/stencil
+  * tests: Portability: Test null depth/stencil
+
+  [ sfricke-samsung ]
+  * layers: Split shader_validation to shader_module
+
+  [ Nathaniel Cesario ]
+  * layers: Use LvlInitStruct
+
+  [ Christophe ]
+  * layers: Add settings to the layer manifest
+  * layers: Fix default value for buffer oob
+
+  [ sfricke-samsung ]
+  * layers: Label InvalidSet with implict VU
+
+  [ Nathaniel Cesario ]
+  * layers: Remove some cases of 02698
+
+  [ sfricke-samsung ]
+  * layers: Improve non-consistent descriptor update message
+  * tests: Add non-consistent VkDescriptorBindingFlagBits
+
+  [ Tony-LunarG ]
+  * layers: Stop validating descriptors copied from mutable
+
+  [ Ben Clayton ]
+  * layers: Fix Handle <-> uint64 logic
+
+  [ sfricke-samsung ]
+  * layers: Improve graphics pipeline flag errors
+  * layers: Add compute pipeline invalid flags
+  * tests: Add compute pipeline invalid flags
+  * layers: Add VkAttachmentReference2 VUs
+  * layers: Add check destroying presentable image
+  * tests: Add destroying presentable image
+
+  [ Mike Schuchardt ]
+  * layers: Simplify pNext handle wrapping
+  * build: Update to header 1.2.176
+
+  [ Vikram Kushwaha ]
+  * layers: Add validation for VK_EXT_extended_dynamic_state2
+  * tests: Add tests for VK_EXT_extended_dynamic_state2
+
+  [ Piers Daniell ]
+  * layers: Validation for VK_EXT_vertex_input_dynamic_state
+  * tests: Tests for VK_EXT_vertex_input_dynamic_state validation
+
+  [ sfricke-samsung ]
+  * layers: Add command_validation for vkCmds
+  * layers: Autogenerate ValidateCmdQueueFlags check
+  * layers: Autogen Inside/OutsideRenderPass check
+
+  [ gfan ]
+  * build: Fix a Andriod build typo in BUILD.md
+
+  [ Yuly Novikov ]
+  * layers: Fix BUILD.gn
+
+  [ sfricke-samsung ]
+  * layers: Autogen bufferlevel implicit check
+  * layers: Move command_counter to ValidateCmd
+
+  [ Mike Schuchardt ]
+  * build: Update shader toolchain dependencies
+
+  [ Nathaniel Cesario ]
+  * layers: Fix reading android settings bug
+
+  [ sfricke-samsung ]
+  * layers: Label vkCmdDrawIndirectByteCountEXT VUID
+
+  [ John Zupin ]
+  * packaging: add robin-hood-hashing as build dep
+  * packaging: updated control version deps
+  * packaging: update rules to use robin-hood-hashing
+  * packaging: update robin-hood-hash package name for build dep
+  * packaging: update rules how build rev is captured
+
+ -- John Zupin <john@odin>  Tue, 27 Apr 2021 14:22:00 -0600
+
 vulkan-validationlayers (1.2.170.0~rc2-1lunarg20.04-1) focal; urgency=medium
 
   [ Jeremy Gebben ]
