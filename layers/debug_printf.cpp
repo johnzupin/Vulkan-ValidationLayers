@@ -145,7 +145,7 @@ void DebugPrintf::ResetCommandBuffer(VkCommandBuffer commandBuffer) {
         return;
     }
     auto debug_printf_buffer_list = GetBufferInfo(commandBuffer);
-    for (auto buffer_info : debug_printf_buffer_list) {
+    for (const auto &buffer_info : debug_printf_buffer_list) {
         vmaDestroyBuffer(vmaAllocator, buffer_info.output_mem_block.buffer, buffer_info.output_mem_block.allocation);
         if (buffer_info.desc_set != VK_NULL_HANDLE) {
             desc_set_manager->PutBackDescriptorSet(buffer_info.desc_pool, buffer_info.desc_set);
@@ -457,7 +457,7 @@ std::string DebugPrintf::FindFormatString(std::vector<unsigned int> pgm, uint32_
     SHADER_MODULE_STATE shader;
     shader.words = pgm;
     if (shader.words.size() > 0) {
-        for (auto insn : shader) {
+        for (const auto &insn : shader) {
             if (insn.opcode() == spv::OpString) {
                 uint32_t offset = insn.offset();
                 if (pgm[offset + 1] == string_id) {
@@ -624,7 +624,7 @@ bool DebugPrintf::CommandBufferNeedsProcessing(VkCommandBuffer command_buffer) {
     if (GetBufferInfo(cb_node->commandBuffer).size()) {
         buffers_present = true;
     }
-    for (auto secondaryCmdBuffer : cb_node->linkedCommandBuffers) {
+    for (const auto *secondaryCmdBuffer : cb_node->linkedCommandBuffers) {
         if (GetBufferInfo(secondaryCmdBuffer->commandBuffer).size()) {
             buffers_present = true;
         }
@@ -635,7 +635,7 @@ bool DebugPrintf::CommandBufferNeedsProcessing(VkCommandBuffer command_buffer) {
 void DebugPrintf::ProcessCommandBuffer(VkQueue queue, VkCommandBuffer command_buffer) {
     auto cb_node = GetCBState(command_buffer);
     UtilProcessInstrumentationBuffer(queue, cb_node, this);
-    for (auto secondary_cmd_buffer : cb_node->linkedCommandBuffers) {
+    for (auto *secondary_cmd_buffer : cb_node->linkedCommandBuffers) {
         UtilProcessInstrumentationBuffer(queue, secondary_cmd_buffer, this);
     }
 }
@@ -907,20 +907,19 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
         vmaUnmapMemory(vmaAllocator, output_block.allocation);
     }
 
-    VkWriteDescriptorSet desc_writes[1] = {};
+    auto desc_writes = LvlInitStruct<VkWriteDescriptorSet>();
     const uint32_t desc_count = 1;
 
     // Write the descriptor
     output_desc_buffer_info.buffer = output_block.buffer;
     output_desc_buffer_info.offset = 0;
 
-    desc_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    desc_writes[0].descriptorCount = 1;
-    desc_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    desc_writes[0].pBufferInfo = &output_desc_buffer_info;
-    desc_writes[0].dstSet = desc_sets[0];
-    desc_writes[0].dstBinding = 3;
-    DispatchUpdateDescriptorSets(device, desc_count, desc_writes, 0, NULL);
+    desc_writes.descriptorCount = 1;
+    desc_writes.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    desc_writes.pBufferInfo = &output_desc_buffer_info;
+    desc_writes.dstSet = desc_sets[0];
+    desc_writes.dstBinding = 3;
+    DispatchUpdateDescriptorSets(device, desc_count, &desc_writes, 0, NULL);
 
     const auto lv_bind_point = ConvertToLvlBindPoint(bind_point);
     const auto *pipeline_state = cb_node->lastBound[lv_bind_point].pipeline_state;

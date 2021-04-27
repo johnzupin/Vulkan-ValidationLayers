@@ -273,7 +273,7 @@ ImageRangeEncoder::ImageRangeEncoder(const IMAGE_STATE& image)
     : ImageRangeEncoder(image, AspectParameters::Get(image.full_range.aspectMask)) {}
 
 ImageRangeEncoder::ImageRangeEncoder(const IMAGE_STATE& image, const AspectParameters* param)
-    : RangeEncoder(image.full_range, param), image_(&image) {
+    : RangeEncoder(image.full_range, param), image_(&image), total_size_(0U) {
     if (image_->createInfo.extent.depth > 1) {
         limits_.arrayLayer = image_->createInfo.extent.depth;
     }
@@ -283,7 +283,7 @@ ImageRangeEncoder::ImageRangeEncoder(const IMAGE_STATE& image, const AspectParam
     linear_image = false;
 
     // WORKAROUND for dev_sim and mock_icd not containing valid VkSubresourceLayout yet. Treat it as optimal image.
-    if (image_->createInfo.tiling != VK_IMAGE_TILING_OPTIMAL) {
+    if (image_->createInfo.tiling == VK_IMAGE_TILING_LINEAR) {
         subres = {static_cast<VkImageAspectFlags>(AspectBit(0)), 0, 0};
         DispatchGetImageSubresourceLayout(image_->store_device_as_workaround, image_->image, &subres, &layout);
         if (layout.size > 0) {
@@ -321,6 +321,7 @@ ImageRangeEncoder::ImageRangeEncoder(const IMAGE_STATE& image, const AspectParam
                 }
                 subres_layouts_.push_back(layout);
             }
+            total_size_ += layout.size;
         }
     }
 }

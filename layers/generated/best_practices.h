@@ -713,6 +713,88 @@ void PostCallRecordCreateWin32SurfaceKHR(
 
 #endif // VK_USE_PLATFORM_WIN32_KHR
 
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+void PostCallRecordGetPhysicalDeviceVideoCapabilitiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    const VkVideoProfileKHR*                    pVideoProfile,
+    VkVideoCapabilitiesKHR*                     pCapabilities,
+    VkResult                                    result) override;
+
+
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+void PostCallRecordGetPhysicalDeviceVideoFormatPropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    const VkPhysicalDeviceVideoFormatInfoKHR*   pVideoFormatInfo,
+    uint32_t*                                   pVideoFormatPropertyCount,
+    VkVideoFormatPropertiesKHR*                 pVideoFormatProperties,
+    VkResult                                    result) override;
+
+
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+void PostCallRecordCreateVideoSessionKHR(
+    VkDevice                                    device,
+    const VkVideoSessionCreateInfoKHR*          pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkVideoSessionKHR*                          pVideoSession,
+    VkResult                                    result) override;
+
+
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+void PostCallRecordGetVideoSessionMemoryRequirementsKHR(
+    VkDevice                                    device,
+    VkVideoSessionKHR                           videoSession,
+    uint32_t*                                   pVideoSessionMemoryRequirementsCount,
+    VkVideoGetMemoryPropertiesKHR*              pVideoSessionMemoryRequirements,
+    VkResult                                    result) override;
+
+
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+void PostCallRecordBindVideoSessionMemoryKHR(
+    VkDevice                                    device,
+    VkVideoSessionKHR                           videoSession,
+    uint32_t                                    videoSessionBindMemoryCount,
+    const VkVideoBindMemoryKHR*                 pVideoSessionBindMemories,
+    VkResult                                    result) override;
+
+
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+void PostCallRecordCreateVideoSessionParametersKHR(
+    VkDevice                                    device,
+    const VkVideoSessionParametersCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkVideoSessionParametersKHR*                pVideoSessionParameters,
+    VkResult                                    result) override;
+
+
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+void PostCallRecordUpdateVideoSessionParametersKHR(
+    VkDevice                                    device,
+    VkVideoSessionParametersKHR                 videoSessionParameters,
+    const VkVideoSessionParametersUpdateInfoKHR* pUpdateInfo,
+    VkResult                                    result) override;
+
+
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
 void PostCallRecordGetPhysicalDeviceImageFormatProperties2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
@@ -1538,6 +1620,62 @@ void PostCallRecordCreateDirectFBSurfaceEXT(
 
 #endif // VK_USE_PLATFORM_DIRECTFB_EXT
 
+#ifdef VK_USE_PLATFORM_FUCHSIA
+
+void PostCallRecordGetMemoryZirconHandleFUCHSIA(
+    VkDevice                                    device,
+    const VkMemoryGetZirconHandleInfoFUCHSIA*   pGetZirconHandleInfo,
+    zx_handle_t*                                pZirconHandle,
+    VkResult                                    result) override;
+
+
+#endif // VK_USE_PLATFORM_FUCHSIA
+
+#ifdef VK_USE_PLATFORM_FUCHSIA
+
+void PostCallRecordGetMemoryZirconHandlePropertiesFUCHSIA(
+    VkDevice                                    device,
+    VkExternalMemoryHandleTypeFlagBits          handleType,
+    zx_handle_t                                 zirconHandle,
+    VkMemoryZirconHandlePropertiesFUCHSIA*      pMemoryZirconHandleProperties,
+    VkResult                                    result) override;
+
+
+#endif // VK_USE_PLATFORM_FUCHSIA
+
+#ifdef VK_USE_PLATFORM_FUCHSIA
+
+void PostCallRecordImportSemaphoreZirconHandleFUCHSIA(
+    VkDevice                                    device,
+    const VkImportSemaphoreZirconHandleInfoFUCHSIA* pImportSemaphoreZirconHandleInfo,
+    VkResult                                    result) override;
+
+
+#endif // VK_USE_PLATFORM_FUCHSIA
+
+#ifdef VK_USE_PLATFORM_FUCHSIA
+
+void PostCallRecordGetSemaphoreZirconHandleFUCHSIA(
+    VkDevice                                    device,
+    const VkSemaphoreGetZirconHandleInfoFUCHSIA* pGetZirconHandleInfo,
+    zx_handle_t*                                pZirconHandle,
+    VkResult                                    result) override;
+
+
+#endif // VK_USE_PLATFORM_FUCHSIA
+
+#ifdef VK_USE_PLATFORM_SCREEN_QNX
+
+void PostCallRecordCreateScreenSurfaceQNX(
+    VkInstance                                  instance,
+    const VkScreenSurfaceCreateInfoQNX*         pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSurfaceKHR*                               pSurface,
+    VkResult                                    result) override;
+
+
+#endif // VK_USE_PLATFORM_SCREEN_QNX
+
 void PostCallRecordCreateAccelerationStructureKHR(
     VkDevice                                    device,
     const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
@@ -1613,7 +1751,7 @@ void PostCallRecordGetRayTracingCaptureReplayShaderGroupHandlesKHR(
 
 
 
-const std::unordered_map<std::string, DeprecationData>  deprecated_extensions = {
+const layer_data::unordered_map<std::string, DeprecationData>  deprecated_extensions = {
     {"VK_AMD_draw_indirect_count", {kExtPromoted, "VK_KHR_draw_indirect_count"}},
     {"VK_AMD_gpu_shader_half_float", {kExtDeprecated, "VK_KHR_shader_float16_int8"}},
     {"VK_AMD_gpu_shader_int16", {kExtDeprecated, "VK_KHR_shader_float16_int8"}},
@@ -1681,7 +1819,7 @@ const std::unordered_map<std::string, DeprecationData>  deprecated_extensions = 
     {"VK_NV_win32_keyed_mutex", {kExtPromoted, "VK_KHR_win32_keyed_mutex"}},
 };
 
-const std::unordered_map<std::string, std::string> special_use_extensions = {
+const layer_data::unordered_map<std::string, std::string> special_use_extensions = {
     {"VK_AMD_buffer_marker", "devtools"},
     {"VK_AMD_shader_info", "devtools"},
     {"VK_EXT_debug_marker", "debugging"},

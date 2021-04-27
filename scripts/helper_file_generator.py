@@ -114,7 +114,7 @@ class HelperFileOutputGenerator(OutputGenerator):
         # Named tuples to store struct and command data
         self.StructType = namedtuple('StructType', ['name', 'value'])
         self.CommandParam = namedtuple('CommandParam', ['type', 'name', 'ispointer', 'isstaticarray', 'isconst', 'iscount', 'len', 'extstructs', 'cdecl'])
-        self.StructMemberData = namedtuple('StructMemberData', ['name', 'members', 'ifdef_protect'])
+        self.StructMemberData = namedtuple('StructMemberData', ['name', 'members', 'ifdef_protect', 'allowduplicate'])
 
         self.custom_construct_params = {
             # safe_VkGraphicsPipelineCreateInfo needs to know if subpass has color and\or depth\stencil attachments to use its pointers
@@ -544,10 +544,12 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                                                  len=self.getLen(member),
                                                  extstructs=self.registry.validextensionstructs[typeName] if name == 'pNext' else None,
                                                  cdecl=cdecl))
+        # If true, this structure type can appear multiple times within a pNext chain
+        allowduplicate = self.getBoolAttribute(typeinfo.elem, 'allowduplicate')
         # If this struct extends another, keep its name in list for further processing
         if typeinfo.elem.attrib.get('structextends') is not None:
             self.structextends_list.append(typeName)
-        self.structMembers.append(self.StructMemberData(name=typeName, members=membersInfo, ifdef_protect=self.featureExtraProtect))
+        self.structMembers.append(self.StructMemberData(name=typeName, members=membersInfo, ifdef_protect=self.featureExtraProtect, allowduplicate=allowduplicate))
     #
     # Enum_string_header: Create a routine to convert an enumerated value into a string
     def GenerateEnumStringConversion(self, groupName, value_list, bitwidth):
@@ -595,10 +597,30 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             outstring += '#endif // %s\n' % self.featureExtraProtect
         return outstring
     #
+    # Enum_string_header: Create a routine to determine whether or not a structure type can appear multiple times in a pNext chain
+    def GenerateDuplicatePnextInfo(self, value_list):
+        outstring = '\nstatic inline bool IsDuplicatePnext(VkStructureType input_value)\n'
+        outstring += '{\n'
+        outstring += '    switch (input_value)\n'
+        outstring += '    {\n'
+        # Emit these in a repeatable order so file is generated with the same contents each time.
+        # This helps compiler caching systems like ccache.
+        for item in sorted(value_list):
+            outstring += '        case %s:\n' % item
+        outstring += '            return true;\n'
+        outstring += '        default:\n'
+        outstring += '            return false;\n'
+        outstring += '    }\n'
+        outstring += '}\n'
+        return outstring
+    def DuplicatePnextInfo(self):
+        return self.GenerateDuplicatePnextInfo([self.structTypes[struct.name].value for struct in self.structMembers if struct.allowduplicate])
+
+    #
     # Tack on a helper which, given an index into a VkPhysicalDeviceFeatures structure, will print the corresponding feature name
     def DeIndexPhysDevFeatures(self):
         pdev_members = None
-        for name, members, ifdef in self.structMembers:
+        for name, members, ifdef, allowduplicate in self.structMembers:
             if name == 'VkPhysicalDeviceFeatures':
                 pdev_members = members
                 break
@@ -622,9 +644,11 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             enum_string_helper_header += '\n'
             enum_string_helper_header += '#include <string>\n'
             enum_string_helper_header += '#include <vulkan/vulkan.h>\n'
+            enum_string_helper_header += '#include "vk_layer_data.h"\n'
             enum_string_helper_header += '\n'
             enum_string_helper_header += self.enum_output
             enum_string_helper_header += self.DeIndexPhysDevFeatures()
+            enum_string_helper_header += self.DuplicatePnextInfo()
             return enum_string_helper_header
     #
     # Helper function for declaring a counter variable only once
@@ -776,16 +800,15 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             '',
             '#ifndef VK_EXTENSION_HELPER_H_',
             '#define VK_EXTENSION_HELPER_H_',
-            '#include <unordered_set>',
             '#include <string>',
-            '#include <unordered_map>',
             '#include <utility>',
             '#include <set>',
             '#include <vector>',
             '#include <cassert>',
             '',
             '#include <vulkan/vulkan.h>',
-            '',
+            '#include "vk_layer_data.h"',
+            ''
             '#define VK_VERSION_1_1_NAME "VK_VERSION_1_1"',
             '',
             '// Suppress unused warning on Linux',
@@ -872,19 +895,19 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                 '       %s requirements;' % req_vec_type,
                 '    };',
                 '',
-                '    typedef std::unordered_map<std::string,%s> %s;' % (info_type, info_map_type),
+                '    typedef layer_data::unordered_map<std::string,%s> %s;' % (info_type, info_map_type),
                 '    static const %s &get_info(const char *name) {' %info_type,
                 '        static const %s info_map = {' % info_map_type ])
             struct.extend([
-                '            std::make_pair("VK_VERSION_1_1", %sInfo(&%sExtensions::vk_feature_version_1_1, {})),' % (type, type)])
+                '            {"VK_VERSION_1_1", %sInfo(&%sExtensions::vk_feature_version_1_1, {})},' % (type, type)])
             struct.extend([
-                '            std::make_pair("VK_VERSION_1_2", %sInfo(&%sExtensions::vk_feature_version_1_2, {})),' % (type, type)])
+                '            {"VK_VERSION_1_2", %sInfo(&%sExtensions::vk_feature_version_1_2, {})},' % (type, type)])
 
             field_format = '&' + struct_type + '::%s'
             req_format = '{' + field_format+ ', %s}'
             req_indent = '\n                           '
             req_join = ',' + req_indent
-            info_format = ('            std::make_pair(%s, ' + info_type + '(' + field_format + ', {%s})),')
+            info_format = ('            {%s, ' + info_type + '(' + field_format + ', {%s})},')
             def format_info(ext_name, info):
                 reqs = req_join.join([req_format % (field_name[req], extension_dict[req]['define']) for req in info['reqs']])
                 return info_format % (info['define'], field_name[ext_name], '{%s}' % (req_indent + reqs) if reqs else '')
@@ -1181,7 +1204,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                     return CastFromUint64<Handle>(handle);
                 }
                 VulkanTypedHandle() :
-                    handle(VK_NULL_HANDLE),
+                    handle(CastToUint64(VK_NULL_HANDLE)),
                     type(kVulkanObjectTypeUnknown),
                     node(nullptr) {}
             }; ''')  +'\n'
@@ -1825,6 +1848,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             'template <typename T> T {init_func}() {{',
             '    T out = {{}};',
             '    out.sType = {type_map}<T>::kSType;',
+            '    out.pNext = nullptr;',
             '    return out;',
             '}}',
 
@@ -1910,3 +1934,8 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             return self.GenerateCcOptickInstrumentationHelperSource()
         else:
             return 'Bad Helper File Generator Option %s' % self.helper_file_type
+
+    # Check if attribute is "true"
+    def getBoolAttribute(self, member, name):
+        try: return member.attrib[name].lower() == 'true'
+        except: return False

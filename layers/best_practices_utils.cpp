@@ -47,7 +47,7 @@ bool BestPractices::VendorCheckEnabled(BPVendorFlags vendors) const {
 
 const char* VendorSpecificTag(BPVendorFlags vendors) {
     // Cache built vendor tags in a map
-    static std::unordered_map<BPVendorFlags, std::string> tag_map;
+    static layer_data::unordered_map<BPVendorFlags, std::string> tag_map;
 
     auto res = tag_map.find(vendors);
     if (res == tag_map.end()) {
@@ -301,7 +301,8 @@ bool BestPractices::PreCallValidateCreateSwapchainKHR(VkDevice device, const VkS
                                "vkGetPhysicalDeviceSurfaceCapabilitiesKHR().");
         }
 
-        if (bp_pd_state->vkGetPhysicalDeviceSurfacePresentModesKHRState != QUERY_DETAILS) {
+        if ((pCreateInfo->presentMode != VK_PRESENT_MODE_FIFO_KHR) &&
+            (bp_pd_state->vkGetPhysicalDeviceSurfacePresentModesKHRState != QUERY_DETAILS)) {
             skip |= LogWarning(device, kVUID_BestPractices_Swapchain_GetSurfaceNotCalled,
                                "vkCreateSwapchainKHR() called before getting surface present mode(s) from "
                                "vkGetPhysicalDeviceSurfacePresentModesKHR().");
@@ -531,7 +532,7 @@ void BestPractices::PostCallRecordFreeDescriptorSets(VkDevice device, VkDescript
         // we want to track frees because we're interested in suggesting re-use
         auto iter = descriptor_pool_freed_count.find(descriptorPool);
         if (iter == descriptor_pool_freed_count.end()) {
-            descriptor_pool_freed_count.insert(std::make_pair(descriptorPool, descriptorSetCount));
+            descriptor_pool_freed_count.emplace(descriptorPool, descriptorSetCount);
         } else {
             iter->second += descriptorSetCount;
         }
@@ -901,7 +902,7 @@ void BestPractices::ManualPostCallRecordCreateGraphicsPipelines(VkDevice device,
 
         // add the tracking state if it doesn't exist
         if (gp_cis == graphicsPipelineCIs.end()) {
-            auto result = graphicsPipelineCIs.emplace(std::make_pair(pipeline_handle, GraphicsPipelineCIs{}));
+            auto result = graphicsPipelineCIs.emplace(pipeline_handle, GraphicsPipelineCIs{});
 
             if (!result.second) continue;
 
@@ -945,9 +946,12 @@ bool BestPractices::PreCallValidateCreateComputePipelines(VkDevice device, VkPip
 bool BestPractices::ValidateCreateComputePipelineArm(const VkComputePipelineCreateInfo& createInfo) const {
     bool skip = false;
     auto* module = GetShaderModuleState(createInfo.stage.module);
+    // Generate warnings about work group sizes based on active resources.
+    auto entrypoint = module->FindEntrypoint(createInfo.stage.pName, createInfo.stage.stage);
+    if (entrypoint == module->end()) return false;
 
     uint32_t x = 1, y = 1, z = 1;
-    FindLocalSize(module, x, y, z);
+    module->FindLocalSize(entrypoint, x, y, z);
 
     uint32_t thread_count = x * y * z;
 
@@ -974,15 +978,11 @@ bool BestPractices::ValidateCreateComputePipelineArm(const VkComputePipelineCrea
                                       kThreadGroupDispatchCountAlignmentArm);
     }
 
-    // Generate warnings about work group sizes based on active resources.
-    auto entrypoint = FindEntrypoint(module, createInfo.stage.pName, createInfo.stage.stage);
-    if (entrypoint == module->end()) return false;
-
     bool has_writeable_descriptors = false;
     bool has_atomic_descriptors = false;
-    auto accessible_ids = MarkAccessibleIds(module, entrypoint);
+    auto accessible_ids = module->MarkAccessibleIds(entrypoint);
     auto descriptor_uses =
-        CollectInterfaceByDescriptorSlot(module, accessible_ids, &has_writeable_descriptors, &has_atomic_descriptors);
+        module->CollectInterfaceByDescriptorSlot(accessible_ids, &has_writeable_descriptors, &has_atomic_descriptors);
 
     unsigned dimensions = 0;
     if (x > 1) dimensions++;
@@ -996,7 +996,7 @@ bool BestPractices::ValidateCreateComputePipelineArm(const VkComputePipelineCrea
     // or we may have a linearly tiled image, but these cases are quite unlikely in practice.
     bool accesses_2d = false;
     for (const auto& usage : descriptor_uses) {
-        auto dim = GetShaderResourceDimensionality(module, usage.second);
+        auto dim = module->GetShaderResourceDimensionality(usage.second);
         if (dim < 0) continue;
         auto spvdim = spv::Dim(dim);
         if (spvdim != spv::Dim1D && spvdim != spv::DimBuffer) accesses_2d = true;
@@ -1230,7 +1230,7 @@ void BestPractices::PostCallRecordCmdBindPipeline(VkCommandBuffer commandBuffer,
         if (gp_cis != graphicsPipelineCIs.end()) {
             auto prepass_state = cbDepthPrePassStates.find(commandBuffer);
             if (prepass_state == cbDepthPrePassStates.end()) {
-                auto result = cbDepthPrePassStates.emplace(std::make_pair(commandBuffer, DepthPrePassState{}));
+                auto result = cbDepthPrePassStates.emplace(commandBuffer, DepthPrePassState{});
 
                 if (!result.second) return;
 
@@ -1266,7 +1266,7 @@ void BestPractices::PostCallRecordCmdBindPipeline(VkCommandBuffer commandBuffer,
             }
         } else {
             // reset depth pre-pass tracking
-            cbDepthPrePassStates.emplace(std::make_pair(commandBuffer, DepthPrePassState{}));
+            cbDepthPrePassStates.emplace(commandBuffer, DepthPrePassState{});
         }
     }
 }
@@ -1378,7 +1378,7 @@ void BestPractices::RecordCmdBeginRenderPass(VkCommandBuffer commandBuffer, Rend
 
     // add the tracking state if it doesn't exist
     if (prepass_state == cbDepthPrePassStates.end()) {
-        auto result = cbDepthPrePassStates.emplace(std::make_pair(commandBuffer, DepthPrePassState{}));
+        auto result = cbDepthPrePassStates.emplace(commandBuffer, DepthPrePassState{});
 
         if (!result.second) return;
 
@@ -1967,10 +1967,10 @@ bool BestPractices::PreCallValidateQueueBindSparse(VkQueue queue, uint32_t bindI
     for (uint32_t bind_idx = 0; bind_idx < bindInfoCount; bind_idx++) {
         const VkBindSparseInfo& bind_info = pBindInfo[bind_idx];
         // Store sparse binding image_state and after binding is complete make sure that any requiring metadata have it bound
-        std::unordered_set<const IMAGE_STATE*> sparse_images;
+        layer_data::unordered_set<const IMAGE_STATE*> sparse_images;
         // Track images getting metadata bound by this call in a set, it'll be recorded into the image_state
         // in RecordQueueBindSparse.
-        std::unordered_set<const IMAGE_STATE*> sparse_images_with_metadata;
+        layer_data::unordered_set<const IMAGE_STATE*> sparse_images_with_metadata;
         // If we're binding sparse image memory make sure reqs were queried and note if metadata is required and bound
         for (uint32_t i = 0; i < bind_info.imageBindCount; ++i) {
             const auto& image_bind = bind_info.pImageBinds[i];

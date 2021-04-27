@@ -220,8 +220,6 @@ class LayerChassisOutputGenerator(OutputGenerator):
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unordered_map>
-#include <unordered_set>
 #include <algorithm>
 #include <memory>
 
@@ -252,7 +250,7 @@ struct HashedUint64 {
     size_t operator()(const uint64_t &t) const { return t >> HASHED_UINT64_SHIFT; }
 
     static uint64_t hash(uint64_t id) {
-        uint64_t h = (uint64_t)std::hash<uint64_t>()(id);
+        uint64_t h = (uint64_t)layer_data::hash<uint64_t>()(id);
         id |= h << HASHED_UINT64_SHIFT;
         return id;
     }
@@ -279,7 +277,6 @@ enum LayerObjectTypeId {
     LayerObjectTypeBestPractices,               // Instance or device best practices layer object
     LayerObjectTypeGpuAssisted,                 // Instance or device gpu assisted validation layer object
     LayerObjectTypeDebugPrintf,                 // Instance or device shader debug printf layer object
-    LayerObjectTypeCommandCounter,              // Command Counter validation object, child of corechecks
     LayerObjectTypeSyncValidation,              // Instance or device synchronization validation layer object
     LayerObjectTypeMaxEnum,                     // Max enum count
 };
@@ -436,8 +433,8 @@ class ValidationObject {
         bool LogError(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
-            if (!(report_data->active_severities & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) ||
-                !(report_data->active_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
+            if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
                 return false;
             }
             va_list argptr;
@@ -454,8 +451,8 @@ class ValidationObject {
         bool LogError(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
-            if (!(report_data->active_severities & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) ||
-                !(report_data->active_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
+            if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
                 return false;
             }
             va_list argptr;
@@ -473,8 +470,8 @@ class ValidationObject {
         bool LogWarning(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
-            if (!(report_data->active_severities & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) ||
-                !(report_data->active_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
+            if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
                 return false;
             }
             va_list argptr;
@@ -491,8 +488,8 @@ class ValidationObject {
         bool LogWarning(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
-            if (!(report_data->active_severities & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) ||
-                !(report_data->active_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
+            if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
                 return false;
             }
             va_list argptr;
@@ -509,8 +506,8 @@ class ValidationObject {
         bool LogPerformanceWarning(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
-            if (!(report_data->active_severities & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) ||
-                !(report_data->active_types & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
+            if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
                 return false;
             }
             va_list argptr;
@@ -527,8 +524,8 @@ class ValidationObject {
         bool LogPerformanceWarning(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
-            if (!(report_data->active_severities & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) ||
-                !(report_data->active_types & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
+            if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
                 return false;
             }
             va_list argptr;
@@ -545,8 +542,8 @@ class ValidationObject {
         bool LogInfo(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
-            if (!(report_data->active_severities & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) ||
-                !(report_data->active_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
+            if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
                 return false;
             }
             va_list argptr;
@@ -563,8 +560,8 @@ class ValidationObject {
         bool LogInfo(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
-            if (!(report_data->active_severities & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) ||
-                !(report_data->active_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
+            if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
                 return false;
             }
             va_list argptr;
@@ -582,18 +579,18 @@ class ValidationObject {
         // Reverse map display handles
         vl_concurrent_unordered_map<VkDisplayKHR, uint64_t, 0> display_id_reverse_mapping;
         // Wrapping Descriptor Template Update structures requires access to the template createinfo structs
-        std::unordered_map<uint64_t, std::unique_ptr<TEMPLATE_STATE>> desc_template_createinfo_map;
+        layer_data::unordered_map<uint64_t, std::unique_ptr<TEMPLATE_STATE>> desc_template_createinfo_map;
         struct SubpassesUsageStates {
-            std::unordered_set<uint32_t> subpasses_using_color_attachment;
-            std::unordered_set<uint32_t> subpasses_using_depthstencil_attachment;
+            layer_data::unordered_set<uint32_t> subpasses_using_color_attachment;
+            layer_data::unordered_set<uint32_t> subpasses_using_depthstencil_attachment;
         };
         // Uses unwrapped handles
-        std::unordered_map<VkRenderPass, SubpassesUsageStates> renderpasses_states;
+        layer_data::unordered_map<VkRenderPass, SubpassesUsageStates> renderpasses_states;
         // Map of wrapped swapchain handles to arrays of wrapped swapchain image IDs
         // Each swapchain has an immutable list of wrapped swapchain image IDs -- always return these IDs if they exist
-        std::unordered_map<VkSwapchainKHR, std::vector<VkImage>> swapchain_wrapped_image_handle_map;
+        layer_data::unordered_map<VkSwapchainKHR, std::vector<VkImage>> swapchain_wrapped_image_handle_map;
         // Map of wrapped descriptor pools to set of wrapped descriptor sets allocated from each pool
-        std::unordered_map<VkDescriptorPool, std::unordered_set<VkDescriptorSet>> pool_descriptor_sets_map;
+        layer_data::unordered_map<VkDescriptorPool, layer_data::unordered_set<VkDescriptorSet>> pool_descriptor_sets_map;
 
 
         // Unwrap a handle.
@@ -686,7 +683,6 @@ bool wrap_handles = true;
 #include "best_practices_validation.h"
 #include "core_validation.h"
 #include "corechecks_optick_instrumentation.h"
-#include "command_counter.h"
 #include "gpu_validation.h"
 #include "object_lifetime_validation.h"
 #include "debug_printf.h"
@@ -708,8 +704,6 @@ static const bool use_optick_instrumentation = false;
 
     inline_custom_source_preamble_2 = """
 namespace vulkan_layer_chassis {
-
-using std::unordered_map;
 
 static const VkLayerProperties global_layer = {
     OBJECT_LAYER_NAME, VK_LAYER_API_VERSION, 1, "LunarG validation Layer",
@@ -734,7 +728,7 @@ typedef struct {
     void* funcptr;
 } function_data;
 
-extern const std::unordered_map<std::string, function_data> name_to_funcptr_map;
+extern const layer_data::unordered_map<std::string, function_data> name_to_funcptr_map;
 
 // Manually written functions
 
@@ -1732,9 +1726,6 @@ VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVe
             case LayerObjectTypeCoreValidation: \\
                 if (typeid(&CoreChecks::name) != typeid(&ValidationObject::name)) intercept_vector->push_back(item);    \\
                 break;  \\
-            case LayerObjectTypeCommandCounter: \\
-                if (typeid(&CommandCounter::name) != typeid(&ValidationObject::name)) intercept_vector->push_back(item);    \\
-                break;  \\
             case LayerObjectTypeBestPractices:  \\
                 if (typeid(&BestPractices::name) != typeid(&ValidationObject::name)) intercept_vector->push_back(item);     \\
                 break;  \\
@@ -1815,7 +1806,7 @@ VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVe
             write('#ifdef _MSC_VER', file=self.outFile)
             write('#pragma warning( suppress: 6262 ) // VS analysis: this uses more than 16 kiB, which is fine here at global scope', file=self.outFile)
             write('#endif', file=self.outFile)
-            write('const std::unordered_map<std::string, function_data> name_to_funcptr_map = {', file=self.outFile)
+            write('const layer_data::unordered_map<std::string, function_data> name_to_funcptr_map = {', file=self.outFile)
             write('\n'.join(self.intercepts), file=self.outFile)
             write('};\n', file=self.outFile)
             self.newline()
