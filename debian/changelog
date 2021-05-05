@@ -1,3 +1,10 @@
+vulkan-validationlayers (1.2.176.1~rc1-1lunarg18.04-1) bionic; urgency=medium
+
+  [ Charles Giessen ]
+  * layers: Add platform guards to enum_string_helper
+
+ -- John Zupin <john@odin>  Wed, 05 May 2021 14:35:30 -0600
+
 vulkan-validationlayers (1.2.176.0~rc4-1lunarg18.04-1) bionic; urgency=medium
 
   [ Jeremy Gebben ]
