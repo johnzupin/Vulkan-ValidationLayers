@@ -264,6 +264,8 @@ class VkLayerTest : public VkRenderFramework {
     bool LoadDeviceProfileLayer(
         PFN_vkSetPhysicalDeviceFormatProperties2EXT &fpvkSetPhysicalDeviceFormatProperties2EXT,
         PFN_vkGetOriginalPhysicalDeviceFormatProperties2EXT &fpvkGetOriginalPhysicalDeviceFormatProperties2EXT);
+    bool LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceLimitsEXT &fpvkSetPhysicalDeviceLimitsEXT,
+                                PFN_vkGetOriginalPhysicalDeviceLimitsEXT &fpvkGetOriginalPhysicalDeviceLimitsEXT);
 
     VkLayerTest();
 };
@@ -285,7 +287,14 @@ class VkBestPracticesLayerTest : public VkLayerTest {
     VkValidationFeaturesEXT features_ = {VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT, nullptr, 1, enables_, 4, disables_};
 };
 
-class VkArmBestPracticesLayerTest : public VkBestPracticesLayerTest {};
+class VkArmBestPracticesLayerTest : public VkBestPracticesLayerTest {
+  public:
+    std::unique_ptr<VkImageObj> CreateImage(VkFormat format, const uint32_t width, const uint32_t height);
+    VkRenderPass CreateRenderPass(VkFormat format, VkAttachmentLoadOp load_op = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                  VkAttachmentStoreOp store_op = VK_ATTACHMENT_STORE_OP_STORE);
+    VkFramebuffer CreateFramebuffer(const uint32_t width, const uint32_t height, VkImageView image_view, VkRenderPass renderpass);
+    VkSampler CreateDefaultSampler();
+};
 
 class VkWsiEnabledLayerTest : public VkLayerTest {
   public:

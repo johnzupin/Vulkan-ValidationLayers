@@ -6430,6 +6430,104 @@ void DispatchCmdDrawIndirectByteCountEXT(
 
 }
 
+VkResult DispatchCreateCuModuleNVX(
+    VkDevice                                    device,
+    const VkCuModuleCreateInfoNVX*              pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkCuModuleNVX*                              pModule)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
+    if (!wrap_handles) return layer_data->device_dispatch_table.CreateCuModuleNVX(device, pCreateInfo, pAllocator, pModule);
+    VkResult result = layer_data->device_dispatch_table.CreateCuModuleNVX(device, pCreateInfo, pAllocator, pModule);
+    if (VK_SUCCESS == result) {
+        *pModule = layer_data->WrapNew(*pModule);
+    }
+    return result;
+}
+
+VkResult DispatchCreateCuFunctionNVX(
+    VkDevice                                    device,
+    const VkCuFunctionCreateInfoNVX*            pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkCuFunctionNVX*                            pFunction)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
+    if (!wrap_handles) return layer_data->device_dispatch_table.CreateCuFunctionNVX(device, pCreateInfo, pAllocator, pFunction);
+    safe_VkCuFunctionCreateInfoNVX var_local_pCreateInfo;
+    safe_VkCuFunctionCreateInfoNVX *local_pCreateInfo = NULL;
+    {
+        if (pCreateInfo) {
+            local_pCreateInfo = &var_local_pCreateInfo;
+            local_pCreateInfo->initialize(pCreateInfo);
+            if (pCreateInfo->module) {
+                local_pCreateInfo->module = layer_data->Unwrap(pCreateInfo->module);
+            }
+        }
+    }
+    VkResult result = layer_data->device_dispatch_table.CreateCuFunctionNVX(device, (const VkCuFunctionCreateInfoNVX*)local_pCreateInfo, pAllocator, pFunction);
+    if (VK_SUCCESS == result) {
+        *pFunction = layer_data->WrapNew(*pFunction);
+    }
+    return result;
+}
+
+void DispatchDestroyCuModuleNVX(
+    VkDevice                                    device,
+    VkCuModuleNVX                               module,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
+    if (!wrap_handles) return layer_data->device_dispatch_table.DestroyCuModuleNVX(device, module, pAllocator);
+    uint64_t module_id = reinterpret_cast<uint64_t &>(module);
+    auto iter = unique_id_mapping.pop(module_id);
+    if (iter != unique_id_mapping.end()) {
+        module = (VkCuModuleNVX)iter->second;
+    } else {
+        module = (VkCuModuleNVX)0;
+    }
+    layer_data->device_dispatch_table.DestroyCuModuleNVX(device, module, pAllocator);
+
+}
+
+void DispatchDestroyCuFunctionNVX(
+    VkDevice                                    device,
+    VkCuFunctionNVX                             function,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
+    if (!wrap_handles) return layer_data->device_dispatch_table.DestroyCuFunctionNVX(device, function, pAllocator);
+    uint64_t function_id = reinterpret_cast<uint64_t &>(function);
+    auto iter = unique_id_mapping.pop(function_id);
+    if (iter != unique_id_mapping.end()) {
+        function = (VkCuFunctionNVX)iter->second;
+    } else {
+        function = (VkCuFunctionNVX)0;
+    }
+    layer_data->device_dispatch_table.DestroyCuFunctionNVX(device, function, pAllocator);
+
+}
+
+void DispatchCmdCuLaunchKernelNVX(
+    VkCommandBuffer                             commandBuffer,
+    const VkCuLaunchInfoNVX*                    pLaunchInfo)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    if (!wrap_handles) return layer_data->device_dispatch_table.CmdCuLaunchKernelNVX(commandBuffer, pLaunchInfo);
+    safe_VkCuLaunchInfoNVX var_local_pLaunchInfo;
+    safe_VkCuLaunchInfoNVX *local_pLaunchInfo = NULL;
+    {
+        if (pLaunchInfo) {
+            local_pLaunchInfo = &var_local_pLaunchInfo;
+            local_pLaunchInfo->initialize(pLaunchInfo);
+            if (pLaunchInfo->function) {
+                local_pLaunchInfo->function = layer_data->Unwrap(pLaunchInfo->function);
+            }
+        }
+    }
+    layer_data->device_dispatch_table.CmdCuLaunchKernelNVX(commandBuffer, (const VkCuLaunchInfoNVX*)local_pLaunchInfo);
+
+}
+
 uint32_t DispatchGetImageViewHandleNVX(
     VkDevice                                    device,
     const VkImageViewHandleInfoNVX*             pInfo)
@@ -8247,6 +8345,37 @@ void DispatchDestroyIndirectCommandsLayoutNV(
 
 }
 
+VkResult DispatchAcquireDrmDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    int32_t                                     drmFd,
+    VkDisplayKHR                                display)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(physicalDevice), layer_data_map);
+    if (!wrap_handles) return layer_data->instance_dispatch_table.AcquireDrmDisplayEXT(physicalDevice, drmFd, display);
+    {
+        display = layer_data->Unwrap(display);
+    }
+    VkResult result = layer_data->instance_dispatch_table.AcquireDrmDisplayEXT(physicalDevice, drmFd, display);
+
+    return result;
+}
+
+VkResult DispatchGetDrmDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    int32_t                                     drmFd,
+    uint32_t                                    connectorId,
+    VkDisplayKHR*                               display)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(physicalDevice), layer_data_map);
+    if (!wrap_handles) return layer_data->instance_dispatch_table.GetDrmDisplayEXT(physicalDevice, drmFd, connectorId, display);
+    {
+        display = layer_data->Unwrap(display);
+    }
+    VkResult result = layer_data->instance_dispatch_table.GetDrmDisplayEXT(physicalDevice, drmFd, connectorId, display);
+
+    return result;
+}
+
 VkResult DispatchCreatePrivateDataSlotEXT(
     VkDevice                                    device,
     const VkPrivateDataSlotCreateInfoEXT*       pCreateInfo,
@@ -8549,6 +8678,33 @@ void                                    DispatchCmdSetColorWriteEnableEXT(
 {
     auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
     layer_data->device_dispatch_table.CmdSetColorWriteEnableEXT(commandBuffer, attachmentCount, pColorWriteEnables);
+
+}
+
+void DispatchCmdDrawMultiEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    drawCount,
+    const VkMultiDrawInfoEXT*                   pVertexInfo,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstInstance,
+    uint32_t                                    stride)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    layer_data->device_dispatch_table.CmdDrawMultiEXT(commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride);
+
+}
+
+void DispatchCmdDrawMultiIndexedEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    drawCount,
+    const VkMultiDrawIndexedInfoEXT*            pIndexInfo,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstInstance,
+    uint32_t                                    stride,
+    const int32_t*                              pVertexOffset)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    layer_data->device_dispatch_table.CmdDrawMultiIndexedEXT(commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset);
 
 }
 

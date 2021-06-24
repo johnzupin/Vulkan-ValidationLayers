@@ -799,6 +799,9 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentsMisc) {
         {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_4_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
          VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        // depth non-resolve attachment
+        {0, ds_format, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL},
     };
 
     std::vector<VkAttachmentReference> input = {
@@ -814,6 +817,10 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentsMisc) {
         {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
     };
     std::vector<uint32_t> preserve = {5};
+    std::vector<VkAttachmentReference> depth_1bit = {
+        {6, VK_IMAGE_LAYOUT_GENERAL},
+        {6, VK_IMAGE_LAYOUT_GENERAL},
+    };
 
     VkSubpassDescription subpass = {0,
                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -956,6 +963,159 @@ TEST_F(VkLayerTest, RenderPassCreateAttachmentsMisc) {
                              "VUID-VkSubpassDescription-loadOp-00846", "VUID-VkSubpassDescription2-loadOp-03064");
 
         attachments[input[0].attachment].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    }
+
+    // Test for depthStencil and color pointing to same attachment
+    {
+        // Both use same VkAttachmentReference
+        VkSubpassDescription subpass_same = {
+            0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 1, depth_1bit.data(), nullptr, depth_1bit.data(), 0, nullptr};
+
+        VkRenderPassCreateInfo rpci_same = rpci;
+        rpci_same.pSubpasses = &subpass_same;
+
+        // only test rp1 so can ignore the expected 2nd error
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription-pColorAttachments-02648");
+        TestRenderPassCreate(m_errorMonitor, m_device->device(), &rpci_same, rp2Supported,
+                             "VUID-VkSubpassDescription-pDepthStencilAttachment-04438", nullptr);
+
+        safe_VkRenderPassCreateInfo2 create_info2;
+        ConvertVkRenderPassCreateInfoToV2KHR(rpci_same, &create_info2);
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-pColorAttachments-02898");
+        TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), create_info2.ptr(),
+                                 "VUID-VkSubpassDescription2-pDepthStencilAttachment-04440");
+
+        // Same test but use 2 different VkAttachmentReference to point to same attachment
+        subpass_same.pDepthStencilAttachment = &depth_1bit.data()[1];
+
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription-pColorAttachments-02648");
+        TestRenderPassCreate(m_errorMonitor, m_device->device(), &rpci_same, rp2Supported,
+                             "VUID-VkSubpassDescription-pDepthStencilAttachment-04438", nullptr);
+
+        ConvertVkRenderPassCreateInfoToV2KHR(rpci_same, &create_info2);
+        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassDescription2-pColorAttachments-02898");
+        TestRenderPass2KHRCreate(m_errorMonitor, m_device->device(), create_info2.ptr(),
+                                 "VUID-VkSubpassDescription2-pDepthStencilAttachment-04440");
+    }
+}
+
+TEST_F(VkLayerTest, InvalidRenderPassCreateRenderPassShaderResolveQCOM) {
+    TEST_DESCRIPTION("Ensure RenderPass create meets the requirements for QCOM_render_pass_shader_resolve");
+
+    // Check for VK_KHR_get_physical_device_properties2
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    bool rp2Supported = CheckCreateRenderPass2Support(this, m_device_extension_names);
+    bool rpShaderResolveSupport = DeviceExtensionSupported(gpu(), nullptr, VK_QCOM_RENDER_PASS_SHADER_RESOLVE_EXTENSION_NAME);
+    if (rpShaderResolveSupport) {
+        m_device_extension_names.push_back(VK_QCOM_RENDER_PASS_SHADER_RESOLVE_EXTENSION_NAME);
+    } else {
+        printf("%s test requires QCOM_render_pass_shader_resolve, not available.  Skipping.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    const VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
+    if (ds_format == VK_FORMAT_UNDEFINED) {
+        printf("%s No Depth + Stencil format found rest of tests skipped.\n", kSkipPrefix);
+        return;
+    }
+
+    std::vector<VkAttachmentDescription> attachments = {
+        // input attachments
+        {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_4_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL},
+        // color attachments
+        {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_4_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_4_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        // depth attachment
+        {0, ds_format, VK_SAMPLE_COUNT_4_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
+        // resolve attachment
+        {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+    };
+
+    std::vector<VkAttachmentReference> input = {
+        {0, VK_IMAGE_LAYOUT_GENERAL},
+    };
+    std::vector<VkAttachmentReference> color = {
+        {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+    };
+    VkAttachmentReference depth = {3, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+
+    std::vector<VkAttachmentReference> resolve = {
+        {4, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+    };
+
+    VkSubpassDescription subpass = {0,
+                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    (uint32_t)input.size(),
+                                    input.data(),
+                                    (uint32_t)color.size(),
+                                    color.data(),
+                                    nullptr,
+                                    &depth,
+                                    0,
+                                    nullptr};
+
+    std::vector<VkSubpassDependency> dependency = {
+        {0, 1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
+         VK_ACCESS_MEMORY_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT},
+    };
+
+    VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                                   nullptr,
+                                   0,
+                                   (uint32_t)attachments.size(),
+                                   attachments.data(),
+                                   1,
+                                   &subpass,
+                                   0,
+                                   nullptr};
+
+    // Create a resolve subpass where the pResolveattachments are not VK_ATTACHMENT_UNUSED
+    VkSubpassDescription test_subpass = subpass;
+    test_subpass.pResolveAttachments = resolve.data();
+    test_subpass.flags = VK_SUBPASS_DESCRIPTION_SHADER_RESOLVE_BIT_QCOM;
+    VkRenderPassCreateInfo test_rpci = rpci;
+    test_rpci.pSubpasses = &test_subpass;
+
+    TestRenderPassCreate(m_errorMonitor, m_device->device(), &test_rpci, rp2Supported, "VUID-VkSubpassDescription-flags-03341",
+                         "VUID-VkRenderPassCreateInfo2-flags-04907");
+
+    // Create a resolve subpass which is not the last subpass in the subpass dependency chain.
+    {
+        VkSubpassDescription subpasses[2] = {subpass, subpass};
+        subpasses[0].pResolveAttachments = nullptr;
+        subpasses[0].flags = VK_SUBPASS_DESCRIPTION_SHADER_RESOLVE_BIT_QCOM;
+        subpasses[1].pResolveAttachments = nullptr;
+        subpasses[1].flags = 0;
+
+        VkRenderPassCreateInfo test2_rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                                             nullptr,
+                                             0,
+                                             (uint32_t)attachments.size(),
+                                             attachments.data(),
+                                             2,
+                                             subpasses,
+                                             (uint32_t)dependency.size(),
+                                             dependency.data()};
+
+        TestRenderPassCreate(m_errorMonitor, m_device->device(), &test2_rpci, rp2Supported, "VUID-VkSubpassDescription-flags-03343",
+                             "VUID-VkRenderPassCreateInfo2-flags-04909");
     }
 }
 
@@ -2414,14 +2574,14 @@ TEST_F(VkLayerTest, InvalidSampleLocations) {
     const uint32_t valid_count =
         multisample_prop.maxSampleLocationGridSize.width * multisample_prop.maxSampleLocationGridSize.height * 1;
 
-    VkSampleLocationEXT sample_location = {0.5, 0.5};
+    std::vector<VkSampleLocationEXT> sample_location(valid_count,{0.5, 0.5});
     VkSampleLocationsInfoEXT sample_locations_info = {};
     sample_locations_info.sType = VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT;
     sample_locations_info.pNext = nullptr;
     sample_locations_info.sampleLocationsPerPixel = VK_SAMPLE_COUNT_1_BIT;
     sample_locations_info.sampleLocationGridSize = multisample_prop.maxSampleLocationGridSize;
     sample_locations_info.sampleLocationsCount = valid_count;
-    sample_locations_info.pSampleLocations = &sample_location;
+    sample_locations_info.pSampleLocations = sample_location.data();
 
     VkPipelineSampleLocationsStateCreateInfoEXT sample_location_state = {};
     sample_location_state.sType = VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT;
@@ -3734,9 +3894,8 @@ TEST_F(VkLayerTest, WriteDescriptorSetConsecutiveUpdates) {
         vk::CmdEndRenderPass(m_commandBuffer->handle());
         m_commandBuffer->end();
     }
-    // buffer2 just went out of scope and was destroyed along with its memory
+    // buffer2 just went out of scope and was destroyed
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidCommandBuffer-VkBuffer");
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidCommandBuffer-VkDeviceMemory");
 
     VkSubmitInfo submit_info = {};
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -3924,10 +4083,8 @@ TEST_F(VkLayerTest, InvalidCmdBufferDescriptorSetBufferDestroyed) {
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    // Invalid VkBuffe
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidCommandBuffe");
-    // Invalid VkDeviceMemory
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, " that is invalid because bound ");
+    // Invalid VkBuffer
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidCommandBuffer-VkBuffer");
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 }
@@ -5625,7 +5782,10 @@ TEST_F(VkLayerTest, DSBufferLimitErrors) {
         bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         VkBuffer buffer;
         VkResult err = vk::CreateBuffer(m_device->device(), &bci, NULL, &buffer);
-        ASSERT_VK_SUCCESS(err);
+        if (VK_SUCCESS != err) {
+            printf("%s Failed to allocate buffer in DSBufferLimitErrors; skipped.\n", kSkipPrefix);
+            continue;
+        }
 
         // Have to bind memory to buffer before descriptor update
         VkMemoryRequirements mem_reqs;
@@ -6328,6 +6488,13 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
     }
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    VkPhysicalDeviceFeatures device_features = {};
+    ASSERT_NO_FATAL_FAILURE(GetPhysicalDeviceFeatures(&device_features));
+
+    if (!(device_features.multiViewport)) {
+        printf("%s multiViewport is not supported. Skipping test\n", kSkipPrefix);
+        return;
+    }
 
     bool rp2Supported = CheckCreateRenderPass2Support(this, m_device_extension_names);
     if (!rp2Supported) {
@@ -6339,8 +6506,8 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
         }
     }
 
-    ASSERT_NO_FATAL_FAILURE(InitState());
-
+    ASSERT_NO_FATAL_FAILURE(InitState(&device_features, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    m_errorMonitor->ExpectSuccess();
     OneOffDescriptorSet descriptor_set(m_device, {
                                                      {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
                                                  });
@@ -6397,8 +6564,7 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
     subpass2.colorAttachmentCount = 1;
     subpass2.pColorAttachments = &color_att2;
 
-    VkRenderPassCreateInfo2 rpci2 = {};
-    rpci2.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    VkRenderPassCreateInfo2 rpci2 = LvlInitStruct<VkRenderPassCreateInfo2>();
     rpci2.attachmentCount = 1;
     rpci2.pAttachments = &attach2;
     rpci2.subpassCount = 1;
@@ -6432,7 +6598,9 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
 
     // Create image view
     VkImageObj image(m_device);
-    image.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
+    auto ici2d = image.ImageCreateInfo2D(128, 128, 1, 2, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                         VK_IMAGE_TILING_OPTIMAL, 0);
+    image.Init(ici2d);
     ASSERT_TRUE(image.initialized());
 
     VkImageView iv;
@@ -6443,7 +6611,7 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
     ivci.format = VK_FORMAT_B8G8R8A8_UNORM;
     ivci.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
                        VK_COMPONENT_SWIZZLE_IDENTITY};
-    ivci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    ivci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2};
     vk::CreateImageView(m_device->device(), &ivci, NULL, &iv);
 
     // Create framebuffers for rp[0] and rp2[0]
@@ -6532,6 +6700,7 @@ TEST_F(VkLayerTest, DrawWithPipelineIncompatibleWithRenderPassMultiview) {
 
     // Bind rp[1]'s pipeline to command buffer
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_1.handle());
+    m_errorMonitor->VerifyNotFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-renderPass-02684");
     // Render triangle (error on Multiview usage should trigger on draw)
@@ -9398,4 +9567,96 @@ TEST_F(VkLayerTest, FramebufferDepthStencilResolveAttachmentTests) {
     }
 
     vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
+}
+
+TEST_F(VkLayerTest, RenderPassCreateInvalidInputAttachmentLayout) {
+    TEST_DESCRIPTION("Create renderpass where an input attachment is also uses as another type");
+
+    bool rp2_supported = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if (rp2_supported) m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    rp2_supported = CheckCreateRenderPass2Support(this, m_device_extension_names);
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    const VkAttachmentDescription attach0 = {0,
+                                      VK_FORMAT_R8G8B8A8_UNORM,
+                                      VK_SAMPLE_COUNT_1_BIT,
+                                      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                      VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                      VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                      VK_IMAGE_LAYOUT_UNDEFINED,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    const VkAttachmentDescription attach1 = {0,
+                                      VK_FORMAT_R8G8B8A8_UNORM,
+                                      VK_SAMPLE_COUNT_1_BIT,
+                                      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                      VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                      VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                      VK_IMAGE_LAYOUT_UNDEFINED,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+
+    const VkAttachmentReference ref0 = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    const VkAttachmentReference ref1 = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    const VkAttachmentReference inRef0 = {0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    const VkAttachmentReference inRef1 = {1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+
+    // First subpass draws to attachment 0
+    const VkSubpassDescription subpass0 = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 1, &ref0, nullptr, nullptr, 0, nullptr};
+    // Second subpass reads attachment 0 as input-attachment, writes to attachment 1
+    const VkSubpassDescription subpass1 = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, &inRef0, 1, &ref1, nullptr, nullptr, 0, nullptr};
+    // Seconnd subpass reads attachment 1 as input-attachment, writes to attachment 0
+    const VkSubpassDescription subpass2 = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, &inRef1, 1, &ref0, nullptr, nullptr, 0, nullptr};
+
+    // Subpass 0 writes attachment 0 as output, subpass 1 reads as input (RAW)
+    VkSubpassDependency dep0 = {0,
+                               1,
+                               VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                               VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                               VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+                               VK_DEPENDENCY_BY_REGION_BIT};
+    // Subpass 1 writes attachment 1 as output, subpass 2 reads as input while (RAW)
+    VkSubpassDependency dep1 = {1,
+                               2,
+                               VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                               VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                               VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+                               VK_DEPENDENCY_BY_REGION_BIT};
+    // Subpass 1 reads attachment 0 as input, subpass 2 writes output (WAR)
+    VkSubpassDependency dep2 = {1,
+                               2,
+                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                               VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                               VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+                               VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                               VK_DEPENDENCY_BY_REGION_BIT};
+
+    std::vector<VkAttachmentDescription> attachs = {attach0, attach1};
+    std::vector<VkSubpassDescription> subpasses = {subpass0, subpass1, subpass2};
+    std::vector<VkSubpassDependency> deps = {dep0, dep1, dep2};
+
+    VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, (uint32_t)attachs.size(), attachs.data(), (uint32_t)subpasses.size(), subpasses.data(), (uint32_t)deps.size(), deps.data()};
+
+    // Current setup should be OK -- no attachment is both input and output in same subpass
+    PositiveTestRenderPassCreate(m_errorMonitor, m_device->device(), &rpci, rp2_supported);
+
+    // Check for invalid layout error when input-attachment is also used as color-attachment.
+    // This should fail as attachment 0 is both input and output in subpass 2, but is not the correct layout
+    // (Note that TestRenderPassCreate() filters out the VUID we want to test -- VUID-VkSubpassDescription-None-04437 -- so we can't use that here.)
+    subpasses[2].pInputAttachments = &inRef0;
+    const char *rp1_vuid = "VUID-VkSubpassDescription-None-04437";
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, rp1_vuid);
+    {
+        VkResult err;
+        VkRenderPass render_pass = VK_NULL_HANDLE;
+        err = vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &render_pass);
+        if (err == VK_SUCCESS) vk::DestroyRenderPass(m_device->device(), render_pass, nullptr);
+    }
+    m_errorMonitor->VerifyFound();
 }

@@ -1801,8 +1801,8 @@ TEST_F(VkSyncValTest, SyncCmdQuery) {
     }
     uint32_t queue_count;
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, NULL);
-    VkQueueFamilyProperties *queue_props = new VkQueueFamilyProperties[queue_count];
-    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props);
+    std::vector<VkQueueFamilyProperties> queue_props(queue_count);
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props.data());
     if (queue_props[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
         printf("%s Device graphic queue has timestampValidBits of 0, skipping.\n", kSkipPrefix);
         return;
@@ -2193,6 +2193,10 @@ TEST_F(VkSyncValTest, SyncRenderPassWithWrongDepthStencilInitialLayout) {
     ASSERT_VK_SUCCESS(g_pipe.CreateGraphicsPipeline());
 
     m_commandBuffer->begin();
+    VkClearValue clear = {};
+    std::array<VkClearValue, 2> clear_values = { {clear, clear} };
+    m_renderPassBeginInfo.pClearValues = clear_values.data();
+    m_renderPassBeginInfo.clearValueCount = clear_values.size();
     m_renderPassBeginInfo.renderArea = {{0, 0}, {32, 32}};
     m_renderPassBeginInfo.renderPass = rp;
 
@@ -2787,7 +2791,7 @@ TEST_F(VkSyncValTest, RenderPassAsyncHazard) {
 
     VkClearValue clear = {};
     clear.color = m_clear_color;
-    std::array<VkClearValue, 3> clear_values = {{clear, clear, clear}};
+    std::array<VkClearValue, 4> clear_values = {{clear, clear, clear, clear}};
 
     // run the renderpass with no dependencies
     {

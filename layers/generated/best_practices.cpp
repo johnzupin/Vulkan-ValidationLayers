@@ -1951,6 +1951,34 @@ void BestPractices::PostCallRecordDebugMarkerSetObjectNameEXT(
     }
 }
 
+void BestPractices::PostCallRecordCreateCuModuleNVX(
+    VkDevice                                    device,
+    const VkCuModuleCreateInfoNVX*              pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkCuModuleNVX*                              pModule,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordCreateCuModuleNVX(device, pCreateInfo, pAllocator, pModule, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_INITIALIZATION_FAILED};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkCreateCuModuleNVX", result, error_codes, success_codes);
+    }
+}
+
+void BestPractices::PostCallRecordCreateCuFunctionNVX(
+    VkDevice                                    device,
+    const VkCuFunctionCreateInfoNVX*            pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkCuFunctionNVX*                            pFunction,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordCreateCuFunctionNVX(device, pCreateInfo, pAllocator, pFunction, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_INITIALIZATION_FAILED};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkCreateCuFunctionNVX", result, error_codes, success_codes);
+    }
+}
+
 void BestPractices::PostCallRecordGetImageViewAddressNVX(
     VkDevice                                    device,
     VkImageView                                 imageView,
@@ -2723,6 +2751,33 @@ void BestPractices::PostCallRecordCreateIndirectCommandsLayoutNV(
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkCreateIndirectCommandsLayoutNV", result, error_codes, success_codes);
+    }
+}
+
+void BestPractices::PostCallRecordAcquireDrmDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    int32_t                                     drmFd,
+    VkDisplayKHR                                display,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordAcquireDrmDisplayEXT(physicalDevice, drmFd, display, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_INITIALIZATION_FAILED};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkAcquireDrmDisplayEXT", result, error_codes, success_codes);
+    }
+}
+
+void BestPractices::PostCallRecordGetDrmDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    int32_t                                     drmFd,
+    uint32_t                                    connectorId,
+    VkDisplayKHR*                               display,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordGetDrmDisplayEXT(physicalDevice, drmFd, connectorId, display, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_INITIALIZATION_FAILED,VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkGetDrmDisplayEXT", result, error_codes, success_codes);
     }
 }
 

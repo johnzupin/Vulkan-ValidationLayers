@@ -30,7 +30,8 @@ import difflib
 import common_codegen
 
 # files to exclude from --verify check
-verify_exclude = ['.clang-format']
+verify_exclude = ['.clang-format',
+                  'gpu_pre_draw_shader.h'] # Requires glslangvalidator, so updated manually when needed
 
 def main(argv):
     parser = argparse.ArgumentParser(description='Generate source code for this repository')
@@ -43,6 +44,7 @@ def main(argv):
     gen_cmds = [*[[common_codegen.repo_relative('scripts/lvl_genvk.py'),
                    '-registry', os.path.abspath(os.path.join(args.registry,  'vk.xml')),
                    '-quiet',
+                   '-removeExtensions', 'VK_HUAWEI_subpass_shading',
                    filename] for filename in ["chassis.cpp",
                                               "chassis.h",
                                               "chassis_dispatch_helper.h",
