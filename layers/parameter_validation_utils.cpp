@@ -525,7 +525,6 @@ bool StatelessValidation::manual_PreCallValidateCreateDevice(VkPhysicalDevice ph
 
     // Validate pCreateInfo->pQueueCreateInfos
     if (pCreateInfo->pQueueCreateInfos) {
-        layer_data::unordered_set<uint32_t> set;
 
         for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; ++i) {
             const VkDeviceQueueCreateInfo &queue_create_info = pCreateInfo->pQueueCreateInfos[i];
@@ -537,13 +536,6 @@ bool StatelessValidation::manual_PreCallValidateCreateDevice(VkPhysicalDevice ph
                              "].queueFamilyIndex is VK_QUEUE_FAMILY_IGNORED, but it is required to provide a valid queue family "
                              "index value.",
                              i);
-            } else if (set.count(requested_queue_family)) {
-                skip |= LogError(physicalDevice, "VUID-VkDeviceCreateInfo-queueFamilyIndex-00372",
-                                 "vkCreateDevice: pCreateInfo->pQueueCreateInfos[%" PRIu32 "].queueFamilyIndex (=%" PRIu32
-                                 ") is not unique within pCreateInfo->pQueueCreateInfos array.",
-                                 i, requested_queue_family);
-            } else {
-                set.insert(requested_queue_family);
             }
 
             if (queue_create_info.pQueuePriorities != nullptr) {
@@ -1500,6 +1492,69 @@ bool StatelessValidation::ValidateCoarseSampleOrderCustomNV(const VkCoarseSample
             "every combination of valid values for pixelX, pixelY, and sample in the structure VkCoarseSampleOrderCustomNV.");
     }
 
+    return skip;
+}
+
+bool StatelessValidation::manual_PreCallValidateCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo,
+                                                                     const VkAllocationCallbacks *pAllocator,
+                                                                     VkPipelineLayout *pPipelineLayout) const {
+    bool skip = false;
+    // Validate layout count against device physical limit
+    if (pCreateInfo->setLayoutCount > device_limits.maxBoundDescriptorSets) {
+        skip |= LogError(device, "VUID-VkPipelineLayoutCreateInfo-setLayoutCount-00286",
+                         "vkCreatePipelineLayout(): setLayoutCount (%d) exceeds physical device maxBoundDescriptorSets limit (%d).",
+                         pCreateInfo->setLayoutCount, device_limits.maxBoundDescriptorSets);
+    }
+
+    // Validate Push Constant ranges
+    for (uint32_t i = 0; i < pCreateInfo->pushConstantRangeCount; ++i) {
+        const uint32_t offset = pCreateInfo->pPushConstantRanges[i].offset;
+        const uint32_t size = pCreateInfo->pPushConstantRanges[i].size;
+        const uint32_t max_push_constants_size = device_limits.maxPushConstantsSize;
+        // Check that offset + size don't exceed the max.
+        // Prevent arithetic overflow here by avoiding addition and testing in this order.
+        if (offset >= max_push_constants_size) {
+            skip |= LogError(device, "VUID-VkPushConstantRange-offset-00294",
+                             "vkCreatePipelineLayout(): pCreateInfo->pPushConstantRanges[%u].offset (%u) that exceeds this "
+                             "device's maxPushConstantSize of %u.",
+                             i, offset, max_push_constants_size);
+        }
+        if (size > max_push_constants_size - offset) {
+            skip |= LogError(device, "VUID-VkPushConstantRange-size-00298",
+                             "vkCreatePipelineLayout(): pCreateInfo->pPushConstantRanges[%u] offset (%u) and size (%u) "
+                             "together exceeds this device's maxPushConstantSize of %u.",
+                             i, offset, size, max_push_constants_size);
+        }
+
+        // size needs to be non-zero and a multiple of 4.
+        if (size == 0) {
+            skip |= LogError(device, "VUID-VkPushConstantRange-size-00296",
+                             "vkCreatePipelineLayout(): pCreateInfo->pPushConstantRanges[%u].size (%u) is not greater than zero.",
+                             i, size);
+        }
+        if (size & 0x3) {
+            skip |= LogError(device, "VUID-VkPushConstantRange-size-00297",
+                             "vkCreatePipelineLayout(): pCreateInfo->pPushConstantRanges[%u].size (%u) is not a multiple of 4.", i,
+                             size);
+        }
+
+        // offset needs to be a multiple of 4.
+        if ((offset & 0x3) != 0) {
+            skip |= LogError(device, "VUID-VkPushConstantRange-offset-00295",
+                             "vkCreatePipelineLayout(): pCreateInfo->pPushConstantRanges[%u].offset (%u) is not a multiple of 4.",
+                             i, offset);
+        }
+    }
+
+    // As of 1.0.28, there is a VU that states that a stage flag cannot appear more than once in the list of push constant ranges.
+    for (uint32_t i = 0; i < pCreateInfo->pushConstantRangeCount; ++i) {
+        for (uint32_t j = i + 1; j < pCreateInfo->pushConstantRangeCount; ++j) {
+            if (0 != (pCreateInfo->pPushConstantRanges[i].stageFlags & pCreateInfo->pPushConstantRanges[j].stageFlags)) {
+                skip |= LogError(device, "VUID-VkPipelineLayoutCreateInfo-pPushConstantRanges-00292",
+                                 "vkCreatePipelineLayout() Duplicate stage flags found in ranges %d and %d.", i, j);
+            }
+        }
+    }
     return skip;
 }
 
@@ -3538,7 +3593,7 @@ bool StatelessValidation::validate_WriteDescriptorSet(const char *vkCallingFunct
                     if (pnext_struct->accelerationStructureCount == 0) {
                         skip |= LogError(device,
                                          "VUID-VkWriteDescriptorSetAccelerationStructureKHR-accelerationStructureCount-arraylength",
-                                         "%s(): accelerationStructureCount must be greater than 0 .");
+                                         "%s(): accelerationStructureCount must be greater than 0 .", vkCallingFunction);
                     }
                     const auto *robustness2_features =
                         LvlFindInChain<VkPhysicalDeviceRobustness2FeaturesEXT>(device_createinfo_pnext);
@@ -3548,7 +3603,7 @@ bool StatelessValidation::validate_WriteDescriptorSet(const char *vkCallingFunct
                                 skip |= LogError(device,
                                                  "VUID-VkWriteDescriptorSetAccelerationStructureKHR-pAccelerationStructures-03580",
                                                  "%s(): If the nullDescriptor feature is not enabled, each member of "
-                                                 "pAccelerationStructures must not be VK_NULL_HANDLE.");
+                                                 "pAccelerationStructures must not be VK_NULL_HANDLE.", vkCallingFunction);
                             }
                         }
                     }
@@ -3575,7 +3630,7 @@ bool StatelessValidation::validate_WriteDescriptorSet(const char *vkCallingFunct
                     if (pnext_struct->accelerationStructureCount == 0) {
                         skip |= LogError(device,
                                          "VUID-VkWriteDescriptorSetAccelerationStructureNV-accelerationStructureCount-arraylength",
-                                         "%s(): accelerationStructureCount must be greater than 0 .");
+                                         "%s(): accelerationStructureCount must be greater than 0 .", vkCallingFunction);
                     }
                     const auto *robustness2_features =
                         LvlFindInChain<VkPhysicalDeviceRobustness2FeaturesEXT>(device_createinfo_pnext);
@@ -3585,7 +3640,7 @@ bool StatelessValidation::validate_WriteDescriptorSet(const char *vkCallingFunct
                                 skip |= LogError(device,
                                                  "VUID-VkWriteDescriptorSetAccelerationStructureNV-pAccelerationStructures-03749",
                                                  "%s(): If the nullDescriptor feature is not enabled, each member of "
-                                                 "pAccelerationStructures must not be VK_NULL_HANDLE.");
+                                                 "pAccelerationStructures must not be VK_NULL_HANDLE.", vkCallingFunction);
                             }
                         }
                     }
@@ -3658,7 +3713,8 @@ bool StatelessValidation::manual_PreCallValidateBeginCommandBuffer(VkCommandBuff
 
         if (info) {
             const VkStructureType allowed_structs_vk_command_buffer_inheritance_info[] = {
-                VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT};
+                VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT,
+                VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV};
             skip |= validate_struct_pnext(
                 cmd_name, "pBeginInfo->pInheritanceInfo->pNext", "VkCommandBufferInheritanceConditionalRenderingInfoEXT",
                 info->pNext, ARRAY_SIZE(allowed_structs_vk_command_buffer_inheritance_info),
@@ -4968,7 +5024,7 @@ bool StatelessValidation::manual_PreCallValidateCreateAccelerationStructureKHR(
         }
         if (SafeModulo(pCreateInfo->offset, 256) != 0) {
             skip |= LogError(device, "VUID-VkAccelerationStructureCreateInfoKHR-offset-03734",
-                             "vkCreateAccelerationStructureKHR(): offset must be a multiple of 256 bytes", pCreateInfo->offset);
+                             "vkCreateAccelerationStructureKHR(): offset %" PRIu64 " must be a multiple of 256 bytes", pCreateInfo->offset);
         }
     }
     return skip;
@@ -5575,7 +5631,7 @@ bool StatelessValidation::manual_PreCallValidateCmdDrawIndirectByteCountEXT(VkCo
 
     if ((counterOffset % 4) != 0) {
         skip |= LogError(commandBuffer, "VUID-vkCmdDrawIndirectByteCountEXT-counterBufferOffset-04568",
-                         "vkCmdDrawIndirectByteCountEXT(): offset (%" PRIu64 ") must be a multiple of 4.", counterOffset);
+                         "vkCmdDrawIndirectByteCountEXT(): offset (%" PRIu32 ") must be a multiple of 4.", counterOffset);
     }
 
     return skip;
@@ -5778,7 +5834,7 @@ bool StatelessValidation::manual_PreCallValidateCmdCopyAccelerationStructureToMe
     }
     if (SafeModulo(pInfo->dst.deviceAddress, 256) != 0) {
         skip |= LogError(device, "VUID-vkCmdCopyAccelerationStructureToMemoryKHR-pInfo-03740",
-                         "vkCmdCopyAccelerationStructureToMemoryKHR(): pInfo->dst.deviceAddress must be aligned to 256 bytes.",
+                         "vkCmdCopyAccelerationStructureToMemoryKHR(): pInfo->dst.deviceAddress (0x%" PRIx64 ") must be aligned to 256 bytes.",
                          pInfo->dst.deviceAddress);
     }
     return skip;
@@ -5850,7 +5906,7 @@ bool StatelessValidation::manual_PreCallValidateCmdCopyMemoryToAccelerationStruc
     skip |= ValidateCopyMemoryToAccelerationStructureInfoKHR(pInfo, "vkCmdCopyMemoryToAccelerationStructureKHR()", false);
     if (SafeModulo(pInfo->src.deviceAddress, 256) != 0) {
         skip |= LogError(device, "VUID-vkCmdCopyMemoryToAccelerationStructureKHR-pInfo-03743",
-                         "vkCmdCopyMemoryToAccelerationStructureKHR(): pInfo->src.deviceAddress must be aligned to 256 bytes.",
+                         "vkCmdCopyMemoryToAccelerationStructureKHR(): pInfo->src.deviceAddress (0x%" PRIx64 ") must be aligned to 256 bytes.",
                          pInfo->src.deviceAddress);
     }
     return skip;
@@ -6326,7 +6382,7 @@ bool StatelessValidation::manual_PreCallValidateCmdBindVertexBuffers2EXT(VkComma
             if (pStrides[i] > device_limits.maxVertexInputBindingStride) {
                 skip |=
                     LogError(commandBuffer, "VUID-vkCmdBindVertexBuffers2EXT-pStrides-03362",
-                             "vkCmdBindVertexBuffers2EXT() pStrides[%d] (%u) must be less than maxVertexInputBindingStride (%u)", i,
+                             "vkCmdBindVertexBuffers2EXT() pStrides[%d] (%" PRIu64 ") must be less than maxVertexInputBindingStride (%u)", i,
                              pStrides[i], device_limits.maxVertexInputBindingStride);
             }
         }
@@ -6729,14 +6785,6 @@ bool StatelessValidation::manual_PreCallValidateCmdBuildAccelerationStructuresIn
             "VkPhysicalDeviceAccelerationStructureFeaturesKHR::accelerationStructureIndirectBuild feature must be enabled.");
     }
     for (uint32_t i = 0; i < infoCount; ++i) {
-        if (pInfos[i].mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR) {
-            if (pInfos[i].srcAccelerationStructure == VK_NULL_HANDLE) {
-                skip |= LogError(device, "VUID-vkCmdBuildAccelerationStructuresIndirectKHR-pInfos-03666",
-                                 "vkCmdBuildAccelerationStructuresIndirectKHR:For each element of pInfos, if its mode member is "
-                                 "VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR, its srcAccelerationStructure member must not be "
-                                 "VK_NULL_HANDLE.");
-            }
-        }
         if (SafeModulo(pInfos[i].scratchData.deviceAddress,
                        phys_dev_ext_props.acc_structure_props.minAccelerationStructureScratchOffsetAlignment) != 0) {
             skip |= LogError(device, "VUID-vkCmdBuildAccelerationStructuresIndirectKHR-pInfos-03710",
@@ -7070,5 +7118,37 @@ bool StatelessValidation::manual_PreCallValidateCmdSetVertexInputEXT(
         }
     }
 
+    return skip;
+}
+
+bool StatelessValidation::manual_PreCallValidateCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
+                                                                 VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size,
+                                                                 const void *pValues) const {
+    bool skip = false;
+    const uint32_t max_push_constants_size = device_limits.maxPushConstantsSize;
+    // Check that offset + size don't exceed the max.
+    // Prevent arithetic overflow here by avoiding addition and testing in this order.
+    if (offset >= max_push_constants_size) {
+        skip |= LogError(device, "VUID-vkCmdPushConstants-offset-00370",
+                         "vkCmdPushConstants(): offset (%u) that exceeds this device's maxPushConstantSize of %u.", offset,
+                         max_push_constants_size);
+    }
+    if (size > max_push_constants_size - offset) {
+        skip |= LogError(device, "VUID-vkCmdPushConstants-size-00371",
+                         "vkCmdPushConstants(): offset (%u) and size (%u) that exceeds this device's maxPushConstantSize of %u.",
+                         offset, size, max_push_constants_size);
+    }
+
+    // size needs to be non-zero and a multiple of 4.
+    if (size & 0x3) {
+        skip |= LogError(device, "VUID-vkCmdPushConstants-size-00369", "vkCmdPushConstants(): size (%u) must be a multiple of 4.",
+                         size);
+    }
+
+    // offset needs to be a multiple of 4.
+    if ((offset & 0x3) != 0) {
+        skip |= LogError(device, "VUID-vkCmdPushConstants-offset-00368",
+                         "vkCmdPushConstants(): offset (%u) must be a multiple of 4.", offset);
+    }
     return skip;
 }

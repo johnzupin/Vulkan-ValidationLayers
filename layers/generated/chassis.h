@@ -1861,6 +1861,7 @@ VKAPI_ATTR void VKAPI_CALL GetQueueCheckpointData2NV(
 
 
 
+
 VKAPI_ATTR void VKAPI_CALL CmdCopyBuffer2KHR(
     VkCommandBuffer                             commandBuffer,
     const VkCopyBufferInfo2KHR*                 pCopyBufferInfo);
@@ -1979,6 +1980,33 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectByteCountEXT(
     VkDeviceSize                                counterBufferOffset,
     uint32_t                                    counterOffset,
     uint32_t                                    vertexStride);
+
+
+VKAPI_ATTR VkResult VKAPI_CALL CreateCuModuleNVX(
+    VkDevice                                    device,
+    const VkCuModuleCreateInfoNVX*              pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkCuModuleNVX*                              pModule);
+
+VKAPI_ATTR VkResult VKAPI_CALL CreateCuFunctionNVX(
+    VkDevice                                    device,
+    const VkCuFunctionCreateInfoNVX*            pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkCuFunctionNVX*                            pFunction);
+
+VKAPI_ATTR void VKAPI_CALL DestroyCuModuleNVX(
+    VkDevice                                    device,
+    VkCuModuleNVX                               module,
+    const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR void VKAPI_CALL DestroyCuFunctionNVX(
+    VkDevice                                    device,
+    VkCuFunctionNVX                             function,
+    const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(
+    VkCommandBuffer                             commandBuffer,
+    const VkCuLaunchInfoNVX*                    pLaunchInfo);
 
 
 VKAPI_ATTR uint32_t VKAPI_CALL GetImageViewHandleNVX(
@@ -2617,6 +2645,7 @@ VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceSupportedFramebufferMixedSamples
 
 
 
+
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
 VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceSurfacePresentModes2EXT(
@@ -2759,6 +2788,18 @@ VKAPI_ATTR void VKAPI_CALL DestroyIndirectCommandsLayoutNV(
 
 
 
+VKAPI_ATTR VkResult VKAPI_CALL AcquireDrmDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    int32_t                                     drmFd,
+    VkDisplayKHR                                display);
+
+VKAPI_ATTR VkResult VKAPI_CALL GetDrmDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    int32_t                                     drmFd,
+    uint32_t                                    connectorId,
+    VkDisplayKHR*                               display);
+
+
 
 
 
@@ -2801,6 +2842,7 @@ VKAPI_ATTR void VKAPI_CALL CmdSetFragmentShadingRateEnumNV(
 
 
 
+
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
 VKAPI_ATTR VkResult VKAPI_CALL AcquireWinrtDisplayNV(
@@ -2835,6 +2877,7 @@ VKAPI_ATTR void VKAPI_CALL CmdSetVertexInputEXT(
     const VkVertexInputBindingDescription2EXT*  pVertexBindingDescriptions,
     uint32_t                                    vertexAttributeDescriptionCount,
     const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions);
+
 
 #ifdef VK_USE_PLATFORM_FUCHSIA
 
@@ -2902,6 +2945,25 @@ VKAPI_ATTR void                                    VKAPI_CALL CmdSetColorWriteEn
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    attachmentCount,
     const VkBool32*                             pColorWriteEnables);
+
+
+
+VKAPI_ATTR void VKAPI_CALL CmdDrawMultiEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    drawCount,
+    const VkMultiDrawInfoEXT*                   pVertexInfo,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstInstance,
+    uint32_t                                    stride);
+
+VKAPI_ATTR void VKAPI_CALL CmdDrawMultiIndexedEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    drawCount,
+    const VkMultiDrawIndexedInfoEXT*            pIndexInfo,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstInstance,
+    uint32_t                                    stride,
+    const int32_t*                              pVertexOffset);
 
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateAccelerationStructureKHR(
@@ -3110,6 +3172,7 @@ typedef enum DisableFlags {
     stateless_checks,
     handle_wrapping,
     shader_validation,
+    shader_validation_caching,
     // Insert new disables above this line
     kMaxDisableFlags,
 } DisableFlags;
@@ -3128,6 +3191,11 @@ typedef enum EnableFlags {
 typedef std::array<bool, kMaxDisableFlags> CHECK_DISABLED;
 typedef std::array<bool, kMaxEnableFlags> CHECK_ENABLED;
 
+#if defined(__GNUC__) || defined(__clang__)
+#define DECORATE_PRINTF(_fmt_argnum, _first_param_num)  __attribute__((format (printf, _fmt_argnum, _first_param_num)))
+#else
+#define DECORATE_PRINTF(_fmt_num, _first_param_num)
+#endif
 // Layer chassis validation object base class definition
 class ValidationObject {
     public:
@@ -3210,7 +3278,7 @@ class ValidationObject {
         };
 
         // Debug Logging Helpers
-        bool LogError(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
+        bool DECORATE_PRINTF(4, 5) LogError(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
             if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
@@ -3228,7 +3296,7 @@ class ValidationObject {
         };
 
         template <typename HANDLE_T>
-        bool LogError(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
+        bool DECORATE_PRINTF(4, 5) LogError(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
             if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
@@ -3247,7 +3315,7 @@ class ValidationObject {
 
         };
 
-        bool LogWarning(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
+        bool DECORATE_PRINTF(4, 5) LogWarning(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
             if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
@@ -3265,7 +3333,7 @@ class ValidationObject {
         };
 
         template <typename HANDLE_T>
-        bool LogWarning(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
+        bool DECORATE_PRINTF(4, 5) LogWarning(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
             if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
@@ -3283,7 +3351,7 @@ class ValidationObject {
             return LogMsgLocked(report_data, kWarningBit, single_object, vuid_text, str);
         };
 
-        bool LogPerformanceWarning(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
+        bool DECORATE_PRINTF(4, 5) LogPerformanceWarning(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
             if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
@@ -3301,7 +3369,7 @@ class ValidationObject {
         };
 
         template <typename HANDLE_T>
-        bool LogPerformanceWarning(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
+        bool DECORATE_PRINTF(4, 5) LogPerformanceWarning(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
             if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
@@ -3319,7 +3387,7 @@ class ValidationObject {
             return LogMsgLocked(report_data, kPerformanceWarningBit, single_object, vuid_text, str);
         };
 
-        bool LogInfo(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
+        bool DECORATE_PRINTF(4, 5) LogInfo(const LogObjectList &objects, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
             if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
@@ -3337,7 +3405,7 @@ class ValidationObject {
         };
 
         template <typename HANDLE_T>
-        bool LogInfo(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
+        bool DECORATE_PRINTF(4, 5) LogInfo(HANDLE_T src_object, const std::string &vuid_text, const char *format, ...) const {
             std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
             // Avoid logging cost if msg is to be ignored
             if (!LogMsgEnabled(report_data, vuid_text, VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
@@ -4438,6 +4506,21 @@ class ValidationObject {
         virtual bool PreCallValidateCmdDrawIndirectByteCountEXT(VkCommandBuffer commandBuffer, uint32_t instanceCount, uint32_t firstInstance, VkBuffer counterBuffer, VkDeviceSize counterBufferOffset, uint32_t counterOffset, uint32_t vertexStride) const { return false; };
         virtual void PreCallRecordCmdDrawIndirectByteCountEXT(VkCommandBuffer commandBuffer, uint32_t instanceCount, uint32_t firstInstance, VkBuffer counterBuffer, VkDeviceSize counterBufferOffset, uint32_t counterOffset, uint32_t vertexStride) {};
         virtual void PostCallRecordCmdDrawIndirectByteCountEXT(VkCommandBuffer commandBuffer, uint32_t instanceCount, uint32_t firstInstance, VkBuffer counterBuffer, VkDeviceSize counterBufferOffset, uint32_t counterOffset, uint32_t vertexStride) {};
+        virtual bool PreCallValidateCreateCuModuleNVX(VkDevice device, const VkCuModuleCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCuModuleNVX* pModule) const { return false; };
+        virtual void PreCallRecordCreateCuModuleNVX(VkDevice device, const VkCuModuleCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCuModuleNVX* pModule) {};
+        virtual void PostCallRecordCreateCuModuleNVX(VkDevice device, const VkCuModuleCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCuModuleNVX* pModule, VkResult result) {};
+        virtual bool PreCallValidateCreateCuFunctionNVX(VkDevice device, const VkCuFunctionCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCuFunctionNVX* pFunction) const { return false; };
+        virtual void PreCallRecordCreateCuFunctionNVX(VkDevice device, const VkCuFunctionCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCuFunctionNVX* pFunction) {};
+        virtual void PostCallRecordCreateCuFunctionNVX(VkDevice device, const VkCuFunctionCreateInfoNVX* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCuFunctionNVX* pFunction, VkResult result) {};
+        virtual bool PreCallValidateDestroyCuModuleNVX(VkDevice device, VkCuModuleNVX module, const VkAllocationCallbacks* pAllocator) const { return false; };
+        virtual void PreCallRecordDestroyCuModuleNVX(VkDevice device, VkCuModuleNVX module, const VkAllocationCallbacks* pAllocator) {};
+        virtual void PostCallRecordDestroyCuModuleNVX(VkDevice device, VkCuModuleNVX module, const VkAllocationCallbacks* pAllocator) {};
+        virtual bool PreCallValidateDestroyCuFunctionNVX(VkDevice device, VkCuFunctionNVX function, const VkAllocationCallbacks* pAllocator) const { return false; };
+        virtual void PreCallRecordDestroyCuFunctionNVX(VkDevice device, VkCuFunctionNVX function, const VkAllocationCallbacks* pAllocator) {};
+        virtual void PostCallRecordDestroyCuFunctionNVX(VkDevice device, VkCuFunctionNVX function, const VkAllocationCallbacks* pAllocator) {};
+        virtual bool PreCallValidateCmdCuLaunchKernelNVX(VkCommandBuffer commandBuffer, const VkCuLaunchInfoNVX* pLaunchInfo) const { return false; };
+        virtual void PreCallRecordCmdCuLaunchKernelNVX(VkCommandBuffer commandBuffer, const VkCuLaunchInfoNVX* pLaunchInfo) {};
+        virtual void PostCallRecordCmdCuLaunchKernelNVX(VkCommandBuffer commandBuffer, const VkCuLaunchInfoNVX* pLaunchInfo) {};
         virtual bool PreCallValidateGetImageViewHandleNVX(VkDevice device, const VkImageViewHandleInfoNVX* pInfo) const { return false; };
         virtual void PreCallRecordGetImageViewHandleNVX(VkDevice device, const VkImageViewHandleInfoNVX* pInfo) {};
         virtual void PostCallRecordGetImageViewHandleNVX(VkDevice device, const VkImageViewHandleInfoNVX* pInfo) {};
@@ -4795,6 +4878,12 @@ class ValidationObject {
         virtual bool PreCallValidateDestroyIndirectCommandsLayoutNV(VkDevice device, VkIndirectCommandsLayoutNV indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) const { return false; };
         virtual void PreCallRecordDestroyIndirectCommandsLayoutNV(VkDevice device, VkIndirectCommandsLayoutNV indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) {};
         virtual void PostCallRecordDestroyIndirectCommandsLayoutNV(VkDevice device, VkIndirectCommandsLayoutNV indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) {};
+        virtual bool PreCallValidateAcquireDrmDisplayEXT(VkPhysicalDevice physicalDevice, int32_t drmFd, VkDisplayKHR display) const { return false; };
+        virtual void PreCallRecordAcquireDrmDisplayEXT(VkPhysicalDevice physicalDevice, int32_t drmFd, VkDisplayKHR display) {};
+        virtual void PostCallRecordAcquireDrmDisplayEXT(VkPhysicalDevice physicalDevice, int32_t drmFd, VkDisplayKHR display, VkResult result) {};
+        virtual bool PreCallValidateGetDrmDisplayEXT(VkPhysicalDevice physicalDevice, int32_t drmFd, uint32_t connectorId, VkDisplayKHR* display) const { return false; };
+        virtual void PreCallRecordGetDrmDisplayEXT(VkPhysicalDevice physicalDevice, int32_t drmFd, uint32_t connectorId, VkDisplayKHR* display) {};
+        virtual void PostCallRecordGetDrmDisplayEXT(VkPhysicalDevice physicalDevice, int32_t drmFd, uint32_t connectorId, VkDisplayKHR* display, VkResult result) {};
         virtual bool PreCallValidateCreatePrivateDataSlotEXT(VkDevice device, const VkPrivateDataSlotCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPrivateDataSlotEXT* pPrivateDataSlot) const { return false; };
         virtual void PreCallRecordCreatePrivateDataSlotEXT(VkDevice device, const VkPrivateDataSlotCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPrivateDataSlotEXT* pPrivateDataSlot) {};
         virtual void PostCallRecordCreatePrivateDataSlotEXT(VkDevice device, const VkPrivateDataSlotCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPrivateDataSlotEXT* pPrivateDataSlot, VkResult result) {};
@@ -4881,6 +4970,12 @@ class ValidationObject {
         virtual bool PreCallValidateCmdSetColorWriteEnableEXT(VkCommandBuffer       commandBuffer, uint32_t                                attachmentCount, const VkBool32*   pColorWriteEnables) const { return false; };
         virtual void PreCallRecordCmdSetColorWriteEnableEXT(VkCommandBuffer       commandBuffer, uint32_t                                attachmentCount, const VkBool32*   pColorWriteEnables) {};
         virtual void PostCallRecordCmdSetColorWriteEnableEXT(VkCommandBuffer       commandBuffer, uint32_t                                attachmentCount, const VkBool32*   pColorWriteEnables) {};
+        virtual bool PreCallValidateCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride) const { return false; };
+        virtual void PreCallRecordCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride) {};
+        virtual void PostCallRecordCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride) {};
+        virtual bool PreCallValidateCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset) const { return false; };
+        virtual void PreCallRecordCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset) {};
+        virtual void PostCallRecordCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset) {};
         virtual bool PreCallValidateCreateAccelerationStructureKHR(VkDevice                                           device, const VkAccelerationStructureCreateInfoKHR*        pCreateInfo, const VkAllocationCallbacks*       pAllocator, VkAccelerationStructureKHR*                        pAccelerationStructure) const { return false; };
         virtual void PreCallRecordCreateAccelerationStructureKHR(VkDevice                                           device, const VkAccelerationStructureCreateInfoKHR*        pCreateInfo, const VkAllocationCallbacks*       pAllocator, VkAccelerationStructureKHR*                        pAccelerationStructure) {};
         virtual void PostCallRecordCreateAccelerationStructureKHR(VkDevice                                           device, const VkAccelerationStructureCreateInfoKHR*        pCreateInfo, const VkAllocationCallbacks*       pAllocator, VkAccelerationStructureKHR*                        pAccelerationStructure, VkResult result) {};

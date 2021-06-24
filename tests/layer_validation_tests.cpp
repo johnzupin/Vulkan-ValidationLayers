@@ -382,8 +382,8 @@ void ValidOwnershipTransferOp(ErrorMonitor *monitor, VkCommandBufferObj *cb, VkP
 void ValidOwnershipTransfer(ErrorMonitor *monitor, VkCommandBufferObj *cb_from, VkCommandBufferObj *cb_to,
                             VkPipelineStageFlags src_stages, VkPipelineStageFlags dst_stages,
                             const VkBufferMemoryBarrier *buf_barrier, const VkImageMemoryBarrier *img_barrier) {
-    ValidOwnershipTransferOp(monitor, cb_from, src_stages, dst_stages, buf_barrier, img_barrier);
-    ValidOwnershipTransferOp(monitor, cb_to, src_stages, dst_stages, buf_barrier, img_barrier);
+    ValidOwnershipTransferOp(monitor, cb_from, src_stages, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, buf_barrier, img_barrier);
+    ValidOwnershipTransferOp(monitor, cb_to, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, dst_stages, buf_barrier, img_barrier);
 }
 
 void ValidOwnershipTransferOp(ErrorMonitor *monitor, VkCommandBufferObj *cb, const VkBufferMemoryBarrier2KHR *buf_barrier,
@@ -403,8 +403,34 @@ void ValidOwnershipTransferOp(ErrorMonitor *monitor, VkCommandBufferObj *cb, con
 
 void ValidOwnershipTransfer(ErrorMonitor *monitor, VkCommandBufferObj *cb_from, VkCommandBufferObj *cb_to,
                             const VkBufferMemoryBarrier2KHR *buf_barrier, const VkImageMemoryBarrier2KHR *img_barrier) {
-    ValidOwnershipTransferOp(monitor, cb_from, buf_barrier, img_barrier);
-    ValidOwnershipTransferOp(monitor, cb_to, buf_barrier, img_barrier);
+    VkBufferMemoryBarrier2KHR fixup_buf_barrier;
+    VkImageMemoryBarrier2KHR fixup_img_barrier;
+    if (buf_barrier) {
+        fixup_buf_barrier = *buf_barrier;
+        fixup_buf_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE_KHR;
+        fixup_buf_barrier.dstAccessMask = 0;
+    }
+    if (img_barrier) {
+        fixup_img_barrier = *img_barrier;
+        fixup_img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE_KHR;
+        fixup_img_barrier.dstAccessMask = 0;
+    }
+
+    ValidOwnershipTransferOp(monitor, cb_from, buf_barrier ? &fixup_buf_barrier : nullptr,
+                             img_barrier ? &fixup_img_barrier : nullptr);
+
+    if (buf_barrier) {
+        fixup_buf_barrier = *buf_barrier;
+        fixup_buf_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE_KHR;
+        fixup_buf_barrier.srcAccessMask = 0;
+    }
+    if (img_barrier) {
+        fixup_img_barrier = *img_barrier;
+        fixup_img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE_KHR;
+        fixup_img_barrier.srcAccessMask = 0;
+    }
+    ValidOwnershipTransferOp(monitor, cb_to, buf_barrier ? &fixup_buf_barrier : nullptr,
+                             img_barrier ? &fixup_img_barrier : nullptr);
 }
 
 VkResult GPDIFPHelper(VkPhysicalDevice dev, const VkImageCreateInfo *ci, VkImageFormatProperties *limits) {
@@ -1164,6 +1190,22 @@ bool VkLayerTest::LoadDeviceProfileLayer(
     return true;
 }
 
+bool VkLayerTest::LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceLimitsEXT &fpvkSetPhysicalDeviceLimitsEXT,
+                                         PFN_vkGetOriginalPhysicalDeviceLimitsEXT &fpvkGetOriginalPhysicalDeviceLimitsEXT) {
+    // Load required functions
+    fpvkSetPhysicalDeviceLimitsEXT =
+        (PFN_vkSetPhysicalDeviceLimitsEXT)vk::GetInstanceProcAddr(instance(), "vkSetPhysicalDeviceLimitsEXT");
+    fpvkGetOriginalPhysicalDeviceLimitsEXT =
+        (PFN_vkGetOriginalPhysicalDeviceLimitsEXT)vk::GetInstanceProcAddr(instance(), "vkGetOriginalPhysicalDeviceLimitsEXT");
+
+    if (!(fpvkSetPhysicalDeviceLimitsEXT) || !(fpvkGetOriginalPhysicalDeviceLimitsEXT)) {
+        printf("%s Can't find device_profile_api functions; skipped.\n", kSkipPrefix);
+        return false;
+    }
+
+    return true;
+}
+
 bool VkBufferTest::GetTestConditionValid(VkDeviceObj *aVulkanDevice, eTestEnFlags aTestFlag, VkBufferUsageFlags aBufferUsage) {
     if (eInvalidDeviceOffset != aTestFlag && eInvalidMemoryOffset != aTestFlag) {
         return true;
@@ -1253,6 +1295,87 @@ VkBufferTest::~VkBufferTest() {
         }
         vk::FreeMemory(VulkanDevice, VulkanMemory, nullptr);
     }
+}
+
+std::unique_ptr<VkImageObj> VkArmBestPracticesLayerTest::CreateImage(VkFormat format, const uint32_t width,
+                                                                     const uint32_t height) {
+    auto img = std::unique_ptr<VkImageObj>(new VkImageObj(m_device));
+    img->Init(width, height, 1, format,
+              VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+              VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+              VK_IMAGE_TILING_OPTIMAL);
+    return img;
+}
+
+VkRenderPass VkArmBestPracticesLayerTest::CreateRenderPass(VkFormat format, VkAttachmentLoadOp load_op,
+                                                           VkAttachmentStoreOp store_op) {
+    VkRenderPass renderpass{VK_NULL_HANDLE};
+
+    // Create renderpass
+    VkAttachmentDescription attachment = {};
+    attachment.format = format;
+    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment.loadOp = load_op;
+    attachment.storeOp = store_op;
+    attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkAttachmentReference attachment_reference = {};
+    attachment_reference.attachment = 0;
+    attachment_reference.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &attachment_reference;
+
+    VkRenderPassCreateInfo rpinf = {
+        VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+    };
+    rpinf.attachmentCount = 1;
+    rpinf.pAttachments = &attachment;
+    rpinf.subpassCount = 1;
+    rpinf.pSubpasses = &subpass;
+    rpinf.dependencyCount = 0;
+    rpinf.pDependencies = nullptr;
+
+    vk::CreateRenderPass(m_device->handle(), &rpinf, nullptr, &renderpass);
+
+    return renderpass;
+}
+
+VkFramebuffer VkArmBestPracticesLayerTest::CreateFramebuffer(const uint32_t width, const uint32_t height, VkImageView image_view,
+                                                             VkRenderPass renderpass) {
+    VkFramebuffer framebuffer{VK_NULL_HANDLE};
+
+    VkFramebufferCreateInfo framebuffer_create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    framebuffer_create_info.renderPass = renderpass;
+    framebuffer_create_info.attachmentCount = 1;
+    framebuffer_create_info.pAttachments = &image_view;
+    framebuffer_create_info.width = width;
+    framebuffer_create_info.height = height;
+    framebuffer_create_info.layers = 1;
+
+    vk::CreateFramebuffer(m_device->handle(), &framebuffer_create_info, nullptr, &framebuffer);
+
+    return framebuffer;
+}
+
+VkSampler VkArmBestPracticesLayerTest::CreateDefaultSampler() {
+    VkSampler sampler{VK_NULL_HANDLE};
+
+    VkSamplerCreateInfo sampler_create_info = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    sampler_create_info.magFilter = VK_FILTER_NEAREST;
+    sampler_create_info.minFilter = VK_FILTER_NEAREST;
+    sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampler_create_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_create_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_create_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_create_info.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    sampler_create_info.maxLod = VK_LOD_CLAMP_NONE;
+
+    vk::CreateSampler(m_device->handle(), &sampler_create_info, nullptr, &sampler);
+
+    return sampler;
 }
 
 bool VkBufferTest::GetBufferCurrent() { return AllocateCurrent && BoundCurrent && CreateCurrent; }
@@ -2234,9 +2357,9 @@ bool InitFrameworkForRayTracingTest(VkRenderFramework *renderFramework, bool isK
 void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, VkBufferObj *vbo, VkBufferObj *ibo,
                                                     VkGeometryNV *geometry) {
     vbo->init(device, 1024, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
+              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
     ibo->init(device, 1024, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
+              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
 
     const std::vector<float> vertices = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f};
     const std::vector<uint32_t> indicies = {0, 1, 2};

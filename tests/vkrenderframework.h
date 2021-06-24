@@ -259,7 +259,9 @@ class VkRenderFramework : public VkTestFramework {
     void InitRenderTarget(VkImageView *dsBinding);
     void InitRenderTarget(uint32_t targets, VkImageView *dsBinding);
     void DestroyRenderTarget();
+    bool InitFrameworkAndRetrieveFeatures(VkPhysicalDeviceFeatures2KHR &features2);
 
+    bool IsDriver(VkDriverId driver_id);
     bool IsPlatform(PlatformType platform);
     void GetPhysicalDeviceFeatures(VkPhysicalDeviceFeatures *features);
     void GetPhysicalDeviceProperties(VkPhysicalDeviceProperties *props);
@@ -293,6 +295,7 @@ class VkRenderFramework : public VkTestFramework {
     VkPhysicalDevice gpu_ = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties physDevProps_;
 
+    uint32_t m_gpu_index;
     VkDeviceObj *m_device;
     VkCommandPoolObj *m_commandPool;
     VkCommandBufferObj *m_commandBuffer;

@@ -167,6 +167,7 @@ class CommandValidationOutputGenerator(OutputGenerator):
             write('#include "vk_layer_logging.h"', file=self.outFile)
             write('#include "core_validation.h"', file=self.outFile)
         elif self.header_file:
+            write('#pragma once', file=self.outFile)
             write('#include <array>', file=self.outFile)
 
     #
@@ -249,8 +250,8 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedMustBeRecordingL
         for name, cmdinfo in sorted(self.commands.items()):
             vuid = 'VUID-' + name + '-commandBuffer-recording'
             if vuid not in self.valid_vuids:
-                print("Error: Could not find %s in validusage.json\n", vuid)
-                sys.exit(1)
+                print("Warning: Could not find {} in validusage.json".format(vuid))
+                vuid = vuid.replace('VUID-', 'UNASSIGNED-')
             output += '    \"' + vuid + '\",\n'
         output += '}};'
         return output
@@ -289,8 +290,8 @@ static const std::array<CommandSupportedQueueType, CMD_RANGE_SIZE> kGeneratedQue
                     sys.exit(1)
             vuid = 'VUID-' + name + '-commandBuffer-cmdpool'
             if vuid not in self.valid_vuids:
-                print("Error: Could not find %s in validusage.json\n", vuid)
-                sys.exit(1)
+                print("Warning: Could not find {} in validusage.json".format(vuid))
+                vuid = vuid.replace('VUID-', 'UNASSIGNED-')
             output += '    {' + ' | '.join(flags) + ', \"' + vuid + '\"},\n'
         output += '}};'
         return output
@@ -327,8 +328,8 @@ static const std::array<CommandSupportedRenderPass, CMD_RANGE_SIZE> kGeneratedRe
             else:
                 vuid = 'VUID-' + name + '-renderpass'
                 if vuid not in self.valid_vuids:
-                    print("Error: Could not find %s in validusage.json\n", vuid)
-                    sys.exit(1)
+                    print("Warning: Could not find {} in validusage.json".format(vuid))
+                    vuid = vuid.replace('VUID-', 'UNASSIGNED-')
                 output += '    {' + render_pass_type + ', \"' + vuid + '\"},\n'
         output += '}};'
         return output
@@ -348,8 +349,8 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedBufferLevelList 
             elif buffer_level == "primary":
                 vuid = 'VUID-' + name + '-bufferlevel'
                 if vuid not in self.valid_vuids:
-                    print("Error: Could not find %s in validusage.json\n", vuid)
-                    sys.exit(1)
+                    print("Warning: Could not find {} in validusage.json".format(vuid))
+                    vuid = vuid.replace('VUID-', 'UNASSIGNED-')
                 output += '    \"' + vuid + '\",\n'
             else:
                 print("cmdbufferlevel attribute was %s and not known, need to update generation code", buffer_level)
@@ -387,7 +388,7 @@ bool CoreChecks::ValidateCmd(const CMD_BUFFER_STATE *cb_state, const CMD_TYPE cm
         default:
             assert(cmd != CMD_NONE);
             const auto error = kGeneratedMustBeRecordingList[cmd];
-            skip |= LogError(cb_state->commandBuffer, error, "You must call vkBeginCommandBuffer() before this call to %s.",
+            skip |= LogError(cb_state->commandBuffer(), error, "You must call vkBeginCommandBuffer() before this call to %s.",
                             caller_name);
     }
 

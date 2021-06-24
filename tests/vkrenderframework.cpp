@@ -487,6 +487,7 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
 
         // Initialize physical device and properties with first device found
         gpu_ = phys_devices[0];
+        m_gpu_index = 0;
         vk::GetPhysicalDeviceProperties(gpu_, &physDevProps_);
 
         // See if there are any higher priority devices found
@@ -496,6 +497,7 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
             if (device_type_rank[tmp_props.deviceType] > device_type_rank[physDevProps_.deviceType]) {
                 physDevProps_ = tmp_props;
                 gpu_ = phys_devices[i];
+                m_gpu_index = i;
             }
         }
     }
@@ -559,6 +561,14 @@ void VkRenderFramework::GetPhysicalDeviceFeatures(VkPhysicalDeviceFeatures *feat
 
 bool VkRenderFramework::IsPlatform(PlatformType platform) {
     return (!vk_gpu_table.find(platform)->second.compare(physDevProps().deviceName));
+}
+
+bool VkRenderFramework::IsDriver(VkDriverId driver_id) {
+    // Assumes api version 1.2+
+    auto driver_properties = LvlInitStruct<VkPhysicalDeviceDriverProperties>();
+    auto physical_device_properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&driver_properties);
+    vk::GetPhysicalDeviceProperties2(gpu_, &physical_device_properties2);
+    return(driver_properties.driverID == driver_id);
 }
 
 void VkRenderFramework::GetPhysicalDeviceProperties(VkPhysicalDeviceProperties *props) { *props = physDevProps_; }
@@ -950,6 +960,38 @@ void VkRenderFramework::DestroyRenderTarget() {
     m_renderPass = VK_NULL_HANDLE;
     vk::DestroyFramebuffer(device(), m_framebuffer, nullptr);
     m_framebuffer = VK_NULL_HANDLE;
+}
+
+bool VkRenderFramework::InitFrameworkAndRetrieveFeatures(VkPhysicalDeviceFeatures2KHR &features2) {
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+    else {
+        printf("Instance extension %s not supported, skipping test\n",
+            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return false;
+    }
+    InitFramework();
+
+    // Cycle through device extensions and check for support
+    for (auto extension : m_device_extension_names) {
+        if (!DeviceExtensionSupported(extension)) {
+            printf("Device extension %s is not supported\n", extension);
+            return false;
+        }
+    }
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(),
+            "vkGetPhysicalDeviceFeatures2KHR");
+
+    if (vkGetPhysicalDeviceFeatures2KHR) {
+        vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+        return true;
+    }
+    else {
+        printf("Cannot use vkGetPhysicalDeviceFeatures to determine available features\n");
+        return false;
+    }
 }
 
 VkDeviceObj::VkDeviceObj(uint32_t id, VkPhysicalDevice obj) : vk_testing::Device(obj), id(id) {

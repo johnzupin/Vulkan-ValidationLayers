@@ -67,6 +67,9 @@ void SetValidationFeatureDisable(CHECK_DISABLED &disable_data, const VkValidatio
         case VK_VALIDATION_FEATURE_DISABLE_UNIQUE_HANDLES_EXT:
             disable_data[handle_wrapping] = true;
             break;
+        case VK_VALIDATION_FEATURE_DISABLE_SHADER_VALIDATION_CACHE_EXT:
+            disable_data[shader_validation_caching] = true;
+            break;
         case VK_VALIDATION_FEATURE_DISABLE_ALL_EXT:
             // Set all disabled flags to true
             std::fill(disable_data.begin(), disable_data.end(), true);
@@ -288,7 +291,7 @@ const VkLayerSettingsEXT *FindSettingsInChain(const void *next) {
     const VkBaseOutStructure *current = reinterpret_cast<const VkBaseOutStructure *>(next);
     const VkLayerSettingsEXT *found = nullptr;
     while (current) {
-        if (static_cast<VkStructureType>(VK_STRUCTURE_TYPE_INSTANCE_LAYER_SETTINGS_EXT) == current->sType) {
+        if (VK_STRUCTURE_TYPE_INSTANCE_LAYER_SETTINGS_EXT == static_cast<uint32_t>(current->sType)) {
             found = reinterpret_cast<const VkLayerSettingsEXT *>(current);
             current = nullptr;
         } else {

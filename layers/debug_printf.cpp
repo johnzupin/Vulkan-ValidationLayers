@@ -23,6 +23,7 @@
 #include <iostream>
 #include "layer_chassis_dispatch.h"
 #include "sync_utils.h"
+#include "cmd_buffer_state.h"
 
 static const VkShaderStageFlags kShaderStageAllRayTracing =
     VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
@@ -59,10 +60,14 @@ void DebugPrintf::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
 
     const char *size_string = getLayerOption("khronos_validation.printf_buffer_size");
     device_debug_printf->output_buffer_size = *size_string ? atoi(size_string) : 1024;
-    const char *verbose_string = getLayerOption("khronos_validation.printf_verbose");
-    device_debug_printf->verbose = *verbose_string ? !strcmp(verbose_string, "true") : false;
-    const char *stdout_string = getLayerOption("khronos_validation.printf_to_stdout");
-    device_debug_printf->use_stdout = *stdout_string ? !strcmp(stdout_string, "true") : false;
+
+    std::string verbose_string = getLayerOption("khronos_validation.printf_verbose");
+    transform(verbose_string.begin(), verbose_string.end(), verbose_string.begin(), ::tolower);
+    device_debug_printf->verbose = verbose_string.length() ? !verbose_string.compare("true") : false;
+
+    std::string stdout_string = getLayerOption("khronos_validation.printf_to_stdout");
+    transform(stdout_string.begin(), stdout_string.end(), stdout_string.begin(), ::tolower);
+    device_debug_printf->use_stdout = stdout_string.length() ? !stdout_string.compare("true") : false;
     if (getenv("DEBUG_PRINTF_TO_STDOUT")) device_debug_printf->use_stdout = true;
 
     if (device_debug_printf->phys_dev_props.apiVersion < VK_API_VERSION_1_1) {
@@ -545,12 +550,25 @@ void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQ
         for (auto &substring : format_substrings) {
             char temp_string[static_size];
             size_t needed = 0;
-            const size_t ul_pos = substring.string.find("%ul");
+            std::vector<std::string> format_strings = { "%ul", "%lu", "%lx" };
+            size_t ul_pos = 0;
+            bool print_hex = true;
+            for (auto ul_string : format_strings) {
+                ul_pos = substring.string.find(ul_string);
+                if (ul_pos != std::string::npos) {
+                    if (ul_string == "%lu") print_hex = false;
+                    break;
+                }
+            }
             if (ul_pos != std::string::npos) {
                 // Unsigned 64 bit value
                 substring.longval = *static_cast<uint64_t *>(values);
                 values = static_cast<uint64_t *>(values) + 1;
-                substring.string.replace(ul_pos + 1, 2, PRIx64);
+                if (print_hex) {
+                    substring.string.replace(ul_pos + 1, 2, PRIx64);
+                } else {
+                    substring.string.replace(ul_pos + 1, 2, PRIu64);
+                }
                 needed = snprintf(temp_string, static_size, substring.string.c_str(), substring.longval);
             } else {
                 if (substring.needs_value) {
@@ -621,11 +639,11 @@ void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQ
 bool DebugPrintf::CommandBufferNeedsProcessing(VkCommandBuffer command_buffer) {
     bool buffers_present = false;
     auto cb_node = GetCBState(command_buffer);
-    if (GetBufferInfo(cb_node->commandBuffer).size()) {
+    if (GetBufferInfo(cb_node->commandBuffer()).size()) {
         buffers_present = true;
     }
     for (const auto *secondaryCmdBuffer : cb_node->linkedCommandBuffers) {
-        if (GetBufferInfo(secondaryCmdBuffer->commandBuffer).size()) {
+        if (GetBufferInfo(secondaryCmdBuffer->commandBuffer()).size()) {
             buffers_present = true;
         }
     }
@@ -925,7 +943,7 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
     const auto *pipeline_state = cb_node->lastBound[lv_bind_point].pipeline_state;
     if (pipeline_state) {
         if (pipeline_state->pipeline_layout->set_layouts.size() <= desc_set_bind_index) {
-            DispatchCmdBindDescriptorSets(cmd_buffer, bind_point, pipeline_state->pipeline_layout->layout, desc_set_bind_index, 1,
+            DispatchCmdBindDescriptorSets(cmd_buffer, bind_point, pipeline_state->pipeline_layout->layout(), desc_set_bind_index, 1,
                                           desc_sets.data(), 0, nullptr);
         }
         // Record buffer and memory info in CB state tracking

@@ -1116,6 +1116,22 @@ void PostCallRecordDebugMarkerSetObjectNameEXT(
     VkResult                                    result) override;
 
 
+void PostCallRecordCreateCuModuleNVX(
+    VkDevice                                    device,
+    const VkCuModuleCreateInfoNVX*              pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkCuModuleNVX*                              pModule,
+    VkResult                                    result) override;
+
+
+void PostCallRecordCreateCuFunctionNVX(
+    VkDevice                                    device,
+    const VkCuFunctionCreateInfoNVX*            pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkCuFunctionNVX*                            pFunction,
+    VkResult                                    result) override;
+
+
 void PostCallRecordGetImageViewAddressNVX(
     VkDevice                                    device,
     VkImageView                                 imageView,
@@ -1570,6 +1586,21 @@ void PostCallRecordCreateIndirectCommandsLayoutNV(
     VkResult                                    result) override;
 
 
+void PostCallRecordAcquireDrmDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    int32_t                                     drmFd,
+    VkDisplayKHR                                display,
+    VkResult                                    result) override;
+
+
+void PostCallRecordGetDrmDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    int32_t                                     drmFd,
+    uint32_t                                    connectorId,
+    VkDisplayKHR*                               display,
+    VkResult                                    result) override;
+
+
 void PostCallRecordCreatePrivateDataSlotEXT(
     VkDevice                                    device,
     const VkPrivateDataSlotCreateInfoEXT*       pCreateInfo,
@@ -1822,6 +1853,7 @@ const layer_data::unordered_map<std::string, DeprecationData>  deprecated_extens
 const layer_data::unordered_map<std::string, std::string> special_use_extensions = {
     {"VK_AMD_buffer_marker", "devtools"},
     {"VK_AMD_shader_info", "devtools"},
+    {"VK_EXT_custom_border_color", "glemulation, d3demulation"},
     {"VK_EXT_debug_marker", "debugging"},
     {"VK_EXT_debug_report", "debugging"},
     {"VK_EXT_debug_utils", "debugging"},
@@ -1829,6 +1861,7 @@ const layer_data::unordered_map<std::string, std::string> special_use_extensions
     {"VK_EXT_device_memory_report", "devtools"},
     {"VK_EXT_line_rasterization", "cadsupport"},
     {"VK_EXT_pipeline_creation_feedback", "devtools"},
+    {"VK_EXT_provoking_vertex", "glemulation"},
     {"VK_EXT_transform_feedback", "glemulation, d3demulation, devtools"},
     {"VK_EXT_validation_features", "debugging"},
     {"VK_EXT_validation_flags", "debugging"},

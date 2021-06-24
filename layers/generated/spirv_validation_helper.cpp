@@ -26,7 +26,8 @@
 #include <functional>
 #include <spirv/unified1/spirv.hpp>
 #include "vk_extension_helper.h"
-#include "core_validation_types.h"
+#include "shader_module.h"
+#include "device_state.h"
 #include "core_validation.h"
 
 struct FeaturePointer {
@@ -162,6 +163,7 @@ static const std::unordered_multimap<uint32_t, RequiredSpirvInfo> spirvCapabilit
     {spv::CapabilityInt64, {0, &VkPhysicalDeviceFeatures::shaderInt64, nullptr, ""}},
     {spv::CapabilityInt64Atomics, {0, &VkPhysicalDeviceVulkan12Features::shaderBufferInt64Atomics, nullptr, ""}},
     {spv::CapabilityInt64Atomics, {0, &VkPhysicalDeviceVulkan12Features::shaderSharedInt64Atomics, nullptr, ""}},
+    {spv::CapabilityInt64Atomics, {0, &VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT::shaderImageInt64Atomics, nullptr, ""}},
     {spv::CapabilityInt64ImageEXT, {0, &VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT::shaderImageInt64Atomics, nullptr, ""}},
     {spv::CapabilityInt8, {0, &VkPhysicalDeviceVulkan12Features::shaderInt8, nullptr, ""}},
     {spv::CapabilityIntegerFunctions2INTEL, {0, &VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL::shaderIntegerFunctions2, nullptr, ""}},
@@ -176,6 +178,8 @@ static const std::unordered_multimap<uint32_t, RequiredSpirvInfo> spirvCapabilit
     {spv::CapabilityPhysicalStorageBufferAddresses, {0, &VkPhysicalDeviceBufferDeviceAddressFeaturesEXT::bufferDeviceAddress, nullptr, ""}},
     {spv::CapabilityRayQueryKHR, {0, &VkPhysicalDeviceRayQueryFeaturesKHR::rayQuery, nullptr, ""}},
     {spv::CapabilityRayTracingKHR, {0, &VkPhysicalDeviceRayTracingPipelineFeaturesKHR::rayTracingPipeline, nullptr, ""}},
+    // Not found in current SPIR-V Headers
+    //    {spv::CapabilityRayTracingMotionBlurNV, {0, &VkPhysicalDeviceRayTracingMotionBlurFeaturesNV::rayTracingMotionBlur, nullptr, ""}},
     {spv::CapabilityRayTracingNV, {0, nullptr, &DeviceExtensions::vk_nv_ray_tracing, ""}},
     {spv::CapabilityRayTraversalPrimitiveCullingKHR, {0, &VkPhysicalDeviceRayTracingPipelineFeaturesKHR::rayTraversalPrimitiveCulling, nullptr, ""}},
     {spv::CapabilityRoundingModeRTE, {0, nullptr, nullptr, "(VkPhysicalDeviceVulkan12Properties::shaderRoundingModeRTEFloat16 & VK_TRUE) != 0"}},

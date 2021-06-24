@@ -25,10 +25,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "vulkan/vulkan.h"
+#include "base_node.h"
+#include "pipeline_state.h"
 #include <spirv/unified1/spirv.hpp>
 #include "spirv-tools/optimizer.hpp"
-#include "core_validation_types.h"
 
 // A forward iterator over spirv instructions. Provides easy access to len, opcode, and content words
 // without the caller needing to care too much about the physical SPIRV module layout.
@@ -188,17 +188,25 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
     bool multiple_entry_points{false};
     bool has_valid_spirv;
     bool has_specialization_constants{false};
-    VkShaderModule vk_shader_module;
     uint32_t gpu_validation_shader_id;
 
     SHADER_MODULE_STATE(VkShaderModuleCreateInfo const *pCreateInfo, VkShaderModule shaderModule, spv_target_env env,
                         uint32_t unique_shader_id)
-        : words(), def_index(), has_valid_spirv(true), vk_shader_module(shaderModule), gpu_validation_shader_id(unique_shader_id) {
+        : BASE_NODE(shaderModule, kVulkanObjectTypeShaderModule),
+          words(),
+          def_index(),
+          has_valid_spirv(true),
+          gpu_validation_shader_id(unique_shader_id) {
         words = PreprocessShaderBinary((uint32_t *)pCreateInfo->pCode, pCreateInfo->codeSize, env);
         BuildDefIndex();
     }
 
-    SHADER_MODULE_STATE() : has_valid_spirv(false), vk_shader_module(VK_NULL_HANDLE), gpu_validation_shader_id(UINT32_MAX) {}
+    SHADER_MODULE_STATE()
+        : BASE_NODE(static_cast<VkShaderModule>(VK_NULL_HANDLE), kVulkanObjectTypeShaderModule),
+          has_valid_spirv(false),
+          gpu_validation_shader_id(UINT32_MAX) {}
+
+    VkShaderModule vk_shader_module() const { return handle_.Cast<VkShaderModule>(); }
 
     decoration_set get_decorations(unsigned id) const {
         // return the actual decorations for this id, or a default set.

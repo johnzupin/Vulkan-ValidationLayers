@@ -15,6 +15,7 @@
 
 #include "cast_utils.h"
 #include "layer_validation_tests.h"
+#include "best_practices_error_enums.h"
 
 void VkBestPracticesLayerTest::InitBestPracticesFramework() {
     // Enable all vendor-specific checks
@@ -247,6 +248,7 @@ TEST_F(VkBestPracticesLayerTest, CmdClearAttachmentTest) {
 
     // Call for full-sized FB Color attachment prior to issuing a Draw
     m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "UNASSIGNED-BestPractices-DrawState-ClearCmdBeforeDraw");
+
     vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &color_attachment, 1, &clear_rect);
     m_errorMonitor->VerifyFound();
 }
@@ -645,6 +647,9 @@ TEST_F(VkBestPracticesLayerTest, ClearAttachmentsAfterLoad) {
     // On tiled renderers, this can also trigger a warning about LOAD_OP_LOAD causing a readback
     m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-vkCmdBeginRenderPass-attachment-needs-readback");
     m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-DrawState-ClearCmdBeforeDraw");
+    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-RenderPass-redundant-store");
+    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-RenderPass-redundant-clear");
+    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-RenderPass-inefficient-clear");
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
@@ -850,7 +855,6 @@ TEST_F(VkBestPracticesLayerTest, MissingQueryDetails) {
 
     // Now get information correctly
     m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
-
     vk_testing::QueueCreateInfoArray queue_info(phys_device_obj.queue_properties());
     // Only request creation with queuefamilies that have at least one queue
     std::vector<VkDeviceQueueCreateInfo> create_queue_infos;
@@ -880,4 +884,60 @@ TEST_F(VkBestPracticesLayerTest, MissingQueryDetails) {
     VkDevice device;
     vk::CreateDevice(phys_device_obj.handle(), &device_ci, nullptr, &device);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkBestPracticesLayerTest, GetSwapchainImagesInvalidCount) {
+    TEST_DESCRIPTION("Pass an 'incorrect' count to the second GetSwapchainImagesKHR call");
+
+    if (!AddSurfaceInstanceExtension()) {
+        printf("%s surface extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+
+    if (!AddSwapchainDeviceExtension()) {
+        printf("%s swapchain extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    if (!InitSwapchain()) {
+        printf("%s Cannot create surface or swapchain, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    uint32_t swapchain_images_count = 0;
+    vk::GetSwapchainImagesKHR(device(), m_swapchain, &swapchain_images_count, nullptr);
+
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, kVUID_BestPractices_Swapchain_InvalidCount);
+    ++swapchain_images_count;  // Set the image count to something greater (i.e., "invalid") than what was returned
+    std::vector<VkImage> swapchain_images(swapchain_images_count, VK_NULL_HANDLE);
+    vk::GetSwapchainImagesKHR(device(), m_swapchain, &swapchain_images_count, swapchain_images.data());
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkBestPracticesLayerTest, DepthBiasNoAttachment) {
+    TEST_DESCRIPTION("Enable depthBias without a depth attachment");
+
+    InitBestPracticesFramework();
+    InitState();
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.rs_state_ci_.depthBiasEnable = VK_TRUE;
+    pipe.rs_state_ci_.depthBiasConstantFactor = 1.0f;
+    pipe.InitState();
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, kVUID_BestPractices_DepthBiasNoAttachment);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->end();
 }
