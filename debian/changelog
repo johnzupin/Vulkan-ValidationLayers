@@ -1,3 +1,367 @@
+vulkan-validationlayers (1.2.182.0~rc1-1lunarg18.04-1) bionic; urgency=medium
+
+  [ Jeremy Gebben ]
+  * corechecks: Refactor ImageDescriptor and ImageSamplerDescriptor
+  * corechecks: Refactor ValidateDescriptorSetBindingData
+  * build: Improve docstrings for robin-hood cmake variables
+
+  [ Charles Giessen ]
+  * cmake: Configure_file to use @ONLY
+
+  [ Jeremy Gebben ]
+  * layers: Move Optional to layer_data::optional
+  * layers: Add a more flexible version of sparse_container::splice
+  * corechecks: Simplify Image Layout Transition maps
+
+  [ Mike Schuchardt ]
+  * scripts: Switch from mkpath to makedirs
+  * layers: Add swapchain rotation to bounds checking
+  * build: Update to header 1.2.177
+
+  [ Christophe ]
+  * manifest: Fix layer settings to match layer manifest schema
+
+  [ David Zhao Akeley ]
+  * layers: Add VK_NV_inherited_viewport_scissor support
+  * tests: Add VK_NV_inherited_viewport_scissor test coverage
+
+  [ Jeremy Gebben ]
+  * layers: Fix Image Layout range splitting
+
+  [ Christian Forfang ]
+  * layers: Fix input-attachment checks
+
+  [ Nathaniel Cesario ]
+  * tests: Fix test bug
+
+  [ Jeremy Gebben ]
+  * layers: Remove unneeded include from vk_enum_string_helper.h
+
+  [ sfricke-samsung ]
+  * layers: Label seperate VU for color/ds mismatch
+  * tests: Seperate VU for color/ds mismatch
+
+  [ Locke Lin ]
+  * layers: Validate provoking vertex
+  * tests: Validate provoking vertex
+
+  [ John Zulauf ]
+  * syncval: Add diagnostic support for range gen opt
+  * layers: Add assignment/copy/move/construtors
+  * syncval: Refactor recursion, gap maps elimintated
+  * syncval: Perf refactor attachment range_gens
+  * syncval: Rewrite of image range gen for perf
+  * syncval: Remove image range gen diagnostic code
+  * syncval: Change to non-upperbound loop termination
+
+  [ David Zhao Akeley ]
+  * layers: Check rasterizerDiscardEnable in tracking viewport state
+
+  [ Charles Giessen ]
+  * layers: Add platform guards to enum_string_helper
+
+  [ Tony-LunarG ]
+  * tests: Add positive case for ignored pointers at bind
+
+  [ sfricke-samsung ]
+  * layers: Add missing device queue VUs
+  * tests: Add missing device queue VUs
+  * docs: Add how to use device profile limits
+  * tests: Device Profile limits load function
+  * layers: Move push constant range to stateless
+  * tests: Add tests for push constant ranges
+  * layers: Add missing pipelineExecutableInfo
+  * tests: Add pipelineExecutableInfo tests
+
+  [ Tony-LunarG ]
+  * gpu: Add basic Pre Draw GPU-AV
+  * gpu: Change GPU-AV asserts to aborts
+  * gpu: Better shader in PreDraw GPU-AV
+  * gpu: Use GpuVuid for draw indirect count errors
+  * gpu: More info in draw indirect count message
+  * tests: Add GPU-AV test for DrawIndirectCount
+  * gpu: Add GPU-AV for CmdDrawIndexedIndirectCount
+  * tests: Add test for GPU-AV DrawIndexedIndirectCount
+  * gpu: Add script to compile pre-draw validation shader
+  * gpu: Add GPU-AV for maxDrawIndirectCount limit
+  * tests: Add test for maxDrawIndirectCount limit
+  * gpu: Add count buffer validation option
+  * gpu: Add GPU-AV for firstInstance VUIDs
+  * tests: Add test for firstInstance VUIDs
+  * gpu: Clean up shader generation
+
+  [ Jeremy Gebben ]
+  * layers: Add checks to allow unit tests to run with ASan enabled
+  * tests: Fix tests to run with ASan enabled
+  * layers: Fix sparse_container::splice()
+  * tests: Add positive tests for image layouts of array layers
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.178
+  * layers: Update descriptor set copy checks
+  * layers: Remove redundant explicit checks
+
+  [ Jeremy Gebben ]
+  * layers: Enable printf warnings for Log* methods
+
+  [ Tony-LunarG ]
+  * printf: Add unsigned long options to debug printf
+  * tests: New cases for debug printf
+
+  [ Nathaniel Cesario ]
+  * layers: Skip test failing on Shield TV
+
+  [ Tim Van Patten ]
+  * layers: Fix invalid UTF-8 character
+
+  [ David Zhao Akeley ]
+  * tests: Remove faulty kSubmitQueueMustMatchSrcOrDst test
+  * layers: Fix queue ownership transfer detection
+  * tests: Re-add wrong-queue queue ownership transfer tests
+
+  [ Piers Daniell ]
+  * VK_EXT_vertex_input_dynamic_state fixes
+  * vertex_input
+  * Revert "vertex_input"
+  * Revert "VK_EXT_vertex_input_dynamic_state fixes"
+
+  [ Tim Van Patten ]
+  * build: Add missing header files to BUILD.gn
+
+  [ Piers Daniell ]
+  * layers: VK_EXT_vertex_input_dynamic_state fixes
+
+  [ Nathaniel Cesario ]
+  * layers: Fix API name
+
+  [ sourav parmar ]
+  * layers: Fix one fragment_shading_rate crash
+
+  [ Jeremy Gebben ]
+  * layers: Move class BASE_NODE to its own file
+  * layers: Improve state object encapsulation
+  * layers: Remove redundant handle members from state objects
+  * layers: Optimize command buffer state tracking
+  * tests: Fix expected errors for deleting in-use objects
+
+  [ Nathaniel Cesario ]
+  * tests: Add test for devsim/loader crash
+
+  [ Jeremy Gebben ]
+  * tests: Fix cleanup in VkPositiveLayerTest.CopyImageSubresource
+
+  [ Nathaniel Cesario ]
+  * cmake: Test CMake minimum requirement
+  * build: Move Windows build to github actions
+  * build: Refactor CI scripts
+  * build: Update check_format.py for CI
+  * build: Rename make_or_exist_dirs
+  * build: Fix github_ci_win_linux.py on Windows
+  * build: Remove github_ci_win.py
+  * build: Windows CI fixes
+  * layers: Fix AddAttachmentUse
+  * tests: Test resolve == input attachment
+
+  [ ZandroFargnoli ]
+  * practices: Check efficiency around render passes
+  * tests: Test render pass efficiency checks
+
+  [ Hans-Kristian Arntzen ]
+  * practices: Check for imageless framebuffers
+  * practices: Clean up overrides
+  * practices: Add tracking for CmdResolve2KHR as well
+  * practices: Lookup render pass state directly
+
+  [ Szilard Papp ]
+  * practices: Check LOAD_OP_LOAD after Blit
+
+  [ Hans-Kristian Arntzen ]
+  * practices: Move best practices image state
+  * practices: Release image usage state for swapchain
+  * practices: Update image usage state in queue submit order
+  * practices: Pull correct descriptor index ranges
+  * tests: Move Arm specific tests to right place
+  * practices: Fix bugs in ValidateImage
+  * tests: Add test which checks that image usage is triggered
+  * tests: Remove buggy test code
+  * practices: Fix CmdEndRenderPass usage tracking
+  * practices: Add more READ_TO_TILE scenarios
+  * practices: Clear deferred command state on begin command buffer
+  * practices: Prioritize READ_TO_TILE state over CLEARED states
+  * practices: Add some missing consts
+  * practices: Cleanup some awkward use of VendorCheckEnabled()
+  * practices: Rename to CamelCase
+  * tests: Use common VkImageObj type
+  * practices: Pass down function name to queued checks
+
+  [ Nathaniel Cesario ]
+  * build: Fix README build badges
+
+  [ Hans-Kristian Arntzen ]
+  * practices: Fix crash when rendering to 3D image slices
+
+  [ Jeremy Gebben ]
+  * layers: Fix Control Flow Integrity in DEVICE_MEMORY_STATE
+
+  [ Nathaniel Cesario ]
+  * build: Update build docs
+
+  [ Petr Kraus ]
+  * layers: Remove redundant interpunction in errors
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.179
+
+  [ Yuly Novikov ]
+  * layers: Avoid destroying BINDABLE multiple times
+
+  [ Nathaniel Cesario ]
+  * layers: Fix drawIndirectCount enabled by extension
+
+  [ sfricke-samsung ]
+  * tests: Add test for 1.1 VK_KHR_draw_indirect_count
+
+  [ Nathaniel Cesario ]
+  * tests: Add test for 1.2 VK_KHR_draw_indirect_count
+
+  [ Locke Lin ]
+  * layers: Provoking vertex supports 1.0
+  * tests: Provoking vertex supports 1.0
+
+  [ Jeff Leger ]
+  * layers: Add Support for VK_QCOM_render_pass_shader_resolve
+  * tests: Add Tests For VK_QCOM_render_pass_shader_resolve
+
+  [ Tony-LunarG ]
+  * practices: Fix swapchain test crashes
+
+  [ Nathaniel Cesario ]
+  * layers: Move SwapchainInvalidCount to BP
+
+  [ Tony-LunarG ]
+  * tests: Add util to check extensions and retrieve features
+
+  [ Jeremy Gebben ]
+  * layers: Improve VUID-VkBindImageMemoryInfo-memory-02629 checking
+  * tests: Add post-delete case to DedicatedAllocationImageAliasing
+  * layers: Split memory related state objects into separate files
+
+  [ Nathaniel Cesario ]
+  * tests: Guard against possible overflow
+
+  [ Jeremy Gebben ]
+  * layers: Split Pipeline and Sampler state into separate files
+
+  [ sfricke-samsung ]
+  * docs: Fix build.md example path
+  * tests: Add single block max components test
+
+  [ Jeremy Gebben ]
+  * layers: Split Renderpass and FB state into a separate files
+
+  [ Yuly Novikov ]
+  * layers: Avoid destroying BINDABLE multiple times
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix logic for VUID 04152 checking
+  * layers: Split Query state objects into a separate file
+
+  [ Nathaniel Cesario ]
+  * layers: Depth bias enabled without attachment
+  * tests: Depth bias without attachment
+
+  [ Jeremy Gebben ]
+  * layers: Split Queue and Device state objects to separate files
+
+  [ Shahbaz Youssefi ]
+  * gn: Fix build
+
+  [ Tony-LunarG ]
+  * tests: Make inline uniform size a power of 2
+  * tests: Fix use of invalid format in positive test
+  * tests: Check return code of CreateBuffer
+  * tests: Check for device coherent memory before test
+  * tests: Fix test creating an illegal image
+  * tests: Use extensions and check format in ImageDrmFormatModifer
+  * tests: Skip some tests that don't run on RADV
+  * tests: Fix errors in renderpass multiview test
+  * tests: Fix shader in InvalidStorageAtomicOperation
+  * tests: Add clear value for each attachment
+  * tests: Use same physical device as InitFramework
+
+  [ Jeremy Gebben ]
+  * layers: Move CommandBuffer state objects to separate files
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.180
+
+  [ Shahbaz Youssefi ]
+  * gn: Fix build
+
+  [ Tony-LunarG ]
+  * layers: Add default shader validation cache
+  * layers: Add disable for shader validation cache
+
+  [ Jeremy Gebben ]
+  * tests: Add a test for layouts for 2D views of 3D image slices
+  * scripts: Add a 'gn gen --check' step to the ci build
+
+  [ Artem Bolgar ]
+  * build: Fixing compile errors / warnings by implicit conversion
+  * build: Adding -Wconversion
+  * build: Fix more warnings revealed by -Wconversion
+  * build: Temporarily turning off some type conversion warnings
+
+  [ Nathaniel Cesario ]
+  * build: Fix clang build error
+
+  [ Tony-LunarG ]
+  * layers: Fix enum to disable shader validation cache
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.181
+
+  [ Tony-LunarG ]
+  * gpu: Make option compares case insensitive
+  * layers: Fix typo in json file
+
+  [ Jeremy Gebben ]
+  * layer: Move Pipeline state methods to their own file
+  * build: Update robin-hood-hashing to 3.11.2
+
+  [ Tony-LunarG ]
+  * layers: Disable validation cache if shader val disabled
+
+  [ sfricke-samsung ]
+  * layers: Label vkQueueSubmit2KHR VUs
+  * layers: Label vkCmdDispatchBase 02712
+
+  [ Jeremy Gebben ]
+  * layers: Update synchronization generated code
+  * scripts: Fix quote characters in sync_val_gen.py
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.182
+
+  [ Nathaniel Cesario ]
+  * layers: Add VUID 03673
+  * tests: Add test for VUID 03673
+
+  [ Jeremy Gebben ]
+  * layers: Do pipeline stage checking for queue family transfers
+  * tests: Avoid invalid pipeline stages in queue family transfers
+  * layers: Further cleanup of queue family transfer checking
+  * layers: Make some "is barrier a QFO?" functions be constexpr
+  * layers: Fix SubpassDependency "barrier" checking
+
+  [ Nathaniel Cesario ]
+  * build: Update SPIR-V and shaderc known_good.json
+
+  [ John Zupin ]
+  * packaging: update control file for 1.2.182.0 SDK
+
+ -- John Zupin <john@odin>  Fri, 25 Jun 2021 15:08:11 -0600
+
 vulkan-validationlayers (1.2.176.1~rc1-1lunarg18.04-1) bionic; urgency=medium
 
   [ Charles Giessen ]
