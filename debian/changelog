@@ -1,3 +1,20 @@
+vulkan-validationlayers (1.2.182.0~rc2-1lunarg18.04-1) bionic; urgency=medium
+
+  [ Ricardo Garcia ]
+  * scripts: Fix crash with dynamic rasterizer enable
+
+  [ Tony-LunarG ]
+  * layers: Add validation for VK_EXT_multi_draw
+  * tests: Add tests for VK_EXT_multi_draw
+
+  [ Jeremy Gebben ]
+  * layers: Clean up and document check disable options
+  * layers: Add environment variables to the layer manifest
+  * manifest: Address additional review comments
+  * manifest: Fix platforms for GPUAV and DebugPrintf sub-settings
+
+ -- John Zupin <john@odin>  Fri, 02 Jul 2021 11:49:41 -0600
+
 vulkan-validationlayers (1.2.182.0~rc1-1lunarg18.04-1) bionic; urgency=medium
 
   [ Jeremy Gebben ]
