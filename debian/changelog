@@ -1,3 +1,717 @@
+vulkan-validationlayers (1.2.189.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ Nathaniel Cesario ]
+  * layers: Add invalid spec. constant size check
+  * tests: Add test for invalid spec. const. size
+
+  [ Tony-LunarG ]
+  * layers: Add missing 2 plane 444 formats
+  * gpu: Use correct constant for end of errors
+
+  [ Jeremy Gebben ]
+  * layers: Simplify DeviceMemory state objects
+
+  [ Samuel Iglesias Gonsálvez ]
+  * layers: Ignore pColorBlendState in some cases
+
+  [ Jeremy Gebben ]
+  * layers: Record Buffer and Image objects used in barriers
+  * tests: Add test cases to destroy objects in use by barrier cmds
+
+  [ Ali Emre Gülcü ]
+  * layers: Fix typo on VUID-01979 error message
+
+  [ Ricardo Garcia ]
+  * scripts: Fix crash with dynamic rasterizer enable
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.183
+
+  [ Tony-LunarG ]
+  * gpu: Add returns for aborted execution
+  * layers: Add validation for VK_EXT_multi_draw
+  * tests: Add tests for VK_EXT_multi_draw
+
+  [ sfricke-samsung ]
+  * layers: Label VU 04882
+
+  [ Jeremy Gebben ]
+  * layers: Clean up and document check disable options
+  * layers: Add environment variables to the layer manifest
+  * manifest: Address additional review comments
+  * manifest: Fix platforms for GPUAV and DebugPrintf sub-settings
+
+  [ Tony-LunarG ]
+  * practices: Fix imageless FB check
+
+  [ sfricke-samsung ]
+  * tests: Add Extra Max Component test
+
+  [ Nathaniel Cesario ]
+  * layers: Refactor Swapchain BP state
+
+  [ sfricke-samsung ]
+  * layers: Fix samplerMirrorClampToEdge check
+  * tests: Add samplerMirrorClampToEdge tests
+  * layers: Fix extension check for gen spirv
+  * tests: Add shaderDrawParameters tests
+  * layers: Remove unused parameter val lists
+
+  [ Arthur Eubanks ]
+  * chassis: Drastically reduce chassis.cpp compile times
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.184
+
+  [ Jeremy Gebben ]
+  * layers: Simplify Buffer and BufferView state objects
+
+  [ Tony-LunarG ]
+  * gpu: Add multi_draw calls to GPU-AV / DPrintf
+  * tests: Add tests for GPU-AV multi_draw
+
+  [ Hans-Kristian Arntzen ]
+  * corechecks: Normalize depth-stencil layouts correctly
+  * tests: Positive test for separate depth-stencil layouts
+  * corechecks: Handle UNDEFINED stencil initialLayout
+  * tests: Also test UNDEFINED stencil aspect initialLayout
+  * corechecks: Match initial image layout correctly
+  * tests: Test initial layout for separate depth-stencil
+
+  [ Jeremy Gebben ]
+  * layers: Simplify Sampler state objects
+
+  [ Hans-Kristian Arntzen ]
+  * layers: Add queue_submit_functions_after_render_pass
+  * practices: Use CMD_BUFFER_STATE deferred state
+  * practices: Repurpose depth prepass tracking struct
+  * practices: Avoid leaking render pass tracking state
+  * practices: Free pipeline tracking state as appropriate
+  * practices: Record which attachments are actually used
+  * practices: Improve check for redundant ClearAttachments
+  * practices: Accumulate depth pre-pass check in secondaries
+  * practices: Record accesses to attachments in draw calls
+  * practices: Clean up redundant checks for graphicsPipelinesCIs
+  * practices: Inherit hasDrawCmd from secondaries
+  * tests: Verify that small clears don't trigger warning
+  * tests: Add VkSubpassContents argument to BeginRenderPass()
+  * tests: Test secondary command buffers clear attachments
+  * tests: Expand ClearAttachmentsAfterLoad test
+  * practices: Fix warning wording for clear before draw
+  * practices: Handle renderpass2 entry points
+  * practices: Fix loadOp bug
+  * practices: Add check for redundant attachments
+  * tests: Fix tests for redundant attachment check
+  * tests: Add attachment usage flag to CreateImage helper
+  * tests: Fix clear op for stencil aspect
+  * tests: Add test for redundant attachments check
+  * practices: Fix MSVC warnings
+  * practices: Ignore pColorBlendState if required
+  * practices: Consider resolved attachment to be accessed
+  * tests: Use one of the supported depth-stencil formats
+  * tests: Remove unnecessary heap allocations
+  * tests: Add fallback test path for CmdClearAttachmentTest
+  * tests: Add fallback test path for CmdClearAttachmentAfterLoad
+
+  [ Tony-LunarG ]
+  * layers: Ignore pAttachments of imageless framebuffers
+  * tests: Verify imageless FB pAttachments is ignored
+
+  [ sfricke-samsung ]
+  * tests: All GLSL shader use raw strings
+  * layers: Fix Spec Constant ID not found
+  * tests: Add Positive Spec Constant case
+
+  [ ziga-lunarg ]
+  * layers: Add check for sparse image with transient usage
+  * tests: Test for sparse image with transient usage
+
+  [ Hannes Harnisch ]
+  * practices: Changing to VUIDs per special use tag
+
+  [ Ricardo Garcia ]
+  * layers: Take multi draw stride into account
+
+  [ ziga-lunarg ]
+  * layers: Add validation for buffer update data size
+  * tests: Test for invalid buffer update data size
+  * layers: Test for ViewportState scissor overflow
+  * tests: Test for ViewportState scissor int overflow
+  * layers: Add validation for negative ViewportState scissor offset
+  * tests: Test for negative ViewportState offset
+  * layers: Add validation for merging pipeline caches
+  * tests: Test merging pipeline caches
+
+  [ Niels Möller ]
+  * layers: Pass subpasses as pointer rather than reference
+  * tests: Add test binding a basic compute pipeline
+
+  [ ziga-lunarg ]
+  * layers: Add validation for correct aspectMask with format
+  * tests: Test for invalid image subresources aspectMask
+
+  [ Jeremy Gebben ]
+  * layers: Simplify Image, ImageView and Swapchain state objects
+
+  [ Nathaniel Cesario ]
+  * layers: Temporarily revert #2970
+
+  [ ziga-lunarg ]
+  * layers: Validate geometryShader feature is enabled if its used
+  * tests: Test using geometry shader stage with feature disabled
+
+  [ Jeremy Gebben ]
+  * layers: Move TraceRays command recording to state tracker
+
+  [ sfricke-samsung ]
+  * tests: Fix tests failing on same devices
+  * layers: Label Maintenance1 ImageView VU
+
+  [ ziga-lunarg ]
+  * layers: Validate tessellation feature is enabled if used
+  * tests: Test tessellation shader with feature disabled
+  * layers: Validate sparse image bind memory offset
+  * tests: Test for invalid memory offset in sparse image bind
+
+  [ sfricke-samsung ]
+  * layers: Add imageView layerCount check
+  * tests: Add imageView layerCount check
+
+  [ ziga-lunarg ]
+  * layers: Add validation for buffer update dst offset
+  * tests: Test for invalid buffer update dst offset
+  * layers: Validate cmdWriteTimestamp query slot
+  * tests: Test for query not lower than query count
+
+  [ sfricke-samsung ]
+  * tests: Fix devsim tests failing
+
+  [ Jeremy Gebben ]
+  * layers: Avoid crash in vkDestroySwapchainKHR
+  * tests: Add VkPositiveLayerTest.DestroySwapchainWithBoundImages
+  * layers: Fix bad SWAPCHAIN_NODE::image_create_info.pNext
+
+  [ Nathaniel Cesario ]
+  * layers: Add ASAN cmake option
+  * layers: Make swizzle less restrictive
+  * tests: Add test for less restrictive swizzle
+  * layers: Fix divide by 0 check
+  * tests: Fix tests running on RADV
+  * tests: Fix clang ASAN error
+
+  [ sfricke-samsung ]
+  * tests: Fix tests ran on Android
+
+  [ ziga-lunarg ]
+  * layers: Update subpass pipelineBindPoint check
+  * layers: Validate color write feature is enabled
+  * tests: Test color write feature is enabled if used
+  * layers: Validate buffer flags with DedicatedAllocationBuffer
+  * tests: Test for invalid flags with DedicatedAllocationBuffer
+  * layers: Validate createComputePipeline flags
+  * tests: Test for ray tracing flag in compute pipeline
+  * layers: Validate descriptor pool flags
+  * tests: Test creating descriptor pool with invalid flags
+  * layers: Validate device atomic features
+  * tests: Test creating device with invalid atomic features
+  * layers: Validate allocate descriptor setLayout flags
+  * tests: Test allocating descriptor set with invalid flags
+  * layers: Validate InheritanceViewportScissor feature disabled
+  * tests: Test InheritanceViewportScissor invalid parameters
+  * layers: Validate allocateMemory pNext export structs
+  * tests: Test for invalid memoryAllocate pNext
+  * layers: Validate block texel view level and layer count
+  * tests: Test for invalid imageView layer and level count
+  * layers: Validate imageCreate flags with DeviceGroup
+  * tests: Test for invalid imageCreate flags with DeviceGroup
+  * layers: Validate externalMemory in imageCreate pNext chain
+  * tests: Test for invalid externalMemory in imageCreate
+  * layers: Validate RenderPassMultiView pViewMasks
+  * tests: Test invalid RenderPassMultiView pViewMasks
+  * layers: Validate image flags with BindImageMemoryDeviceGroup
+  * tests: Test using invalid BindImageMemoryDeviceGroup
+  * layers: Validate GroupDevice physicalDevices are unique
+  * tests: Test for duplicated physicalDevices in GroupDevice
+  * layers: Validate createDescriptorSetLayout flags
+  * tests: Test for invalid flags when creating descriptorSetLayout
+
+  [ Jeremy Gebben ]
+  * tests: Fix some leaks of X Displays and XCB connections
+
+  [ Mike Schuchardt ]
+  * layers: Standardize DeviceExtensions member names
+  * build: Update to header 1.2.185
+
+  [ AndreyVK_D3D ]
+  * layers: Fix Invalid message
+
+  [ Lionel Landwerlin ]
+  * layers: Validate storage image reads/writes formats
+  * layers: Validate decorations of variables for storage images
+
+  [ ziga-lunarg ]
+  * layers: Temporarily revert #3006
+  * layers: Validate CmdBindDescriptorSets pipelineBindPoint
+  * tests: Test binding descriptor set to invalid bind point
+
+  [ Nathaniel Cesario ]
+  * tests: Temporarily disable failing tests on S10
+
+  [ sfricke-samsung ]
+  * layers: Relabel STAGE_NONE VUs
+
+  [ ziga-lunarg ]
+  * layers: Update pipeline bind point NV to KHR
+  * layers: Validate occlusionQueryEnable in CmdExecuteCommands
+  * tests: Test secondary command buffer in active query
+  * layers: Validate descriptor set layout binding
+  * tests: Test creating invalid descriptor set layout
+
+  [ sfricke-samsung ]
+  * tests: Prevent AHB external image regression
+
+  [ Jeremy Gebben ]
+  * tests: Fix VkRenderFramework::InitSurface() leaks
+  * tests: Fix leaks from device_profile_api's CreateInstance
+
+  [ sfricke-samsung ]
+  * layers: Fix VK_KHR_shared_presentable_image minImageCount
+  * tests: Add VK_KHR_shared_presentable_image minImageCount
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix a crash in PreCallValidateCmdBindDescriptorSets
+  * tests: Add VkLayerTest.DynamicOffsetWithNullBuffer
+
+  [ Lionel Landwerlin ]
+  * layers: Simplify shader module GetImageFormatInst()
+
+  [ Jeremy Gebben ]
+  * tests: Revert "Fix VkRenderFramework::InitSurface() leaks"
+
+  [ Corentin Wallez ]
+  * layers: Only check storage images for NonRead/Writable
+
+  [ ziga-lunarg ]
+  * layers: Check for invalid descriptorSetLayout bindings
+  * tests: Test descriptorSetLayout with invalid bindings
+  * layers: Fix checking extensions in ppEnabledExtensionNames
+
+  [ sfricke-samsung ]
+  * layers: Cleanup CollectBuiltinBlockMembers
+  * layers: Fix VK_KHR_shared_presentable_image imageUsage
+  * tests: Add VK_KHR_shared_presentable_image imageUsage
+
+  [ James Rumble ]
+  * layers: Track buffer device address used in vkCreateBuffer
+
+  [ sfricke-samsung ]
+  * layers: Cleanup ValidateBuiltinLimits
+
+  [ Nathaniel Cesario ]
+  * tests: Fix printing driver info on Mesa
+
+  [ sfricke-samsung ]
+  * layers: Improve InvalidImageLayout error message
+
+  [ Nathaniel Cesario ]
+  * tests: Disable RenderPassAsyncHazard on Pixel 3
+
+  [ ziga-lunarg ]
+  * layers: Validate SpecializationInfo constantIDs are unique
+  * tests: Test for duplicated constantIDs in specialization
+  * tests: Fix test for duplicated physicalDevice in GroupDevice
+  * layers: Update vuid 00721 message
+
+  [ Tim Van Patten ]
+  * layers: Fix ValidateShaderStorageImageFormats: SubpassData
+
+  [ sfricke-samsung ]
+  * tests: Add separate WSI test file
+
+  [ ziga-lunarg ]
+  * layers: Validate BindImageMemoryDeviceGroupInfo
+  * tests: Test BindIMageMemoryDeviceGroupInfo members
+  * layers: Add correct VUID for CreateBuffer QueueFamilies
+  * tests: Update test for invalid queue family index
+
+  [ Jeremy Gebben ]
+  * layers: Clean up of Surface and Swapchain state tracking
+  * layers: Fix Swapchain Image state tracking
+  * layers: Remove IMAGE_STATE::is_swapchain_image data member
+  * layers: Allow FakeAllocator to have NULL value
+  * layers: Add IMAGE_STATE::Unlink
+
+  [ ziga-lunarg ]
+  * layers: Check QueueSubmit2KHR if sync2 is enabled
+  * tests: Check QueueSubmit2KHR with sync2 disabled
+  * layers: Update renderArea checks
+  * tests: Check invalid renderArea in CmdBeginRenderPass
+  * layers: Validate FramebufferAttachmentImageInfo pNext
+  * tests: Check pNext of FramebufferAttachmentsCreateInfo
+
+  [ Peter Kasting ]
+  * layers: Fix some instances of -Wunused-but-set-variable
+
+  [ ziga-lunarg ]
+  * layers: Validate waiting on same Semaphore in different Queues
+  * tests: Test 2 queues waiting on same binary semaphore
+  * layers: Validate ShaderStageCreateInfo SubgroupSize
+  * tests: Test ShaderStageCreateInfo with invalid flags
+  * layers: Validate GetPhysicalDeviceVideoFormatProperties
+  * tests: Check VkPhysicalDeviceVideoFormatInfoKHR imageUsage
+  * layers: Check CmdWaitEvents2KHR if sync2 is enabled
+  * tests: Test CmdWaitEvents2KHR with sync2 disabled
+  * layers: Validate CmdSetDiscardRectangleEXT rectangle count
+  * tests: Test CmdSetDiscardRectangleEXT with invalid count
+  * layers: Validate CmdSetColorWriteEnableEXT
+  * tests: Test CmdSetColorWriteEnableEXT feature and count
+
+  [ sfricke-samsung ]
+  * tests: Use LvlInitStruct for AHB tests
+
+  [ Jeremy Gebben ]
+  * layers: Initialize SURFACE_STATE::swapchain in the constructor
+  * tests: Add VkPositiveLayerTests.CreateSurface
+
+  [ ziga-lunarg ]
+  * layers: Validate creating pipeline with read-only depth/stencil
+  * tests: Test creating pipeline with invalid depthWriteEnable
+
+  [ sfricke-samsung ]
+  * layers: ImageFloat32AtomicMinMax feature check
+  * tests: ImageFloat32AtomicMinMax feature check
+
+  [ ziga-lunarg ]
+  * layers: Add correct VUID for CreateImage QueueFamilies
+  * tests: Test CreateImage queue families
+  * layers: Validate DisplayPresentInfoKHR srcRect
+  * tests: Test DisplayPresentInfoKHR srcRect
+  * layers: Validate CmdEndQueryIndexedExt index
+  * tests: Test CmdEndQueryIndexedEXT invalid index
+  * layers: Validate CmdSetDiscardRectangleEXT offsets
+  * tests: Test CmdSetDiscardRectanglesEXT with invalid offsets
+  * layers: Fix AcquireNextImage2KHR retired swapchain vuid
+  * tests: Acquire image from retired swapchain
+  * layers: Validate AccelerationStructureInfo type
+  * tests: Add test for AccelerationStructure type generic
+
+  [ Mike Schuchardt ]
+  * build: Add SPIRV-Tools to known_good.json
+  * cmake: Clean up VLT link section
+
+  [ Nathaniel Cesario ]
+  * layers: Remove added warnings from #2777
+
+  [ ziga-lunarg ]
+  * layers: Validate ImageSubresourceRange aspectMask
+  * tests: Test Creating ImageView with invalid aspectMask
+  * layers: Fix AcquireNextImage2KHR signaled semaphore vuid
+  * tests: Acquire image with signaled semaphore
+  * layers: Validate CreateDevice features and extensions
+  * tests: Test CreateDevice with bufferDeviceAdress
+  * layers: Validate CreateImageView viewType
+  * tests: Test CreateImageView with invalid viewType
+  * layers: Validate CmdWaitEvents barrier queue families
+  * tests: Test CmdWaitEvents with different barrier queue families
+  * layers: Validate DeviceGroupSubmitInfo
+  * tests: Test DeviceGroupSubmitInfo with invalid count members
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.186
+
+  [ Ricardo Garcia ]
+  * layers: Add valid layouts for IAs and sampled imgs
+  * layers: Consider IAs depth/stencil ROs accesses
+
+  [ ziga-lunarg ]
+  * layers: Revert 04890
+
+  [ Tony-LunarG ]
+  * layers: Add validation for present_id & present_wait
+  * tests: Add ability to create second swapchain
+  * tests: Add utility to set image format
+  * tests: Add tests for present_id & present_wait
+
+  [ Nathaniel Cesario ]
+  * layers: Add VUIDs 04961 and 04962
+  * tests: Add tests for VUIDs 04961, 04962
+
+  [ ziga-lunarg ]
+  * layers: Validate DeviceRenderAreas
+  * tests: Test DeviceGroupRenderPassBeginInfo renderAreas
+  * layers: Validate DescriptorUpdateTemplateEnty
+  * tests: Test DescriptorUpdateTemplateEntry with invalid integers
+
+  [ sfricke-samsung ]
+  * layers: Add VK_KHR_shader_atomic_int64
+  * tests: Add VK_KHR_shader_atomic_int64
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.187
+
+  [ sfricke-samsung ]
+  * layers: Add shaderImageInt64Atomics
+  * tests: Add shaderImageInt64Atomics
+
+  [ ziga-lunarg ]
+  * layers: Validate binding library pipeline
+  * tests: Test binding library pipeline
+  * layers: Validate DiscardRectangleState count
+  * tests: Validate DiscardRectangleState count
+  * layers: Validate advanced blend operations
+  * tests: Test invalid graphics pipeline blend operation
+
+  [ sfricke-samsung ]
+  * layers: Label VUID 06225
+
+  [ ziga-lunarg ]
+  * layers: Validate VkPipelineColorWriteCreateInfoEXT
+  * tests: Test ColorWriteCreateInfo count and feature enabled
+  * layers: Validate CmdClearAttachments with multiview
+  * tests: Test CmdClearAttachments with multiview renderPass
+
+  [ sfricke-samsung ]
+  * layers: Label missing pipeline index value
+
+  [ Tony-LunarG ]
+  * layers: Fix reporting of validation features ext
+  * tests: Add assumption that validation features are available
+  * tests: Add test for validation layer extensions
+
+  [ Charles Giessen ]
+  * test: Fix ValidateGetPhysicalDeviceVideoFormatProperties
+
+  [ ziga-lunarg ]
+  * layers: Validate advanced color blend is supported
+  * tests: Test using advanced blend when it is not supported
+  * layers: Validate CmdBeginQuery with type transform feedback
+  * tests: Test transform feedback query
+  * layers: Validate AccelerationStructure scratchData
+  * tests: Test invalid scratchData buffer usage
+  * layers: Validate fragmentDensityMapAttachment layerCount
+  * tests: Test invalid framebuffer with fragmentDensityMap
+  * tests: Fix CmdSetDiscardRectangleEXT tests
+  * layers: Validate CmdSetDiscardRectangleEXT pDiscardRectangles
+  * tests: Test CmdSetDiscardRectangleEXT integer overflow
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.188
+
+  [ Christophe ]
+  * layers: Workaround for unlimited duplicate messages
+
+  [ Nathaniel Cesario ]
+  * layers: Fix ARM best practices description
+
+  [ ziga-lunarg ]
+  * layers: Fix issue 3012
+  * tests: Tets presenting image without acquiring it
+  * layers: Validate compute shader shared memory
+  * tests: Test compute shader shared memory
+  * layers: Validate CmdBindPipeline with discard rectangle
+  * tests: Test binding pipeline with missing dynamic state
+
+  [ Jeremy Gebben ]
+  * tests: Fix crash in CreatePipelineWithCoreChecksDisabled test
+  * layers: Fix vkCreateImage memory reqs. check for multiplanar
+
+  [ ziga-lunarg ]
+  * layers: Validate CmdBeginQuery queryPool queryType
+  * tests: Test CmdBeginQuery with invalid queryPool queryType
+
+  [ Jeremy Gebben ]
+  * practices: Fix leaks in struct GraphicsPipelineCIs
+  * tests: Fix leaks in VkBestPracticesLayerTest.* test cases
+
+  [ John Zulauf ]
+  * layers: Add detect default to messenger setup
+
+  [ ziga-lunarg ]
+  * layers: ValidateCmdFillBuffer cmd pool capabilities
+  * tests: Test CmdFillBuffer cmdBuffers pool capabilities
+  * layers: Fix recording pipeline shader stages
+  * tests: Positive test for shader stages not in order
+
+  [ Jeremy Gebben ]
+  * layers: Move state tracker methods to CMD_BUFFER_STATE
+
+  [ ziga-lunarg ]
+  * layers: Validate descriptorSetLayout with invalid flags
+  * tests: Test creating descriptorSetLayout with invalid flags
+  * layers: Validate ImageFormatInfo2 with drm format modifier
+  * tests: Test ImageFormatInfo2 with invalid tiling and pNext chain
+  * layers: Fix VkSparseMemoryBind offset check
+  * tests: Fix SparseMemoryBindOffset test with invalid offset
+
+  [ Jeremy Gebben ]
+  * tests: Add vk_testing::RenderPass and Framebuffer
+  * tests: Fix leaks in VkSyncValTest.* cases
+
+  [ ziga-lunarg ]
+  * layers: Validate EndCommandBuffer conditional rendering
+  * tests: Test EndCommandBuffer with conditional rendering
+
+  [ Jeremy Gebben ]
+  * layers: Fix memory leaks from class BothRangeMap
+  * tests: Fix leaks in some VkLayerTest.* cases
+
+  [ Gareth Webb ]
+  * practices: Add warning for zero-sized render area
+
+  [ Hannes Harnisch ]
+  * tests: Adding test for zero-size render area
+
+  [ Gareth Webb ]
+  * tests: Fix failing test for zero-sized render area
+
+  [ ziga-lunarg ]
+  * layers: Validate SparseMemoryBind memory type
+  * tests: Test SparseMemoryBind with invalid memory type
+
+  [ Jeremy Gebben ]
+  * layers: Fix VUID 01619 regression in CTS
+  * layers: Add CreateCmdBufferState() factory method
+  * practices: Use subclassed CMD_BUFFER_STATE
+
+  [ John Zulauf ]
+  * syncval: Add VK_EXT_load_store_op_none support
+  * tests: Add _NONE_ load/store tests to syncval test
+
+  [ Jeremy Gebben ]
+  * layers: Fix state tracker GetCBState() calls that snuck in
+
+  [ ziga-lunarg ]
+  * layers: Validate ConditionalRendering buffer usage
+  * tests: Test invalid buffer in conditional rendering
+  * layers: Validate BindImageMemoryDeviceGroupInfo
+  * tests: Test BindImageMemoryDeviceGroup with DeviceGroup
+
+  [ Jeremy Gebben ]
+  * layers: Fix ImageSubresourceLayoutMap update corner cases
+  * tests: Improve VkPositiveLayerTest.CopyImageSubresource
+  * layers: Fix state recording of 2D ImageViews of 3D Images
+
+  [ Tony-LunarG ]
+  * tests: Fix BDA GPU-AV test
+  * layers: Use new VUIDs for present_id present_wait features
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.189
+
+  [ Jeremy Gebben ]
+  * layers: Move command counting to CMD_BUFFER_STATE::RecordCmd()
+  * layers: Move sync related methods to cmd_buffer.cpp
+  * layers: Move sync related methods to CMD_BUFFER_STATE
+
+  [ ziga-lunarg ]
+  * layers: Fix SparseMemoryBind check if pointers are null
+
+  [ Jeremy Gebben ]
+  * layers: Use subclassed CMD_BUFFER_STATE in DebugPrintf and GpuAV
+
+  [ Nathaniel Cesario ]
+  * layers: Fix shader builtin arrays
+  * tests: Mesh shader writing point size
+
+  [ sfricke-samsung ]
+  * tests: Add external camera AHB test
+
+  [ Nathaniel Cesario ]
+  * layers: Remove duplicate check
+  * layers: Fix VUID 04739
+  * tests: Change error monitor default
+  * tests: Change error monitor default (part 2)
+
+  [ sfricke-samsung ]
+  * layers: Clean up android_ndk_types.h
+
+  [ Nathaniel Cesario ]
+  * layers: Address issue 2955
+  * tests: Add tests for invalid spec. constants
+  * tests: Refactor SPV compilation
+
+  [ ziga-lunarg ]
+  * layers: Add validation for invalid depth and stencil aspect
+  * tests: Add test for invalid depth and stencil aspect
+  * layers: Validate CreateComputePipeline derivatives
+  * tests: Test for invalid compute pipeline derivatives
+  * layers: Validate DepthStencilResolve format
+  * tests: Test DepthStencilResolve with invalid format
+  * layers: Validate SampleLocations
+  * tests: Test mismatched SampleLocations
+
+  [ Nathaniel Cesario ]
+  * tests: Allow usage of SPV_ENV_VULKAN* enums
+
+  [ sfricke-samsung ]
+  * tests: Shader tests use Vulkan Version enum
+
+  [ ziga-lunarg ]
+  * layers: Validate specialization for WorkGroupSize
+  * tests: Test invalid specialization for WorkGroupSize
+
+  [ sfricke-samsung ]
+  * layers: Clean up CreateDevice properties
+
+  [ ziga-lunarg ]
+  * layers: Validate CmdBindPipeline and transform feedback
+  * tests: Test CmdBindPipeline during transform feedback
+
+  [ Nathaniel Cesario ]
+  * layers: Fix API version number reporting
+
+  [ Jeremy Gebben ]
+  * build: Update robin-hood-hashing to 3.11.3
+
+  [ ziga-lunarg ]
+  * layers: Fix GetPhysicalDeviceVideoFormatPropertiesKHR return
+  * layers: Validate GetQueryPoolResults flags
+  * tests: Test GetQueryPoolResults flags
+  * layers: Validate beginning conditional rendering
+  * tests: Begin conditional rendering when already active
+
+  [ Tony-LunarG ]
+  * layers: Re-label Printf to stdout option
+
+  [ ziga-lunarg ]
+  * layers: Validate SparseImageMemoryBindInfo subresource
+  * tests: Test SparseImageMemoryBindInfo mipLevel and arrayLayer
+  * layers: Validate GetQueryPoolResults with results status only
+  * tests: Test invalid GetQueryPoolResults flags
+  * layers: Validate rasterizationStreams
+  * tests: Test PipelineRasterizationStateStreamCreateInfoEXT
+
+  [ Mike Schuchardt ]
+  * test: Remove uniform case from ShaderAtomicInt64
+  * repo: Update shader toolchain ahead of SDK
+  * layers: Re-enable CapabilityRayTracingMotionBlurNV
+
+  [ Jeremy Gebben ]
+  * layers: Clean up PIPELINE_LAYOUT_STATE
+
+  [ Nathaniel Cesario ]
+  * tests: Move googletest to known_good.json
+
+  [ ziga-lunarg ]
+  * layers: Validate sync2 feature is enabled if used
+  * tests: Test sync2 functions with feature disabled
+
+  [ sfricke-samsung ]
+  * layers: Add Atomic Float Features
+  * tests: Add Atomic Float Features
+
+  [ Nadav Geva ]
+  * docs: Fixes a few typos
+  * layers: Add AMD best practice layer options
+  * layers: AMD best practice layer
+  * tests: Tests for AMD's best practice layer
+  * docs: Adds AMD best practice layer env variable description
+
+  [ John Zupin ]
+  * packaging: update repository to reflect upstream
+
+ -- John Zupin <john@odin>  Fri, 27 Aug 2021 16:30:20 -0600
+
 vulkan-validationlayers (1.2.182.0~rc2-1lunarg20.04-1) focal; urgency=medium
 
   [ Ricardo Garcia ]
