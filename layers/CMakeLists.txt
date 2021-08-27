@@ -302,14 +302,6 @@ if(BUILD_LAYERS)
     endif()
     target_link_libraries(VkLayer_khronos_validation PRIVATE ${SPIRV_TOOLS_LIBRARIES})
 
-    # Force generation of the PDB file for Release builds.
-    # Note that CMake reduces optimization levels for RelWithDebInfo builds.
-    if(MSVC)
-        target_compile_options(VkLayer_khronos_validation PRIVATE "$<$<CONFIG:Release>:/Zi>")
-        # Need to use this instead of target_link_options for older versions of CMake.
-        target_link_libraries(VkLayer_khronos_validation PRIVATE "$<$<CONFIG:Release>:-DEBUG:FULL>")
-    endif()
-
     # The output file needs Unix "/" separators or Windows "\" separators On top of that, Windows separators actually need to be doubled
     # because the json format uses backslash escapes
     file(TO_NATIVE_PATH "./" RELATIVE_PATH_PREFIX)
