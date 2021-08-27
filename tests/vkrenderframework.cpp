@@ -40,9 +40,12 @@ typename C::iterator RemoveIf(C &container, F &&fn) {
     return container.erase(std::remove_if(container.begin(), container.end(), std::forward<F>(fn)), container.end());
 }
 
-ErrorMonitor::ErrorMonitor() {
+ErrorMonitor::ErrorMonitor(Behavior behavior) : behavior_(behavior) {
     test_platform_thread_create_mutex(&mutex_);
     MonitorReset();
+    if (behavior_ == Behavior::DefaultSuccess) {
+        ExpectSuccess(kErrorBit);
+    }
 }
 
 ErrorMonitor::~ErrorMonitor() NOEXCEPT { test_platform_thread_delete_mutex(&mutex_); }
@@ -67,6 +70,10 @@ void ErrorMonitor::Reset() {
 void ErrorMonitor::SetDesiredFailureMsg(const VkFlags msgFlags, const string msg) { SetDesiredFailureMsg(msgFlags, msg.c_str()); }
 
 void ErrorMonitor::SetDesiredFailureMsg(const VkFlags msgFlags, const char *const msgString) {
+    if (NeedCheckSuccess()) {
+        VerifyNotFound();
+    }
+
     test_platform_thread_lock_mutex(&mutex_);
     desired_message_strings_.insert(msgString);
     message_flags_ |= msgFlags;
@@ -80,6 +87,9 @@ void ErrorMonitor::SetAllowedFailureMsg(const char *const msg) {
 }
 
 void ErrorMonitor::SetUnexpectedError(const char *const msg) {
+    if (NeedCheckSuccess()) {
+        VerifyNotFound();
+    }
     test_platform_thread_lock_mutex(&mutex_);
     ignore_message_strings_.emplace_back(msg);
     test_platform_thread_unlock_mutex(&mutex_);
@@ -197,6 +207,10 @@ void ErrorMonitor::VerifyFound() {
     }
     MonitorReset();
     test_platform_thread_unlock_mutex(&mutex_);
+
+    if (behavior_ == Behavior::DefaultSuccess) {
+        ExpectSuccess();
+    }
 }
 
 void ErrorMonitor::VerifyNotFound() {
@@ -330,9 +344,10 @@ bool VkRenderFramework::InstanceLayerSupported(const char *const layer_name, con
 // Return true if extension name is found and spec value is >= requested spec value
 // WARNING: for simplicity, does not cover layers' extensions
 bool VkRenderFramework::InstanceExtensionSupported(const char *const extension_name, const uint32_t spec_version) {
-    // WARNING: assume debug extensions are always supported, which are usually provided by layers
+    // WARNING: assume debug and validation feature extensions are always supported, which are usually provided by layers
     if (0 == strncmp(extension_name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME, VK_MAX_EXTENSION_NAME_SIZE)) return true;
     if (0 == strncmp(extension_name, VK_EXT_DEBUG_REPORT_EXTENSION_NAME, VK_MAX_EXTENSION_NAME_SIZE)) return true;
+    if (0 == strncmp(extension_name, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME, VK_MAX_EXTENSION_NAME_SIZE)) return true;
 
     const auto extensions = vk_testing::GetGlobalExtensions();
 
@@ -443,6 +458,13 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
         }
     };
 
+    static bool driver_printed = false;
+    static bool print_driver_info = GetEnvironment("VK_LAYER_TESTS_PRINT_DRIVER") != "";
+    if (print_driver_info && !driver_printed &&
+        InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+
     RemoveIf(instance_layers_, LayerNotSupportedWithReporting);
     RemoveIf(instance_extensions_, ExtensionNotSupportedWithReporting);
 
@@ -504,15 +526,13 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
 
     debug_reporter_.Create(instance_);
 
-    static bool driver_printed = false;
-    if (GetEnvironment("VK_LAYER_TESTS_PRINT_DRIVER") != "" && !driver_printed) {
-        if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-            auto driver_properties = LvlInitStruct<VkPhysicalDeviceDriverProperties>();
-            auto physical_device_properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&driver_properties);
-            vk::GetPhysicalDeviceProperties2(gpu_, &physical_device_properties2);
-            printf("Driver Name = %s\n", driver_properties.driverName);
-            printf("Driver Info = %s\n", driver_properties.driverInfo);
-        }
+    if (print_driver_info && !driver_printed) {
+        auto driver_properties = LvlInitStruct<VkPhysicalDeviceDriverProperties>();
+        auto physical_device_properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&driver_properties);
+        vk::GetPhysicalDeviceProperties2(gpu_, &physical_device_properties2);
+        printf("Driver Name = %s\n", driver_properties.driverName);
+        printf("Driver Info = %s\n", driver_properties.driverInfo);
+
         driver_printed = true;
     }
 }
@@ -640,7 +660,9 @@ void VkRenderFramework::InitViewport(float width, float height) {
 
 void VkRenderFramework::InitViewport() { InitViewport(m_width, m_height); }
 
-bool VkRenderFramework::InitSurface() { return InitSurface(m_width, m_height); }
+bool VkRenderFramework::InitSurface() { return InitSurface(m_width, m_height, m_surface); }
+
+bool VkRenderFramework::InitSurface(float width, float height) { return InitSurface(width, height, m_surface); }
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -648,7 +670,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 #endif  // VK_USE_PLATFORM_WIN32_KHR
 
-bool VkRenderFramework::InitSurface(float width, float height) {
+bool VkRenderFramework::InitSurface(float width, float height, VkSurfaceKHR &surface) {
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
     HINSTANCE window_instance = GetModuleHandle(nullptr);
     const char class_name[] = "test";
@@ -664,7 +686,7 @@ bool VkRenderFramework::InitSurface(float width, float height) {
     surface_create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     surface_create_info.hinstance = window_instance;
     surface_create_info.hwnd = window;
-    VkResult err = vk::CreateWin32SurfaceKHR(instance(), &surface_create_info, nullptr, &m_surface);
+    VkResult err = vk::CreateWin32SurfaceKHR(instance(), &surface_create_info, nullptr, &surface);
     if (err != VK_SUCCESS) return false;
 #endif
 
@@ -727,6 +749,17 @@ void VkRenderFramework::InitSwapchainInfo() {
     if (present_mode_count != 0) {
         m_surface_present_modes.resize(present_mode_count);
         vk::GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, m_surface, &present_mode_count, m_surface_present_modes.data());
+
+        // Shared Present mode has different requirements most tests won't actually want
+        // Implementation required to support a non-shared present mode
+        for (size_t i = 0; i < m_surface_present_modes.size(); i++) {
+            const VkPresentModeKHR present_mode = m_surface_present_modes[i];
+            if ((present_mode != VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR) &&
+                (present_mode != VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR)) {
+                m_surface_non_shared_present_mode = present_mode;
+                break;
+            }
+        }
     }
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
@@ -745,6 +778,12 @@ bool VkRenderFramework::InitSwapchain(VkImageUsageFlags imageUsage, VkSurfaceTra
 
 bool VkRenderFramework::InitSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags imageUsage,
                                       VkSurfaceTransformFlagBitsKHR preTransform) {
+    return InitSwapchain(surface, imageUsage, preTransform, m_swapchain);
+}
+
+bool VkRenderFramework::InitSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags imageUsage,
+                                      VkSurfaceTransformFlagBitsKHR preTransform, VkSwapchainKHR &swapchain,
+                                      VkSwapchainKHR oldSwapchain) {
     InitSwapchainInfo();
 
     VkBool32 supported;
@@ -767,19 +806,19 @@ bool VkRenderFramework::InitSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags i
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapchain_create_info.preTransform = preTransform;
     swapchain_create_info.compositeAlpha = m_surface_composite_alpha;
-    swapchain_create_info.presentMode = m_surface_present_modes[0];
+    swapchain_create_info.presentMode = m_surface_non_shared_present_mode;
     swapchain_create_info.clipped = VK_FALSE;
-    swapchain_create_info.oldSwapchain = 0;
+    swapchain_create_info.oldSwapchain = oldSwapchain;
 
-    VkResult err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+    VkResult err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &swapchain);
     if (err != VK_SUCCESS) {
         return false;
     }
     uint32_t imageCount = 0;
-    vk::GetSwapchainImagesKHR(device(), m_swapchain, &imageCount, nullptr);
+    vk::GetSwapchainImagesKHR(device(), swapchain, &imageCount, nullptr);
     vector<VkImage> swapchainImages;
     swapchainImages.resize(imageCount);
-    vk::GetSwapchainImagesKHR(device(), m_swapchain, &imageCount, swapchainImages.data());
+    vk::GetSwapchainImagesKHR(device(), swapchain, &imageCount, swapchainImages.data());
     return true;
 }
 
@@ -872,7 +911,7 @@ void VkRenderFramework::InitRenderTarget(uint32_t targets, VkImageView *dsBindin
         att.loadOp = (m_clear_via_load_op) ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
         ;
         att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        att.stencilLoadOp = (m_clear_via_load_op) ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
         att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
         att.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         att.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1199,8 +1238,7 @@ VkRenderpassObj::VkRenderpassObj(VkDeviceObj *dev, const VkFormat format) {
     rpci.pAttachments = &attach_desc;
     rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 
-    device = dev->device();
-    vk::CreateRenderPass(device, &rpci, NULL, &m_renderpass);
+    init(*dev, rpci);
 }
 
 VkRenderpassObj::VkRenderpassObj(VkDeviceObj *dev, VkFormat format, bool depthStencil) {
@@ -1228,12 +1266,9 @@ VkRenderpassObj::VkRenderpassObj(VkDeviceObj *dev, VkFormat format, bool depthSt
         rpci.pAttachments = &attach_desc;
         rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 
-        device = dev->device();
-        vk::CreateRenderPass(device, &rpci, NULL, &m_renderpass);
+        init(*dev, rpci);
     }
 }
-
-VkRenderpassObj::~VkRenderpassObj() NOEXCEPT { vk::DestroyRenderPass(device, m_renderpass, NULL); }
 
 VkImageObj::VkImageObj(VkDeviceObj *dev) {
     m_device = dev;
@@ -1552,6 +1587,20 @@ void VkImageObj::init(const VkImageCreateInfo *create_info) {
     SetLayout(image_aspect, VK_IMAGE_LAYOUT_GENERAL);
 }
 
+bool VkImageObj::IsCompatibleCheck(const VkImageCreateInfo &create_info) {
+    VkFormatProperties image_fmt;
+    vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), create_info.format, &image_fmt);
+
+    switch (create_info.tiling) {
+        case VK_IMAGE_TILING_OPTIMAL:
+            return IsCompatible(create_info.usage, image_fmt.optimalTilingFeatures);
+        case VK_IMAGE_TILING_LINEAR:
+            return IsCompatible(create_info.usage, image_fmt.linearTilingFeatures);
+        default:
+            return true;
+    }
+}
+
 VkResult VkImageObj::CopyImage(VkImageObj &src_image) {
     VkImageLayout src_image_layout, dest_image_layout;
 
@@ -1785,7 +1834,7 @@ VkConstantBufferObj::VkConstantBufferObj(VkDeviceObj *device, VkDeviceSize alloc
 
 VkPipelineShaderStageCreateInfo const &VkShaderObj::GetStageCreateInfo() const { return m_stage_info; }
 
-VkShaderObj::VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char const *name, VkSpecializationInfo *specInfo)
+VkShaderObj::VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char const *name, const VkSpecializationInfo *specInfo)
     : m_device(device) {
     m_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     m_stage_info.pNext = nullptr;
@@ -1797,14 +1846,14 @@ VkShaderObj::VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char 
 }
 
 VkShaderObj::VkShaderObj(VkDeviceObj *device, const char *shader_code, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                         char const *name, bool debug, VkSpecializationInfo *specInfo, uint32_t spirv_minor_version)
+                         char const *name, bool debug, const VkSpecializationInfo *specInfo, const spv_target_env env)
     : VkShaderObj(*device, stage, name, specInfo) {
-    InitFromGLSL(*framework, shader_code, debug, spirv_minor_version);
+    InitFromGLSL(*framework, shader_code, debug, env);
 }
 
-bool VkShaderObj::InitFromGLSL(VkRenderFramework &framework, const char *shader_code, bool debug, uint32_t spirv_minor_version) {
+bool VkShaderObj::InitFromGLSL(VkRenderFramework &framework, const char *shader_code, bool debug, const spv_target_env env) {
     std::vector<unsigned int> spv;
-    framework.GLSLtoSPV(&m_device.props.limits, m_stage_info.stage, shader_code, spv, debug, spirv_minor_version);
+    framework.GLSLtoSPV(&m_device.props.limits, m_stage_info.stage, shader_code, spv, debug, env);
 
     VkShaderModuleCreateInfo moduleCreateInfo = {};
     moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1819,10 +1868,9 @@ bool VkShaderObj::InitFromGLSL(VkRenderFramework &framework, const char *shader_
 // Because shaders are currently validated at pipeline creation time, there are test cases that might fail shader module creation
 // due to supplying an invalid/unknown SPIR-V capability/operation. This is called after VkShaderObj creation when tests are found
 // to crash on a CI device
-VkResult VkShaderObj::InitFromGLSLTry(VkRenderFramework &framework, const char *shader_code, bool debug,
-                                      uint32_t spirv_minor_version) {
+VkResult VkShaderObj::InitFromGLSLTry(VkRenderFramework &framework, const char *shader_code, bool debug, const spv_target_env env) {
     std::vector<unsigned int> spv;
-    framework.GLSLtoSPV(&m_device.props.limits, m_stage_info.stage, shader_code, spv, debug, spirv_minor_version);
+    framework.GLSLtoSPV(&m_device.props.limits, m_stage_info.stage, shader_code, spv, debug, env);
 
     VkShaderModuleCreateInfo moduleCreateInfo = {};
     moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1835,7 +1883,7 @@ VkResult VkShaderObj::InitFromGLSLTry(VkRenderFramework &framework, const char *
 }
 
 VkShaderObj::VkShaderObj(VkDeviceObj *device, const string spv_source, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                         char const *name, VkSpecializationInfo *specInfo, const spv_target_env env)
+                         char const *name, const VkSpecializationInfo *specInfo, const spv_target_env env)
     : VkShaderObj(*device, stage, name, specInfo) {
     InitFromASM(*framework, spv_source, env);
 }
@@ -1854,9 +1902,9 @@ bool VkShaderObj::InitFromASM(VkRenderFramework &framework, const std::string &s
     return VK_NULL_HANDLE != handle();
 }
 
-VkResult VkShaderObj::InitFromASMTry(VkRenderFramework &framework, const std::string &spv_source) {
+VkResult VkShaderObj::InitFromASMTry(VkRenderFramework &framework, const std::string &spv_source, const spv_target_env spv_env) {
     vector<unsigned int> spv;
-    framework.ASMtoSPV(SPV_ENV_VULKAN_1_0, 0, spv_source.data(), spv);
+    framework.ASMtoSPV(spv_env, 0, spv_source.data(), spv);
 
     VkShaderModuleCreateInfo moduleCreateInfo = {};
     moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1866,6 +1914,29 @@ VkResult VkShaderObj::InitFromASMTry(VkRenderFramework &framework, const std::st
     const auto result = init_try(m_device, moduleCreateInfo);
     m_stage_info.module = handle();
     return result;
+}
+
+// static
+std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromGLSL(VkDeviceObj &dev, VkRenderFramework &framework,
+                                                         VkShaderStageFlagBits stage, const std::string &code,
+                                                         const char *entry_point, const VkSpecializationInfo *spec_info,
+                                                         const spv_target_env spv_env, bool debug) {
+    auto shader = layer_data::make_unique<VkShaderObj>(dev, stage, entry_point, spec_info);
+    if (VK_SUCCESS == shader->InitFromGLSLTry(framework, code.c_str(), debug, spv_env)) {
+        return shader;
+    }
+    return {};
+}
+
+// static
+std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromASM(VkDeviceObj &dev, VkRenderFramework &framework, VkShaderStageFlagBits stage,
+                                                        const std::string &code, const char *entry_point,
+                                                        const VkSpecializationInfo *spec_info, const spv_target_env spv_env) {
+    auto shader = layer_data::make_unique<VkShaderObj>(dev, stage, entry_point, spec_info);
+    if (VK_SUCCESS == shader->InitFromASMTry(framework, code.c_str(), spv_env)) {
+        return shader;
+    }
+    return {};
 }
 
 VkPipelineLayoutObj::VkPipelineLayoutObj(VkDeviceObj *device, const vector<const VkDescriptorSetLayoutObj *> &descriptor_layouts,
@@ -2199,8 +2270,8 @@ void VkCommandBufferObj::PrepareAttachments(const vector<std::unique_ptr<VkImage
     }
 }
 
-void VkCommandBufferObj::BeginRenderPass(const VkRenderPassBeginInfo &info) {
-    vk::CmdBeginRenderPass(handle(), &info, VK_SUBPASS_CONTENTS_INLINE);
+void VkCommandBufferObj::BeginRenderPass(const VkRenderPassBeginInfo &info, VkSubpassContents contents) {
+    vk::CmdBeginRenderPass(handle(), &info, contents);
 }
 
 void VkCommandBufferObj::EndRenderPass() { vk::CmdEndRenderPass(handle()); }

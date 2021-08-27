@@ -97,7 +97,7 @@ class SpirvValidationHelperOutputGenerator(OutputGenerator):
         # These 2 arrays SHOULD be empty when possible and when the SPIR-V Headers are updated these
         # should be attempted to be cleared
         self.extensionExcludeList = []
-        self.capabilityExcludeList = ['RayTracingMotionBlurNV']
+        self.capabilityExcludeList = []
 
         # This is a list that maps the Vulkan struct a feature field is with the internal
         # state tracker's enabled features value
@@ -120,14 +120,16 @@ class SpirvValidationHelperOutputGenerator(OutputGenerator):
             {'vulkan' : 'VkPhysicalDeviceRayTracingPipelineFeaturesKHR', 'layer' : 'ray_tracing_pipeline_features'},
             {'vulkan' : 'VkPhysicalDeviceAccelerationStructureFeaturesKHR', 'layer' : 'ray_tracing_acceleration_structure_features'},
             {'vulkan' : 'VkPhysicalDeviceFragmentDensityMapFeaturesEXT', 'layer' : 'fragment_density_map_features'},
-            {'vulkan' : 'VkPhysicalDeviceBufferDeviceAddressFeaturesEXT', 'layer' : 'buffer_device_address_ext'},
+            {'vulkan' : 'VkPhysicalDeviceBufferDeviceAddressFeaturesEXT', 'layer' : 'buffer_device_address_ext_features'},
             {'vulkan' : 'VkPhysicalDeviceFragmentShadingRateFeaturesKHR', 'layer' : 'fragment_shading_rate_features'},
             {'vulkan' : 'VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL', 'layer' : 'shader_integer_functions2_features'},
-            {'vulkan' : 'VkPhysicalDeviceShaderSMBuiltinsFeaturesNV', 'layer' : 'shader_sm_builtins_feature'},
-            {'vulkan' : 'VkPhysicalDeviceShadingRateImageFeaturesNV', 'layer' : 'shading_rate_image'},
-            {'vulkan' : 'VkPhysicalDeviceShaderAtomicFloatFeaturesEXT', 'layer' : 'shader_atomic_float_feature'},
-            {'vulkan' : 'VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT', 'layer' : 'shader_image_atomic_int64_feature'},
+            {'vulkan' : 'VkPhysicalDeviceShaderSMBuiltinsFeaturesNV', 'layer' : 'shader_sm_builtins_features'},
+            {'vulkan' : 'VkPhysicalDeviceShadingRateImageFeaturesNV', 'layer' : 'shading_rate_image_features'},
+            {'vulkan' : 'VkPhysicalDeviceShaderAtomicFloatFeaturesEXT', 'layer' : 'shader_atomic_float_features'},
+            {'vulkan' : 'VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT', 'layer' : 'shader_image_atomic_int64_features'},
             {'vulkan' : 'VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR', 'layer' : 'workgroup_memory_explicit_layout_features'},
+            {'vulkan' : 'VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT', 'layer' : 'shader_atomic_float2_features'},
+            {'vulkan' : 'VkPhysicalDeviceRayTracingMotionBlurFeaturesNV', 'layer' : 'ray_tracing_motion_blur_features'},
         ]
 
         # Promoted features structure in state_tracker.cpp are put in the VkPhysicalDeviceVulkan*Features structs
@@ -402,7 +404,9 @@ bool CoreChecks::ValidateShaderCapabilitiesAndExtensions(SHADER_MODULE_STATE con
                     has_support = true;
                 }
             } else if (it->second.extension) {
-                if (device_extensions.*(it->second.extension)) {
+                // kEnabledByApiLevel is not valid as some extension are promoted with feature bits to be used.
+                // If the new Api Level gives support, it will be caught in the "it->second.version" check instead.
+                if (device_extensions.*(it->second.extension) == kEnabledByCreateinfo) {
                     has_support = true;
                 }
             } else if (it->second.property) {

@@ -33,13 +33,13 @@ struct DeviceFeatures {
     VkPhysicalDeviceVulkan11Features core11;
     VkPhysicalDeviceVulkan12Features core12;
 
-    VkPhysicalDeviceExclusiveScissorFeaturesNV exclusive_scissor;
-    VkPhysicalDeviceShadingRateImageFeaturesNV shading_rate_image;
-    VkPhysicalDeviceMeshShaderFeaturesNV mesh_shader;
-    VkPhysicalDeviceInlineUniformBlockFeaturesEXT inline_uniform_block;
+    VkPhysicalDeviceExclusiveScissorFeaturesNV exclusive_scissor_features;
+    VkPhysicalDeviceShadingRateImageFeaturesNV shading_rate_image_features;
+    VkPhysicalDeviceMeshShaderFeaturesNV mesh_shader_features;
+    VkPhysicalDeviceInlineUniformBlockFeaturesEXT inline_uniform_block_features;
     VkPhysicalDeviceTransformFeedbackFeaturesEXT transform_feedback_features;
     VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT vtx_attrib_divisor_features;
-    VkPhysicalDeviceBufferDeviceAddressFeaturesEXT buffer_device_address_ext;
+    VkPhysicalDeviceBufferDeviceAddressFeaturesEXT buffer_device_address_ext_features;
     VkPhysicalDeviceCooperativeMatrixFeaturesNV cooperative_matrix_features;
     VkPhysicalDeviceComputeShaderDerivativesFeaturesNV compute_shader_derivatives_features;
     VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV fragment_shader_barycentric_features;
@@ -66,11 +66,11 @@ struct DeviceFeatures {
     VkPhysicalDevicePortabilitySubsetFeaturesKHR portability_subset_features;
     VkPhysicalDeviceFragmentShadingRateFeaturesKHR fragment_shading_rate_features;
     VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL shader_integer_functions2_features;
-    VkPhysicalDeviceShaderSMBuiltinsFeaturesNV shader_sm_builtins_feature;
-    VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shader_atomic_float_feature;
-    VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT shader_image_atomic_int64_feature;
-    VkPhysicalDeviceShaderClockFeaturesKHR shader_clock_feature;
-    VkPhysicalDeviceConditionalRenderingFeaturesEXT conditional_rendering;
+    VkPhysicalDeviceShaderSMBuiltinsFeaturesNV shader_sm_builtins_features;
+    VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shader_atomic_float_features;
+    VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT shader_image_atomic_int64_features;
+    VkPhysicalDeviceShaderClockFeaturesKHR shader_clock_features;
+    VkPhysicalDeviceConditionalRenderingFeaturesEXT conditional_rendering_features;
     VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR workgroup_memory_explicit_layout_features;
     VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2_features;
     VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extended_dynamic_state2_features;
@@ -78,6 +78,11 @@ struct DeviceFeatures {
     VkPhysicalDeviceInheritedViewportScissorFeaturesNV inherited_viewport_scissor_features;
     VkPhysicalDeviceProvokingVertexFeaturesEXT provoking_vertex_features;
     VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw_features;
+    VkPhysicalDeviceColorWriteEnableFeaturesEXT color_write_features;
+    VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT shader_atomic_float2_features;
+    VkPhysicalDevicePresentIdFeaturesKHR present_id_features;
+    VkPhysicalDevicePresentWaitFeaturesKHR present_wait_features;
+    VkPhysicalDeviceRayTracingMotionBlurFeaturesNV ray_tracing_motion_blur_features;
     // If a new feature is added here that involves a SPIR-V capability add also in spirv_validation_generator.py
     // This is known by checking the table in the spec or if the struct is in a <spirvcapability> in vk.xml
 };
@@ -104,36 +109,6 @@ class PHYSICAL_DEVICE_STATE {
     // TODO These are currently used by CoreChecks, but should probably be refactored
     bool vkGetPhysicalDeviceSurfaceCapabilitiesKHR_called = false;
     bool vkGetPhysicalDeviceDisplayPlanePropertiesKHR_called = false;
-};
-
-struct GpuQueue {
-    VkPhysicalDevice gpu;
-    uint32_t queue_family_index;
-};
-
-inline bool operator==(GpuQueue const& lhs, GpuQueue const& rhs) {
-    return (lhs.gpu == rhs.gpu && lhs.queue_family_index == rhs.queue_family_index);
-}
-
-namespace std {
-template <>
-struct hash<GpuQueue> {
-    size_t operator()(GpuQueue gq) const throw() {
-        return hash<uint64_t>()((uint64_t)(gq.gpu)) ^ hash<uint32_t>()(gq.queue_family_index);
-    }
-};
-}  // namespace std
-
-class SWAPCHAIN_NODE;
-
-class SURFACE_STATE : public BASE_NODE {
-  public:
-    SWAPCHAIN_NODE* swapchain = nullptr;
-    layer_data::unordered_map<GpuQueue, bool> gpu_queue_support;
-
-    SURFACE_STATE(VkSurfaceKHR s) : BASE_NODE(s, kVulkanObjectTypeSurfaceKHR) {}
-
-    VkSurfaceKHR surface() const { return handle_.Cast<VkSurfaceKHR>(); }
 };
 
 class DISPLAY_MODE_STATE : public BASE_NODE {

@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 # Author: Mark Lobodzinski <mark@lunarg.com>
+# Author: Nadav Geva <nadav.geva@amd.com>
 
 import os,re,sys,string,json
 import xml.etree.ElementTree as etree
@@ -119,10 +120,15 @@ class BestPracticesOutputGenerator(OutputGenerator):
             'vkGetPhysicalDeviceSurfaceFormatsKHR',
             'vkGetPhysicalDeviceSurfaceFormats2KHR',
             'vkGetPhysicalDeviceDisplayPlanePropertiesKHR',
-            'vkCreateSwapchainKHR',
             'vkGetSwapchainImagesKHR',
             'vkEnumeratePhysicalDevices',
             'vkCreateDevice',
+            # AMD tracked
+            'vkCreateComputePipelines',
+            'vkCmdPipelineBarrier',
+            'vkCreateFence',
+            'vkCreateSemaphore',
+            'vkQueueSubmit',
             ]
 
         self.extension_info = dict()
@@ -171,6 +177,7 @@ class BestPracticesOutputGenerator(OutputGenerator):
         copyright += ' * limitations under the License.\n'
         copyright += ' *\n'
         copyright += ' * Author: Mark Lobodzinski <mark@lunarg.com>\n'
+        copyright += ' * Author: Nadav Geva <nadav.geva@amd.com>\n'
         copyright += ' *\n'
         copyright += ' ****************************************************************************/\n'
         self.otwrite('both', copyright)
