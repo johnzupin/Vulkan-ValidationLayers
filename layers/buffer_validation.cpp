@@ -67,15 +67,15 @@ static const char *GetBufferImageCopyCommandVUID(std::string id, bool image_to_b
             "VUID-VkCopyImageToBufferInfo2KHR-bufferOffset-01559",
         }},
         {"00197", {
-            "VUID-vkCmdCopyBufferToImage-imageOffset-00197",
-            "VUID-vkCmdCopyImageToBuffer-imageOffset-00197",
-            "VUID-VkCopyBufferToImageInfo2KHR-imageOffset-00197",
+            "VUID-vkCmdCopyBufferToImage-pRegions-06218",
+            "VUID-vkCmdCopyImageToBuffer-pRegions-06221",
+            "VUID-VkCopyBufferToImageInfo2KHR-pRegions-06223",
             "VUID-VkCopyImageToBufferInfo2KHR-imageOffset-00197",
         }},
         {"00198", {
-            "VUID-vkCmdCopyBufferToImage-imageOffset-00198",
-            "VUID-vkCmdCopyImageToBuffer-imageOffset-00198",
-            "VUID-VkCopyBufferToImageInfo2KHR-imageOffset-00198",
+            "VUID-vkCmdCopyBufferToImage-pRegions-06219",
+            "VUID-vkCmdCopyImageToBuffer-pRegions-06222",
+            "VUID-VkCopyBufferToImageInfo2KHR-pRegions-06224",
             "VUID-VkCopyImageToBufferInfo2KHR-imageOffset-00198",
         }},
         {"00199", {
@@ -177,39 +177,34 @@ static const char *GetBufferImageCopyCommandVUID(std::string id, bool image_to_b
     return copy_imagebuffer_vuid.at(id).at(index);
 }
 
-// Transfer VkImageSubresourceRange into VkImageSubresourceLayers struct
-static VkImageSubresourceLayers LayersFromRange(const VkImageSubresourceRange &subresource_range) {
-    VkImageSubresourceLayers subresource_layers;
-    subresource_layers.aspectMask = subresource_range.aspectMask;
-    subresource_layers.baseArrayLayer = subresource_range.baseArrayLayer;
-    subresource_layers.layerCount = subresource_range.layerCount;
-    subresource_layers.mipLevel = subresource_range.baseMipLevel;
-    return subresource_layers;
-}
-
-// Transfer VkImageSubresourceLayers into VkImageSubresourceRange struct
-static VkImageSubresourceRange RangeFromLayers(const VkImageSubresourceLayers &subresource_layers) {
-    VkImageSubresourceRange subresource_range;
-    subresource_range.aspectMask = subresource_layers.aspectMask;
-    subresource_range.baseArrayLayer = subresource_layers.baseArrayLayer;
-    subresource_range.layerCount = subresource_layers.layerCount;
-    subresource_range.baseMipLevel = subresource_layers.mipLevel;
-    subresource_range.levelCount = 1;
-    return subresource_range;
-}
-
-static VkImageLayout NormalizeImageLayout(VkImageLayout layout, VkImageLayout non_normal, VkImageLayout normal) {
-    return (layout == non_normal) ? normal : layout;
-}
-
 static VkImageLayout NormalizeDepthImageLayout(VkImageLayout layout) {
-    return NormalizeImageLayout(layout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-                                VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL);
+    switch (layout) {
+        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
+        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
+            return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
+
+        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+        case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
+            return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+
+        default:
+            return layout;
+    }
 }
 
 static VkImageLayout NormalizeStencilImageLayout(VkImageLayout layout) {
-    return NormalizeImageLayout(layout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-                                VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL);
+    switch (layout) {
+        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
+        case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
+            return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
+
+        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
+            return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+
+        default:
+            return layout;
+    }
 }
 
 static VkImageLayout NormalizeSynchronization2Layout(const VkImageAspectFlags aspect_mask, VkImageLayout layout) {
@@ -244,8 +239,12 @@ static bool ImageLayoutMatches(const VkImageAspectFlags aspect_mask, VkImageLayo
         b = NormalizeSynchronization2Layout(aspect_mask, b);
         matches = (a == b);
         if (!matches) {
-            // Relaxed rules when referencing *only* the depth or stencil aspects
-            if (aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT) {
+            // Relaxed rules when referencing *only* the depth or stencil aspects.
+            // When accessing both, normalize layouts for aspects separately.
+            if (aspect_mask == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
+                matches = NormalizeDepthImageLayout(a) == NormalizeDepthImageLayout(b) &&
+                          NormalizeStencilImageLayout(a) == NormalizeStencilImageLayout(b);
+            } else if (aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT) {
                 matches = NormalizeDepthImageLayout(a) == NormalizeDepthImageLayout(b);
             } else if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT) {
                 matches = NormalizeStencilImageLayout(a) == NormalizeStencilImageLayout(b);
@@ -351,88 +350,6 @@ bool CoreChecks::FindLayouts(const IMAGE_STATE &image_state, std::vector<VkImage
         layouts.push_back(entry.second);
     }
     return true;
-}
-
-// Set image layout for given VkImageSubresourceRange struct
-void CoreChecks::SetImageLayout(CMD_BUFFER_STATE *cb_node, const IMAGE_STATE &image_state,
-                                const VkImageSubresourceRange &image_subresource_range, VkImageLayout layout,
-                                VkImageLayout expected_layout) {
-    auto *subresource_map = cb_node->GetImageSubresourceLayoutMap(image_state);
-    assert(subresource_map);  // the non-const getter must return a valid pointer
-    if (subresource_map->SetSubresourceRangeLayout(*cb_node, image_subresource_range, layout, expected_layout)) {
-        cb_node->image_layout_change_count++;  // Change the version of this data to force revalidation
-    }
-    for (const auto *alias_state : image_state.aliasing_images) {
-        assert(alias_state);
-        // The map state of the aliases should all be in sync, so no need to check the return value
-        subresource_map = cb_node->GetImageSubresourceLayoutMap(*alias_state);
-        assert(subresource_map);
-        subresource_map->SetSubresourceRangeLayout(*cb_node, image_subresource_range, layout, expected_layout);
-    }
-}
-
-// Set the initial image layout for all slices of an image view
-void CoreChecks::SetImageViewInitialLayout(CMD_BUFFER_STATE *cb_node, const IMAGE_VIEW_STATE &view_state, VkImageLayout layout) {
-    if (disabled[image_layout_validation]) {
-        return;
-    }
-    IMAGE_STATE *image_state = view_state.image_state.get();
-    auto *subresource_map = cb_node->GetImageSubresourceLayoutMap(*image_state);
-    subresource_map->SetSubresourceRangeInitialLayout(*cb_node, layout, view_state);
-    for (const auto *alias_state : image_state->aliasing_images) {
-        assert(alias_state);
-        subresource_map = cb_node->GetImageSubresourceLayoutMap(*alias_state);
-        subresource_map->SetSubresourceRangeInitialLayout(*cb_node, layout, view_state);
-    }
-}
-
-// Set the initial image layout for a passed non-normalized subresource range
-void CoreChecks::SetImageInitialLayout(CMD_BUFFER_STATE *cb_node, const IMAGE_STATE &image_state,
-                                       const VkImageSubresourceRange &range, VkImageLayout layout) {
-    auto *subresource_map = cb_node->GetImageSubresourceLayoutMap(image_state);
-    assert(subresource_map);
-    subresource_map->SetSubresourceRangeInitialLayout(*cb_node, image_state.NormalizeSubresourceRange(range), layout);
-    for (const auto *alias_state : image_state.aliasing_images) {
-        assert(alias_state);
-        subresource_map = cb_node->GetImageSubresourceLayoutMap(*alias_state);
-        assert(subresource_map);
-        subresource_map->SetSubresourceRangeInitialLayout(*cb_node, alias_state->NormalizeSubresourceRange(range), layout);
-    }
-}
-
-void CoreChecks::SetImageInitialLayout(CMD_BUFFER_STATE *cb_node, VkImage image, const VkImageSubresourceRange &range,
-                                       VkImageLayout layout) {
-    const IMAGE_STATE *image_state = GetImageState(image);
-    if (!image_state) return;
-    SetImageInitialLayout(cb_node, *image_state, range, layout);
-};
-
-void CoreChecks::SetImageInitialLayout(CMD_BUFFER_STATE *cb_node, const IMAGE_STATE &image_state,
-                                       const VkImageSubresourceLayers &layers, VkImageLayout layout) {
-    SetImageInitialLayout(cb_node, image_state, RangeFromLayers(layers), layout);
-}
-
-// Set image layout for all slices of an image view
-void CoreChecks::SetImageViewLayout(CMD_BUFFER_STATE *cb_node, const IMAGE_VIEW_STATE &view_state, VkImageLayout layout,
-                                    VkImageLayout layoutStencil) {
-    IMAGE_STATE *image_state = view_state.image_state.get();
-
-    VkImageSubresourceRange sub_range = view_state.normalized_subresource_range;
-    // When changing the layout of a 3D image subresource via a 2D or 2D_ARRRAY image view, all depth slices of
-    // the subresource mip level(s) are transitioned, ignoring any layers restriction in the subresource info.
-    if ((image_state->createInfo.imageType == VK_IMAGE_TYPE_3D) && (view_state.create_info.viewType != VK_IMAGE_VIEW_TYPE_3D)) {
-        sub_range.baseArrayLayer = 0;
-        sub_range.layerCount = image_state->createInfo.extent.depth;
-    }
-
-    if (sub_range.aspectMask == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) && layoutStencil != kInvalidLayout) {
-        sub_range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        SetImageLayout(cb_node, *image_state, sub_range, layout);
-        sub_range.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-        SetImageLayout(cb_node, *image_state, sub_range, layoutStencil);
-    } else {
-        SetImageLayout(cb_node, *image_state, sub_range, layout);
-    }
 }
 
 bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(RenderPassCreateVersion rp_version, VkImageLayout layout,
@@ -631,37 +548,56 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(RenderPassCreateVersion r
                 attachment_stencil_initial_layout = attachment_description_stencil_layout->stencilInitialLayout;
             }
 
-            // Cast pCB to const because we don't want to create entries that don't exist here (in case the key changes to something
-            // in common with the non-const version.)
-            const ImageSubresourceLayoutMap *subresource_map = (attachment_initial_layout != VK_IMAGE_LAYOUT_UNDEFINED)
-                                                                   ? const_p_cb->GetImageSubresourceLayoutMap(image)
-                                                                   : nullptr;
+            const ImageSubresourceLayoutMap *subresource_map = nullptr;
+            bool has_queried_map = false;
+            bool subres_skip = false;
 
-            if (subresource_map) {  // If no layout information for image yet, will be checked at QueueSubmit time
-                LayoutUseCheckAndMessage layout_check(subresource_map);
-                bool subres_skip = false;
-                auto pos = subresource_map->Find(view_state->normalized_subresource_range);
-                // IncrementInterval skips over all the subresources that have the same state as we just checked, incrementing to
-                // the next "constant value" range
-                for (; !(pos.AtEnd()) && !subres_skip; pos.IncrementInterval()) {
-                    const VkImageSubresource &subres = pos->subresource;
-
-                    // Allow for differing depth and stencil layouts
-                    VkImageLayout check_layout = attachment_initial_layout;
-                    if (subres.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) check_layout = attachment_stencil_initial_layout;
-
-                    if (!layout_check.Check(subres, check_layout, pos->current_layout, pos->initial_layout)) {
-                        subres_skip |= LogError(
-                            device, kVUID_Core_DrawState_InvalidRenderpass,
-                            "You cannot start a render pass using attachment %u where the render pass initial layout is %s "
-                            "and the %s layout of the attachment is %s. The layouts must match, or the render "
-                            "pass initial layout for the attachment must be VK_IMAGE_LAYOUT_UNDEFINED",
-                            i, string_VkImageLayout(check_layout), layout_check.message, string_VkImageLayout(layout_check.layout));
-                    }
+            for (uint32_t aspect_index = 0; aspect_index < 32; aspect_index++) {
+                VkImageAspectFlags test_aspect = 1u << aspect_index;
+                if ((view_state->normalized_subresource_range.aspectMask & test_aspect) == 0) {
+                    continue;
                 }
 
-                skip |= subres_skip;
+                // Allow for differing depth and stencil layouts
+                VkImageLayout check_layout = attachment_initial_layout;
+                if (test_aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
+                    check_layout = attachment_stencil_initial_layout;
+                }
+
+                if (check_layout != VK_IMAGE_LAYOUT_UNDEFINED) {  // If no layout information for image yet, will be checked at QueueSubmit time
+                    if (!has_queried_map) {
+                        // Cast pCB to const because we don't want to create entries that don't exist here (in case the key changes to something
+                        // in common with the non-const version.)
+                        // The lookup is expensive, so cache it.
+                        subresource_map = const_p_cb->GetImageSubresourceLayoutMap(image);
+                        has_queried_map = true;
+                    }
+
+                    if (subresource_map) {
+                        auto normalized_range = view_state->normalized_subresource_range;
+                        normalized_range.aspectMask = test_aspect;
+                        auto pos = subresource_map->Find(normalized_range);
+                        LayoutUseCheckAndMessage layout_check(subresource_map, test_aspect);
+
+                        // IncrementInterval skips over all the subresources that have the same state as we just checked, incrementing to the next "constant value" range
+                        for (; !(pos.AtEnd()) && !subres_skip; pos.IncrementInterval()) {
+                            const VkImageSubresource &subres = pos->subresource;
+
+                            if (!layout_check.Check(subres, check_layout, pos->current_layout, pos->initial_layout)) {
+                                subres_skip |= LogError(
+                                    device, kVUID_Core_DrawState_InvalidRenderpass,
+                                    "You cannot start a render pass using attachment %u where the render pass initial layout is %s "
+                                    "and the %s layout of the attachment is %s. The layouts must match, or the render "
+                                    "pass initial layout for the attachment must be VK_IMAGE_LAYOUT_UNDEFINED",
+                                    i, string_VkImageLayout(check_layout), layout_check.message,
+                                    string_VkImageLayout(layout_check.layout));
+                            }
+                        }
+                    }
+                }
             }
+
+            skip |= subres_skip;
 
             ValidateRenderPassLayoutAgainstFramebufferImageUsage(rp_version, attachment_initial_layout, image, image_view,
                                                                  framebuffer, render_pass, i, "initial layout");
@@ -737,7 +673,7 @@ void CoreChecks::TransitionAttachmentRefLayout(CMD_BUFFER_STATE *pCB, FRAMEBUFFE
                 stencil_layout = attachment_reference_stencil_layout->stencilLayout;
             }
 
-            SetImageViewLayout(pCB, *image_view, ref.layout, stencil_layout);
+            pCB->SetImageViewLayout(*image_view, ref.layout, stencil_layout);
         }
     }
 }
@@ -778,11 +714,11 @@ void CoreChecks::TransitionBeginRenderPassLayouts(CMD_BUFFER_STATE *cb_state, co
                 const auto stencil_initial_layout = attachment_description_stencil_layout->stencilInitialLayout;
                 VkImageSubresourceRange sub_range = view_state->normalized_subresource_range;
                 sub_range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-                SetImageInitialLayout(cb_state, *image_state, sub_range, initial_layout);
+                cb_state->SetImageInitialLayout(*image_state, sub_range, initial_layout);
                 sub_range.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-                SetImageInitialLayout(cb_state, *image_state, sub_range, stencil_initial_layout);
+                cb_state->SetImageInitialLayout(*image_state, sub_range, stencil_initial_layout);
             } else {
-                SetImageInitialLayout(cb_state, *image_state, view_state->normalized_subresource_range, initial_layout);
+                cb_state->SetImageInitialLayout(*image_state, view_state->normalized_subresource_range, initial_layout);
             }
         }
     }
@@ -977,23 +913,35 @@ bool CoreChecks::ValidateBarriersToImages(const Location &outer_loc, const CMD_B
                 // subresource.
             } else if (subresource_map && !QueueFamilyIsExternal(img_barrier.srcQueueFamilyIndex)) {
                 bool subres_skip = false;
-                LayoutUseCheckAndMessage layout_check(subresource_map);
-                auto normalized_isr = image_state->NormalizeSubresourceRange(img_barrier.subresourceRange);
-                // IncrementInterval skips over all the subresources that have the same state as we just checked, incrementing to
-                // the next "constant value" range
-                for (auto pos = subresource_map->Find(normalized_isr); !(pos.AtEnd()) && !subres_skip; pos.IncrementInterval()) {
-                    const auto &value = *pos;
-                    auto old_layout =
-                        NormalizeSynchronization2Layout(img_barrier.subresourceRange.aspectMask, img_barrier.oldLayout);
-                    if (!layout_check.Check(value.subresource, old_layout, value.current_layout, value.initial_layout)) {
-                        const auto &vuid = GetImageBarrierVUID(loc, ImageError::kConflictingLayout);
-                        subres_skip = LogError(cb_state->commandBuffer(), vuid,
-                                               "%s %s cannot transition the layout of aspect=%d level=%d layer=%d from %s when the "
-                                               "%s layout is %s.",
-                                               loc.Message().c_str(), report_data->FormatHandle(img_barrier.image).c_str(),
-                                               value.subresource.aspectMask, value.subresource.mipLevel,
-                                               value.subresource.arrayLayer, string_VkImageLayout(img_barrier.oldLayout),
-                                               layout_check.message, string_VkImageLayout(layout_check.layout));
+
+                // Validate aspects in isolation.
+                // This is required when handling separate depth-stencil layouts.
+                for (uint32_t aspect_index = 0; aspect_index < 32; aspect_index++) {
+                    VkImageAspectFlags test_aspect = 1u << aspect_index;
+                    if ((img_barrier.subresourceRange.aspectMask & test_aspect) == 0) {
+                        continue;
+                    }
+
+                    LayoutUseCheckAndMessage layout_check(subresource_map, test_aspect);
+                    auto normalized_isr = image_state->NormalizeSubresourceRange(img_barrier.subresourceRange);
+                    normalized_isr.aspectMask = test_aspect;
+
+                    // IncrementInterval skips over all the subresources that have the same state as we just checked, incrementing to the next "constant value" range
+                    for (auto pos = subresource_map->Find(normalized_isr); !(pos.AtEnd()) && !subres_skip; pos.IncrementInterval()) {
+                        const auto &value = *pos;
+                        auto old_layout =
+                            NormalizeSynchronization2Layout(test_aspect, img_barrier.oldLayout);
+                        if (!layout_check.Check(value.subresource, old_layout, value.current_layout, value.initial_layout)) {
+                            const auto &vuid = GetImageBarrierVUID(loc, ImageError::kConflictingLayout);
+                            subres_skip =
+                                LogError(cb_state->commandBuffer(), vuid,
+                                         "%s %s cannot transition the layout of aspect=%d level=%d layer=%d from %s when the "
+                                         "%s layout is %s.",
+                                         loc.Message().c_str(), report_data->FormatHandle(img_barrier.image).c_str(),
+                                         value.subresource.aspectMask, value.subresource.mipLevel, value.subresource.arrayLayer,
+                                         string_VkImageLayout(img_barrier.oldLayout), layout_check.message,
+                                         string_VkImageLayout(layout_check.layout));
+                        }
                     }
                 }
                 skip |= subres_skip;
@@ -1444,15 +1392,6 @@ void CoreChecks::RecordTransitionImageLayout(CMD_BUFFER_STATE *cb_state, const I
         }
     }
     auto normalized_isr = image_state->NormalizeSubresourceRange(mem_barrier.subresourceRange);
-    const auto &image_create_info = image_state->createInfo;
-
-    // Special case for 3D images with VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT flag bit, where <extent.depth> and
-    // <arrayLayers> can potentially alias.  When recording layout for the entire image, pre-emptively record layouts
-    // for all (potential) layer sub_resources.
-    if (0 != (image_create_info.flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)) {
-        normalized_isr.baseArrayLayer = 0;
-        normalized_isr.layerCount = image_create_info.extent.depth;  // Treat each depth slice as a layer subresource
-    }
 
     VkImageLayout initial_layout = NormalizeSynchronization2Layout(mem_barrier.subresourceRange.aspectMask, mem_barrier.oldLayout);
     VkImageLayout new_layout = NormalizeSynchronization2Layout(mem_barrier.subresourceRange.aspectMask, mem_barrier.newLayout);
@@ -1463,9 +1402,9 @@ void CoreChecks::RecordTransitionImageLayout(CMD_BUFFER_STATE *cb_state, const I
     }
 
     if (is_release_op) {
-        SetImageInitialLayout(cb_state, *image_state, normalized_isr, initial_layout);
+        cb_state->SetImageInitialLayout(*image_state, normalized_isr, initial_layout);
     } else {
-        SetImageLayout(cb_state, *image_state, normalized_isr, new_layout, initial_layout);
+        cb_state->SetImageLayout(*image_state, normalized_isr, new_layout, initial_layout);
     }
 }
 
@@ -1551,7 +1490,7 @@ void CoreChecks::TransitionFinalSubpassLayouts(CMD_BUFFER_STATE *pCB, const VkRe
                 if (attachment_description_stencil_layout) {
                     stencil_layout = attachment_description_stencil_layout->stencilFinalLayout;
                 }
-                SetImageViewLayout(pCB, *view_state, render_pass_info->pAttachments[i].finalLayout, stencil_layout);
+                pCB->SetImageViewLayout(*view_state, render_pass_info->pAttachments[i].finalLayout, stencil_layout);
             }
         }
     }
@@ -1642,7 +1581,7 @@ bool CoreChecks::ValidateCreateImageViewANDROID(const VkImageViewCreateInfo *cre
     bool skip = false;
     const IMAGE_STATE *image_state = GetImageState(create_info->image);
 
-    if (image_state->has_ahb_format) {
+    if (image_state->HasAHBFormat()) {
         if (VK_FORMAT_UNDEFINED != create_info->format) {
             skip |= LogError(create_info->image, "VUID-VkImageViewCreateInfo-image-02399",
                              "vkCreateImageView(): VkImageViewCreateInfo struct has a chained VkExternalFormatANDROID struct, but "
@@ -1655,10 +1594,10 @@ bool CoreChecks::ValidateCreateImageViewANDROID(const VkImageViewCreateInfo *cre
         uint64_t external_format = 0;
         const VkSamplerYcbcrConversionInfo *ycbcr_conv_info = LvlFindInChain<VkSamplerYcbcrConversionInfo>(create_info->pNext);
         if (ycbcr_conv_info != nullptr) {
-            VkSamplerYcbcrConversion conv_handle = ycbcr_conv_info->conversion;
-            if (ycbcr_conversion_ahb_fmt_map.find(conv_handle) != ycbcr_conversion_ahb_fmt_map.end()) {
+            auto ycbcr_state = GetSamplerYcbcrConversionState(ycbcr_conv_info->conversion);
+            if (ycbcr_state) {
                 conv_found = true;
-                external_format = ycbcr_conversion_ahb_fmt_map.at(conv_handle);
+                external_format = ycbcr_state->external_format;
             }
         }
         if ((!conv_found) || (external_format != image_state->ahb_format)) {
@@ -1690,7 +1629,7 @@ bool CoreChecks::ValidateGetImageSubresourceLayoutANDROID(const VkImage image) c
 
     const IMAGE_STATE *image_state = GetImageState(image);
     if (image_state != nullptr) {
-        if (image_state->external_ahb && (0 == image_state->GetBoundMemory().size())) {
+        if (image_state->IsExternalAHB() && (0 == image_state->GetBoundMemory().size())) {
             skip |= LogError(image, "VUID-vkGetImageSubresourceLayout-image-01895",
                              "vkGetImageSubresourceLayout(): Attempt to query layout from an image created with "
                              "VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID handleType which has not yet been "
@@ -1800,13 +1739,6 @@ bool CoreChecks::PreCallValidateCreateImage(VkDevice device, const VkImageCreate
                              "vkCreateImage(): Image type must be VK_IMAGE_TYPE_2D when VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT "
                              "flag bit is set");
         }
-
-        if ((pCreateInfo->extent.width != pCreateInfo->extent.height) || (pCreateInfo->arrayLayers < 6)) {
-            skip |= LogError(device, "VUID-VkImageCreateInfo-imageType-00954",
-                             "vkCreateImage(): If VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT flag bit is set, width (%d) must equal "
-                             "height (%d) and arrayLayers (%d) must be >= 6.",
-                             pCreateInfo->extent.width, pCreateInfo->extent.height, pCreateInfo->arrayLayers);
-        }
     }
 
     const VkPhysicalDeviceLimits *device_limits = &phys_dev_props.limits;
@@ -1826,7 +1758,15 @@ bool CoreChecks::PreCallValidateCreateImage(VkDevice device, const VkImageCreate
                          pCreateInfo->extent.height, device_limits->maxFramebufferHeight);
     }
 
-    if (device_extensions.vk_ext_fragment_density_map || device_extensions.vk_ext_fragment_density_map_2) {
+    VkImageCreateFlags sparseFlags =
+        VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_IMAGE_CREATE_SPARSE_ALIASED_BIT;
+    if ((pCreateInfo->flags & sparseFlags) && (pCreateInfo->usage & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT)) {
+        skip |= LogError(
+            device, "VUID-VkImageCreateInfo-None-01925",
+            "vkCreateImage(): images using sparse memory cannot have VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT set");
+    }
+
+    if (device_extensions.vk_ext_fragment_density_map || device_extensions.vk_ext_fragment_density_map2) {
         uint32_t ceiling_width = static_cast<uint32_t>(ceil(
             static_cast<float>(device_limits->maxFramebufferWidth) /
             std::max(static_cast<float>(phys_dev_ext_props.fragment_density_map_props.minFragmentDensityTexelSize.width), 1.0f)));
@@ -2023,9 +1963,10 @@ bool CoreChecks::PreCallValidateCreateImage(VkDevice device, const VkImageCreate
     }
 
     if (pCreateInfo->sharingMode == VK_SHARING_MODE_CONCURRENT && pCreateInfo->pQueueFamilyIndices) {
+        const char *vuid = device_extensions.vk_khr_get_physical_device_properties2 ? "VUID-VkImageCreateInfo-sharingMode-01420"
+                                                                                    : "VUID-VkImageCreateInfo-sharingMode-01392";
         skip |= ValidatePhysicalDeviceQueueFamilies(pCreateInfo->queueFamilyIndexCount, pCreateInfo->pQueueFamilyIndices,
-                                                    "vkCreateImage", "pCreateInfo->pQueueFamilyIndices",
-                                                    "VUID-VkImageCreateInfo-sharingMode-01420");
+                                                    "vkCreateImage", "pCreateInfo->pQueueFamilyIndices", vuid);
     }
 
     if (!FormatIsMultiplane(pCreateInfo->format) && !(pCreateInfo->flags & VK_IMAGE_CREATE_ALIAS_BIT) &&
@@ -2101,6 +2042,24 @@ bool CoreChecks::PreCallValidateCreateImage(VkDevice device, const VkImageCreate
         }
     }
 
+    const auto external_memory_create_info_nv = LvlFindInChain<VkExternalMemoryImageCreateInfoNV>(pCreateInfo->pNext);
+    if (external_memory_create_info_nv != nullptr) {
+        const auto external_memory_create_info = LvlFindInChain<VkExternalMemoryImageCreateInfo>(pCreateInfo->pNext);
+        if (external_memory_create_info != nullptr) {
+            skip |= LogError(device, "VUID-VkImageCreateInfo-pNext-00988",
+                             "vkCreateImage(): VkImageCreateInfo struct has both VkExternalMemoryImageCreateInfoNV and "
+                             "VkExternalMemoryImageCreateInfo chained structs.");
+        }
+    }
+
+    if (device_group_create_info.physicalDeviceCount == 1) {
+        if (pCreateInfo->flags & VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT) {
+            skip |= LogError(device, "VUID-VkImageCreateInfo-physicalDeviceCount-01421",
+                             "vkCreateImage: Device was created with VkDeviceGroupDeviceCreateInfo::physicalDeviceCount 1, but "
+                             "flags contain VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT bit.");
+        }
+    }
+
     return skip;
 }
 
@@ -2117,9 +2076,8 @@ bool CoreChecks::PreCallValidateDestroyImage(VkDevice device, VkImage image, con
     const IMAGE_STATE *image_state = GetImageState(image);
     bool skip = false;
     if (image_state) {
-        if (image_state->is_swapchain_image) {
-            // TODO - Add VUID when headers are upstreamed
-            skip |= LogError(device, "UNASSIGNED-vkDestroyImage-image",
+        if (image_state->IsSwapchainImage()) {
+            skip |= LogError(device, "VUID-vkDestroyImage-image-04882",
                              "vkDestroyImage(): %s is a presentable image and it is controlled by the implementation and is "
                              "destroyed with vkDestroySwapchainKHR.",
                              report_data->FormatHandle(image_state->image()).c_str());
@@ -2271,7 +2229,7 @@ void CoreChecks::PreCallRecordCmdClearColorImage(VkCommandBuffer commandBuffer, 
     auto image_state = GetImageState(image);
     if (cb_node && image_state) {
         for (uint32_t i = 0; i < rangeCount; ++i) {
-            SetImageInitialLayout(cb_node, image, pRanges[i], imageLayout);
+            cb_node->SetImageInitialLayout(image, pRanges[i], imageLayout);
         }
     }
 }
@@ -2399,7 +2357,7 @@ void CoreChecks::PreCallRecordCmdClearDepthStencilImage(VkCommandBuffer commandB
     auto image_state = GetImageState(image);
     if (cb_node && image_state) {
         for (uint32_t i = 0; i < rangeCount; ++i) {
-            SetImageInitialLayout(cb_node, image, pRanges[i], imageLayout);
+            cb_node->SetImageInitialLayout(image, pRanges[i], imageLayout);
         }
     }
 }
@@ -3335,8 +3293,8 @@ void CoreChecks::PreCallRecordCmdCopyImage(VkCommandBuffer commandBuffer, VkImag
 
     // Make sure that all image slices are updated to correct layout
     for (uint32_t i = 0; i < regionCount; ++i) {
-        SetImageInitialLayout(cb_node, *src_image_state, pRegions[i].srcSubresource, srcImageLayout);
-        SetImageInitialLayout(cb_node, *dst_image_state, pRegions[i].dstSubresource, dstImageLayout);
+        cb_node->SetImageInitialLayout(*src_image_state, pRegions[i].srcSubresource, srcImageLayout);
+        cb_node->SetImageInitialLayout(*dst_image_state, pRegions[i].dstSubresource, dstImageLayout);
     }
 }
 
@@ -3348,10 +3306,10 @@ void CoreChecks::PreCallRecordCmdCopyImage2KHR(VkCommandBuffer commandBuffer, co
 
     // Make sure that all image slices are updated to correct layout
     for (uint32_t i = 0; i < pCopyImageInfo->regionCount; ++i) {
-        SetImageInitialLayout(cb_node, *src_image_state, pCopyImageInfo->pRegions[i].srcSubresource,
-                              pCopyImageInfo->srcImageLayout);
-        SetImageInitialLayout(cb_node, *dst_image_state, pCopyImageInfo->pRegions[i].dstSubresource,
-                              pCopyImageInfo->dstImageLayout);
+        cb_node->SetImageInitialLayout(*src_image_state, pCopyImageInfo->pRegions[i].srcSubresource,
+                                       pCopyImageInfo->srcImageLayout);
+        cb_node->SetImageInitialLayout(*dst_image_state, pCopyImageInfo->pRegions[i].dstSubresource,
+                                       pCopyImageInfo->dstImageLayout);
     }
 }
 
@@ -3389,7 +3347,7 @@ bool CoreChecks::ValidateClearAttachmentExtent(VkCommandBuffer command_buffer, u
         if (image_view_state) {
             // The layers specified by a given element of pRects must be contained within every attachment that
             // pAttachments refers to
-            const auto attachment_layer_count = image_view_state->create_info.subresourceRange.layerCount;
+            const auto attachment_layer_count = image_view_state->normalized_subresource_range.layerCount;
             if ((clear_rects[j].baseArrayLayer >= attachment_layer_count) ||
                 (clear_rects[j].baseArrayLayer + clear_rects[j].layerCount > attachment_layer_count)) {
                 skip |= LogError(command_buffer, "VUID-vkCmdClearAttachments-pRects-00017",
@@ -3514,6 +3472,18 @@ bool CoreChecks::PreCallValidateCmdClearAttachments(VkCommandBuffer commandBuffe
                                                    "VUID-vkCmdClearAttachments-commandBuffer-02504");
                     skip |= ValidateUnprotectedImage(cb_node, image_view_state->image_state.get(), "vkCmdClearAttachments()",
                                                      "VUID-vkCmdClearAttachments-commandBuffer-02505");
+                }
+            }
+        }
+
+        // When a subpass uses a non-zero view mask, multiview functionality is considered to be enabled
+        if (subpass_desc->viewMask > 0) {
+            for (uint32_t i = 0; i < rectCount; ++i) {
+                if (pRects[i].baseArrayLayer != 0 || pRects[i].layerCount != 1) {
+                    skip |= LogError(commandBuffer, "VUID-vkCmdClearAttachments-baseArrayLayer-00018",
+                                     "vkCmdClearAttachments(): pRects[%" PRIu32 "] baseArrayLayer is %" PRIu32
+                                     " and layerCount is %" PRIu32 ", but the render pass instance uses multiview.",
+                                     i, pRects[i].baseArrayLayer, pRects[i].layerCount);
                 }
             }
         }
@@ -4229,8 +4199,8 @@ void CoreChecks::RecordCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcIm
 
     // Make sure that all image slices are updated to correct layout
     for (uint32_t i = 0; i < regionCount; ++i) {
-        SetImageInitialLayout(cb_node, *src_image_state, pRegions[i].srcSubresource, srcImageLayout);
-        SetImageInitialLayout(cb_node, *dst_image_state, pRegions[i].dstSubresource, dstImageLayout);
+        cb_node->SetImageInitialLayout(*src_image_state, pRegions[i].srcSubresource, srcImageLayout);
+        cb_node->SetImageInitialLayout(*dst_image_state, pRegions[i].dstSubresource, dstImageLayout);
     }
 }
 
@@ -4286,7 +4256,8 @@ struct GlobalLayoutUpdater {
 };
 
 // This validates that the initial layout specified in the command buffer for the IMAGE is the same as the global IMAGE layout
-bool CoreChecks::ValidateCmdBufImageLayouts(const CMD_BUFFER_STATE *pCB, const GlobalImageLayoutMap &globalImageLayoutMap,
+bool CoreChecks::ValidateCmdBufImageLayouts(const Location &loc, const CMD_BUFFER_STATE *pCB,
+                                            const GlobalImageLayoutMap &globalImageLayoutMap,
                                             GlobalImageLayoutMap &overlayLayoutMap) const {
     if (disabled[image_layout_validation]) return false;
     bool skip = false;
@@ -4333,18 +4304,17 @@ bool CoreChecks::ValidateCmdBufImageLayouts(const CMD_BUFFER_STATE *pCB, const G
             if (initial_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
                 // TODO: Set memory invalid which is in mem_tracker currently
             } else if (image_layout != initial_layout) {
-                // Need to look up the inital layout *state* to get a bit more information
-                const auto *initial_layout_state = subres_map->GetSubresourceInitialLayoutState(pos->first.begin);
-                assert(initial_layout_state);  // There's no way we should have an initial layout without matching state...
-                bool matches = ImageLayoutMatches(initial_layout_state->aspect_mask, image_layout, initial_layout);
+                const auto aspect_mask = image_state->subresource_encoder.Decode(intersected_range.begin).aspectMask;
+                bool matches = ImageLayoutMatches(aspect_mask, image_layout, initial_layout);
                 if (!matches) {
                     // We can report all the errors for the intersected range directly
                     for (auto index : sparse_container::range_view<decltype(intersected_range)>(intersected_range)) {
                         const auto subresource = image_state->subresource_encoder.Decode(index);
                         skip |= LogError(
                             pCB->commandBuffer(), kVUID_Core_DrawState_InvalidImageLayout,
-                            "Submitted command buffer expects %s (subresource: aspectMask 0x%X array layer %u, mip level %u) "
+                            "%s command buffer %s expects %s (subresource: aspectMask 0x%X array layer %u, mip level %u) "
                             "to be in layout %s--instead, current layout is %s.",
+                            loc.Message().c_str(), report_data->FormatHandle(pCB->commandBuffer()).c_str(),
                             report_data->FormatHandle(image).c_str(), subresource.aspectMask, subresource.arrayLayer,
                             subresource.mipLevel, string_VkImageLayout(initial_layout), string_VkImageLayout(image_layout));
                     }
@@ -4472,7 +4442,7 @@ bool CoreChecks::ValidateImageFormatFeatureFlags(IMAGE_STATE const *image_state,
     const VkFormatFeatureFlags image_format_features = image_state->format_features;
     if ((image_format_features & desired) != desired) {
         // Same error, but more details if it was an AHB external format
-        if (image_state->has_ahb_format == true) {
+        if (image_state->HasAHBFormat()) {
             skip |= LogError(image_state->image(), vuid,
                              "In %s, VkFormatFeatureFlags (0x%08X) does not support required feature %s for the external format "
                              "found in VkAndroidHardwareBufferFormatPropertiesANDROID::formatFeatures used by %s.",
@@ -4634,9 +4604,20 @@ bool CoreChecks::PreCallValidateCreateBuffer(VkDevice device, const VkBufferCrea
         }
     }
 
+    auto dedicated_allocation_buffer = LvlFindInChain<VkDedicatedAllocationBufferCreateInfoNV>(pCreateInfo->pNext);
+    if (dedicated_allocation_buffer && dedicated_allocation_buffer->dedicatedAllocation == VK_TRUE) {
+        if (pCreateInfo->flags &
+            (VK_BUFFER_CREATE_SPARSE_BINDING_BIT | VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT | VK_BUFFER_CREATE_SPARSE_ALIASED_BIT)) {
+            skip |= LogError(device, "VUID-VkBufferCreateInfo-pNext-01571",
+                             "vkCreateBuffer(): pCreateInfos->flags must not include VK_BUFFER_CREATE_SPARSE_BINDING_BIT, "
+                             "VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT, or VK_BUFFER_CREATE_SPARSE_ALIASED_BIT when "
+                             "VkDedicatedAllocationBufferCreateInfoNV is in pNext chain with dedicatedAllocation VK_TRUE.");
+        }
+    }
+
     if ((pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) &&
         !enabled_features.core12.bufferDeviceAddressCaptureReplay &&
-        !enabled_features.buffer_device_address_ext.bufferDeviceAddressCaptureReplay) {
+        !enabled_features.buffer_device_address_ext_features.bufferDeviceAddressCaptureReplay) {
         skip |= LogError(
             device, "VUID-VkBufferCreateInfo-flags-03338",
             "vkCreateBuffer(): the bufferDeviceAddressCaptureReplay device feature is disabled: Buffers cannot be created with "
@@ -4644,9 +4625,10 @@ bool CoreChecks::PreCallValidateCreateBuffer(VkDevice device, const VkBufferCrea
     }
 
     if (pCreateInfo->sharingMode == VK_SHARING_MODE_CONCURRENT && pCreateInfo->pQueueFamilyIndices) {
+        const char *vuid = device_extensions.vk_khr_get_physical_device_properties2 ? "VUID-VkBufferCreateInfo-sharingMode-01419"
+                                                                                    : "VUID-VkBufferCreateInfo-sharingMode-01391";
         skip |= ValidatePhysicalDeviceQueueFamilies(pCreateInfo->queueFamilyIndexCount, pCreateInfo->pQueueFamilyIndices,
-                                                    "vkCreateBuffer", "pCreateInfo->pQueueFamilyIndices",
-                                                    "VUID-VkBufferCreateInfo-sharingMode-01419");
+                                                    "vkCreateBuffer", "pCreateInfo->pQueueFamilyIndices", vuid);
     }
 
     if ((pCreateInfo->flags & VK_BUFFER_CREATE_PROTECTED_BIT) != 0) {
@@ -4886,6 +4868,16 @@ bool CoreChecks::ValidateImageSubresourceRange(const uint32_t image_mip_count, c
                                  cmd_name, param_name, subresourceRange.baseArrayLayer, subresourceRange.layerCount,
                                  necessary_layer_count, image_layer_count_var_name, image_layer_count);
             }
+        }
+    }
+
+    if (subresourceRange.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) {
+        if (subresourceRange.aspectMask &
+            (VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT)) {
+            skip |= LogError(image, "VUID-VkImageSubresourceRange-aspectMask-01670",
+                             "%s: aspectMask includes both VK_IMAGE_ASPECT_COLOR_BIT and one of VK_IMAGE_ASPECT_PLANE_0_BIT, "
+                             "VK_IMAGE_ASPECT_PLANE_1_BIT, or VK_IMAGE_ASPECT_PLANE_2_BIT.",
+                             cmd_name);
         }
     }
 
@@ -5417,7 +5409,7 @@ bool CoreChecks::ValidateImageViewFormatFeatures(const IMAGE_STATE *image_state,
     VkFormatFeatureFlags tiling_features = VK_FORMAT_FEATURE_FLAG_BITS_MAX_ENUM;
     const VkImageTiling image_tiling = image_state->createInfo.tiling;
 
-    if (image_state->has_ahb_format == true) {
+    if (image_state->HasAHBFormat()) {
         // AHB image view and image share same feature sets
         tiling_features = image_state->format_features;
     } else if (image_tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
@@ -5524,6 +5516,7 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
         VkImageAspectFlags aspect_mask = pCreateInfo->subresourceRange.aspectMask;
         VkImageType image_type = image_state->createInfo.imageType;
         VkImageViewType view_type = pCreateInfo->viewType;
+        uint32_t layer_count = pCreateInfo->subresourceRange.layerCount;
 
         // If there's a chained VkImageViewUsageCreateInfo struct, modify image_usage to match
         auto chained_ivuci_struct = LvlFindInChain<VkImageViewUsageCreateInfo>(pCreateInfo->pNext);
@@ -5650,6 +5643,7 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
         // Validate correct image aspect bits for desired formats and format consistency
         skip |= ValidateImageAspectMask(image_state->image(), image_format, aspect_mask, "vkCreateImageView()");
 
+        // Valdiate Image/ImageView type compatibility #resources-image-views-compatibility
         switch (image_type) {
             case VK_IMAGE_TYPE_1D:
                 if (view_type != VK_IMAGE_VIEW_TYPE_1D && view_type != VK_IMAGE_VIEW_TYPE_1D_ARRAY) {
@@ -5679,16 +5673,23 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
                             if (!(image_flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)) {
                                 skip |=
                                     LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-01005",
-                                             "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type %s.",
+                                             "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type "
+                                             "%s since the image doesn't have VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT flag set.",
                                              string_VkImageViewType(view_type), string_VkImageType(image_type));
                             } else if ((image_flags & (VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT |
                                                        VK_IMAGE_CREATE_SPARSE_ALIASED_BIT))) {
                                 skip |= LogError(
-                                    pCreateInfo->image, "VUID-VkImageViewCreateInfo-subResourceRange-01021",
+                                    pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-04971",
                                     "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type %s "
                                     "when the VK_IMAGE_CREATE_SPARSE_BINDING_BIT, VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT, or "
                                     "VK_IMAGE_CREATE_SPARSE_ALIASED_BIT flags are enabled.",
                                     string_VkImageViewType(view_type), string_VkImageType(image_type));
+                            } else if (pCreateInfo->subresourceRange.levelCount != 1) {
+                                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-04970",
+                                                 "vkCreateImageView(): pCreateInfo->viewType %s is with image type %s must have a "
+                                                 "levelCount of 1 but it is %u.",
+                                                 string_VkImageViewType(view_type), string_VkImageType(image_type),
+                                                 pCreateInfo->subresourceRange.levelCount);
                             }
                         } else {
                             skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-subResourceRange-01021",
@@ -5698,9 +5699,17 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
                     }
                 } else {
                     if (view_type != VK_IMAGE_VIEW_TYPE_3D) {
-                        skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-subResourceRange-01021",
-                                         "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type %s.",
-                                         string_VkImageViewType(view_type), string_VkImageType(image_type));
+                        // Help point to VK_KHR_maintenance1
+                        if ((view_type == VK_IMAGE_VIEW_TYPE_2D || view_type == VK_IMAGE_VIEW_TYPE_2D_ARRAY)) {
+                            skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-subResourceRange-01021",
+                                             "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type %s "
+                                             "without VK_KHR_maintenance1 enabled which was promoted in Vulkan 1.0.",
+                                             string_VkImageViewType(view_type), string_VkImageType(image_type));
+                        } else {
+                            skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-subResourceRange-01021",
+                                             "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type %s.",
+                                             string_VkImageViewType(view_type), string_VkImageType(image_type));
+                        }
                     }
                 }
                 break;
@@ -5715,7 +5724,7 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
 
         skip |= ValidateImageViewFormatFeatures(image_state, view_format, image_usage);
 
-        if (enabled_features.shading_rate_image.shadingRateImage) {
+        if (enabled_features.shading_rate_image_features.shadingRateImage) {
             if (image_usage & VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV) {
                 if (view_format != VK_FORMAT_R8_UINT) {
                     skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-02087",
@@ -5725,7 +5734,7 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
             }
         }
 
-        if (enabled_features.shading_rate_image.shadingRateImage ||
+        if (enabled_features.shading_rate_image_features.shadingRateImage ||
             enabled_features.fragment_shading_rate_features.attachmentFragmentShadingRate) {
             if (image_usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) {
                 if (view_type != VK_IMAGE_VIEW_TYPE_2D && view_type != VK_IMAGE_VIEW_TYPE_2D_ARRAY) {
@@ -5739,26 +5748,39 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
 
         if (enabled_features.fragment_shading_rate_features.attachmentFragmentShadingRate &&
             !phys_dev_ext_props.fragment_shading_rate_props.layeredShadingRateAttachments &&
-            image_usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR &&
-            pCreateInfo->subresourceRange.layerCount != 1) {
+            image_usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR && layer_count != 1) {
             skip |= LogError(device, "VUID-VkImageViewCreateInfo-usage-04551",
                              "vkCreateImageView(): subresourceRange.layerCount is %u for a shading rate attachment image view.",
-                             pCreateInfo->subresourceRange.layerCount);
+                             layer_count);
         }
 
-        if (pCreateInfo->subresourceRange.layerCount == VK_REMAINING_ARRAY_LAYERS) {
-            if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_CUBE &&
-                image_state->createInfo.arrayLayers - pCreateInfo->subresourceRange.baseArrayLayer != 6) {
+        if (layer_count == VK_REMAINING_ARRAY_LAYERS) {
+            const uint32_t remaining_layers = image_state->createInfo.arrayLayers - pCreateInfo->subresourceRange.baseArrayLayer;
+            if (view_type == VK_IMAGE_VIEW_TYPE_CUBE && remaining_layers != 6) {
                 skip |= LogError(device, "VUID-VkImageViewCreateInfo-viewType-02962",
                                  "vkCreateImageView(): subresourceRange.layerCount VK_REMAINING_ARRAY_LAYERS=(%d) must be 6",
-                                 image_state->createInfo.arrayLayers - pCreateInfo->subresourceRange.baseArrayLayer);
+                                 remaining_layers);
             }
-            if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY &&
-                ((image_state->createInfo.arrayLayers - pCreateInfo->subresourceRange.baseArrayLayer) % 6) != 0) {
+            if (view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY && ((remaining_layers) % 6) != 0) {
                 skip |= LogError(
                     device, "VUID-VkImageViewCreateInfo-viewType-02963",
                     "vkCreateImageView(): subresourceRange.layerCount VK_REMAINING_ARRAY_LAYERS=(%d) must be a multiple of 6",
-                    image_state->createInfo.arrayLayers - pCreateInfo->subresourceRange.baseArrayLayer);
+                    remaining_layers);
+            }
+            if ((remaining_layers != 1) && ((view_type == VK_IMAGE_VIEW_TYPE_1D) || (view_type == VK_IMAGE_VIEW_TYPE_2D) ||
+                                            (view_type == VK_IMAGE_VIEW_TYPE_3D))) {
+                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-imageViewType-04974",
+                                 "vkCreateImageView(): Using pCreateInfo->viewType %s and the subresourceRange.layerCount "
+                                 "VK_REMAINING_ARRAY_LAYERS=(%d) and must 1 (try looking into VK_IMAGE_VIEW_TYPE_*_ARRAY).",
+                                 string_VkImageViewType(view_type), remaining_layers);
+            }
+        } else {
+            if ((layer_count != 1) && ((view_type == VK_IMAGE_VIEW_TYPE_1D) || (view_type == VK_IMAGE_VIEW_TYPE_2D) ||
+                                       (view_type == VK_IMAGE_VIEW_TYPE_3D))) {
+                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-imageViewType-04973",
+                                 "vkCreateImageView(): Using pCreateInfo->viewType %s and the subresourceRange.layerCount is %d "
+                                 "and must 1 (try looking into VK_IMAGE_VIEW_TYPE_*_ARRAY).",
+                                 string_VkImageViewType(view_type), layer_count);
             }
         }
 
@@ -5789,6 +5811,29 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
             }
         }
 
+        if (image_flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) {
+            if (pCreateInfo->subresourceRange.levelCount != 1) {
+                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-01584",
+                                 "vkCreateImageView(): Image was created with VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT bit, "
+                                 "but subresourcesRange.levelCount (%" PRIu32 ") is not 1.",
+                                 pCreateInfo->subresourceRange.levelCount);
+            }
+            if (pCreateInfo->subresourceRange.layerCount != 1) {
+                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-01584",
+                                 "vkCreateImageView(): Image was created with VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT bit, "
+                                 "but subresourcesRange.layerCount (%" PRIu32 ") is not 1.",
+                                 pCreateInfo->subresourceRange.layerCount);
+            }
+        }
+
+        if (image_flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT && !FormatIsCompressed(view_format) &&
+            pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_3D) {
+            skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-04739",
+                             "vkCreateImageView(): Image was created with VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT bit and "
+                             "non-compressed format (%s), but pCreateInfo->viewType is VK_IMAGE_VIEW_TYPE_3D.",
+                             string_VkFormat(image_format));
+        }
+
         if (pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_FRAGMENT_DENSITY_MAP_DEFERRED_BIT_EXT) {
             if (!enabled_features.fragment_density_map2_features.fragmentDensityMapDeferred) {
                 skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-flags-03567",
@@ -5802,16 +5847,14 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
                              "flags must not contain VK_IMAGE_VIEW_CREATE_FRAGMENT_DENSITY_MAP_DYNAMIC_BIT_EXT");
             }
         }
-        if (device_extensions.vk_ext_fragment_density_map_2) {
+        if (device_extensions.vk_ext_fragment_density_map2) {
             if ((image_flags & VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT) && (image_usage & VK_IMAGE_USAGE_SAMPLED_BIT) &&
-                (pCreateInfo->subresourceRange.layerCount >
-                 phys_dev_ext_props.fragment_density_map2_props.maxSubsampledArrayLayers)) {
+                (layer_count > phys_dev_ext_props.fragment_density_map2_props.maxSubsampledArrayLayers)) {
                 skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-03569",
                                  "vkCreateImageView(): If image was created with flags containing "
                                  "VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT and usage containing VK_IMAGE_USAGE_SAMPLED_BIT "
                                  "subresourceRange.layerCount (%d) must: be less than or equal to maxSubsampledArrayLayers (%d)",
-                                 pCreateInfo->subresourceRange.layerCount,
-                                 phys_dev_ext_props.fragment_density_map2_props.maxSubsampledArrayLayers);
+                                 layer_count, phys_dev_ext_props.fragment_density_map2_props.maxSubsampledArrayLayers);
             }
         }
 
@@ -5827,11 +5870,13 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
 
         if (ExtEnabled::kNotEnabled != device_extensions.vk_khr_portability_subset) {
             // If swizzling is disabled, make sure it isn't used
+            // NOTE: as of spec version 1.2.183, VUID 04465 states: "all elements of components _must_ be
+            // VK_COMPONENT_SWIZZLE_IDENTITY."
+            //       However, issue https://github.com/KhronosGroup/Vulkan-Portability/issues/27 points out that the identity can
+            //       also be defined via R, G, B, A enums in the correct order.
+            //       Spec change is at https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/4600
             if ((VK_FALSE == enabled_features.portability_subset_features.imageViewFormatSwizzle) &&
-                (pCreateInfo->components.r != VK_COMPONENT_SWIZZLE_IDENTITY ||
-                 pCreateInfo->components.g != VK_COMPONENT_SWIZZLE_IDENTITY ||
-                 pCreateInfo->components.b != VK_COMPONENT_SWIZZLE_IDENTITY ||
-                 pCreateInfo->components.a != VK_COMPONENT_SWIZZLE_IDENTITY)) {
+                !IsIdentitySwizzle(pCreateInfo->components)) {
                 skip |= LogError(device, "VUID-VkImageViewCreateInfo-imageViewFormatSwizzle-04465",
                                  "vkCreateImageView (portability error): swizzle is disabled for this device.");
             }
@@ -6056,6 +6101,11 @@ bool CoreChecks::PreCallValidateCmdFillBuffer(VkCommandBuffer commandBuffer, VkB
                          "vkCmdFillBuffer(): size (0x%" PRIxLEAST64 ") is greater than dstBuffer (%s) size (0x%" PRIxLEAST64
                          ") minus dstOffset (0x%" PRIxLEAST64 ").",
                          size, report_data->FormatHandle(dstBuffer).c_str(), buffer_state->createInfo.size, dstOffset);
+    }
+
+    if (!device_extensions.vk_khr_maintenance1) {
+        skip |= ValidateCmdQueueFlags(cb_node, "vkCmdFillBuffer()", VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT,
+                                      "VUID-vkCmdFillBuffer-commandBuffer-00030");
     }
 
     return skip;
@@ -6414,7 +6464,7 @@ bool CoreChecks::ValidateCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkI
                          "or transfer capabilities.",
                          func_name);
     }
-    vuid = is_2khr ? "VUID-VkCopyImageToBufferInfo2KHR-pRegions-00182" : "VUID-vkCmdCopyImageToBuffer-pRegions-00182";
+    vuid = is_2khr ? "VUID-VkCopyImageToBufferInfo2KHR-pRegions-00182" : "VUID-vkCmdCopyImageToBuffer-pRegions-06220";
     skip |= ValidateImageBounds(src_image_state, regionCount, pRegions, func_name, vuid);
     vuid = is_2khr ? "VUID-VkCopyImageToBufferInfo2KHR-pRegions-00183" : "VUID-vkCmdCopyImageToBuffer-pRegions-00183";
     skip |= ValidateBufferBounds(src_image_state, dst_buffer_state, regionCount, pRegions, func_name, vuid);
@@ -6505,7 +6555,7 @@ void CoreChecks::PreCallRecordCmdCopyImageToBuffer(VkCommandBuffer commandBuffer
     auto src_image_state = GetImageState(srcImage);
     // Make sure that all image slices record referenced layout
     for (uint32_t i = 0; i < regionCount; ++i) {
-        SetImageInitialLayout(cb_node, *src_image_state, pRegions[i].imageSubresource, srcImageLayout);
+        cb_node->SetImageInitialLayout(*src_image_state, pRegions[i].imageSubresource, srcImageLayout);
     }
 }
 
@@ -6517,8 +6567,8 @@ void CoreChecks::PreCallRecordCmdCopyImageToBuffer2KHR(VkCommandBuffer commandBu
     auto src_image_state = GetImageState(pCopyImageToBufferInfo->srcImage);
     // Make sure that all image slices record referenced layout
     for (uint32_t i = 0; i < pCopyImageToBufferInfo->regionCount; ++i) {
-        SetImageInitialLayout(cb_node, *src_image_state, pCopyImageToBufferInfo->pRegions[i].imageSubresource,
-                              pCopyImageToBufferInfo->srcImageLayout);
+        cb_node->SetImageInitialLayout(*src_image_state, pCopyImageToBufferInfo->pRegions[i].imageSubresource,
+                                       pCopyImageToBufferInfo->srcImageLayout);
     }
 }
 
@@ -6540,7 +6590,7 @@ bool CoreChecks::ValidateCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkB
     // Validate command buffer state
     skip |= ValidateCmd(cb_node, cmd_type, func_name);
 
-    vuid = is_2khr ? "VUID-VkCopyBufferToImageInfo2KHR-pRegions-00172" : "VUID-vkCmdCopyBufferToImage-pRegions-00172";
+    vuid = is_2khr ? "VUID-VkCopyBufferToImageInfo2KHR-pRegions-00172" : "VUID-vkCmdCopyBufferToImage-pRegions-06217";
     skip |= ValidateImageBounds(dst_image_state, regionCount, pRegions, func_name, vuid);
     vuid = is_2khr ? "VUID-VkCopyBufferToImageInfo2KHR-pRegions-00171" : "VUID-vkCmdCopyBufferToImage-pRegions-00171";
     skip |= ValidateBufferBounds(dst_image_state, src_buffer_state, regionCount, pRegions, func_name, vuid);
@@ -6649,7 +6699,7 @@ void CoreChecks::PreCallRecordCmdCopyBufferToImage(VkCommandBuffer commandBuffer
     auto dst_image_state = GetImageState(dstImage);
     // Make sure that all image slices are record referenced layout
     for (uint32_t i = 0; i < regionCount; ++i) {
-        SetImageInitialLayout(cb_node, *dst_image_state, pRegions[i].imageSubresource, dstImageLayout);
+        cb_node->SetImageInitialLayout(*dst_image_state, pRegions[i].imageSubresource, dstImageLayout);
     }
 }
 
@@ -6661,8 +6711,8 @@ void CoreChecks::PreCallRecordCmdCopyBufferToImage2KHR(VkCommandBuffer commandBu
     auto dst_image_state = GetImageState(pCopyBufferToImageInfo2KHR->dstImage);
     // Make sure that all image slices are record referenced layout
     for (uint32_t i = 0; i < pCopyBufferToImageInfo2KHR->regionCount; ++i) {
-        SetImageInitialLayout(cb_node, *dst_image_state, pCopyBufferToImageInfo2KHR->pRegions[i].imageSubresource,
-                              pCopyBufferToImageInfo2KHR->dstImageLayout);
+        cb_node->SetImageInitialLayout(*dst_image_state, pCopyBufferToImageInfo2KHR->pRegions[i].imageSubresource,
+                                       pCopyBufferToImageInfo2KHR->dstImageLayout);
     }
 }
 bool CoreChecks::PreCallValidateGetImageSubresourceLayout(VkDevice device, VkImage image, const VkImageSubresource *pSubresource,
@@ -6736,6 +6786,36 @@ bool CoreChecks::PreCallValidateGetImageSubresourceLayout(VkDevice device, VkIma
             }
         } else if (FormatIsDepthOrStencil(img_format)) {
             if ((sub_aspect != VK_IMAGE_ASPECT_DEPTH_BIT) && (sub_aspect != VK_IMAGE_ASPECT_STENCIL_BIT)) {
+            }
+        }
+        if (!FormatIsDepthAndStencil(img_format) && !FormatIsDepthOnly(img_format)) {
+            if (sub_aspect & VK_IMAGE_ASPECT_DEPTH_BIT) {
+                skip |= LogError(image, "VUID-vkGetImageSubresourceLayout-format-04464",
+                                 "vkGetImageSubresourceLayout(): Image format (%s) does not contain a depth component, "
+                                 "but VkImageSubresource.aspectMask contains VK_IMAGE_ASPECT_DEPTH_BIT.",
+                                 string_VkFormat(img_format));
+            }
+        } else {
+            if ((sub_aspect & VK_IMAGE_ASPECT_DEPTH_BIT) == 0) {
+                skip |= LogError(image, "VUID-vkGetImageSubresourceLayout-format-04462",
+                                 "vkGetImageSubresourceLayout(): Image format (%s) contains a depth component, "
+                                 "but VkImageSubresource.aspectMask does not contain VK_IMAGE_ASPECT_DEPTH_BIT.",
+                                 string_VkFormat(img_format));
+            }
+        }
+        if (!FormatIsDepthAndStencil(img_format) && !FormatIsStencilOnly(img_format)) {
+            if (sub_aspect & VK_IMAGE_ASPECT_STENCIL_BIT) {
+                skip |= LogError(image, "VUID-vkGetImageSubresourceLayout-format-04464",
+                                 "vkGetImageSubresourceLayout(): Image format (%s) does not contain a stencil component, "
+                                 "but VkImageSubresource.aspectMask contains VK_IMAGE_ASPECT_STENCIL_BIT.",
+                                 string_VkFormat(img_format));
+            }
+        } else {
+            if ((sub_aspect & VK_IMAGE_ASPECT_STENCIL_BIT) == 0) {
+                skip |= LogError(image, "VUID-vkGetImageSubresourceLayout-format-04463",
+                                 "vkGetImageSubresourceLayout(): Image format (%s) contains a stencil component, "
+                                 "but VkImageSubresource.aspectMask does not contain VK_IMAGE_ASPECT_STENCIL_BIT.",
+                                 string_VkFormat(img_format));
             }
         }
     } else if (image_entry->createInfo.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {

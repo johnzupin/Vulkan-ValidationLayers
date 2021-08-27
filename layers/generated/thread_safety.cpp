@@ -2092,6 +2092,7 @@ void ThreadSafety::PreCallRecordResetCommandBuffer(
     VkCommandBufferResetFlags                   flags) {
     StartWriteObject(commandBuffer, "vkResetCommandBuffer");
     // Host access to commandBuffer must be externally synchronized
+    // the sname:VkCommandPool that pname:commandBuffer was allocated from must be externally synchronized between host accesses
 }
 
 void ThreadSafety::PostCallRecordResetCommandBuffer(
@@ -2100,6 +2101,7 @@ void ThreadSafety::PostCallRecordResetCommandBuffer(
     VkResult                                    result) {
     FinishWriteObject(commandBuffer, "vkResetCommandBuffer");
     // Host access to commandBuffer must be externally synchronized
+    // the sname:VkCommandPool that pname:commandBuffer was allocated from must be externally synchronized between host accesses
 }
 
 void ThreadSafety::PreCallRecordCmdBindPipeline(
@@ -4864,6 +4866,27 @@ void ThreadSafety::PostCallRecordCmdSetFragmentShadingRateKHR(
     const VkFragmentShadingRateCombinerOpKHR    combinerOps[2]) {
     FinishWriteObject(commandBuffer, "vkCmdSetFragmentShadingRateKHR");
     // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordWaitForPresentKHR(
+    VkDevice                                    device,
+    VkSwapchainKHR                              swapchain,
+    uint64_t                                    presentId,
+    uint64_t                                    timeout) {
+    StartReadObjectParentInstance(device, "vkWaitForPresentKHR");
+    StartWriteObjectParentInstance(swapchain, "vkWaitForPresentKHR");
+    // Host access to swapchain must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordWaitForPresentKHR(
+    VkDevice                                    device,
+    VkSwapchainKHR                              swapchain,
+    uint64_t                                    presentId,
+    uint64_t                                    timeout,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkWaitForPresentKHR");
+    FinishWriteObjectParentInstance(swapchain, "vkWaitForPresentKHR");
+    // Host access to swapchain must be externally synchronized
 }
 
 void ThreadSafety::PreCallRecordGetBufferDeviceAddressKHR(
@@ -7764,6 +7787,68 @@ void ThreadSafety::PostCallRecordGetSemaphoreZirconHandleFUCHSIA(
     FinishReadObjectParentInstance(device, "vkGetSemaphoreZirconHandleFUCHSIA");
 }
 #endif // VK_USE_PLATFORM_FUCHSIA
+
+void ThreadSafety::PreCallRecordGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI(
+    VkDevice                                    device,
+    VkRenderPass                                renderpass,
+    VkExtent2D*                                 pMaxWorkgroupSize) {
+    StartReadObjectParentInstance(device, "vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI");
+    StartReadObject(renderpass, "vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI");
+}
+
+void ThreadSafety::PostCallRecordGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI(
+    VkDevice                                    device,
+    VkRenderPass                                renderpass,
+    VkExtent2D*                                 pMaxWorkgroupSize,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI");
+    FinishReadObject(renderpass, "vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI");
+}
+
+void ThreadSafety::PreCallRecordCmdSubpassShadingHUAWEI(
+    VkCommandBuffer                             commandBuffer) {
+    StartWriteObject(commandBuffer, "vkCmdSubpassShadingHUAWEI");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdSubpassShadingHUAWEI(
+    VkCommandBuffer                             commandBuffer) {
+    FinishWriteObject(commandBuffer, "vkCmdSubpassShadingHUAWEI");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdBindInvocationMaskHUAWEI(
+    VkCommandBuffer                             commandBuffer,
+    VkImageView                                 imageView,
+    VkImageLayout                               imageLayout) {
+    StartWriteObject(commandBuffer, "vkCmdBindInvocationMaskHUAWEI");
+    StartReadObject(imageView, "vkCmdBindInvocationMaskHUAWEI");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdBindInvocationMaskHUAWEI(
+    VkCommandBuffer                             commandBuffer,
+    VkImageView                                 imageView,
+    VkImageLayout                               imageLayout) {
+    FinishWriteObject(commandBuffer, "vkCmdBindInvocationMaskHUAWEI");
+    FinishReadObject(imageView, "vkCmdBindInvocationMaskHUAWEI");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordGetMemoryRemoteAddressNV(
+    VkDevice                                    device,
+    const VkMemoryGetRemoteAddressInfoNV*       pMemoryGetRemoteAddressInfo,
+    VkRemoteAddressNV*                          pAddress) {
+    StartReadObjectParentInstance(device, "vkGetMemoryRemoteAddressNV");
+}
+
+void ThreadSafety::PostCallRecordGetMemoryRemoteAddressNV(
+    VkDevice                                    device,
+    const VkMemoryGetRemoteAddressInfoNV*       pMemoryGetRemoteAddressInfo,
+    VkRemoteAddressNV*                          pAddress,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkGetMemoryRemoteAddressNV");
+}
 
 void ThreadSafety::PreCallRecordCmdSetPatchControlPointsEXT(
     VkCommandBuffer                             commandBuffer,
