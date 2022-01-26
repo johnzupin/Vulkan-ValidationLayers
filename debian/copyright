@@ -7,7 +7,7 @@ Copyright: 2020-2021, Advanced Micro Devices, Inc
            2015-2021, Google Inc
            2015-2021, Google, Inc
            2019-2020, Intel Corporation
-           2014-2021, LunarG, Inc
+           2014-2022, LunarG, Inc
            2016-2021, The ANGLE Project Authors
            2015-2017, The Android Open Source Project
            2017, The Glslang Authors
@@ -50,13 +50,13 @@ Files: .appveyor.yml
        tests/layers/macos/*
        tests/layers/windows/*
        tests/vk_layer_validation_tests.vcxproj.user
-Copyright: 2021, CopyrightLunarG Inc
-           2015-2021, LunarG, Inc
+Copyright: 2022,  LunarG, Inc
+           2015-2022, LunarG, Inc
            2015, Valve Corporation
 License: Apache-2.0
 
 Files: debian/*
-Copyright: 2015-2021, LunarG, Inc
+Copyright: 2015-2022, LunarG, Inc
            2016, Timo Aaltonen <tjaalton@debian.org>
 License: BSD-3-clause or GPL-3 or MIT
 
