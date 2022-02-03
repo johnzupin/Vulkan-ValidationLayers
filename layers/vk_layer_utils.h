@@ -1,6 +1,6 @@
-/* Copyright (c) 2015-2017, 2019-2021 The Khronos Group Inc.
- * Copyright (c) 2015-2017, 2019-2021 Valve Corporation
- * Copyright (c) 2015-2017, 2019-2021 LunarG, Inc.
+/* Copyright (c) 2015-2017, 2019-2022 The Khronos Group Inc.
+ * Copyright (c) 2015-2017, 2019-2022 Valve Corporation
+ * Copyright (c) 2015-2017, 2019-2022 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -157,6 +157,16 @@ VK_LAYER_EXPORT VkLayerDeviceCreateInfo *get_chain_info(const VkDeviceCreateInfo
 
 static inline bool IsPowerOfTwo(unsigned x) { return x && !(x & (x - 1)); }
 
+static inline uint32_t MostSignificantBit(uint32_t mask) {
+    uint32_t highest_view_bit = 0;
+    for (uint32_t k = 0; k < 32; ++k) {
+        if (((mask >> k) & 1) != 0) {
+            highest_view_bit = k;
+        }
+    }
+    return highest_view_bit;
+}
+
 static inline uint32_t SampleCountSize(VkSampleCountFlagBits sample_count) {
     uint32_t size = 0;
     switch (sample_count) {
@@ -210,6 +220,25 @@ static inline VkDeviceSize GetIndexAlignment(VkIndexType indexType) {
             // Not a real index type. Express no alignment requirement here; we expect upper layer
             // to have already picked up on the enum being nonsense.
             return 1;
+    }
+}
+
+static inline uint32_t GetPlaneIndex(VkImageAspectFlags aspect) {
+    // Returns an out of bounds index on error
+    switch (aspect) {
+        case VK_IMAGE_ASPECT_PLANE_0_BIT:
+            return 0;
+            break;
+        case VK_IMAGE_ASPECT_PLANE_1_BIT:
+            return 1;
+            break;
+        case VK_IMAGE_ASPECT_PLANE_2_BIT:
+            return 2;
+            break;
+        default:
+            // If more than one plane bit is set, return error condition
+            return FORMAT_MAX_PLANES;
+            break;
     }
 }
 
@@ -323,6 +352,17 @@ typedef std::unique_lock<ReadWriteLock> ReadLockGuard;
 #endif
 typedef std::unique_lock<ReadWriteLock> WriteLockGuard;
 
+// helper class for the very common case of getting and then locking a command buffer (or other state object)
+template <typename T, typename Guard>
+class LockedSharedPtr : public std::shared_ptr<T> {
+  public:
+    LockedSharedPtr(std::shared_ptr<T> &&ptr, Guard &&guard) : std::shared_ptr<T>(std::move(ptr)), guard_(std::move(guard)) {}
+    LockedSharedPtr() : std::shared_ptr<T>(), guard_() {}
+
+  private:
+    Guard guard_;
+};
+
 // Limited concurrent_unordered_map that supports internally-synchronized
 // insert/erase/access. Splits locking across N buckets and uses shared_mutex
 // for read/write locking. Iterators are not supported. The following
@@ -402,6 +442,7 @@ class vl_concurrent_unordered_map {
     // find()/end() return a FindResult containing a copy of the value. For end(),
     // return a default value.
     FindResult end() const { return FindResult(false, T()); }
+    FindResult cend() const { return end(); }
 
     FindResult find(const Key &key) const {
         uint32_t h = ConcurrentMapHashObject(key);
@@ -444,6 +485,31 @@ class vl_concurrent_unordered_map {
             }
         }
         return ret;
+    }
+
+    void clear() {
+        for (int h = 0; h < BUCKETS; ++h) {
+            WriteLockGuard lock(locks[h].lock);
+            maps[h].clear();
+        }
+    }
+
+    size_t size() const {
+        size_t result = 0;
+        for (int h = 0; h < BUCKETS; ++h) {
+            ReadLockGuard lock(locks[h].lock);
+            result += maps[h].size();
+        }
+        return result;
+    }
+
+    bool empty() const {
+        bool result = 0;
+        for (int h = 0; h < BUCKETS; ++h) {
+            ReadLockGuard lock(locks[h].lock);
+            result |= maps[h].empty();
+        }
+        return result;
     }
 
   private:

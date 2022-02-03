@@ -66,6 +66,9 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 
+find_package(SPIRV-Tools REQUIRED CONFIG)
+find_package(SPIRV-Tools-opt REQUIRED CONFIG)
+
 set(LIBGLM_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/libs)
 
 set(COMMON_CPP
@@ -78,6 +81,7 @@ set(COMMON_CPP
     vklayertests_amd_best_practices.cpp
     vklayertests_gpu.cpp
     vklayertests_descriptor_renderpass_framebuffer.cpp
+    vklayertests_dynamic_rendering.cpp
     vklayertests_command.cpp
     vklayertests_imageless_framebuffer.cpp
     vklayertests_portability_subset.cpp
@@ -85,6 +89,7 @@ set(COMMON_CPP
     vklayertests_wsi.cpp
     positive/command.cpp
     positive/descriptors.cpp
+    positive/dynamic_rendering.cpp
     positive/image_buffer.cpp
     positive/instance.cpp
     positive/other.cpp
@@ -109,32 +114,23 @@ endif()
 set_source_files_properties(${PROJECT_BINARY_DIR}/vk_safe_struct.cpp PROPERTIES GENERATED TRUE)
 add_executable(vk_layer_validation_tests
                layer_validation_tests.cpp
-               ../layers/vk_format_utils.cpp
+               ../layers/generated/vk_format_utils.cpp
                ../layers/convert_to_renderpass2.cpp
                ../layers/generated/vk_safe_struct.cpp
                ../layers/generated/lvt_function_pointers.cpp
                ${COMMON_CPP})
 add_test(NAME vk_layer_validation_tests COMMAND vk_layer_validation_tests)
 add_dependencies(vk_layer_validation_tests VkLayer_khronos_validation VkLayer_khronos_validation-json)
-if(NOT GTEST_IS_STATIC_LIB)
-    set_target_properties(vk_layer_validation_tests PROPERTIES COMPILE_DEFINITIONS "GTEST_LINKED_AS_SHARED_LIBRARY=1")
-endif()
-# Note that there is no need to add GTEST directories here due to googletest exporting them via the gtest target.
 target_include_directories(vk_layer_validation_tests
                            PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
                                   ${PROJECT_SOURCE_DIR}/layers
                                   ${PROJECT_SOURCE_DIR}/layers/generated
                                   ${GLSLANG_INCLUDE_DIR}
-                                  ${SPIRV_TOOLS_INCLUDE_DIR}
-                                  ${SPIRV_HEADERS_INCLUDE_DIR}
                                   ${CMAKE_CURRENT_BINARY_DIR}
                                   ${CMAKE_BINARY_DIR}
                                   ${PROJECT_BINARY_DIR}
                                   ${VulkanHeaders_INCLUDE_DIR}
                                   ${PROJECT_BINARY_DIR}/layers)
-if (USE_ROBIN_HOOD_HASHING)
-    target_include_directories(vk_layer_validation_tests PUBLIC ${ROBIN_HOOD_HASHING_INCLUDE_DIR})
-endif()
 add_dependencies(vk_layer_validation_tests
                  VkLayer_utils)
 
@@ -156,10 +152,10 @@ endif()
 # Specify target_link_libraries
 target_link_libraries(vk_layer_validation_tests
                       PRIVATE VkLayer_utils
-                              gtest
-                              gtest_main
                               ${GLSLANG_LIBRARIES}
-                              ${SPIRV_TOOLS_LIBRARIES})
+			      SPIRV-Headers::SPIRV-Headers
+			      SPIRV-Tools-static SPIRV-Tools-opt
+			      GTest::gtest GTest::gtest_main)
 
 if(NOT WIN32)
     target_link_libraries(vk_layer_validation_tests PRIVATE dl)
@@ -167,16 +163,6 @@ if(NOT WIN32)
         target_link_libraries(vk_layer_validation_tests
                               PRIVATE ${XCB_LIBRARIES}
                                       ${X11_LIBRARIES})
-    endif()
-endif()
-
-if(WIN32)
-    # For Windows, copy necessary gtest DLLs to the right spot for the vk_layer_tests...
-    if(NOT GTEST_IS_STATIC_LIB)
-        file(TO_NATIVE_PATH ${CMAKE_BINARY_DIR}/googletest/googletest/$<CONFIG>/*.dll SRC_GTEST_DLLS)
-        file(TO_NATIVE_PATH ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG> DST_GTEST_DLLS)
-        add_custom_command(TARGET vk_layer_validation_tests POST_BUILD
-                           COMMAND xcopy /Y /I ${SRC_GTEST_DLLS} ${DST_GTEST_DLLS})
     endif()
 endif()
 
