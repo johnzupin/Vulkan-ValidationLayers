@@ -1,3 +1,430 @@
+vulkan-validationlayers (1.3.204.0~rc1-1lunarg18.04-1) bionic; urgency=medium
+
+  [ ziga-lunarg ]
+  * layers: Validate updating mutable descriptor types
+  * tests: Test updating mutable descriptor set
+
+  [ Maksim Sisov ]
+  * build: Renamed use_x11 to ozone_platform_x11
+
+  [ Jeremy Gebben ]
+  * layers: Make most state tracker data protected or private
+
+  [ Aaron Hagan ]
+  * layers: Add VK_KHR_dynamic_rendering VUs - Change Set #1
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.199
+
+  [ sfricke-samsung ]
+  * layers: Label unassigned sync VUID
+  * layers: Use protectedNoFault correctly
+
+  [ Jeremy Gebben ]
+  * layers: Remove excess state object lookups
+
+  [ Lars-Ivar Hesselberg Simonsen ]
+  * layers: Add state tracking for host AS builds
+
+  [ Jeremy Gebben ]
+  * layers: Remove non-template GetFoo() state tracker methods
+
+  [ Malcolm Bechard ]
+  * layers: Fix VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT validation
+
+  [ Jeremy Gebben ]
+  * tests: Use AddRequiredDeviceExtensions() for dynamic rendering
+  * corechecks: Remove extra CommandBuffer Get<> calls
+  * corechecks: Remove a few extra Image/ImageView Get<> calls
+
+  [ Aaron Hagan ]
+  * layers: Add VK_KHR_dynamic_rendering VUs - Change Set #2
+  * tests: Add VK_KHR_dynamic_rendering tests
+  * layers: Add VK_KHR_dynamic_rendering vkCmdDraw* VUs
+
+  [ Lars-Ivar Hesselberg Simonsen ]
+  * layers: Fix CMD_BUFFER_STATE::EndQueries
+
+  [ Nathaniel Cesario ]
+  * build: Fix deprecated-copy warnings in clang 13
+
+  [ sfricke-samsung ]
+  * layers: Pre generated format utils changes
+
+  [ Piers Daniell ]
+  * corechecks: Validation for VK_EXT_border_color_swizzle
+  * corechecks: Validation for VK_KHR_maintenance4
+
+  [ ziga-lunarg ]
+  * layers: Validate transform feedback stream data size
+  * tests: Test tranform feedback stream data size
+
+  [ stusmith ]
+  * layers: Add various VK_KHR_dynamic_rendering VUs
+
+  [ Lars-Ivar Hesselberg Simonsen ]
+  * scripts: Check optional for deref array lengths
+
+  [ Niels Möller ]
+  * layers: Fix leak of object_label
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.200
+
+  [ stusmith ]
+  * tests: Added tests for some dynamic rendering VUIDs
+  * layers: Remove duplicate ValidateCmdSubpassState VUID
+
+  [ Aaron Hagan ]
+  * layers: Dynamic Rendering - Validate FS Outputs
+  * tests: Fix CreateGraphicsPipelineDynamicRendering Test
+
+  [ Jeremy Gebben ]
+  * threading: Handle vkRegisterDisplayEventEXT
+
+  [ Tony-LunarG ]
+  * layers: Validate VK_EXT_image_view_min_lod
+  * tests: Add test for VK_EXT_image_view_min_lod
+
+  [ Aaron Hagan ]
+  * layers: Dynamic Rendering - Validate against CTS
+
+  [ Mike Schuchardt ]
+  * ci: Remove windows-2016 github actions runner
+  * build: Update to header 1.2.201
+  * layers: VUID cleanup for 201 header
+
+  [ Jeremy Gebben ]
+  * layers: Remove global queryToStateMap
+
+  [ sfricke-samsung ]
+  * layers: Fix up depthStencilResolve
+  * tests: Add depthStencilResolveMode tests
+
+  [ Tony-LunarG ]
+  * layers: Fix error message for VUID 04553
+
+  [ Jeremy Gebben ]
+  * layers: Use find_package() for the dependencies that support it
+
+  [ sfricke-samsung ]
+  * layers: Add VK_EXT_depth_clip_control
+  * tests: Add VK_EXT_depth_clip_control
+  * layers: Auto generate format utils
+
+  [ Lars-Ivar Hesselberg Simonsen ]
+  * scripts: Store and delete mem for deferred ops
+
+  [ Jeremy Gebben ]
+  * layers: Make PIPELINE_STATE::samplers_used_by_image be const
+  * layers: Use unordered_map for samplers_used_by_image
+  * layers: Make PIPELINE_STATE shading rate tracking const
+  * layers: Only support shared_ptr Get<>() methods
+
+  [ Tony-LunarG ]
+  * layers: Guard against null pointer dereference
+
+  [ Nathaniel Cesario ]
+  * build: Fix mock ICD build in CI
+
+  [ Younggwan Kim ]
+  * layers: Add VK_ARM_rasterization_order_attachment_access VUs
+  * tests: Add VK_ARM_rasterization_order_attachment_access tests
+
+  [ Lionel Landwerlin ]
+  * layers: Fix assumption on DRM modifiers
+
+  [ Younggwan Kim ]
+  * layers: Fix segfault with invalid pipeline info
+
+  [ ziga-lunarg ]
+  * layers: Fix colorBlendState attachment index
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.2.203
+  * layers: Rename VkDeviceCreateInfo VUIDs
+
+  [ sfricke-samsung ]
+  * layers: Update VkAttachmentDescription VUs
+
+  [ stusmith ]
+  * layers: Update device group render area VUIDs
+  * tests: Update device group render area VUIDs
+  * tests: Added version checks and corrected error strings
+  * tests: Add VkPipelineRenderingCreateInfoKHR tests
+
+  [ Aaron Hagan ]
+  * layers: Add VK_KHR_dynamic_rendering VUs
+
+  [ stusmith ]
+  * layers: Add 6 vkCmdExecuteCommands-pNext VUIDs
+  * tests: Add 6 vkCmdExecuteCommands-pNext tests
+
+  [ sfricke-samsung ]
+  * tests: Fix InvalidSampleLocations test
+  * tests: Convert buffer image tests to LvlInitStruct
+
+  [ ziga-lunarg ]
+  * layers: Validate creating win32 surface
+  * tests: Test creating win32 surface with no hwnd
+
+  [ sfricke-samsung ]
+  * tests: Convert to LvlInitStruct command
+  * tests: Convert to LvlInitStruct descriptor
+  * tests: Convert to LvlInitStruct gpu
+  * tests: Convert to LvlInitStruct imageless
+  * tests: Convert to LvlInitStruct instanceless
+  * tests: Convert to LvlInitStruct others
+  * tests: Convert to LvlInitStruct pipeline
+  * tests: Convert to LvlInitStruct portability
+  * tests: Convert to LvlInitStruct viewport
+  * tests: Convert to LvlInitStruct wsi
+
+  [ Yilong Li ]
+  * layers: Fix a deref nullptr bug in StateTracker
+
+  [ Jeremy Gebben ]
+  * layers: Make class ValidationCache threadsafe
+  * layers: Make class QUERY_POOL_STATE threadsafe
+  * layers: Make class DESCRIPTOR_POOL_STATE threadsafe
+  * layers: Make class SURFACE_STATE threadsafe
+  * layers: Use concurrent_ordered_map for state objects
+
+  [ Yilong Li ]
+  * layers: Set up QUEUE_STATE when getting device queue
+
+  [ stusmith ]
+  * layers: Fixed some EndRendering/EndRenderpass VUIDs
+  * tests: Add 2 EndRenderpass/EndRendering tests
+
+  [ Nathaniel Cesario ]
+  * docs: Update creating tests docs
+
+  [ Jeremy Gebben ]
+  * layer: Fix compile of vk_format_utils.cpp without RH hashing
+  * layers: Fix crash in IMAGE_STATE::NotifyInvalidate()
+  * corechecks: Remove VerifyQueueStateToSeq() and its callers
+  * layers: Encapsulate FENCE_STATE member data
+  * corechecks: Restructure semaphore validation checks
+  * layers: Encapsulate SEMAPHORE_STATE member data
+  * tests: Add positive case QueueSubmitTimelineSemaphore2Queue
+
+  [ Nathaniel Cesario ]
+  * build: Fix linux clang build
+
+  [ Jeremy Gebben ]
+  * layers: Avoid self-merge deadlock in ValidationCache::Merge()
+  * layers: Use a write lock in vl_concurrent_unordered_map::clear()
+
+  [ aitor-lunarg ]
+  * scripts: Fix object wrapping in ray trace pipeline creation
+
+  [ Jeremy Gebben ]
+  * docs: Fix description of robin-hood-hashing in BUILD.md
+
+  [ Lionel Landwerlin ]
+  * build: Fix CI for 2022
+  * scripts: Generate non const find_in_chain helper
+  * layers: Support VkFormatProperties3KHR in device profile layer
+  * layers: Fix 2 VUID names
+  * layers: Add storage image read/write without format VUIDs
+  * layers: Update state tracking of format features
+  * layers: Track read/write without formats in shader module
+  * layers: Track KHR_format_feature_flags2 availability
+  * layers: KHR_format_feature_flags2 storage read/write validation
+  * layers: Validation for feature SAMPLED_IMAGE_DEPTH_COMPARISON
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix a crash in PreCallValidateQueueBindSparse()
+
+  [ aitor-lunarg ]
+  * layers: Validate AMD_NEG_VP_HT is not enabled on 1.1+ instaces
+  * tests: Add test for VUID-01840
+
+  [ Jeremy Gebben ]
+  * docs: Further clarification of robin-hood-hashing build
+  * layers: Fix minor formatting problems from recent commits
+  * layers: Simplify push DescriptorSet management
+  * layers: Make QUEUE_STATE and related classes threadsafe
+
+  [ Aaron Hagan ]
+  * layers: Dynamic Rendering render_area fixes
+
+  [ Mike Schuchardt ]
+  * layers: Validation for optional surface handles
+  * layers: VUID updates for 1.2.203
+  * layers: Rename VUID-NONE errors
+
+  [ Tony-LunarG ]
+  * layers: Don't index into empty vector
+
+  [ Jeremy Gebben ]
+  * build: Disable loader physical device sorting in github CI
+  * layers: Add base_node.cpp
+  * layers: Add BASE_NODE tree locking
+
+  [ Aaron Hagan ]
+  * tests: Updated tests to be vendor portable
+
+  [ Jeremy Gebben ]
+  * layers: Make CMD_BUFFER_STATE threadsafe
+
+  [ Lionel Landwerlin ]
+  * layers: Don't include DRM modifiers in queries
+
+  [ stusmith ]
+  * layers: More dynamic rendering draw time VUIDs
+  * tests: Added more dynamic rendering draw time tests
+
+  [ sfricke-samsung ]
+  * layers: Fix drawtime checks for separate samplers
+
+  [ AndreyVK_D3D ]
+  * layers: Fix ValidatePipelineDrawtimeState crash
+
+  [ Nathaniel Cesario ]
+  * build: Add missing Android tests
+
+  [ Jeremy Gebben ]
+  * layers: Make global queue family ownership state threadsafe
+  * layers: Make global image layout state threadsafe
+  * corechecks: Add setting to enable fine-grained locking
+  * corechecks: Remove extra GetRead() call in dynamic rendering
+
+  [ aitor-lunarg ]
+  * tests: Fix ray tracing tests crash ExpectSuccess
+  * layers: Fix typo on error log
+  * tests: Fix CreateImage...SubresourceRange crash ExpectSuccess
+  * tests: Fix RenderPassBegin...UsageMismatches crash ExpectSuccess
+  * tests: Fix ExternalMemoryAndExternalMemoryNV crash ExpectSuccess
+
+  [ sfricke-samsung ]
+  * layers: Consistent shader module names
+
+  [ Luc Charbonneau ]
+  * layers: Fix fragment density map validation
+  * tests: Fix tests for fragment density map
+
+  [ sfricke-samsung ]
+  * layers: Add SPIR-V Instruction Table
+  * tests: Consolidate VkShaderObj contructor
+
+  [ Jeremy Gebben ]
+  * tests: Ignore locking perf warning in best practices test
+  * actions: Rerun *Thread* cases with fine grained locking enabled
+
+  [ Nathaniel Cesario ]
+  * tests: Add env var to enable all tests
+
+  [ Jeremy Gebben ]
+  * docs: Document layer settings for fine grained locking
+
+  [ ziga-lunarg ]
+  * layer: Fix log typo
+
+  [ Ari Suonpää ]
+  * build: Skip find_package for added targets
+
+  [ sfricke-samsung ]
+  * layers: Add helper to print out spirv instruction
+  * layers: Refactoring ValidateShaderStorageImageFormats
+
+  [ John Zupin ]
+  * packaging: update copyright
+
+  [ Nathaniel Cesario ]
+  * tests: Disable driver check
+  * build: Fix mock ICD build
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.204
+
+  [ Tony-LunarG ]
+  * layers: Add core13 features, properties, and codegen
+  * tests: Add 13features test
+  * tests: Fix 1.3 ValidateExtendedDynamicStateEnabled
+  * layers: Validate 1.3 extended dynamic state
+  * tests: Add 1.3 extended dynamic state tests
+  * layers: Validate vkCmdCopyBuffer2
+  * layers: Validate vkCmdCopyImage2
+  * layers: Validate vkCmdBlitImage2
+
+  [ Tony Barbour ]
+  * layers: Validate vkCmdCopyBufferToImage2
+
+  [ Tony-LunarG ]
+  * layers: Validate vkCmdCopyImageToBuffer2
+  * layers: Validate vkCmdResolveImage2
+  * tests: Fix copy_commands2 VUIDs
+  * tests: Add CopyCommands2V13
+  * layers: Promote VK_EXT_inline_uniform_block VUID
+  * layers: Promote sync2 VUIDs for 1.3
+  * layers: Validate vkCmdSetEvent2
+  * layers: Validate vkCmdResetEvent2
+  * layers: Validate vkQueueSubmit2
+  * layers: Validate vkCmdWriteTimestamp2
+  * layers: Validate vkCmdWaitEvents2
+  * layers: Validate vkCmdPipelineBarrier2
+  * tests: Add sync2 1.3 tests
+  * layers: Promote dyn rend + misc VUIDs for 1.3
+  * layers: Add 1.3 private data validation
+  * tests: Add test for 1.3 private data
+  * layers: Promote dynamic rendering VUIDs
+  * layers: Promote dynamic rendering validation
+  * tests: Add test for promoted dynamic rendering
+  * layers: Add 1.3 to PickSpirvEnv
+  * layers: Update json files for 1.3
+  * practices: Add 1.3 promoted entrypoints
+  * layers: Fix Copyrights
+  * layers: Fix code gen copyrights
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix lock recursion in ValidateExtendedDynamicState()
+
+  [ Tony-LunarG ]
+  * docs: Update spec pointers to 1.3
+
+  [ Jeremy Gebben ]
+  * corechecks: Avoid deadlock in CoreChecks::RecordCmdWaitEvents2
+  * corechecks: Fix deadlock in PreCallRecordCmdPipelineBarrier2()
+
+  [ Tony-LunarG ]
+  * layers: Fix spirv validation for 1.3 exts
+  * layers: Misc 1.3 promotion cleanup
+  * layers: Update versions and glslang version
+
+  [ sfricke-samsung ]
+  * layers: Consistent SHADER_MODULE_STATE name
+  * layers: Use uint32_t for SPIR-V words
+  * layers: Small shader module cleanup
+
+  [ ziga-lunarg ]
+  * tests: Validate CmdWriteTimestamp2 stage flags
+  * layers: Fix CmdClearAttachment layer count
+
+  [ ziga ]
+  * tests: Test CmdClearAttachments with 2D array view
+
+  [ ziga-lunarg ]
+  * layers: Validate spirv Workgroup initialization
+  * tests: Test spirv initializing shared memory
+
+  [ Jeremy Gebben ]
+  * build: Reenable loader physical device sorting in github CI
+  * layers: Fix vkCmdWaitEvents2 checking in DebugPrintf and GPUAV
+
+  [ aitor-lunarg ]
+  * tests: Fix PhysicalStorageBuffer error defaultSuccess
+  * tests: Fix vklayertests_command errors defaultSuccess
+  * tests: Fix vklayertests_..._framebuffer error defaultSuccess
+  * tests: Fix imageless_framebuffer error defaultSuccess
+  * tests: Fix viewport_inheritance error defaultSuccess
+  * tests: Fix wsi error defaultSuccess
+  * layers: Fix error code for update descriptors when in use
+  * tests: Add checking for updating desc sets while in use
+
+ -- John Zupin <john@odin>  Thu, 03 Feb 2022 15:43:49 -0700
+
 vulkan-validationlayers (1.2.198.0~rc1-1lunarg18.04-1) bionic; urgency=medium
 
   [ ziga-lunarg ]
