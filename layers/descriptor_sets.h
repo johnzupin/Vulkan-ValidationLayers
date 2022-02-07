@@ -417,7 +417,8 @@ class Descriptor {
     virtual bool IsImmutableSampler() const { return false; };
     virtual bool AddParent(BASE_NODE *base_node) { return false; }
     virtual void RemoveParent(BASE_NODE *base_node) {}
-    void SetDescriptorType(VkDescriptorType type) { active_descriptor_type = type; }
+    virtual void SetDescriptorType(VkDescriptorType type, VkDeviceSize buffer_size) { active_descriptor_type = type; }
+    virtual void SetDescriptorType(const Descriptor *src) { active_descriptor_type = src->active_descriptor_type; }
 
     bool updated;  // Has descriptor been updated?
     DescriptorClass descriptor_class;
@@ -647,8 +648,76 @@ class MutableDescriptor : public Descriptor {
       void WriteUpdate(DescriptorSet *set_state, const ValidationStateTracker *dev_data, const VkWriteDescriptorSet *, const uint32_t) override;
       void CopyUpdate(DescriptorSet *set_state, const ValidationStateTracker *dev_data, const Descriptor *) override;
 
-  private:
+      void SetDescriptorType(VkDescriptorType type, VkDeviceSize buffer_size) override {
+          active_descriptor_type = type;
+          buffer_size_ = buffer_size;
+      }
+      void SetDescriptorType(const Descriptor *src) override {
+          active_descriptor_type = src->active_descriptor_type;
+          if (src->GetClass() == cvdescriptorset::DescriptorClass::GeneralBuffer) {
+              auto buffer = static_cast<const cvdescriptorset::BufferDescriptor *>(src)->GetBuffer();
+              if (buffer == VK_NULL_HANDLE) {
+                  buffer_size_ = std::numeric_limits<uint32_t>::max();
+              } else {
+                  auto buffer_state = static_cast<const cvdescriptorset::BufferDescriptor *>(src)->GetBufferState();
+                  buffer_size_ = static_cast<uint32_t>(buffer_state->createInfo.size);
+              }
+          } else if (src->GetClass() == cvdescriptorset::DescriptorClass::TexelBuffer) {
+              auto buffer_view = static_cast<const cvdescriptorset::TexelDescriptor *>(src)->GetBufferView();
+              if (buffer_view == VK_NULL_HANDLE) {
+                  buffer_size_ = std::numeric_limits<uint32_t>::max();
+              } else {
+                  auto buffer_view_state = static_cast<const cvdescriptorset::TexelDescriptor *>(src)->GetBufferViewState();
+                  buffer_size_ = static_cast<uint32_t>(buffer_view_state->buffer_state->createInfo.size);
+              }
+          } else if (src->GetClass() == cvdescriptorset::DescriptorClass::Mutable) {
+              auto descriptor = static_cast<const cvdescriptorset::MutableDescriptor *>(src);
+              buffer_size_ = descriptor->GetBufferSize();
+          } else {
+              buffer_size_ = 0;
+          }
+      }
+      VkDeviceSize GetBufferSize() const { return buffer_size_; }
+
+      std::shared_ptr<SAMPLER_STATE> GetSharedSamplerState() const { return sampler_state_; }
+      std::shared_ptr<IMAGE_VIEW_STATE> GetSharedImageViewState() const { return image_view_state_; }
+      VkImageLayout GetImageLayout() const { return image_layout_; }
+      std::shared_ptr<BUFFER_STATE> GetSharedBufferState() const { return buffer_state_; }
+      VkDeviceSize GetOffset() const { return offset_; }
+      VkDeviceSize GetRange() const { return range_; }
+      std::shared_ptr<BUFFER_VIEW_STATE> GetSharedBufferViewState() const { return buffer_view_state_; }
+      VkAccelerationStructureKHR GetAccelerationStructure() const { return acc_; }
+      const ACCELERATION_STRUCTURE_STATE_KHR *GetAccelerationStructureStateKHR() const { return acc_state_.get(); }
+      ACCELERATION_STRUCTURE_STATE_KHR *GetAccelerationStructureStateKHR() { return acc_state_.get(); }
+      VkAccelerationStructureNV GetAccelerationStructureNV() const { return acc_nv_; }
+      const ACCELERATION_STRUCTURE_STATE *GetAccelerationStructureStateNV() const { return acc_state_nv_.get(); }
+      ACCELERATION_STRUCTURE_STATE *GetAccelerationStructureStateNV() { return acc_state_nv_.get(); }
+
+      bool AddParent(BASE_NODE *base_node) override;
+      void RemoveParent(BASE_NODE *base_node) override;
+
+    private:
+      VkDeviceSize buffer_size_;
       DescriptorClass active_descriptor_class_;
+
+      // Sampler and ImageSampler Descriptor
+      bool immutable_;
+      std::shared_ptr<SAMPLER_STATE> sampler_state_;
+      // Image Descriptor
+      std::shared_ptr<IMAGE_VIEW_STATE> image_view_state_;
+      VkImageLayout image_layout_;
+      // Texel Descriptor
+      std::shared_ptr<BUFFER_VIEW_STATE> buffer_view_state_;
+      // Buffer Descriptor
+      VkDeviceSize offset_;
+      VkDeviceSize range_;
+      std::shared_ptr<BUFFER_STATE> buffer_state_;
+      // Acceleration Structure Descriptor
+      bool is_khr_;
+      VkAccelerationStructureKHR acc_;
+      std::shared_ptr<ACCELERATION_STRUCTURE_STATE_KHR> acc_state_;
+      VkAccelerationStructureNV acc_nv_;
+      std::shared_ptr<ACCELERATION_STRUCTURE_STATE> acc_state_nv_;
 };
 
 union AnyDescriptor {
