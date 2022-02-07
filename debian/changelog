@@ -1,3 +1,37 @@
+vulkan-validationlayers (1.3.204.0~rc2-1lunarg20.04-1) focal; urgency=medium
+
+  [ Jeremy Gebben ]
+  * layers: Remove 'const' from GetRead<>/GetWrite<> results
+  * layers: Remove const from Get<> results
+  * layers: Add const and/or * to shared_ptr<>::get() results
+
+  [ Nathaniel Cesario ]
+  * layers: FS output validation crash
+  * tests: Pipeline with no FS outputs and RS disabled
+
+  [ ziga ]
+  * layers: Track mutable descxriptors buffer size
+  * layers: Update tracking mutable descriptors
+
+  [ aitor-lunarg ]
+  * layers: Fix perf warning when copying from and to same image
+  * tests: Test no perf warning when copying from and to same image
+
+  [ Tony-LunarG ]
+  * tests: Process INFO level msgs on Android
+  * tests: Skip RenderPassBeginInvalidRenderArea on ShieldTV
+  * tests: Make SetTargetApiVersion more robust
+  * tests: Add spirv 1.3 env test
+  * tests: Use AddRequiredExtensions in new tests
+
+  [ Mike Schuchardt ]
+  * build: Update shader toolchain known good versions
+
+  [ Aaron Hagan ]
+  * layers: Add VK_KHR_dynamic_rendering VUs and Tests
+
+ -- John Zupin <john@odin>  Mon, 07 Feb 2022 13:41:59 -0700
+
 vulkan-validationlayers (1.3.204.0~rc1-1lunarg20.04-1) focal; urgency=medium
 
   [ ziga-lunarg ]
