@@ -1,3 +1,23 @@
+vulkan-validationlayers (1.3.204.1~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ Jeremy Gebben ]
+  * build: Handle many permutations of SPIRV-Headers locations
+  * build: Handle different SPIRV-Tools targets
+
+  [ Tony-LunarG ]
+  * layers: Allow null VkDeviceImageMemoryRequirements:planeAspect
+
+  [ David Pinedo ]
+  * docs: Auto gen of layer documents
+  * docs: Add link to fined_grain_locking
+  * docs: Updates to md files
+  * docs: Documentation tweaks
+  * docs: Update to vk_layer_settings.txt
+  * docs: Update copyright notice
+  * docs: Documentation tweaks
+
+ -- john <john@odin>  Thu, 24 Feb 2022 15:17:38 -0700
+
 vulkan-validationlayers (1.3.204.0~rc4-1lunarg20.04-1) focal; urgency=medium
 
   [ Jeremy Gebben ]
