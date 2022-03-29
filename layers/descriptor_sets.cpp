@@ -1261,110 +1261,183 @@ bool CoreChecks::ValidateImageDescriptor(const char *caller, const DrawDispatchV
         // format support is reported per format rather as a blankey physical
         // device feature.
         if (has_format_feature2) {
-            const VkFormatFeatureFlags2KHR img_format_feats = image_view_state->image_state->format_features;
+            const VkFormatFeatureFlags2 format_features = image_view_state->format_features;
 
             if (descriptor_type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
                 if ((reqs & DESCRIPTOR_REQ_IMAGE_READ_WITHOUT_FORMAT) &&
-                    !(img_format_feats & VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR)) {
+                    !(format_features & VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT)) {
                     auto set = descriptor_set->GetSet();
                     LogObjectList objlist(set);
                     objlist.add(image_view);
                     return LogError(objlist, vuids.storage_image_read_without_format,
                                     "Descriptor set %s encountered the following validation error at %s time: Descriptor "
                                     "in binding #%" PRIu32 " index %" PRIu32
-                                    ", %s, format %s, doesn't "
-                                    "contain VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR",
+                                    ", %s, image view format %s feature flags (%s) doesn't "
+                                    "contain VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT",
                                     report_data->FormatHandle(set).c_str(), caller, binding, index,
-                                    report_data->FormatHandle(image_view).c_str(), string_VkFormat(image_view_ci.format));
+                                    report_data->FormatHandle(image_view).c_str(), string_VkFormat(image_view_ci.format),
+                                    string_VkFormatFeatureFlags2(format_features).c_str());
                 }
 
                 if ((reqs & DESCRIPTOR_REQ_IMAGE_WRITE_WITHOUT_FORMAT) &&
-                    !(img_format_feats & VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT_KHR)) {
+                    !(format_features & VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT)) {
                     auto set = descriptor_set->GetSet();
                     LogObjectList objlist(set);
                     objlist.add(image_view);
                     return LogError(objlist, vuids.storage_image_write_without_format,
                                     "Descriptor set %s encountered the following validation error at %s time: Descriptor "
                                     "in binding #%" PRIu32 " index %" PRIu32
-                                    ", %s, format %s, doesn't "
-                                    "contain VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT_KHR",
+                                    ", %s, image view format %s feature flags (%s) doesn't "
+                                    "contain VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT",
                                     report_data->FormatHandle(set).c_str(), caller, binding, index,
-                                    report_data->FormatHandle(image_view).c_str(), string_VkFormat(image_view_ci.format));
+                                    report_data->FormatHandle(image_view).c_str(), string_VkFormat(image_view_ci.format),
+                                    string_VkFormatFeatureFlags2(format_features).c_str());
                 }
             }
 
-            if ((reqs & DESCRIPTOR_REQ_IMAGE_DREF) &&
-                !(img_format_feats & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT_KHR)) {
+            if ((reqs & DESCRIPTOR_REQ_IMAGE_DREF) && !(format_features & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT)) {
                 auto set = descriptor_set->GetSet();
                 LogObjectList objlist(set);
                 objlist.add(image_view);
                 return LogError(objlist, vuids.depth_compare_sample,
                                 "Descriptor set %s encountered the following validation error at %s time: Descriptor "
                                 "in binding #%" PRIu32 " index %" PRIu32
-                                ", %s, format %s, doesn't "
-                                "contain VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT_KHR",
+                                ", %s, image view format %s feature flags (%s) doesn't "
+                                "contain VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT",
                                 report_data->FormatHandle(set).c_str(), caller, binding, index,
-                                report_data->FormatHandle(image_view).c_str(), string_VkFormat(image_view_ci.format));
+                                report_data->FormatHandle(image_view).c_str(), string_VkFormat(image_view_ci.format),
+                                string_VkFormatFeatureFlags2(format_features).c_str());
             }
         }
 
         // Verify if attachments are used in DescriptorSet
         if (attachments && attachments->size() > 0 && subpasses && (descriptor_type != VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)) {
-            bool ds_aspect = (image_view_state->normalized_subresource_range.aspectMask &
-                              (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
-                                 ? true
-                                 : false;
-            uint32_t att_index = 0;
-            for (const auto &view_state : *attachments) {
-                const SUBPASS_INFO& subpass = (*subpasses)[att_index];
-                if (!subpass.used || !view_state || view_state->Destroyed()) {
+            for (uint32_t att_index = 0; att_index < attachments->size(); ++att_index) {
+                const auto &view_state = (*attachments)[att_index];
+                const SUBPASS_INFO &subpass = (*subpasses)[att_index];
+                if (!view_state || view_state->Destroyed()) {
                     continue;
                 }
-                if (ds_aspect && (subpass.usage == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT ||
-                                  subpass.usage == VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) {
-                    if ((image_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
-                         image_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                         image_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) &&
-                        (subpass.layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
-                         subpass.layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                         subpass.layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL)) {
-                        continue;
-                    }
-                    if ((image_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL &&
-                         subpass.layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL) ||
-                        (subpass.layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL &&
-                         image_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL)) {
-                        continue;
+                bool same_view = view_state->image_view() == image_view;
+                bool overlapping_view = image_view_state->OverlapSubresource(*view_state);
+                if (!same_view && !overlapping_view) {
+                    continue;
+                }
+
+                bool readable = false;
+                bool writable = false;
+                uint32_t set_index = std::numeric_limits<uint32_t>::max();
+                for (uint32_t i = 0; i < cb_node->lastBound[VK_PIPELINE_BIND_POINT_GRAPHICS].per_set.size(); ++i) {
+                    const auto &set = cb_node->lastBound[VK_PIPELINE_BIND_POINT_GRAPHICS].per_set[i];
+                    if (set.bound_descriptor_set.get() == descriptor_set) {
+                        set_index = i;
+                        break;
                     }
                 }
-                if (view_state->image_view() == image_view) {
-                    auto set = descriptor_set->GetSet();
-                    LogObjectList objlist(set);
-                    objlist.add(image_view);
-                    objlist.add(framebuffer);
-                    return LogError(objlist, vuids.image_subresources,
-                                    "Descriptor set %s encountered the following validation error at %s time: %s is used in "
-                                    "Descriptor in binding #%" PRIu32 " index %" PRIu32 " and %s attachment # %" PRIu32 ".",
-                                    report_data->FormatHandle(set).c_str(), caller, report_data->FormatHandle(image_view).c_str(),
-                                    binding, index, report_data->FormatHandle(framebuffer).c_str(), att_index);
-                } else {
-                    if (image_view_state->OverlapSubresource(*view_state)) {
+                assert(set_index != std::numeric_limits<uint32_t>::max());
+                const auto pipeline = cb_node->GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
+                for (const auto &stage : pipeline->stage_state) {
+                    for (const auto &descriptor : stage.descriptor_uses) {
+                        if (descriptor.first.set == set_index && descriptor.first.binding == binding) {
+                            writable |= descriptor.second.is_writable;
+                            readable |= descriptor.second.is_readable | descriptor.second.is_sampler_implicitLod_dref_proj;
+                            break;
+                        }
+                    }
+                }
+
+                bool write_attachment =
+                    (subpass.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) > 0;
+                if (write_attachment && readable) {
+                    if (same_view) {
+                        auto set = descriptor_set->GetSet();
+                        LogObjectList objlist(set);
+                        objlist.add(image_view);
+                        objlist.add(framebuffer);
+                        return LogError(
+                            objlist, vuids.image_subresources_subpass_read,
+                            "Descriptor set %s encountered the following validation error at %s time: %s is being read from in "
+                            "Descriptor in binding #%" PRIu32 " index %" PRIu32
+                            " and will be written to as %s attachment # %" PRIu32 ".",
+                            report_data->FormatHandle(set).c_str(), caller, report_data->FormatHandle(image_view).c_str(), binding,
+                            index, report_data->FormatHandle(framebuffer).c_str(), att_index);
+                    } else if (overlapping_view) {
                         auto set = descriptor_set->GetSet();
                         LogObjectList objlist(set);
                         objlist.add(image_view);
                         objlist.add(framebuffer);
                         objlist.add(view_state->image_view());
-                        return LogError(
-                            objlist, vuids.image_subresources,
-                            "Descriptor set %s encountered the following validation error at %s time: "
-                            "Image subresources of %s in "
-                            "Descriptor in binding #%" PRIu32 " index %" PRIu32 " and %s in %s attachment # %" PRIu32 " overlap.",
-                            report_data->FormatHandle(set).c_str(), caller, report_data->FormatHandle(image_view).c_str(), binding,
-                            index, report_data->FormatHandle(view_state->image_view()).c_str(),
-                            report_data->FormatHandle(framebuffer).c_str(), att_index);
+                        return LogError(objlist, vuids.image_subresources_subpass_read,
+                                        "Descriptor set %s encountered the following validation error at %s time: "
+                                        "Image subresources of %s is being read from in "
+                                        "Descriptor in binding #%" PRIu32 " index %" PRIu32
+                                        " and will be written to as %s in %s attachment # %" PRIu32 " overlap.",
+                                        report_data->FormatHandle(set).c_str(), caller,
+                                        report_data->FormatHandle(image_view).c_str(), binding, index,
+                                        report_data->FormatHandle(view_state->image_view()).c_str(),
+                                        report_data->FormatHandle(framebuffer).c_str(), att_index);
                     }
                 }
-                ++att_index;
+                bool read_attachment = (subpass.usage & (VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) > 0;
+                if (read_attachment && writable) {
+                    if (same_view) {
+                        auto set = descriptor_set->GetSet();
+                        LogObjectList objlist(set);
+                        objlist.add(image_view);
+                        objlist.add(framebuffer);
+                        return LogError(
+                            objlist, vuids.image_subresources_subpass_write,
+                            "Descriptor set %s encountered the following validation error at %s time: %s is being written to in "
+                            "Descriptor in binding #%" PRIu32 " index %" PRIu32 " and read from as %s attachment # %" PRIu32 ".",
+                            report_data->FormatHandle(set).c_str(), caller, report_data->FormatHandle(image_view).c_str(), binding,
+                            index, report_data->FormatHandle(framebuffer).c_str(), att_index);
+                    } else if (overlapping_view) {
+                        auto set = descriptor_set->GetSet();
+                        LogObjectList objlist(set);
+                        objlist.add(image_view);
+                        objlist.add(framebuffer);
+                        objlist.add(view_state->image_view());
+                        return LogError(objlist, vuids.image_subresources_subpass_write,
+                                        "Descriptor set %s encountered the following validation error at %s time: "
+                                        "Image subresources of %s is being written to in "
+                                        "Descriptor in binding #%" PRIu32 " index %" PRIu32
+                                        " and will be read from as %s in %s attachment # %" PRIu32 " overlap.",
+                                        report_data->FormatHandle(set).c_str(), caller,
+                                        report_data->FormatHandle(image_view).c_str(), binding, index,
+                                        report_data->FormatHandle(view_state->image_view()).c_str(),
+                                        report_data->FormatHandle(framebuffer).c_str(), att_index);
+                    }
+                }
+
+                if (writable) {
+                    if (same_view) {
+                        auto set = descriptor_set->GetSet();
+                        LogObjectList objlist(set);
+                        objlist.add(image_view);
+                        objlist.add(framebuffer);
+                        return LogError(
+                            objlist, vuids.image_subresources_render_pass_write,
+                            "Descriptor set %s encountered the following validation error at %s time: %s is used in "
+                            "Descriptor in binding #%" PRIu32 " index %" PRIu32 " as writable and %s attachment # %" PRIu32 ".",
+                            report_data->FormatHandle(set).c_str(), caller, report_data->FormatHandle(image_view).c_str(), binding,
+                            index, report_data->FormatHandle(framebuffer).c_str(), att_index);
+                    } else if (overlapping_view) {
+                        auto set = descriptor_set->GetSet();
+                        LogObjectList objlist(set);
+                        objlist.add(image_view);
+                        objlist.add(framebuffer);
+                        objlist.add(view_state->image_view());
+                        return LogError(objlist, vuids.image_subresources_render_pass_write,
+                                        "Descriptor set %s encountered the following validation error at %s time: "
+                                        "Image subresources of %s in "
+                                        "writable Descriptor in binding #%" PRIu32 " index %" PRIu32
+                                        " and %s in %s attachment # %" PRIu32 " overlap.",
+                                        report_data->FormatHandle(set).c_str(), caller,
+                                        report_data->FormatHandle(image_view).c_str(), binding, index,
+                                        report_data->FormatHandle(view_state->image_view()).c_str(),
+                                        report_data->FormatHandle(framebuffer).c_str(), att_index);
+                    }
+                }
             }
             if (enabled_features.core11.protectedMemory == VK_TRUE) {
                 if (ValidateProtectedImage(cb_node, image_view_state->image_state.get(), caller, vuids.unprotected_command_buffer,
@@ -1606,6 +1679,7 @@ bool CoreChecks::ValidateTexelDescriptor(const char *caller, const DrawDispatchV
     if (buffer_view) {
         auto buffer = buffer_view_state->create_info.buffer;
         const auto *buffer_state = buffer_view_state->buffer_state.get();
+        const VkFormat buffer_view_format = buffer_view_state->create_info.format;
         if (buffer_state->Destroyed()) {
             auto set = descriptor_set->GetSet();
             return LogError(set, vuids.descriptor_valid,
@@ -1614,7 +1688,7 @@ bool CoreChecks::ValidateTexelDescriptor(const char *caller, const DrawDispatchV
                             report_data->FormatHandle(set).c_str(), caller, binding, index,
                             report_data->FormatHandle(buffer).c_str());
         }
-        auto format_bits = DescriptorRequirementsBitsFromFormat(buffer_view_state->create_info.format);
+        auto format_bits = DescriptorRequirementsBitsFromFormat(buffer_view_format);
 
         if (!(reqs & format_bits)) {
             // bad component type
@@ -1623,13 +1697,15 @@ bool CoreChecks::ValidateTexelDescriptor(const char *caller, const DrawDispatchV
                             "Descriptor set %s encountered the following validation error at %s time: Descriptor in "
                             "binding #%" PRIu32 " index %" PRIu32 " requires %s component type, but bound descriptor format is %s.",
                             report_data->FormatHandle(set).c_str(), caller, binding, index, StringDescriptorReqComponentType(reqs),
-                            string_VkFormat(buffer_view_state->create_info.format));
+                            string_VkFormat(buffer_view_format));
         }
 
+        const VkFormatFeatureFlags2KHR format_features = buffer_view_state->format_features;
+        const VkDescriptorType descriptor_type = descriptor_set->GetTypeFromBinding(binding);
+
         // Verify VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT
-        if ((reqs & DESCRIPTOR_REQ_VIEW_ATOMIC_OPERATION) &&
-            (descriptor_set->GetTypeFromBinding(binding) == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER) &&
-            !(buffer_view_state->format_features & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT)) {
+        if ((reqs & DESCRIPTOR_REQ_VIEW_ATOMIC_OPERATION) && (descriptor_type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER) &&
+            !(format_features & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT)) {
             auto set = descriptor_set->GetSet();
             LogObjectList objlist(set);
             objlist.add(buffer_view);
@@ -1639,8 +1715,41 @@ bool CoreChecks::ValidateTexelDescriptor(const char *caller, const DrawDispatchV
                             ", %s, format %s, doesn't "
                             "contain VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT.",
                             report_data->FormatHandle(set).c_str(), caller, binding, index,
-                            report_data->FormatHandle(buffer_view).c_str(), string_VkFormat(buffer_view_state->create_info.format));
+                            report_data->FormatHandle(buffer_view).c_str(), string_VkFormat(buffer_view_format));
         }
+
+        if (descriptor_type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER) {
+            if ((reqs & DESCRIPTOR_REQ_IMAGE_READ_WITHOUT_FORMAT) &&
+                !(format_features & VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR)) {
+                auto set = descriptor_set->GetSet();
+                LogObjectList objlist(set);
+                objlist.add(buffer_view);
+                return LogError(objlist, vuids.storage_image_read_without_format,
+                                "Descriptor set %s encountered the following validation error at %s time: Descriptor "
+                                "in binding #%" PRIu32 " index %" PRIu32
+                                ", %s, buffer view format %s feature flags (%s) doesn't "
+                                "contain VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR",
+                                report_data->FormatHandle(set).c_str(), caller, binding, index,
+                                report_data->FormatHandle(buffer_view).c_str(), string_VkFormat(buffer_view_format),
+                                string_VkFormatFeatureFlags2KHR(format_features).c_str());
+            }
+
+            if ((reqs & DESCRIPTOR_REQ_IMAGE_WRITE_WITHOUT_FORMAT) &&
+                !(format_features & VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT_KHR)) {
+                auto set = descriptor_set->GetSet();
+                LogObjectList objlist(set);
+                objlist.add(buffer_view);
+                return LogError(objlist, vuids.storage_image_write_without_format,
+                                "Descriptor set %s encountered the following validation error at %s time: Descriptor "
+                                "in binding #%" PRIu32 " index %" PRIu32
+                                ", %s, buffer view format %s feature flags (%s) doesn't "
+                                "contain VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT_KHR",
+                                report_data->FormatHandle(set).c_str(), caller, binding, index,
+                                report_data->FormatHandle(buffer_view).c_str(), string_VkFormat(buffer_view_format),
+                                string_VkFormatFeatureFlags2KHR(format_features).c_str());
+            }
+        }
+
         if (enabled_features.core11.protectedMemory == VK_TRUE) {
             if (ValidateProtectedBuffer(cb_node, buffer_view_state->buffer_state.get(), caller, vuids.unprotected_command_buffer,
                                         "Buffer is in a descriptorSet")) {
@@ -1677,7 +1786,7 @@ bool CoreChecks::ValidateAccelerationDescriptor(const char *caller, const DrawDi
                                 report_data->FormatHandle(acc).c_str());
             }
         } else {
-            for (const auto &item: acc_node->GetBoundMemory()) {
+            for (const auto &item: acc_node->buffer_state->GetBoundMemory()) {
                 auto &mem_binding = item.second;
                 if (mem_binding.mem_state->Destroyed()) {
                     auto set = descriptor_set->GetSet();
@@ -2983,6 +3092,39 @@ void cvdescriptorset::MutableDescriptor::RemoveParent(BASE_NODE *base_node) {
     }
     if (acc_state_nv_) {
         acc_state_nv_->RemoveParent(base_node);
+    }
+}
+
+bool cvdescriptorset::MutableDescriptor::Invalid() const {
+    switch (active_descriptor_type) {
+        case VK_DESCRIPTOR_TYPE_SAMPLER:
+            return !sampler_state_ || sampler_state_->Destroyed();
+
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            return !sampler_state_ || sampler_state_->Invalid() || !image_view_state_ || image_view_state_->Invalid();
+
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            return !buffer_view_state_ || buffer_view_state_->Invalid();
+
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            return !image_view_state_ || image_view_state_->Invalid();
+
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            return !buffer_state_ || buffer_state_->Invalid();
+
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            return !acc_state_ || acc_state_->Invalid();
+
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+            return !acc_state_nv_ || acc_state_nv_->Invalid();
+        default:
+            return false;
     }
 }
 

@@ -76,8 +76,7 @@ TEST_F(VkPositiveLayerTest, ViewportWithCountNoMultiViewport) {
         VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT,
         VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT,
     };
-    VkPipelineDynamicStateCreateInfo dyn_state_ci = {};
-    dyn_state_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    VkPipelineDynamicStateCreateInfo dyn_state_ci = LvlInitStruct<VkPipelineDynamicStateCreateInfo>();
     dyn_state_ci.dynamicStateCount = size(dyn_states);
     dyn_state_ci.pDynamicStates = dyn_states;
     pipe.dyn_state_ci_ = dyn_state_ci;
@@ -267,7 +266,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineAttribComponents) {
     subpass.pColorAttachments = attachments;
     subpass.colorAttachmentCount = 2;
 
-    VkRenderPassCreateInfo rpci = {};
+    VkRenderPassCreateInfo rpci = LvlInitStruct<VkRenderPassCreateInfo>();
     rpci.subpassCount = 1;
     rpci.pSubpasses = &subpass;
     rpci.attachmentCount = 2;
@@ -285,7 +284,6 @@ TEST_F(VkPositiveLayerTest, CreatePipelineAttribComponents) {
     attach_desc[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
     rpci.pAttachments = attach_desc;
-    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 
     VkRenderPass renderpass;
     vk::CreateRenderPass(m_device->device(), &rpci, NULL, &renderpass);
@@ -644,14 +642,11 @@ TEST_F(VkPositiveLayerTest, CreateComputePipelineFragmentShadingRate) {
         return;
     }
 
-    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = {};
-    fsr_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
     fsr_features.pipelineFragmentShadingRate = true;
     fsr_features.primitiveFragmentShadingRate = true;
 
-    VkPhysicalDeviceFeatures2 device_features = {};
-    device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    device_features.pNext = &fsr_features;
+    VkPhysicalDeviceFeatures2 device_features = LvlInitStruct<VkPhysicalDeviceFeatures2>(&fsr_features);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &device_features));
 
@@ -799,9 +794,7 @@ TEST_F(VkPositiveLayerTest, PSOPolygonModeValid) {
 
     const VkPipelineLayoutObj pipeline_layout(&test_device);
 
-    VkPipelineRasterizationStateCreateInfo rs_ci = {};
-    rs_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rs_ci.pNext = nullptr;
+    VkPipelineRasterizationStateCreateInfo rs_ci = LvlInitStruct<VkPipelineRasterizationStateCreateInfo>();
     rs_ci.lineWidth = 1.0f;
     rs_ci.rasterizerDiscardEnable = false;
 
@@ -1099,8 +1092,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineWithCoreChecksDisabled) {
 
     // Enable KHR validation features extension
     VkValidationFeatureDisableEXT disables[] = {VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
-    VkValidationFeaturesEXT features = {};
-    features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+    VkValidationFeaturesEXT features = LvlInitStruct<VkValidationFeaturesEXT>();
     features.disabledValidationFeatureCount = 1;
     features.pDisabledValidationFeatures = disables;
 
@@ -1225,10 +1217,10 @@ TEST_F(VkPositiveLayerTest, ViewportArray2NV) {
     for (auto stage : vertex_stages) {
         m_errorMonitor->ExpectSuccess();
 
-        VkPipelineInputAssemblyStateCreateInfo iaci = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+        VkPipelineInputAssemblyStateCreateInfo iaci = LvlInitStruct<VkPipelineInputAssemblyStateCreateInfo>();
         iaci.topology = (stage != TestStage::VERTEX) ? VK_PRIMITIVE_TOPOLOGY_PATCH_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-        VkPipelineTessellationStateCreateInfo tsci = {VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO};
+        VkPipelineTessellationStateCreateInfo tsci = LvlInitStruct<VkPipelineTessellationStateCreateInfo>();
         tsci.patchControlPoints = 3;
 
         const VkPipelineLayoutObj pl(m_device);
@@ -1317,8 +1309,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineFragmentOutputNotConsumedButAlphaToCov
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget(0u));
 
-    VkPipelineMultisampleStateCreateInfo ms_state_ci = {};
-    ms_state_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    VkPipelineMultisampleStateCreateInfo ms_state_ci = LvlInitStruct<VkPipelineMultisampleStateCreateInfo>();
     ms_state_ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     ms_state_ci.alphaToCoverageEnable = VK_TRUE;
 
@@ -1463,7 +1454,7 @@ TEST_F(VkPositiveLayerTest, SampleMaskOverrideCoverageNV) {
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &cAttachRef;
 
-    VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+    VkRenderPassCreateInfo rpci = LvlInitStruct<VkRenderPassCreateInfo>();
     rpci.attachmentCount = 1;
     rpci.pAttachments = &cAttachment;
     rpci.subpassCount = 1;
@@ -1475,7 +1466,7 @@ TEST_F(VkPositiveLayerTest, SampleMaskOverrideCoverageNV) {
     const VkPipelineLayoutObj pl(m_device);
 
     VkSampleMask sampleMask = 0x01;
-    VkPipelineMultisampleStateCreateInfo msaa = {VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    VkPipelineMultisampleStateCreateInfo msaa = LvlInitStruct<VkPipelineMultisampleStateCreateInfo>();
     msaa.rasterizationSamples = sampleCount;
     msaa.sampleShadingEnable = VK_FALSE;
     msaa.pSampleMask = &sampleMask;
@@ -1518,7 +1509,7 @@ TEST_F(VkPositiveLayerTest, TestRasterizationDiscardEnableTrue) {
     sp.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     sp.colorAttachmentCount = 1;
     sp.pColorAttachments = &cr;
-    VkRenderPassCreateInfo rpi = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+    VkRenderPassCreateInfo rpi = LvlInitStruct<VkRenderPassCreateInfo>();
     rpi.attachmentCount = 1;
     rpi.pAttachments = att;
     rpi.subpassCount = 1;
@@ -1597,8 +1588,7 @@ TEST_F(VkPositiveLayerTest, TestSamplerDataForCombinedImageSampler) {
     vk::CreateSampler(m_device->device(), &sampler_ci, nullptr, &sampler);
 
     uint32_t qfi = 0;
-    VkBufferCreateInfo buffer_create_info = {};
-    buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    VkBufferCreateInfo buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
     buffer_create_info.size = 1024;
     buffer_create_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     buffer_create_info.queueFamilyIndexCount = 1;
@@ -1905,9 +1895,7 @@ TEST_F(VkPositiveLayerTest, PipelineStageConditionalRendering) {
                                   nullptr};
     vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
 
-    VkImageMemoryBarrier imb = {};
-    imb.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imb.pNext = nullptr;
+    VkImageMemoryBarrier imb = LvlInitStruct<VkImageMemoryBarrier>();
     imb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     imb.dstAccessMask = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT;
     imb.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -2713,10 +2701,9 @@ TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
     }
 
     VkPhysicalDeviceFeatures features = {};
-    VkPhysicalDeviceFeatures2 features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-    VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures separate_features = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES};
-    features2.pNext = &separate_features;
+    VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures separate_features =
+        LvlInitStruct<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures>();
+    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&separate_features);
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
     if (!separate_features.separateDepthStencilLayouts) {
         printf("separateDepthStencilLayouts feature not supported, skipping tests\n");
@@ -2753,7 +2740,7 @@ TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
     const auto depth_stencil_range = image.subresource_range(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
     vk_testing::ImageView view;
-    VkImageViewCreateInfo view_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    VkImageViewCreateInfo view_info = LvlInitStruct<VkImageViewCreateInfo>();
     view_info.image = image.handle();
     view_info.subresourceRange = depth_stencil_range;
     view_info.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
@@ -2805,13 +2792,13 @@ TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
     barriers.push_back(image.image_memory_barrier(0, 0, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL,
                                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, depth_stencil_range));
 
-    VkRenderPassBeginInfo rp_begin_info = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    VkRenderPassCreateInfo2 rp2 = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2};
-    VkAttachmentDescription2 desc = {VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2};
-    VkSubpassDescription2 sub = {VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2};
-    VkAttachmentReference2 att = {VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2};
-    VkAttachmentDescriptionStencilLayout stencil_desc = {VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT};
-    VkAttachmentReferenceStencilLayout stencil_att = {VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT};
+    VkRenderPassBeginInfo rp_begin_info = LvlInitStruct<VkRenderPassBeginInfo>();
+    VkRenderPassCreateInfo2 rp2 = LvlInitStruct<VkRenderPassCreateInfo2>();
+    VkAttachmentDescription2 desc = LvlInitStruct<VkAttachmentDescription2>();
+    VkSubpassDescription2 sub = LvlInitStruct<VkSubpassDescription2>();
+    VkAttachmentReference2 att = LvlInitStruct<VkAttachmentReference2>();
+    VkAttachmentDescriptionStencilLayout stencil_desc = LvlInitStruct<VkAttachmentDescriptionStencilLayout>();
+    VkAttachmentReferenceStencilLayout stencil_att = LvlInitStruct<VkAttachmentReferenceStencilLayout>();
     // Test that we can discard stencil layout.
     stencil_desc.stencilInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     stencil_desc.stencilFinalLayout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
@@ -2856,7 +2843,7 @@ TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
 
     vkCreateRenderPass2KHR(device(), &rp2, nullptr, &render_pass_combined);
 
-    VkFramebufferCreateInfo fb_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    VkFramebufferCreateInfo fb_info = LvlInitStruct<VkFramebufferCreateInfo>();
     fb_info.renderPass = render_pass_separate;
     fb_info.width = 1;
     fb_info.height = 1;
@@ -2958,8 +2945,7 @@ TEST_F(VkPositiveLayerTest, SwapchainImageFormatProps) {
     ASSERT_VK_SUCCESS(vk::AcquireNextImageKHR(device(), m_swapchain, UINT64_MAX, VK_NULL_HANDLE, fence.handle(), &image_index));
     fence.wait(UINT32_MAX);
 
-    VkImageViewCreateInfo ivci = {};
-    ivci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    VkImageViewCreateInfo ivci = LvlInitStruct<VkImageViewCreateInfo>();
     ivci.image = swapchain_images[image_index];
     ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
     ivci.format = format;
@@ -2967,8 +2953,7 @@ TEST_F(VkPositiveLayerTest, SwapchainImageFormatProps) {
     VkImageView image_view;
     ASSERT_VK_SUCCESS(vk::CreateImageView(device(), &ivci, nullptr, &image_view));
 
-    VkFramebufferCreateInfo fbci = {};
-    fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    VkFramebufferCreateInfo fbci = LvlInitStruct<VkFramebufferCreateInfo>();
     fbci.renderPass = render_pass.handle();
     fbci.attachmentCount = 1;
     fbci.pAttachments = &image_view;
@@ -2980,8 +2965,7 @@ TEST_F(VkPositiveLayerTest, SwapchainImageFormatProps) {
 
     VkCommandBufferObj cmdbuff(DeviceObj(), m_commandPool);
     cmdbuff.begin();
-    VkRenderPassBeginInfo rpbi = {};
-    rpbi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    VkRenderPassBeginInfo rpbi = LvlInitStruct<VkRenderPassBeginInfo>();
     rpbi.renderPass = render_pass.handle();
     rpbi.framebuffer = framebuffer;
     rpbi.renderArea = {{0, 0}, {1, 1}};
@@ -4466,7 +4450,7 @@ TEST_F(VkPositiveLayerTest, PhysicalStorageBuffer) {
         if (DeviceExtensionSupported(gpu(), nullptr, ext)) {
             m_device_extension_names.push_back(ext);
         } else {
-            printf("%s %s extension not supported. Skipping.", kSkipPrefix, ext);
+            printf("%s %s extension not supported. Skipping.\n", kSkipPrefix, ext);
             return;
         }
     }
@@ -4476,7 +4460,7 @@ TEST_F(VkPositiveLayerTest, PhysicalStorageBuffer) {
     vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
 
     if (VK_TRUE != features12.bufferDeviceAddress) {
-        printf("%s VkPhysicalDeviceVulkan12Features::bufferDeviceAddress not supported and is required. Skipping.", kSkipPrefix);
+        printf("%s VkPhysicalDeviceVulkan12Features::bufferDeviceAddress not supported and is required. Skipping.\n", kSkipPrefix);
         return;
     }
 
@@ -4772,9 +4756,7 @@ TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
     VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
-    VkSwapchainCreateInfoKHR swapchain_create_info = {};
-    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchain_create_info.pNext = 0;
+    VkSwapchainCreateInfoKHR swapchain_create_info = LvlInitStruct<VkSwapchainCreateInfoKHR>();
     swapchain_create_info.flags = VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR;
     swapchain_create_info.surface = surface;
     swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
@@ -4914,8 +4896,7 @@ TEST_F(VkPositiveLayerTest, ImageDrmFormatModifier) {
         std::vector<uint64_t> mods;
 
         // get general features and modifiers
-        VkDrmFormatModifierPropertiesListEXT modp = {};
-        modp.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+        VkDrmFormatModifierPropertiesListEXT modp = LvlInitStruct<VkDrmFormatModifierPropertiesListEXT>();
         auto fmtp = LvlInitStruct<VkFormatProperties2>(&modp);
 
         vk::GetPhysicalDeviceFormatProperties2(gpu(), format, &fmtp);
@@ -4959,8 +4940,7 @@ TEST_F(VkPositiveLayerTest, ImageDrmFormatModifier) {
         ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        VkImageDrmFormatModifierListCreateInfoEXT mod_list = {};
-        mod_list.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT;
+        VkImageDrmFormatModifierListCreateInfoEXT mod_list = LvlInitStruct<VkImageDrmFormatModifierListCreateInfoEXT>();
         mod_list.pDrmFormatModifiers = mods.data();
         mod_list.drmFormatModifierCount = mods.size();
         ci.pNext = &mod_list;
@@ -4982,8 +4962,7 @@ TEST_F(VkPositiveLayerTest, ImageDrmFormatModifier) {
         for (uint32_t type = 0; type < phys_mem_props.memoryTypeCount; type++) {
             if ((mem_reqs.memoryTypeBits & (1 << type)) &&
                 ((phys_mem_props.memoryTypes[type].propertyFlags & mem_props) == mem_props)) {
-                VkMemoryAllocateInfo alloc_info = {};
-                alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                VkMemoryAllocateInfo alloc_info = LvlInitStruct<VkMemoryAllocateInfo>();
                 alloc_info.allocationSize = mem_reqs.size;
                 alloc_info.memoryTypeIndex = type;
                 ASSERT_VK_SUCCESS(vk::AllocateMemory(device(), &alloc_info, nullptr, &mem_obj));
@@ -5024,8 +5003,7 @@ TEST_F(VkPositiveLayerTest, AllowedDuplicateStype) {
 
     VkInstance instance;
 
-    VkInstanceCreateInfo ici = {};
-    ici.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    VkInstanceCreateInfo ici = LvlInitStruct<VkInstanceCreateInfo>();
     ici.enabledLayerCount = instance_layers_.size();
     ici.ppEnabledLayerNames = instance_layers_.data();
 
@@ -5257,9 +5235,7 @@ TEST_F(VkPositiveLayerTest, ImageDescriptorSubresourceLayout) {
     VkDescriptorImageInfo img_info = {};
     img_info.sampler = sampler.handle();
 
-    VkWriteDescriptorSet descriptor_write;
-    memset(&descriptor_write, 0, sizeof(descriptor_write));
-    descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    VkWriteDescriptorSet descriptor_write = LvlInitStruct<VkWriteDescriptorSet>();
     descriptor_write.dstSet = descriptorSet;
     descriptor_write.dstBinding = 0;
     descriptor_write.descriptorCount = 1;
@@ -5280,8 +5256,7 @@ TEST_F(VkPositiveLayerTest, ImageDescriptorSubresourceLayout) {
 
     VkCommandBufferObj cmd_buf(m_device, m_commandPool);
 
-    VkSubmitInfo submit_info = {};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmd_buf.handle();
 
@@ -5504,9 +5479,7 @@ TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
     VkDescriptorImageInfo img_info = {};
     img_info.sampler = sampler.handle();
 
-    VkWriteDescriptorSet descriptor_write;
-    memset(&descriptor_write, 0, sizeof(descriptor_write));
-    descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    VkWriteDescriptorSet descriptor_write = LvlInitStruct<VkWriteDescriptorSet>();
     descriptor_write.dstSet = descriptorSet;
     descriptor_write.dstBinding = 0;
     descriptor_write.descriptorCount = 1;
@@ -5527,8 +5500,7 @@ TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
 
     VkCommandBufferObj cmd_buf(m_device, m_commandPool);
 
-    VkSubmitInfo submit_info = {};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmd_buf.handle();
 
@@ -5914,7 +5886,6 @@ TEST_F(VkPositiveLayerTest, TopologyAtRasterizer) {
 
     VkDynamicState dyn_state = VK_DYNAMIC_STATE_LINE_WIDTH;
     VkPipelineDynamicStateCreateInfo dyn_state_ci = LvlInitStruct<VkPipelineDynamicStateCreateInfo>();
-    dyn_state_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dyn_state_ci.dynamicStateCount = 1;
     dyn_state_ci.pDynamicStates = &dyn_state;
 
@@ -6278,21 +6249,26 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
     library_info_one.libraryCount = 1;
     library_info_one.pLibraries = &library;
 
-    VkPipelineShaderStageCreateInfo stage_create_infos[1] = {};
-    stage_create_infos[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    VkPipelineShaderStageCreateInfo stage_create_infos[2] = {};
+    stage_create_infos[0] = LvlInitStruct<VkPipelineShaderStageCreateInfo>();
     stage_create_infos[0].stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     stage_create_infos[0].module = rgen_shader.handle();
     stage_create_infos[0].pName = "main";
 
+    stage_create_infos[1] = LvlInitStruct<VkPipelineShaderStageCreateInfo>();
+    stage_create_infos[1].stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    stage_create_infos[1].module = chit_shader.handle();
+    stage_create_infos[1].pName = "main";
+
     VkRayTracingShaderGroupCreateInfoKHR group_create_infos[2] = {};
-    group_create_infos[0].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+    group_create_infos[0] = LvlInitStruct<VkRayTracingShaderGroupCreateInfoKHR>();
     group_create_infos[0].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
     group_create_infos[0].generalShader = 0;
     group_create_infos[0].closestHitShader = VK_SHADER_UNUSED_KHR;
     group_create_infos[0].anyHitShader = VK_SHADER_UNUSED_KHR;
     group_create_infos[0].intersectionShader = VK_SHADER_UNUSED_KHR;
 
-    group_create_infos[1].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+    group_create_infos[1] = LvlInitStruct<VkRayTracingShaderGroupCreateInfoKHR>();
     group_create_infos[1].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
     group_create_infos[1].generalShader = VK_SHADER_UNUSED_KHR;
     group_create_infos[1].closestHitShader = 1;  // Index 1 corresponds to the closest hit shader from the library
@@ -6301,7 +6277,7 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
 
     VkRayTracingPipelineCreateInfoKHR pipeline_ci = LvlInitStruct<VkRayTracingPipelineCreateInfoKHR>();
     pipeline_ci.pLibraryInfo = &library_info_one;
-    pipeline_ci.stageCount = 1;
+    pipeline_ci.stageCount = 2;
     pipeline_ci.pStages = stage_create_infos;
     pipeline_ci.groupCount = 2;
     pipeline_ci.pGroups = group_create_infos;
@@ -6388,6 +6364,166 @@ TEST_F(VkPositiveLayerTest, LineTopologyClasses) {
     cb.EndRenderPass();
 
     cb.end();
+    m_errorMonitor->VerifyNotFound();
+}
+
+TEST_F(VkPositiveLayerTest, MutableStorageImageFormatWriteForFormat) {
+    TEST_DESCRIPTION("Create a shader writing a storage image without an image format");
+
+    // need to be compatible to use VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT
+    const VkFormat image_format = VK_FORMAT_B8G8R8A8_SRGB;
+    const VkFormat image_view_format = VK_FORMAT_R32_SFLOAT;
+
+    if (!EnableDeviceProfileLayer()) {
+        printf("%s Failed to enable device profile layer.\n", kSkipPrefix);
+        return;
+    }
+
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+
+    if (!AreRequestedExtensionsEnabled()) {
+        printf("%s Required extensions not supported, skipping.\n", kSkipPrefix);
+        return;
+    }
+
+    PFN_vkSetPhysicalDeviceFormatProperties2EXT fpvkSetPhysicalDeviceFormatProperties2EXT = nullptr;
+    PFN_vkGetOriginalPhysicalDeviceFormatProperties2EXT fpvkGetOriginalPhysicalDeviceFormatProperties2EXT = nullptr;
+    if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFormatProperties2EXT, fpvkGetOriginalPhysicalDeviceFormatProperties2EXT)) {
+        printf("%s Failed to device profile layer.\n", kSkipPrefix);
+        return;
+    }
+
+    auto fmt_props_3 = LvlInitStruct<VkFormatProperties3>();
+    auto fmt_props = LvlInitStruct<VkFormatProperties2>(&fmt_props_3);
+
+    fpvkGetOriginalPhysicalDeviceFormatProperties2EXT(gpu(), image_format, &fmt_props);
+    fmt_props.formatProperties.optimalTilingFeatures =
+        (fmt_props.formatProperties.optimalTilingFeatures & ~VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT);
+    fmt_props_3.optimalTilingFeatures = (fmt_props_3.optimalTilingFeatures & ~VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT);
+    fmt_props_3.optimalTilingFeatures = (fmt_props_3.optimalTilingFeatures & ~VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT);
+    fpvkSetPhysicalDeviceFormatProperties2EXT(gpu(), image_format, fmt_props);
+
+    fpvkGetOriginalPhysicalDeviceFormatProperties2EXT(gpu(), image_view_format, &fmt_props);
+    fmt_props.formatProperties.optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
+    fmt_props_3.optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
+    fmt_props_3.optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
+    fpvkSetPhysicalDeviceFormatProperties2EXT(gpu(), image_view_format, fmt_props);
+
+    m_errorMonitor->ExpectSuccess();
+
+    // Make sure compute pipeline has a compute shader stage set
+    const std::string csSource = R"(
+                  OpCapability Shader
+                  OpCapability StorageImageWriteWithoutFormat
+             %1 = OpExtInstImport "GLSL.std.450"
+                  OpMemoryModel Logical GLSL450
+                  OpEntryPoint GLCompute %main "main"
+                  OpExecutionMode %main LocalSize 1 1 1
+                  OpSource GLSL 450
+                  OpName %main "main"
+                  OpName %img "img"
+                  OpDecorate %img DescriptorSet 0
+                  OpDecorate %img Binding 0
+                  OpDecorate %img NonWritable
+          %void = OpTypeVoid
+             %3 = OpTypeFunction %void
+         %float = OpTypeFloat 32
+             %7 = OpTypeImage %float 2D 0 0 0 2 Unknown
+%_ptr_UniformConstant_7 = OpTypePointer UniformConstant %7
+           %img = OpVariable %_ptr_UniformConstant_7 UniformConstant
+           %int = OpTypeInt 32 1
+         %v2int = OpTypeVector %int 2
+         %int_0 = OpConstant %int 0
+            %14 = OpConstantComposite %v2int %int_0 %int_0
+       %v4float = OpTypeVector %float 4
+       %float_0 = OpConstant %float 0
+            %17 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_0
+          %uint = OpTypeInt 32 0
+        %v3uint = OpTypeVector %uint 3
+        %uint_1 = OpConstant %uint 1
+          %main = OpFunction %void None %3
+             %5 = OpLabel
+            %10 = OpLoad %7 %img
+                  OpImageWrite %10 %14 %17
+                  OpReturn
+                  OpFunctionEnd
+                  )";
+
+    OneOffDescriptorSet ds(m_device, {
+                                         {0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                     });
+
+    CreateComputePipelineHelper cs_pipeline(*this);
+    cs_pipeline.InitInfo();
+    cs_pipeline.cs_.reset(new VkShaderObj(this, csSource.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM));
+    cs_pipeline.InitState();
+    cs_pipeline.pipeline_layout_ = VkPipelineLayoutObj(m_device, {&ds.layout_});
+    cs_pipeline.LateBindPipelineInfo();
+    cs_pipeline.cp_ci_.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;  // override with wrong value
+    cs_pipeline.CreateComputePipeline(true, false);                // need false to prevent late binding
+
+    // Messing with format support, make sure device will handle the image combination
+    VkImageFormatProperties format_props;
+    if (VK_SUCCESS != vk::GetPhysicalDeviceImageFormatProperties(gpu(), image_format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                                                                 VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
+                                                                 &format_props)) {
+        printf("%s Device will not be able to initialize image skipped.\n", kSkipPrefix);
+        return;
+    }
+
+    auto image_create_info = LvlInitStruct<VkImageCreateInfo>();
+    image_create_info.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = image_format;
+    image_create_info.extent = {32, 32, 1};
+    image_create_info.mipLevels = 1;
+    image_create_info.arrayLayers = 1;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_create_info.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+    VkImageObj image(m_device);
+    image.Init(image_create_info);
+
+    VkDescriptorImageInfo image_info = {};
+    image_info.imageView = image.targetView(image_view_format);
+    image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet descriptor_write = LvlInitStruct<VkWriteDescriptorSet>();
+    descriptor_write.dstSet = ds.set_;
+    descriptor_write.dstBinding = 0;
+    descriptor_write.descriptorCount = 1;
+    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    descriptor_write.pImageInfo = &image_info;
+    vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, NULL);
+
+    m_commandBuffer->reset();
+    m_commandBuffer->begin();
+
+    VkImageMemoryBarrier img_barrier = LvlInitStruct<VkImageMemoryBarrier>();
+    img_barrier.srcAccessMask = VK_ACCESS_HOST_READ_BIT;
+    img_barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    img_barrier.image = image.handle();  // Image mis-matches with FB image
+    img_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    img_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    img_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    img_barrier.subresourceRange.baseArrayLayer = 0;
+    img_barrier.subresourceRange.baseMipLevel = 0;
+    img_barrier.subresourceRange.layerCount = 1;
+    img_barrier.subresourceRange.levelCount = 1;
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipeline.pipeline_);
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipeline.pipeline_layout_.handle(), 0,
+                              1, &ds.set_, 0, nullptr);
+    vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
+    m_commandBuffer->end();
     m_errorMonitor->VerifyNotFound();
 }
 

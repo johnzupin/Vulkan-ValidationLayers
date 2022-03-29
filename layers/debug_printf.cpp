@@ -55,8 +55,6 @@ void DebugPrintf::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
     ValidationObject *device_object = GetLayerDataPtr(get_dispatch_key(*pDevice), layer_data_map);
     ValidationObject *validation_data = GetValidationObject(device_object->object_dispatch, this->container_type);
     DebugPrintf *device_debug_printf = static_cast<DebugPrintf *>(validation_data);
-    device_debug_printf->physicalDevice = physicalDevice;
-    device_debug_printf->device = *pDevice;
 
     const char *size_string = getLayerOption("khronos_validation.printf_buffer_size");
     device_debug_printf->output_buffer_size = *size_string ? atoi(size_string) : 1024;
@@ -656,7 +654,7 @@ void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQ
 
 bool DebugPrintf::CommandBufferNeedsProcessing(VkCommandBuffer command_buffer) {
     bool buffers_present = false;
-    auto cb_node = GetCBState(command_buffer);
+    auto cb_node = Get<debug_printf_state::CommandBuffer>(command_buffer);
     if (GetBufferInfo(cb_node.get()).size()) {
         buffers_present = true;
     }
@@ -669,7 +667,7 @@ bool DebugPrintf::CommandBufferNeedsProcessing(VkCommandBuffer command_buffer) {
 }
 
 void DebugPrintf::ProcessCommandBuffer(VkQueue queue, VkCommandBuffer command_buffer) {
-    auto cb_node = GetCBState(command_buffer);
+    auto cb_node = Get<debug_printf_state::CommandBuffer>(command_buffer);
     UtilProcessInstrumentationBuffer(queue, cb_node.get(), this);
     for (auto *secondary_cmd_buffer : cb_node->linkedCommandBuffers) {
         UtilProcessInstrumentationBuffer(queue, secondary_cmd_buffer, this);
@@ -876,7 +874,7 @@ void DebugPrintf::PostCallRecordCmdTraceRaysNV(VkCommandBuffer commandBuffer, Vk
                                                VkDeviceSize hitShaderBindingStride, VkBuffer callableShaderBindingTableBuffer,
                                                VkDeviceSize callableShaderBindingOffset, VkDeviceSize callableShaderBindingStride,
                                                uint32_t width, uint32_t height, uint32_t depth) {
-    auto cb_state = GetCBState(commandBuffer);
+    auto cb_state = Get<debug_printf_state::CommandBuffer>(commandBuffer);
     cb_state->hasTraceRaysCmd = true;
 }
 
@@ -895,7 +893,7 @@ void DebugPrintf::PostCallRecordCmdTraceRaysKHR(VkCommandBuffer commandBuffer,
                                                 const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
                                                 const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width,
                                                 uint32_t height, uint32_t depth) {
-    auto cb_state = GetCBState(commandBuffer);
+    auto cb_state = Get<debug_printf_state::CommandBuffer>(commandBuffer);
     cb_state->hasTraceRaysCmd = true;
 }
 
@@ -914,7 +912,7 @@ void DebugPrintf::PostCallRecordCmdTraceRaysIndirectKHR(VkCommandBuffer commandB
                                                         const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
                                                         const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
                                                         VkDeviceAddress indirectDeviceAddress) {
-    auto cb_state = GetCBState(commandBuffer);
+    auto cb_state = Get<debug_printf_state::CommandBuffer>(commandBuffer);
     cb_state->hasTraceRaysCmd = true;
 }
 
@@ -940,7 +938,7 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
     VkDescriptorBufferInfo output_desc_buffer_info = {};
     output_desc_buffer_info.range = output_buffer_size;
 
-    auto cb_node = GetCBState(cmd_buffer);
+    auto cb_node = Get<debug_printf_state::CommandBuffer>(cmd_buffer);
     if (!cb_node) {
         ReportSetupProblem(device, "Unrecognized command buffer");
         aborted = true;
@@ -1003,14 +1001,15 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
 std::shared_ptr<CMD_BUFFER_STATE> DebugPrintf::CreateCmdBufferState(VkCommandBuffer cb,
                                                                     const VkCommandBufferAllocateInfo *pCreateInfo,
                                                                     const COMMAND_POOL_STATE *pool) {
-    return std::static_pointer_cast<CMD_BUFFER_STATE>(std::make_shared<CMD_BUFFER_STATE_PRINTF>(this, cb, pCreateInfo, pool));
+    return std::static_pointer_cast<CMD_BUFFER_STATE>(
+        std::make_shared<debug_printf_state::CommandBuffer>(this, cb, pCreateInfo, pool));
 }
 
-CMD_BUFFER_STATE_PRINTF::CMD_BUFFER_STATE_PRINTF(DebugPrintf *dp, VkCommandBuffer cb,
+debug_printf_state::CommandBuffer::CommandBuffer(DebugPrintf *dp, VkCommandBuffer cb,
                                                  const VkCommandBufferAllocateInfo *pCreateInfo, const COMMAND_POOL_STATE *pool)
     : CMD_BUFFER_STATE(dp, cb, pCreateInfo, pool) {}
 
-void CMD_BUFFER_STATE_PRINTF::Reset() {
+void debug_printf_state::CommandBuffer::Reset() {
     CMD_BUFFER_STATE::Reset();
     auto debug_printf = static_cast<DebugPrintf *>(dev_data);
     // Free the device memory and descriptor set(s) associated with a command buffer.

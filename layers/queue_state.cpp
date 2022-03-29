@@ -70,6 +70,21 @@ uint64_t QUEUE_STATE::Submit(CB_SUBMISSION &&submission) {
     return retire_early ? next_seq : 0;
 }
 
+bool QUEUE_STATE::HasWait(VkSemaphore semaphore, VkFence fence) const {
+    auto guard = ReadLock();
+    for (const auto &submission : submissions_) {
+        if (fence != VK_NULL_HANDLE && submission.fence && submission.fence->Handle().Cast<VkFence>() == fence) {
+            return true;
+        }
+        for (const auto &wait_semaphore : submission.wait_semaphores) {
+            if (wait_semaphore.semaphore->Handle().Cast<VkSemaphore>() == semaphore) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static void MergeResults(SEMAPHORE_STATE::RetireResult &results, const SEMAPHORE_STATE::RetireResult &sem_result) {
     for (auto &entry : sem_result) {
         auto &last_seq = results[entry.first];
@@ -102,14 +117,6 @@ void QUEUE_STATE::Retire(uint64_t until_seq) {
             MergeResults(other_queue_seqs, result);
             wait.semaphore->EndUse();
         }
-        for (auto &signal : submission->signal_semaphores) {
-            auto result = signal.semaphore->Retire(this, signal.payload);
-            // in the case of timeline semaphores, signaling at payload == N
-            // may unblock waiting queues for payload <= N so we need to
-            // process them
-            MergeResults(other_queue_seqs, result);
-            signal.semaphore->EndUse();
-        }
         // Handle updates to how far the current queue has progressed
         // without going recursive when we call Retire on other_queue_seqs
         // below.
@@ -119,14 +126,38 @@ void QUEUE_STATE::Retire(uint64_t until_seq) {
             other_queue_seqs.erase(self_update);
         }
 
+        auto is_query_updated_after = [this](const QueryObject &query_object) {
+            for (const auto &submission : submissions_) {
+                for (uint32_t j = 0; j < submission.cbs.size(); ++j) {
+                    const auto &next_cb_node = submission.cbs[j];
+                    if (!next_cb_node) {
+                        continue;
+                    }
+                    if (next_cb_node->updatedQueries.find(query_object) != next_cb_node->updatedQueries.end()) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
         for (auto &cb_node : submission->cbs) {
             auto cb_guard = cb_node->WriteLock();
             for (auto *secondary_cmd_buffer : cb_node->linkedCommandBuffers) {
                 auto secondary_guard = secondary_cmd_buffer->WriteLock();
-                secondary_cmd_buffer->Retire(submission->perf_submit_pass);
+                secondary_cmd_buffer->Retire(submission->perf_submit_pass, is_query_updated_after);
             }
-            cb_node->Retire(submission->perf_submit_pass);
+            cb_node->Retire(submission->perf_submit_pass, is_query_updated_after);
             cb_node->EndUse();
+        }
+
+        for (auto &signal : submission->signal_semaphores) {
+            auto result = signal.semaphore->Retire(this, signal.payload);
+            // in the case of timeline semaphores, signaling at payload == N
+            // may unblock waiting queues for payload <= N so we need to
+            // process them
+            MergeResults(other_queue_seqs, result);
+            signal.semaphore->EndUse();
         }
 
         if (submission->fence) {
@@ -167,6 +198,8 @@ void FENCE_STATE::Retire(bool notify_queue) {
         queue_ = nullptr;
         seq_ = 0;
         state_ = FENCE_RETIRED;
+
+        ExecuteWaitingFunctions();
     }
     if (q && notify_queue) {
         q->Retire(seq);
@@ -298,6 +331,7 @@ SEMAPHORE_STATE::RetireResult SEMAPHORE_STATE::Retire(QUEUE_STATE *queue, uint64
             last_seq = std::max(last_seq, completed_.seq);
         }
     }
+    ExecuteWaitingFunctions();
     return result;
 }
 
