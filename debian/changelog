@@ -1,3 +1,332 @@
+vulkan-validationlayers (1.3.209.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ sfricke-samsung ]
+  * layers: Label 06530 and add testing
+  * layers: Block Texel View VU 01583
+  * tests: Add extra positive spec constant
+
+  [ Piers Daniell ]
+  * layers: Fix Vulkan 1.3 extended dynamic state validation
+  * layers: Match the VUID strings
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.205
+
+  [ Jeremy Gebben ]
+  * corechecks: Remove KHR from VUID strings for dynamic rendering
+
+  [ aitor-lunarg ]
+  * tests: Add test extended usage with different format views
+
+  [ Tony-LunarG ]
+  * layers: Initialize safe structs
+
+  [ aitor-lunarg ]
+  * tests: Remove test extended usage with different format views
+
+  [ Tony-LunarG ]
+  * practices: Ignore pointers when appropriate
+
+  [ aitor-lunarg ]
+  * tests: Add test extended usage with different format views
+
+  [ Jeremy Gebben ]
+  * syncval: Handle destruction of bindless descriptor resources
+  * tests: Add VkSyncValTest.DestroyedUnusedDescriptors
+  * layers: Add missing small_vector<> destructor
+
+  [ sfricke-samsung ]
+  * layers: Better attribAddress error message
+  * tests: Fix tests failing with 1.3 devsim
+  * layers: Generate shader module def_index table
+  * layers: Add depcrecated WorkgroupSize BP warning
+  * tests: Add depcrecated WorkgroupSize BP warning
+  * docs: Add InitBestPracticesFramework note
+  * layers: Fix format_feature_2 format features
+
+  [ Andrej Redeky ]
+  * layers: Fix crashing in best practices
+
+  [ Tony-LunarG ]
+  * layers: Use more secure location for shader val cache
+
+  [ aitor-lunarg ]
+  * layers: Update SubresGenerator when advancing SubresLayoutMap
+  * tests: Check correct mip level is reported for subres layout
+
+  [ Jeremy Gebben ]
+  * layers: Don't create buffer address map entries for address 0
+
+  [ Tony-LunarG ]
+  * practices: Handle deprecated extensions in 1.3
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.206
+
+  [ Jeremy Gebben ]
+  * build: Handle many permutations of SPIRV-Headers locations
+
+  [ Tony-LunarG ]
+  * layers: Allow null VkDeviceImageMemoryRequirements:planeAspect
+  * tests: Test for null VkDeviceImageMemoryRequirements.planeAspect
+
+  [ sfricke-samsung ]
+  * build: Update SPIRV-Tools
+
+  [ Jeremy Gebben ]
+  * build: Handle different SPIRV-Tools targets
+
+  [ sfricke-samsung ]
+  * layers: Add WITHOUT_FORMAT_BIT for storage buffer
+  * tests: Add WITHOUT_FORMAT_BIT storage texel buffer
+
+  [ Jeremy Gebben ]
+  * layers: Use allocator codegen hooks for acceleration structures
+
+  [ aitor-lunarg ]
+  * layers: Fix stage index typo
+
+  [ sfricke-samsung ]
+  * tests: Convert rest of tests to LvlInitStruct
+
+  [ Agarwal, Arpit ]
+  * layer: Add VK_QCOM_fragment_density_map_offset VUs
+  * tests: Add VK_QCOM_fragment_density_map_offset tests
+
+  [ Tony-LunarG ]
+  * tests: Clean up LvlInitStructs
+
+  [ David Pinedo ]
+  * docs: Auto gen of layer documents
+  * docs: Add link to fined_grain_locking
+  * docs: Updates to md files
+  * docs: Documentation tweaks
+  * docs: Update to vk_layer_settings.txt
+  * docs: Update copyright notice
+  * docs: Documentation tweaks
+
+  [ Charles Baker ]
+  * layers: Avoid out of bounds access in UpdateDrawState()
+
+  [ Aaron Hagan ]
+  * layers: Add VK_KHR_dynamic_rendering VUs and Tests
+
+  [ Jeremy Gebben ]
+  * layers: Clean up acceleration state objects
+  * layers: Track objects in the accel struct <-> memory copies
+  * layers: Track buffers used in vkCmdBuildAccelerationStructureNV
+  * tests: Add ObjInUseCmdBuildAccelerationStructureNV test
+  * layers: Track buffs used by vkCmdBuildAccelerationStructuresKHR
+  * tests: Add ObjInUseCmdBuildAccelerationStructureKHR test
+  * tests: Add a check for VUID 03082
+
+  [ ziga-lunarg ]
+  * layers: Check if renderpass is set before use
+
+  [ Tony-LunarG ]
+  * layers: Check count before pointer in OT
+
+  [ Tomasz Śniatowski ]
+  * layers: Avoid creating a nullptr std::string in LogError call
+
+  [ Nathaniel Cesario ]
+  * tests: Fix extension and feature check
+
+  [ Jeremy Gebben ]
+  * layers: Let state tracker accessors to work with derived classes
+
+  [ sfricke-samsung ]
+  * tests: Cleanup YCbCr tests to use vulkan 1.1
+  * layers: Add VUID 06415
+  * tests: Add VUID 06415
+
+  [ Petr Kraus ]
+  * tests: Add missing printf newlines
+
+  [ Tony-LunarG ]
+  * gpu: Handle NULL renderpass
+  * tests: Add gpu-av dyn rendering test
+
+  [ ziga-lunarg ]
+  * layers: Validate memory of buffers in acceleration copy
+  * tests: Test invalid memory in acceleration structures copy
+
+  [ Jeremy Gebben ]
+  * practices: Only track image usages if ARM checks are enabled
+  * docs: Add fine grained locking design document
+
+  [ ziga-lunarg ]
+  * layers: Skip render pass validation if dynamic rendering
+  * tests: Test buffer memory barrier with dynamic rendering
+
+  [ sfricke-samsung ]
+  * layers: ComputeWorkGroupSize with spec const
+
+  [ ziga-lunarg ]
+  * layers: Check attachments vector size before access
+  * tests: Test creating pipeline with mismatched attachments
+  * layers: Fix pipeline stage state
+
+  [ aitor-lunarg ]
+  * tests: Extend pipeline helper for multiple attachments
+
+  [ ziga-lunarg ]
+  * layers: Skip if pipeline state was not created
+  * tests: Test creating pipeline with invalid render pass
+  * layers: Check vector size before access
+  * tests: Test incompatible render pass and framebuffer
+
+  [ aitor-lunarg ]
+  * layers: Unbind resources with multiview at render/subpass start
+
+  [ ziga-lunarg ]
+  * tests: Fix ray tracing library test
+  * tests: Fix acceleration structure test
+  * layers: Track subpass only when dynamic rendering is not used
+  * layers: Validate buffer memory in acceleration copy
+  * tests: Test copying to unbound buffer
+  * tests: Fix dynamic rendering test
+  * layers: Validate viewport and scissor with count
+  * tests: Create pipeline with viewport and scissor with count
+  * tests: Fix extended dynamic state enabled test
+  * tests: Skip gpu oob test on amd
+  * layers: Add necessary guards for object types
+  * layers: Fix updating queries
+  * tests: Test updating queries in multiple command buffers
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.208
+
+  [ ziga-lunarg ]
+  * layers: Fix validating dynamic rendering pipeline flags
+  * tests: Test dynamic rendering pipeline missing flags
+  * layers: Improve vkCmdBeginRendering logs
+  * layers: Validate renderpass multiview view offsets
+  * tests: Create multiview render pass with invalid offset
+  * layers: Validate queries in multiview subpass
+  * tests: Test queries in multiview subpass
+
+  [ sfricke-samsung ]
+  * layers: Consistent use of RegionType
+
+  [ ziga-lunarg ]
+  * layers: Check if extension is enabled for VUIDs
+  * layers: Validate input attachment and descriptor using same view
+  * tests: Test attachments and descriptors using same image views
+  * tests: Fix barrier layout test
+
+  [ Tony-LunarG ]
+  * layers: Update cmdbuf status at unbind
+
+  [ ziga-lunarg ]
+  * layers: Fix comparing buffer copy regions
+  * tests: Test copying completely overlapping buffer regions
+  * tests: Fix buffer copy test
+
+  [ Tony-LunarG ]
+  * layers: Remove special case for planeAspect
+
+  [ Jeremy Gebben ]
+  * gpu: Normalize CreateAccelerationStructureBuildValidationState()
+  * layers: Clean up GPUAV and DebugPrintf member data
+
+  [ ziga-lunarg ]
+  * layers: Fix rendering attachment access
+  * tests: Fix dynamic rendering create pipeline test
+
+  [ Martin Freebody ]
+  * layers: Fix sample count for non-sequential color attachments
+
+  [ ziga-lunarg ]
+  * layers: Validate depth RenderingAttachment resolve mode
+  * tests: Invalid depth rendering attachment resolve mode
+  * layers: Validate build acc structure buffer memory
+  * tests: Build acc structure with invalid memory
+  * layers: Validate RenderingInfo depth and stencil samples
+  * tests: Test mismatched RenderingInfo attachment samples
+  * practices: Validate image create flags
+  * tests: Test ineffective image create flags
+  * layers: Validate BeginRendering depth attachment format
+  * tests: Test BeginRendering with invalid depth attachment format
+
+  [ Jeremy Gebben ]
+  * practices: Rearrange header declarations
+  * practices: Implement fine-grained locking
+  * tests: Add a positive multithreaded test for best practices
+
+  [ jweinstein ]
+  * layers: Make MostSignificantBit(0) yield -1
+
+  [ ziga-lunarg ]
+  * layers: Fix vuid 06083 and 06084 log messages
+  * tests: Test invalid render begin device group area
+  * layers: Fix validating RenderingInfo layer count
+  * tests: Test invalid RenderingInfo layer count
+  * tests: Fix begin rendering test
+  * layers: Fix checking enabled ray tracing features
+  * tests: Test enabled only one required ray tracing feature
+  * tests: Fix group render pass test
+  * practices: Warn when transitioning from undefined to read-only
+  * tests: Test transitioning from undefined to read-only layout
+
+  [ Jeremy Gebben ]
+  * gpu: Rename derived command buffer state
+  * printf: Move derived command buffer state to a namespace
+
+  [ ziga-lunarg ]
+  * tests: Fix transfer image test
+  * layers: Fix invalid next subpass
+
+  [ sfricke-samsung ]
+  * layers: Fix LogObjectList not being used
+
+  [ ziga-lunarg ]
+  * layers: Validate RenderingInfo stencil attachment aspect
+  * tests: Test RenderingInfo with invalid stencil attachment
+  * layers: Validate FragmentShadingRate layer count
+  * tests: Test FragmentShadingRate layer count
+  * layers: Swapchain extent allow cached surface capabilities
+  * tests: Create swapchain with invalid extent
+
+  [ Hans-Kristian Arntzen ]
+  * layers: Fix segfault when checking for dynamic DS attachments
+
+  [ aitor-lunarg ]
+  * layers: Let concurrent unordered map's insert use templated args
+
+  [ ziga-lunarg ]
+  * layers: Skip validating subpass when dynamic rendering
+  * tests: Test queries with dynamic rendering
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.209
+
+  [ sfricke-samsung ]
+  * layers: Update colorWriteEnable attachment count
+
+  [ ziga-lunarg ]
+  * layers: Validate statistics query queue support
+  * tests: Unsupported statistics queries
+  * layers: Validate get query pool results parameters
+  * tests: Test get query pool results
+  * layers: Validate non-acquired swapchain image use
+  * tests: Test acquiring swapchain images before use
+  * tests: Fix tests not waiting for swapchain image acquire
+  * layers: Fix validating swapchain image wait
+  * tests: Test using swapchain image before acquire wait
+  * tests: Test acquiring swapchain image with fence
+  * layers: Add missing locks and fix swapchain image state
+  * layers: Validate memory in WriteAccelerationStructure
+  * tests: Test invalid memory in acceleration structure
+
+  [ sfricke-samsung ]
+  * layers: Make use of CMD_TYPE
+
+  [ ziga-lunarg ]
+  * layers: Use copy of pointer in lambda
+
+ -- john <john@odin>  Tue, 29 Mar 2022 14:11:41 -0600
+
 vulkan-validationlayers (1.3.204.1~rc1-1lunarg20.04-1) focal; urgency=medium
 
   [ Jeremy Gebben ]
