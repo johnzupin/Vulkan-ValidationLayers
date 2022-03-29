@@ -321,10 +321,14 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
             return "VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO";
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO:
             return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO";
+        case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_BINDING_REFERENCE_VALVE:
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_BINDING_REFERENCE_VALVE";
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO:
             return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO";
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO:
             return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO";
+        case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_HOST_MAPPING_INFO_VALVE:
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_HOST_MAPPING_INFO_VALVE";
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT:
             return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT";
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO:
@@ -685,6 +689,8 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_NV:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_NV";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_NV:
@@ -1274,6 +1280,10 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
             return "VK_STRUCTURE_TYPE_VIDEO_CODING_CONTROL_INFO_KHR";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
+        case VK_STRUCTURE_TYPE_VIDEO_DECODE_CAPABILITIES_KHR:
+            return "VK_STRUCTURE_TYPE_VIDEO_DECODE_CAPABILITIES_KHR";
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_CAPABILITIES_EXT:
             return "VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_CAPABILITIES_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
@@ -1292,10 +1302,6 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_EXT:
             return "VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_EXT";
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-        case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_SESSION_CREATE_INFO_EXT:
-            return "VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_SESSION_CREATE_INFO_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_SESSION_PARAMETERS_ADD_INFO_EXT:
@@ -1322,10 +1328,6 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
             return "VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PROFILE_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-        case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_SESSION_CREATE_INFO_EXT:
-            return "VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_SESSION_CREATE_INFO_EXT";
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_SESSION_PARAMETERS_ADD_INFO_EXT:
             return "VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_SESSION_PARAMETERS_ADD_INFO_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
@@ -1336,6 +1338,10 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_INFO_KHR:
             return "VK_STRUCTURE_TYPE_VIDEO_DECODE_INFO_KHR";
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_CAPABILITIES_KHR:
+            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_CAPABILITIES_KHR";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_CAPABILITIES_EXT:
@@ -1366,8 +1372,8 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
             return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_LAYER_INFO_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_CREATE_INFO_EXT:
-            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_CREATE_INFO_EXT";
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_REFERENCE_LISTS_EXT:
+            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_REFERENCE_LISTS_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_ADD_INFO_EXT:
@@ -1394,8 +1400,8 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
             return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_EMIT_PICTURE_PARAMETERS_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_NALU_SLICE_EXT:
-            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_NALU_SLICE_EXT";
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_NALU_SLICE_SEGMENT_EXT:
+            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_NALU_SLICE_SEGMENT_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_EXT:
@@ -1412,10 +1418,6 @@ static inline const char* string_VkStructureType(VkStructureType input_value)
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_REFERENCE_LISTS_EXT:
             return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_REFERENCE_LISTS_EXT";
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_CREATE_INFO_EXT:
-            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_CREATE_INFO_EXT";
 #endif // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_ADD_INFO_EXT:
@@ -1688,8 +1690,8 @@ static inline const char* string_VkImageAspectFlagBits(VkImageAspectFlagBits inp
             return "VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT";
         case VK_IMAGE_ASPECT_METADATA_BIT:
             return "VK_IMAGE_ASPECT_METADATA_BIT";
-        case VK_IMAGE_ASPECT_NONE_KHR:
-            return "VK_IMAGE_ASPECT_NONE_KHR";
+        case VK_IMAGE_ASPECT_NONE:
+            return "VK_IMAGE_ASPECT_NONE";
         case VK_IMAGE_ASPECT_PLANE_0_BIT:
             return "VK_IMAGE_ASPECT_PLANE_0_BIT";
         case VK_IMAGE_ASPECT_PLANE_1_BIT:
@@ -2678,6 +2680,33 @@ static inline std::string string_VkImageUsageFlags(VkImageUsageFlags input_value
         input_value >>= 1;
     }
     if( ret.empty()) ret.append(string_VkImageUsageFlagBits(static_cast<VkImageUsageFlagBits>(0)));
+    return ret;
+}
+
+static inline const char* string_VkInstanceCreateFlagBits(VkInstanceCreateFlagBits input_value)
+{
+    switch (input_value)
+    {
+        case VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR:
+            return "VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR";
+        default:
+            return "Unhandled VkInstanceCreateFlagBits";
+    }
+}
+
+static inline std::string string_VkInstanceCreateFlags(VkInstanceCreateFlags input_value)
+{
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkInstanceCreateFlagBits(static_cast<VkInstanceCreateFlagBits>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if( ret.empty()) ret.append(string_VkInstanceCreateFlagBits(static_cast<VkInstanceCreateFlagBits>(0)));
     return ret;
 }
 
@@ -6282,6 +6311,41 @@ static inline const char* string_VkQueryResultStatusKHR(VkQueryResultStatusKHR i
 
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
+static inline const char* string_VkVideoDecodeCapabilityFlagBitsKHR(VkVideoDecodeCapabilityFlagBitsKHR input_value)
+{
+    switch (input_value)
+    {
+        case VK_VIDEO_DECODE_CAPABILITY_DEFAULT_KHR:
+            return "VK_VIDEO_DECODE_CAPABILITY_DEFAULT_KHR";
+        case VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_COINCIDE_BIT_KHR:
+            return "VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_COINCIDE_BIT_KHR";
+        case VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_DISTINCT_BIT_KHR:
+            return "VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_DISTINCT_BIT_KHR";
+        default:
+            return "Unhandled VkVideoDecodeCapabilityFlagBitsKHR";
+    }
+}
+
+static inline std::string string_VkVideoDecodeCapabilityFlagsKHR(VkVideoDecodeCapabilityFlagsKHR input_value)
+{
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkVideoDecodeCapabilityFlagBitsKHR(static_cast<VkVideoDecodeCapabilityFlagBitsKHR>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if( ret.empty()) ret.append(string_VkVideoDecodeCapabilityFlagBitsKHR(static_cast<VkVideoDecodeCapabilityFlagBitsKHR>(0)));
+    return ret;
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
 static inline const char* string_VkVideoDecodeFlagBitsKHR(VkVideoDecodeFlagBitsKHR input_value)
 {
     switch (input_value)
@@ -7083,32 +7147,32 @@ static inline std::string string_VkVideoEncodeFlagsKHR(VkVideoEncodeFlagsKHR inp
 
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
-static inline const char* string_VkVideoEncodeRateControlFlagBitsKHR(VkVideoEncodeRateControlFlagBitsKHR input_value)
+static inline const char* string_VkVideoEncodeCapabilityFlagBitsKHR(VkVideoEncodeCapabilityFlagBitsKHR input_value)
 {
     switch (input_value)
     {
-        case VK_VIDEO_ENCODE_RATE_CONTROL_DEFAULT_KHR:
-            return "VK_VIDEO_ENCODE_RATE_CONTROL_DEFAULT_KHR";
-        case VK_VIDEO_ENCODE_RATE_CONTROL_RESERVED_0_BIT_KHR:
-            return "VK_VIDEO_ENCODE_RATE_CONTROL_RESERVED_0_BIT_KHR";
+        case VK_VIDEO_ENCODE_CAPABILITY_DEFAULT_KHR:
+            return "VK_VIDEO_ENCODE_CAPABILITY_DEFAULT_KHR";
+        case VK_VIDEO_ENCODE_CAPABILITY_PRECEDING_EXTERNALLY_ENCODED_BYTES_BIT_KHR:
+            return "VK_VIDEO_ENCODE_CAPABILITY_PRECEDING_EXTERNALLY_ENCODED_BYTES_BIT_KHR";
         default:
-            return "Unhandled VkVideoEncodeRateControlFlagBitsKHR";
+            return "Unhandled VkVideoEncodeCapabilityFlagBitsKHR";
     }
 }
 
-static inline std::string string_VkVideoEncodeRateControlFlagsKHR(VkVideoEncodeRateControlFlagsKHR input_value)
+static inline std::string string_VkVideoEncodeCapabilityFlagsKHR(VkVideoEncodeCapabilityFlagsKHR input_value)
 {
     std::string ret;
     int index = 0;
     while(input_value) {
         if (input_value & 1) {
             if( !ret.empty()) ret.append("|");
-            ret.append(string_VkVideoEncodeRateControlFlagBitsKHR(static_cast<VkVideoEncodeRateControlFlagBitsKHR>(1U << index)));
+            ret.append(string_VkVideoEncodeCapabilityFlagBitsKHR(static_cast<VkVideoEncodeCapabilityFlagBitsKHR>(1U << index)));
         }
         ++index;
         input_value >>= 1;
     }
-    if( ret.empty()) ret.append(string_VkVideoEncodeRateControlFlagBitsKHR(static_cast<VkVideoEncodeRateControlFlagBitsKHR>(0)));
+    if( ret.empty()) ret.append(string_VkVideoEncodeCapabilityFlagBitsKHR(static_cast<VkVideoEncodeCapabilityFlagBitsKHR>(0)));
     return ret;
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
@@ -7144,6 +7208,39 @@ static inline std::string string_VkVideoEncodeRateControlModeFlagsKHR(VkVideoEnc
         input_value >>= 1;
     }
     if( ret.empty()) ret.append(string_VkVideoEncodeRateControlModeFlagBitsKHR(static_cast<VkVideoEncodeRateControlModeFlagBitsKHR>(0)));
+    return ret;
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+static inline const char* string_VkVideoEncodeRateControlFlagBitsKHR(VkVideoEncodeRateControlFlagBitsKHR input_value)
+{
+    switch (input_value)
+    {
+        case VK_VIDEO_ENCODE_RATE_CONTROL_DEFAULT_KHR:
+            return "VK_VIDEO_ENCODE_RATE_CONTROL_DEFAULT_KHR";
+        case VK_VIDEO_ENCODE_RATE_CONTROL_RESERVED_0_BIT_KHR:
+            return "VK_VIDEO_ENCODE_RATE_CONTROL_RESERVED_0_BIT_KHR";
+        default:
+            return "Unhandled VkVideoEncodeRateControlFlagBitsKHR";
+    }
+}
+
+static inline std::string string_VkVideoEncodeRateControlFlagsKHR(VkVideoEncodeRateControlFlagsKHR input_value)
+{
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkVideoEncodeRateControlFlagBitsKHR(static_cast<VkVideoEncodeRateControlFlagBitsKHR>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if( ret.empty()) ret.append(string_VkVideoEncodeRateControlFlagBitsKHR(static_cast<VkVideoEncodeRateControlFlagBitsKHR>(0)));
     return ret;
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
@@ -7644,16 +7741,40 @@ static inline const char* string_VkVideoEncodeH264CapabilityFlagBitsEXT(VkVideoE
             return "VK_VIDEO_ENCODE_H264_CAPABILITY_DEBLOCKING_FILTER_ENABLED_BIT_EXT";
         case VK_VIDEO_ENCODE_H264_CAPABILITY_DEBLOCKING_FILTER_PARTIAL_BIT_EXT:
             return "VK_VIDEO_ENCODE_H264_CAPABILITY_DEBLOCKING_FILTER_PARTIAL_BIT_EXT";
-        case VK_VIDEO_ENCODE_H264_CAPABILITY_EVENLY_DISTRIBUTED_SLICE_SIZE_BIT_EXT:
-            return "VK_VIDEO_ENCODE_H264_CAPABILITY_EVENLY_DISTRIBUTED_SLICE_SIZE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_DIFFERENT_SLICE_TYPE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_DIFFERENT_SLICE_TYPE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_DIRECT_8X8_INFERENCE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_DIRECT_8X8_INFERENCE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_DISABLE_DIRECT_SPATIAL_MV_PRED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_DISABLE_DIRECT_SPATIAL_MV_PRED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_HRD_COMPLIANCE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_HRD_COMPLIANCE_BIT_EXT";
         case VK_VIDEO_ENCODE_H264_CAPABILITY_MULTIPLE_SLICE_PER_FRAME_BIT_EXT:
             return "VK_VIDEO_ENCODE_H264_CAPABILITY_MULTIPLE_SLICE_PER_FRAME_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_PIC_INIT_QP_MINUS26_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_PIC_INIT_QP_MINUS26_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_QPPRIME_Y_ZERO_TRANSFORM_BYPASS_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_QPPRIME_Y_ZERO_TRANSFORM_BYPASS_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_ROW_UNALIGNED_SLICE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_ROW_UNALIGNED_SLICE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_SCALING_LISTS_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_SCALING_LISTS_BIT_EXT";
         case VK_VIDEO_ENCODE_H264_CAPABILITY_SECOND_CHROMA_QP_OFFSET_BIT_EXT:
             return "VK_VIDEO_ENCODE_H264_CAPABILITY_SECOND_CHROMA_QP_OFFSET_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_SEPARATE_COLOUR_PLANE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_SEPARATE_COLOUR_PLANE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_SLICE_MB_COUNT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_SLICE_MB_COUNT_BIT_EXT";
         case VK_VIDEO_ENCODE_H264_CAPABILITY_TRANSFORM_8X8_BIT_EXT:
             return "VK_VIDEO_ENCODE_H264_CAPABILITY_TRANSFORM_8X8_BIT_EXT";
-        case VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_BI_PRED_IMPLICIT_BIT_EXT:
-            return "VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_BI_PRED_IMPLICIT_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_BIPRED_EXPLICIT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_BIPRED_EXPLICIT_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_BIPRED_IMPLICIT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_BIPRED_IMPLICIT_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_PRED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_PRED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_PRED_NO_TABLE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H264_CAPABILITY_WEIGHTED_PRED_NO_TABLE_BIT_EXT";
         default:
             return "Unhandled VkVideoEncodeH264CapabilityFlagBitsEXT";
     }
@@ -7749,39 +7870,6 @@ static inline std::string string_VkVideoEncodeH264OutputModeFlagsEXT(VkVideoEnco
 
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
-static inline const char* string_VkVideoEncodeH264CreateFlagBitsEXT(VkVideoEncodeH264CreateFlagBitsEXT input_value)
-{
-    switch (input_value)
-    {
-        case VK_VIDEO_ENCODE_H264_CREATE_DEFAULT_EXT:
-            return "VK_VIDEO_ENCODE_H264_CREATE_DEFAULT_EXT";
-        case VK_VIDEO_ENCODE_H264_CREATE_RESERVED_0_BIT_EXT:
-            return "VK_VIDEO_ENCODE_H264_CREATE_RESERVED_0_BIT_EXT";
-        default:
-            return "Unhandled VkVideoEncodeH264CreateFlagBitsEXT";
-    }
-}
-
-static inline std::string string_VkVideoEncodeH264CreateFlagsEXT(VkVideoEncodeH264CreateFlagsEXT input_value)
-{
-    std::string ret;
-    int index = 0;
-    while(input_value) {
-        if (input_value & 1) {
-            if( !ret.empty()) ret.append("|");
-            ret.append(string_VkVideoEncodeH264CreateFlagBitsEXT(static_cast<VkVideoEncodeH264CreateFlagBitsEXT>(1U << index)));
-        }
-        ++index;
-        input_value >>= 1;
-    }
-    if( ret.empty()) ret.append(string_VkVideoEncodeH264CreateFlagBitsEXT(static_cast<VkVideoEncodeH264CreateFlagBitsEXT>(0)));
-    return ret;
-}
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
 static inline const char* string_VkVideoEncodeH264RateControlStructureFlagBitsEXT(VkVideoEncodeH264RateControlStructureFlagBitsEXT input_value)
 {
     switch (input_value)
@@ -7817,6 +7905,83 @@ static inline std::string string_VkVideoEncodeH264RateControlStructureFlagsEXT(V
 
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
+static inline const char* string_VkVideoEncodeH265CapabilityFlagBitsEXT(VkVideoEncodeH265CapabilityFlagBitsEXT input_value)
+{
+    switch (input_value)
+    {
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_DEBLOCKING_FILTER_OVERRIDE_ENABLED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_DEBLOCKING_FILTER_OVERRIDE_ENABLED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_DEPENDENT_SLICE_SEGMENT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_DEPENDENT_SLICE_SEGMENT_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_DIFFERENT_SLICE_TYPE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_DIFFERENT_SLICE_TYPE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_ENTROPY_CODING_SYNC_ENABLED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_ENTROPY_CODING_SYNC_ENABLED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_HRD_COMPLIANCE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_HRD_COMPLIANCE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_INIT_QP_MINUS26_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_INIT_QP_MINUS26_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_LOG2_PARALLEL_MERGE_LEVEL_MINUS2_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_LOG2_PARALLEL_MERGE_LEVEL_MINUS2_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_MULTIPLE_SLICE_PER_TILE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_MULTIPLE_SLICE_PER_TILE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_MULTIPLE_TILE_PER_FRAME_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_MULTIPLE_TILE_PER_FRAME_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_MULTIPLE_TILE_PER_SLICE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_MULTIPLE_TILE_PER_SLICE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_PCM_ENABLE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_PCM_ENABLE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_PPS_SLICE_CHROMA_QP_OFFSETS_PRESENT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_PPS_SLICE_CHROMA_QP_OFFSETS_PRESENT_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_ROW_UNALIGNED_SLICE_SEGMENT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_ROW_UNALIGNED_SLICE_SEGMENT_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_SAMPLE_ADAPTIVE_OFFSET_ENABLED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_SAMPLE_ADAPTIVE_OFFSET_ENABLED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_SCALING_LISTS_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_SCALING_LISTS_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_SEPARATE_COLOUR_PLANE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_SEPARATE_COLOUR_PLANE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_SIGN_DATA_HIDING_ENABLED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_SIGN_DATA_HIDING_ENABLED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_SLICE_SEGMENT_CTB_COUNT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_SLICE_SEGMENT_CTB_COUNT_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_SPS_TEMPORAL_MVP_ENABLED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_SPS_TEMPORAL_MVP_ENABLED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_TRANSFORM_SKIP_ENABLED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_TRANSFORM_SKIP_ENABLED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_TRANSQUANT_BYPASS_ENABLED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_TRANSQUANT_BYPASS_ENABLED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_WEIGHTED_BIPRED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_WEIGHTED_BIPRED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_WEIGHTED_PRED_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_WEIGHTED_PRED_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_CAPABILITY_WEIGHTED_PRED_NO_TABLE_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_CAPABILITY_WEIGHTED_PRED_NO_TABLE_BIT_EXT";
+        default:
+            return "Unhandled VkVideoEncodeH265CapabilityFlagBitsEXT";
+    }
+}
+
+static inline std::string string_VkVideoEncodeH265CapabilityFlagsEXT(VkVideoEncodeH265CapabilityFlagsEXT input_value)
+{
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkVideoEncodeH265CapabilityFlagBitsEXT(static_cast<VkVideoEncodeH265CapabilityFlagBitsEXT>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if( ret.empty()) ret.append(string_VkVideoEncodeH265CapabilityFlagBitsEXT(static_cast<VkVideoEncodeH265CapabilityFlagBitsEXT>(0)));
+    return ret;
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
 static inline const char* string_VkVideoEncodeH265InputModeFlagBitsEXT(VkVideoEncodeH265InputModeFlagBitsEXT input_value)
 {
     switch (input_value)
@@ -7825,8 +7990,8 @@ static inline const char* string_VkVideoEncodeH265InputModeFlagBitsEXT(VkVideoEn
             return "VK_VIDEO_ENCODE_H265_INPUT_MODE_FRAME_BIT_EXT";
         case VK_VIDEO_ENCODE_H265_INPUT_MODE_NON_VCL_BIT_EXT:
             return "VK_VIDEO_ENCODE_H265_INPUT_MODE_NON_VCL_BIT_EXT";
-        case VK_VIDEO_ENCODE_H265_INPUT_MODE_SLICE_BIT_EXT:
-            return "VK_VIDEO_ENCODE_H265_INPUT_MODE_SLICE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_INPUT_MODE_SLICE_SEGMENT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_INPUT_MODE_SLICE_SEGMENT_BIT_EXT";
         default:
             return "Unhandled VkVideoEncodeH265InputModeFlagBitsEXT";
     }
@@ -7860,8 +8025,8 @@ static inline const char* string_VkVideoEncodeH265OutputModeFlagBitsEXT(VkVideoE
             return "VK_VIDEO_ENCODE_H265_OUTPUT_MODE_FRAME_BIT_EXT";
         case VK_VIDEO_ENCODE_H265_OUTPUT_MODE_NON_VCL_BIT_EXT:
             return "VK_VIDEO_ENCODE_H265_OUTPUT_MODE_NON_VCL_BIT_EXT";
-        case VK_VIDEO_ENCODE_H265_OUTPUT_MODE_SLICE_BIT_EXT:
-            return "VK_VIDEO_ENCODE_H265_OUTPUT_MODE_SLICE_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_OUTPUT_MODE_SLICE_SEGMENT_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_OUTPUT_MODE_SLICE_SEGMENT_BIT_EXT";
         default:
             return "Unhandled VkVideoEncodeH265OutputModeFlagBitsEXT";
     }
@@ -7897,8 +8062,6 @@ static inline const char* string_VkVideoEncodeH265CtbSizeFlagBitsEXT(VkVideoEnco
             return "VK_VIDEO_ENCODE_H265_CTB_SIZE_32_BIT_EXT";
         case VK_VIDEO_ENCODE_H265_CTB_SIZE_64_BIT_EXT:
             return "VK_VIDEO_ENCODE_H265_CTB_SIZE_64_BIT_EXT";
-        case VK_VIDEO_ENCODE_H265_CTB_SIZE_8_BIT_EXT:
-            return "VK_VIDEO_ENCODE_H265_CTB_SIZE_8_BIT_EXT";
         default:
             return "Unhandled VkVideoEncodeH265CtbSizeFlagBitsEXT";
     }
@@ -7917,6 +8080,43 @@ static inline std::string string_VkVideoEncodeH265CtbSizeFlagsEXT(VkVideoEncodeH
         input_value >>= 1;
     }
     if( ret.empty()) ret.append(string_VkVideoEncodeH265CtbSizeFlagBitsEXT(static_cast<VkVideoEncodeH265CtbSizeFlagBitsEXT>(0)));
+    return ret;
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+static inline const char* string_VkVideoEncodeH265TransformBlockSizeFlagBitsEXT(VkVideoEncodeH265TransformBlockSizeFlagBitsEXT input_value)
+{
+    switch (input_value)
+    {
+        case VK_VIDEO_ENCODE_H265_TRANSFORM_BLOCK_SIZE_16_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_TRANSFORM_BLOCK_SIZE_16_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_TRANSFORM_BLOCK_SIZE_32_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_TRANSFORM_BLOCK_SIZE_32_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_TRANSFORM_BLOCK_SIZE_4_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_TRANSFORM_BLOCK_SIZE_4_BIT_EXT";
+        case VK_VIDEO_ENCODE_H265_TRANSFORM_BLOCK_SIZE_8_BIT_EXT:
+            return "VK_VIDEO_ENCODE_H265_TRANSFORM_BLOCK_SIZE_8_BIT_EXT";
+        default:
+            return "Unhandled VkVideoEncodeH265TransformBlockSizeFlagBitsEXT";
+    }
+}
+
+static inline std::string string_VkVideoEncodeH265TransformBlockSizeFlagsEXT(VkVideoEncodeH265TransformBlockSizeFlagsEXT input_value)
+{
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkVideoEncodeH265TransformBlockSizeFlagBitsEXT(static_cast<VkVideoEncodeH265TransformBlockSizeFlagBitsEXT>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if( ret.empty()) ret.append(string_VkVideoEncodeH265TransformBlockSizeFlagBitsEXT(static_cast<VkVideoEncodeH265TransformBlockSizeFlagBitsEXT>(0)));
     return ret;
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS

@@ -691,6 +691,11 @@ TEST_F(VkLayerTest, SwapchainAcquireTooManyImages) {
     if (!AddSwapchainDeviceExtension()) return;
 
     ASSERT_NO_FATAL_FAILURE(InitState());
+    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+        // will throw a std::bad_alloc sometimes
+        printf("%s Test not supported by MockICD, skipping tests\n", kSkipPrefix);
+        return;
+    }
     ASSERT_TRUE(InitSwapchain());
     uint32_t image_count;
     ASSERT_VK_SUCCESS(vk::GetSwapchainImagesKHR(device(), m_swapchain, &image_count, nullptr));
@@ -855,6 +860,11 @@ TEST_F(VkLayerTest, SwapchainAcquireTooManyImages2KHR) {
     if (!AddSwapchainDeviceExtension()) return;
 
     ASSERT_NO_FATAL_FAILURE(InitState());
+    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+        // will throw a std::bad_alloc sometimes
+        printf("%s Test not supported by MockICD, skipping tests\n", kSkipPrefix);
+        return;
+    }
     ASSERT_TRUE(InitSwapchain());
     uint32_t image_count;
     ASSERT_VK_SUCCESS(vk::GetSwapchainImagesKHR(device(), m_swapchain, &image_count, nullptr));
@@ -1875,7 +1885,8 @@ TEST_F(VkLayerTest, DisplayPresentInfoSrcRect) {
     VkSemaphore image_acquired;
     VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
     vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &image_acquired);
-    vk::AcquireNextImageKHR(device(), m_swapchain, UINT64_MAX, image_acquired, VK_NULL_HANDLE, &current_buffer);
+    vk::AcquireNextImageKHR(device(), m_swapchain, std::numeric_limits<uint64_t>::max(), image_acquired, VK_NULL_HANDLE,
+                            &current_buffer);
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
@@ -1896,6 +1907,8 @@ TEST_F(VkLayerTest, DisplayPresentInfoSrcRect) {
     display_present_info.dstRect.extent.height = swapchain_height;
 
     VkPresentInfoKHR present = LvlInitStruct<VkPresentInfoKHR>(&display_present_info);
+    present.waitSemaphoreCount = 1;
+    present.pWaitSemaphores = &image_acquired;
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &current_buffer;
     present.swapchainCount = 1;
@@ -2190,7 +2203,7 @@ TEST_F(VkLayerTest, TestSurfaceSupportByPhysicalDevice) {
         }
     }
     if (supported) {
-        printf("%s Physical device supports present, skipping", kSkipPrefix);
+        printf("%s Physical device supports present, skipping\n", kSkipPrefix);
         return;
     }
 
@@ -2406,4 +2419,204 @@ TEST_F(VkLayerTest, TestCreatingWin32Surface) {
     vk::CreateWin32SurfaceKHR(instance(), &surface_create_info, nullptr, &surface);
     m_errorMonitor->VerifyFound();
 #endif
+}
+
+TEST_F(VkLayerTest, UseNonAcquiredSwapchainImage) {
+    TEST_DESCRIPTION("Test using a swapchain image that was not yet acquired.");
+
+    if (!AddSurfaceInstanceExtension()) {
+        printf("%s surface extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AddSwapchainDeviceExtension()) {
+        printf("%s swapchain extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    if (!InitSwapchain()) {
+        printf("%s Cannot create surface or swapchain, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    auto fence_create_info = LvlInitStruct<VkFenceCreateInfo>();
+
+    vk_testing::Fence fence;
+    fence.init(*m_device, fence_create_info);
+    VkFence fence_handle = fence.handle();
+
+    uint32_t swapchain_images_count = 0;
+    vk::GetSwapchainImagesKHR(device(), m_swapchain, &swapchain_images_count, nullptr);
+    std::vector<VkImage> swapchain_images;
+    swapchain_images.resize(swapchain_images_count);
+    vk::GetSwapchainImagesKHR(device(), m_swapchain, &swapchain_images_count, swapchain_images.data());
+
+    m_commandBuffer->begin();
+
+    auto img_barrier = LvlInitStruct<VkImageMemoryBarrier>();
+    img_barrier.srcAccessMask = 0;
+    img_barrier.dstAccessMask = 0;
+    img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    img_barrier.image = swapchain_images[0];
+    img_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    img_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    img_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    img_barrier.subresourceRange.baseArrayLayer = 0;
+    img_barrier.subresourceRange.baseMipLevel = 0;
+    img_barrier.subresourceRange.layerCount = 1;
+    img_barrier.subresourceRange.levelCount = 1;
+
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+    m_commandBuffer->end();
+
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, kVUID_Core_NonAcquiredSwapchainImageUsed);
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->ExpectSuccess();
+    uint32_t image_index;
+    vk::AcquireNextImageKHR(device(), m_swapchain, UINT64_MAX, VK_NULL_HANDLE, fence_handle, &image_index);
+    vk::WaitForFences(device(), 1, &fence_handle, VK_TRUE, UINT64_MAX);
+
+    m_commandBuffer->reset();
+    m_commandBuffer->begin();
+
+    img_barrier.image = swapchain_images[image_index];
+
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+    m_commandBuffer->end();
+
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+
+    VkPresentInfoKHR present = LvlInitStruct<VkPresentInfoKHR>();
+    present.pSwapchains = &m_swapchain;
+    present.pImageIndices = &image_index;
+    present.swapchainCount = 1;
+    vk::QueuePresentKHR(m_device->m_queue, &present);
+    m_errorMonitor->VerifyNotFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, kVUID_Core_NonAcquiredSwapchainImageUsed);
+    img_barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    m_commandBuffer->reset();
+    m_commandBuffer->begin();
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+    m_commandBuffer->end();
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+    m_errorMonitor->VerifyFound();
+
+    DestroySwapchain();
+}
+
+TEST_F(VkLayerTest, UseSwapchainImageBeforeWait) {
+    TEST_DESCRIPTION("Test using a swapchain image that was acquired but not waited on.");
+
+    if (!AddSurfaceInstanceExtension()) {
+        printf("%s surface extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AddSwapchainDeviceExtension()) {
+        printf("%s swapchain extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    if (!InitSwapchain()) {
+        printf("%s Cannot create surface or swapchain, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPresentInfoKHR-pImageIndices-01296");
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
+    VkSemaphore acquire_semaphore;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &acquire_semaphore));
+
+    uint32_t swapchain_images_count = 0;
+    vk::GetSwapchainImagesKHR(device(), m_swapchain, &swapchain_images_count, nullptr);
+    std::vector<VkImage> swapchain_images;
+    swapchain_images.resize(swapchain_images_count);
+    vk::GetSwapchainImagesKHR(device(), m_swapchain, &swapchain_images_count, swapchain_images.data());
+
+    uint32_t image_index = 0;
+    vk::AcquireNextImageKHR(device(), m_swapchain, std::numeric_limits<uint64_t>::max(), acquire_semaphore, VK_NULL_HANDLE,
+                            &image_index);
+
+    VkPresentInfoKHR present = LvlInitStruct<VkPresentInfoKHR>();
+    present.waitSemaphoreCount = 0; // Invalid, acquire_semaphore should be waited on
+    present.swapchainCount = 1;
+    present.pSwapchains = &m_swapchain;
+    present.pImageIndices = &image_index;
+    vk::QueuePresentKHR(m_device->m_queue, &present);
+
+    vk::QueueWaitIdle(m_device->m_queue);
+    m_errorMonitor->VerifyFound();
+
+    vk::DestroySemaphore(device(), acquire_semaphore, nullptr);
+    DestroySwapchain();
+}
+
+TEST_F(VkLayerTest, TestCreatingSwapchainWithInvalidExtent) {
+    TEST_DESCRIPTION("Create swapchain with extent greater than maxImageExtent of SurfaceCapabilities");
+
+    if (!AddSurfaceInstanceExtension()) {
+        printf("%s surface extensions not supported, skipping test.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AddSwapchainDeviceExtension()) {
+        printf("%s swapchain extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+    if (!InitSurface()) {
+        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    InitSwapchainInfo();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSwapchainCreateInfoKHR-imageExtent-01274");
+
+    VkSurfaceCapabilitiesKHR surface_capabilities;
+    vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(gpu(), m_surface, &surface_capabilities);
+
+    VkSwapchainCreateInfoKHR swapchain_ci = LvlInitStruct<VkSwapchainCreateInfoKHR>();
+    swapchain_ci.surface = m_surface;
+    swapchain_ci.minImageCount = m_surface_capabilities.minImageCount;
+    swapchain_ci.imageFormat = m_surface_formats[0].format;
+    swapchain_ci.imageColorSpace = m_surface_formats[0].colorSpace;
+    swapchain_ci.imageExtent.width = surface_capabilities.maxImageExtent.width + 1;
+    swapchain_ci.imageExtent.height = surface_capabilities.maxImageExtent.height;
+    swapchain_ci.imageArrayLayers = 1;
+    swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_ci.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    swapchain_ci.compositeAlpha = m_surface_composite_alpha;
+    swapchain_ci.presentMode = m_surface_non_shared_present_mode;
+    swapchain_ci.clipped = VK_FALSE;
+    swapchain_ci.oldSwapchain = 0;
+
+    VkSwapchainKHR swapchain;
+    vk::CreateSwapchainKHR(device(), &swapchain_ci, nullptr, &swapchain);
+
+    m_errorMonitor->VerifyFound();
 }

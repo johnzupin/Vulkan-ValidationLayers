@@ -644,8 +644,11 @@ TEST_F(VkArmBestPracticesLayerTest, DepthPrePassUsage) {
         printf("%s This test crashes on the NexusPlayer platform\n", kSkipPrefix);
         return;
     }
+    m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
+    ASSERT_TRUE(m_depth_stencil_fmt != 0);
 
-    InitRenderTarget();
+    m_depthStencil->Init(m_device, static_cast<int32_t>(m_width), static_cast<int32_t>(m_height), m_depth_stencil_fmt);
+    InitRenderTarget(m_depthStencil->BindInfo());
 
     VkAttachmentDescription attachment{};
     attachment.samples = VK_SAMPLE_COUNT_4_BIT;
@@ -732,6 +735,7 @@ TEST_F(VkArmBestPracticesLayerTest, DepthPrePassUsage) {
 
     m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
                                          "UNASSIGNED-BestPractices-vkCmdEndRenderPass-depth-pre-pass-usage");
+    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-vkCmdEndRenderPass-redundant-attachment-on-tile");
 
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_depth_only.pipeline_);
     for (size_t i = 0; i < 30; i++) m_commandBuffer->DrawIndexed(indices.size(), 1000, 0, 0, 0);
@@ -1066,9 +1070,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantRenderPassClear) {
     graphics_pipeline.InitInfo();
 
     graphics_pipeline.dsl_bindings_[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    graphics_pipeline.cb_attachments_.colorWriteMask = 0xf;
-    graphics_pipeline.cb_ci_.attachmentCount = 1;
-    graphics_pipeline.cb_ci_.pAttachments = &graphics_pipeline.cb_attachments_;
+    graphics_pipeline.cb_attachments_[0].colorWriteMask = 0xf;
     graphics_pipeline.InitState();
 
     graphics_pipeline.gp_ci_.renderPass = renderpasses[0];
@@ -1151,9 +1153,7 @@ TEST_F(VkArmBestPracticesLayerTest, InefficientRenderPassClear) {
     graphics_pipeline.InitInfo();
 
     graphics_pipeline.dsl_bindings_[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    graphics_pipeline.cb_attachments_.colorWriteMask = 0xf;
-    graphics_pipeline.cb_ci_.attachmentCount = 1;
-    graphics_pipeline.cb_ci_.pAttachments = &graphics_pipeline.cb_attachments_;
+    graphics_pipeline.cb_attachments_[0].colorWriteMask = 0xf;
     graphics_pipeline.InitState();
 
     graphics_pipeline.gp_ci_.renderPass = renderpasses[0];
@@ -1244,9 +1244,7 @@ TEST_F(VkArmBestPracticesLayerTest, DescriptorTracking) {
     graphics_pipeline.dsl_bindings_[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     graphics_pipeline.dsl_bindings_[1].binding = 10;
     graphics_pipeline.dsl_bindings_[1].descriptorCount = 4;
-    graphics_pipeline.cb_ci_.attachmentCount = 1;
-    graphics_pipeline.cb_ci_.pAttachments = &graphics_pipeline.cb_attachments_;
-    graphics_pipeline.cb_attachments_.colorWriteMask = 0xf;
+    graphics_pipeline.cb_attachments_[0].colorWriteMask = 0xf;
     graphics_pipeline.InitState();
 
     graphics_pipeline.gp_ci_.renderPass = renderpasses[0];
@@ -1490,7 +1488,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantAttachment) {
     CreatePipelineHelper pipe_all(*this);
     pipe_all.InitInfo();
     pipe_all.InitState();
-    pipe_all.cb_attachments_.colorWriteMask = 0xf;
+    pipe_all.cb_attachments_[0].colorWriteMask = 0xf;
     pipe_all.ds_ci_ = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     pipe_all.gp_ci_.pDepthStencilState = &pipe_all.ds_ci_;
     pipe_all.ds_ci_.depthTestEnable = VK_TRUE;
@@ -1500,7 +1498,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantAttachment) {
     CreatePipelineHelper pipe_color(*this);
     pipe_color.InitInfo();
     pipe_color.InitState();
-    pipe_color.cb_attachments_.colorWriteMask = 0xf;
+    pipe_color.cb_attachments_[0].colorWriteMask = 0xf;
     pipe_color.ds_ci_ = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     pipe_color.gp_ci_.pDepthStencilState = &pipe_color.ds_ci_;
     pipe_color.CreateGraphicsPipeline();
@@ -1508,7 +1506,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantAttachment) {
     CreatePipelineHelper pipe_depth(*this);
     pipe_depth.InitInfo();
     pipe_depth.InitState();
-    pipe_depth.cb_attachments_.colorWriteMask = 0;
+    pipe_depth.cb_attachments_[0].colorWriteMask = 0;
     pipe_depth.ds_ci_ = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     pipe_depth.gp_ci_.pDepthStencilState = &pipe_depth.ds_ci_;
     pipe_depth.ds_ci_.depthTestEnable = VK_TRUE;
@@ -1517,7 +1515,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantAttachment) {
     CreatePipelineHelper pipe_stencil(*this);
     pipe_stencil.InitInfo();
     pipe_stencil.InitState();
-    pipe_stencil.cb_attachments_.colorWriteMask = 0;
+    pipe_stencil.cb_attachments_[0].colorWriteMask = 0;
     pipe_stencil.ds_ci_ = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     pipe_stencil.gp_ci_.pDepthStencilState = &pipe_stencil.ds_ci_;
     pipe_stencil.ds_ci_.stencilTestEnable = VK_TRUE;

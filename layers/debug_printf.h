@@ -67,42 +67,23 @@ struct DPFOutputRecord {
     uint32_t values;
 };
 
-class CMD_BUFFER_STATE_PRINTF : public CMD_BUFFER_STATE {
+namespace debug_printf_state {
+class CommandBuffer : public CMD_BUFFER_STATE {
   public:
     std::vector<DPFBufferInfo> buffer_infos;
 
-    CMD_BUFFER_STATE_PRINTF(DebugPrintf* dp, VkCommandBuffer cb, const VkCommandBufferAllocateInfo* create_info,
-                            const COMMAND_POOL_STATE* pool);
+    CommandBuffer(DebugPrintf* dp, VkCommandBuffer cb, const VkCommandBufferAllocateInfo* create_info,
+                  const COMMAND_POOL_STATE* pool);
 
     void Reset() final;
 };
+};  // namespace debug_printf_state
+
+VALSTATETRACK_DERIVED_STATE_OBJECT(VkCommandBuffer, debug_printf_state::CommandBuffer, CMD_BUFFER_STATE);
 
 class DebugPrintf : public ValidationStateTracker {
-    VkPhysicalDeviceFeatures supported_features;
-
-    uint32_t unique_shader_module_id = 0;
-    uint32_t output_buffer_size;
-
-    bool CommandBufferNeedsProcessing(VkCommandBuffer command_buffer);
-    void ProcessCommandBuffer(VkQueue queue, VkCommandBuffer command_buffer);
-
   public:
     DebugPrintf() { container_type = LayerObjectTypeDebugPrintf; }
-
-    bool aborted = false;
-    bool verbose = false;
-    bool use_stdout = false;
-    VkDevice device;
-    VkPhysicalDevice physicalDevice;
-    uint32_t adjusted_max_desc_sets;
-    uint32_t desc_set_bind_index;
-    VkDescriptorSetLayout debug_desc_layout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout dummy_desc_layout = VK_NULL_HANDLE;
-    std::unique_ptr<UtilDescriptorSetManager> desc_set_manager;
-    layer_data::unordered_map<uint32_t, DPFShaderTracker> shader_map;
-    PFN_vkSetDeviceLoaderData vkSetDeviceLoaderData;
-    VmaAllocator vmaAllocator = {};
-    std::map<VkQueue, UtilQueueBarrierCommandInfo> queue_barrier_command_infos;
 
     template <typename T>
     void ReportSetupProblem(T object, const char* const specific_message) const;
@@ -260,12 +241,6 @@ class DebugPrintf : public ValidationStateTracker {
                                     VkResult result) override;
     void AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer, const VkPipelineBindPoint bind_point);
 
-    std::shared_ptr<CMD_BUFFER_STATE_PRINTF> GetCBState(VkCommandBuffer commandBuffer) {
-        return std::static_pointer_cast<CMD_BUFFER_STATE_PRINTF>(Get<CMD_BUFFER_STATE>(commandBuffer));
-    }
-    std::shared_ptr<const CMD_BUFFER_STATE_PRINTF> GetCBState(VkCommandBuffer commandBuffer) const {
-        return std::static_pointer_cast<const CMD_BUFFER_STATE_PRINTF>(Get<CMD_BUFFER_STATE>(commandBuffer));
-    }
     std::shared_ptr<SHADER_MODULE_STATE> GetShaderModuleState(VkShaderModule shader_module) {
         return Get<SHADER_MODULE_STATE>(shader_module);
     }
@@ -277,16 +252,39 @@ class DebugPrintf : public ValidationStateTracker {
 
     const std::vector<DPFBufferInfo>& GetBufferInfo(const CMD_BUFFER_STATE* cb_node) const {
         assert(cb_node);
-        return static_cast<const CMD_BUFFER_STATE_PRINTF*>(cb_node)->buffer_infos;
+        return static_cast<const debug_printf_state::CommandBuffer*>(cb_node)->buffer_infos;
     }
 
     std::vector<DPFBufferInfo>& GetBufferInfo(CMD_BUFFER_STATE* cb_node) {
         assert(cb_node);
-        return static_cast<CMD_BUFFER_STATE_PRINTF*>(cb_node)->buffer_infos;
+        return static_cast<debug_printf_state::CommandBuffer*>(cb_node)->buffer_infos;
     }
 
     std::shared_ptr<CMD_BUFFER_STATE> CreateCmdBufferState(VkCommandBuffer cb, const VkCommandBufferAllocateInfo* create_info,
                                                            const COMMAND_POOL_STATE* pool) final;
 
     void DestroyBuffer(DPFBufferInfo& buffer_info);
+
+private:
+    bool CommandBufferNeedsProcessing(VkCommandBuffer command_buffer);
+    void ProcessCommandBuffer(VkQueue queue, VkCommandBuffer command_buffer);
+
+    VkPhysicalDeviceFeatures supported_features;
+
+    uint32_t unique_shader_module_id = 0;
+    uint32_t output_buffer_size;
+
+public:
+    bool aborted = false;
+    bool verbose = false;
+    bool use_stdout = false;
+    uint32_t adjusted_max_desc_sets;
+    uint32_t desc_set_bind_index;
+    VkDescriptorSetLayout debug_desc_layout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout dummy_desc_layout = VK_NULL_HANDLE;
+    std::unique_ptr<UtilDescriptorSetManager> desc_set_manager;
+    layer_data::unordered_map<uint32_t, DPFShaderTracker> shader_map;
+    PFN_vkSetDeviceLoaderData vkSetDeviceLoaderData;
+    VmaAllocator vmaAllocator = {};
+    std::map<VkQueue, UtilQueueBarrierCommandInfo> queue_barrier_command_infos;
 };
