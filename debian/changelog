@@ -1,3 +1,45 @@
+vulkan-validationlayers (1.3.209.0~rc2-1lunarg18.04-1) bionic; urgency=medium
+
+  [ ziga-lunarg ]
+  * "layers: Revert Validate non-acquired swapchain image use"
+  * tests: Remove test for reverted code
+
+  [ Tony-LunarG ]
+  * practices: Avoid renderpass attachments if dyn rendering
+
+  [ Jeremy Gebben ]
+  * gpuav: Remove buffer_map
+
+  [ Lionel Landwerlin ]
+  * layers: Validation for new separate DS layouts
+
+  [ ziga-lunarg ]
+  * layers: Validate queue family global priority
+  * tests: Test mismatched device queue global priority
+
+  [ Petr Kraus ]
+  * layers: Fix false pipeline errors in dyn. rendering
+  * tests: Try dyn. rendering with discard
+
+  [ ziga-lunarg ]
+  * layers: Fix checking buffer copy overlaps
+  * tests: Test copying interleaved buffer memory
+  * layers: Fix tracking compressed format extents
+  * tests: Test copying to compressed texture
+  * layers: Validate dynamic sample locations
+  * tests: Test pipeline with dynamic sample locations
+  * layers: Validate dynamic color write enable
+  * tests: Test dynamic color write enable
+  * layers: Use format usage only if set
+  * tests: Test invalid external subpass
+  * layers: Validate VkDeviceImageMemoryRequirements pNext
+  * tests: Test invalid VkDeviceImageMemoryRequirements
+
+  [ John Zupin ]
+  * packaging: fix merge problem
+
+ -- john <john@odin>  Fri, 01 Apr 2022 11:01:47 -0600
+
 vulkan-validationlayers (1.3.209.0~rc1-1lunarg18.04-1) bionic; urgency=medium
 
   [ sfricke-samsung ]
