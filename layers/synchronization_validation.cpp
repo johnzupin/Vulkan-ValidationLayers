@@ -264,8 +264,9 @@ std::string CommandBufferAccessContext::FormatUsage(const HazardResult &hazard) 
         out << ", write_barriers: " << string_SyncStageAccessFlags(write_barrier);
     }
 
-    assert(tag < access_log_.size());
-    out << ", " << FormatUsage(tag) << ")";
+    if (tag < access_log_.size()) {
+        out << ", " << FormatUsage(tag) << ")";
+    }
     return out.str();
 }
 
@@ -3530,10 +3531,8 @@ bool SyncValidator::PreCallValidateCmdCopyImage(VkCommandBuffer commandBuffer, V
         }
 
         if (dst_image) {
-            VkExtent3D dst_copy_extent =
-                GetAdjustedDestImageExtent(src_image->createInfo.format, dst_image->createInfo.format, copy_region.extent);
             auto hazard = context->DetectHazard(*dst_image, SYNC_COPY_TRANSFER_WRITE, copy_region.dstSubresource,
-                                                copy_region.dstOffset, dst_copy_extent);
+                                                copy_region.dstOffset, copy_region.extent);
             if (hazard.hazard) {
                 skip |= LogError(dstImage, string_SyncHazardVUID(hazard.hazard),
                                  "vkCmdCopyImage: Hazard %s for dstImage %s, region %" PRIu32 ". Access info %s.",
@@ -3566,10 +3565,8 @@ void SyncValidator::PreCallRecordCmdCopyImage(VkCommandBuffer commandBuffer, VkI
                                        copy_region.srcSubresource, copy_region.srcOffset, copy_region.extent, tag);
         }
         if (dst_image) {
-            VkExtent3D dst_copy_extent =
-                GetAdjustedDestImageExtent(src_image->createInfo.format, dst_image->createInfo.format, copy_region.extent);
             context->UpdateAccessState(*dst_image, SYNC_COPY_TRANSFER_WRITE, SyncOrdering::kNonAttachment,
-                                       copy_region.dstSubresource, copy_region.dstOffset, dst_copy_extent, tag);
+                                       copy_region.dstSubresource, copy_region.dstOffset, copy_region.extent, tag);
         }
     }
 }
@@ -3603,10 +3600,8 @@ bool SyncValidator::ValidateCmdCopyImage2(VkCommandBuffer commandBuffer, const V
         }
 
         if (dst_image) {
-            VkExtent3D dst_copy_extent =
-                GetAdjustedDestImageExtent(src_image->createInfo.format, dst_image->createInfo.format, copy_region.extent);
             auto hazard = context->DetectHazard(*dst_image, SYNC_COPY_TRANSFER_WRITE, copy_region.dstSubresource,
-                                                copy_region.dstOffset, dst_copy_extent);
+                                                copy_region.dstOffset, copy_region.extent);
             if (hazard.hazard) {
                 skip |= LogError(pCopyImageInfo->dstImage, string_SyncHazardVUID(hazard.hazard),
                                  "%s: Hazard %s for dstImage %s, region %" PRIu32 ". Access info %s.", func_name,
@@ -3646,10 +3641,8 @@ void SyncValidator::RecordCmdCopyImage2(VkCommandBuffer commandBuffer, const VkC
                                        copy_region.srcSubresource, copy_region.srcOffset, copy_region.extent, tag);
         }
         if (dst_image) {
-            VkExtent3D dst_copy_extent =
-                GetAdjustedDestImageExtent(src_image->createInfo.format, dst_image->createInfo.format, copy_region.extent);
             context->UpdateAccessState(*dst_image, SYNC_COPY_TRANSFER_WRITE, SyncOrdering::kNonAttachment,
-                                       copy_region.dstSubresource, copy_region.dstOffset, dst_copy_extent, tag);
+                                       copy_region.dstSubresource, copy_region.dstOffset, copy_region.extent, tag);
         }
     }
 }

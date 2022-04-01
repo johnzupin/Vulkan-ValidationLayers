@@ -13951,3 +13951,150 @@ TEST_F(VkLayerTest, TestGetQueryPoolResultsDataAndStride) {
     vk::GetQueryPoolResults(m_device->device(), query_pool.handle(), 0, 1, out_data_size, &data, 3, 0);
     m_errorMonitor->VerifyFound();
 }
+
+TEST_F(VkLayerTest, ValidateColorWriteDynamicStateNotSet) {
+    TEST_DESCRIPTION("Validate dynamic state color write enable was set before draw command");
+
+    AddRequiredExtensions(VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequestedExtensionsEnabled()) {
+        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME);
+        return;
+    }
+
+    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+
+    auto color_write_enable_features = LvlInitStruct<VkPhysicalDeviceColorWriteEnableFeaturesEXT>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&color_write_enable_features);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+
+    if (color_write_enable_features.colorWriteEnable == VK_FALSE) {
+        printf("%s colorWriteEnable feature is not supported.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget(2));
+
+    auto vkCmdSetColorWriteEnableEXT =
+        reinterpret_cast<PFN_vkCmdSetColorWriteEnableEXT>(vk::GetDeviceProcAddr(m_device->handle(), "vkCmdSetColorWriteEnableEXT"));
+
+    VkPipelineColorBlendAttachmentState color_blend[2] = {};
+    color_blend[0].blendEnable = VK_TRUE;
+    color_blend[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
+    color_blend[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+    color_blend[0].colorBlendOp = VK_BLEND_OP_ADD;
+    color_blend[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    color_blend[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    color_blend[0].alphaBlendOp = VK_BLEND_OP_ADD;
+    color_blend[1].blendEnable = VK_TRUE;
+    color_blend[1].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
+    color_blend[1].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+    color_blend[1].colorBlendOp = VK_BLEND_OP_ADD;
+    color_blend[1].srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    color_blend[1].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    color_blend[1].alphaBlendOp = VK_BLEND_OP_ADD;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.cb_ci_.attachmentCount = 2;
+    pipe.cb_ci_.pAttachments = color_blend;
+    const VkDynamicState dyn_states[] = {VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
+    auto dyn_state_ci = LvlInitStruct<VkPipelineDynamicStateCreateInfo>();
+    dyn_state_ci.dynamicStateCount = size(dyn_states);
+    dyn_state_ci.pDynamicStates = dyn_states;
+    pipe.dyn_state_ci_ = dyn_state_ci;
+    pipe.InitState();
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-attachmentCount-06667");
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    VkBool32 color_write_enable[] = {VK_TRUE, VK_FALSE};
+    vkCmdSetColorWriteEnableEXT(m_commandBuffer->handle(), 1, color_write_enable);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-attachmentCount-06667");
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->ExpectSuccess();
+    vkCmdSetColorWriteEnableEXT(m_commandBuffer->handle(), 2, color_write_enable);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_errorMonitor->VerifyNotFound();
+
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+}
+
+TEST_F(VkLayerTest, MismatchedDeviceQueueGlobalPriority) {
+    TEST_DESCRIPTION("Create multiple device queues with same queue family index but different global priorty.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        printf("%s Tests requires Vulkan 1.1 or greater, skipping test\n", kSkipPrefix);
+        return;
+    }
+    if (!AreRequestedExtensionsEnabled()) {
+        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
+        return;
+    }
+
+    uint32_t queue_family_count;
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_family_count, nullptr);
+    std::vector<VkQueueFamilyProperties> queue_props(queue_family_count);
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_family_count, queue_props.data());
+
+    uint32_t queue_family_index = queue_family_count;
+
+    for (uint32_t i = 0; i < queue_family_count; ++i) {
+        if (queue_props[i].queueCount > 1) {
+            queue_family_index = i;
+            break;
+        }
+    }
+    if (queue_family_index == queue_family_count) {
+        printf("%s Multiple queues from same queue family are required to run this test. .\n", kSkipPrefix);
+        return;
+    }
+
+    VkDeviceQueueGlobalPriorityCreateInfoKHR queue_global_priority_ci[2] = {};
+    queue_global_priority_ci[0] = LvlInitStruct<VkDeviceQueueGlobalPriorityCreateInfoKHR>();
+    queue_global_priority_ci[0].globalPriority = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
+    queue_global_priority_ci[1] = LvlInitStruct<VkDeviceQueueGlobalPriorityCreateInfoKHR>();
+    queue_global_priority_ci[1].globalPriority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
+
+    float priorities[] = {1.0f, 1.0f};
+    VkDeviceQueueCreateInfo device_queue_ci[2] = {};
+    device_queue_ci[0] = LvlInitStruct<VkDeviceQueueCreateInfo>(&queue_global_priority_ci[0]);
+    device_queue_ci[0].queueFamilyIndex = queue_family_index;
+    device_queue_ci[0].queueCount = 1;
+    device_queue_ci[0].pQueuePriorities = &priorities[0];
+
+    device_queue_ci[1] = LvlInitStruct<VkDeviceQueueCreateInfo>(&queue_global_priority_ci[1]);
+    device_queue_ci[1].queueFamilyIndex = queue_family_index;
+    device_queue_ci[1].queueCount = 1;
+    device_queue_ci[1].pQueuePriorities = &priorities[1];
+
+    auto device_ci = LvlInitStruct<VkDeviceCreateInfo>();
+    device_ci.queueCreateInfoCount = 2;
+    device_ci.pQueueCreateInfos = device_queue_ci;
+    device_ci.enabledLayerCount = 0;
+    device_ci.enabledExtensionCount = m_device_extension_names.size();
+    device_ci.ppEnabledExtensionNames = m_device_extension_names.data();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDeviceCreateInfo-queueFamilyIndex-02802");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDeviceCreateInfo-pQueueCreateInfos-06654");
+    VkDevice device;
+    vk::CreateDevice(gpu(), &device_ci, nullptr, &device);
+    m_errorMonitor->VerifyFound();
+}

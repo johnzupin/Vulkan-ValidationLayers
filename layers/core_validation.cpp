@@ -1194,6 +1194,22 @@ bool CoreChecks::ValidatePipelineDrawtimeState(const LAST_BOUND_STATE &state, co
                            "Dynamic vertex input binding stride not set for this command buffer", vuid.vertex_input_binding_stride);
     skip |=
         ValidateStatus(pCB, CBSTATUS_VERTEX_INPUT_SET, "Dynamic vertex input not set for this command buffer", vuid.vertex_input);
+    skip |= ValidateStatus(pCB, CBSTATUS_COLOR_WRITE_ENABLE_SET, "Dynamic color write enable not set for this command buffer",
+                           vuid.color_write_enable);
+    if (IsDynamic(pPipeline, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT) && pCB->status & CBSTATUS_COLOR_WRITE_ENABLE_SET) {
+        uint32_t blend_attachment_count =
+            pCB->GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS)->create_info.graphics.pColorBlendState->attachmentCount;
+        if (pCB->dynamicColorWriteEnableAttachmentCount != blend_attachment_count) {
+            skip |= LogError(
+                pCB->commandBuffer(), vuid.color_write_enable,
+                "%s(): Currently bound pipeline was created with VkPipelineColorBlendStateCreateInfo::attachmentCount %" PRIu32
+                " and VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT, but the number of attachments written by "
+                "vkCmdSetColorWriteEnableEXT() is %" PRIu32 ".",
+                caller, blend_attachment_count, pCB->dynamicColorWriteEnableAttachmentCount);
+        }
+    }
+    skip |= ValidateStatus(pCB, CBSTATUS_SAMPLE_LOCATIONS_SET, "Dynamic sample locations not set for this command buffer",
+                           vuid.dynamic_sample_locations);
 
     // VUID {refpage}-primitiveTopology-03420
     skip |= ValidateStatus(pCB, CBSTATUS_PRIMITIVE_TOPOLOGY_SET, "Dynamic primitive topology state not set for this command buffer",
@@ -2720,10 +2736,12 @@ bool CoreChecks::ValidatePipelineUnlocked(const PIPELINE_STATE *pPipeline, uint3
 
     const auto rendering_struct = LvlFindInChain<VkPipelineRenderingCreateInfo>(create_info.pNext);
     if (rendering_struct) {
-        if ((pPipeline->active_shaders & VK_SHADER_STAGE_FRAGMENT_BIT) &&
+        const bool has_rasterization =
+            create_info.pRasterizationState && (create_info.pRasterizationState->rasterizerDiscardEnable == VK_FALSE);
+        if (has_rasterization &&
             ((rendering_struct->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ||
              (rendering_struct->stencilAttachmentFormat != VK_FORMAT_UNDEFINED)) &&
-             (create_info.pDepthStencilState == nullptr)) {
+            (create_info.pDepthStencilState == nullptr)) {
             skip |= LogError(
                 device, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06053",
                 "vkCreateGraphicsPipelines(): Pipeline %" PRIu32
@@ -2732,11 +2750,10 @@ bool CoreChecks::ValidatePipelineUnlocked(const PIPELINE_STATE *pPipeline, uint3
                 string_VkFormat(rendering_struct->stencilAttachmentFormat));
         }
 
-        if ((pPipeline->active_shaders & VK_SHADER_STAGE_FRAGMENT_BIT) &&
-            (rendering_struct->colorAttachmentCount != 0) &&
-            (create_info.pColorBlendState == nullptr)) {
+        if (has_rasterization && (rendering_struct->colorAttachmentCount != 0) && (create_info.pColorBlendState == nullptr)) {
             skip |= LogError(device, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06054",
-                             "vkCreateGraphicsPipelines(): Pipeline %" PRIu32 " has VkPipelineRenderingCreateInfoKHR::colorAttachmentCount (%" PRIu32
+                             "vkCreateGraphicsPipelines(): Pipeline %" PRIu32
+                             " has VkPipelineRenderingCreateInfoKHR::colorAttachmentCount (%" PRIu32
                              ") and an invalid pColorBlendState structure",
                              pipelineIndex, rendering_struct->colorAttachmentCount);
         }
@@ -3083,6 +3100,7 @@ bool CoreChecks::ValidateDeviceQueueCreateInfos(const PHYSICAL_DEVICE_STATE *pd_
         create_flags(uint32_t a, uint32_t b) : unprocted_index(a), protected_index(b) {}
     };
     layer_data::unordered_map<uint32_t, create_flags> queue_family_map;
+    layer_data::unordered_map<uint32_t, VkQueueGlobalPriorityKHR> global_priorities;
 
     for (uint32_t i = 0; i < info_count; ++i) {
         const auto requested_queue_family = infos[i].queueFamilyIndex;
@@ -3139,6 +3157,24 @@ bool CoreChecks::ValidateDeviceQueueCreateInfos(const PHYSICAL_DEVICE_STATE *pd_
                     }
                 }
             }
+        }
+
+        VkQueueGlobalPriorityKHR global_priority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR; // Implicit default value
+        const auto *global_priority_ci = LvlFindInChain<VkDeviceQueueGlobalPriorityCreateInfoKHR>(infos[i].pNext);
+        if (global_priority_ci) {
+            global_priority = global_priority_ci->globalPriority;
+        }
+        const auto prev_global_priority = global_priorities.find(infos[i].queueFamilyIndex);
+        if (prev_global_priority != global_priorities.end()) {
+            if (prev_global_priority->second != global_priority) {
+                skip |= LogError(pd_state->Handle(), "VUID-VkDeviceCreateInfo-pQueueCreateInfos-06654",
+                                 "vkCreateDevice(): Multiple queues are created with queueFamilyIndex %" PRIu32
+                                 ", but one has global priority %s and another %s.",
+                                 infos[i].queueFamilyIndex, string_VkQueueGlobalPriorityKHR(prev_global_priority->second),
+                                 string_VkQueueGlobalPriorityKHR(global_priority));
+            }
+        } else {
+            global_priorities.insert({infos[i].queueFamilyIndex, global_priority});
         }
 
         const VkQueueFamilyProperties requested_queue_family_props = pd_state->queue_family_properties[requested_queue_family];
@@ -9948,31 +9984,6 @@ bool CoreChecks::PreCallValidateCmdPipelineBarrier2(VkCommandBuffer commandBuffe
     return ValidateCmdPipelineBarrier2(commandBuffer, pDependencyInfo, CMD_PIPELINEBARRIER2);
 }
 
-void CoreChecks::EnqueueVerifyPipelineBarrier(CMD_BUFFER_STATE *cb_state, uint32_t imageMemoryBarrierCount,
-                                              const VkImageMemoryBarrier *pImageMemoryBarriers, const char *func_name) {
-    if (imageMemoryBarrierCount == 0) {
-        return;
-    }
-    // Enqueue the submit time validation here, ahead of the submit time state update in the StateTracker's PostCallRecord
-    std::vector<VkImage> images;
-    for (uint32_t i = 0; i < imageMemoryBarrierCount; ++i) {
-        auto image_state = Get<IMAGE_STATE>(pImageMemoryBarriers[i].image);
-        // Add only swapchain images
-        if (image_state->create_from_swapchain) {
-            images.push_back(pImageMemoryBarriers[i].image);
-        }
-    }
-    if (!images.empty()) {
-        cb_state->barrierUpdates.emplace_back([this, images, func_name]() {
-            bool skip = false;
-            for (const auto image : images) {
-                skip |= ValidateImageAcquired(image, func_name);
-            }
-            return skip;
-        });
-    }
-}
-
 void CoreChecks::PreCallRecordCmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask,
                                                  VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags,
                                                  uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers,
@@ -9989,8 +10000,6 @@ void CoreChecks::PreCallRecordCmdPipelineBarrier(VkCommandBuffer commandBuffer, 
     RecordBarriers(Func::vkCmdPipelineBarrier, cb_state.get(), bufferMemoryBarrierCount, pBufferMemoryBarriers,
                    imageMemoryBarrierCount, pImageMemoryBarriers);
     TransitionImageLayouts(cb_state.get(), imageMemoryBarrierCount, pImageMemoryBarriers);
-
-    EnqueueVerifyPipelineBarrier(cb_state.get(), imageMemoryBarrierCount, pImageMemoryBarriers, "vkCmdPipelineBarrier()");
 
 }
 
@@ -16286,32 +16295,11 @@ bool CoreChecks::PreCallValidateQueuePresentKHR(VkQueue queue, const VkPresentIn
                     "vkQueuePresentKHR: pSwapchains[%u] image index is too large (%u). There are only %u images in this swapchain.",
                     i, pPresentInfo->pImageIndices[i], static_cast<uint32_t>(swapchain_data->images.size()));
             } else if (!swapchain_data->images[pPresentInfo->pImageIndices[i]].image_state ||
-                       swapchain_data->images[pPresentInfo->pImageIndices[i]].acquired != SWAPCHAIN_IMAGE::State::kAcquired) {
-                if (swapchain_data->images[pPresentInfo->pImageIndices[i]].acquired == SWAPCHAIN_IMAGE::State::kNonAcquired) {
-                    skip |= LogError(pPresentInfo->pSwapchains[i], validation_error,
-                                     "vkQueuePresentKHR: pSwapchains[%" PRIu32 "] image at index %" PRIu32
-                                     " was not acquired from the swapchain.",
-                                     i, pPresentInfo->pImageIndices[i]);
-                }
-                if (swapchain_data->images[pPresentInfo->pImageIndices[i]].acquired == SWAPCHAIN_IMAGE::State::kWaiting) {
-                    bool has_wait_semaphore = false;
-                    for (uint32_t j = 0; j < pPresentInfo->waitSemaphoreCount; ++j) {
-                        if (pPresentInfo->pWaitSemaphores[j] ==
-                            swapchain_data->images[pPresentInfo->pImageIndices[i]].waiting_semaphore) {
-                            has_wait_semaphore = true;
-                            break;
-                        }
-                    }
-                    if (!has_wait_semaphore &&
-                        !queue_state->HasWait(swapchain_data->images[pPresentInfo->pImageIndices[i]].waiting_semaphore,
-                                              swapchain_data->images[pPresentInfo->pImageIndices[i]].waiting_fence)) {
-                        skip |= LogError(pPresentInfo->pSwapchains[i], validation_error,
-                                         "vkQueuePresentKHR: pSwapchains[%" PRIu32 "] image at index %" PRIu32
-                                         " was acquired from the swapchain, but the semaphore or fence used in acquire has not yet "
-                                         "been waited on.",
-                                         i, pPresentInfo->pImageIndices[i]);
-                    }
-                }
+                       !swapchain_data->images[pPresentInfo->pImageIndices[i]].acquired) {
+                skip |= LogError(pPresentInfo->pSwapchains[i], validation_error,
+                                 "vkQueuePresentKHR: pSwapchains[%" PRIu32 "] image at index %" PRIu32
+                                 " was not acquired from the swapchain.",
+                                 i, pPresentInfo->pImageIndices[i]);
             } else {
                 const auto *image_state = swapchain_data->images[pPresentInfo->pImageIndices[i]].image_state;
                 assert(image_state);

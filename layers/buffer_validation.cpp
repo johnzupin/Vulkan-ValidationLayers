@@ -4914,18 +4914,8 @@ bool CoreChecks::ValidateImageAspectMask(VkImage image, VkFormat format, VkImage
     return skip;
 }
 
-bool CoreChecks::ValidateImageAcquired(VkImage image, const char *func_name) const {
+bool CoreChecks::ValidateImageAcquired(IMAGE_STATE const &image_state, const char *func_name) const {
     bool skip = false;
-
-    const auto image_state = Get<IMAGE_STATE>(image);
-
-    if (image_state->create_from_swapchain) {
-        if (image_state->bind_swapchain->images[image_state->swapchain_image_index].acquired == SWAPCHAIN_IMAGE::State::kNonAcquired) {
-            skip |= LogError(image_state->Handle(), kVUID_Core_NonAcquiredSwapchainImageUsed,
-                             "%s: Image %s is a presentable image, but it is currently not acquired from swapchain.", func_name,
-                             report_data->FormatHandle(image_state->Handle()).c_str());
-        }
-    }
 
     return skip;
 }
@@ -5347,6 +5337,7 @@ bool CoreChecks::ValidateImageBarrier(const LogObjectList &objects, const Locati
 
         skip |=
             ValidateImageBarrierSubresourceRange(loc.dot(Field::subresourceRange), image_data.get(), mem_barrier.subresourceRange);
+        skip |= ValidateImageAcquired(*image_data, loc.StringFunc().c_str());
     }
     return skip;
 }
@@ -6073,17 +6064,9 @@ bool CoreChecks::ValidateCmdCopyBufferBounds(const BUFFER_STATE *src_buffer_stat
 
     VkDeviceSize src_buffer_size = src_buffer_state->createInfo.size;
     VkDeviceSize dst_buffer_size = dst_buffer_state->createInfo.size;
-    VkDeviceSize src_min = UINT64_MAX;
-    VkDeviceSize src_max = 0;
-    VkDeviceSize dst_min = UINT64_MAX;
-    VkDeviceSize dst_max = 0;
 
     for (uint32_t i = 0; i < regionCount; i++) {
         const RegionType region = pRegions[i];
-        src_min = std::min(src_min, region.srcOffset);
-        src_max = std::max(src_max, (region.srcOffset + region.size));
-        dst_min = std::min(dst_min, region.dstOffset);
-        dst_max = std::max(dst_max, (region.dstOffset + region.size));
 
         // The srcOffset member of each element of pRegions must be less than the size of srcBuffer
         if (region.srcOffset >= src_buffer_size) {
@@ -6120,17 +6103,24 @@ bool CoreChecks::ValidateCmdCopyBufferBounds(const BUFFER_STATE *src_buffer_stat
                              ") minus pRegions[%d].dstOffset (%" PRIuLEAST64 ").",
                              func_name, i, region.size, dst_buffer_size, i, region.dstOffset);
         }
-    }
 
-    // The union of the source regions, and the union of the destination regions, must not overlap in memory
-    if (src_buffer_state->buffer() == dst_buffer_state->buffer()) {
-        if (((src_min > dst_min) && (src_min < dst_max)) || ((src_max > dst_min) && (src_max < dst_max)) ||
-            ((src_min == dst_min && src_max == dst_max))) {
-            vuid = is_2 ? "VUID-VkCopyBufferInfo2-pRegions-00117" : "VUID-vkCmdCopyBuffer-pRegions-00117";
-            skip |= LogError(src_buffer_state->buffer(), vuid, "%s: Detected overlap between source and dest regions in memory.",
-                             func_name);
+        // The union of the source regions, and the union of the destination regions, must not overlap in memory
+        if (src_buffer_state->buffer() == dst_buffer_state->buffer()) {
+            VkDeviceSize src_min = region.srcOffset;
+            VkDeviceSize src_max = region.srcOffset + region.size;
+            for (uint32_t j = 0; j < regionCount; j++) {
+                VkDeviceSize dst_min = pRegions[j].dstOffset;
+                VkDeviceSize dst_max = pRegions[j].dstOffset + region.size;
+                if (((src_min > dst_min) && (src_min < dst_max)) || ((src_max > dst_min) && (src_max < dst_max)) ||
+                    ((src_min == dst_min && src_max == dst_max))) {
+                    vuid = is_2 ? "VUID-VkCopyBufferInfo2-pRegions-00117" : "VUID-vkCmdCopyBuffer-pRegions-00117";
+                    skip |= LogError(src_buffer_state->buffer(), vuid,
+                                     "%s: Detected overlap between source and dest regions in memory.", func_name);
+                }
+            }
         }
     }
+
 
     return skip;
 }
