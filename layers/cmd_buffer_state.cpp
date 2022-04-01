@@ -146,6 +146,8 @@ VkDynamicState ConvertToDynamicState(CBStatusFlagBits flag) {
             return VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT;
         case CBSTATUS_VERTEX_INPUT_SET:
             return VK_DYNAMIC_STATE_VERTEX_INPUT_EXT;
+        case CBSTATUS_COLOR_WRITE_ENABLE_SET:
+            return VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT;
         default:
             // CBSTATUS_INDEX_BUFFER_BOUND is not in VkDynamicState
             return VK_DYNAMIC_STATE_MAX_ENUM;
@@ -223,6 +225,8 @@ CBStatusFlagBits ConvertToCBStatusFlagBits(VkDynamicState state) {
             return CBSTATUS_PRIMITIVE_RESTART_ENABLE_SET;
         case VK_DYNAMIC_STATE_VERTEX_INPUT_EXT:
             return CBSTATUS_VERTEX_INPUT_SET;
+        case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
+            return CBSTATUS_COLOR_WRITE_ENABLE_SET;
         default:
             return CBSTATUS_NONE;
     }
@@ -300,6 +304,7 @@ void CMD_BUFFER_STATE::Reset() {
     usedDynamicViewportCount = false;
     usedDynamicScissorCount = false;
     primitiveTopology = VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
+    dynamicColorWriteEnableAttachmentCount = 0;
 
     activeRenderPassBeginInfo = safe_VkRenderPassBeginInfo();
     activeRenderPass = nullptr;
@@ -329,7 +334,6 @@ void CMD_BUFFER_STATE::Reset() {
     cmd_execute_commands_functions.clear();
     eventUpdates.clear();
     queryUpdates.clear();
-    barrierUpdates.clear();
 
     // Remove object bindings
     for (const auto &obj : object_bindings) {
@@ -903,9 +907,6 @@ void CMD_BUFFER_STATE::ExecuteCommands(uint32_t commandBuffersCount, const VkCom
         for (auto &function : sub_cb_state->queryUpdates) {
             queryUpdates.push_back(function);
         }
-        for (const auto &function : sub_cb_state->barrierUpdates) {
-            barrierUpdates.push_back(function);
-        }
         for (auto &function : sub_cb_state->queue_submit_functions) {
             queue_submit_functions.push_back(function);
         }
@@ -1211,6 +1212,11 @@ void CMD_BUFFER_STATE::RecordStateCmd(CMD_TYPE cmd_type, CBStatusFlags state_bit
     static_status &= ~state_bits;
 }
 
+void CMD_BUFFER_STATE::RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CBStatusFlags state_bits, uint32_t attachment_count) {
+    RecordStateCmd(cmd_type, state_bits);
+    dynamicColorWriteEnableAttachmentCount = std::max(dynamicColorWriteEnableAttachmentCount, attachment_count);
+}
+
 void CMD_BUFFER_STATE::RecordTransferCmd(CMD_TYPE cmd_type, std::shared_ptr<BINDABLE> &&buf1, std::shared_ptr<BINDABLE> &&buf2) {
     RecordCmd(cmd_type);
     if (buf1) {
@@ -1360,10 +1366,6 @@ void CMD_BUFFER_STATE::Retire(uint32_t perf_submit_pass, const std::function<boo
     VkQueryPool first_pool = VK_NULL_HANDLE;
     for (auto &function : queryUpdates) {
         function(nullptr, /*do_validate*/ false, first_pool, perf_submit_pass, &local_query_to_state_map);
-    }
-
-    for (const auto &function : barrierUpdates) {
-        function();
     }
 
     for (const auto &query_state_pair : local_query_to_state_map) {

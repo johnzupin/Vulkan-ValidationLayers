@@ -1094,6 +1094,26 @@ class StatelessValidation : public ValidationObject {
                                          func_name);
                         }
                     }
+                    if (attachment_description_stencil_layout && separate_depth_stencil_layouts) {
+                        if (initial_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
+                            initial_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
+                            skip |=
+                                LogError(device, "VUID-VkAttachmentDescription2-separateDepthStencilLayouts-06556",
+                                         "%s: pCreateInfo->pAttachments[%d].initialLayout must not be "
+                                         "VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL or "
+                                         "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
+                                         func_name, i);
+                        }
+                        if (final_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
+                            final_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
+                            skip |=
+                                LogError(device, "VUID-VkAttachmentDescription2-separateDepthStencilLayouts-06557",
+                                         "%s: pCreateInfo->pAttachments[%d].initialLayout must not be "
+                                         "VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL or "
+                                         "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
+                                         func_name, i);
+                        }
+                    }
                 } else {
                     if (initial_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
                         initial_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
@@ -1811,6 +1831,9 @@ class StatelessValidation : public ValidationObject {
     bool manual_PreCallValidateCmdBeginConditionalRenderingEXT(
         VkCommandBuffer commandBuffer, const VkConditionalRenderingBeginInfoEXT *pConditionalRenderingBegin) const;
 
+    bool ValidateDeviceImageMemoryRequirements(VkDevice device, const VkDeviceImageMemoryRequirementsKHR *pInfo,
+                                               const char *func_name) const;
+
     bool manual_PreCallValidateGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
                                                                   uint32_t *pSurfaceFormatCount,
                                                                   VkSurfaceFormatKHR *pSurfaceFormats) const;
@@ -1844,6 +1867,12 @@ class StatelessValidation : public ValidationObject {
         VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements) const;
 
     bool manual_PreCallValidateGetDeviceImageSparseMemoryRequirements(
+        VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, uint32_t *pSparseMemoryRequirementCount,
+        VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements) const;
+
+    bool manual_PreCallValidateGetDeviceImageMemoryRequirementsKHR(VkDevice device, const VkDeviceImageMemoryRequirements *pInfo,
+                                                                   VkMemoryRequirements2 *pMemoryRequirements) const;
+    bool manual_PreCallValidateGetDeviceImageSparseMemoryRequirementsKHR(
         VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, uint32_t *pSparseMemoryRequirementCount,
         VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements) const;
 

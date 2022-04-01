@@ -8295,40 +8295,39 @@ bool StatelessValidation::manual_PreCallValidateGetPhysicalDeviceSurfacePresentM
     }
     return skip;
 }
+
 #endif  // VK_USE_PLATFORM_WIN32_KHR
 
-// VkDeviceImageMemoryRequirements::planeAspect should have been listed as optional to account for VK_IMAGE_ASPECT_NONE
-bool StatelessValidation::manual_PreCallValidateGetDeviceImageMemoryRequirementsKHR(
-    VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, VkMemoryRequirements2 *pMemoryRequirements) const {
-    return validate_flags("vkGetDeviceImageMemoryRequirementsKHR", "pInfo->planeAspect", "VkImageAspectFlagBits",
-                          AllVkImageAspectFlagBits, pInfo->planeAspect, kOptionalSingleBit,
-                          "VUID-VkDeviceImageMemoryRequirements-planeAspect-parameter",
-                          "VUID-VkDeviceImageMemoryRequirements-planeAspect-parameter");
+bool StatelessValidation::ValidateDeviceImageMemoryRequirements(VkDevice device, const VkDeviceImageMemoryRequirementsKHR *pInfo,
+                                                                const char *func_name) const {
+    bool skip = false;
+
+    if (pInfo && pInfo->pCreateInfo) {
+        const auto *image_swapchain_create_info = LvlFindInChain<VkImageSwapchainCreateInfoKHR>(pInfo->pCreateInfo);
+        if (image_swapchain_create_info) {
+            skip |= LogError(device, "VUID-VkDeviceImageMemoryRequirementsKHR-pCreateInfo-06416",
+                             "%s(): pInfo->pCreateInfo->pNext chain contains VkImageSwapchainCreateInfoKHR.", func_name);
+        }
+    }
+
+    return skip;
 }
 
-bool StatelessValidation::manual_PreCallValidateGetDeviceImageMemoryRequirements(VkDevice device,
-                                                                                 const VkDeviceImageMemoryRequirements *pInfo,
-                                                                                 VkMemoryRequirements2 *pMemoryRequirements) const {
-    return validate_flags("vkGetDeviceImageMemoryRequirements", "pInfo->planeAspect", "VkImageAspectFlagBits",
-                          AllVkImageAspectFlagBits, pInfo->planeAspect, kOptionalSingleBit,
-                          "VUID-VkDeviceImageMemoryRequirements-planeAspect-parameter",
-                          "VUID-VkDeviceImageMemoryRequirements-planeAspect-parameter");
+bool StatelessValidation::manual_PreCallValidateGetDeviceImageMemoryRequirementsKHR(
+    VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, VkMemoryRequirements2 *pMemoryRequirements) const {
+    bool skip = false;
+
+    skip |= ValidateDeviceImageMemoryRequirements(device, pInfo, "vkGetDeviceImageMemoryRequirementsKHR");
+
+    return skip;
 }
 
 bool StatelessValidation::manual_PreCallValidateGetDeviceImageSparseMemoryRequirementsKHR(
     VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, uint32_t *pSparseMemoryRequirementCount,
     VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements) const {
-    return validate_flags("vkGetDeviceImageSparseMemoryRequirementsKHR", "pInfo->planeAspect", "VkImageAspectFlagBits",
-                          AllVkImageAspectFlagBits, pInfo->planeAspect, kOptionalSingleBit,
-                          "VUID-VkDeviceImageMemoryRequirements-planeAspect-parameter",
-                          "VUID-VkDeviceImageMemoryRequirements-planeAspect-parameter");
-}
+    bool skip = false;
 
-bool StatelessValidation::manual_PreCallValidateGetDeviceImageSparseMemoryRequirements(
-    VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, uint32_t *pSparseMemoryRequirementCount,
-    VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements) const {
-    return validate_flags("vkGetDeviceImageSparseMemoryRequirements", "pInfo->planeAspect", "VkImageAspectFlagBits",
-                          AllVkImageAspectFlagBits, pInfo->planeAspect, kOptionalSingleBit,
-                          "VUID-VkDeviceImageMemoryRequirements-planeAspect-parameter",
-                          "VUID-VkDeviceImageMemoryRequirements-planeAspect-parameter");
+    skip |= ValidateDeviceImageMemoryRequirements(device, pInfo, "vkGetDeviceImageSparseMemoryRequirementsKHR");
+
+    return skip;
 }

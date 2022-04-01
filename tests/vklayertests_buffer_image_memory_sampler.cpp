@@ -14915,6 +14915,46 @@ TEST_F(VkLayerTest, ImageViewMinLodFeature) {
     CreateImageViewTest(*this, &ivci, "VUID-VkImageViewMinLodCreateInfoEXT-minLod-06455");
 }
 
+TEST_F(VkLayerTest, ValidateDeviceImageMemoryRequirements) {
+    TEST_DESCRIPTION("Validate usage of VkDeviceImageMemoryRequirementsKHR.");
+
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(Init());
+    if (!AreRequestedExtensionsEnabled()) {
+        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+        return;
+    }
+
+    PFN_vkGetDeviceImageMemoryRequirementsKHR vkGetDeviceImageMemoryRequirementsKHR =
+        reinterpret_cast<PFN_vkGetDeviceImageMemoryRequirementsKHR>(vk::GetInstanceProcAddr(instance(), "vkGetDeviceImageMemoryRequirementsKHR"));
+    assert(vkGetDeviceImageMemoryRequirementsKHR != nullptr);
+
+    auto image_swapchain_create_info = LvlInitStruct<VkImageSwapchainCreateInfoKHR>();
+    image_swapchain_create_info.swapchain = m_swapchain;
+
+    auto image_create_info = LvlInitStruct<VkImageCreateInfo>(&image_swapchain_create_info);
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+    image_create_info.extent.width = 32;
+    image_create_info.extent.height = 32;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 1;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    image_create_info.arrayLayers = 1;
+
+    auto device_image_memory_requirements = LvlInitStruct<VkDeviceImageMemoryRequirementsKHR>();
+    device_image_memory_requirements.pCreateInfo = &image_create_info;
+    device_image_memory_requirements.planeAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    VkMemoryRequirements2 memory_requirements = LvlInitStruct<VkMemoryRequirements2>();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDeviceImageMemoryRequirementsKHR-pCreateInfo-06416");
+    vkGetDeviceImageMemoryRequirementsKHR(device(), &device_image_memory_requirements, &memory_requirements);
+    m_errorMonitor->VerifyFound();
+}
+
 TEST_F(VkLayerTest, TestCompletelyOverlappingBufferCopy) {
     TEST_DESCRIPTION("Test copying between buffers with completely overlapping source and destination regions.");
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -14935,4 +14975,42 @@ TEST_F(VkLayerTest, TestCompletelyOverlappingBufferCopy) {
     m_commandBuffer->end();
 
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkLayerTest, TestCopyingInterleavedRegions) {
+    TEST_DESCRIPTION("Test copying between interleaved source and destination regions.");
+    ASSERT_NO_FATAL_FAILURE(Init());
+
+    VkBufferCopy copy_infos[4];
+    copy_infos[0].srcOffset = 0;
+    copy_infos[0].dstOffset = 4;
+    copy_infos[0].size = 4;
+    copy_infos[1].srcOffset = 8;
+    copy_infos[1].dstOffset = 12;
+    copy_infos[1].size = 4;
+    copy_infos[2].srcOffset = 16;
+    copy_infos[2].dstOffset = 20;
+    copy_infos[2].size = 4;
+    copy_infos[3].srcOffset = 24;
+    copy_infos[3].dstOffset = 28;
+    copy_infos[3].size = 4;
+
+    VkBufferObj buffer;
+    VkMemoryPropertyFlags reqs = 0;
+    buffer.init_as_src_and_dst(*m_device, 32, reqs);
+
+
+    m_commandBuffer->begin();
+
+    m_errorMonitor->ExpectSuccess();
+    vk::CmdCopyBuffer(m_commandBuffer->handle(), buffer.handle(), buffer.handle(), 4, copy_infos);
+    m_errorMonitor->VerifyNotFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBuffer-pRegions-00117");
+    copy_infos[2].dstOffset = 21;
+    vk::CmdCopyBuffer(m_commandBuffer->handle(), buffer.handle(), buffer.handle(), 4, copy_infos);
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->end();
+
 }
