@@ -79,11 +79,19 @@ enum RenderPassCreateVersion { RENDER_PASS_VERSION_1 = 0, RENDER_PASS_VERSION_2 
 // Added from VK_KHR_device_group but added to VK_KHR_swapchain with Vulkan 1.1
 enum AcquireVersion { ACQUIRE_VERSION_1 = 0, ACQUIRE_VERSION_2 = 1 };
 
+// This structure is used modify and pass parameters for the CreateShaderModule down-chain API call
+struct create_shader_module_api_state {
+    uint32_t unique_shader_id;
+    VkShaderModuleCreateInfo instrumented_create_info;
+    std::vector<uint32_t> instrumented_pgm;
+};
+
 // This structure is used to save data across the CreateGraphicsPipelines down-chain API call
 struct create_graphics_pipeline_api_state {
     std::vector<safe_VkGraphicsPipelineCreateInfo> gpu_create_infos;
     std::vector<safe_VkGraphicsPipelineCreateInfo> printf_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
+    std::vector<std::vector<create_shader_module_api_state>> shader_states;
     const VkGraphicsPipelineCreateInfo* pCreateInfos;
 };
 
@@ -120,13 +128,6 @@ struct create_pipeline_layout_api_state {
 // This structure is used modify parameters for the CreateBuffer down-chain API call
 struct create_buffer_api_state {
     VkBufferCreateInfo modified_create_info;
-};
-
-// This structure is used modify and pass parameters for the CreateShaderModule down-chain API call
-struct create_shader_module_api_state {
-    uint32_t unique_shader_id;
-    VkShaderModuleCreateInfo instrumented_create_info;
-    std::vector<uint32_t> instrumented_pgm;
 };
 
 #define VALSTATETRACK_MAP_AND_TRAITS_IMPL(handle_type, state_type, map_member, instance_scope) \
@@ -196,22 +197,26 @@ static inline VkExtent3D GetAdjustedDestImageExtent(VkFormat src_format, VkForma
     return adjusted_extent;
 }
 
-// Test if the extent argument has any dimensions set to 0.
-static inline bool IsExtentSizeZero(const VkExtent3D* extent) {
-    return ((extent->width == 0) || (extent->height == 0) || (extent->depth == 0));
-}
-
-// Get buffer size from vkBufferImageCopy / vkBufferImageCopy2KHR structure, for a given format
+// Get buffer size from VkBufferImageCopy / VkBufferImageCopy2KHR structure, for a given format
 template <typename RegionType>
 static inline VkDeviceSize GetBufferSizeFromCopyImage(const RegionType& region, VkFormat image_format) {
     VkDeviceSize buffer_size = 0;
     VkExtent3D copy_extent = region.imageExtent;
     VkDeviceSize buffer_width = (0 == region.bufferRowLength ? copy_extent.width : region.bufferRowLength);
     VkDeviceSize buffer_height = (0 == region.bufferImageHeight ? copy_extent.height : region.bufferImageHeight);
+    // VUID-VkImageCreateInfo-imageType-00961 prevents having both depth and layerCount ever both be greater than 1 together. Take
+    // max to logic simple. This is the number of 'slices' to copy.
+    const uint32_t z_copies = std::max(copy_extent.depth, region.imageSubresource.layerCount);
+
+    // Invalid if copy size is 0 and other validation checks will catch it. Returns zero as the caller should have fallback already
+    // to ignore.
+    if (copy_extent.width == 0 || copy_extent.height == 0 || copy_extent.depth == 0 || z_copies == 0) {
+        return 0;
+    }
 
     VkDeviceSize unit_size = 0;
     if (region.imageSubresource.aspectMask & (VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT)) {
-        // Spec in vkBufferImageCopy section list special cases for each format
+        // Spec in VkBufferImageCopy section list special cases for each format
         if (region.imageSubresource.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
             unit_size = 1;
         } else {
@@ -249,16 +254,10 @@ static inline VkDeviceSize GetBufferSizeFromCopyImage(const RegionType& region, 
         copy_extent.depth = (copy_extent.depth + block_dim.depth - 1) / block_dim.depth;
     }
 
-    // Either depth or layerCount may be greater than 1 (not both). This is the number of 'slices' to copy
-    uint32_t z_copies = std::max(copy_extent.depth, region.imageSubresource.layerCount);
-    if (IsExtentSizeZero(&copy_extent) || (0 == z_copies)) {
-        // TODO: Issue warning here? Already warned in ValidateImageBounds()...
-    } else {
-        // Calculate buffer offset of final copied byte, + 1.
-        buffer_size = (z_copies - 1) * buffer_height * buffer_width;                   // offset to slice
-        buffer_size += ((copy_extent.height - 1) * buffer_width) + copy_extent.width;  // add row,col
-        buffer_size *= unit_size;                                                      // convert to bytes
-    }
+    // Calculate buffer offset of final copied byte, + 1.
+    buffer_size = (z_copies - 1) * buffer_height * buffer_width;                   // offset to slice
+    buffer_size += ((copy_extent.height - 1) * buffer_width) + copy_extent.width;  // add row,col
+    buffer_size *= unit_size;                                                      // convert to bytes
     return buffer_size;
 }
 
@@ -323,9 +322,6 @@ class ValidationStateTracker : public ValidationObject {
     }
 
   public:
-    // Override base class, we have some extra work to do here
-    void InitDeviceValidationObject(bool add_obj, ValidationObject* inst_obj, ValidationObject* dev_obj) override;
-
     template <typename State, typename HandleType = typename state_object::Traits<State>::HandleType>
     void Add(std::shared_ptr<State>&& state_object) {
         auto& map = GetStateMap<State>();
@@ -604,6 +600,8 @@ class ValidationStateTracker : public ValidationObject {
 
     void PostCallRecordCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo* pCreateInfo,
                                     const VkAllocationCallbacks* pAllocator, VkDevice* pDevice, VkResult result) override;
+    virtual void CreateDevice(const VkDeviceCreateInfo* pCreateInfo);
+
     void PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) override;
 
     void PostCallRecordCreateAccelerationStructureNV(VkDevice device, const VkAccelerationStructureCreateInfoNV* pCreateInfo,
@@ -788,6 +786,11 @@ class ValidationStateTracker : public ValidationObject {
     void PostCallRecordCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo,
                                        const VkAllocationCallbacks* pAllocator, VkSemaphore* pSemaphore, VkResult result) override;
     void PreCallRecordDestroySemaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks* pAllocator) override;
+
+    std::shared_ptr<SHADER_MODULE_STATE> CreateShaderModuleState(const VkShaderModuleCreateInfo& create_info,
+                                                                 uint32_t unique_shader_id) const;
+    std::shared_ptr<SHADER_MODULE_STATE> CreateShaderModuleState(const VkShaderModuleCreateInfo& create_info,
+                                                                 uint32_t unique_shader_id, VkShaderModule handle) const;
     void PostCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo,
                                           const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule, VkResult result,
                                           void* csm_state) override;

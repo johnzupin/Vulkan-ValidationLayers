@@ -268,6 +268,16 @@ layer_data::unordered_set<uint32_t> SHADER_MODULE_STATE::MarkAccessibleIds(spirv
     return ids;
 }
 
+layer_data::unordered_set<uint32_t> SHADER_MODULE_STATE::MarkVariableIds() const {
+    layer_data::unordered_set<uint32_t> variable_ids;
+    for (const auto insn : *this) {
+        if (insn.opcode() == spv::OpVariable) {
+            variable_ids.insert(insn.word(2));
+        }
+    }
+    return variable_ids;
+}
+
 layer_data::optional<VkPrimitiveTopology> SHADER_MODULE_STATE::GetTopology(const spirv_inst_iter &entrypoint) const {
     layer_data::optional<VkPrimitiveTopology> result;
 
@@ -308,6 +318,14 @@ layer_data::optional<VkPrimitiveTopology> SHADER_MODULE_STATE::GetTopology(const
     }
 
     return result;
+}
+
+layer_data::optional<VkPrimitiveTopology> SHADER_MODULE_STATE::GetTopology() const {
+    if (static_data_.entry_points.size() > 0) {
+        const auto entrypoint = static_data_.entry_points.cbegin()->second;
+        return GetTopology(get_def(entrypoint.offset));
+    }
+    return {};
 }
 
 SHADER_MODULE_STATE::SpirvStaticData::SpirvStaticData(const SHADER_MODULE_STATE &module_state) {
@@ -1515,11 +1533,11 @@ void SHADER_MODULE_STATE::IsSpecificDescriptorType(const spirv_inst_iter &id_it,
 }
 
 std::vector<std::pair<DescriptorSlot, interface_var>> SHADER_MODULE_STATE::CollectInterfaceByDescriptorSlot(
-    layer_data::unordered_set<uint32_t> const &accessible_ids) const {
+    layer_data::unordered_set<uint32_t> const &ids) const {
     std::vector<std::pair<DescriptorSlot, interface_var>> out;
     shader_module_used_operators operators;
 
-    for (auto id : accessible_ids) {
+    for (auto id : ids) {
         auto insn = get_def(id);
         assert(insn != end());
 
@@ -1792,8 +1810,8 @@ uint32_t SHADER_MODULE_STATE::GetNumComponentsInBaseType(const spirv_inst_iter &
     } else if (opcode == spv::OpTypeMatrix) {
         const auto column_type = get_def(iter.word(2));
         const uint32_t vector_length = GetNumComponentsInBaseType(column_type);
-        const uint32_t column_count = iter.word(3);
-        return vector_length * column_count;
+        // Because we are calculating components for a single location we do not care about column count
+        return vector_length;
     } else if (opcode == spv::OpTypeArray) {
         const auto element_type = get_def(iter.word(2));
         const uint32_t element_length = GetNumComponentsInBaseType(element_type);

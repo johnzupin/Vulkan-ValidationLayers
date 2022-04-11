@@ -236,32 +236,31 @@ void GpuAssisted::PreCallRecordCreateBuffer(VkDevice device, const VkBufferCreat
 void GpuAssisted::PreCallRecordCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo *create_info,
                                             const VkAllocationCallbacks *pAllocator, VkDevice *pDevice,
                                             void *modified_create_info) {
-    DispatchGetPhysicalDeviceFeatures(gpu, &supported_features);
+    // Use a local variable to query features since this method runs in the instance validation object.
+    // To avoid confusion and race conditions about which physical device's features are stored in the
+    // 'supported_devices' member variable, it will only be set in the device validation objects.
+    // See CreateDevice() below.
+    VkPhysicalDeviceFeatures gpu_supported_features;
+    DispatchGetPhysicalDeviceFeatures(gpu, &gpu_supported_features);
     VkPhysicalDeviceFeatures features = {};
     features.vertexPipelineStoresAndAtomics = true;
     features.fragmentStoresAndAtomics = true;
     features.shaderInt64 = true;
-    UtilPreCallRecordCreateDevice(gpu, reinterpret_cast<safe_VkDeviceCreateInfo *>(modified_create_info), supported_features,
+    UtilPreCallRecordCreateDevice(gpu, reinterpret_cast<safe_VkDeviceCreateInfo *>(modified_create_info), gpu_supported_features,
                                   features);
     ValidationStateTracker::PreCallRecordCreateDevice(gpu, create_info, pAllocator, pDevice, modified_create_info);
 }
 // Perform initializations that can be done at Create Device time.
-void GpuAssisted::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
-                                             const VkAllocationCallbacks *pAllocator, VkDevice *pDevice, VkResult result) {
+void GpuAssisted::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
     // The state tracker sets up the device state
-    ValidationStateTracker::PostCallRecordCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice, result);
+    ValidationStateTracker::CreateDevice(pCreateInfo);
 
-    ValidationObject *device_object = GetLayerDataPtr(get_dispatch_key(*pDevice), layer_data_map);
-    ValidationObject *validation_data = GetValidationObject(device_object->object_dispatch, this->container_type);
-    GpuAssisted *device_gpu_assisted = static_cast<GpuAssisted *>(validation_data);
-
-    if (device_gpu_assisted->enabled_features.core.robustBufferAccess ||
-        device_gpu_assisted->enabled_features.robustness2_features.robustBufferAccess2) {
-        device_gpu_assisted->buffer_oob_enabled = false;
+    if (enabled_features.core.robustBufferAccess || enabled_features.robustness2_features.robustBufferAccess2) {
+        buffer_oob_enabled = false;
     } else {
         std::string bufferoob_string = getLayerOption("khronos_validation.gpuav_buffer_oob");
         transform(bufferoob_string.begin(), bufferoob_string.end(), bufferoob_string.begin(), ::tolower);
-        device_gpu_assisted->buffer_oob_enabled = !bufferoob_string.empty() ? !bufferoob_string.compare("true") : true;
+        buffer_oob_enabled = !bufferoob_string.empty() ? !bufferoob_string.compare("true") : true;
     }
     std::string descriptor_indexing_string = getLayerOption("khronos_validation.gpuav_descriptor_indexing");
     transform(descriptor_indexing_string.begin(), descriptor_indexing_string.end(), descriptor_indexing_string.begin(), ::tolower);
@@ -269,19 +268,20 @@ void GpuAssisted::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
 
     std::string draw_indirect_string = getLayerOption("khronos_validation.validate_draw_indirect");
     transform(draw_indirect_string.begin(), draw_indirect_string.end(), draw_indirect_string.begin(), ::tolower);
-    device_gpu_assisted->validate_draw_indirect = !draw_indirect_string.empty() ? !draw_indirect_string.compare("true") : true;
+    validate_draw_indirect = !draw_indirect_string.empty() ? !draw_indirect_string.compare("true") : true;
 
-    if (device_gpu_assisted->phys_dev_props.apiVersion < VK_API_VERSION_1_1) {
+    if (phys_dev_props.apiVersion < VK_API_VERSION_1_1) {
         ReportSetupProblem(device, "GPU-Assisted validation requires Vulkan 1.1 or later.  GPU-Assisted Validation disabled.");
-        device_gpu_assisted->aborted = true;
+        aborted = true;
         return;
     }
 
+    DispatchGetPhysicalDeviceFeatures(physical_device, &supported_features);
     if (!supported_features.fragmentStoresAndAtomics || !supported_features.vertexPipelineStoresAndAtomics) {
         ReportSetupProblem(device,
                            "GPU-Assisted validation requires fragmentStoresAndAtomics and vertexPipelineStoresAndAtomics.  "
                            "GPU-Assisted Validation disabled.");
-        device_gpu_assisted->aborted = true;
+        aborted = true;
         return;
     }
 
@@ -291,10 +291,10 @@ void GpuAssisted::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
         LogWarning(device, "UNASSIGNED-GPU-Assisted Validation Warning",
                    "shaderInt64 feature is not available.  No buffer device address checking will be attempted");
     }
-    device_gpu_assisted->shaderInt64 = supported_features.shaderInt64;
-    device_gpu_assisted->output_buffer_size = sizeof(uint32_t) * (spvtools::kInstMaxOutCnt + 1);
+    shaderInt64 = supported_features.shaderInt64;
+    output_buffer_size = sizeof(uint32_t) * (spvtools::kInstMaxOutCnt + 1);
     if (validate_descriptor_indexing) {
-        device_gpu_assisted->descriptor_indexing = CheckForDescriptorIndexing(device_gpu_assisted->enabled_features);
+        descriptor_indexing = CheckForDescriptorIndexing(enabled_features);
     }
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
@@ -307,8 +307,8 @@ void GpuAssisted::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
         binding.binding = i;
         bindings.push_back(binding);
     }
-    UtilPostCallRecordCreateDevice(pCreateInfo, bindings, device_gpu_assisted, device_gpu_assisted->phys_dev_props);
-    device_gpu_assisted->CreateAccelerationStructureBuildValidationState();
+    UtilPostCallRecordCreateDevice(pCreateInfo, bindings, this, phys_dev_props);
+    CreateAccelerationStructureBuildValidationState();
 }
 
 // Clean up device-related resources
@@ -702,9 +702,10 @@ struct GPUAV_RESTORABLE_PIPELINE_STATE {
             if (last_bound.push_descriptor_set) {
                 push_descriptor_set_writes = last_bound.push_descriptor_set->GetWrites();
             }
-            if (last_bound.pipeline_state->pipeline_layout->push_constant_ranges == cb_state->push_constant_data_ranges) {
+            const auto &pipeline_layout = last_bound.pipeline_state->PipelineLayoutState();
+            if (pipeline_layout->push_constant_ranges == cb_state->push_constant_data_ranges) {
                 push_constants_data = cb_state->push_constant_data;
-                push_constants_ranges = last_bound.pipeline_state->pipeline_layout->push_constant_ranges;
+                push_constants_ranges = pipeline_layout->push_constant_ranges;
             }
         }
     }
@@ -1198,7 +1199,31 @@ void GpuAssisted::PostCallRecordCreateRayTracingPipelinesKHR(VkDevice device, Vk
         device, deferredOperation, pipelineCache, count, pCreateInfos, pAllocator, pPipelines, result, crtpl_state_data);
     if (aborted) return;
     UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, crtpl_state->gpu_create_infos.data());
-    UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, this);
+
+    bool is_operation_deferred = (deferredOperation != VK_NULL_HANDLE && result == VK_OPERATION_DEFERRED_KHR);
+    if (is_operation_deferred) {
+        std::vector<safe_VkRayTracingPipelineCreateInfoKHR> infos{pCreateInfos, pCreateInfos + count};
+        auto register_fn = [this, infos, pAllocator](const std::vector<VkPipeline> &pipelines) {
+            UtilPostCallRecordPipelineCreations(static_cast<uint32_t>(infos.size()),
+                                                reinterpret_cast<const VkRayTracingPipelineCreateInfoKHR *>(infos.data()),
+                                                pAllocator, pipelines.data(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, this);
+        };
+
+        auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
+        if (wrap_handles) {
+            deferredOperation = layer_data->Unwrap(deferredOperation);
+        }
+        std::vector<std::function<void(const std::vector<VkPipeline> &)>> cleanup_fn;
+        auto find_res = layer_data->deferred_operation_post_check.pop(deferredOperation);
+        if (find_res->first) {
+            cleanup_fn = std::move(find_res->second);
+        }
+        cleanup_fn.emplace_back(register_fn);
+        layer_data->deferred_operation_post_check.insert(deferredOperation, cleanup_fn);
+    } else {
+        UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                                            this);
+    }
 }
 
 // Remove all the shader trackers associated with this destroyed pipeline.
@@ -1915,7 +1940,7 @@ void GpuAssisted::AllocatePreDrawValidationResources(GpuAssistedDeviceMemoryBloc
     }
 
     VkPipeline pipeline = VK_NULL_HANDLE;
-    VkRenderPass render_pass = state.pipeline_state->rp_state->renderPass();
+    VkRenderPass render_pass = state.pipeline_state->RenderPassState()->renderPass();
     if (render_pass != VK_NULL_HANDLE) {
         auto pipeentry = pre_draw_validation_state.renderpass_to_pipeline.find(render_pass);
         if (pipeentry != pre_draw_validation_state.renderpass_to_pipeline.end()) {
@@ -2010,6 +2035,23 @@ void GpuAssisted::AllocateValidationResources(const VkCommandBuffer cmd_buffer, 
 
     if (aborted) return;
 
+    auto cb_node = Get<gpuav_state::CommandBuffer>(cmd_buffer);
+    if (!cb_node) {
+        ReportSetupProblem(device, "Unrecognized command buffer");
+        aborted = true;
+        return;
+    }
+    const auto lv_bind_point = ConvertToLvlBindPoint(bind_point);
+    auto const &state = cb_node->lastBound[lv_bind_point];
+    const auto *pipeline_state = state.pipeline_state;
+
+    // TODO (ncesario) remove once VK_EXT_graphics_pipeline_library support is added for GPU-AV
+    if (pipeline_state->IsGraphicsLibrary()) {
+        ReportSetupProblem(device, "GPU-AV does not currently support VK_EXT_graphics_pipeline_library");
+        aborted = true;
+        return;
+    }
+
     std::vector<VkDescriptorSet> desc_sets;
     VkDescriptorPool desc_pool = VK_NULL_HANDLE;
     result = desc_set_manager->GetDescriptorSets(1, &desc_pool, debug_desc_layout, &desc_sets);
@@ -2022,13 +2064,6 @@ void GpuAssisted::AllocateValidationResources(const VkCommandBuffer cmd_buffer, 
 
     VkDescriptorBufferInfo output_desc_buffer_info = {};
     output_desc_buffer_info.range = output_buffer_size;
-
-    auto cb_node = Get<gpuav_state::CommandBuffer>(cmd_buffer);
-    if (!cb_node) {
-        ReportSetupProblem(device, "Unrecognized command buffer");
-        aborted = true;
-        return;
-    }
 
     // Allocate memory for the output block that the gpu will use to return any error information
     GpuAssistedDeviceMemoryBlock output_block = {};
@@ -2058,8 +2093,6 @@ void GpuAssisted::AllocateValidationResources(const VkCommandBuffer cmd_buffer, 
     VkWriteDescriptorSet desc_writes[3] = {};
     GpuAssistedPreDrawResources pre_draw_resources = {};
     uint32_t desc_count = 1;
-    const auto lv_bind_point = ConvertToLvlBindPoint(bind_point);
-    auto const &state = cb_node->lastBound[lv_bind_point];
     uint32_t number_of_sets = static_cast<uint32_t>(state.per_set.size());
 
     if (validate_draw_indirect && ((cmd_type == CMD_DRAWINDIRECTCOUNT || cmd_type == CMD_DRAWINDIRECTCOUNTKHR ||
@@ -2419,14 +2452,13 @@ void GpuAssisted::AllocateValidationResources(const VkCommandBuffer cmd_buffer, 
     desc_writes[0].dstSet = desc_sets[0];
     DispatchUpdateDescriptorSets(device, desc_count, desc_writes, 0, NULL);
 
-    const auto *pipeline_state = state.pipeline_state;
     if (pipeline_state) {
-        if ((pipeline_state->pipeline_layout->set_layouts.size() <= desc_set_bind_index) &&
-            !pipeline_state->pipeline_layout->Destroyed()) {
-            DispatchCmdBindDescriptorSets(cmd_buffer, bind_point, pipeline_state->pipeline_layout->layout(), desc_set_bind_index, 1,
+        const auto &pipeline_layout = pipeline_state->PipelineLayoutState();
+        if ((pipeline_layout->set_layouts.size() <= desc_set_bind_index) && !pipeline_layout->Destroyed()) {
+            DispatchCmdBindDescriptorSets(cmd_buffer, bind_point, pipeline_layout->layout(), desc_set_bind_index, 1,
                                           desc_sets.data(), 0, nullptr);
         }
-        if (pipeline_state->pipeline_layout->Destroyed()) {
+        if (pipeline_layout->Destroyed()) {
             ReportSetupProblem(device, "Pipeline layout has been destroyed, aborting GPU-AV");
             aborted = true;
         } else {

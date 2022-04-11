@@ -9823,6 +9823,26 @@ TEST_F(VkLayerTest, ValidateCmdBuildAccelerationStructuresKHR) {
         vkCmdBuildAccelerationStructuresKHR(m_commandBuffer->handle(), 1, &invalid_build_info_khr, &pBuildRangeInfos);
         m_errorMonitor->VerifyFound();
     }
+    // Invalid dst buffer
+    {
+        auto buffer_ci = VkBufferObj::create_info(
+            4096, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        VkBufferObj invalid_buffer;
+        invalid_buffer.init_no_mem(*m_device, buffer_ci);
+        as_create_info.buffer = invalid_buffer.handle();
+        as_create_info.createFlags = 0;
+        as_create_info.offset = 0;
+        as_create_info.size = 0;
+        as_create_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        as_create_info.deviceAddress = 0;
+        VkAccelerationStructurekhrObj invalid_bot_level_as(*m_device, as_create_info);
+
+        VkAccelerationStructureBuildGeometryInfoKHR invalid_build_info_khr = build_info_khr;
+        invalid_build_info_khr.dstAccelerationStructure = invalid_bot_level_as.handle();
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03707");
+        vkCmdBuildAccelerationStructuresKHR(m_commandBuffer->handle(), 1, &invalid_build_info_khr, &pBuildRangeInfos);
+        m_errorMonitor->VerifyFound();
+    }
     // Invalid sType
     {
         VkAccelerationStructureBuildGeometryInfoKHR invalid_build_info_khr = build_info_khr;
@@ -12023,7 +12043,8 @@ TEST_F(VkLayerTest, ValidateVertexInputDynamicStateEnabled) {
     }
 
     // VUID-VkVertexInputAttributeDescription2EXT-offset-06230
-    {
+    if (m_device->props.limits.maxVertexInputAttributeOffset <
+        std::numeric_limits<decltype(m_device->props.limits.maxVertexInputAttributeOffset)>::max()) {
         VkVertexInputBindingDescription2EXT binding = {
             VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT, nullptr, 0, 0, VK_VERTEX_INPUT_RATE_VERTEX, 1};
         VkVertexInputAttributeDescription2EXT attribute = {
@@ -13750,6 +13771,9 @@ TEST_F(VkLayerTest, BuildAccelerationStructureKHR) {
     VkBufferObj buffer;
     buffer.init(*m_device, 4096, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR);
 
+    VkBufferObj host_buffer;
+    host_buffer.init(*m_device, 4096, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR);
+
     VkAccelerationStructureCreateInfoKHR as_create_info = LvlInitStruct<VkAccelerationStructureCreateInfoKHR>();
     as_create_info.buffer = buffer.handle();
     as_create_info.createFlags = 0;
@@ -13758,6 +13782,8 @@ TEST_F(VkLayerTest, BuildAccelerationStructureKHR) {
     as_create_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
     as_create_info.deviceAddress = 0;
     VkAccelerationStructurekhrObj bot_level_as(*m_device, as_create_info);
+    as_create_info.buffer = host_buffer.handle();
+    VkAccelerationStructurekhrObj host_bot_level_as(*m_device, as_create_info);
 
     auto build_info_khr = LvlInitStruct<VkAccelerationStructureBuildGeometryInfoKHR>();
     build_info_khr.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
@@ -13774,14 +13800,18 @@ TEST_F(VkLayerTest, BuildAccelerationStructureKHR) {
     build_range_info.primitiveOffset = 3;
     build_range_info.transformOffset = 0;
 
-    VkAccelerationStructureBuildRangeInfoKHR* p_build_range_info = &build_range_info;
+    VkAccelerationStructureBuildRangeInfoKHR *p_build_range_info = &build_range_info;
 
     m_errorMonitor->VerifyNotFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkBuildAccelerationStructuresKHR-pInfos-03722");
-
     vkBuildAccelerationStructuresKHR(device(), VK_NULL_HANDLE, 1, &build_info_khr, &p_build_range_info);
+    m_errorMonitor->VerifyFound();
 
+    build_info_khr.srcAccelerationStructure = bot_level_as.handle();
+    build_info_khr.dstAccelerationStructure = host_bot_level_as.handle();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkBuildAccelerationStructuresKHR-pInfos-03723");
+    vkBuildAccelerationStructuresKHR(device(), VK_NULL_HANDLE, 1, &build_info_khr, &p_build_range_info);
     m_errorMonitor->VerifyFound();
 }
 
@@ -13952,6 +13982,38 @@ TEST_F(VkLayerTest, TestGetQueryPoolResultsDataAndStride) {
     m_errorMonitor->VerifyFound();
 }
 
+TEST_F(VkLayerTest, InvalidDeviceQueueFamilyIndex) {
+    TEST_DESCRIPTION("Create device queue with invalid queue family index.");
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    uint32_t queue_family_count;
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_family_count, nullptr);
+    std::vector<VkQueueFamilyProperties> queue_props(queue_family_count);
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_family_count, queue_props.data());
+
+    uint32_t queue_family_index = queue_family_count;
+
+
+    float priority = 1.0f;
+    auto device_queue_ci = LvlInitStruct<VkDeviceQueueCreateInfo>();
+    device_queue_ci.queueFamilyIndex = queue_family_index;
+    device_queue_ci.queueCount = 1;
+    device_queue_ci.pQueuePriorities = &priority;
+
+    auto device_ci = LvlInitStruct<VkDeviceCreateInfo>();
+    device_ci.queueCreateInfoCount = 1;
+    device_ci.pQueueCreateInfos = &device_queue_ci;
+    device_ci.enabledLayerCount = 0;
+    device_ci.enabledExtensionCount = m_device_extension_names.size();
+    device_ci.ppEnabledExtensionNames = m_device_extension_names.data();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDeviceQueueCreateInfo-queueFamilyIndex-00381");
+    VkDevice device;
+    vk::CreateDevice(gpu(), &device_ci, nullptr, &device);
+    m_errorMonitor->VerifyFound();
+}
+
 TEST_F(VkLayerTest, ValidateColorWriteDynamicStateNotSet) {
     TEST_DESCRIPTION("Validate dynamic state color write enable was set before draw command");
 
@@ -14097,4 +14159,216 @@ TEST_F(VkLayerTest, MismatchedDeviceQueueGlobalPriority) {
     VkDevice device;
     vk::CreateDevice(gpu(), &device_ci, nullptr, &device);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkLayerTest, TestCopyMemoryToAsBuffer) {
+    TEST_DESCRIPTION("Test invalid buffer used in vkCopyMemoryToAccelerationStructureKHR.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        printf("%s Vulkan12Struct requires Vulkan 1.1+, skipping test\n", kSkipPrefix);
+        return;
+    }
+    if (!AreRequestedExtensionsEnabled()) {
+        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        return;
+    }
+    auto accel_features = LvlInitStruct<VkPhysicalDeviceAccelerationStructureFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&accel_features);
+    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+
+    if (accel_features.accelerationStructureHostCommands == VK_FALSE) {
+        printf("%s accelerationStructureHostCommands feature is not supported.\n", kSkipPrefix);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    auto vkCopyMemoryToAccelerationStructureKHR = reinterpret_cast<PFN_vkCopyMemoryToAccelerationStructureKHR>(
+        vk::GetDeviceProcAddr(device(), "vkCopyMemoryToAccelerationStructureKHR"));
+    assert(vkCopyMemoryToAccelerationStructureKHR != nullptr);
+
+    VkBufferObj buffer;
+    buffer.init(*m_device, 4096, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR);
+    VkAccelerationStructureCreateInfoKHR as_create_info = LvlInitStruct<VkAccelerationStructureCreateInfoKHR>();
+    as_create_info.buffer = buffer.handle();
+    as_create_info.createFlags = 0;
+    as_create_info.offset = 0;
+    as_create_info.size = 0;
+    as_create_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    as_create_info.deviceAddress = 0;
+    VkAccelerationStructurekhrObj bot_level_as(*m_device, as_create_info);
+
+    uint8_t output[4096];
+    VkDeviceOrHostAddressConstKHR output_data;
+    output_data.hostAddress = reinterpret_cast<void *>(output);
+
+    auto info = LvlInitStruct<VkCopyMemoryToAccelerationStructureInfoKHR>();
+    info.dst = bot_level_as.handle();
+    info.src = output_data;
+    info.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_DESERIALIZE_KHR;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCopyMemoryToAccelerationStructureKHR-buffer-03730");
+    vkCopyMemoryToAccelerationStructureKHR(device(), VK_NULL_HANDLE, &info);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkLayerTest, PrimitivesGeneratedQueryFeature) {
+    TEST_DESCRIPTION("Test missing primitives generated query feature");
+
+    AddRequiredExtensions(VK_EXT_PRIMITIVES_GENERATED_QUERY_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(Init());
+    if (!AreRequestedExtensionsEnabled()) {
+        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_EXT_PRIMITIVES_GENERATED_QUERY_EXTENSION_NAME);
+        //return;
+    }
+
+    VkQueryPoolCreateInfo query_pool_ci = LvlInitStruct<VkQueryPoolCreateInfo>();
+    query_pool_ci.queryType = VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT;
+    query_pool_ci.queryCount = 1;
+
+    VkQueryPool query_pool;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBeginQuery-queryType-06688");
+    vk::CreateQueryPool(device(), &query_pool_ci, nullptr, &query_pool);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkLayerTest, RayTracingPipelineDeferredOp) {
+    TEST_DESCRIPTION(
+        "Test that objects created with deferred operations are recorded once the operation has successfully completed.");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    auto ray_tracing_features = LvlInitStruct<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&ray_tracing_features);
+    if (!InitFrameworkForRayTracingTest(this, true, m_instance_extension_names, m_device_extension_names, m_errorMonitor, false,
+                                        false, true, &features2)) {
+        return;
+    }
+
+    // Needed for Ray Tracing
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        printf("%s test requires Vulkan 1.1+ extensions, not available.  Skipping.\n", kSkipPrefix);
+        return;
+    }
+
+    if (!ray_tracing_features.rayTracingPipeline) {
+        printf("%s Feature rayTracing is not supported.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    const VkPipelineLayoutObj empty_pipeline_layout(m_device, {});
+
+    const std::string empty_shader = R"glsl(
+        #version 460
+        #extension GL_EXT_ray_tracing : require
+        void main() {}
+    )glsl";
+
+    VkShaderObj rgen_shader(this, empty_shader, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
+    VkShaderObj chit_shader(this, empty_shader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
+
+    auto vkCreateRayTracingPipelinesKHR =
+        reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vk::GetInstanceProcAddr(instance(), "vkCreateRayTracingPipelinesKHR"));
+    ASSERT_TRUE(vkCreateRayTracingPipelinesKHR != nullptr);
+
+    auto vkCreateDeferredOperationKHR =
+        reinterpret_cast<PFN_vkCreateDeferredOperationKHR>(vk::GetInstanceProcAddr(instance(), "vkCreateDeferredOperationKHR"));
+    ASSERT_TRUE(vkCreateDeferredOperationKHR != nullptr);
+
+    auto vkDeferredOperationJoinKHR =
+        reinterpret_cast<PFN_vkDeferredOperationJoinKHR>(vk::GetInstanceProcAddr(instance(), "vkDeferredOperationJoinKHR"));
+    ASSERT_TRUE(vkDeferredOperationJoinKHR != nullptr);
+
+    auto vkGetDeferredOperationResultKHR = reinterpret_cast<PFN_vkGetDeferredOperationResultKHR>(
+        vk::GetInstanceProcAddr(instance(), "vkGetDeferredOperationResultKHR"));
+    ASSERT_TRUE(vkDeferredOperationJoinKHR != nullptr);
+
+    PFN_vkDestroyDeferredOperationKHR vkDestroyDeferredOperationKHR =
+        reinterpret_cast<PFN_vkDestroyDeferredOperationKHR>(vk::GetInstanceProcAddr(instance(), "vkDestroyDeferredOperationKHR"));
+    ASSERT_TRUE(vkDestroyDeferredOperationKHR != nullptr);
+
+    const VkPipelineLayoutObj pipeline_layout(m_device, {});
+
+    VkPipelineShaderStageCreateInfo stage_create_info = LvlInitStruct<VkPipelineShaderStageCreateInfo>();
+    stage_create_info.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    stage_create_info.module = chit_shader.handle();
+    stage_create_info.pName = "main";
+
+    VkRayTracingShaderGroupCreateInfoKHR group_create_info = LvlInitStruct<VkRayTracingShaderGroupCreateInfoKHR>();
+    group_create_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+    group_create_info.generalShader = VK_SHADER_UNUSED_KHR;
+    group_create_info.closestHitShader = 0;
+    group_create_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+    group_create_info.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+    VkRayTracingPipelineInterfaceCreateInfoKHR interface_ci = LvlInitStruct<VkRayTracingPipelineInterfaceCreateInfoKHR>();
+    interface_ci.maxPipelineRayHitAttributeSize = 4;
+    interface_ci.maxPipelineRayPayloadSize = 4;
+
+    VkRayTracingPipelineCreateInfoKHR library_pipeline = LvlInitStruct<VkRayTracingPipelineCreateInfoKHR>();
+    library_pipeline.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+    library_pipeline.stageCount = 1;
+    library_pipeline.pStages = &stage_create_info;
+    library_pipeline.groupCount = 1;
+    library_pipeline.pGroups = &group_create_info;
+    library_pipeline.layout = pipeline_layout.handle();
+    library_pipeline.pLibraryInterface = &interface_ci;
+
+    VkPipeline library = VK_NULL_HANDLE;
+    vkCreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &library_pipeline, nullptr, &library);
+
+    VkPipelineLibraryCreateInfoKHR library_info_one = LvlInitStruct<VkPipelineLibraryCreateInfoKHR>();
+    library_info_one.libraryCount = 1;
+    library_info_one.pLibraries = &library;
+
+    stage_create_info.stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    stage_create_info.module = rgen_shader.handle();
+    stage_create_info.pName = "main";
+
+    group_create_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+    group_create_info.generalShader = 0;
+    group_create_info.closestHitShader = VK_SHADER_UNUSED_KHR;
+    group_create_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+    group_create_info.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+    VkRayTracingPipelineCreateInfoKHR pipeline_ci = LvlInitStruct<VkRayTracingPipelineCreateInfoKHR>();
+    pipeline_ci.pLibraryInfo = &library_info_one;
+    pipeline_ci.stageCount = 1;
+    pipeline_ci.pStages = &stage_create_info;
+    pipeline_ci.groupCount = 1;
+    pipeline_ci.pGroups = &group_create_info;
+    pipeline_ci.layout = empty_pipeline_layout.handle();
+    pipeline_ci.pLibraryInterface = &interface_ci;
+
+    VkDeferredOperationKHR deferredOperation = VK_NULL_HANDLE;
+    vkCreateDeferredOperationKHR(m_device->handle(), 0, &deferredOperation);
+
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkResult result =
+        vkCreateRayTracingPipelinesKHR(m_device->handle(), deferredOperation, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &pipeline);
+    ASSERT_EQ(result, VK_OPERATION_DEFERRED_KHR);
+
+    result = vkDeferredOperationJoinKHR(this->m_device->handle(), deferredOperation);
+    ASSERT_EQ(result, VK_SUCCESS);
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBindPipeline-pipeline-parameter");
+    m_commandBuffer->begin();
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline);
+    m_errorMonitor->VerifyFound();
+
+    result = vkGetDeferredOperationResultKHR(m_device->handle(), deferredOperation);
+    ASSERT_EQ(result, VK_SUCCESS);
+
+    m_errorMonitor->ExpectSuccess();
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline);
+    m_commandBuffer->end();
+
+    vk::DestroyPipeline(m_device->handle(), pipeline, nullptr);
+    vkDestroyDeferredOperationKHR(m_device->handle(), deferredOperation, nullptr);
+    vk::DestroyPipeline(m_device->handle(), library, nullptr);
+
+    m_errorMonitor->VerifyNotFound();
 }

@@ -1133,6 +1133,7 @@ bool CoreChecks::ValidateImageDescriptor(const char *caller, const DrawDispatchV
     VkImageLayout image_layout = image_descriptor.GetImageLayout();
     const auto binding = binding_info.first;
     const auto reqs = binding_info.second.reqs;
+    const auto all_reqs = binding_info.second.all_reqs;
 
     if (image_descriptor.GetClass() == cvdescriptorset::DescriptorClass::ImageSampler) {
         sampler_states.emplace_back(
@@ -1167,8 +1168,8 @@ bool CoreChecks::ValidateImageDescriptor(const char *caller, const DrawDispatchV
         const auto &image_view_ci = image_view_state->create_info;
         const auto *image_state = image_view_state->image_state.get();
 
-        if (reqs & DESCRIPTOR_REQ_ALL_VIEW_TYPE_BITS) {
-            if (~reqs & (1 << image_view_ci.viewType)) {
+        if (all_reqs & DESCRIPTOR_REQ_ALL_VIEW_TYPE_BITS) {
+            if (~all_reqs & (1 << image_view_ci.viewType)) {
                 auto set = descriptor_set->GetSet();
                 return LogError(set, vuids.descriptor_valid,
                                 "Descriptor set %s encountered the following validation error at %s time: Descriptor "
@@ -1176,7 +1177,8 @@ bool CoreChecks::ValidateImageDescriptor(const char *caller, const DrawDispatchV
                                 report_data->FormatHandle(set).c_str(), caller, binding, index,
                                 StringDescriptorReqViewType(reqs).c_str(), string_VkImageViewType(image_view_ci.viewType));
             }
-
+        }
+        if (reqs & DESCRIPTOR_REQ_ALL_VIEW_TYPE_BITS) {
             if (!(reqs & image_view_state->descriptor_format_bits)) {
                 // bad component type
                 auto set = descriptor_set->GetSet();
@@ -1324,8 +1326,8 @@ bool CoreChecks::ValidateImageDescriptor(const char *caller, const DrawDispatchV
                     continue;
                 }
 
-                bool readable = false;
-                bool writable = false;
+                bool descriptor_readable = false;
+                bool descriptor_writable = false;
                 uint32_t set_index = std::numeric_limits<uint32_t>::max();
                 for (uint32_t i = 0; i < cb_node->lastBound[VK_PIPELINE_BIND_POINT_GRAPHICS].per_set.size(); ++i) {
                     const auto &set = cb_node->lastBound[VK_PIPELINE_BIND_POINT_GRAPHICS].per_set[i];
@@ -1339,16 +1341,19 @@ bool CoreChecks::ValidateImageDescriptor(const char *caller, const DrawDispatchV
                 for (const auto &stage : pipeline->stage_state) {
                     for (const auto &descriptor : stage.descriptor_uses) {
                         if (descriptor.first.set == set_index && descriptor.first.binding == binding) {
-                            writable |= descriptor.second.is_writable;
-                            readable |= descriptor.second.is_readable | descriptor.second.is_sampler_implicitLod_dref_proj;
+                            descriptor_writable |= descriptor.second.is_writable;
+                            descriptor_readable |=
+                                descriptor.second.is_readable | descriptor.second.is_sampler_implicitLod_dref_proj;
                             break;
                         }
                     }
                 }
 
+                bool layout_read_only = IsImageLayoutReadOnly(subpass.layout);
                 bool write_attachment =
-                    (subpass.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) > 0;
-                if (write_attachment && readable) {
+                    (subpass.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) > 0 &&
+                    !layout_read_only;
+                if (write_attachment && descriptor_readable) {
                     if (same_view) {
                         auto set = descriptor_set->GetSet();
                         LogObjectList objlist(set);
@@ -1379,7 +1384,7 @@ bool CoreChecks::ValidateImageDescriptor(const char *caller, const DrawDispatchV
                     }
                 }
                 bool read_attachment = (subpass.usage & (VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) > 0;
-                if (read_attachment && writable) {
+                if (read_attachment && descriptor_writable) {
                     if (same_view) {
                         auto set = descriptor_set->GetSet();
                         LogObjectList objlist(set);
@@ -1409,7 +1414,7 @@ bool CoreChecks::ValidateImageDescriptor(const char *caller, const DrawDispatchV
                     }
                 }
 
-                if (writable) {
+                if (descriptor_writable && !layout_read_only) {
                     if (same_view) {
                         auto set = descriptor_set->GetSet();
                         LogObjectList objlist(set);
@@ -2434,10 +2439,21 @@ bool CoreChecks::ValidateImageUpdate(VkImageView image_view, VkImageLayout image
     assert(image_node);
 
     format = image_node->createInfo.format;
-    usage = image_node->createInfo.usage;
+    const auto image_view_usage_info = LvlFindInChain<VkImageViewUsageCreateInfo>(iv_state->create_info.pNext);
     const auto stencil_usage_info = LvlFindInChain<VkImageStencilUsageCreateInfo>(image_node->createInfo.pNext);
+    if (image_view_usage_info) {
+        usage = image_view_usage_info->usage;
+    } else {
+        usage = image_node->createInfo.usage;
+    }
     if (stencil_usage_info) {
-        usage |= stencil_usage_info->stencilUsage;
+        bool stencil_aspect = (aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT) > 0;
+        bool depth_aspect = (aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) > 0;
+        if (stencil_aspect && !depth_aspect) {
+            usage = stencil_usage_info->stencilUsage;
+        } else if (stencil_aspect && depth_aspect) {
+            usage &= stencil_usage_info->stencilUsage;
+        }
     }
 
     // Validate that memory is bound to image
@@ -2450,9 +2466,17 @@ bool CoreChecks::ValidateImageUpdate(VkImageView image_view, VkImageLayout image
     // KHR_maintenance1 allows rendering into 2D or 2DArray views which slice a 3D image,
     // but not binding them to descriptor sets.
     if (iv_state->IsDepthSliced()) {
-        *error_code = "VUID-VkDescriptorImageInfo-imageView-00343";
-        *error_msg = "ImageView must not be a 2D or 2DArray view of a 3D image";
-        return false;
+        if (!device_extensions.vk_ext_image_2d_view_of_3d) {
+            if (iv_state->create_info.viewType == VK_IMAGE_VIEW_TYPE_2D) {
+                *error_code = "VUID-VkDescriptorImageInfo-imageView-06711";
+                *error_msg = "ImageView must not be a 2D view of a 3D image";
+                return false;
+            }
+        } else if (iv_state->create_info.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY) {
+            *error_code = "VUID-VkDescriptorImageInfo-imageView-06712";
+            *error_msg = "ImageView must not be a 2DArray view of a 3D image";
+            return false;
+        }
     }
 
     // TODO : The various image aspect and format checks here are based on general spec language in 11.5 Image Views section under
@@ -2678,6 +2702,45 @@ bool CoreChecks::ValidateImageUpdate(VkImageView image_view, VkImageLayout image
                   << ") that is not 0.0";
         *error_msg = error_str.str();
         return false;
+    }
+
+    if (device_extensions.vk_ext_image_2d_view_of_3d && iv_state->create_info.viewType == VK_IMAGE_VIEW_TYPE_2D &&
+        image_node->createInfo.imageType == VK_IMAGE_TYPE_3D) {
+        if ((type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) || (type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) ||
+            (type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)) {
+            if (!(image_node->createInfo.flags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT)) {
+                *error_code = "VUID-VkWriteDescriptorSet-descriptorType-06710";
+                std::stringstream error_str;
+                error_str << "ImageView (" << report_data->FormatHandle(image_view)
+                          << ") , is a 2D image view created from 3D image (" << report_data->FormatHandle(image)
+                          << ") , written to a descriptor of type " << string_VkDescriptorType(type)
+                          << " but the image used to create the image view was not created with "
+                             "VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT set";
+                *error_msg = error_str.str();
+                return false;
+            }
+            if (type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && !enabled_features.image_2d_view_of_3d_features.image2DViewOf3D) {
+                *error_code = "VUID-VkDescriptorImageInfo-descriptorType-06713";
+                std::stringstream error_str;
+                error_str << "ImageView (" << report_data->FormatHandle(image_view)
+                          << ") , is a 2D image view created from 3D image (" << report_data->FormatHandle(image)
+                          << ") , written to a descriptor of type VK_DESCRIPTOR_TYPE_STORAGE_IMAGE"
+                          << " and the image2DViewOf3D feature is not enabled";
+                *error_msg = error_str.str();
+                return false;
+            }
+            if ((type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) &&
+                !enabled_features.image_2d_view_of_3d_features.sampler2DViewOf3D) {
+                *error_code = "VUID-VkDescriptorImageInfo-descriptorType-06714";
+                std::stringstream error_str;
+                error_str << "ImageView (" << report_data->FormatHandle(image_view)
+                          << ") , is a 2D image view created from 3D image (" << report_data->FormatHandle(image)
+                          << ") , written to a descriptor of type " << string_VkDescriptorType(type)
+                          << " and the image2DViewOf3D feature is not enabled";
+                *error_msg = error_str.str();
+                return false;
+            }
+        }
     }
 
     return true;
