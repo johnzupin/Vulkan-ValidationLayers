@@ -1078,11 +1078,11 @@ bool ObjectLifetimes::PreCallValidateCreateGraphicsPipelines(
         for (uint32_t index0 = 0; index0 < createInfoCount; ++index0) {
             if (pCreateInfos[index0].pStages) {
                 for (uint32_t index1 = 0; index1 < pCreateInfos[index0].stageCount; ++index1) {
-                    skip |= ValidateObject(pCreateInfos[index0].pStages[index1].module, kVulkanObjectTypeShaderModule, false, "VUID-VkPipelineShaderStageCreateInfo-module-parameter", kVUIDUndefined);
+                    skip |= ValidateObject(pCreateInfos[index0].pStages[index1].module, kVulkanObjectTypeShaderModule, true, "VUID-VkPipelineShaderStageCreateInfo-module-parameter", kVUIDUndefined);
                 }
             }
-            skip |= ValidateObject(pCreateInfos[index0].layout, kVulkanObjectTypePipelineLayout, false, "VUID-VkGraphicsPipelineCreateInfo-layout-parameter", "VUID-VkGraphicsPipelineCreateInfo-commonparent");
-            skip |= ValidateObject(pCreateInfos[index0].renderPass, kVulkanObjectTypeRenderPass, true, "VUID-VkGraphicsPipelineCreateInfo-renderPass-parameter", "VUID-VkGraphicsPipelineCreateInfo-commonparent");
+            skip |= ValidateObject(pCreateInfos[index0].layout, kVulkanObjectTypePipelineLayout, true, kVUIDUndefined, "VUID-VkGraphicsPipelineCreateInfo-commonparent");
+            skip |= ValidateObject(pCreateInfos[index0].renderPass, kVulkanObjectTypeRenderPass, true, kVUIDUndefined, "VUID-VkGraphicsPipelineCreateInfo-commonparent");
             if ((pCreateInfos[index0].flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfos[index0].basePipelineIndex == -1))
                 skip |= ValidateObject(pCreateInfos[index0].basePipelineHandle, kVulkanObjectTypePipeline, false, "VUID-VkGraphicsPipelineCreateInfo-flags-00722", "VUID-VkGraphicsPipelineCreateInfo-commonparent");
         }
@@ -1121,7 +1121,7 @@ bool ObjectLifetimes::PreCallValidateCreateComputePipelines(
     skip |= ValidateObject(pipelineCache, kVulkanObjectTypePipelineCache, true, "VUID-vkCreateComputePipelines-pipelineCache-parameter", "VUID-vkCreateComputePipelines-pipelineCache-parent");
     if (pCreateInfos) {
         for (uint32_t index0 = 0; index0 < createInfoCount; ++index0) {
-            skip |= ValidateObject(pCreateInfos[index0].stage.module, kVulkanObjectTypeShaderModule, false, "VUID-VkPipelineShaderStageCreateInfo-module-parameter", kVUIDUndefined);
+            skip |= ValidateObject(pCreateInfos[index0].stage.module, kVulkanObjectTypeShaderModule, true, "VUID-VkPipelineShaderStageCreateInfo-module-parameter", kVUIDUndefined);
             skip |= ValidateObject(pCreateInfos[index0].layout, kVulkanObjectTypePipelineLayout, false, "VUID-VkComputePipelineCreateInfo-layout-parameter", "VUID-VkComputePipelineCreateInfo-commonparent");
             if ((pCreateInfos[index0].flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfos[index0].basePipelineIndex == -1))
                 skip |= ValidateObject(pCreateInfos[index0].basePipelineHandle, kVulkanObjectTypePipeline, false, "VUID-VkComputePipelineCreateInfo-flags-00697", "VUID-VkComputePipelineCreateInfo-commonparent");
@@ -1179,7 +1179,7 @@ bool ObjectLifetimes::PreCallValidateCreatePipelineLayout(
     if (pCreateInfo) {
         if ((pCreateInfo->setLayoutCount > 0) && (pCreateInfo->pSetLayouts)) {
             for (uint32_t index1 = 0; index1 < pCreateInfo->setLayoutCount; ++index1) {
-                skip |= ValidateObject(pCreateInfo->pSetLayouts[index1], kVulkanObjectTypeDescriptorSetLayout, false, "VUID-VkPipelineLayoutCreateInfo-pSetLayouts-parameter", kVUIDUndefined);
+                skip |= ValidateObject(pCreateInfo->pSetLayouts[index1], kVulkanObjectTypeDescriptorSetLayout, true, "VUID-VkPipelineLayoutCreateInfo-pSetLayouts-parameter", kVUIDUndefined);
             }
         }
     }
@@ -1541,7 +1541,7 @@ bool ObjectLifetimes::PreCallValidateCmdBindDescriptorSets(
     skip |= ValidateObject(layout, kVulkanObjectTypePipelineLayout, false, "VUID-vkCmdBindDescriptorSets-layout-parameter", "VUID-vkCmdBindDescriptorSets-commonparent");
     if ((descriptorSetCount > 0) && (pDescriptorSets)) {
         for (uint32_t index0 = 0; index0 < descriptorSetCount; ++index0) {
-            skip |= ValidateObject(pDescriptorSets[index0], kVulkanObjectTypeDescriptorSet, false, "VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter", "VUID-vkCmdBindDescriptorSets-commonparent");
+            skip |= ValidateObject(pDescriptorSets[index0], kVulkanObjectTypeDescriptorSet, true, "VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter", "VUID-vkCmdBindDescriptorSets-commonparent");
         }
     }
 
@@ -6029,7 +6029,7 @@ bool ObjectLifetimes::PreCallValidateCreateRayTracingPipelinesNV(
         for (uint32_t index0 = 0; index0 < createInfoCount; ++index0) {
             if (pCreateInfos[index0].pStages) {
                 for (uint32_t index1 = 0; index1 < pCreateInfos[index0].stageCount; ++index1) {
-                    skip |= ValidateObject(pCreateInfos[index0].pStages[index1].module, kVulkanObjectTypeShaderModule, false, "VUID-VkPipelineShaderStageCreateInfo-module-parameter", kVUIDUndefined);
+                    skip |= ValidateObject(pCreateInfos[index0].pStages[index1].module, kVulkanObjectTypeShaderModule, true, "VUID-VkPipelineShaderStageCreateInfo-module-parameter", kVUIDUndefined);
                 }
             }
             skip |= ValidateObject(pCreateInfos[index0].layout, kVulkanObjectTypePipelineLayout, false, "VUID-VkRayTracingPipelineCreateInfoNV-layout-parameter", "VUID-VkRayTracingPipelineCreateInfoNV-commonparent");
@@ -7548,60 +7548,6 @@ bool ObjectLifetimes::PreCallValidateCmdTraceRaysKHR(
     skip |= ValidateObject(commandBuffer, kVulkanObjectTypeCommandBuffer, false, "VUID-vkCmdTraceRaysKHR-commandBuffer-parameter", kVUIDUndefined);
 
     return skip;
-}
-
-bool ObjectLifetimes::PreCallValidateCreateRayTracingPipelinesKHR(
-    VkDevice                                    device,
-    VkDeferredOperationKHR                      deferredOperation,
-    VkPipelineCache                             pipelineCache,
-    uint32_t                                    createInfoCount,
-    const VkRayTracingPipelineCreateInfoKHR*    pCreateInfos,
-    const VkAllocationCallbacks*                pAllocator,
-    VkPipeline*                                 pPipelines) const {
-    bool skip = false;
-    skip |= ValidateObject(device, kVulkanObjectTypeDevice, false, "VUID-vkCreateRayTracingPipelinesKHR-device-parameter", kVUIDUndefined);
-    skip |= ValidateObject(deferredOperation, kVulkanObjectTypeDeferredOperationKHR, true, "VUID-vkCreateRayTracingPipelinesKHR-deferredOperation-parameter", "VUID-vkCreateRayTracingPipelinesKHR-deferredOperation-parent");
-    skip |= ValidateObject(pipelineCache, kVulkanObjectTypePipelineCache, true, "VUID-vkCreateRayTracingPipelinesKHR-pipelineCache-parameter", "VUID-vkCreateRayTracingPipelinesKHR-pipelineCache-parent");
-    if (pCreateInfos) {
-        for (uint32_t index0 = 0; index0 < createInfoCount; ++index0) {
-            if (pCreateInfos[index0].pStages) {
-                for (uint32_t index1 = 0; index1 < pCreateInfos[index0].stageCount; ++index1) {
-                    skip |= ValidateObject(pCreateInfos[index0].pStages[index1].module, kVulkanObjectTypeShaderModule, false, "VUID-VkPipelineShaderStageCreateInfo-module-parameter", kVUIDUndefined);
-                }
-            }
-            if (pCreateInfos[index0].pLibraryInfo) {
-                if ((pCreateInfos[index0].pLibraryInfo->libraryCount > 0) && (pCreateInfos[index0].pLibraryInfo->pLibraries)) {
-                    for (uint32_t index2 = 0; index2 < pCreateInfos[index0].pLibraryInfo->libraryCount; ++index2) {
-                        skip |= ValidateObject(pCreateInfos[index0].pLibraryInfo->pLibraries[index2], kVulkanObjectTypePipeline, false, "VUID-VkPipelineLibraryCreateInfoKHR-pLibraries-parameter", kVUIDUndefined);
-                    }
-                }
-            }
-            skip |= ValidateObject(pCreateInfos[index0].layout, kVulkanObjectTypePipelineLayout, false, "VUID-VkRayTracingPipelineCreateInfoKHR-layout-parameter", "VUID-VkRayTracingPipelineCreateInfoKHR-commonparent");
-            if ((pCreateInfos[index0].flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfos[index0].basePipelineIndex == -1))
-                skip |= ValidateObject(pCreateInfos[index0].basePipelineHandle, kVulkanObjectTypePipeline, false, "VUID-VkRayTracingPipelineCreateInfoKHR-flags-03421", "VUID-VkRayTracingPipelineCreateInfoKHR-commonparent");
-        }
-    }
-
-    return skip;
-}
-
-void ObjectLifetimes::PostCallRecordCreateRayTracingPipelinesKHR(
-    VkDevice                                    device,
-    VkDeferredOperationKHR                      deferredOperation,
-    VkPipelineCache                             pipelineCache,
-    uint32_t                                    createInfoCount,
-    const VkRayTracingPipelineCreateInfoKHR*    pCreateInfos,
-    const VkAllocationCallbacks*                pAllocator,
-    VkPipeline*                                 pPipelines,
-    VkResult                                    result) {
-    if (VK_ERROR_VALIDATION_FAILED_EXT == result) return;
-    if (pPipelines) {
-        for (uint32_t index = 0; index < createInfoCount; index++) {
-            if (!pPipelines[index]) continue;
-            CreateObject(pPipelines[index], kVulkanObjectTypePipeline, pAllocator);
-        }
-    }
-
 }
 
 bool ObjectLifetimes::PreCallValidateGetRayTracingCaptureReplayShaderGroupHandlesKHR(

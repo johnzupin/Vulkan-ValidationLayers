@@ -11978,6 +11978,7 @@ VKAPI_ATTR void VKAPI_CALL GetPrivateDataEXT(
 
 
 
+
 VKAPI_ATTR void VKAPI_CALL CmdSetFragmentShadingRateEnumNV(
     VkCommandBuffer                             commandBuffer,
     VkFragmentShadingRateNV                     shadingRate,
@@ -12624,6 +12625,7 @@ VKAPI_ATTR void                                    VKAPI_CALL CmdSetColorWriteEn
 
 
 
+
 VKAPI_ATTR void VKAPI_CALL CmdDrawMultiEXT(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    drawCount,
@@ -12674,6 +12676,7 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawMultiIndexedEXT(
         intercept->PostCallRecordCmdDrawMultiIndexedEXT(commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset);
     }
 }
+
 
 
 

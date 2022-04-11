@@ -37,10 +37,9 @@ struct VendorSpecificInfo {
     std::string name;
 };
 
-const std::map<BPVendorFlagBits, VendorSpecificInfo> kVendorInfo = {
-    {kBPVendorArm, {vendor_specific_arm, "Arm"}},
-    {kBPVendorAMD, {vendor_specific_amd, "AMD"}},
-};
+const std::map<BPVendorFlagBits, VendorSpecificInfo> kVendorInfo = {{kBPVendorArm, {vendor_specific_arm, "Arm"}},
+                                                                    {kBPVendorAMD, {vendor_specific_amd, "AMD"}},
+                                                                    {kBPVendorIMG, {vendor_specific_img, "IMG"}}};
 
 const SpecialUseVUIDs kSpecialUseInstanceVUIDs {
     kVUID_BestPractices_CreateInstance_SpecialUseExtension_CADSupport,
@@ -202,13 +201,6 @@ bool BestPractices::ValidateSpecialUseExtensions(const char* api_name, const cha
     return skip;
 }
 
-void BestPractices::InitDeviceValidationObject(bool add_obj, ValidationObject* inst_obj, ValidationObject* dev_obj) {
-    if (add_obj) {
-        ValidationStateTracker::InitDeviceValidationObject(add_obj, inst_obj, dev_obj);
-    }
-}
-
-
 bool BestPractices::PreCallValidateCreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,
                                                   VkInstance* pInstance) const {
     bool skip = false;
@@ -265,15 +257,15 @@ bool BestPractices::PreCallValidateCreateDevice(VkPhysicalDevice physicalDevice,
                            "vkCreateDevice() called before getting physical device features from vkGetPhysicalDeviceFeatures().");
     }
 
-    if ((VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorAMD)) && (pCreateInfo->pEnabledFeatures != nullptr) &&
-        (pCreateInfo->pEnabledFeatures->robustBufferAccess == VK_TRUE)) {
+    if ((VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorAMD) || VendorCheckEnabled(kBPVendorIMG)) &&
+        (pCreateInfo->pEnabledFeatures != nullptr) && (pCreateInfo->pEnabledFeatures->robustBufferAccess == VK_TRUE)) {
         skip |= LogPerformanceWarning(
             device, kVUID_BestPractices_CreateDevice_RobustBufferAccess,
-            "%s %s vkCreateDevice() called with enabled robustBufferAccess. Use robustBufferAccess as a debugging tool during "
+            "%s %s %s: vkCreateDevice() called with enabled robustBufferAccess. Use robustBufferAccess as a debugging tool during "
             "development. Enabling it causes loss in performance for accesses to uniform buffers and shader storage "
             "buffers. Disable robustBufferAccess in release builds. Only leave it enabled if the application use-case "
             "requires the additional level of reliability due to the use of unverified user-supplied draw parameters.",
-            VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorAMD));
+            VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorAMD), VendorSpecificTag(kBPVendorIMG));
     }
 
     return skip;
@@ -319,24 +311,47 @@ bool BestPractices::PreCallValidateCreateImage(VkDevice device, const VkImageCre
                            "same format and VK_IMAGE_CREATE_EXTENDED_USAGE_BIT will not have any effect.");
     }
 
-    if (VendorCheckEnabled(kBPVendorArm)) {
-        if (pCreateInfo->samples > kMaxEfficientSamplesArm) {
-            skip |= LogPerformanceWarning(
-                device, kVUID_BestPractices_CreateImage_TooLargeSampleCount,
-                "%s vkCreateImage(): Trying to create an image with %u samples. "
-                "The hardware revision may not have full throughput for framebuffers with more than %u samples.",
-                VendorSpecificTag(kBPVendorArm), static_cast<uint32_t>(pCreateInfo->samples), kMaxEfficientSamplesArm);
-        }
-
+    if (VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorIMG)) {
         if (pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT && !(pCreateInfo->usage & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT)) {
             skip |= LogPerformanceWarning(
                 device, kVUID_BestPractices_CreateImage_NonTransientMSImage,
-                "%s vkCreateImage(): Trying to create a multisampled image, but createInfo.usage did not have "
+                "%s %s vkCreateImage(): Trying to create a multisampled image, but createInfo.usage did not have "
                 "VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT set. Multisampled images may be resolved on-chip, "
                 "and do not need to be backed by physical storage. "
                 "TRANSIENT_ATTACHMENT allows tiled GPUs to not back the multisampled image with physical memory.",
-                VendorSpecificTag(kBPVendorArm));
+                VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG));
         }
+    }
+
+    if (VendorCheckEnabled(kBPVendorArm) && pCreateInfo->samples > kMaxEfficientSamplesArm) {
+        skip |= LogPerformanceWarning(
+            device, kVUID_BestPractices_CreateImage_TooLargeSampleCount,
+            "%s vkCreateImage(): Trying to create an image with %u samples. "
+            "The hardware revision may not have full throughput for framebuffers with more than %u samples.",
+            VendorSpecificTag(kBPVendorArm), static_cast<uint32_t>(pCreateInfo->samples), kMaxEfficientSamplesArm);
+    }
+
+    if (VendorCheckEnabled(kBPVendorIMG) && pCreateInfo->samples > kMaxEfficientSamplesImg) {
+        skip |= LogPerformanceWarning(
+            device, kVUID_BestPractices_CreateImage_TooLargeSampleCount,
+            "%s vkCreateImage(): Trying to create an image with %u samples. "
+            "The device may not have full support for true multisampling for images with more than %u samples. "
+            "XT devices support up to 8 samples, XE up to 4 samples.",
+            VendorSpecificTag(kBPVendorIMG), static_cast<uint32_t>(pCreateInfo->samples), kMaxEfficientSamplesImg);
+    }
+
+    if (VendorCheckEnabled(kBPVendorIMG) && (pCreateInfo->format == VK_FORMAT_PVRTC1_2BPP_SRGB_BLOCK_IMG ||
+                                             pCreateInfo->format == VK_FORMAT_PVRTC1_2BPP_UNORM_BLOCK_IMG ||
+                                             pCreateInfo->format == VK_FORMAT_PVRTC1_4BPP_SRGB_BLOCK_IMG ||
+                                             pCreateInfo->format == VK_FORMAT_PVRTC1_4BPP_UNORM_BLOCK_IMG ||
+                                             pCreateInfo->format == VK_FORMAT_PVRTC2_2BPP_SRGB_BLOCK_IMG ||
+                                             pCreateInfo->format == VK_FORMAT_PVRTC2_2BPP_UNORM_BLOCK_IMG ||
+                                             pCreateInfo->format == VK_FORMAT_PVRTC2_4BPP_SRGB_BLOCK_IMG ||
+                                             pCreateInfo->format == VK_FORMAT_PVRTC2_4BPP_UNORM_BLOCK_IMG)) {
+        skip |= LogPerformanceWarning(device, kVUID_BestPractices_Texture_Format_PVRTC_Outdated,
+                                      "%s vkCreateImage(): Trying to create an image with a PVRTC format. Both PVRTC1 and PVRTC2 "
+                                      "are slower than standard image formats on PowerVR GPUs, prefer ETC, BC, ASTC, etc.",
+                                      VendorSpecificTag(kBPVendorIMG));
     }
 
     if (VendorCheckEnabled(kBPVendorAMD)) {
@@ -408,7 +423,9 @@ bool BestPractices::PreCallValidateCreateSwapchainKHR(VkDevice device, const VkS
                        pCreateInfo->queueFamilyIndexCount);
     }
 
-    if (pCreateInfo->minImageCount == 2) {
+    const auto present_mode = pCreateInfo->presentMode;
+    if (((present_mode == VK_PRESENT_MODE_MAILBOX_KHR) || (present_mode == VK_PRESENT_MODE_FIFO_KHR)) &&
+        (pCreateInfo->minImageCount == 2)) {
         skip |= LogPerformanceWarning(
             device, kVUID_BestPractices_SuboptimalSwapchainImageCount,
             "Warning: A Swapchain is being created with minImageCount set to %" PRIu32
@@ -1516,8 +1533,8 @@ void BestPractices::PostCallRecordCmdBindPipeline(VkCommandBuffer commandBuffer,
             render_pass_state.nextDrawTouchesAttachments = pipeline_state->access_framebuffer_attachments;
             render_pass_state.drawTouchAttachments = true;
 
-            const auto* blend_state = pipeline_state->create_info.graphics.pColorBlendState;
-            const auto* stencil_state = pipeline_state->create_info.graphics.pDepthStencilState;
+            const auto* blend_state = pipeline_state->ColorBlendState();
+            const auto* stencil_state = pipeline_state->DepthStencilState();
 
             if (blend_state) {
                 // assume the pipeline is depth-only unless any of the attachments have color writes enabled
@@ -1645,17 +1662,17 @@ bool BestPractices::ValidateCmdBeginRenderPass(VkCommandBuffer commandBuffer, Re
             }
 
             // Using LOAD_OP_LOAD is expensive on tiled GPUs, so flag it as a potential improvement
-            if (attachment_needs_readback && VendorCheckEnabled(kBPVendorArm)) {
-                skip |= LogPerformanceWarning(
-                    device, kVUID_BestPractices_BeginRenderPass_AttachmentNeedsReadback,
-                    "%s Attachment #%u in render pass has begun with VK_ATTACHMENT_LOAD_OP_LOAD.\n"
-                    "Submitting this renderpass will cause the driver to inject a readback of the attachment "
+            if (attachment_needs_readback && (VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorIMG))) {
+                skip |=
+                    LogPerformanceWarning(device, kVUID_BestPractices_BeginRenderPass_AttachmentNeedsReadback,
+                                          "%s %s: Attachment #%u in render pass has begun with VK_ATTACHMENT_LOAD_OP_LOAD.\n"
+                                          "Submitting this renderpass will cause the driver to inject a readback of the attachment "
                                           "which will copy in total %u pixels (renderArea = "
-                    "{ %" PRId32 ", %" PRId32 ", %" PRIu32", %" PRIu32 " }) to the tile buffer.",
-                    VendorSpecificTag(kBPVendorArm), att,
-                    pRenderPassBegin->renderArea.extent.width * pRenderPassBegin->renderArea.extent.height,
-                    pRenderPassBegin->renderArea.offset.x, pRenderPassBegin->renderArea.offset.y,
-                    pRenderPassBegin->renderArea.extent.width, pRenderPassBegin->renderArea.extent.height);
+                                          "{ %" PRId32 ", %" PRId32 ", %" PRIu32 ", %" PRIu32 " }) to the tile buffer.",
+                                          VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG), att,
+                                          pRenderPassBegin->renderArea.extent.width * pRenderPassBegin->renderArea.extent.height,
+                                          pRenderPassBegin->renderArea.offset.x, pRenderPassBegin->renderArea.offset.y,
+                                          pRenderPassBegin->renderArea.extent.width, pRenderPassBegin->renderArea.extent.height);
             }
         }
     }
@@ -1712,7 +1729,7 @@ void BestPractices::QueueValidateImage(QueueCallbacks &funcs, const char* functi
     }
 }
 
-void BestPractices::ValidateImageInQueueArm(const char* function_name, const bp_state::Image& image,
+void BestPractices::ValidateImageInQueueArmImg(const char* function_name, const bp_state::Image& image,
                                             IMAGE_SUBRESOURCE_USAGE_BP last_usage, IMAGE_SUBRESOURCE_USAGE_BP usage,
                                             uint32_t array_layer, uint32_t mip_level) {
     // Swapchain images are implicitly read so clear after store is expected.
@@ -1720,20 +1737,19 @@ void BestPractices::ValidateImageInQueueArm(const char* function_name, const bp_
         !image.IsSwapchainImage()) {
         LogPerformanceWarning(
             device, kVUID_BestPractices_RenderPass_RedundantStore,
-            "%s: %s Subresource (arrayLayer: %u, mipLevel: %u) of image was cleared as part of LOAD_OP_CLEAR, but last time "
+            "%s %s: %s Subresource (arrayLayer: %u, mipLevel: %u) of image was cleared as part of LOAD_OP_CLEAR, but last time "
             "image was used, it was written to with STORE_OP_STORE. "
             "Storing to the image is probably redundant in this case, and wastes bandwidth on tile-based "
             "architectures.",
-            function_name, VendorSpecificTag(kBPVendorArm), array_layer, mip_level);
+            function_name, VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG), array_layer, mip_level);
     } else if (usage == IMAGE_SUBRESOURCE_USAGE_BP::RENDER_PASS_CLEARED && last_usage == IMAGE_SUBRESOURCE_USAGE_BP::CLEARED) {
         LogPerformanceWarning(
             device, kVUID_BestPractices_RenderPass_RedundantClear,
-            "%s: %s Subresource (arrayLayer: %u, mipLevel: %u) of image was cleared as part of LOAD_OP_CLEAR, but last time "
+            "%s %s: %s Subresource (arrayLayer: %u, mipLevel: %u) of image was cleared as part of LOAD_OP_CLEAR, but last time "
             "image was used, it was written to with vkCmdClear*Image(). "
             "Clearing the image with vkCmdClear*Image() is probably redundant in this case, and wastes bandwidth on "
-            "tile-based architectures."
-            "architectures.",
-            function_name, VendorSpecificTag(kBPVendorArm), array_layer, mip_level);
+            "tile-based architectures.",
+            function_name, VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG), array_layer, mip_level);
     } else if (usage == IMAGE_SUBRESOURCE_USAGE_BP::RENDER_PASS_READ_TO_TILE &&
                (last_usage == IMAGE_SUBRESOURCE_USAGE_BP::BLIT_WRITE || last_usage == IMAGE_SUBRESOURCE_USAGE_BP::CLEARED ||
                 last_usage == IMAGE_SUBRESOURCE_USAGE_BP::COPY_WRITE || last_usage == IMAGE_SUBRESOURCE_USAGE_BP::RESOLVE_WRITE)) {
@@ -1780,17 +1796,18 @@ void BestPractices::ValidateImageInQueueArm(const char* function_name, const bp_
 
         LogPerformanceWarning(
             device, vuid,
-            "%s: %s Subresource (arrayLayer: %u, mipLevel: %u) of image was loaded to tile as part of LOAD_OP_LOAD, but last "
+            "%s %s: %s Subresource (arrayLayer: %u, mipLevel: %u) of image was loaded to tile as part of LOAD_OP_LOAD, but last "
             "time image was used, it was written to with %s. %s",
-            function_name, VendorSpecificTag(kBPVendorArm), array_layer, mip_level, last_cmd, suggestion);
+            function_name, VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG), array_layer, mip_level, last_cmd,
+            suggestion);
     }
 }
 
 void BestPractices::ValidateImageInQueue(const char* function_name, bp_state::Image& state, IMAGE_SUBRESOURCE_USAGE_BP usage,
                                          uint32_t array_layer, uint32_t mip_level) {
     auto last_usage = state.UpdateUsage(array_layer, mip_level, usage);
-    if (VendorCheckEnabled(kBPVendorArm)) {
-        ValidateImageInQueueArm(function_name, state, last_usage, usage, array_layer, mip_level);
+    if (VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorIMG)) {
+        ValidateImageInQueueArmImg(function_name, state, last_usage, usage, array_layer, mip_level);
     }
 }
 
@@ -2001,7 +2018,7 @@ bool BestPractices::ValidateCmdDrawType(VkCommandBuffer cmd_buffer, const char* 
         const auto& current_vtx_bfr_binding_info = cb_state->current_vertex_buffer_binding_info.vertex_buffer_bindings;
 
         // Verify vertex binding
-        if (pipeline_state->vertex_binding_descriptions_.size() <= 0) {
+        if (pipeline_state->vertex_input_state && pipeline_state->vertex_input_state->binding_descriptions.size() <= 0) {
             if ((!current_vtx_bfr_binding_info.empty()) && (!cb_state->vertex_buffer_used)) {
                 skip |= LogPerformanceWarning(cb_state->commandBuffer(), kVUID_BestPractices_DrawState_VtxIndexOutOfBounds,
                                               "Vertex buffers are bound to %s but no vertex buffers are attached to %s.",
@@ -2012,15 +2029,16 @@ bool BestPractices::ValidateCmdDrawType(VkCommandBuffer cmd_buffer, const char* 
 
         const auto* pipe = cb_state->GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
         if (pipe) {
-            const auto* rp_state = pipe->rp_state.get();
+            const auto& rp_state = pipe->RenderPassState();
             if (rp_state) {
                 for (uint32_t i = 0; i < rp_state->createInfo.subpassCount; ++i) {
                     const auto& subpass = rp_state->createInfo.pSubpasses[i];
-                    const auto& create_info = pipe->create_info.graphics;
+                    const auto* ds_state = pipe->DepthStencilState();
                     const uint32_t depth_stencil_attachment =
-                        GetSubpassDepthStencilAttachmentIndex(create_info.pDepthStencilState, subpass.pDepthStencilAttachment);
-                    if ((depth_stencil_attachment == VK_ATTACHMENT_UNUSED) && create_info.pRasterizationState &&
-                        create_info.pRasterizationState->depthBiasEnable == VK_TRUE) {
+                        GetSubpassDepthStencilAttachmentIndex(ds_state, subpass.pDepthStencilAttachment);
+                    const auto* raster_state = pipe->RasterizationState();
+                    if ((depth_stencil_attachment == VK_ATTACHMENT_UNUSED) && raster_state &&
+                        raster_state->depthBiasEnable == VK_TRUE) {
                         skip |= LogWarning(cb_state->commandBuffer(), kVUID_BestPractices_DepthBiasNoAttachment,
                                            "%s: depthBiasEnable == VK_TRUE without a depth-stencil attachment.", caller);
                     }
@@ -2049,7 +2067,14 @@ void BestPractices::RecordCmdDrawType(VkCommandBuffer cmd_buffer, uint32_t draw_
 
 void BestPractices::RecordCmdDrawTypeArm(bp_state::CommandBuffer& cb_node, uint32_t draw_count, const char* caller) {
     auto& render_pass_state = cb_node.render_pass_state;
-    if (draw_count >= kDepthPrePassMinDrawCountArm) {
+    // Each TBDR vendor requires a depth pre-pass draw call to have a minimum number of vertices/indices before it counts towards
+    // depth prepass warnings First find the lowest enabled draw count
+    uint32_t lowestEnabledMinDrawCount = 0;
+    lowestEnabledMinDrawCount = VendorCheckEnabled(kBPVendorArm) * kDepthPrePassMinDrawCountArm;
+    if (VendorCheckEnabled(kBPVendorIMG) && kDepthPrePassMinDrawCountIMG < lowestEnabledMinDrawCount)
+        lowestEnabledMinDrawCount = kDepthPrePassMinDrawCountIMG;
+
+    if (draw_count >= lowestEnabledMinDrawCount) {
         if (render_pass_state.depthOnly) render_pass_state.numDrawCallsDepthOnly++;
         if (render_pass_state.depthEqualComparison) render_pass_state.numDrawCallsDepthEqualCompare++;
     }
@@ -2089,12 +2114,13 @@ bool BestPractices::PreCallValidateCmdDrawIndexed(VkCommandBuffer commandBuffer,
     const auto cmd_state = GetRead<bp_state::CommandBuffer>(commandBuffer);
     if ((indexCount * instanceCount) <= kSmallIndexedDrawcallIndices &&
         (cmd_state->small_indexed_draw_call_count == kMaxSmallIndexedDrawcalls - 1) &&
-        VendorCheckEnabled(kBPVendorArm)) {
+        (VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorIMG))) {
         skip |= LogPerformanceWarning(device, kVUID_BestPractices_CmdDrawIndexed_ManySmallIndexedDrawcalls,
-                                      "%s: The command buffer contains many small indexed drawcalls "
+                                      "%s %s: The command buffer contains many small indexed drawcalls "
                                       "(at least %u drawcalls with less than %u indices each). This may cause pipeline bubbles. "
                                       "You can try batching drawcalls or instancing when applicable.",
-                                      VendorSpecificTag(kBPVendorArm), kMaxSmallIndexedDrawcalls, kSmallIndexedDrawcallIndices);
+                                      VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG), kMaxSmallIndexedDrawcalls,
+                                      kSmallIndexedDrawcallIndices);
     }
 
     if (VendorCheckEnabled(kBPVendorArm)) {
@@ -2123,8 +2149,9 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cmd_st
     const auto& pipeline_binding_iter = cmd_state.lastBound[lv_bind_point];
     const auto* pipeline_state = pipeline_binding_iter.pipeline_state;
 
-    if (pipeline_state != nullptr && pipeline_state->create_info.graphics.pInputAssemblyState != nullptr) {
-        primitive_restart_enable = pipeline_state->create_info.graphics.pInputAssemblyState->primitiveRestartEnable == VK_TRUE;
+    const auto* ia_state = pipeline_state ? pipeline_state->InputAssemblyState() : nullptr;
+    if (ia_state) {
+        primitive_restart_enable = ia_state->primitiveRestartEnable == VK_TRUE;
     }
 
     // no point checking index buffer if the memory is nonexistant/unmapped, or if there is no graphics pipeline bound to this CB
@@ -2602,22 +2629,30 @@ bool BestPractices::ValidateCmdEndRenderPass(VkCommandBuffer commandBuffer) cons
     if (cmd == nullptr) return skip;
     auto &render_pass_state = cmd->render_pass_state;
 
-    bool uses_depth = (render_pass_state.depthAttachment || render_pass_state.colorAttachment) &&
-                      render_pass_state.numDrawCallsDepthEqualCompare >= kDepthPrePassNumDrawCallsArm &&
-                      render_pass_state.numDrawCallsDepthOnly >= kDepthPrePassNumDrawCallsArm;
+    // Does the number of draw calls classified as depth only surpass the vendor limit for a specified vendor
+    bool depth_only_arm = render_pass_state.numDrawCallsDepthEqualCompare >= kDepthPrePassNumDrawCallsArm &&
+                          render_pass_state.numDrawCallsDepthOnly >= kDepthPrePassNumDrawCallsArm;
+    bool depth_only_img = render_pass_state.numDrawCallsDepthEqualCompare >= kDepthPrePassNumDrawCallsIMG &&
+                          render_pass_state.numDrawCallsDepthOnly >= kDepthPrePassNumDrawCallsIMG;
+
+    // Only send the warning when the vendor is enabled and a depth prepass is detected
+    bool uses_depth =
+        (render_pass_state.depthAttachment || render_pass_state.colorAttachment) &&
+        ((depth_only_arm && VendorCheckEnabled(kBPVendorArm)) || (depth_only_img && VendorCheckEnabled(kBPVendorIMG)));
+
     if (uses_depth) {
         skip |= LogPerformanceWarning(
             device, kVUID_BestPractices_EndRenderPass_DepthPrePassUsage,
-            "%s Depth pre-passes may be in use. In general, this is not recommended, as in Arm Mali GPUs since "
-            "Mali-T620, Forward Pixel Killing (FPK) can already perform automatic hidden surface removal; in which "
-            "case, using depth pre-passes for hidden surface removal may worsen performance.",
-            VendorSpecificTag(kBPVendorArm));
+            "%s %s: Depth pre-passes may be in use. In general, this is not recommended in tile-based deferred "
+            "renderering architectures; such as those in Arm Mali or PowerVR GPUs. Since they can remove geometry "
+            "hidden by other opaque geometry. Mali has Forward Pixel Killing (FPK), PowerVR has Hiden Surface "
+            "Remover (HSR) in which case, using depth pre-passes for hidden surface removal may worsen performance.",
+            VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG));
     }
 
     RENDER_PASS_STATE* rp = cmd->activeRenderPass.get();
 
-    if (VendorCheckEnabled(kBPVendorArm) && rp) {
-
+    if ((VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorIMG)) && rp) {
         // If we use an attachment on-tile, we should access it in some way. Otherwise,
         // it is redundant to have it be part of the render pass.
         // Only consider it redundant if it will actually consume bandwidth, i.e.
@@ -2668,11 +2703,11 @@ bool BestPractices::ValidateCmdEndRenderPass(VkCommandBuffer commandBuffer) cons
             if (untouched_aspects) {
                 skip |= LogPerformanceWarning(
                     device, kVUID_BestPractices_EndRenderPass_RedundantAttachmentOnTile,
-                    "%s Render pass was ended, but attachment #%u (format: %u, untouched aspects 0x%x) "
+                    "%s %s: Render pass was ended, but attachment #%u (format: %u, untouched aspects 0x%x) "
                     "was never accessed by a pipeline or clear command. "
-                    "On tile-based architectures, LOAD_OP_LOAD and STORE_OP_STORE consume bandwidth and should not be part of the render pass "
-                    "if the attachments are not intended to be accessed.",
-                    VendorSpecificTag(kBPVendorArm), i, attachment.format, untouched_aspects);
+                    "On tile-based architectures, LOAD_OP_LOAD and STORE_OP_STORE consume bandwidth and should not be part of the "
+                    "render pass if the attachments are not intended to be accessed.",
+                    VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG), i, attachment.format, untouched_aspects);
             }
         }
     }

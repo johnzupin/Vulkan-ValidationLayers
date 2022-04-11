@@ -2413,6 +2413,40 @@ static bool RegionIntersects(const RegionType *region0, const RegionType *region
     return result;
 }
 
+template <typename RegionType>
+static bool RegionIntersectsBlit(const RegionType *region0, const RegionType *region1, VkImageType type, bool is_multiplane) {
+    bool result = false;
+
+    // Separate planes within a multiplane image cannot intersect
+    if (is_multiplane && (region0->srcSubresource.aspectMask != region1->dstSubresource.aspectMask)) {
+        return result;
+    }
+
+    if ((region0->srcSubresource.mipLevel == region1->dstSubresource.mipLevel) &&
+        (RangesIntersect(region0->srcSubresource.baseArrayLayer, region0->srcSubresource.layerCount,
+                         region1->dstSubresource.baseArrayLayer, region1->dstSubresource.layerCount))) {
+        result = true;
+        switch (type) {
+            case VK_IMAGE_TYPE_3D:
+                result &= RangesIntersect(region0->srcOffsets[0].z, region0->srcOffsets[1].z - region0->srcOffsets[0].z,
+                                          region1->dstOffsets[0].z, region1->dstOffsets[1].z - region1->dstOffsets[0].z);
+                // fall through
+            case VK_IMAGE_TYPE_2D:
+                result &= RangesIntersect(region0->srcOffsets[0].y, region0->srcOffsets[1].y - region0->srcOffsets[0].y,
+                                          region1->dstOffsets[0].y, region1->dstOffsets[1].y - region1->dstOffsets[0].y);
+                // fall through
+            case VK_IMAGE_TYPE_1D:
+                result &= RangesIntersect(region0->srcOffsets[0].x, region0->srcOffsets[1].x - region0->srcOffsets[0].x,
+                                          region1->dstOffsets[0].x, region1->dstOffsets[1].x - region1->dstOffsets[0].x);
+                break;
+            default:
+                // Unrecognized or new IMAGE_TYPE enums will be caught in parameter_validation
+                assert(false);
+        }
+    }
+    return result;
+}
+
 // Returns non-zero if offset and extent exceed image extents
 static const uint32_t kXBit = 1;
 static const uint32_t kYBit = 2;
@@ -3027,6 +3061,26 @@ bool CoreChecks::ValidateCmdCopyImage(VkCommandBuffer commandBuffer, VkImage src
                 command_buffer, vuid,
                 "%s: pRegions[%u].dstSubresource.aspectMask (0x%x) cannot specify aspects not present in destination image.",
                 func_name, i, region.dstSubresource.aspectMask);
+        }
+
+        // Make sure not a empty region
+        if (src_copy_extent.width == 0) {
+            vuid = is_2 ? "VUID-VkImageCopy2-extent-06668" : "VUID-VkImageCopy-extent-06668";
+            skip |=
+                LogError(command_buffer, vuid,
+                         "%s: pRegion[%" PRIu32 "] extent.width must not be zero as empty copies are not allowed.", func_name, i);
+        }
+        if (src_copy_extent.height == 0) {
+            vuid = is_2 ? "VUID-VkImageCopy2-extent-06669" : "VUID-VkImageCopy-extent-06669";
+            skip |=
+                LogError(command_buffer, vuid,
+                         "%s: pRegion[%" PRIu32 "] extent.height must not be zero as empty copies are not allowed.", func_name, i);
+        }
+        if (src_copy_extent.depth == 0) {
+            vuid = is_2 ? "VUID-VkImageCopy2-extent-06670" : "VUID-VkImageCopy-extent-06670";
+            skip |=
+                LogError(command_buffer, vuid,
+                         "%s: pRegion[%" PRIu32 "] extent.depth must not be zero as empty copies are not allowed.", func_name, i);
         }
 
         // Each dimension offset + extent limits must fall with image subresource extent
@@ -4249,6 +4303,19 @@ bool CoreChecks::ValidateCmdBlitImage(VkCommandBuffer commandBuffer, VkImage src
                                      func_name, i);
                 }
             }
+
+            // The union of all source regions, and the union of all destination regions, specified by the elements of regions,
+            // must not overlap in memory
+            if (srcImage == dstImage) {
+                for (uint32_t j = 0; j < regionCount; j++) {
+                    if (RegionIntersectsBlit(&region, &pRegions[j], src_image_state->createInfo.imageType,
+                                             FormatIsMultiplane(src_format))) {
+                        vuid = is_2 ? "VUID-VkBlitImageInfo2-pRegions-00217" : "VUID-vkCmdBlitImage-pRegions-00217";
+                        skip |= LogError(cb_node->commandBuffer(), vuid,
+                                         "%s: pRegion[%" PRIu32 "] src overlaps with pRegions[%" PRIu32 "] dst.", func_name, i, j);
+                    }
+                }
+            }
         }  // per-region checks
     } else {
         assert(0);
@@ -4993,8 +5060,11 @@ bool CoreChecks::ValidateImageSubresourceRange(const uint32_t image_mip_count, c
 bool CoreChecks::ValidateCreateImageViewSubresourceRange(const IMAGE_STATE *image_state, bool is_imageview_2d_type,
                                                          const VkImageSubresourceRange &subresourceRange) const {
     bool is_khr_maintenance1 = IsExtEnabled(device_extensions.vk_khr_maintenance1);
-    bool is_image_slicable = image_state->createInfo.imageType == VK_IMAGE_TYPE_3D &&
-                             (image_state->createInfo.flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT);
+    bool is_2d_compatible = (image_state->createInfo.flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) ? true : false;
+    if (device_extensions.vk_ext_image_2d_view_of_3d)
+        is_2d_compatible |= (image_state->createInfo.flags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT) ? true : false;
+    bool is_image_slicable =
+            (image_state->createInfo.imageType == VK_IMAGE_TYPE_3D) && is_2d_compatible;
     bool is_3_d_to_2_d_map = is_khr_maintenance1 && is_image_slicable && is_imageview_2d_type;
 
     uint32_t image_layer_count;
@@ -5014,12 +5084,16 @@ bool CoreChecks::ValidateCreateImageViewSubresourceRange(const IMAGE_STATE *imag
     subresource_range_error_codes.mip_count_err = "VUID-VkImageViewCreateInfo-subresourceRange-01718";
     subresource_range_error_codes.base_layer_err =
         is_khr_maintenance1
-            ? (is_3_d_to_2_d_map ? "VUID-VkImageViewCreateInfo-image-02724" : "VUID-VkImageViewCreateInfo-image-01482")
+            ? (is_3_d_to_2_d_map ? "VUID-VkImageViewCreateInfo-image-02724"
+                                 : (device_extensions.vk_ext_image_2d_view_of_3d ? "VUID-VkImageViewCreateInfo-image-06724"
+                                                                                 : "VUID-VkImageViewCreateInfo-image-01482"))
             : "VUID-VkImageViewCreateInfo-subresourceRange-01480";
-    subresource_range_error_codes.layer_count_err = is_khr_maintenance1
-                                                        ? (is_3_d_to_2_d_map ? "VUID-VkImageViewCreateInfo-subresourceRange-02725"
-                                                                             : "VUID-VkImageViewCreateInfo-subresourceRange-01483")
-                                                        : "VUID-VkImageViewCreateInfo-subresourceRange-01719";
+    subresource_range_error_codes.layer_count_err =
+        is_khr_maintenance1
+            ? (is_3_d_to_2_d_map ? "VUID-VkImageViewCreateInfo-subresourceRange-02725"
+                                 : (device_extensions.vk_ext_image_2d_view_of_3d ? "VUID-VkImageViewCreateInfo-subresourceRange-06725"
+                                                                                 : "VUID-VkImageViewCreateInfo-subresourceRange-01483"))
+            : "VUID-VkImageViewCreateInfo-subresourceRange-01719";
 
     return ValidateImageSubresourceRange(image_state->createInfo.mipLevels, image_layer_count, subresourceRange,
                                          "vkCreateImageView", "pCreateInfo->subresourceRange", image_layer_count_var_name,
@@ -5786,13 +5860,34 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
                 if (IsExtEnabled(device_extensions.vk_khr_maintenance1)) {
                     if (view_type != VK_IMAGE_VIEW_TYPE_3D) {
                         if ((view_type == VK_IMAGE_VIEW_TYPE_2D || view_type == VK_IMAGE_VIEW_TYPE_2D_ARRAY)) {
-                            if (!(image_flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)) {
+                            if (device_extensions.vk_ext_image_2d_view_of_3d) {
+                                if (!(image_flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)) {
+                                    if (view_type == VK_IMAGE_VIEW_TYPE_2D_ARRAY) {
+                                        skip |= LogError(
+                                            pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-06723",
+                                            "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type "
+                                            "%s since the image doesn't have VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT flag set.",
+                                            string_VkImageViewType(view_type), string_VkImageType(image_type));
+                                    } else if (view_type == VK_IMAGE_VIEW_TYPE_2D &&
+                                               !(image_flags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT)) {
+                                        skip |= LogError(
+                                            pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-06728",
+                                            "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type "
+                                            "%s since the image doesn't have VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT or "
+                                            "VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT flag set.",
+                                            string_VkImageViewType(view_type), string_VkImageType(image_type));
+                                    }
+                                }
+                            } else if (!(image_flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) &&
+                                       (view_type == VK_IMAGE_VIEW_TYPE_2D)) {
                                 skip |=
-                                    LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-01005",
-                                             "vkCreateImageView(): pCreateInfo->viewType %s is not compatible with image type "
+                                    LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-06727",
+                                             "vkCreateImageView(): pCreateInfo->viewType VK_IMAGE_VIEW_TYPE_2D is not compatible "
+                                             "with image type "
                                              "%s since the image doesn't have VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT flag set.",
-                                             string_VkImageViewType(view_type), string_VkImageType(image_type));
-                            } else if ((image_flags & (VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT |
+                                             string_VkImageType(image_type));
+                            }
+                            if ((image_flags & (VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT |
                                                        VK_IMAGE_CREATE_SPARSE_ALIASED_BIT))) {
                                 skip |= LogError(
                                     pCreateInfo->image, "VUID-VkImageViewCreateInfo-image-04971",
@@ -6320,6 +6415,32 @@ bool CoreChecks::ValidateBufferImageCopyData(const CMD_BUFFER_STATE *cb_node, ui
             }
         }
 
+        // Make sure not a empty region
+        if (region.imageExtent.width == 0) {
+            vuid = is_2 ? "VUID-VkBufferImageCopy2-imageExtent-06659" : "VUID-VkBufferImageCopy-imageExtent-06659";
+            LogObjectList objlist(cb_node->commandBuffer());
+            objlist.add(image_state->image());
+            skip |=
+                LogError(objlist, vuid, "%s: pRegion[%" PRIu32 "] extent.width must not be zero as empty copies are not allowed.",
+                         function, i);
+        }
+        if (region.imageExtent.height == 0) {
+            vuid = is_2 ? "VUID-VkBufferImageCopy2-imageExtent-06660" : "VUID-VkBufferImageCopy-imageExtent-06660";
+            LogObjectList objlist(cb_node->commandBuffer());
+            objlist.add(image_state->image());
+            skip |=
+                LogError(objlist, vuid, "%s: pRegion[%" PRIu32 "] extent.height must not be zero as empty copies are not allowed.",
+                         function, i);
+        }
+        if (region.imageExtent.depth == 0) {
+            vuid = is_2 ? "VUID-VkBufferImageCopy2-imageExtent-06661" : "VUID-VkBufferImageCopy-imageExtent-06661";
+            LogObjectList objlist(cb_node->commandBuffer());
+            objlist.add(image_state->image());
+            skip |=
+                LogError(objlist, vuid, "%s: pRegion[%" PRIu32 "] extent.depth must not be zero as empty copies are not allowed.",
+                         function, i);
+        }
+
         //  BufferRowLength must be 0, or greater than or equal to the width member of imageExtent
         if ((region.bufferRowLength != 0) && (region.bufferRowLength < region.imageExtent.width)) {
             vuid = (is_2) ? "VUID-VkBufferImageCopy2-bufferRowLength-00195" : "VUID-VkBufferImageCopy-bufferRowLength-00195";
@@ -6521,13 +6642,6 @@ bool CoreChecks::ValidateImageBounds(const IMAGE_STATE *image_state, const uint3
         const RegionType region = pRegions[i];
         VkExtent3D extent = region.imageExtent;
         VkOffset3D offset = region.imageOffset;
-
-        if (IsExtentSizeZero(&extent))  // Warn on zero area subresource
-        {
-            skip |= LogWarning(image_state->image(), kVUID_Core_Image_ZeroAreaSubregion,
-                               "%s: pRegion[%d] imageExtent of {%1d, %1d, %1d} has zero area", func_name, i, extent.width,
-                               extent.height, extent.depth);
-        }
 
         VkExtent3D image_extent = image_state->GetSubresourceExtent(region.imageSubresource);
 

@@ -39,46 +39,47 @@ void DebugPrintf::ReportSetupProblem(T object, const char *const specific_messag
 void DebugPrintf::PreCallRecordCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo *create_info,
                                             const VkAllocationCallbacks *pAllocator, VkDevice *pDevice,
                                             void *modified_create_info) {
-    DispatchGetPhysicalDeviceFeatures(gpu, &supported_features);
+    // Use a local variable to query features since this method runs in the instance validation object.
+    // To avoid confusion and race conditions about which physical device's features are stored in the
+    // 'supported_devices' member variable, it will only be set in the device validation objects.
+    // See CreateDevice() below.
+    VkPhysicalDeviceFeatures gpu_supported_features;
+    DispatchGetPhysicalDeviceFeatures(gpu, &gpu_supported_features);
     VkPhysicalDeviceFeatures features = {};
     features.vertexPipelineStoresAndAtomics = true;
     features.fragmentStoresAndAtomics = true;
-    UtilPreCallRecordCreateDevice(gpu, reinterpret_cast<safe_VkDeviceCreateInfo *>(modified_create_info), supported_features,
+    UtilPreCallRecordCreateDevice(gpu, reinterpret_cast<safe_VkDeviceCreateInfo *>(modified_create_info), gpu_supported_features,
                                   features);
 }
 
 // Perform initializations that can be done at Create Device time.
-void DebugPrintf::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
-                                             const VkAllocationCallbacks *pAllocator, VkDevice *pDevice, VkResult result) {
-    ValidationStateTracker::PostCallRecordCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice, result);
-
-    ValidationObject *device_object = GetLayerDataPtr(get_dispatch_key(*pDevice), layer_data_map);
-    ValidationObject *validation_data = GetValidationObject(device_object->object_dispatch, this->container_type);
-    DebugPrintf *device_debug_printf = static_cast<DebugPrintf *>(validation_data);
+void DebugPrintf::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
+    ValidationStateTracker::CreateDevice(pCreateInfo);
 
     const char *size_string = getLayerOption("khronos_validation.printf_buffer_size");
-    device_debug_printf->output_buffer_size = *size_string ? atoi(size_string) : 1024;
+    output_buffer_size = *size_string ? atoi(size_string) : 1024;
 
     std::string verbose_string = getLayerOption("khronos_validation.printf_verbose");
     transform(verbose_string.begin(), verbose_string.end(), verbose_string.begin(), ::tolower);
-    device_debug_printf->verbose = verbose_string.length() ? !verbose_string.compare("true") : false;
+    verbose = verbose_string.length() ? !verbose_string.compare("true") : false;
 
     std::string stdout_string = getLayerOption("khronos_validation.printf_to_stdout");
     transform(stdout_string.begin(), stdout_string.end(), stdout_string.begin(), ::tolower);
-    device_debug_printf->use_stdout = stdout_string.length() ? !stdout_string.compare("true") : false;
-    if (getenv("DEBUG_PRINTF_TO_STDOUT")) device_debug_printf->use_stdout = true;
+    use_stdout = stdout_string.length() ? !stdout_string.compare("true") : false;
+    if (getenv("DEBUG_PRINTF_TO_STDOUT")) use_stdout = true;
 
-    if (device_debug_printf->phys_dev_props.apiVersion < VK_API_VERSION_1_1) {
+    if (phys_dev_props.apiVersion < VK_API_VERSION_1_1) {
         ReportSetupProblem(device, "Debug Printf requires Vulkan 1.1 or later.  Debug Printf disabled.");
-        device_debug_printf->aborted = true;
+        aborted = true;
         return;
     }
 
+    DispatchGetPhysicalDeviceFeatures(physical_device, &supported_features);
     if (!supported_features.fragmentStoresAndAtomics || !supported_features.vertexPipelineStoresAndAtomics) {
         ReportSetupProblem(device,
                            "Debug Printf requires fragmentStoresAndAtomics and vertexPipelineStoresAndAtomics.  "
                            "Debug Printf disabled.");
-        device_debug_printf->aborted = true;
+        aborted = true;
         return;
     }
 
@@ -86,7 +87,7 @@ void DebugPrintf::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
         ReportSetupProblem(device,
                            "Debug Printf cannot be enabled when gpu assisted validation is enabled.  "
                            "Debug Printf disabled.");
-        device_debug_printf->aborted = true;
+        aborted = true;
         return;
     }
 
@@ -97,7 +98,7 @@ void DebugPrintf::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, co
                                                 kShaderStageAllRayTracing,
                                             NULL};
     bindings.push_back(binding);
-    UtilPostCallRecordCreateDevice(pCreateInfo, bindings, device_debug_printf, device_debug_printf->phys_dev_props);
+    UtilPostCallRecordCreateDevice(pCreateInfo, bindings, this, phys_dev_props);
 }
 
 void DebugPrintf::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) {
@@ -301,7 +302,31 @@ void DebugPrintf::PostCallRecordCreateRayTracingPipelinesKHR(VkDevice device, Vk
         device, deferredOperation, pipelineCache, count, pCreateInfos, pAllocator, pPipelines, result, crtpl_state_data);
     if (aborted) return;
     UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, crtpl_state->printf_create_infos.data());
-    UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, this);
+
+    bool is_operation_deferred = (deferredOperation != VK_NULL_HANDLE && result == VK_OPERATION_DEFERRED_KHR);
+    if (is_operation_deferred) {
+        std::vector<safe_VkRayTracingPipelineCreateInfoKHR> infos{pCreateInfos, pCreateInfos + count};
+        auto register_fn = [this, infos, pAllocator](const std::vector<VkPipeline> &pipelines) {
+            UtilPostCallRecordPipelineCreations(static_cast<uint32_t>(infos.size()),
+                                                reinterpret_cast<const VkRayTracingPipelineCreateInfoKHR *>(infos.data()),
+                                                pAllocator, pipelines.data(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, this);
+        };
+
+        auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
+        if (wrap_handles) {
+            deferredOperation = layer_data->Unwrap(deferredOperation);
+        }
+        std::vector<std::function<void(const std::vector<VkPipeline> &)>> cleanup_fn;
+        auto find_res = layer_data->deferred_operation_post_check.pop(deferredOperation);
+        if (find_res->first) {
+            cleanup_fn = std::move(find_res->second);
+        }
+        cleanup_fn.emplace_back(register_fn);
+        layer_data->deferred_operation_post_check.insert(deferredOperation, cleanup_fn);
+    } else {
+        UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                                            this);
+    }
 }
 
 // Remove all the shader trackers associated with this destroyed pipeline.
@@ -945,6 +970,16 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
         return;
     }
 
+    const auto lv_bind_point = ConvertToLvlBindPoint(bind_point);
+    const auto *pipeline_state = cb_node->lastBound[lv_bind_point].pipeline_state;
+
+    // TODO (ncesario) remove once VK_EXT_graphics_pipeline_library support is added for debug printf
+    if (pipeline_state && pipeline_state->IsGraphicsLibrary()) {
+        ReportSetupProblem(device, "Debug printf does not currently support VK_EXT_graphics_pipeline_library");
+        aborted = true;
+        return;
+    }
+
     // Allocate memory for the output block that the gpu will use to return values for printf
     DPFDeviceMemoryBlock output_block = {};
     VkBufferCreateInfo buffer_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
@@ -981,11 +1016,10 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
     desc_writes.dstBinding = 3;
     DispatchUpdateDescriptorSets(device, desc_count, &desc_writes, 0, NULL);
 
-    const auto lv_bind_point = ConvertToLvlBindPoint(bind_point);
-    const auto *pipeline_state = cb_node->lastBound[lv_bind_point].pipeline_state;
     if (pipeline_state) {
-        if (pipeline_state->pipeline_layout->set_layouts.size() <= desc_set_bind_index) {
-            DispatchCmdBindDescriptorSets(cmd_buffer, bind_point, pipeline_state->pipeline_layout->layout(), desc_set_bind_index, 1,
+        const auto &pipeline_layout = pipeline_state->PipelineLayoutState();
+        if (pipeline_layout->set_layouts.size() <= desc_set_bind_index) {
+            DispatchCmdBindDescriptorSets(cmd_buffer, bind_point, pipeline_layout->layout(), desc_set_bind_index, 1,
                                           desc_sets.data(), 0, nullptr);
         }
         // Record buffer and memory info in CB state tracking
