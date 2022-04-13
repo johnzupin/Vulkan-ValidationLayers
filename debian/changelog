@@ -1,3 +1,10 @@
+vulkan-validationlayers (1.3.211.0~rc2-1lunarg18.04-1) bionic; urgency=medium
+
+  [ Tony-LunarG ]
+  * layers: Fix shader validation cache file path
+
+ -- john <john@odin>  Wed, 13 Apr 2022 15:11:26 -0600
+
 vulkan-validationlayers (1.3.211.0~rc1-1lunarg18.04-1) bionic; urgency=medium
 
   [ ziga-lunarg ]
