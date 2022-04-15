@@ -1,3 +1,24 @@
+vulkan-validationlayers (1.3.211.0~rc3-1lunarg20.04-1) focal; urgency=medium
+
+  [ ziga-lunarg ]
+  * layers: Check if iterator is not empty before increment
+
+  [ Tony-LunarG ]
+  * practices: Don't dereference null pipeline state ptr
+
+  [ aitor-lunarg ]
+  * layers: Transfer event updates from secondary to primary cmd
+  * tests: Test event data is copied from secondary to primary cmd
+
+  [ tmerilehti ]
+  * layers: Fix message in VUID 06410 validation
+
+  [ ziga-lunarg ]
+  * tests: Revert Bind sampler type which is unused in shader
+  * layers: Revert Find all shader variable ids
+
+ -- john <john@odin>  Fri, 15 Apr 2022 11:06:35 -0600
+
 vulkan-validationlayers (1.3.211.0~rc2-1lunarg20.04-1) focal; urgency=medium
 
   [ Tony-LunarG ]
