@@ -1,3 +1,371 @@
+vulkan-validationlayers (1.3.214.0~rc1-1lunarg18.04-1) bionic; urgency=medium
+
+  [ ziga-lunarg ]
+  * layers: Validate primitives generated query queue support
+  * tests: Test primitives generated query queue support
+
+  [ Jeremy Gebben ]
+  * layers: Add GpuAssistedBase class
+  * layers: Handle CreateDevice and DestroyDevice in GpuAssistedBase
+  * layers: Handle Queue Submission in GpuAssistedBase
+  * layers: Handle PipelineLayouts and Pipelines in GpuAssistedBase
+
+  [ ziga-lunarg ]
+  * layers: Validate sampler reduction mode
+  * tests: Test sampler reduction mode without extension
+  * layers: Validate primitives generated with streams
+  * tests: Test primitives generated query with streams
+
+  [ Tony-LunarG ]
+  * practices: Don't dereference null pipeline state ptr
+
+  [ aitor-lunarg ]
+  * layers: Transfer event updates from secondary to primary cmd
+  * tests: Test event data is copied from secondary to primary cmd
+
+  [ Nathaniel Cesario ]
+  * layers: Add 06587, 06588
+
+  [ sjfricke ]
+  * layers: Add missing IsExtEnabled
+
+  [ Tony-LunarG ]
+  * layers: Fix shader validation cache file path
+
+  [ Nathaniel Cesario ]
+  * layers: Add VUID 06579
+  * tests: Add test for VUID 06579
+
+  [ Jonah Ryan-Davis ]
+  * layers: Add missing headers to BUILD.gn
+
+  [ Nathaniel Cesario ]
+  * layers: Consolidate ValidatePipeline functions
+
+  [ tmerilehti ]
+  * layers: Fix message in VUID 06410 validation
+
+  [ ziga-lunarg ]
+  * layers: Check if iterator is not empty before increment
+
+  [ Nathaniel Cesario ]
+  * layers: Add more implicit -> explicit VUIDs
+  * tests: Add checks for 06602, 06603, 06604
+
+  [ ziga-lunarg ]
+  * tests: Revert Bind sampler type which is unused in shader
+  * layers: Revert Find all shader variable ids
+
+  [ Jeremy Gebben ]
+  * layers: Move GPUAV and Debug Printf buffer processing
+  * layers: Make GpuAssistedBase::shader_map threadsafe
+  * gpu: Make renderpass_to_pipeline lookups threadsafe
+  * layers: Enable fine-grained locking for GPUAV and DebugPrintf
+
+  [ Nathaniel Cesario ]
+  * layers: Add VUIDs 06606, 06607, 06608
+  * tests: Check VUIDs 06606, 06607, 06608
+  * layers: Add VUID 06590
+
+  [ ziga-lunarg ]
+  * layers: Validate subpass attachment view mask
+  * tests: Test subpass description invalid view mask
+  * layers: Fix checking multiple queues waiting on semaphore
+  * tests: Test different queues waiting on same semaphore
+  * tests: Test creating image view with invalid aspect
+  * layers: Validate stencil load op with layout
+  * tests: Test creating render pass with invalid stencil load op
+  * tests: Fix separate depth stencil subresource layout test
+  * tests: Test using pipeline with incompatible subpass
+  * layers: Warn when overallocating from descriptor pool
+  * tests: Test over allocating from descriptor pool
+  * layers: Validate RenderingFragmentShadringRate usage
+  * tests: Test RenderingFragmentShadingRate image usage
+  * tests: Add RenderingFragmentShadringRate tests
+  * layers: Validate fragment density render area
+  * tests: Test FragmentDensity render area
+  * layers: Add helper for calculating quotient ceiling
+
+  [ Andrej Oder ]
+  * layers: Add VUID 06694 06695
+  * tests: Add tests for VUID 06694 06695
+
+  [ ziga-lunarg ]
+  * tests: Fix fragment shading rate test
+  * layers: Validate required subgroup size
+  * tests: Test compute shader required subgroup size
+  * layers: Fix variable descriptor sizes
+  * tests: Test large variable descriptor size
+  * tests: Fix device memory requirements test
+  * layers: Fix descriptor type check for 06714
+  * layers: Validate buffer memory barrier src and dst queue
+  * tests: Test buffer barrier with both queues external
+  * layers: Update messages for shader io mismatch
+  * tests: Test vertex fragment shader io mismatch
+
+  [ Tony-LunarG ]
+  * layers: Move VUID 06688 into core and CmdBeginQuery
+  * layers: Add validation for VK_EXT_primitives_generated_query
+  * tests: Add tests for VK_EXT_primitives_generated_query
+
+  [ ziga-lunarg ]
+  * layers: Validate barrier access masks
+  * tests: Test barrier access masks
+  * layers: Validate MemoryDeviceGroup deviceIndexCount
+  * tests: Test device count in bind group info
+  * tests: Fix tests using bind device group
+
+  [ John Zulauf ]
+  * layers: Add shared_from_this to CB state
+  * syncval: Clean up reset_count sourcing
+  * syncval: Revise subpass tagging to isolate syncops
+  * syncval: Cleanup of invalid tagging
+  * syncval: Cleanup/infrastruct. for RP syncop replay
+  * layers: Adding two missing entry points
+  * syncval: Cleanup syncval getters
+  * syncval: Refactor CommandExecutionContext i/f
+  * layers: Add make_span functionality
+  * syncval: Cleanup error formatting factorization
+
+  [ ziga-lunarg ]
+  * layers: Validate video buffer usage
+  * tests: Test video buffer usage
+
+  [ Nathaniel Cesario ]
+  * layers: Fix 06588 wording
+
+  [ ziga-lunarg ]
+  * layers: Fix dual source blend with dynamic rendering
+  * tests: Test dual src blend with dynamic rendering
+  * layers: Validate LocalSizeId execution mode
+  * tests: Test using LocalSizeId without required extension
+  * layers: Warn when semaphore is set but count is 0
+  * tests: Test setting semaphore but not semaphore count
+
+  [ aitor-lunarg ]
+  * layers: Buffer bound memory overlap check
+  * tests: Extend buffer copy to check shared memory buffers
+
+  [ Mike Schuchardt ]
+  * ci: Remove remnants of windows-2016 github actions
+  * build: Update to header 1.3.212
+
+  [ Nathaniel Cesario ]
+  * layers: Fix VUID consistency
+  * layers: Add VUID 06609, 06610
+  * tests: Check VUID 06609, 06610
+
+  [ aitor-lunarg ]
+  * layers: Revert buffers' bound memory overlap check
+  * tests: Comment buffers' bound memory overlap tests
+
+  [ Nathaniel Cesario ]
+  * layers: Fix valid CB queue submission
+
+  [ Ali Emre Gülcü ]
+  * layers: Fix typo on VUID-06129 and VUID-06130 error messages
+
+  [ Owen Smith ]
+  * layers: Fix print order upon invalid timeline semaphore signal
+
+  [ ziga-lunarg ]
+  * layers: Add missing skip
+  * layers: Fix checking integer formats with dynamic rendering
+  * tests: Test stencil attachment with integer format
+  * tests: Test stencil attachment with separate depth stencil
+  * layers: Fix checking enabled multiview feature
+  * tests: Test enabling multiview feature in core 11 features
+  * layers: Fix iterating variable descriptors
+  * layers: Validate multiview render pass with all masks 0
+  * tests: All 0 view masks in multiview render pass
+
+  [ Nathaniel Cesario ]
+  * tests: Fixes for RADV driver
+
+  [ ziga-lunarg ]
+  * layers: Fix dynamic rendering validation usage and layerCount
+  * tests: Positive test for fragment density attachment map
+  * layers: Validate SubpassDescription pipeline bind point
+  * tests: Fix pipeline bind point for subpass test
+  * layers: Validate sampler reduction mode with filter
+  * tests: Test invalid sampler reduction mode
+  * layers: Add RenderPass2 validation for FragmentDensityMap
+  * tests: Test fragment density attachment in rp2
+  * tests: Fix fragment density map references test
+  * layers: Dont set parents to update after bind descriptors
+  * tests: Test destroying update after bind descriptor
+  * tests: Test destroying unused partially bound descriptor
+  * layers: Validate RenderPassMultiview view mask bits
+  * tests: Test RenderPassMultiview view mask
+  * tests: Fix multivew tests
+  * layers: Validate subgroup uniform control flow
+  * tests: Test subgroup uniform control flow execution mode
+
+  [ Jeremy Gebben ]
+  * layers: Enable fine-grained locking by default
+  * layers: Enable fine-grained locking in settings and manifest
+  * corechecks: Fix nullptr dereference
+  * layers: Optimize DescriptorSet::UpdateDrawState()
+  * layers: Add VkDescriptorType -> DescriptorClass function
+
+  [ ziga-lunarg ]
+  * layers: Fix iterating variable descriptors
+  * tests: Disable QueueThreading test on amd
+
+  [ aitor-lunarg ]
+  * layers: Check sparse memory bind size greater than 0
+  * tests: Test sparse memory bind size greater then 0
+  * layers: Check sparse mem bind res offset less than res size
+  * tests: Test sparse mem bind res offset less than res size
+  * layers: Check sparse mem bind size > than remaining res size
+  * tests: Test sparse mem bind size > than remaining res size
+  * layers: Unify VUID-01101
+  * layers: Check sparse mem bind size > than remaining mem size
+  * tests: Test sparse mem bind size > than remaining mem size
+
+  [ ziga-lunarg ]
+  * layers: Check if zero allocation size is allowed
+  * layers: Complete validation of compatible render passes
+  * tests: Test using incompatible render passes
+  * tests: Fix tests with incompatible render passes
+
+  [ Nathaniel Cesario ]
+  * tests: Rename instance extensions test
+
+  [ ziga-lunarg ]
+  * layers: Validate ray tracing pipeline flags
+  * tests: Test invalid ray tracing pipeline flags
+  * layers: Validate ray tracing pipeline resource count
+  * tests: Test too many resources in ray tracing pipeline
+
+  [ Tony-LunarG ]
+  * tests: Check for sType assignment instead of LvlInitStruct
+  * gpu: Add VMA stats to out of memory messages
+  * gpu: Choose memtype based on requirements
+  * gpu: Clean up option processing
+  * gpu: Add linearly allocated buffers for output
+  * gpu: Add setting for GPU-AV linear memory allocation
+
+  [ Nathaniel Cesario ]
+  * layers: Remove GetUnifiedCreateInfo
+
+  [ ziga-lunarg ]
+  * layers: Validate subgroupSizeControl feature is enabled
+  * tests: Test missing subgroupSizeControl feature
+  * tests: Fix subgroup size control tests
+
+  [ Mike Blumenkrantz ]
+  * layers: Fix zs attachment detection with dynamic render
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.213
+
+  [ ziga-lunarg ]
+  * layers: Allow multithread host only descriptor set access
+  * tests: Access host only descriptor set from multiple threads
+
+  [ Lionel Landwerlin ]
+  * layers: Fix format features check for buffer views
+
+  [ ziga-lunarg ]
+  * layers: Fix getting imageView layerCount
+  * tests: Test imageless framebuffer with 3D image
+
+  [ Nathaniel Cesario ]
+  * build: Enable -Wstring-conversion
+
+  [ Jeremy Gebben ]
+  * corechecks: Move validation code out of descriptor_sets.cpp
+  * corechecks: Remove validation helpers from cvdescriptorset::
+
+  [ ziga-lunarg ]
+  * layers: Use correct GetPhysicalDeviceProperties2 function
+  * layers: Validate render pass attachment layout
+  * tests: Test invalid render pass attachment
+  * tests: Fix tests with invalid render pass attachment
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix ASan heap buffer overflow
+
+  [ Nathaniel Cesario ]
+  * tests: Update GoogleTest to latest
+
+  [ Tony-LunarG ]
+  * layers: Handle null stage pName
+  * tests: Add test with null stage pName
+  * gpu: Remove unused api_state vectors
+  * gpu: Pass modified CreateInfos to RecordPipelineCreations
+  * gpu: Fix pipeline creation recovery
+  * tests: Fix GPU-AV test and add using shader after recovery
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.214
+  * layer: Remove VUID 06131
+
+  [ ziga-lunarg ]
+  * layers: Validate buffer device group indices
+  * tests: Test invalid buffer bind device group index
+  * layers: Validate depth stencil read only attachment
+  * tests: Test invalid depth stencil read only attachment
+
+  [ Aaron Gamache ]
+  * layers: Fix Dynamic Rendering SEGFAULT for Portability
+
+  [ Marc Alcala Prieto ]
+  * layers: Fix logic in PreCallValidateQueuePresentKHR
+
+  [ Nathaniel Cesario ]
+  * layers: Fix null ColorBlendState crash
+
+  [ ziga-lunarg ]
+  * layers: Fix wording of layer count vuid
+
+  [ sjfricke ]
+  * layers: Remove unused warning and cleanup
+
+  [ Aitor Camacho ]
+  * layers: VkBindImagePlaneMemoryInfo in pNext for binding planes
+  * tests: Fix test when binding planes
+  * tests: Extend BindInvalidMemory2BindInfos for pNext check
+
+  [ sjfricke ]
+  * tests: Extension check unified
+
+  [ Nathaniel Cesario ]
+  * layers: Add VUs 06756-06758
+  * tests: Verify VUs 06756-06758
+
+  [ sfricke-samsung ]
+  * layers: Add VK_KHR_ray_tracing_maintenance1
+
+  [ ziga-lunarg ]
+  * layers: Validate resolve image usage and format features
+  * tests: Test src and dst resolve image usage
+
+  [ sjfricke ]
+  * tests: Cleanup use of CanEnableDeviceExtnsion
+
+  [ Ricardo Garcia ]
+  * layers: Do not check pipeline flag bits in render pass flags
+
+  [ sjfricke ]
+  * tests: Version check unified
+
+  [ John Zulauf ]
+  * syncval: Cleanup callbacks on syncval destroy
+
+  [ Tony-LunarG ]
+  * layers: Use ofstream to write shader validation cache
+
+  [ sjfricke ]
+  * layers: Use LvlInitStruct
+
+  [ Aitor Camacho ]
+  * layers: VkSparseImageMemoryBind check offset
+  * tests: VkSparseImageMemoryBind test offset values
+
+ -- john <john@odin>  Wed, 25 May 2022 14:54:39 -0600
+
 vulkan-validationlayers (1.3.211.0~rc3-1lunarg18.04-1) bionic; urgency=medium
 
   [ ziga-lunarg ]
