@@ -88,8 +88,7 @@ struct create_shader_module_api_state {
 
 // This structure is used to save data across the CreateGraphicsPipelines down-chain API call
 struct create_graphics_pipeline_api_state {
-    std::vector<safe_VkGraphicsPipelineCreateInfo> gpu_create_infos;
-    std::vector<safe_VkGraphicsPipelineCreateInfo> printf_create_infos;
+    std::vector<safe_VkGraphicsPipelineCreateInfo> modified_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
     std::vector<std::vector<create_shader_module_api_state>> shader_states;
     const VkGraphicsPipelineCreateInfo* pCreateInfos;
@@ -97,24 +96,21 @@ struct create_graphics_pipeline_api_state {
 
 // This structure is used to save data across the CreateComputePipelines down-chain API call
 struct create_compute_pipeline_api_state {
-    std::vector<safe_VkComputePipelineCreateInfo> gpu_create_infos;
-    std::vector<safe_VkComputePipelineCreateInfo> printf_create_infos;
+    std::vector<safe_VkComputePipelineCreateInfo> modified_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
     const VkComputePipelineCreateInfo* pCreateInfos;
 };
 
 // This structure is used to save data across the CreateRayTracingPipelinesNV down-chain API call.
 struct create_ray_tracing_pipeline_api_state {
-    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> gpu_create_infos;
-    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> printf_create_infos;
+    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> modified_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
     const VkRayTracingPipelineCreateInfoNV* pCreateInfos;
 };
 
 // This structure is used to save data across the CreateRayTracingPipelinesKHR down-chain API call.
 struct create_ray_tracing_pipeline_khr_api_state {
-    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> gpu_create_infos;
-    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> printf_create_infos;
+    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> modified_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfos;
 };
@@ -471,6 +467,11 @@ class ValidationStateTracker : public ValidationObject {
         command_buffer_free_callback.reset(new CommandBufferFreeCallback(std::forward<Fn>(fn)));
     }
 
+    void ResetCommandBufferCallbacks() {
+        command_buffer_reset_callback.reset();
+        command_buffer_free_callback.reset();
+    }
+
     using SetImageViewInitialLayoutCallback = std::function<void(CMD_BUFFER_STATE*, const IMAGE_VIEW_STATE&, VkImageLayout)>;
     template <typename Fn>
     void SetSetImageViewInitialLayoutCallback(Fn&& fn) {
@@ -500,6 +501,9 @@ class ValidationStateTracker : public ValidationObject {
                                                     VkMemoryRequirements2* pMemoryRequirements) override;
     void PostCallRecordGetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2* pInfo,
                                                        VkMemoryRequirements2* pMemoryRequirements) override;
+
+    virtual std::shared_ptr<QUEUE_STATE> CreateQueue(VkQueue queue, uint32_t queue_family_index, VkDeviceQueueCreateFlags flags);
+
     void PostCallRecordGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) override;
     void PostCallRecordGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue) override;
     void PostCallRecordGetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd, VkResult result) override;
@@ -1004,6 +1008,7 @@ class ValidationStateTracker : public ValidationObject {
                                                const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
                                                const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
                                                VkDeviceAddress indirectDeviceAddress) override;
+    void PostCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) override;
     void PostCallRecordCmdEndDebugUtilsLabelEXT(VkCommandBuffer commandBuffer) override;
     void PostCallRecordCmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t slot) override;
     void PostCallRecordCmdEndQueryIndexedEXT(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query,
@@ -1300,6 +1305,19 @@ class ValidationStateTracker : public ValidationObject {
         }
     }
 
+    template <typename ExtProp>
+    void GetPhysicalDeviceExtProperties(VkPhysicalDevice gpu, ExtProp* ext_prop) {
+        assert(ext_prop);
+        *ext_prop = LvlInitStruct<ExtProp>();
+        if (api_version < VK_API_VERSION_1_1) {
+            auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2>(ext_prop);
+            DispatchGetPhysicalDeviceProperties2KHR(gpu, &prop2);
+        } else {
+            auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2>(ext_prop);
+            DispatchGetPhysicalDeviceProperties2(gpu, &prop2);
+        }
+    }
+
     // Link to the device's physical-device data
     PHYSICAL_DEVICE_STATE* physical_device_state;
 
@@ -1355,6 +1373,7 @@ class ValidationStateTracker : public ValidationObject {
         VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT blend_operation_advanced_props;
         VkPhysicalDeviceConservativeRasterizationPropertiesEXT conservative_rasterization_props;
         VkPhysicalDeviceSubgroupSizeControlPropertiesEXT subgroup_size_control_props;
+        VkPhysicalDeviceSubgroupProperties subgroup_properties;
     };
     DeviceExtensionProperties phys_dev_ext_props = {};
     std::vector<VkCooperativeMatrixPropertiesNV> cooperative_matrix_properties;

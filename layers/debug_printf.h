@@ -19,11 +19,7 @@
 
 #pragma once
 
-#include "chassis.h"
-#include "vk_mem_alloc.h"
-#include "state_tracker.h"
 #include "gpu_utils.h"
-#include <map>
 class DebugPrintf;
 
 struct DPFDeviceMemoryBlock {
@@ -39,12 +35,6 @@ struct DPFBufferInfo {
     DPFBufferInfo(DPFDeviceMemoryBlock output_mem_block, VkDescriptorSet desc_set, VkDescriptorPool desc_pool,
                   VkPipelineBindPoint pipeline_bind_point)
         : output_mem_block(output_mem_block), desc_set(desc_set), desc_pool(desc_pool), pipeline_bind_point(pipeline_bind_point){};
-};
-
-struct DPFShaderTracker {
-    VkPipeline pipeline;
-    VkShaderModule shader_module;
-    std::vector<uint32_t> pgm;
 };
 
 enum vartype { varsigned, varunsigned, varfloat };
@@ -68,35 +58,32 @@ struct DPFOutputRecord {
 };
 
 namespace debug_printf_state {
-class CommandBuffer : public CMD_BUFFER_STATE {
+class CommandBuffer : public gpu_utils_state::CommandBuffer {
   public:
     std::vector<DPFBufferInfo> buffer_infos;
 
     CommandBuffer(DebugPrintf* dp, VkCommandBuffer cb, const VkCommandBufferAllocateInfo* create_info,
                   const COMMAND_POOL_STATE* pool);
 
+    bool NeedsProcessing() const final { return !buffer_infos.empty(); }
+
+    void Process(VkQueue queue) final;
     void Reset() final;
 };
 };  // namespace debug_printf_state
 
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkCommandBuffer, debug_printf_state::CommandBuffer, CMD_BUFFER_STATE);
 
-class DebugPrintf : public ValidationStateTracker {
+class DebugPrintf : public GpuAssistedBase {
   public:
-    DebugPrintf() { container_type = LayerObjectTypeDebugPrintf; }
+    DebugPrintf() {
+        setup_vuid = "UNASSIGNED-DEBUG-PRINTF";
+        container_type = LayerObjectTypeDebugPrintf;
+        desired_features.vertexPipelineStoresAndAtomics = true;
+        desired_features.fragmentStoresAndAtomics = true;
+    }
 
-    template <typename T>
-    void ReportSetupProblem(T object, const char* const specific_message) const;
-    void PreCallRecordCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo* pCreateInfo,
-                                   const VkAllocationCallbacks* pAllocator, VkDevice* pDevice, void* modified_create_info) override;
     void CreateDevice(const VkDeviceCreateInfo* pCreateInfo) override;
-    void PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) override;
-    void PreCallRecordCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo* pCreateInfo,
-                                           const VkAllocationCallbacks* pAllocator, VkPipelineLayout* pPipelineLayout,
-                                           void* cpl_state_data) override;
-    void PostCallRecordCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo* pCreateInfo,
-                                            const VkAllocationCallbacks* pAllocator, VkPipelineLayout* pPipelineLayout,
-                                            VkResult result) override;
     bool PreCallValidateCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent* pEvents,
                                       VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
                                       uint32_t memoryBarrierCount, const VkMemoryBarrier* pMemoryBarriers,
@@ -107,42 +94,6 @@ class DebugPrintf : public ValidationStateTracker {
                                           const VkDependencyInfoKHR* pDependencyInfos) const override;
     bool PreCallValidateCmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent* pEvents,
                                        const VkDependencyInfo* pDependencyInfos) const override;
-
-    void PreCallRecordCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                              const VkGraphicsPipelineCreateInfo* pCreateInfos,
-                                              const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
-                                              void* cgpl_state_data) override;
-    void PreCallRecordCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                             const VkComputePipelineCreateInfo* pCreateInfos,
-                                             const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
-                                             void* ccpl_state_data) override;
-    void PreCallRecordCreateRayTracingPipelinesNV(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                                  const VkRayTracingPipelineCreateInfoNV* pCreateInfos,
-                                                  const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
-                                                  void* crtpl_state_data) override;
-    void PreCallRecordCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
-                                                   VkPipelineCache pipelineCache, uint32_t count,
-                                                   const VkRayTracingPipelineCreateInfoKHR* pCreateInfos,
-                                                   const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
-                                                   void* crtpl_state_data) override;
-    void PostCallRecordCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                               const VkGraphicsPipelineCreateInfo* pCreateInfos,
-                                               const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines, VkResult result,
-                                               void* cgpl_state_data) override;
-    void PostCallRecordCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                              const VkComputePipelineCreateInfo* pCreateInfos,
-                                              const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines, VkResult result,
-                                              void* ccpl_state_data) override;
-    void PostCallRecordCreateRayTracingPipelinesNV(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                                   const VkRayTracingPipelineCreateInfoNV* pCreateInfos,
-                                                   const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines, VkResult result,
-                                                   void* crtpl_state_data) override;
-    void PostCallRecordCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
-                                                    VkPipelineCache pipelineCache, uint32_t count,
-                                                    const VkRayTracingPipelineCreateInfoKHR* pCreateInfos,
-                                                    const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
-                                                    VkResult result, void* crtpl_state_data) override;
-    void PreCallRecordDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks* pAllocator) override;
     bool InstrumentShader(const VkShaderModuleCreateInfo* pCreateInfo, std::vector<uint32_t>& new_pgm, uint32_t* unique_shader_id);
     void PreCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo,
                                          const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule,
@@ -230,60 +181,16 @@ class DebugPrintf : public ValidationStateTracker {
                                                const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable,
                                                const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable,
                                                VkDeviceAddress indirectDeviceAddress) override;
-
-    void PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence,
-                                   VkResult result) override;
-    void RecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence, VkResult result);
-    void PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR* pSubmits, VkFence fence,
-                                       VkResult result) override;
-    void PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence,
-                                    VkResult result) override;
+    void PreCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) override;
+    void PostCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) override;
     void AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer, const VkPipelineBindPoint bind_point);
-
-    std::shared_ptr<SHADER_MODULE_STATE> GetShaderModuleState(VkShaderModule shader_module) {
-        return Get<SHADER_MODULE_STATE>(shader_module);
-    }
-    std::shared_ptr<const SHADER_MODULE_STATE> GetShaderModuleState(VkShaderModule shader_module) const {
-        return Get<SHADER_MODULE_STATE>(shader_module);
-    }
-    std::shared_ptr<const PIPELINE_STATE> GetPipelineState(VkPipeline pipeline) const { return Get<PIPELINE_STATE>(pipeline); }
-    std::shared_ptr<PIPELINE_STATE> GetPipelineState(VkPipeline pipeline) { return Get<PIPELINE_STATE>(pipeline); }
-
-    const std::vector<DPFBufferInfo>& GetBufferInfo(const CMD_BUFFER_STATE* cb_node) const {
-        assert(cb_node);
-        return static_cast<const debug_printf_state::CommandBuffer*>(cb_node)->buffer_infos;
-    }
-
-    std::vector<DPFBufferInfo>& GetBufferInfo(CMD_BUFFER_STATE* cb_node) {
-        assert(cb_node);
-        return static_cast<debug_printf_state::CommandBuffer*>(cb_node)->buffer_infos;
-    }
 
     std::shared_ptr<CMD_BUFFER_STATE> CreateCmdBufferState(VkCommandBuffer cb, const VkCommandBufferAllocateInfo* create_info,
                                                            const COMMAND_POOL_STATE* pool) final;
 
     void DestroyBuffer(DPFBufferInfo& buffer_info);
 
-private:
-    bool CommandBufferNeedsProcessing(VkCommandBuffer command_buffer);
-    void ProcessCommandBuffer(VkQueue queue, VkCommandBuffer command_buffer);
-
-    VkPhysicalDeviceFeatures supported_features;
-
-    uint32_t unique_shader_module_id = 0;
-    uint32_t output_buffer_size;
-
-public:
-    bool aborted = false;
+  private:
     bool verbose = false;
     bool use_stdout = false;
-    uint32_t adjusted_max_desc_sets;
-    uint32_t desc_set_bind_index;
-    VkDescriptorSetLayout debug_desc_layout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout dummy_desc_layout = VK_NULL_HANDLE;
-    std::unique_ptr<UtilDescriptorSetManager> desc_set_manager;
-    layer_data::unordered_map<uint32_t, DPFShaderTracker> shader_map;
-    PFN_vkSetDeviceLoaderData vkSetDeviceLoaderData;
-    VmaAllocator vmaAllocator = {};
-    std::map<VkQueue, UtilQueueBarrierCommandInfo> queue_barrier_command_infos;
 };

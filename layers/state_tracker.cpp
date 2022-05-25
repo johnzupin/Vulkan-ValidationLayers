@@ -134,10 +134,7 @@ VkFormatFeatureFlags2KHR GetImageFormatFeatures(VkPhysicalDevice physical_device
         DispatchGetPhysicalDeviceFormatProperties2(physical_device, format, &fmt_props_2);
 
         if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
-            VkImageDrmFormatModifierPropertiesEXT drm_format_props = {
-                VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT,
-                nullptr,
-            };
+            VkImageDrmFormatModifierPropertiesEXT drm_format_props = LvlInitStruct<VkImageDrmFormatModifierPropertiesEXT>();
 
             // Find the image modifier
             DispatchGetImageDrmFormatModifierPropertiesEXT(device, image, &drm_format_props);
@@ -161,13 +158,11 @@ VkFormatFeatureFlags2KHR GetImageFormatFeatures(VkPhysicalDevice physical_device
                 (tiling == VK_IMAGE_TILING_LINEAR) ? fmt_props_3.linearTilingFeatures : fmt_props_3.optimalTilingFeatures;
         }
     } else if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
-        VkImageDrmFormatModifierPropertiesEXT drm_format_properties = {VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT,
-                                                                       nullptr};
+        VkImageDrmFormatModifierPropertiesEXT drm_format_properties = LvlInitStruct<VkImageDrmFormatModifierPropertiesEXT>();
         DispatchGetImageDrmFormatModifierPropertiesEXT(device, image, &drm_format_properties);
 
-        VkFormatProperties2 format_properties_2 = {VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2, nullptr};
-        VkDrmFormatModifierPropertiesListEXT drm_properties_list = {VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT,
-                                                                    nullptr};
+        VkFormatProperties2 format_properties_2 = LvlInitStruct<VkFormatProperties2>();
+        VkDrmFormatModifierPropertiesListEXT drm_properties_list = LvlInitStruct<VkDrmFormatModifierPropertiesListEXT>();
         format_properties_2.pNext = (void *)&drm_properties_list;
         DispatchGetPhysicalDeviceFormatProperties2(physical_device, format, &format_properties_2);
         std::vector<VkDrmFormatModifierPropertiesEXT> drm_properties;
@@ -349,19 +344,21 @@ void ValidationStateTracker::PostCallRecordCreateBufferView(VkDevice device, con
 
     auto buffer_state = Get<BUFFER_STATE>(pCreateInfo->buffer);
 
-    VkFormatFeatureFlags2KHR buffer_features;
+    VkFormatFeatureFlags2KHR buffer_features, image_features;
     if (has_format_feature2) {
         auto fmt_props_3 = LvlInitStruct<VkFormatProperties3KHR>();
         auto fmt_props_2 = LvlInitStruct<VkFormatProperties2>(&fmt_props_3);
         DispatchGetPhysicalDeviceFormatProperties2(physical_device, pCreateInfo->format, &fmt_props_2);
         buffer_features = fmt_props_3.bufferFeatures;
+        image_features = fmt_props_3.linearTilingFeatures;
     } else {
         VkFormatProperties format_properties;
         DispatchGetPhysicalDeviceFormatProperties(physical_device, pCreateInfo->format, &format_properties);
         buffer_features = format_properties.bufferFeatures;
+        image_features = format_properties.linearTilingFeatures;
     }
 
-    Add(std::make_shared<BUFFER_VIEW_STATE>(buffer_state, *pView, pCreateInfo, buffer_features));
+    Add(std::make_shared<BUFFER_VIEW_STATE>(buffer_state, *pView, pCreateInfo, buffer_features, image_features));
 }
 
 void ValidationStateTracker::PostCallRecordCreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo,
@@ -577,6 +574,10 @@ void ValidationStateTracker::PostCallRecordCreateDevice(VkPhysicalDevice gpu, co
     device_state->physical_device_state = Get<PHYSICAL_DEVICE_STATE>(gpu).get();
     // finish setup in the object representing the device
     device_state->CreateDevice(pCreateInfo);
+}
+
+std::shared_ptr<QUEUE_STATE> ValidationStateTracker::CreateQueue(VkQueue q, uint32_t index, VkDeviceQueueCreateFlags flags) {
+    return std::make_shared<QUEUE_STATE>(q, index, flags);
 }
 
 void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
@@ -1164,6 +1165,24 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
         if (image_2d_view_of_3d_features) {
             enabled_features.image_2d_view_of_3d_features = *image_2d_view_of_3d_features;
         }
+
+        const auto graphics_pipeline_library_features =
+            LvlFindInChain<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT>(pCreateInfo->pNext);
+        if (graphics_pipeline_library_features) {
+            enabled_features.graphics_pipeline_library_features = *graphics_pipeline_library_features;
+        }
+
+        const auto shader_subgroup_uniform_control_flow_features =
+            LvlFindInChain<VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR>(pCreateInfo->pNext);
+        if (shader_subgroup_uniform_control_flow_features) {
+            enabled_features.shader_subgroup_uniform_control_flow_features = *shader_subgroup_uniform_control_flow_features;
+        }
+
+        const auto ray_tracing_maintenance1_features =
+            LvlFindInChain<VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR>(pCreateInfo->pNext);
+        if (ray_tracing_maintenance1_features) {
+            enabled_features.ray_tracing_maintenance1_features= *ray_tracing_maintenance1_features;
+        }
     }
 
     // Store physical device properties and physical device mem limits into CoreChecks structs
@@ -1372,6 +1391,9 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
                                    &phys_dev_props->conservative_rasterization_props);
     GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_ext_subgroup_size_control,
                                    &phys_dev_props->subgroup_size_control_props);
+    if (api_version >= VK_API_VERSION_1_1) {
+        GetPhysicalDeviceExtProperties(physical_device, &phys_dev_props->subgroup_properties);
+    }
 
     if (IsExtEnabled(dev_ext.vk_nv_cooperative_matrix)) {
         // Get the needed cooperative_matrix properties
@@ -1411,7 +1433,7 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
                     DispatchGetDeviceQueue(device, queue_info.queue_family_index, i, &queue);
                 }
                 assert(queue != VK_NULL_HANDLE);
-                Add(std::make_shared<QUEUE_STATE>(queue, queue_info.queue_family_index, queue_info.flags));
+                Add(CreateQueue(queue, queue_info.queue_family_index, queue_info.flags));
             }
         }
     }
@@ -1761,7 +1783,7 @@ void ValidationStateTracker::PostCallRecordGetFenceStatus(VkDevice device, VkFen
 
 void ValidationStateTracker::RecordGetDeviceQueueState(uint32_t queue_family_index, VkDeviceQueueCreateFlags flags, VkQueue queue) {
     if (Get<QUEUE_STATE>(queue) == nullptr) {
-        Add(std::make_shared<QUEUE_STATE>(queue, queue_family_index, flags));
+        Add(CreateQueue(queue, queue_family_index, flags));
     }
 }
 
@@ -4299,6 +4321,13 @@ std::shared_ptr<SHADER_MODULE_STATE> ValidationStateTracker::CreateShaderModuleS
     bool is_spirv = (create_info.pCode[0] == spv::MagicNumber);
     return is_spirv ? std::make_shared<SHADER_MODULE_STATE>(create_info, handle, spirv_environment, unique_shader_id)
                     : std::make_shared<SHADER_MODULE_STATE>();
+}
+
+void ValidationStateTracker::PostCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer,
+                                                                    VkDeviceAddress indirectDeviceAddress) {
+    auto cb_state = GetWrite<CMD_BUFFER_STATE>(commandBuffer);
+    cb_state->UpdateStateCmdDrawDispatchType(CMD_TRACERAYSINDIRECT2KHR, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+    cb_state->hasTraceRaysCmd = true;
 }
 
 void ValidationStateTracker::PostCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo,

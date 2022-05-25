@@ -767,6 +767,28 @@ class StatelessValidation : public ValidationObject {
         return skip_call;
     }
 
+    template <typename T>
+    bool validate_ranged_enum_array(const char *apiName, const char *vuid, const ParameterName &countName,
+                                    const ParameterName &arrayName, const char *enumName, const std::vector<T> &valid_values,
+                                    uint32_t count, const T *array, bool countRequired, bool arrayRequired) const {
+        bool skip_call = false;
+
+        if ((count == 0) || (array == nullptr)) {
+            skip_call |= validate_array(apiName, countName, arrayName, count, &array, countRequired, arrayRequired, vuid, vuid);
+        } else {
+            for (uint32_t i = 0; i < count; ++i) {
+                if (std::find(valid_values.begin(), valid_values.end(), array[i]) == valid_values.end()) {
+                    skip_call |= LogError(device, vuid,
+                                          "%s: value of %s[%d] (%d) does not fall within the begin..end range of the core %s "
+                                          "enumeration tokens and is not an extension added token",
+                                          apiName, arrayName.get_name().c_str(), i, array[i], enumName);
+                }
+            }
+        }
+
+        return skip_call;
+    }
+
     /**
      * Verify that a reserved VkFlags value is zero.
      *
@@ -1002,10 +1024,11 @@ class StatelessValidation : public ValidationObject {
         }
 
         for (uint32_t i = 0; i < pCreateInfo->attachmentCount; ++i) {
+            // if not null, also confirms rp2 is being used
             const auto *attachment_description_stencil_layout =
                 (use_rp2) ? LvlFindInChain<VkAttachmentDescriptionStencilLayout>(
                                 reinterpret_cast<VkAttachmentDescription2 const *>(&pCreateInfo->pAttachments[i])->pNext)
-                          : 0;
+                          : nullptr;
 
             const VkFormat attachment_format = pCreateInfo->pAttachments[i].format;
             const VkImageLayout initial_layout = pCreateInfo->pAttachments[i].initialLayout;
@@ -1023,10 +1046,10 @@ class StatelessValidation : public ValidationObject {
                                  func_name, i);
             }
             if (!separate_depth_stencil_layouts) {
-                if (pCreateInfo->pAttachments[i].initialLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    pCreateInfo->pAttachments[i].initialLayout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                    pCreateInfo->pAttachments[i].initialLayout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    pCreateInfo->pAttachments[i].initialLayout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
+                if (initial_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
+                    initial_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
+                    initial_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
+                    initial_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
                     vuid = use_rp2 ? "VUID-VkAttachmentDescription2-separateDepthStencilLayouts-03298"
                                    : "VUID-VkAttachmentDescription-separateDepthStencilLayouts-03284";
                     skip |= LogError(
@@ -1176,7 +1199,7 @@ class StatelessValidation : public ValidationObject {
                                      func_name, i);
                 }
             }
-            if (use_rp2 && attachment_description_stencil_layout) {
+            if (attachment_description_stencil_layout) {
                 if (attachment_description_stencil_layout->stencilInitialLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
                     attachment_description_stencil_layout->stencilInitialLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
                     attachment_description_stencil_layout->stencilInitialLayout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
@@ -1279,6 +1302,47 @@ class StatelessValidation : public ValidationObject {
                                      func_name, i);
                 }
             }
+            if (FormatIsColor(attachment_format) || FormatHasDepth(attachment_format)) {
+                if (pCreateInfo->pAttachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&
+                    initial_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
+                    vuid = use_rp2 ? "VUID-VkAttachmentDescription2-format-06702" : "VUID-VkAttachmentDescription-format-06699";
+                    skip |= LogError(
+                        device, vuid,
+                        "%s: pCreateInfo->pAttachments[%" PRIu32
+                        "] format is %s and loadOp is VK_ATTACHMENT_LOAD_OP_LOAD, but initialLayout is VK_IMAGE_LAYOUT_UNDEFINED.",
+                        func_name, i, string_VkFormat(attachment_format));
+                }
+            }
+            if (FormatHasStencil(attachment_format) && pCreateInfo->pAttachments[i].stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
+                if (initial_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
+                    if (use_rp2) {
+                        skip |= LogError(device, "VUID-VkAttachmentDescription2-pNext-06704",
+                                         "%s: pCreateInfo->pAttachments[%" PRIu32
+                                         "] format includes stencil aspect and stencilLoadOp is VK_ATTACHMENT_LOAD_OP_LOAD, but "
+                                         "the initialLayout is VK_IMAGE_LAYOUT_UNDEFINED.",
+                                         func_name, i);
+                    } else if (!IsExtEnabled(device_extensions.vk_khr_separate_depth_stencil_layouts)) {
+                        vuid = use_rp2 ? "VUID-VkAttachmentDescription2-format-06703" : "VUID-VkAttachmentDescription-format-06700";
+                        skip |= LogError(device, vuid,
+                                         "%s: pCreateInfo->pAttachments[%" PRIu32
+                                         "] format is %s and stencilLoadOp is VK_ATTACHMENT_LOAD_OP_LOAD, but initialLayout is "
+                                         "VK_IMAGE_LAYOUT_UNDEFINED.",
+                                         func_name, i, string_VkFormat(attachment_format));
+                    }
+                }
+
+                // rp2 can have seperate depth/stencil layout and need to look in pNext
+                if (attachment_description_stencil_layout) {
+                    if (attachment_description_stencil_layout->stencilInitialLayout == VK_IMAGE_LAYOUT_UNDEFINED) {
+                        skip |=
+                            LogError(device, "VUID-VkAttachmentDescription2-pNext-06705",
+                                     "%s: pCreateInfo->pAttachments[%" PRIu32
+                                     "] format includes stencil aspect and stencilLoadOp is VK_ATTACHMENT_LOAD_OP_LOAD, but "
+                                     "the VkAttachmentDescriptionStencilLayout::stencilInitialLayout is VK_IMAGE_LAYOUT_UNDEFINED.",
+                                     func_name, i);
+                    }
+                }
+            }
         }
 
         for (uint32_t i = 0; i < pCreateInfo->subpassCount; ++i) {
@@ -1363,6 +1427,7 @@ class StatelessValidation : public ValidationObject {
                                           const VkCommandBuffer *pCommandBuffers) override;
     void PostCallRecordDestroyCommandPool(VkDevice device, VkCommandPool commandPool,
                                           const VkAllocationCallbacks *pAllocator) override;
+    void GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2 &pProperties) const;
     void PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                                     const VkAllocationCallbacks *pAllocator, VkDevice *pDevice, VkResult result) override;
     void PostCallRecordCreateInstance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
@@ -1742,6 +1807,8 @@ class StatelessValidation : public ValidationObject {
                                                        const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
                                                        const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
                                                        VkDeviceAddress indirectDeviceAddress) const;
+
+    bool manual_PreCallValidateCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) const;
 
     bool manual_PreCallValidateCmdTraceRaysNV(VkCommandBuffer commandBuffer, VkBuffer raygenShaderBindingTableBuffer,
                                               VkDeviceSize raygenShaderBindingOffset, VkBuffer missShaderBindingTableBuffer,

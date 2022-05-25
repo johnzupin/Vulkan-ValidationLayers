@@ -245,13 +245,10 @@ TEST_F(VkPositiveLayerTest, ComputeSharedMemoryLimitWorkgroupMemoryExplicitLayou
 
     // need at least SPIR-V 1.4 for SPV_KHR_workgroup_memory_explicit_layout
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s Test requires Vulkan >= 1.2.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
     if (!AreRequestedExtensionsEnabled()) {
-        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix,
-               VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME);
-        return;
+        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
     }
 
     auto explicit_layout_features = LvlInitStruct<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR>();
@@ -428,8 +425,7 @@ TEST_F(VkPositiveLayerTest, ComputeWorkGroupSizeLocalSizeId) {
     SetTargetApiVersion(VK_API_VERSION_1_3);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
-        printf("%s test requires Vulkan 1.3+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
     }
 
     auto features13 = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
@@ -467,8 +463,7 @@ TEST_F(VkPositiveLayerTest, ComputeWorkGroupSizeLocalSizeIdSpecConstant) {
     SetTargetApiVersion(VK_API_VERSION_1_3);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
-        printf("%s test requires Vulkan 1.3+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
     }
 
     auto features13 = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
@@ -529,8 +524,7 @@ TEST_F(VkPositiveLayerTest, ComputeWorkGroupSizePrecedenceOverLocalSizeId) {
     SetTargetApiVersion(VK_API_VERSION_1_3);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
-        printf("%s test requires Vulkan 1.3+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
     }
 
     auto features13 = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
@@ -1011,8 +1005,7 @@ TEST_F(VkPositiveLayerTest, ShaderDrawParametersWithoutFeature) {
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
     if (DeviceValidationVersion() != VK_API_VERSION_1_0) {
-        printf("%s Tests requires Vulkan 1.0 exactly, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "requires Vulkan 1.0 exactly";
     }
 
     char const *vsSource = R"glsl(
@@ -1041,8 +1034,7 @@ TEST_F(VkPositiveLayerTest, ShaderDrawParametersWithoutFeature11) {
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        printf("%s Tests requires Vulkan 1.1+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
     if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME)) {
@@ -1090,8 +1082,7 @@ TEST_F(VkPositiveLayerTest, ShaderDrawParametersWithFeature) {
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s Tests requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     auto features11 = LvlInitStruct<VkPhysicalDeviceVulkan11Features>();
@@ -1502,8 +1493,7 @@ TEST_F(VkPositiveLayerTest, ShaderAtomicFloat2) {
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s Test requires Vulkan >= 1.2.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_SHADER_ATOMIC_FLOAT_2_EXTENSION_NAME)) {
@@ -1792,8 +1782,7 @@ TEST_F(VkPositiveLayerTest, ShaderAtomicFromPhysicalPointer) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s Test requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
@@ -2146,12 +2135,10 @@ TEST_F(VkPositiveLayerTest, TaskAndMeshShader) {
     AddRequiredExtensions(VK_NV_MESH_SHADER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        printf("%s Tests requires Vulkan 1.1+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
     if (!AreRequestedExtensionsEnabled()) {
-        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_NV_MESH_SHADER_EXTENSION_NAME);
-        return;
+        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
     }
 
     PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
@@ -2392,8 +2379,7 @@ TEST_F(VkPositiveLayerTest, Std430SpirvOptFlags10) {
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (!AreRequestedExtensionsEnabled()) {
-        printf("%s test required extensions not available.  Skipping.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
     }
 
     PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
@@ -2465,8 +2451,7 @@ TEST_F(VkPositiveLayerTest, Std430SpirvOptFlags12) {
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s Tests requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
@@ -2535,8 +2520,7 @@ TEST_F(VkPositiveLayerTest, SpecializationWordBoundryOffset) {
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
     if (!AreRequestedExtensionsEnabled()) {
-        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
-        return;
+        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
     }
 
     auto float16int8_features = LvlInitStruct<VkPhysicalDeviceFloat16Int8FeaturesKHR>();
@@ -2769,8 +2753,7 @@ TEST_F(VkPositiveLayerTest, Spirv16Vulkan13) {
     ASSERT_NO_FATAL_FAILURE(Init());
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
-        printf("%s Tests requires Vulkan 1.3+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
     }
 
     VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_3);

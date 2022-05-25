@@ -3683,6 +3683,16 @@ bool CoreChecks::ValidateCmdResolveImage(VkCommandBuffer commandBuffer, VkImage 
         skip |= ValidateProtectedImage(cb_node.get(), dst_image_state.get(), func_name, vuid);
         vuid = is_2 ? "VUID-vkCmdResolveImage2-commandBuffer-01839" : "VUID-vkCmdResolveImage-commandBuffer-01839";
         skip |= ValidateUnprotectedImage(cb_node.get(), dst_image_state.get(), func_name, vuid);
+        vuid = is_2 ? "VUID-VkResolveImageInfo2-srcImage-06762" : "VUID-vkCmdResolveImage-srcImage-06762";
+        skip |= ValidateImageUsageFlags(src_image_state.get(), VK_IMAGE_USAGE_TRANSFER_SRC_BIT, true, vuid, func_name,
+                                        "VK_IMAGE_USAGE_TRANSFER_SRC_BIT");
+        vuid = is_2 ? "VUID-VkResolveImageInfo2-srcImage-06763" : "VUID-vkCmdResolveImage-srcImage-06763";
+        skip |= ValidateImageFormatFeatureFlags(src_image_state.get(), VK_FORMAT_FEATURE_TRANSFER_SRC_BIT, func_name, vuid);
+        vuid = is_2 ? "VUID-VkResolveImageInfo2-dstImage-06764" : "VUID-vkCmdResolveImage-dstImage-06764";
+        skip |= ValidateImageUsageFlags(dst_image_state.get(), VK_IMAGE_USAGE_TRANSFER_DST_BIT, true, vuid, func_name,
+                                        "VK_IMAGE_USAGE_TRANSFER_DST_BIT");
+        vuid = is_2 ? "VUID-VkResolveImageInfo2-dstImage-06765" : "VUID-vkCmdResolveImage-dstImage-06765";
+        skip |= ValidateImageFormatFeatureFlags(dst_image_state.get(), VK_FORMAT_FEATURE_TRANSFER_DST_BIT, func_name, vuid);
 
         // Validation for VK_EXT_fragment_density_map
         if (src_image_state->createInfo.flags & VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT) {
@@ -4802,6 +4812,45 @@ bool CoreChecks::PreCallValidateCreateBuffer(VkDevice device, const VkBufferCrea
         }
     }
 
+    if ((pCreateInfo->usage & (VK_BUFFER_USAGE_VIDEO_DECODE_SRC_BIT_KHR | VK_BUFFER_USAGE_VIDEO_DECODE_DST_BIT_KHR)) > 0) {
+        bool has_decode_codec_operation = false;
+        const auto* video_profiles = LvlFindInChain<VkVideoProfilesKHR>(pCreateInfo->pNext);
+        if (video_profiles) {
+            for (uint32_t i = 0; i < video_profiles->profileCount; ++i) {
+                if (video_profiles->pProfiles[i].videoCodecOperation &
+                    (VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_EXT | VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_EXT)) {
+                    has_decode_codec_operation = true;
+                    break;
+                }
+            }
+        }
+        if (!has_decode_codec_operation) {
+            skip |= LogError(device, "VUID-VkBufferCreateInfo-usage-04813",
+                             "vkCreateBuffer(): pCreateInfo->usage is %s, but pNext chain does not include VkVideoProfilesKHR with "
+                             "a decode codec-operation.",
+                             string_VkBufferUsageFlags(pCreateInfo->usage).c_str());
+        }
+    }
+    if ((pCreateInfo->usage & (VK_BUFFER_USAGE_VIDEO_ENCODE_SRC_BIT_KHR | VK_BUFFER_USAGE_VIDEO_ENCODE_DST_BIT_KHR)) > 0) {
+        bool has_encode_codec_operation = false;
+        const auto *video_profiles = LvlFindInChain<VkVideoProfilesKHR>(pCreateInfo->pNext);
+        if (video_profiles) {
+            for (uint32_t i = 0; i < video_profiles->profileCount; ++i) {
+                if (video_profiles->pProfiles[i].videoCodecOperation &
+                    (VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_EXT | VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_EXT)) {
+                    has_encode_codec_operation = true;
+                    break;
+                }
+            }
+        }
+        if (!has_encode_codec_operation) {
+            skip |= LogError(device, "VUID-VkBufferCreateInfo-usage-04814",
+                             "vkCreateBuffer(): pCreateInfo->usage is %s, but pNext chain does not include VkVideoProfilesKHR with "
+                             "an encode codec-operation.",
+                             string_VkBufferUsageFlags(pCreateInfo->usage).c_str());
+        }
+    }
+
     return skip;
 }
 
@@ -5373,6 +5422,13 @@ bool CoreChecks::ValidateBufferBarrier(const LogObjectList &objects, const Locat
                              report_data->FormatHandle(mem_barrier.buffer).c_str());
         }
     }
+
+    if (mem_barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL &&
+        mem_barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL) {
+        auto size_loc = loc.dot(Field::srcQueueFamilyIndex);
+        const auto &vuid = GetBufferBarrierVUID(size_loc, BufferError::kQueueFamilyExternal);
+        skip |= LogError(objects, vuid, "Both srcQueueFamilyIndex and dstQueueFamilyIndex are VK_QUEUE_FAMILY_EXTERNAL.");
+    }
     return skip;
 }
 
@@ -5597,8 +5653,7 @@ bool CoreChecks::ValidateImageViewFormatFeatures(const IMAGE_STATE *image_state,
     } else if (image_tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
         // Parameter validation should catch if this is used without VK_EXT_image_drm_format_modifier
         assert(IsExtEnabled(device_extensions.vk_ext_image_drm_format_modifier));
-        VkImageDrmFormatModifierPropertiesEXT drm_format_properties = {VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT,
-                                                                       nullptr};
+        VkImageDrmFormatModifierPropertiesEXT drm_format_properties = LvlInitStruct<VkImageDrmFormatModifierPropertiesEXT>();
         DispatchGetImageDrmFormatModifierPropertiesEXT(device, image_state->image(), &drm_format_properties);
 
         auto fmt_drm_props = LvlInitStruct<VkDrmFormatModifierPropertiesListEXT>();
@@ -5989,9 +6044,9 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
             if ((layer_count != 1) && ((view_type == VK_IMAGE_VIEW_TYPE_1D) || (view_type == VK_IMAGE_VIEW_TYPE_2D) ||
                                        (view_type == VK_IMAGE_VIEW_TYPE_3D))) {
                 skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-imageViewType-04973",
-                                 "vkCreateImageView(): Using pCreateInfo->viewType %s and the subresourceRange.layerCount is %d "
-                                 "and must 1 (try looking into VK_IMAGE_VIEW_TYPE_*_ARRAY).",
-                                 string_VkImageViewType(view_type), layer_count);
+                                 "vkCreateImageView(): subresourceRange.layerCount (%" PRIu32
+                                 ") must be 1 when using viewType %s (try looking into VK_IMAGE_VIEW_TYPE_*_ARRAY).",
+                                 layer_count, string_VkImageViewType(view_type));
             }
         }
 
@@ -6199,6 +6254,7 @@ bool CoreChecks::ValidateCmdCopyBufferBounds(const BUFFER_STATE *src_buffer_stat
                              func_name, i, region.size, dst_buffer_size, i, region.dstOffset);
         }
 
+        // Perf improvement potential here
         // The union of the source regions, and the union of the destination regions, must not overlap in memory
         if (src_buffer_state->buffer() == dst_buffer_state->buffer()) {
             VkDeviceSize src_min = region.srcOffset;

@@ -375,8 +375,7 @@ TEST_F(VkPositiveLayerTest, TestPhysicalDeviceSurfaceSupport) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        printf("%s Test requires Vulkan 1.1+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -409,8 +408,7 @@ TEST_F(VkPositiveLayerTest, ModifyPnext) {
     }
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s test requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     if (DeviceExtensionSupported(gpu(), nullptr, VK_NV_FRAGMENT_SHADING_RATE_ENUMS_EXTENSION_NAME)) {
@@ -523,8 +521,7 @@ TEST_F(VkPositiveLayerTest, GetDevProcAddrExtensions) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        printf("%s GetDevProcAddrExtensions requires Vulkan 1.1+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -562,8 +559,7 @@ TEST_F(VkPositiveLayerTest, Vulkan12Features) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s Vulkan12Struct requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     VkPhysicalDeviceFeatures2 features2 = {};
@@ -629,7 +625,16 @@ TEST_F(VkPositiveLayerTest, QueueThreading) {
 
     using namespace std::chrono;
     using std::thread;
+    SetTargetApiVersion(VK_API_VERSION_1_1);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
+    // Test randomly fails with VK_TIMEOUT, most likely a driver bug
+    if (IsDriver(VK_DRIVER_ID_AMD_PROPRIETARY)) {
+        printf("%s Test does not run on AMD proprietary driver, skipping tests\n", kSkipPrefix);
+        return;
+    }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     const auto queue_family = DeviceObj()->GetDefaultQueue()->get_family_index();
@@ -791,12 +796,10 @@ TEST_F(VkPositiveLayerTest, ValidateGetAccelerationStructureBuildSizes) {
     }
 
     if (!AreRequestedExtensionsEnabled()) {
-        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-        return;
+        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
     }
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        printf("%s test requires Vulkan 1.1 extensions, not available, skipping test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
     auto ray_query_features = LvlInitStruct<VkPhysicalDeviceRayQueryFeaturesKHR>();
