@@ -29,33 +29,15 @@ static const VkShaderStageFlags kShaderStageAllRayTracing =
     VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
     VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
-// Convenience function for reporting problems with setting up Debug Printf.
-template <typename T>
-void DebugPrintf::ReportSetupProblem(T object, const char *const specific_message) const {
-    LogError(object, "UNASSIGNED-DEBUG-PRINTF ", "Detail: (%s)", specific_message);
-}
-
-// Turn on necessary device features.
-void DebugPrintf::PreCallRecordCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo *create_info,
-                                            const VkAllocationCallbacks *pAllocator, VkDevice *pDevice,
-                                            void *modified_create_info) {
-    // Use a local variable to query features since this method runs in the instance validation object.
-    // To avoid confusion and race conditions about which physical device's features are stored in the
-    // 'supported_devices' member variable, it will only be set in the device validation objects.
-    // See CreateDevice() below.
-    VkPhysicalDeviceFeatures gpu_supported_features;
-    DispatchGetPhysicalDeviceFeatures(gpu, &gpu_supported_features);
-    VkPhysicalDeviceFeatures features = {};
-    features.vertexPipelineStoresAndAtomics = true;
-    features.fragmentStoresAndAtomics = true;
-    UtilPreCallRecordCreateDevice(gpu, reinterpret_cast<safe_VkDeviceCreateInfo *>(modified_create_info), gpu_supported_features,
-                                  features);
-}
-
 // Perform initializations that can be done at Create Device time.
 void DebugPrintf::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
-    ValidationStateTracker::CreateDevice(pCreateInfo);
-
+    if (enabled[gpu_validation]) {
+        ReportSetupProblem(device,
+                           "Debug Printf cannot be enabled when gpu assisted validation is enabled.  "
+                           "Debug Printf disabled.");
+        aborted = true;
+        return;
+    }
     const char *size_string = getLayerOption("khronos_validation.printf_buffer_size");
     output_buffer_size = *size_string ? atoi(size_string) : 1024;
 
@@ -67,6 +49,16 @@ void DebugPrintf::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
     transform(stdout_string.begin(), stdout_string.end(), stdout_string.begin(), ::tolower);
     use_stdout = stdout_string.length() ? !stdout_string.compare("true") : false;
     if (getenv("DEBUG_PRINTF_TO_STDOUT")) use_stdout = true;
+
+    // GpuAssistedBase::CreateDevice will set up bindings
+    VkDescriptorSetLayoutBinding binding = {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
+                                            VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_MESH_BIT_NV |
+                                                VK_SHADER_STAGE_TASK_BIT_NV | VK_SHADER_STAGE_COMPUTE_BIT |
+                                                kShaderStageAllRayTracing,
+                                            NULL};
+    bindings_.push_back(binding);
+
+    GpuAssistedBase::CreateDevice(pCreateInfo);
 
     if (phys_dev_props.apiVersion < VK_API_VERSION_1_1) {
         ReportSetupProblem(device, "Debug Printf requires Vulkan 1.1 or later.  Debug Printf disabled.");
@@ -81,65 +73,6 @@ void DebugPrintf::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
                            "Debug Printf disabled.");
         aborted = true;
         return;
-    }
-
-    if (enabled[gpu_validation]) {
-        ReportSetupProblem(device,
-                           "Debug Printf cannot be enabled when gpu assisted validation is enabled.  "
-                           "Debug Printf disabled.");
-        aborted = true;
-        return;
-    }
-
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    VkDescriptorSetLayoutBinding binding = {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
-                                            VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_MESH_BIT_NV |
-                                                VK_SHADER_STAGE_TASK_BIT_NV | VK_SHADER_STAGE_COMPUTE_BIT |
-                                                kShaderStageAllRayTracing,
-                                            NULL};
-    bindings.push_back(binding);
-    UtilPostCallRecordCreateDevice(pCreateInfo, bindings, this, phys_dev_props);
-}
-
-void DebugPrintf::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) {
-    UtilPreCallRecordDestroyDevice(this);
-    ValidationStateTracker::PreCallRecordDestroyDevice(device, pAllocator);
-    // State Tracker can end up making vma calls through callbacks - don't destroy allocator until ST is done
-    if (vmaAllocator) {
-        vmaDestroyAllocator(vmaAllocator);
-    }
-    desc_set_manager.reset();
-}
-
-// Modify the pipeline layout to include our debug descriptor set and any needed padding with the dummy descriptor set.
-void DebugPrintf::PreCallRecordCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo,
-                                                    const VkAllocationCallbacks *pAllocator, VkPipelineLayout *pPipelineLayout,
-                                                    void *cpl_state_data) {
-    if (aborted) {
-        return;
-    }
-
-    create_pipeline_layout_api_state *cpl_state = reinterpret_cast<create_pipeline_layout_api_state *>(cpl_state_data);
-
-    if (cpl_state->modified_create_info.setLayoutCount >= adjusted_max_desc_sets) {
-        std::ostringstream strm;
-        strm << "Pipeline Layout conflict with validation's descriptor set at slot " << desc_set_bind_index << ". "
-             << "Application has too many descriptor sets in the pipeline layout to continue with debug printf. "
-             << "Not modifying the pipeline layout. "
-             << "Instrumented shaders are replaced with non-instrumented shaders.";
-        ReportSetupProblem(device, strm.str().c_str());
-    } else {
-        UtilPreCallRecordCreatePipelineLayout(cpl_state, this, pCreateInfo);
-    }
-}
-
-void DebugPrintf::PostCallRecordCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo,
-                                                     const VkAllocationCallbacks *pAllocator, VkPipelineLayout *pPipelineLayout,
-                                                     VkResult result) {
-    ValidationStateTracker::PostCallRecordCreatePipelineLayout(device, pCreateInfo, pAllocator, pPipelineLayout, result);
-    if (result != VK_SUCCESS) {
-        ReportSetupProblem(device, "Unable to create pipeline layout.  Device could become unstable.");
-        aborted = true;
     }
 }
 
@@ -203,143 +136,6 @@ bool DebugPrintf::PreCallValidateCmdWaitEvents2(VkCommandBuffer commandBuffer, u
     return false;
 }
 
-void DebugPrintf::PreCallRecordCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                                       const VkGraphicsPipelineCreateInfo *pCreateInfos,
-                                                       const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
-                                                       void *cgpl_state_data) {
-    if (aborted) return;
-    std::vector<safe_VkGraphicsPipelineCreateInfo> new_pipeline_create_infos;
-    create_graphics_pipeline_api_state *cgpl_state = reinterpret_cast<create_graphics_pipeline_api_state *>(cgpl_state_data);
-    UtilPreCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, cgpl_state->pipe_state,
-                                       &new_pipeline_create_infos, VK_PIPELINE_BIND_POINT_GRAPHICS, this);
-    cgpl_state->printf_create_infos = new_pipeline_create_infos;
-    cgpl_state->pCreateInfos = reinterpret_cast<VkGraphicsPipelineCreateInfo *>(cgpl_state->printf_create_infos.data());
-}
-
-void DebugPrintf::PreCallRecordCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                                      const VkComputePipelineCreateInfo *pCreateInfos,
-                                                      const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
-                                                      void *ccpl_state_data) {
-    if (aborted) return;
-    std::vector<safe_VkComputePipelineCreateInfo> new_pipeline_create_infos;
-    auto *ccpl_state = reinterpret_cast<create_compute_pipeline_api_state *>(ccpl_state_data);
-    UtilPreCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, ccpl_state->pipe_state,
-                                       &new_pipeline_create_infos, VK_PIPELINE_BIND_POINT_COMPUTE, this);
-    ccpl_state->printf_create_infos = new_pipeline_create_infos;
-    ccpl_state->pCreateInfos = reinterpret_cast<VkComputePipelineCreateInfo *>(ccpl_state->printf_create_infos.data());
-}
-
-void DebugPrintf::PreCallRecordCreateRayTracingPipelinesNV(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                                           const VkRayTracingPipelineCreateInfoNV *pCreateInfos,
-                                                           const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
-                                                           void *crtpl_state_data) {
-    if (aborted) return;
-    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> new_pipeline_create_infos;
-    auto *crtpl_state = reinterpret_cast<create_ray_tracing_pipeline_api_state *>(crtpl_state_data);
-    UtilPreCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, crtpl_state->pipe_state,
-                                       &new_pipeline_create_infos, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, this);
-    crtpl_state->printf_create_infos = new_pipeline_create_infos;
-    crtpl_state->pCreateInfos = reinterpret_cast<VkRayTracingPipelineCreateInfoNV *>(crtpl_state->printf_create_infos.data());
-}
-
-void DebugPrintf::PreCallRecordCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
-                                                            VkPipelineCache pipelineCache, uint32_t count,
-                                                            const VkRayTracingPipelineCreateInfoKHR *pCreateInfos,
-                                                            const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
-                                                            void *crtpl_state_data) {
-    if (aborted) return;
-    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> new_pipeline_create_infos;
-    auto *crtpl_state = reinterpret_cast<create_ray_tracing_pipeline_khr_api_state *>(crtpl_state_data);
-    UtilPreCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, crtpl_state->pipe_state,
-                                       &new_pipeline_create_infos, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, this);
-    crtpl_state->printf_create_infos = new_pipeline_create_infos;
-    crtpl_state->pCreateInfos = reinterpret_cast<VkRayTracingPipelineCreateInfoKHR *>(crtpl_state->printf_create_infos.data());
-}
-
-void DebugPrintf::PostCallRecordCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                                        const VkGraphicsPipelineCreateInfo *pCreateInfos,
-                                                        const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
-                                                        VkResult result, void *cgpl_state_data) {
-    ValidationStateTracker::PostCallRecordCreateGraphicsPipelines(device, pipelineCache, count, pCreateInfos, pAllocator,
-                                                                  pPipelines, result, cgpl_state_data);
-    if (aborted) return;
-    create_graphics_pipeline_api_state *cgpl_state = reinterpret_cast<create_graphics_pipeline_api_state *>(cgpl_state_data);
-    UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, cgpl_state->printf_create_infos.data());
-    UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_GRAPHICS, this);
-}
-
-void DebugPrintf::PostCallRecordCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                                       const VkComputePipelineCreateInfo *pCreateInfos,
-                                                       const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
-                                                       VkResult result, void *ccpl_state_data) {
-    ValidationStateTracker::PostCallRecordCreateComputePipelines(device, pipelineCache, count, pCreateInfos, pAllocator, pPipelines,
-                                                                 result, ccpl_state_data);
-    if (aborted) return;
-    create_compute_pipeline_api_state *ccpl_state = reinterpret_cast<create_compute_pipeline_api_state *>(ccpl_state_data);
-    UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, ccpl_state->printf_create_infos.data());
-    UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_COMPUTE, this);
-}
-
-void DebugPrintf::PostCallRecordCreateRayTracingPipelinesNV(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
-                                                            const VkRayTracingPipelineCreateInfoNV *pCreateInfos,
-                                                            const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
-                                                            VkResult result, void *crtpl_state_data) {
-    auto *crtpl_state = reinterpret_cast<create_ray_tracing_pipeline_khr_api_state *>(crtpl_state_data);
-    ValidationStateTracker::PostCallRecordCreateRayTracingPipelinesNV(device, pipelineCache, count, pCreateInfos, pAllocator,
-                                                                      pPipelines, result, crtpl_state_data);
-    if (aborted) return;
-    UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, crtpl_state->printf_create_infos.data());
-    UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, this);
-}
-
-void DebugPrintf::PostCallRecordCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
-                                                             VkPipelineCache pipelineCache, uint32_t count,
-                                                             const VkRayTracingPipelineCreateInfoKHR *pCreateInfos,
-                                                             const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
-                                                             VkResult result, void *crtpl_state_data) {
-    auto *crtpl_state = reinterpret_cast<create_ray_tracing_pipeline_khr_api_state *>(crtpl_state_data);
-    ValidationStateTracker::PostCallRecordCreateRayTracingPipelinesKHR(
-        device, deferredOperation, pipelineCache, count, pCreateInfos, pAllocator, pPipelines, result, crtpl_state_data);
-    if (aborted) return;
-    UtilCopyCreatePipelineFeedbackData(count, pCreateInfos, crtpl_state->printf_create_infos.data());
-
-    bool is_operation_deferred = (deferredOperation != VK_NULL_HANDLE && result == VK_OPERATION_DEFERRED_KHR);
-    if (is_operation_deferred) {
-        std::vector<safe_VkRayTracingPipelineCreateInfoKHR> infos{pCreateInfos, pCreateInfos + count};
-        auto register_fn = [this, infos, pAllocator](const std::vector<VkPipeline> &pipelines) {
-            UtilPostCallRecordPipelineCreations(static_cast<uint32_t>(infos.size()),
-                                                reinterpret_cast<const VkRayTracingPipelineCreateInfoKHR *>(infos.data()),
-                                                pAllocator, pipelines.data(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, this);
-        };
-
-        auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
-        if (wrap_handles) {
-            deferredOperation = layer_data->Unwrap(deferredOperation);
-        }
-        std::vector<std::function<void(const std::vector<VkPipeline> &)>> cleanup_fn;
-        auto find_res = layer_data->deferred_operation_post_check.pop(deferredOperation);
-        if (find_res->first) {
-            cleanup_fn = std::move(find_res->second);
-        }
-        cleanup_fn.emplace_back(register_fn);
-        layer_data->deferred_operation_post_check.insert(deferredOperation, cleanup_fn);
-    } else {
-        UtilPostCallRecordPipelineCreations(count, pCreateInfos, pAllocator, pPipelines, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
-                                            this);
-    }
-}
-
-// Remove all the shader trackers associated with this destroyed pipeline.
-void DebugPrintf::PreCallRecordDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks *pAllocator) {
-    for (auto it = shader_map.begin(); it != shader_map.end();) {
-        if (it->second.pipeline == pipeline) {
-            it = shader_map.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    ValidationStateTracker::PreCallRecordDestroyPipeline(device, pipeline, pAllocator);
-}
 // Call the SPIR-V Optimizer to run the instrumentation pass on the shader.
 bool DebugPrintf::InstrumentShader(const VkShaderModuleCreateInfo *pCreateInfo, std::vector<uint32_t> &new_pgm,
                                    uint32_t *unique_shader_id) {
@@ -673,98 +469,51 @@ void DebugPrintf::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQ
     memset(debug_output_buffer, 0, 4 * (debug_output_buffer[0] + 1));
 }
 
+// For the given command buffer, map its debug data buffers and read their contents for analysis.
+void debug_printf_state::CommandBuffer::Process(VkQueue queue) {
+    auto *device_state = static_cast<DebugPrintf *>(dev_data);
+    if (hasDrawCmd || hasTraceRaysCmd || hasDispatchCmd) {
+        auto &gpu_buffer_list = buffer_infos;
+        uint32_t draw_index = 0;
+        uint32_t compute_index = 0;
+        uint32_t ray_trace_index = 0;
+
+        for (auto &buffer_info : gpu_buffer_list) {
+            char *data;
+
+            uint32_t operation_index = 0;
+            if (buffer_info.pipeline_bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS) {
+                operation_index = draw_index;
+            } else if (buffer_info.pipeline_bind_point == VK_PIPELINE_BIND_POINT_COMPUTE) {
+                operation_index = compute_index;
+            } else if (buffer_info.pipeline_bind_point == VK_PIPELINE_BIND_POINT_RAY_TRACING_NV) {
+                operation_index = ray_trace_index;
+            } else {
+                assert(false);
+            }
+
+            VkResult result = vmaMapMemory(device_state->vmaAllocator, buffer_info.output_mem_block.allocation, (void **)&data);
+            if (result == VK_SUCCESS) {
+                device_state->AnalyzeAndGenerateMessages(commandBuffer(), queue, buffer_info, operation_index, (uint32_t *)data);
+                vmaUnmapMemory(device_state->vmaAllocator, buffer_info.output_mem_block.allocation);
+            }
+
+            if (buffer_info.pipeline_bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS) {
+                draw_index++;
+            } else if (buffer_info.pipeline_bind_point == VK_PIPELINE_BIND_POINT_COMPUTE) {
+                compute_index++;
+            } else if (buffer_info.pipeline_bind_point == VK_PIPELINE_BIND_POINT_RAY_TRACING_NV) {
+                ray_trace_index++;
+            } else {
+                assert(false);
+            }
+        }
+    }
+}
+
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
-
-bool DebugPrintf::CommandBufferNeedsProcessing(VkCommandBuffer command_buffer) {
-    bool buffers_present = false;
-    auto cb_node = Get<debug_printf_state::CommandBuffer>(command_buffer);
-    if (GetBufferInfo(cb_node.get()).size()) {
-        buffers_present = true;
-    }
-    for (const auto *secondaryCmdBuffer : cb_node->linkedCommandBuffers) {
-        if (GetBufferInfo(secondaryCmdBuffer).size()) {
-            buffers_present = true;
-        }
-    }
-    return buffers_present;
-}
-
-void DebugPrintf::ProcessCommandBuffer(VkQueue queue, VkCommandBuffer command_buffer) {
-    auto cb_node = Get<debug_printf_state::CommandBuffer>(command_buffer);
-    UtilProcessInstrumentationBuffer(queue, cb_node.get(), this);
-    for (auto *secondary_cmd_buffer : cb_node->linkedCommandBuffers) {
-        UtilProcessInstrumentationBuffer(queue, secondary_cmd_buffer, this);
-    }
-}
-
-// Issue a memory barrier to make GPU-written data available to host.
-// Wait for the queue to complete execution.
-// Check the debug buffers for all the command buffers that were submitted.
-void DebugPrintf::PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence,
-                                            VkResult result) {
-    ValidationStateTracker::PostCallRecordQueueSubmit(queue, submitCount, pSubmits, fence, result);
-
-    if (aborted || (result != VK_SUCCESS)) return;
-    bool buffers_present = false;
-    // Don't QueueWaitIdle if there's nothing to process
-    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
-        const VkSubmitInfo *submit = &pSubmits[submit_idx];
-        for (uint32_t i = 0; i < submit->commandBufferCount; i++) {
-            buffers_present |= CommandBufferNeedsProcessing(submit->pCommandBuffers[i]);
-        }
-    }
-    if (!buffers_present) return;
-
-    UtilSubmitBarrier(queue, this);
-
-    DispatchQueueWaitIdle(queue);
-
-    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
-        const VkSubmitInfo *submit = &pSubmits[submit_idx];
-        for (uint32_t i = 0; i < submit->commandBufferCount; i++) {
-            ProcessCommandBuffer(queue, submit->pCommandBuffers[i]);
-        }
-    }
-}
-
-void DebugPrintf::RecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence,
-                                     VkResult result) {
-    if (aborted || (result != VK_SUCCESS)) return;
-    bool buffers_present = false;
-    // Don't QueueWaitIdle if there's nothing to process
-    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
-        const auto *submit = &pSubmits[submit_idx];
-        for (uint32_t i = 0; i < submit->commandBufferInfoCount; i++) {
-            buffers_present |= CommandBufferNeedsProcessing(submit->pCommandBufferInfos[i].commandBuffer);
-        }
-    }
-    if (!buffers_present) return;
-
-    UtilSubmitBarrier(queue, this);
-
-    DispatchQueueWaitIdle(queue);
-
-    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
-        const VkSubmitInfo2 *submit = &pSubmits[submit_idx];
-        for (uint32_t i = 0; i < submit->commandBufferInfoCount; i++) {
-            ProcessCommandBuffer(queue, submit->pCommandBufferInfos[i].commandBuffer);
-        }
-    }
-}
-
-void DebugPrintf::PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
-                                                VkFence fence, VkResult result) {
-    ValidationStateTracker::PostCallRecordQueueSubmit2KHR(queue, submitCount, pSubmits, fence, result);
-    RecordQueueSubmit2(queue, submitCount, pSubmits, fence, result);
-}
-
-void DebugPrintf::PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence,
-                                             VkResult result) {
-    ValidationStateTracker::PostCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, result);
-    RecordQueueSubmit2(queue, submitCount, pSubmits, fence, result);
-}
 
 void DebugPrintf::PreCallRecordCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
                                        uint32_t firstVertex, uint32_t firstInstance) {
@@ -899,7 +648,7 @@ void DebugPrintf::PostCallRecordCmdTraceRaysNV(VkCommandBuffer commandBuffer, Vk
                                                VkDeviceSize hitShaderBindingStride, VkBuffer callableShaderBindingTableBuffer,
                                                VkDeviceSize callableShaderBindingOffset, VkDeviceSize callableShaderBindingStride,
                                                uint32_t width, uint32_t height, uint32_t depth) {
-    auto cb_state = Get<debug_printf_state::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<debug_printf_state::CommandBuffer>(commandBuffer);
     cb_state->hasTraceRaysCmd = true;
 }
 
@@ -918,7 +667,7 @@ void DebugPrintf::PostCallRecordCmdTraceRaysKHR(VkCommandBuffer commandBuffer,
                                                 const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
                                                 const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width,
                                                 uint32_t height, uint32_t depth) {
-    auto cb_state = Get<debug_printf_state::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<debug_printf_state::CommandBuffer>(commandBuffer);
     cb_state->hasTraceRaysCmd = true;
 }
 
@@ -937,6 +686,15 @@ void DebugPrintf::PostCallRecordCmdTraceRaysIndirectKHR(VkCommandBuffer commandB
                                                         const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
                                                         const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
                                                         VkDeviceAddress indirectDeviceAddress) {
+    auto cb_state = GetWrite<debug_printf_state::CommandBuffer>(commandBuffer);
+    cb_state->hasTraceRaysCmd = true;
+}
+
+void DebugPrintf::PreCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) {
+    AllocateDebugPrintfResources(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+}
+
+void DebugPrintf::PostCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) {
     auto cb_state = Get<debug_printf_state::CommandBuffer>(commandBuffer);
     cb_state->hasTraceRaysCmd = true;
 }
@@ -963,7 +721,7 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
     VkDescriptorBufferInfo output_desc_buffer_info = {};
     output_desc_buffer_info.range = output_buffer_size;
 
-    auto cb_node = Get<debug_printf_state::CommandBuffer>(cmd_buffer);
+    auto cb_node = GetWrite<debug_printf_state::CommandBuffer>(cmd_buffer);
     if (!cb_node) {
         ReportSetupProblem(device, "Unrecognized command buffer");
         aborted = true;
@@ -982,11 +740,11 @@ void DebugPrintf::AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer,
 
     // Allocate memory for the output block that the gpu will use to return values for printf
     DPFDeviceMemoryBlock output_block = {};
-    VkBufferCreateInfo buffer_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    VkBufferCreateInfo buffer_info = LvlInitStruct<VkBufferCreateInfo>();
     buffer_info.size = output_buffer_size;
     buffer_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     VmaAllocationCreateInfo alloc_info = {};
-    alloc_info.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+    alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     result = vmaCreateBuffer(vmaAllocator, &buffer_info, &alloc_info, &output_block.buffer, &output_block.allocation, nullptr);
     if (result != VK_SUCCESS) {
         ReportSetupProblem(device, "Unable to allocate device memory.  Device could become unstable.");
@@ -1041,7 +799,7 @@ std::shared_ptr<CMD_BUFFER_STATE> DebugPrintf::CreateCmdBufferState(VkCommandBuf
 
 debug_printf_state::CommandBuffer::CommandBuffer(DebugPrintf *dp, VkCommandBuffer cb,
                                                  const VkCommandBufferAllocateInfo *pCreateInfo, const COMMAND_POOL_STATE *pool)
-    : CMD_BUFFER_STATE(dp, cb, pCreateInfo, pool) {}
+    : gpu_utils_state::CommandBuffer(dp, cb, pCreateInfo, pool) {}
 
 void debug_printf_state::CommandBuffer::Reset() {
     CMD_BUFFER_STATE::Reset();

@@ -330,8 +330,7 @@ TEST_F(VkPositiveLayerTest, SamplerMirrorClampToEdgeWithoutFeature) {
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
     if (DeviceValidationVersion() != VK_API_VERSION_1_1) {
-        printf("%s Tests requires Vulkan 1.1 exactly, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires Vulkan 1.1 exactly";
     }
 
     VkSampler sampler = VK_NULL_HANDLE;
@@ -350,8 +349,7 @@ TEST_F(VkPositiveLayerTest, SamplerMirrorClampToEdgeWithoutFeature12) {
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s Tests requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME)) {
@@ -380,8 +378,7 @@ TEST_F(VkPositiveLayerTest, SamplerMirrorClampToEdgeWithFeature) {
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s Tests requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
@@ -1604,14 +1601,19 @@ TEST_F(VkPositiveLayerTest, MultiplaneImageTests) {
 
         // Set up 3-plane binding
         VkBindImageMemoryInfo bind_info[3];
+        VkBindImagePlaneMemoryInfo plane_info[3];
         for (int plane = 0; plane < 3; plane++) {
-            bind_info[plane] = LvlInitStruct<VkBindImageMemoryInfo>();
+            plane_info[plane] = LvlInitStruct<VkBindImagePlaneMemoryInfo>();
+            bind_info[plane] = LvlInitStruct<VkBindImageMemoryInfo>(&plane_info[plane]);
             bind_info[plane].image = image;
             bind_info[plane].memoryOffset = 0;
         }
         bind_info[0].memory = p0_mem;
         bind_info[1].memory = p1_mem;
         bind_info[2].memory = p2_mem;
+        plane_info[0].planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT;
+        plane_info[1].planeAspect = VK_IMAGE_ASPECT_PLANE_1_BIT;
+        plane_info[2].planeAspect = VK_IMAGE_ASPECT_PLANE_2_BIT;
 
         m_errorMonitor->ExpectSuccess();
         vkBindImageMemory2Function(device(), 3, bind_info);
@@ -1824,8 +1826,7 @@ TEST_F(VkPositiveLayerTest, TestMappingMemoryWithMultiInstanceHeapFlag) {
     AddRequiredExtensions(VK_KHR_DEVICE_GROUP_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (!AreRequestedExtensionsEnabled()) {
-        printf("%s Extension %s is not supported, skipping test.\n", kSkipPrefix, VK_KHR_DEVICE_GROUP_EXTENSION_NAME);
-        return;
+        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -1887,8 +1888,7 @@ TEST_F(VkPositiveLayerTest, CmdCopySwapchainImage) {
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s This test requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     if (IsDriver(VK_DRIVER_ID_MESA_RADV)) {
@@ -1992,8 +1992,7 @@ TEST_F(VkPositiveLayerTest, TransferImageToSwapchainDeviceGroup) {
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s This test requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     if (IsDriver(VK_DRIVER_ID_MESA_RADV)) {
@@ -2293,8 +2292,7 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        printf("%s This test requires Vulkan 1.2+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
     if (IsDriver(VK_DRIVER_ID_MESA_RADV)) {
@@ -2382,8 +2380,8 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
     image.init_no_mem(*m_device, imageCreateInfo);
 
     auto bind_devicegroup_info = LvlInitStruct<VkBindImageMemoryDeviceGroupInfo>();
-    bind_devicegroup_info.deviceIndexCount = 2;
-    std::array<uint32_t, 2> deviceIndices = {{0, 0}};
+    bind_devicegroup_info.deviceIndexCount = 1;
+    std::array<uint32_t, 2> deviceIndices = {{0}};
     bind_devicegroup_info.pDeviceIndices = deviceIndices.data();
     bind_devicegroup_info.splitInstanceBindRegionCount = 0;
     bind_devicegroup_info.pSplitInstanceBindRegions = nullptr;
@@ -2479,8 +2477,7 @@ TEST_F(VkPositiveLayerTest, ValidExtendedUsageWithDifferentFormatViews) {
     AddRequiredExtensions(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(Init());
     if (!AreRequestedExtensionsEnabled()) {
-        printf("%s %s extension not available\n", kSkipPrefix, VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
-        return;
+        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
     }
 
     auto image_ci = LvlInitStruct<VkImageCreateInfo>();
@@ -2544,8 +2541,7 @@ TEST_F(VkPositiveLayerTest, PlaneAspectNone) {
     ASSERT_NO_FATAL_FAILURE(Init());
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
-        printf("%s This test requires Vulkan 1.3+, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
     }
     m_errorMonitor->ExpectSuccess();
     auto image_createinfo = LvlInitStruct<VkImageCreateInfo>();

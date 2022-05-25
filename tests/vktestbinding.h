@@ -844,10 +844,13 @@ class RenderPass : public internal::NonDispHandle<VkRenderPass> {
   public:
     RenderPass() = default;
     RenderPass(const Device &dev, const VkRenderPassCreateInfo &info) { init(dev, info); }
+    RenderPass(const Device &dev, const VkRenderPassCreateInfo2 &info) { init(dev, info); }
     ~RenderPass() NOEXCEPT;
 
     // vkCreateRenderPass()
     void init(const Device &dev, const VkRenderPassCreateInfo &info);
+    // vkCreateRenderPass2()
+    void init(const Device &dev, const VkRenderPassCreateInfo2 &info);
 };
 
 
@@ -926,7 +929,7 @@ inline VkImageCreateInfo Image::create_info() {
 inline VkImageSubresource Image::subresource(VkImageAspectFlags aspect, uint32_t mip_level, uint32_t array_layer) {
     VkImageSubresource subres = {};
     if (aspect == 0) {
-        assert(!"Invalid VkImageAspectFlags");
+        assert(false && "Invalid VkImageAspectFlags");
     }
     subres.aspectMask = aspect;
     subres.mipLevel = mip_level;
@@ -949,7 +952,7 @@ inline VkImageSubresourceLayers Image::subresource(VkImageAspectFlags aspect, ui
             /* valid */
             break;
         default:
-            assert(!"Invalid VkImageAspectFlags");
+            assert(false && "Invalid VkImageAspectFlags");
     }
     subres.aspectMask = aspect;
     subres.mipLevel = mip_level;
@@ -967,7 +970,7 @@ inline VkImageSubresourceRange Image::subresource_range(VkImageAspectFlags aspec
                                                         uint32_t mip_levels, uint32_t base_array_layer, uint32_t num_layers) {
     VkImageSubresourceRange range = {};
     if (aspect_mask == 0) {
-        assert(!"Invalid VkImageAspectFlags");
+        assert(false && "Invalid VkImageAspectFlags");
     }
     range.aspectMask = aspect_mask;
     range.baseMipLevel = base_mip_level;
