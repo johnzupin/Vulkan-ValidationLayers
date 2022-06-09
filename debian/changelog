@@ -1,3 +1,170 @@
+vulkan-validationlayers (1.3.216.0~rc1-1lunarg18.04-1) bionic; urgency=medium
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.215
+
+  [ Aitor Camacho ]
+  * layers: Check 02271 plane index
+  * tests: Test 02271 invalid plane index
+  * layers: VkSparseImageMemoryBind check extents
+  * tests: VkSparseImageMemoryBind test extent values
+
+  [ John Zulauf ]
+  * layers: Performance fix to small vector
+  * tests: Make queue_index uint32_t
+
+  [ Younggwan Kim ]
+  * layers: Add VU VK_EXT_image_compression_control
+  * tests: Add VK_EXT_image_compression_controt tests
+
+  [ sjfricke ]
+  * scripts: Unify SPIR-V alias capability list
+
+  [ ziga-lunarg ]
+  * layers: Validate dynamic rendering stencil format aspect
+  * tests: Dynamic rendering with invalid stencil format
+  * layers: Validate pipeline depth attachment samples
+  * tests: Test invalid pipeline depth attachment samples
+  * tests: Format dynamic rendering
+  * tests: Test creating pipeline without render pass
+  * layers: Validate graphics pipeline multisample state
+  * tests: Create pipeline without multisample state
+  * layers: Validate rendering info attachment extent
+  * tests: Test rendering info attachment extent
+  * tests: Test rendering info attachment extent
+  * layers: Validate seconary cmd buffer render pass compatibility
+  * tests: Test secondary cmd buffer with incompatible render pass
+  * layers: Validate secondary command buffer subpass
+  * tests: Execute secondary cmd buffer with differenet subpass
+  * layers: Validate subpass contents with secondary cmd buffers
+  * tests: Test invalid subpass contents with secondary cmd buffer
+  * layers: Validate pipeline depth attachment compatibility
+  * tests: Test pipeline depth attachment compatibility
+  * layers: Validate pipeline color attachment compatibility
+  * tests: Test pipeline color attachment compatibility
+  * tests: Test pipeline rendering info attachment count
+  * layers: Validate pipeline stencil attachment compatibility
+  * tests: Test pipeline stencil attachment compatibility
+  * layers: Validate multiview dynamic rendering with Layer
+  * tests: Test pipeline with invalid Layer decoration
+  * layers: Validate InputAttachment capability
+  * tests: Test InputAttachment capability
+  * layers: Validate rendering info color attachment format
+  * tests: Test invalid rendering info color attachment format
+  * layers: Validate dynamic rendering pipeline library view mask
+  * tests: Test dynamic rendering pipeline library view mask
+  * layers: Validate dynamic rendering color attachment samples
+  * tests: Test dynamic rendering color attachment samples
+  * layers: Validate pipeline libraries flags and view mask
+  * tests: Test pipeline libraries flags and view mask
+  * layers: Validate library flags and render pass
+  * tests: Test pipeline library flags and render pass
+  * layers: Validate pipeline multisample state set
+  * tests: Test pipeline with missing multisample state
+  * layers: Fix checking fragment density map layer count
+  * layers: Validate rendering fragment density map layout
+  * tests: Test rendering fragment density map layout
+  * layers: Validate rendering fragment density map usage
+  * tests: Test rendering fragment density map usage
+  * layers: Validate fragment density map image create flags
+  * tests: Test rendering fragment density map image create flags
+  * layers: Validate rendering fragment density map layer count
+  * tests: Test rendering fragment density map layer count
+  * layers: Fix checking rendering fragment shading rate layer count
+  * layers: Validate rendering pnext image views
+  * tests: Test different image views in rendering pnext
+  * layers: Validate RenderingInfo renderArea offset
+  * tests: Test RenderingInfo renderArea offset
+  * layers: Validate RenderingInfo renderArea limits
+  * tests: Test RenderingInfo renderArea limits
+  * layers: Validate RenderingInfo view mask bits
+  * tests: Test RenderingInfo viewMask bits
+  * tests: Test invalid rendering color attachment format
+  * tests: Test resolve mode of integer color format
+  * tests: Test invalid sample count with resolve mode not none
+  * tests: Test resolve image view sample count
+  * tests: Resolve image view with different format from image view
+  * tests: Test rendering attachment with invalid layout
+  * tests: Test invalid resolve image view layout
+  * tests: Test invalid separate depth stencil resolve layout
+  * tests: Test invalid resolve image view shading rate layout
+  * tests: Test attachment view layout fragment density optimal
+  * tests: Test resolve image view fragment density optimal layout
+  * tests: Test invalid resolve image view layout
+  * tests: Test rendering fragment shading rate attachment layout
+  * tests: Test dynamic rendering color attachment
+  * tests: Test depth and stencil attachment in RenderingInfo
+  * tests: Test RenderingInfo render area with device group ext
+  * tests: Test stencil attachment in RenderingInfo
+  * tests: Invalid pipeline used during dynamic render pass
+  * tests: Non unique shading rate rendering attachment
+  * layers: Format CmdBeginRendering
+  * tests: Fragment density attachment with multiview
+  * tests: Fix FragmentDensity render area test
+  * layers: Validate fragment density without device group
+  * tests: Test fragment density attachment render area
+  * layers: Validate shading rate attachment size
+  * tests: Fragment shading rate attachment size
+  * layers: Validate fragment shading rate with device group
+  * tests: Test fragment shading rate attachment with device group
+  * layers: Validate suspending and resuming render pass instance
+  * tests: Test suspending and resuming render pass instance
+  * tests: Fix dynamic rendering tests
+  * tests: Fix dynamic rendering graphics pipeline tests
+  * layers: Fix fragment density map level count check
+  * tests: Fix fragment density attachment test
+  * layers: Dynamic rendering fixes
+  * tests: Dynamic rendering tests fixes
+  * layers: Fix checking if render pass is null handle
+  * tests: Fix input attachment dynamic rendering tests
+  * tests: Remove tests validating removed vuid
+  * layers: Fix build error
+
+  [ sjfricke ]
+  * layers: Add VU 06776
+  * tests: Add VU 06776
+
+  [ Jeremy Gebben ]
+  * docs: Update fine-grained locking documentation
+  * json: Update fine-grained locking settings
+
+  [ Nathaniel Cesario ]
+  * layers: Rename 06562 to 06753
+  * layers: Rename 06564 to 06754
+
+  [ Aitor Camacho ]
+  * layers: Rework memory tracking to support sparse
+  * layers: Hotfix sparse subpass dependency check
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.216
+
+  [ sjfricke ]
+  * layers: Add and refactor drawIndirectCount VU
+  * tests: Add new drawIndirectCount tests
+
+  [ Mike Schuchardt ]
+  * build: Update shader toolchain known good
+
+  [ Aitor Camacho ]
+  * layers: Fix assert with multiplane images
+
+  [ sjfricke ]
+  * layers: Use GetPipelineTypeName for message
+
+  [ Aitor Camacho ]
+  * layers: Fix attachment overlap check
+
+  [ Jeremy Gebben ]
+  * tests: Allow vk_layerGetDeviceProcAddr() to be queried
+  * layers: Allow vk_layerGetPhysicalDeviceProcAddr to be queried
+
+  [ Aitor Camacho ]
+  * layers: Fix ImageRangeGenerator depth sliced check
+  * layers: Use ImageRangeGenerator instead of RangeGenerator
+
+ -- john <john@odin>  Thu, 09 Jun 2022 10:13:56 -0600
+
 vulkan-validationlayers (1.3.214.0~rc1-1lunarg18.04-1) bionic; urgency=medium
 
   [ ziga-lunarg ]
