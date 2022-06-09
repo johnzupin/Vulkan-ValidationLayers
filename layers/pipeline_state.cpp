@@ -69,7 +69,9 @@ PipelineStageState::PipelineStageState(const safe_VkPipelineShaderStageCreateInf
       descriptor_uses(module_state->CollectInterfaceByDescriptorSlot(accessible_ids)),
       has_writable_descriptor(HasWriteableDescriptor(descriptor_uses)),
       has_atomic_descriptor(HasAtomicDescriptor(descriptor_uses)),
-      wrote_primitive_shading_rate(WrotePrimitiveShadingRate(stage_flag, entrypoint, module_state.get())) {}
+      wrote_primitive_shading_rate(WrotePrimitiveShadingRate(stage_flag, entrypoint, module_state.get())),
+      writes_to_gl_layer(module_state->WritesToGlLayer()),
+      has_input_attachment_capability(module_state->HasInputAttachmentCapability()) {}
 
 // static
 PIPELINE_STATE::StageStateVec PIPELINE_STATE::GetStageStates(const ValidationStateTracker &state_data,
@@ -419,6 +421,7 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       pre_raster_state(CreatePreRasterState(*this, *state_data, create_info.graphics, rpstate)),
       fragment_shader_state(CreateFragmentShaderState(*this, *state_data, *pCreateInfo, create_info.graphics, rpstate)),
       fragment_output_state(CreateFragmentOutputState(*this, *state_data, *pCreateInfo, create_info.graphics, rpstate)),
+      rendering_create_info(LvlFindInChain<VkPipelineRenderingCreateInfo>(PNext())),
       stage_state(GetStageStates(*state_data, *this)),
       fragmentShader_writable_output_location_list(GetFSOutputLocations(stage_state)),
       active_slots(GetActiveSlots(stage_state)),

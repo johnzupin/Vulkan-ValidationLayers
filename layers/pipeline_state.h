@@ -108,6 +108,8 @@ struct PipelineStageState {
     bool has_writable_descriptor;
     bool has_atomic_descriptor;
     bool wrote_primitive_shading_rate;
+    bool writes_to_gl_layer;
+    bool has_input_attachment_capability;
 
     PipelineStageState(const safe_VkPipelineShaderStageCreateInfo *stage, std::shared_ptr<const SHADER_MODULE_STATE> &module_state);
 };
@@ -179,6 +181,8 @@ class PIPELINE_STATE : public BASE_NODE {
     const std::shared_ptr<FragmentShaderState> fragment_shader_state;  // VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT
     const std::shared_ptr<FragmentOutputState>
         fragment_output_state;  // VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT
+
+    const VkPipelineRenderingCreateInfo *rendering_create_info = nullptr;
 
     // Additional metadata needed by pipeline_state initialization and validation
     using StageStateVec = std::vector<PipelineStageState>;
@@ -454,6 +458,7 @@ class PIPELINE_STATE : public BASE_NODE {
     }
 
     VkStructureType GetCreateInfoSType() const { return create_info.graphics.sType; }
+    const VkPipelineRenderingCreateInfo *GetPipelineRenderingCreateInfo() const { return rendering_create_info; }
 
     const void *PNext() const { return create_info.graphics.pNext; }
 
