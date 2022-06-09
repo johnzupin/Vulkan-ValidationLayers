@@ -1286,6 +1286,24 @@ bool StatelessValidation::manual_PreCallValidateCreateImage(VkDevice device, con
                 }
             }
         }
+
+        const auto image_compression_control = LvlFindInChain<VkImageCompressionControlEXT>(pCreateInfo->pNext);
+        if (image_compression_control) {
+            constexpr VkImageCompressionFlagsEXT AllVkImageCompressionFlagBitsEXT =
+                (VK_IMAGE_COMPRESSION_DEFAULT_EXT | VK_IMAGE_COMPRESSION_FIXED_RATE_DEFAULT_EXT |
+                 VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT | VK_IMAGE_COMPRESSION_DISABLED_EXT);
+            skip |= validate_flags("vkCreateImage", "VkImageCompressionControlEXT::flags", "VkImageCompressionFlagsEXT",
+                                   AllVkImageCompressionFlagBitsEXT, image_compression_control->flags, kRequiredSingleBit,
+                                   "VUID-VkImageCompressionControlEXT-flags-06747");
+
+            if (image_compression_control->flags == VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT &&
+                !image_compression_control->pFixedRateFlags) {
+                skip |= LogError(
+                    device, "VUID-VkImageCompressionControlEXT-flags-06748",
+                    "VkImageCompressionControlEXT::pFixedRateFlags is nullptr even though VkImageCompressionControlEXT::flags are %s",
+                    string_VkImageCompressionFlagsEXT(image_compression_control->flags).c_str());
+            }
+        }
     }
 
     return skip;
@@ -1614,16 +1632,13 @@ bool StatelessValidation::manual_PreCallValidateCreatePipelineLayout(VkDevice de
                          pCreateInfo->setLayoutCount, device_limits.maxBoundDescriptorSets);
     }
 
-    const bool has_independent_sets = (pCreateInfo->flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT) != 0;
-    const bool graphics_pipeline_library = IsExtEnabled(device_extensions.vk_ext_graphics_pipeline_library);
-    const char *const valid_dsl_vuid = (!graphics_pipeline_library)
-                                           ? "VUID-VkPipelineLayoutCreateInfo-pSetLayouts-06561"
-                                           : ((!has_independent_sets) ? "VUID-VkPipelineLayoutCreateInfo-flags-06562" : nullptr);
-    if (valid_dsl_vuid) {
+    if (!IsExtEnabled(device_extensions.vk_ext_graphics_pipeline_library)) {
         for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i) {
             if (!pCreateInfo->pSetLayouts[i]) {
-                skip |=
-                    LogError(device, valid_dsl_vuid, "vkCreatePipelineLayout(): pSetLayouts[%" PRIu32 "] is VK_NULL_HANDLE.", i);
+                skip |= LogError(device, "VUID-VkPipelineLayoutCreateInfo-pSetLayouts-06561",
+                                 "vkCreatePipelineLayout(): pSetLayouts[%" PRIu32
+                                 "] is VK_NULL_HANDLE, but VK_EXT_graphics_pipeline_library is not enabled.",
+                                 i);
             }
         }
     }
@@ -1798,8 +1813,8 @@ bool StatelessValidation::manual_PreCallValidateCreateGraphicsPipelines(VkDevice
 
             if (!create_info.renderPass) {
                 if (create_info.pColorBlendState && create_info.pMultisampleState) {
-                    // Pipeline has fragment outout state
                     const auto rendering_struct = LvlFindInChain<VkPipelineRenderingCreateInfo>(create_info.pNext);
+                    // Pipeline has fragment output state
                     if (rendering_struct) {
                         if ((rendering_struct->depthAttachmentFormat != VK_FORMAT_UNDEFINED)) {
                             skip |= validate_ranged_enum("VkPipelineRenderingCreateInfo", "stencilAttachmentFormat", "VkFormat",
@@ -1833,6 +1848,26 @@ bool StatelessValidation::manual_PreCallValidateCreateGraphicsPipelines(VkDevice
                                 "VkPipelineRenderingCreateInfo", "VUID-VkGraphicsPipelineCreateInfo-renderPass-06579",
                                 "colorAttachmentCount", "pColorAttachmentFormats", "VkFormat", AllVkFormatEnums,
                                 rendering_struct->colorAttachmentCount, rendering_struct->pColorAttachmentFormats, true, true);
+                        }
+
+                        if (rendering_struct->pColorAttachmentFormats) {
+                            for (uint32_t j = 0; j < rendering_struct->colorAttachmentCount; ++j) {
+                                skip |= validate_ranged_enum("VkPipelineRenderingCreateInfo", "pColorAttachmentFormats", "VkFormat",
+                                                             AllVkFormatEnums, rendering_struct->pColorAttachmentFormats[j],
+                                                             "VUID-VkGraphicsPipelineCreateInfo-renderPass-06580");
+                            }
+                        }
+                    }
+
+                    // VkAttachmentSampleCountInfoAMD == VkAttachmentSampleCountInfoNV
+                    auto attachment_sample_count_info = LvlFindInChain<VkAttachmentSampleCountInfoAMD>(create_info.pNext);
+                    if (attachment_sample_count_info && attachment_sample_count_info->pColorAttachmentSamples) {
+                        for (uint32_t j = 0; j < attachment_sample_count_info->colorAttachmentCount; ++j) {
+                            skip |= validate_flags("vkCreateGraphicsPipelines",
+                                                   ParameterName("VkAttachmentSampleCountInfoAMD->pColorAttachmentSamples"),
+                                                   "VkSampleCountFlagBits", AllVkSampleCountFlagBits,
+                                                   attachment_sample_count_info->pColorAttachmentSamples[j], kRequiredFlags,
+                                                   "VUID-VkGraphicsPipelineCreateInfo-pColorAttachmentSamples-06592");
                         }
                     }
                 }
@@ -7283,7 +7318,7 @@ bool StatelessValidation::manual_PreCallValidateCmdTraceRaysIndirect2KHR(VkComma
     const auto *raytracing_features = LvlFindInChain<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>(device_createinfo_pnext);
     if (!raytracing_features || raytracing_features->rayTracingPipelineTraceRaysIndirect == VK_FALSE) {
         skip |= LogError(
-            device, "VUID-vkCmdTraceRaysIndirect2KHR-rayTracingPipelineTraceRaysIndirect-03637",
+            device, "VUID-vkCmdTraceRaysIndirect2KHR-rayTracingPipelineTraceRaysIndirect2-03637",
             "vkCmdTraceRaysIndirect2KHR: the VkPhysicalDeviceRayTracingPipelineFeaturesKHR::rayTracingPipelineTraceRaysIndirect "
             "feature must be enabled.");
     }
@@ -8533,6 +8568,13 @@ bool StatelessValidation::ValidateDeviceImageMemoryRequirements(VkDevice device,
         if (image_swapchain_create_info) {
             skip |= LogError(device, "VUID-VkDeviceImageMemoryRequirementsKHR-pCreateInfo-06416",
                              "%s(): pInfo->pCreateInfo->pNext chain contains VkImageSwapchainCreateInfoKHR.", func_name);
+        }
+        const auto *drm_format_modifier_create_info =
+            LvlFindInChain<VkImageDrmFormatModifierExplicitCreateInfoEXT>(pInfo->pCreateInfo);
+        if (drm_format_modifier_create_info) {
+            skip |= LogError(device, "VUID-VkDeviceImageMemoryRequirements-pCreateInfo-06776",
+                             "%s(): pInfo->pCreateInfo->pNext chain contains VkImageDrmFormatModifierExplicitCreateInfoEXT.",
+                             func_name);
         }
     }
 

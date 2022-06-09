@@ -290,15 +290,12 @@ bool CoreChecks::PreCallValidateCmdBindDescriptorSets(VkCommandBuffer commandBuf
                                  "] (%s) that does not exist, and %s is not enabled.",
                                  set_idx, report_data->FormatHandle(pDescriptorSets[set_idx]).c_str(),
                                  VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME);
-            } else {
-                const auto layout_flags = pipeline_layout->CreateFlags();
-                if ((layout_flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT) == 0) {
-                    skip |= LogError(pDescriptorSets[set_idx], "VUID-vkCmdBindDescriptorSets-layout-06564",
-                                     "vkCmdBindDescriptorSets(): Attempt to bind pDescriptorSets[%" PRIu32
-                                     "] (%s) that does not exist, and the layout was not created "
-                                     "VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT.",
-                                     set_idx, report_data->FormatHandle(pDescriptorSets[set_idx]).c_str());
-                }
+            } else if (!enabled_features.graphics_pipeline_library_features.graphicsPipelineLibrary) {
+                skip |= LogError(pDescriptorSets[set_idx], "VUID-vkCmdBindDescriptorSets-graphicsPipelineLibrary-06754",
+                                 "vkCmdBindDescriptorSets(): Attempt to bind pDescriptorSets[%" PRIu32
+                                 "] (%s) that does not exist, and the layout was not created "
+                                 "VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT.",
+                                 set_idx, report_data->FormatHandle(pDescriptorSets[set_idx]).c_str());
             }
         }
     }
@@ -844,18 +841,14 @@ bool CoreChecks::ValidateGeneralBufferDescriptor(const char *caller, const DrawD
                         report_data->FormatHandle(buffer).c_str());
     }
     if (buffer) {
-        if (buffer_node && !buffer_node->sparse) {
-            for (const auto &item : buffer_node->GetBoundMemory()) {
-                auto &binding = item.second;
-                if (binding.mem_state->Destroyed()) {
-                    auto set = descriptor_set->GetSet();
-                    return LogError(set, vuids.descriptor_valid,
-                                    "Descriptor set %s encountered the following validation error at %s time: Descriptor in "
-                                    "binding #%" PRIu32 " index %" PRIu32 " is uses buffer %s that references invalid memory %s.",
-                                    report_data->FormatHandle(set).c_str(), caller, binding_info.first, index,
-                                    report_data->FormatHandle(buffer).c_str(),
-                                    report_data->FormatHandle(binding.mem_state->mem()).c_str());
-                }
+        if (buffer_node /* && !buffer_node->sparse*/) {
+            for (const auto &binding : buffer_node->GetInvalidMemory()) {
+                auto set = descriptor_set->GetSet();
+                return LogError(set, vuids.descriptor_valid,
+                                "Descriptor set %s encountered the following validation error at %s time: Descriptor in "
+                                "binding #%" PRIu32 " index %" PRIu32 " is uses buffer %s that references invalid memory %s.",
+                                report_data->FormatHandle(set).c_str(), caller, binding_info.first, index,
+                                report_data->FormatHandle(buffer).c_str(), report_data->FormatHandle(binding->mem()).c_str());
             }
         }
         if (enabled_features.core11.protectedMemory == VK_TRUE) {
@@ -1544,18 +1537,14 @@ bool CoreChecks::ValidateAccelerationDescriptor(const char *caller, const DrawDi
                                 report_data->FormatHandle(acc).c_str());
             }
         } else {
-            for (const auto &item : acc_node->buffer_state->GetBoundMemory()) {
-                auto &mem_binding = item.second;
-                if (mem_binding.mem_state->Destroyed()) {
-                    auto set = descriptor_set->GetSet();
-                    return LogError(set, vuids.descriptor_valid,
-                                    "Descriptor set %s encountered the following validation error at %s time: Descriptor in "
-                                    "binding #%" PRIu32 " index %" PRIu32
-                                    " is using acceleration structure %s that references invalid memory %s.",
-                                    report_data->FormatHandle(set).c_str(), caller, binding, index,
-                                    report_data->FormatHandle(acc).c_str(),
-                                    report_data->FormatHandle(mem_binding.mem_state->mem()).c_str());
-                }
+            for (const auto &mem_binding : acc_node->buffer_state->GetInvalidMemory()) {
+                auto set = descriptor_set->GetSet();
+                return LogError(set, vuids.descriptor_valid,
+                                "Descriptor set %s encountered the following validation error at %s time: Descriptor in "
+                                "binding #%" PRIu32 " index %" PRIu32
+                                " is using acceleration structure %s that references invalid memory %s.",
+                                report_data->FormatHandle(set).c_str(), caller, binding, index,
+                                report_data->FormatHandle(acc).c_str(), report_data->FormatHandle(mem_binding->mem()).c_str());
             }
         }
     } else {
@@ -1572,18 +1561,14 @@ bool CoreChecks::ValidateAccelerationDescriptor(const char *caller, const DrawDi
                                 report_data->FormatHandle(acc).c_str());
             }
         } else {
-            for (const auto &item : acc_node->GetBoundMemory()) {
-                auto &mem_binding = item.second;
-                if (mem_binding.mem_state->Destroyed()) {
-                    auto set = descriptor_set->GetSet();
-                    return LogError(set, vuids.descriptor_valid,
-                                    "Descriptor set %s encountered the following validation error at %s time: Descriptor in "
-                                    "binding #%" PRIu32 " index %" PRIu32
-                                    " is using acceleration structure %s that references invalid memory %s.",
-                                    report_data->FormatHandle(set).c_str(), caller, binding, index,
-                                    report_data->FormatHandle(acc).c_str(),
-                                    report_data->FormatHandle(mem_binding.mem_state->mem()).c_str());
-                }
+            for (const auto &mem_binding : acc_node->GetInvalidMemory()) {
+                auto set = descriptor_set->GetSet();
+                return LogError(set, vuids.descriptor_valid,
+                                "Descriptor set %s encountered the following validation error at %s time: Descriptor in "
+                                "binding #%" PRIu32 " index %" PRIu32
+                                " is using acceleration structure %s that references invalid memory %s.",
+                                report_data->FormatHandle(set).c_str(), caller, binding, index,
+                                report_data->FormatHandle(acc).c_str(), report_data->FormatHandle(mem_binding->mem()).c_str());
             }
         }
     }
