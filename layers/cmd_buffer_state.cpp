@@ -273,7 +273,7 @@ void CMD_BUFFER_STATE::RemoveChild(std::shared_ptr<BASE_NODE> &child_node) {
 // Reset the command buffer state
 //  Maintain the createInfo and set state to CB_NEW, but clear all other state
 void CMD_BUFFER_STATE::Reset() {
-    ResetUse();
+    assert(!InUse());
     // Reset CB state (note that createInfo is not cleared)
     memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
     memset(&inheritanceInfo, 0, sizeof(VkCommandBufferInheritanceInfo));
@@ -734,6 +734,7 @@ void CMD_BUFFER_STATE::BeginRendering(CMD_TYPE cmd_type, const VkRenderingInfo *
     RecordCmd(cmd_type);
     begin_rendering_func_name = CommandTypeString(cmd_type);
     activeRenderPass = std::make_shared<RENDER_PASS_STATE>(pRenderingInfo);
+    commands_since_begin_rendering = 0;
 
     auto chained_device_group_struct = LvlFindInChain<VkDeviceGroupRenderPassBeginInfo>(pRenderingInfo->pNext);
     if (chained_device_group_struct) {
@@ -1215,7 +1216,12 @@ void CMD_BUFFER_STATE::SetImageViewLayout(const IMAGE_VIEW_STATE &view_state, Vk
     }
 }
 
-void CMD_BUFFER_STATE::RecordCmd(CMD_TYPE cmd_type) { commandCount++; }
+void CMD_BUFFER_STATE::RecordCmd(CMD_TYPE cmd_type) {
+    commandCount++;
+    if (pipeline_bound) {
+        ++commands_since_begin_rendering;
+    }
+}
 
 void CMD_BUFFER_STATE::RecordStateCmd(CMD_TYPE cmd_type, CBStatusFlags state_bits) {
     RecordCmd(cmd_type);
@@ -1388,12 +1394,8 @@ void CMD_BUFFER_STATE::Retire(uint32_t perf_submit_pass, const std::function<boo
 }
 
 void CMD_BUFFER_STATE::UnbindResources() {
-    // Pipeline and descriptor sets
-    lastBound[BindPoint_Graphics].Reset();
-
     // Vertex and index buffers
     index_buffer_binding.reset();
-    status &= ~CBSTATUS_INDEX_BUFFER_BOUND;
     vertex_buffer_used = false;
     current_vertex_buffer_binding_info.vertex_buffer_bindings.clear();
 
@@ -1403,6 +1405,23 @@ void CMD_BUFFER_STATE::UnbindResources() {
     push_constant_data_update.clear();
     push_constant_pipeline_layout_set = VK_NULL_HANDLE;
 
-    // Dynamic state
-    dynamic_status = CBSTATUS_NONE;
+    // Reset status of cb to force rebinding of all resources
+    // Index buffer included
+    status = CBSTATUS_NONE;
+
+    // Pipeline and descriptor sets
+    lastBound[BindPoint_Graphics].Reset();
+}
+
+bool CMD_BUFFER_STATE::RasterizationDisabled() const {
+    auto pipeline = lastBound[BindPoint_Graphics].pipeline_state;
+    if (pipeline) {
+        if (pipeline->IsDynamic(VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)) {
+            return rasterization_disabled;
+        } else {
+            return pipeline->RasterizationDisabled();
+        }
+    }
+
+    return false;
 }

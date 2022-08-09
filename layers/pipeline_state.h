@@ -302,6 +302,8 @@ class PIPELINE_STATE : public BASE_NODE {
         return merged_graphics_layout;
     }
 
+    std::vector<std::shared_ptr<const PIPELINE_LAYOUT_STATE>> PipelineLayoutStateUnion() const;
+
     const std::shared_ptr<const PIPELINE_LAYOUT_STATE> PreRasterPipelineLayoutState() const {
         if (pre_raster_state) {
             return pre_raster_state->pipeline_layout;
@@ -336,6 +338,13 @@ class PIPELINE_STATE : public BASE_NODE {
             return pre_raster_state->raster_state;
         }
         return nullptr;
+    }
+
+    bool RasterizationDisabled() const {
+        if (pre_raster_state && pre_raster_state->raster_state) {
+            return pre_raster_state->raster_state->rasterizerDiscardEnable == VK_TRUE;
+        }
+        return false;
     }
 
     const safe_VkPipelineViewportStateCreateInfo *ViewportState() const {
@@ -464,6 +473,17 @@ class PIPELINE_STATE : public BASE_NODE {
 
     static ActiveSlotMap GetActiveSlots(const StageStateVec &stage_states);
     static StageStateVec GetStageStates(const ValidationStateTracker &state_data, const PIPELINE_STATE &pipe_state);
+
+    // Return true if for a given PSO, the given state enum is dynamic, else return false
+    bool IsDynamic(const VkDynamicState state) const {
+        const auto *dynamic_state = DynamicState();
+        if ((GetPipelineType() == VK_PIPELINE_BIND_POINT_GRAPHICS) && dynamic_state) {
+            for (uint32_t i = 0; i < dynamic_state->dynamicStateCount; i++) {
+                if (state == dynamic_state->pDynamicStates[i]) return true;
+            }
+        }
+        return false;
+    }
 
   protected:
     static std::shared_ptr<VertexInputState> CreateVertexInputState(const PIPELINE_STATE &p, const ValidationStateTracker &state,

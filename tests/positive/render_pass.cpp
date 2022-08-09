@@ -58,9 +58,7 @@ TEST_F(VkPositiveLayerTest, RenderPassCreateAttachmentUsedTwiceOK) {
     VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, 1, attach, 1, subpasses, 0, nullptr};
     VkRenderPass rp;
 
-    m_errorMonitor->ExpectSuccess();
     vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &rp);
-    m_errorMonitor->VerifyNotFound();
     vk::DestroyRenderPass(m_device->device(), rp, nullptr);
 }
 
@@ -68,8 +66,6 @@ TEST_F(VkPositiveLayerTest, RenderPassCreateInitialLayoutUndefined) {
     TEST_DESCRIPTION(
         "Ensure that CmdBeginRenderPass with an attachment's initialLayout of VK_IMAGE_LAYOUT_UNDEFINED works when the command "
         "buffer has prior knowledge of that attachment's layout.");
-
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -128,8 +124,6 @@ TEST_F(VkPositiveLayerTest, RenderPassCreateInitialLayoutUndefined) {
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
 
-    m_errorMonitor->VerifyNotFound();
-
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
 
@@ -142,7 +136,6 @@ TEST_F(VkPositiveLayerTest, RenderPassCreateAttachmentLayoutWithLoadOpThenReadOn
     TEST_DESCRIPTION(
         "Positive test where we create a renderpass with an attachment that uses LOAD_OP_CLEAR, the first subpass has a valid "
         "layout, and a second subpass then uses a valid *READ_ONLY* layout.");
-    m_errorMonitor->ExpectSuccess();
     ASSERT_NO_FATAL_FAILURE(Init());
     auto depth_format = FindSupportedDepthStencilFormat(gpu());
     if (!depth_format) {
@@ -179,15 +172,12 @@ TEST_F(VkPositiveLayerTest, RenderPassCreateAttachmentLayoutWithLoadOpThenReadOn
     // Now create RenderPass and verify no errors
     VkRenderPass rp;
     vk::CreateRenderPass(m_device->device(), &rpci, NULL, &rp);
-    m_errorMonitor->VerifyNotFound();
 
     vk::DestroyRenderPass(m_device->device(), rp, NULL);
 }
 
 TEST_F(VkPositiveLayerTest, RenderPassBeginSubpassZeroTransitionsApplied) {
     TEST_DESCRIPTION("Ensure that CmdBeginRenderPass applies the layout transitions for the first subpass");
-
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -246,7 +236,6 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginSubpassZeroTransitionsApplied) {
                              VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     vk::CmdEndRenderPass(m_commandBuffer->handle());
-    m_errorMonitor->VerifyNotFound();
     m_commandBuffer->end();
 
     vk::DestroyFramebuffer(m_device->device(), fb, nullptr);
@@ -262,7 +251,6 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginTransitionsAttachmentUnused) {
         printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
         return;
     }
-    m_errorMonitor->ExpectSuccess();
 
     // A renderpass with no attachments
     VkAttachmentReference att_ref = {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
@@ -287,7 +275,6 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginTransitionsAttachmentUnused) {
     m_commandBuffer->begin();
     vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdEndRenderPass(m_commandBuffer->handle());
-    m_errorMonitor->VerifyNotFound();
     m_commandBuffer->end();
 
     vk::DestroyFramebuffer(m_device->device(), fb, nullptr);
@@ -431,9 +418,7 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginStencilLoadOp) {
     submit_info.signalSemaphoreCount = 0;
     submit_info.pSignalSemaphores = NULL;
 
-    m_errorMonitor->ExpectSuccess();
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
-    m_errorMonitor->VerifyNotFound();
 
     vk::QueueWaitIdle(m_device->m_queue);
     vk::DestroyRenderPass(m_device->device(), rp, nullptr);
@@ -441,8 +426,6 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginStencilLoadOp) {
 }
 
 TEST_F(VkPositiveLayerTest, RenderPassBeginInlineAndSecondaryCommandBuffers) {
-    m_errorMonitor->ExpectSuccess();
-
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -450,14 +433,10 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginInlineAndSecondaryCommandBuffers) {
 
     vk::CmdBeginRenderPass(m_commandBuffer->handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
     vk::CmdEndRenderPass(m_commandBuffer->handle());
-    m_errorMonitor->VerifyNotFound();
     vk::CmdBeginRenderPass(m_commandBuffer->handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    m_errorMonitor->VerifyNotFound();
     vk::CmdEndRenderPass(m_commandBuffer->handle());
-    m_errorMonitor->VerifyNotFound();
 
     m_commandBuffer->end();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, RenderPassBeginDepthStencilLayoutTransitionFromUndefined) {
@@ -479,7 +458,6 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginDepthStencilLayoutTransitionFromUndef
         return;
     }
 
-    m_errorMonitor->ExpectSuccess();
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     // A renderpass with one depth/stencil attachment.
@@ -533,7 +511,6 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginDepthStencilLayoutTransitionFromUndef
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
     m_commandBuffer->QueueCommandBuffer(false);
-    m_errorMonitor->VerifyNotFound();
 
     // Cleanup
     vk::DestroyImageView(m_device->device(), view, NULL);
@@ -543,7 +520,6 @@ TEST_F(VkPositiveLayerTest, RenderPassBeginDepthStencilLayoutTransitionFromUndef
 
 TEST_F(VkPositiveLayerTest, DestroyPipelineRenderPass) {
     TEST_DESCRIPTION("Draw using a pipeline whose create renderPass has been destroyed.");
-    m_errorMonitor->ExpectSuccess();
     ASSERT_NO_FATAL_FAILURE(Init());
     if (IsPlatform(kNexusPlayer)) {
         printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
@@ -627,34 +603,26 @@ TEST_F(VkPositiveLayerTest, DestroyPipelineRenderPass) {
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
-    m_errorMonitor->VerifyNotFound();
     vk::QueueWaitIdle(m_device->m_queue);
 }
 
 TEST_F(VkPositiveLayerTest, ImagelessFramebufferNonZeroBaseMip) {
     TEST_DESCRIPTION("Use a 1D image view for an imageless framebuffer with base mip level > 0.");
-    m_errorMonitor->ExpectSuccess();
 
-    if (!AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME)) {
-        printf("%s Instance extensions for %s not supported\n", kSkipPrefix, VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
-        return;
-    }
-
+    AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
     auto pd_imageless_fb_features = LvlInitStruct<VkPhysicalDeviceImagelessFramebufferFeaturesKHR>();
     pd_imageless_fb_features.imagelessFramebuffer = VK_TRUE;
     auto pd_features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&pd_imageless_fb_features);
     if (!InitFrameworkAndRetrieveFeatures(pd_features2)) {
-        printf("%s Failed to initialize physical device and query features\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Failed to initialize physical device and query features";
     }
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (pd_imageless_fb_features.imagelessFramebuffer != VK_TRUE) {
-        printf("%s VkPhysicalDeviceImagelessFramebufferFeaturesKHR::imagelessFramebuffer feature not supported\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "VkPhysicalDeviceImagelessFramebufferFeaturesKHR::imagelessFramebuffer feature not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &pd_features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -669,6 +637,7 @@ TEST_F(VkPositiveLayerTest, ImagelessFramebufferNonZeroBaseMip) {
     VkAttachmentDescription attachment_desc = {};
     attachment_desc.format = formats[0];
     attachment_desc.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_desc.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachment_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
     VkAttachmentReference attachment_ref = {};
     attachment_ref.layout = VK_IMAGE_LAYOUT_GENERAL;
@@ -707,6 +676,7 @@ TEST_F(VkPositiveLayerTest, ImagelessFramebufferNonZeroBaseMip) {
     fb_ci.pAttachments = nullptr;
     fb_ci.renderPass = rp.handle();
     vk_testing::Framebuffer fb(*m_device, fb_ci);
+    ASSERT_TRUE(fb.initialized());
 
     auto image_ci = LvlInitStruct<VkImageCreateInfo>();
     image_ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -800,8 +770,6 @@ TEST_F(VkPositiveLayerTest, RenderPassValidStages) {
 
 TEST_F(VkPositiveLayerTest, RenderPassSingleMipTransition) {
     TEST_DESCRIPTION("Ensure that the validation message contains the correct miplevel");
-
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -977,8 +945,6 @@ TEST_F(VkPositiveLayerTest, RenderPassSingleMipTransition) {
                                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
                                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-    m_errorMonitor->VerifyNotFound();
-
     depthImage.Layout(VK_IMAGE_LAYOUT_GENERAL);
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "cannot transition the layout of aspect=2 level=1 layer=0");
@@ -999,8 +965,6 @@ TEST_F(VkPositiveLayerTest, RenderPassSingleMipTransition) {
 TEST_F(VkPositiveLayerTest, CreateRenderPassWithViewMask) {
     TEST_DESCRIPTION("Create render pass with view mask, with multiview feature enabled in Vulkan11Features.");
 
-    m_errorMonitor->ExpectSuccess();
-
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
@@ -1009,8 +973,8 @@ TEST_F(VkPositiveLayerTest, CreateRenderPassWithViewMask) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto vulkan_11_features = LvlInitStruct<VkPhysicalDeviceVulkan11Features>();
@@ -1044,5 +1008,6 @@ TEST_F(VkPositiveLayerTest, CreateRenderPassWithViewMask) {
 
     VkRenderPass render_pass;
     vkCreateRenderPass2KHR(device(), &render_pass_ci, nullptr, &render_pass);
-    m_errorMonitor->VerifyNotFound();
+
+    vk::DestroyRenderPass(device(), render_pass, nullptr);
 }

@@ -182,22 +182,10 @@ TEST_F(VkLayerTest, DynamicLineStippleNotBound) {
     TEST_DESCRIPTION(
         "Run a simple draw calls to validate failure when Line Stipple dynamic state is required but not correctly bound.");
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    std::array<const char *, 1> required_device_extensions = {{VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME}};
-    for (auto device_extension : required_device_extensions) {
-        if (DeviceExtensionSupported(gpu(), nullptr, device_extension)) {
-            m_device_extension_names.push_back(device_extension);
-        } else {
-            printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, device_extension);
-            return;
-        }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
@@ -627,17 +615,11 @@ TEST_F(VkLayerTest, InvalidPushConstants) {
     m_errorMonitor->VerifyFound();
 
     // Positive tests for the overlapping ranges
-    m_errorMonitor->ExpectSuccess();
     vk::CmdPushConstants(m_commandBuffer->handle(), pipeline_layout_obj.handle(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, 16,
                          dummy_values);
-    m_errorMonitor->VerifyNotFound();
-    m_errorMonitor->ExpectSuccess();
     vk::CmdPushConstants(m_commandBuffer->handle(), pipeline_layout_obj.handle(), VK_SHADER_STAGE_VERTEX_BIT, 32, 48, dummy_values);
-    m_errorMonitor->VerifyNotFound();
-    m_errorMonitor->ExpectSuccess();
     vk::CmdPushConstants(m_commandBuffer->handle(), pipeline_layout_obj.handle(),
                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 16, 16, dummy_values);
-    m_errorMonitor->VerifyNotFound();
 
     // Wrong cmd stages for extant range
     // No range for all cmd stages -- "VUID-vkCmdPushConstants-offset-01795" VUID-vkCmdPushConstants-offset-01795
@@ -980,10 +962,8 @@ TEST_F(VkLayerTest, ClearColorAttachmentsDepthStencil) {
     clear_rect.baseArrayLayer = 0;
     clear_rect.layerCount = 1;
 
-    m_errorMonitor->ExpectSuccess();
     attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &attachment, 1, &clear_rect);
-    m_errorMonitor->VerifyNotFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-aspectMask-02502");
     attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -1244,10 +1224,11 @@ TEST_F(VkLayerTest, SimultaneousUseOneShot) {
 
     // Set one time use and now look for one time submit
     duplicates[0] = duplicates[1] = cmd_bufs[1];
-    cb_binfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    cb_binfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vk::BeginCommandBuffer(cmd_bufs[1], &cb_binfo);
     vk::CmdSetViewport(cmd_bufs[1], 0, 1, &viewport);
     vk::EndCommandBuffer(cmd_bufs[1]);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueSubmit-pCommandBuffers-00071");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, one_shot_message);
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
@@ -1578,7 +1559,6 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     mem_barriers[2].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
     // Mip level copies that work - 5 levels
-    m_errorMonitor->ExpectSuccess();
 
     // Mip 0 should fit in 1k buffer - 1k texels @ 1b each
     region.imageExtent = {32, 32, 1};
@@ -1629,7 +1609,6 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 2,
                            &mem_barriers[1], 0, nullptr, 0, nullptr);
     vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region);
-    m_errorMonitor->VerifyNotFound();
 
     // Buffer must accommodate a full compressed block, regardless of texel count
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-pRegions-00183");
@@ -1718,7 +1697,6 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     region.imageOffset = {4, 4, 0};
     region.imageExtent = {3, 4, 1};
     region.imageSubresource.mipLevel = 2;
-    m_errorMonitor->ExpectSuccess();
 
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                            &mem_barriers[0], 0, nullptr, 0, nullptr);
@@ -1729,7 +1707,6 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
                            &mem_barriers[1], 0, nullptr, 0, nullptr);
     vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16.handle(), odd_image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1,
                              &region);
-    m_errorMonitor->VerifyNotFound();
 
     // Offset + extent width < mip width and not a multiple of block width - should fail
     region.imageExtent = {3, 3, 1};
@@ -1915,7 +1892,6 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
         m_commandBuffer->begin();
 
         // successful copies
-        m_errorMonitor->ExpectSuccess();
         vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image_16k.handle(), VK_IMAGE_LAYOUT_GENERAL, buffer_16k.handle(), 1,
                                  &region);
 
@@ -1943,7 +1919,6 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
                                &mem_barriers[1], 0, nullptr, 0, nullptr);
         vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image_16k.handle(), VK_IMAGE_LAYOUT_GENERAL, buffer_64k.handle(), 1,
                                  &region);
-        m_errorMonitor->VerifyNotFound();
 
         // image/buffer too small (extent too large) on copy to image
         region.imageExtent = {65, 64, 1};
@@ -2102,22 +2077,16 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
         ds_region.imageExtent = {256, 256, 1};
 
         // Depth copies that should succeed
-        m_errorMonitor->ExpectSuccess();  // Extract 4b depth per texel, pack into 256k buffer
         vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), ds_image_4D_1S.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                  buffer_256k.handle(), 1, &ds_region);
-        m_errorMonitor->VerifyNotFound();
 
-        m_errorMonitor->ExpectSuccess();  // Extract 3b depth per texel, pack (loose) into 256k buffer
         vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                                &mem_barriers[0], 0, nullptr, 0, nullptr);
         vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), ds_image_3D_1S.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                  buffer_256k.handle(), 1, &ds_region);
-        m_errorMonitor->VerifyNotFound();
 
-        m_errorMonitor->ExpectSuccess();  // Copy 2b depth per texel, into 128k buffer
         vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), ds_image_2D.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                  buffer_128k.handle(), 1, &ds_region);
-        m_errorMonitor->VerifyNotFound();
 
         // Depth copies that should fail
         ds_region.bufferOffset = 4;
@@ -2153,26 +2122,20 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
         // Stencil copies that should succeed
         ds_region.bufferOffset = 0;
         ds_region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-        m_errorMonitor->ExpectSuccess();  // Extract 1b stencil per texel, pack into 64k buffer
         vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                                &mem_barriers[0], 0, nullptr, 0, nullptr);
         vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), ds_image_4D_1S.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                  buffer_64k.handle(), 1, &ds_region);
-        m_errorMonitor->VerifyNotFound();
 
-        m_errorMonitor->ExpectSuccess();  // Extract 1b stencil per texel, pack into 64k buffer
         vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                                &mem_barriers[0], 0, nullptr, 0, nullptr);
         vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), ds_image_3D_1S.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                  buffer_64k.handle(), 1, &ds_region);
-        m_errorMonitor->VerifyNotFound();
 
-        m_errorMonitor->ExpectSuccess();  // Copy 1b depth per texel, into 64k buffer
         vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                                &mem_barriers[0], 0, nullptr, 0, nullptr);
         vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), ds_image_1S.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                  buffer_64k.handle(), 1, &ds_region);
-        m_errorMonitor->VerifyNotFound();
 
         // Stencil copies that should fail
         m_errorMonitor->SetDesiredFailureMsg(
@@ -2256,11 +2219,9 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
             // Just fits
             vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                                    &mem_barriers[0], 0, nullptr, 0, nullptr);
-            m_errorMonitor->ExpectSuccess();
             region.imageExtent = {128, 128, 1};
             vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image_16k_4x4comp.handle(), VK_IMAGE_LAYOUT_GENERAL,
                                      buffer_16k.handle(), 1, &region);
-            m_errorMonitor->VerifyNotFound();
 
             // with offset, too big for buffer
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-pRegions-00183");
@@ -2294,7 +2255,6 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
             // TODO: All available compressed formats are 2D, with block depth of 1. Unable to provoke VU_01277.
 
             // non-multiple extents are allowed if at the far edge of a non-block-multiple image - these should pass
-            m_errorMonitor->ExpectSuccess();
             region.imageExtent.width = 66;
             region.imageOffset.x = 64;
             vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
@@ -2309,7 +2269,6 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
                                    &mem_barriers[0], 0, nullptr, 0, nullptr);
             vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image_NPOT_4x4comp.handle(), VK_IMAGE_LAYOUT_GENERAL,
                                      buffer_16k.handle(), 1, &region);
-            m_errorMonitor->VerifyNotFound();
             region.imageOffset = {0, 0, 0};
 
             // buffer offset must be a multiple of texel block size (16)
@@ -2373,13 +2332,11 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
             ASSERT_TRUE(image_multi_planar.initialized());
 
             // Copies into a mutli-planar image aspect properly
-            m_errorMonitor->ExpectSuccess();
             mp_region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
             vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                                    &mem_barriers[2], 0, nullptr, 0, nullptr);
             vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16k.handle(), image_multi_planar.handle(),
                                      VK_IMAGE_LAYOUT_GENERAL, 1, &mp_region);
-            m_errorMonitor->VerifyNotFound();
 
             // uses plane_2 without being 3 planar format
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-aspectMask-01560");
@@ -2535,8 +2492,7 @@ TEST_F(VkLayerTest, CopyImageTypeExtentMismatch) {
 
     // Tests are designed to run without Maintenance1 which was promoted in 1.1
     if (DeviceValidationVersion() >= VK_API_VERSION_1_1) {
-        printf("%s Tests for 1.0 only, test skipped.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Tests for 1.0 only";
     }
 
     VkImageCreateInfo ci = LvlInitStruct<VkImageCreateInfo>();
@@ -2597,10 +2553,8 @@ TEST_F(VkLayerTest, CopyImageTypeExtentMismatch) {
     copy_region.dstOffset = {0, 0, 0};
 
     // Sanity check
-    m_errorMonitor->ExpectSuccess();
     m_commandBuffer->CopyImage(image_1D.image(), VK_IMAGE_LAYOUT_GENERAL, image_2D.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     // Equivalent sanity check using KHR_copy_commands2
     if (copy_commands2 && vkCmdCopyImage2Function) {
@@ -2619,9 +2573,7 @@ TEST_F(VkLayerTest, CopyImageTypeExtentMismatch) {
                                                       VK_IMAGE_LAYOUT_GENERAL,
                                                       1,
                                                       &region2};
-        m_errorMonitor->ExpectSuccess();
         vkCmdCopyImage2Function(m_commandBuffer->handle(), &copy_image_info2);
-        m_errorMonitor->VerifyNotFound();
     }
 
     // 1D texture w/ offset.y > 0. Source = VU 09c00124, dest = 09c00130
@@ -3025,9 +2977,7 @@ TEST_F(VkLayerTest, CopyImageCompressedBlockAlignment) {
     copy_region.dstOffset = {0, 0, 0};
 
     // Sanity check
-    m_errorMonitor->ExpectSuccess();
     m_commandBuffer->CopyImage(image_1.image(), VK_IMAGE_LAYOUT_GENERAL, image_2.image(), VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     std::string vuid;
     bool ycbcr = (DeviceExtensionEnabled(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME) ||
@@ -3208,7 +3158,6 @@ TEST_F(VkLayerTest, CopyImageSinglePlane422Alignment) {
     // 422 dest
     m_commandBuffer->CopyImage(image_ucmp.image(), VK_IMAGE_LAYOUT_GENERAL, image_422.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
     copy_region.dstOffset = {0, 0, 0};
 
     m_commandBuffer->end();
@@ -3391,10 +3340,8 @@ TEST_F(VkLayerTest, CopyImageSrcSizeExceeded) {
     copy_region.srcOffset = {0, 0, 0};
     copy_region.dstOffset = {0, 0, 0};
 
-    m_errorMonitor->ExpectSuccess();
     m_commandBuffer->CopyImage(src_image.image(), VK_IMAGE_LAYOUT_GENERAL, dst_image.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     // Source exceeded in x-dim
     copy_region.srcOffset.x = 4;
@@ -3478,10 +3425,8 @@ TEST_F(VkLayerTest, CopyImageDstSizeExceeded) {
     copy_region.srcOffset = {0, 0, 0};
     copy_region.dstOffset = {0, 0, 0};
 
-    m_errorMonitor->ExpectSuccess();
     m_commandBuffer->CopyImage(src_image.image(), VK_IMAGE_LAYOUT_GENERAL, dst_image.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     // Dest exceeded in x-dim
     copy_region.dstOffset.x = 4;
@@ -3675,18 +3620,14 @@ TEST_F(VkLayerTest, CopyImageMultiPlaneSizeExceeded) {
     m_commandBuffer->begin();
 
     // Should be able to do a 64x64 copy from plane 1 -> Plane 1
-    m_errorMonitor->ExpectSuccess();
     m_commandBuffer->CopyImage(src_image.image(), VK_IMAGE_LAYOUT_GENERAL, dst_image.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     // Should be able to do a 64x64 copy from plane 0 -> Plane 0
     copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
     copy_region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
-    m_errorMonitor->ExpectSuccess();
     m_commandBuffer->CopyImage(src_image.image(), VK_IMAGE_LAYOUT_GENERAL, dst_image.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     VkMemoryBarrier mem_barrier = LvlInitStruct<VkMemoryBarrier>();
     mem_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -3695,33 +3636,27 @@ TEST_F(VkLayerTest, CopyImageMultiPlaneSizeExceeded) {
     // Should be able to do a 64x64 copy from plane 0 -> Plane 1
     copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
     copy_region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT;
-    m_errorMonitor->ExpectSuccess();
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                            &mem_barrier, 0, nullptr, 0, nullptr);
     m_commandBuffer->CopyImage(src_image.image(), VK_IMAGE_LAYOUT_GENERAL, dst_image.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     // Should be able to do a 64x64 copy from plane 0 -> Plane 1
     copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT;
     copy_region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
-    m_errorMonitor->ExpectSuccess();
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                            &mem_barrier, 0, nullptr, 0, nullptr);
     m_commandBuffer->CopyImage(src_image.image(), VK_IMAGE_LAYOUT_GENERAL, dst_image.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     // Should be able to do a 128x64 copy from plane 0 -> Plane 0
     copy_region.extent = {128, 64, 1};
     copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
     copy_region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
-    m_errorMonitor->ExpectSuccess();
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1,
                            &mem_barrier, 0, nullptr, 0, nullptr);
     m_commandBuffer->CopyImage(src_image.image(), VK_IMAGE_LAYOUT_GENERAL, dst_image.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
-    m_errorMonitor->VerifyNotFound();
 
     // 128x64 copy from plane 0 -> Plane 1
     copy_region.extent = {128, 64, 1};
@@ -3761,37 +3696,25 @@ TEST_F(VkLayerTest, CopyImageMultiPlaneSizeExceeded) {
 }
 
 TEST_F(VkLayerTest, CopyImageFormatSizeMismatch) {
-    if (!EnableDeviceProfileLayer()) {
-        printf("%s Failed to enable device profile layer.\n", kSkipPrefix);
-        return;
+    if (!OverrideDevsimForDeviceProfileLayer()) {
+        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
     }
 
     // Enable KHR multiplane req'd extensions
-    bool mp_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-                                                    VK_KHR_GET_MEMORY_REQUIREMENTS_2_SPEC_VERSION);
-    if (mp_extensions == true) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-    if (mp_extensions == true) {
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-    }
-    ASSERT_NO_FATAL_FAILURE(InitState());
+    auto mp_features = LvlInitStruct<VkPhysicalDeviceSamplerYcbcrConversionFeaturesKHR>();
+    auto features2 = GetPhysicalDeviceFeatures2(mp_features);
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
     PFN_vkSetPhysicalDeviceFormatPropertiesEXT fpvkSetPhysicalDeviceFormatPropertiesEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceFormatPropertiesEXT fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT = nullptr;
-
-    // Load required functions
     if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFormatPropertiesEXT, fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT)) {
-        printf("%s Failed to device profile layer.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Failed to load device profile layer.";
     }
 
     // Set transfer for all potential used formats
@@ -3855,12 +3778,12 @@ TEST_F(VkLayerTest, CopyImageFormatSizeMismatch) {
         copyRegion.extent.depth = 1;
 
         // Sanity check between two 8bit formats
-        m_errorMonitor->ExpectSuccess();
         m_commandBuffer->CopyImage(image_8b_unorm.handle(), VK_IMAGE_LAYOUT_GENERAL, image_8b_uint.handle(),
                                    VK_IMAGE_LAYOUT_GENERAL, 1, &copyRegion);
-        m_errorMonitor->VerifyNotFound();
 
-        const char *vuid = (mp_extensions) ? "VUID-vkCmdCopyImage-srcImage-01548" : "VUID-vkCmdCopyImage-srcImage-00135";
+        const char *vuid = (IsExtensionsEnabled(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME))
+                               ? "VUID-vkCmdCopyImage-srcImage-01548"
+                               : "VUID-vkCmdCopyImage-srcImage-00135";
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, vuid);
         m_commandBuffer->CopyImage(image_8b_unorm.handle(), VK_IMAGE_LAYOUT_GENERAL, image_32b_unorm.handle(),
                                    VK_IMAGE_LAYOUT_GENERAL, 1, &copyRegion);
@@ -3876,7 +3799,7 @@ TEST_F(VkLayerTest, CopyImageFormatSizeMismatch) {
     }
 
     // DstImage is a mismatched plane of a multi-planar format
-    if (mp_extensions == false) {
+    if (!mp_features.samplerYcbcrConversion) {
         printf("%s No multi-planar support; section of tests skipped.\n", kSkipPrefix);
     } else {
         fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT(gpu(), VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, &format_props);
@@ -3910,19 +3833,15 @@ TEST_F(VkLayerTest, CopyImageFormatSizeMismatch) {
         copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
 
         // Plane 0 is VK_FORMAT_R8_UNORM so this should succeed
-        m_errorMonitor->ExpectSuccess();
         m_commandBuffer->CopyImage(image_8b_unorm.handle(), VK_IMAGE_LAYOUT_GENERAL, image_8b_16b_420_unorm.handle(),
                                    VK_IMAGE_LAYOUT_GENERAL, 1, &copyRegion);
-        m_errorMonitor->VerifyNotFound();
 
         image_8b_16b_420_unorm.ImageMemoryBarrier(m_commandBuffer, VK_IMAGE_ASPECT_PLANE_0_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                                                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
         // Make sure no false postiives if Compatible format
-        m_errorMonitor->ExpectSuccess();
         m_commandBuffer->CopyImage(image_8b_uint.handle(), VK_IMAGE_LAYOUT_GENERAL, image_8b_16b_420_unorm.handle(),
                                    VK_IMAGE_LAYOUT_GENERAL, 1, &copyRegion);
-        m_errorMonitor->VerifyNotFound();
 
         // Plane 1 is VK_FORMAT_R8G8_UNORM so this should fail
         copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT;
@@ -3940,18 +3859,14 @@ TEST_F(VkLayerTest, CopyImageFormatSizeMismatch) {
         image_8b_16b_420_unorm.ImageMemoryBarrier(m_commandBuffer, VK_IMAGE_ASPECT_PLANE_0_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                                                   VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
-        m_errorMonitor->ExpectSuccess();
         m_commandBuffer->CopyImage(image_8b_16b_420_unorm.handle(), VK_IMAGE_LAYOUT_GENERAL, image_8b_unorm.handle(),
                                    VK_IMAGE_LAYOUT_GENERAL, 1, &copyRegion);
-        m_errorMonitor->VerifyNotFound();
 
         image_8b_16b_420_unorm.ImageMemoryBarrier(m_commandBuffer, VK_IMAGE_ASPECT_PLANE_0_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                                                   VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
-        m_errorMonitor->ExpectSuccess();
         m_commandBuffer->CopyImage(image_8b_16b_420_unorm.handle(), VK_IMAGE_LAYOUT_GENERAL, image_8b_uint.handle(),
                                    VK_IMAGE_LAYOUT_GENERAL, 1, &copyRegion);
-        m_errorMonitor->VerifyNotFound();
 
         copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT;
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-None-01549");
@@ -4103,9 +4018,8 @@ TEST_F(VkLayerTest, CopyImageSampleCountMismatch) {
 TEST_F(VkLayerTest, CopyImageAspectMismatch) {
     TEST_DESCRIPTION("Image copies with aspect mask errors");
 
-    if (!EnableDeviceProfileLayer()) {
-        printf("%s Failed to enable device profile layer.\n", kSkipPrefix);
-        return;
+    if (!OverrideDevsimForDeviceProfileLayer()) {
+        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
     }
 
     bool mp_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, 1);
@@ -4128,10 +4042,8 @@ TEST_F(VkLayerTest, CopyImageAspectMismatch) {
 
     PFN_vkSetPhysicalDeviceFormatPropertiesEXT fpvkSetPhysicalDeviceFormatPropertiesEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceFormatPropertiesEXT fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT = nullptr;
-
     if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFormatPropertiesEXT, fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT)) {
-        printf("%s Required extensions are not avaiable.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Failed to load device profile layer.";
     }
 
     auto ds_format = FindSupportedDepthStencilFormat(gpu());
@@ -4268,10 +4180,8 @@ TEST_F(VkLayerTest, CopyImageAspectMismatch) {
     // Check no performance warnings regarding layout are thrown when copying from and to the same image
     copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    m_errorMonitor->ExpectSuccess(kPerformanceWarningBit);
     vk::CmdCopyImage(m_commandBuffer->handle(), depth_image.handle(), VK_IMAGE_LAYOUT_GENERAL, depth_image.handle(),
                      VK_IMAGE_LAYOUT_GENERAL, 1, &copyRegion);
-    m_errorMonitor->VerifyNotFound();
 
     m_commandBuffer->end();
 }
@@ -4878,7 +4788,6 @@ TEST_F(VkLayerTest, ResolveImageSizeExceeded) {
     TEST_DESCRIPTION("Resolve Image with subresource region greater than size of src/dst image");
     ASSERT_NO_FATAL_FAILURE(Init());
 
-    m_errorMonitor->ExpectSuccess();
     VkImageObj srcImage2D(m_device);
     VkImageObj dstImage2D(m_device);
 
@@ -4928,7 +4837,6 @@ TEST_F(VkLayerTest, ResolveImageSizeExceeded) {
 
     m_commandBuffer->ResolveImage(srcImage2D.image(), VK_IMAGE_LAYOUT_GENERAL, dstImage2D.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                   &resolveRegion);
-    m_errorMonitor->VerifyNotFound();
 
     // srcImage exceeded in x-dim
     resolveRegion.srcOffset.x = 4;
@@ -5186,51 +5094,53 @@ TEST_F(VkLayerTest, ExecuteDiffertQueueFlagsSecondaryCB) {
     ASSERT_NO_FATAL_FAILURE(Init());
 
     if (m_device->queue_props.size() < 2) {
-        printf("%s Need 2 different queues for testing skipping.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Need 2 different queues for testing skipping.";
     }
 
     // First two queue families
-    uint32_t queue_index_A = 0;
-    uint32_t queue_index_B = 1;
+    uint32_t queue_index_a = 0;
+    uint32_t queue_index_b = 1;
 
     VkCommandPoolCreateInfo pool_create_info = LvlInitStruct<VkCommandPoolCreateInfo>();
     pool_create_info.flags = 0;
 
-    VkCommandPool command_pool_A;
-    pool_create_info.queueFamilyIndex = queue_index_A;
-    vk::CreateCommandPool(m_device->device(), &pool_create_info, nullptr, &command_pool_A);
+    pool_create_info.queueFamilyIndex = queue_index_a;
+    vk_testing::CommandPool command_pool_a(*m_device, pool_create_info);
+    ASSERT_TRUE(command_pool_a.initialized());
 
-    VkCommandPool command_pool_B;
-    pool_create_info.queueFamilyIndex = queue_index_B;
-    vk::CreateCommandPool(m_device->device(), &pool_create_info, nullptr, &command_pool_B);
+    pool_create_info.queueFamilyIndex = queue_index_b;
+    vk_testing::CommandPool command_pool_b(*m_device, pool_create_info);
+    ASSERT_TRUE(command_pool_b.initialized());
 
-    VkCommandBuffer command_buffer[2];  // [0] primary and [1] secondary
-    VkCommandBufferAllocateInfo command_buffer_allocate_info = LvlInitStruct<VkCommandBufferAllocateInfo>();
+    auto command_buffer_allocate_info = LvlInitStruct<VkCommandBufferAllocateInfo>();
     command_buffer_allocate_info.commandBufferCount = 1;
-    command_buffer_allocate_info.commandPool = command_pool_A;
+    command_buffer_allocate_info.commandPool = command_pool_a.handle();
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, &command_buffer[0]);
+    vk_testing::CommandBuffer command_buffer_primary(*m_device, command_buffer_allocate_info);
+    ASSERT_TRUE(command_buffer_primary.initialized());
 
-    command_buffer_allocate_info.commandPool = command_pool_B;
+    command_buffer_allocate_info.commandPool = command_pool_b.handle();
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, &command_buffer[1]);
+    vk_testing::CommandBuffer command_buffer_secondary(*m_device, command_buffer_allocate_info);
 
-    VkCommandBufferBeginInfo begin_info = LvlInitStruct<VkCommandBufferBeginInfo>();
+    auto cmdbuff_ii = LvlInitStruct<VkCommandBufferInheritanceInfo>();
+    cmdbuff_ii.renderPass = m_renderPass;
+    cmdbuff_ii.subpass = 0;
+    cmdbuff_ii.framebuffer = m_framebuffer;
+
+    auto begin_info = LvlInitStruct<VkCommandBufferBeginInfo>();
+    begin_info.pInheritanceInfo = &cmdbuff_ii;
 
     // secondary
-    vk::BeginCommandBuffer(command_buffer[1], &begin_info);
-    vk::EndCommandBuffer(command_buffer[1]);
+    command_buffer_secondary.begin(&begin_info);
+    command_buffer_secondary.end();
 
     // Try using different pool's command buffer as secondary
-    vk::BeginCommandBuffer(command_buffer[0], &begin_info);
+    command_buffer_primary.begin(&begin_info);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-pCommandBuffers-00094");
-    vk::CmdExecuteCommands(command_buffer[0], 1, &command_buffer[1]);
+    vk::CmdExecuteCommands(command_buffer_primary.handle(), 1, &command_buffer_secondary.handle());
     m_errorMonitor->VerifyFound();
-    vk::EndCommandBuffer(command_buffer[0]);
-
-    vk::DestroyCommandPool(m_device->device(), command_pool_A, NULL);
-    vk::DestroyCommandPool(m_device->device(), command_pool_B, NULL);
+    command_buffer_primary.end();
 }
 
 TEST_F(VkLayerTest, ExecuteUnrecordedSecondaryCB) {
@@ -5302,9 +5212,7 @@ TEST_F(VkLayerTest, ExecuteSecondaryCBWithLayoutMismatch) {
     secondary.end();
     m_commandBuffer->begin();
     pipeline(*m_commandBuffer, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    m_errorMonitor->ExpectSuccess();
     vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
-    m_errorMonitor->VerifyNotFound();
     m_commandBuffer->end();
 }
 
@@ -5557,20 +5465,11 @@ TEST_F(VkLayerTest, SecondaryCommandBufferClearColorAttachmentsRenderArea) {
 
 TEST_F(VkLayerTest, PushDescriptorSetCmdPushBadArgs) {
     TEST_DESCRIPTION("Attempt to push a push descriptor set with incorrect arguments.");
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -5682,20 +5581,11 @@ TEST_F(VkLayerTest, PushDescriptorSetCmdPushBadArgs) {
 
 TEST_F(VkLayerTest, PushDescriptorSetCmdBufferOffsetUnaligned) {
     TEST_DESCRIPTION("Attempt to push a push descriptor set buffer with unaligned offset.");
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -5999,20 +5889,15 @@ TEST_F(VkLayerTest, MultiDrawFeatures) {
 TEST_F(VkLayerTest, IndirectDrawTests) {
     TEST_DESCRIPTION("Test covered valid usage for vkCmdDrawIndirect and vkCmdDrawIndexedIndirect");
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kMockICD) || DeviceSimulation()) {
-        printf("%sNot suppored by MockICD, skipping tests\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test not supported by MockICD";
     }
-
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -6072,20 +5957,12 @@ TEST_F(VkLayerTest, IndirectDrawTests) {
 TEST_F(VkLayerTest, DrawIndirectByteCountEXT) {
     TEST_DESCRIPTION("Test covered valid usage for vkCmdDrawIndirectByteCountEXT");
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
+
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-    } else {
-        printf("%s VK_EXT_transform_feedback extension not supported, skipping test\n", kSkipPrefix);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -6123,8 +6000,7 @@ TEST_F(VkLayerTest, DrawIndirectByteCountEXT) {
     m_commandBuffer->end();
 
     if (!tf_properties.maxTransformFeedbackBufferDataStride) {
-        printf("%s , maxTransformFeedbackBufferDataStride is zero, skipping subtests\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "maxTransformFeedbackBufferDataStride is zero, skipping subtests";
     }
 
     std::vector<const char *> device_extension_names;
@@ -6134,24 +6010,31 @@ TEST_F(VkLayerTest, DrawIndirectByteCountEXT) {
     VkCommandBufferObj commandBuffer(&test_device, &commandPool);
     VkBufferObj counter_buffer2;
     counter_buffer2.init(test_device, buffer_create_info);
+
     VkPipelineLayoutObj pipelineLayout(&test_device);
-    VkRenderPass renderpass;
+
     VkRenderPassCreateInfo rp_info = LvlInitStruct<VkRenderPassCreateInfo>();
     VkSubpassDescription subpass = {};
     rp_info.pSubpasses = &subpass;
     rp_info.subpassCount = 1;
-    vk::CreateRenderPass(test_device.handle(), &rp_info, nullptr, &renderpass);
+    vk_testing::RenderPass renderpass(test_device, rp_info);
+    ASSERT_TRUE(renderpass.handle());
+
     VkPipelineObj pipeline(&test_device);
     VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL_TRY);
-    vs.InitFromGLSLTry(bindStateVertShaderText, false, SPV_ENV_VULKAN_1_0, &test_device);
+    VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL_TRY);
+    vs.InitFromGLSLTry(false, &test_device);
+    fs.InitFromGLSLTry(false, &test_device);
     pipeline.AddShader(&vs);
-    pipeline.CreateVKPipeline(pipelineLayout.handle(), renderpass);
-    m_renderPassBeginInfo.renderPass = renderpass;
-    VkFramebuffer fb;
-    VkFramebufferCreateInfo fbci = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, nullptr, 0, renderpass, 0, nullptr, 256, 256, 1};
-    vk::CreateFramebuffer(test_device.handle(), &fbci, nullptr, &fb);
-    m_renderPassBeginInfo.framebuffer = fb;
-    m_renderPassBeginInfo.renderPass = renderpass;
+    pipeline.AddShader(&fs);
+    pipeline.CreateVKPipeline(pipelineLayout.handle(), renderpass.handle());
+    m_renderPassBeginInfo.renderPass = renderpass.handle();
+    VkFramebufferCreateInfo fbci = {
+        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, nullptr, 0, renderpass.handle(), 0, nullptr, 256, 256, 1};
+    vk_testing::Framebuffer fb(test_device, fbci);
+    ASSERT_TRUE(fb.initialized());
+    m_renderPassBeginInfo.framebuffer = fb.handle();
+    m_renderPassBeginInfo.renderPass = renderpass.handle();
     commandBuffer.begin();
     VkViewport viewport = {0, 0, 16, 16, 0, 1};
     vk::CmdSetViewport(commandBuffer.handle(), 0, 1, &viewport);
@@ -6165,25 +6048,18 @@ TEST_F(VkLayerTest, DrawIndirectByteCountEXT) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-transformFeedback-02287");
     fpvkCmdDrawIndirectByteCountEXT(commandBuffer.handle(), 1, 0, counter_buffer2.handle(), 0, 0, 1);
     m_errorMonitor->VerifyFound();
-    vk::DestroyRenderPass(test_device.handle(), renderpass, nullptr);
-    vk::DestroyFramebuffer(test_device.handle(), fb, nullptr);
 }
 
 TEST_F(VkLayerTest, DrawIndirectCountKHR) {
     TEST_DESCRIPTION("Test covered valid usage for vkCmdDrawIndirectCountKHR");
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-    } else {
-        printf("             VK_KHR_draw_indirect_count Extension not supported, skipping test\n");
-        return;
+    AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-
-    VkMemoryRequirements memory_requirements;
-    VkMemoryAllocateInfo memory_allocate_info = LvlInitStruct<VkMemoryAllocateInfo>();
 
     auto vkCmdDrawIndirectCountKHR =
         (PFN_vkCmdDrawIndirectCountKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawIndirectCountKHR");
@@ -6213,8 +6089,9 @@ TEST_F(VkLayerTest, DrawIndirectCountKHR) {
     VkBufferCreateInfo buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
     buffer_create_info.size = sizeof(VkDrawIndirectCommand);
     buffer_create_info.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    VkBuffer draw_buffer;
-    vk::CreateBuffer(m_device->device(), &buffer_create_info, nullptr, &draw_buffer);
+    vk_testing::Buffer draw_buffer;
+    draw_buffer.init_no_mem(*m_device, buffer_create_info);
+    ASSERT_TRUE(draw_buffer.initialized());
 
     VkDeviceSize count_buffer_size = 128;
     VkBufferCreateInfo count_buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
@@ -6224,70 +6101,60 @@ TEST_F(VkLayerTest, DrawIndirectCountKHR) {
     count_buffer.init(*m_device, count_buffer_create_info);
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectCount-buffer-02708");
-    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer, 0, count_buffer.handle(), 0, 1,
+    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 1,
                               sizeof(VkDrawIndirectCommand));
     m_errorMonitor->VerifyFound();
 
-    vk::GetBufferMemoryRequirements(m_device->device(), draw_buffer, &memory_requirements);
-    memory_allocate_info.allocationSize = memory_requirements.size;
-    m_device->phy().set_memory_type(memory_requirements.memoryTypeBits, &memory_allocate_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-    VkDeviceMemory draw_buffer_memory;
-    vk::AllocateMemory(m_device->device(), &memory_allocate_info, NULL, &draw_buffer_memory);
-    vk::BindBufferMemory(m_device->device(), draw_buffer, draw_buffer_memory, 0);
+    draw_buffer.bind_memory(*m_device, 0, 0);
 
-    VkBuffer count_buffer_unbound;
-    vk::CreateBuffer(m_device->device(), &count_buffer_create_info, nullptr, &count_buffer_unbound);
+    vk_testing::Buffer count_buffer_unbound;
+    count_buffer_unbound.init_no_mem(*m_device, count_buffer_create_info);
+    ASSERT_TRUE(count_buffer_unbound.initialized());
 
     VkBufferObj count_buffer_wrong;
-    count_buffer_create_info.usage = 0;
+    count_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     count_buffer_wrong.init(*m_device, count_buffer_create_info);
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectCount-countBuffer-02714");
-    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer, 0, count_buffer_unbound, 0, 1, sizeof(VkDrawIndirectCommand));
+    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer_unbound.handle(), 0, 1,
+                              sizeof(VkDrawIndirectCommand));
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, " VUID-vkCmdDrawIndirectCount-countBuffer-02715");
-    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer, 0, count_buffer_wrong.handle(), 0, 1,
+    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer_wrong.handle(), 0, 1,
                               sizeof(VkDrawIndirectCommand));
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectCount-offset-02710");
-    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer, 1, count_buffer.handle(), 0, 1,
+    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 1, count_buffer.handle(), 0, 1,
                               sizeof(VkDrawIndirectCommand));
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectCount-countBufferOffset-02716");
-    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer, 0, count_buffer.handle(), 1, 1,
+    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), 1, 1,
                               sizeof(VkDrawIndirectCommand));
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectCount-countBufferOffset-04129");
-    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer, 0, count_buffer.handle(), count_buffer_size, 1,
+    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), count_buffer_size, 1,
                               sizeof(VkDrawIndirectCommand));
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectCount-stride-03110");
-    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer, 0, count_buffer.handle(), 0, 1, 1);
+    vkCmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 1, 1);
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-
-    vk::DestroyBuffer(m_device->device(), draw_buffer, 0);
-    vk::DestroyBuffer(m_device->device(), count_buffer_unbound, 0);
-
-    vk::FreeMemory(m_device->device(), draw_buffer_memory, 0);
 }
 
 TEST_F(VkLayerTest, DrawIndexedIndirectCountKHR) {
     TEST_DESCRIPTION("Test covered valid usage for vkCmdDrawIndexedIndirectCountKHR");
 
+    AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-    } else {
-        printf("             VK_KHR_draw_indirect_count Extension not supported, skipping test\n");
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -6343,23 +6210,25 @@ TEST_F(VkLayerTest, DrawIndexedIndirectCountKHR) {
 
     vk::CmdBindIndexBuffer(m_commandBuffer->handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
 
-    VkBuffer draw_buffer_unbound;
-    vk::CreateBuffer(m_device->device(), &count_buffer_create_info, nullptr, &draw_buffer_unbound);
+    vk_testing::Buffer draw_buffer_unbound;
+    draw_buffer_unbound.init_no_mem(*m_device, count_buffer_create_info);
+    ASSERT_TRUE(draw_buffer_unbound.initialized());
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexedIndirectCount-buffer-02708");
-    vkCmdDrawIndexedIndirectCountKHR(m_commandBuffer->handle(), draw_buffer_unbound, 0, count_buffer.handle(), 0, 1,
+    vkCmdDrawIndexedIndirectCountKHR(m_commandBuffer->handle(), draw_buffer_unbound.handle(), 0, count_buffer.handle(), 0, 1,
                                      sizeof(VkDrawIndexedIndirectCommand));
     m_errorMonitor->VerifyFound();
 
-    VkBuffer count_buffer_unbound;
-    vk::CreateBuffer(m_device->device(), &count_buffer_create_info, nullptr, &count_buffer_unbound);
+    vk_testing::Buffer count_buffer_unbound;
+    count_buffer_unbound.init_no_mem(*m_device, count_buffer_create_info);
+    ASSERT_TRUE(count_buffer_unbound.initialized());
 
     VkBufferObj count_buffer_wrong;
-    count_buffer_create_info.usage = 0;
+    count_buffer_create_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     count_buffer_wrong.init(*m_device, count_buffer_create_info);
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexedIndirectCount-countBuffer-02714");
-    vkCmdDrawIndexedIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer_unbound, 0, 1,
+    vkCmdDrawIndexedIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer_unbound.handle(), 0, 1,
                                      sizeof(VkDrawIndexedIndirectCommand));
     m_errorMonitor->VerifyFound();
 
@@ -6389,9 +6258,6 @@ TEST_F(VkLayerTest, DrawIndexedIndirectCountKHR) {
 
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-
-    vk::DestroyBuffer(m_device->device(), draw_buffer_unbound, 0);
-    vk::DestroyBuffer(m_device->device(), count_buffer_unbound, 0);
 }
 
 TEST_F(VkLayerTest, DrawIndirectCountFeature) {
@@ -6610,27 +6476,15 @@ TEST_F(VkLayerTest, ExclusiveScissorNV) {
 TEST_F(VkLayerTest, MeshShaderNV) {
     TEST_DESCRIPTION("Test VK_NV_mesh_shader.");
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_NV_MESH_SHADER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    std::array<const char *, 1> required_device_extensions = {{VK_NV_MESH_SHADER_EXTENSION_NAME}};
-    for (auto device_extension : required_device_extensions) {
-        if (DeviceExtensionSupported(gpu(), nullptr, device_extension)) {
-            m_device_extension_names.push_back(device_extension);
-        } else {
-            printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, device_extension);
-            return;
-        }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (IsPlatform(kMockICD) || DeviceSimulation()) {
-        printf("%sNot suppored by MockICD, skipping tests\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test not supported by MockICD";
     }
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
@@ -6690,9 +6544,11 @@ TEST_F(VkLayerTest, MeshShaderNV) {
                                           vector<std::string>({"VUID-VkGraphicsPipelineCreateInfo-pStages-02095"}));
 
         // vertex or mesh must be present
+        // 02096 overlaps with 06896
         const auto break_vp2 = [&](CreatePipelineHelper &helper) { helper.shader_stages_ = {fs.GetStageCreateInfo()}; };
         CreatePipelineHelper::OneshotTest(*this, break_vp2, kErrorBit,
-                                          vector<std::string>({"VUID-VkGraphicsPipelineCreateInfo-stage-02096"}));
+                                          vector<std::string>({"VUID-VkGraphicsPipelineCreateInfo-stage-02096",
+                                                               "VUID-VkGraphicsPipelineCreateInfo-pStages-06896"}));
 
         // vertexinput and inputassembly must be valid when vertex stage is present
         const auto break_vp3 = [&](CreatePipelineHelper &helper) {
@@ -6730,34 +6586,26 @@ TEST_F(VkLayerTest, MeshShaderNV) {
 TEST_F(VkLayerTest, MeshShaderDisabledNV) {
     TEST_DESCRIPTION("Test VK_NV_mesh_shader VUs with NV_mesh_shader disabled.");
 
-    if (!AddRequiredExtensions(VK_NV_MESH_SHADER_EXTENSION_NAME)) {
-        printf("%s %s not supported\n", kSkipPrefix, VK_NV_MESH_SHADER_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_NV_MESH_SHADER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
     auto mesh_shader_features = LvlInitStruct<VkPhysicalDeviceMeshShaderFeaturesNV>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&mesh_shader_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    GetPhysicalDeviceFeatures2(mesh_shader_features);
     if (mesh_shader_features.meshShader != VK_TRUE) {
-        printf("%s Mesh shader feature not supported\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Mesh shader feature not supported";
     }
 
     mesh_shader_features.meshShader = VK_FALSE;
     mesh_shader_features.taskShader = VK_FALSE;
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &mesh_shader_features));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    VkEvent event;
-    VkEventCreateInfo event_create_info = LvlInitStruct<VkEventCreateInfo>();
-    vk::CreateEvent(m_device->device(), &event_create_info, nullptr, &event);
+    vk_testing::Event event_obj(*m_device);
+    const auto event = event_obj.handle();
+    ASSERT_TRUE(event_obj.initialized());
 
     m_commandBuffer->begin();
 
@@ -6803,9 +6651,9 @@ TEST_F(VkLayerTest, MeshShaderDisabledNV) {
 
     m_commandBuffer->end();
 
-    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
-    VkSemaphore semaphore;
-    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore));
+    vk_testing::Semaphore semaphore_obj(*m_device);
+    const auto semaphore = semaphore_obj.handle();
+    ASSERT_TRUE(semaphore_obj.initialized());
 
     VkPipelineStageFlags stage_flags = VK_PIPELINE_STAGE_MESH_SHADER_BIT_NV | VK_PIPELINE_STAGE_TASK_SHADER_BIT_NV;
     VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
@@ -6814,7 +6662,6 @@ TEST_F(VkLayerTest, MeshShaderDisabledNV) {
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = &semaphore;
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
-    m_errorMonitor->VerifyNotFound();
 
     submit_info.signalSemaphoreCount = 0;
     submit_info.pSignalSemaphores = nullptr;
@@ -6867,17 +6714,15 @@ TEST_F(VkLayerTest, MeshShaderDisabledNV) {
 
     VkShaderObj task_shader(this, task_src, VK_SHADER_STAGE_TASK_BIT_NV);
     VkShaderObj mesh_shader(this, mesh_src, VK_SHADER_STAGE_MESH_BIT_NV);
+    VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     // mesh and task shaders not supported
     const auto break_vp = [&](CreatePipelineHelper &helper) {
-        helper.shader_stages_ = {task_shader.GetStageCreateInfo(), mesh_shader.GetStageCreateInfo()};
+        helper.shader_stages_ = {task_shader.GetStageCreateInfo(), mesh_shader.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     };
     CreatePipelineHelper::OneshotTest(*this, break_vp, kErrorBit,
                                       vector<std::string>({"VUID-VkPipelineShaderStageCreateInfo-stage-02091",
                                                            "VUID-VkPipelineShaderStageCreateInfo-stage-02092"}));
-
-    vk::DestroyEvent(m_device->device(), event, nullptr);
-    vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
 }
 
 TEST_F(VkLayerTest, ViewportWScalingNV) {
@@ -6951,7 +6796,7 @@ TEST_F(VkLayerTest, ViewportWScalingNV) {
     const auto set_vpci = [&vpci](CreatePipelineHelper &helper) { helper.vp_state_ci_ = vpci; };
 
     // Make sure no errors show up when creating the pipeline with w-scaling enabled
-    CreatePipelineHelper::OneshotTest(*this, set_vpci, kErrorBit, vector<std::string>(), true);
+    CreatePipelineHelper::OneshotTest(*this, set_vpci, kErrorBit);
 
     // Create pipeline with w-scaling enabled but without a valid scaling array
     vpsi.pViewportWScalings = nullptr;
@@ -6990,14 +6835,10 @@ TEST_F(VkLayerTest, ViewportWScalingNV) {
     m_commandBuffer->begin();
 
     // Bind pipeline without dynamic w scaling enabled
-    m_errorMonitor->ExpectSuccess();
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.handle());
-    m_errorMonitor->VerifyNotFound();
 
     // Bind pipeline that has dynamic w-scaling enabled
-    m_errorMonitor->ExpectSuccess();
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeDynWScale.handle());
-    m_errorMonitor->VerifyNotFound();
 
     const auto max_vps = m_device->props.limits.maxViewports;
 
@@ -7005,9 +6846,7 @@ TEST_F(VkLayerTest, ViewportWScalingNV) {
     vkCmdSetViewportWScalingNV(m_commandBuffer->handle(), 1, max_vps, scale.data());
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->ExpectSuccess();
     vkCmdSetViewportWScalingNV(m_commandBuffer->handle(), 0, vp_count, scale.data());
-    m_errorMonitor->VerifyNotFound();
 
     m_commandBuffer->end();
 }
@@ -7071,20 +6910,13 @@ TEST_F(VkLayerTest, CreateSamplerYcbcrConversionEnable) {
 TEST_F(VkLayerTest, TransformFeedbackFeatureEnabled) {
     TEST_DESCRIPTION("VkPhysicalDeviceTransformFeedbackFeaturesEXT::transformFeedback must be enabled");
 
-    if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
-    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    m_device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
 
     {
         PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
@@ -7146,38 +6978,22 @@ TEST_F(VkLayerTest, TransformFeedbackFeatureEnabled) {
 TEST_F(VkLayerTest, TransformFeedbackCmdBindTransformFeedbackBuffersEXT) {
     TEST_DESCRIPTION("Submit invalid arguments to vkCmdBindTransformFeedbackBuffersEXT");
 
-    if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
+    AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
-    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kGalaxyS10)) {
-        printf("%s Test temporarily disabled on S10 device\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test temporarily disabled on S10 device";
     }
-
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-        return;
-    }
-    m_device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
 
     {
-        PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-            (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-        ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
         auto tf_features = LvlInitStruct<VkPhysicalDeviceTransformFeedbackFeaturesEXT>();
-        auto pd_features = LvlInitStruct<VkPhysicalDeviceFeatures2>(&tf_features);
-        vkGetPhysicalDeviceFeatures2KHR(gpu(), &pd_features);
+        auto pd_features = GetPhysicalDeviceFeatures2(tf_features);
 
         if (!tf_features.transformFeedback) {
-            printf("%s transformFeedback not supported; skipped.\n", kSkipPrefix);
-            return;
+            GTEST_SKIP() << "transformFeedback not supported; skipped.";
         }
 
         ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &pd_features));
@@ -7191,8 +7007,7 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBindTransformFeedbackBuffersEXT) {
 
     {
         auto tf_properties = LvlInitStruct<VkPhysicalDeviceTransformFeedbackPropertiesEXT>();
-        auto pd_properties = LvlInitStruct<VkPhysicalDeviceProperties2>(&tf_properties);
-        vk::GetPhysicalDeviceProperties2(gpu(), &pd_properties);
+        GetPhysicalDeviceProperties2(tf_properties);
 
         auto info = LvlInitStruct<VkBufferCreateInfo>();
         info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
@@ -7280,7 +7095,7 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBindTransformFeedbackBuffersEXT) {
         }
 
         // Bind while transform feedback is active.
-        {
+        if (!IsDriver(VK_DRIVER_ID_MESA_RADV)) {
             auto vkCmdBeginTransformFeedbackEXT =
                 (PFN_vkCmdBeginTransformFeedbackEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdBeginTransformFeedbackEXT");
             ASSERT_TRUE(vkCmdBeginTransformFeedbackEXT != nullptr);
@@ -7304,7 +7119,7 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBindTransformFeedbackBuffersEXT) {
         auto info = LvlInitStruct<VkBufferCreateInfo>();
         // info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
         info.size = 4;
-        m_errorMonitor->SetUnexpectedError("VUID-VkBufferCreateInfo-usage-parameter");
+        m_errorMonitor->SetUnexpectedError("VUID-VkBufferCreateInfo-usage-requiredbitmask");
         VkBufferObj const buffer_obj(*m_device, info);
 
         VkDeviceSize const offsets[1]{};
@@ -7316,21 +7131,18 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBindTransformFeedbackBuffersEXT) {
 
     // Don't bind memory.
     {
-        VkBuffer buffer{};
+        vk_testing::Buffer buffer;
         {
-            auto vkCreateBuffer = (PFN_vkCreateBuffer)vk::GetDeviceProcAddr(m_device->device(), "vkCreateBuffer");
-            ASSERT_TRUE(vkCreateBuffer != nullptr);
-
             auto info = LvlInitStruct<VkBufferCreateInfo>();
             info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
             info.size = 4;
-            vkCreateBuffer(m_device->device(), &info, nullptr, &buffer);
+            buffer.init_no_mem(*m_device, info);
         }
 
         VkDeviceSize const offsets[1]{};
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBindTransformFeedbackBuffersEXT-pBuffers-02364");
-        vkCmdBindTransformFeedbackBuffersEXT(m_commandBuffer->handle(), 0, 1, &buffer, offsets, nullptr);
+        vkCmdBindTransformFeedbackBuffersEXT(m_commandBuffer->handle(), 0, 1, &buffer.handle(), offsets, nullptr);
         m_errorMonitor->VerifyFound();
     }
 }
@@ -7338,38 +7150,22 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBindTransformFeedbackBuffersEXT) {
 TEST_F(VkLayerTest, TransformFeedbackCmdBeginTransformFeedbackEXT) {
     TEST_DESCRIPTION("Submit invalid arguments to vkCmdBeginTransformFeedbackEXT");
 
-    if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
+    AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
-    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kGalaxyS10)) {
-        printf("%s Test temporarily disabled on S10 device\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test temporarily disabled on S10 device";
     }
-
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-        return;
-    }
-    m_device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
 
     {
-        PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-            (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-        ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
         auto tf_features = LvlInitStruct<VkPhysicalDeviceTransformFeedbackFeaturesEXT>();
-        auto pd_features = LvlInitStruct<VkPhysicalDeviceFeatures2>(&tf_features);
-        vkGetPhysicalDeviceFeatures2KHR(gpu(), &pd_features);
+        auto pd_features = GetPhysicalDeviceFeatures2(tf_features);
 
         if (!tf_features.transformFeedback) {
-            printf("%s transformFeedback not supported; skipped.\n", kSkipPrefix);
-            return;
+            GTEST_SKIP() << "transformFeedback not supported; skipped.";
         }
 
         ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &pd_features));
@@ -7383,8 +7179,7 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBeginTransformFeedbackEXT) {
 
     {
         auto tf_properties = LvlInitStruct<VkPhysicalDeviceTransformFeedbackPropertiesEXT>();
-        auto pd_properties = LvlInitStruct<VkPhysicalDeviceProperties2>(&tf_properties);
-        vk::GetPhysicalDeviceProperties2(gpu(), &pd_properties);
+        GetPhysicalDeviceProperties2(tf_properties);
 
         // Request a firstCounterBuffer that is too large.
         {
@@ -7434,7 +7229,7 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBeginTransformFeedbackEXT) {
         auto info = LvlInitStruct<VkBufferCreateInfo>();
         // info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
         info.size = 4;
-        m_errorMonitor->SetUnexpectedError("VUID-VkBufferCreateInfo-usage-parameter");
+        m_errorMonitor->SetUnexpectedError("VUID-VkBufferCreateInfo-usage-requiredbitmask");
         VkBufferObj const buffer_obj(*m_device, info);
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBeginTransformFeedbackEXT-pCounterBuffers-02372");
@@ -7443,7 +7238,7 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBeginTransformFeedbackEXT) {
     }
 
     // Begin while transform feedback is active.
-    {
+    if (!IsDriver(VK_DRIVER_ID_MESA_RADV)) {
         vkCmdBeginTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, nullptr);
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBeginTransformFeedbackEXT-None-02367");
@@ -7461,38 +7256,22 @@ TEST_F(VkLayerTest, TransformFeedbackCmdBeginTransformFeedbackEXT) {
 TEST_F(VkLayerTest, TransformFeedbackCmdEndTransformFeedbackEXT) {
     TEST_DESCRIPTION("Submit invalid arguments to vkCmdEndTransformFeedbackEXT");
 
-    if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
-    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
+    AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
 
     if (IsPlatform(kGalaxyS10)) {
-        printf("%s Test temporarily disabled on S10 device\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test temporarily disabled on S10 device";
     }
-
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-        return;
-    }
-    m_device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
 
     {
-        PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-            (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-        ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
         auto tf_features = LvlInitStruct<VkPhysicalDeviceTransformFeedbackFeaturesEXT>();
-        auto pd_features = LvlInitStruct<VkPhysicalDeviceFeatures2>(&tf_features);
-        vkGetPhysicalDeviceFeatures2KHR(gpu(), &pd_features);
+        auto pd_features = GetPhysicalDeviceFeatures2(tf_features);
 
         if (!tf_features.transformFeedback) {
-            printf("%s transformFeedback not supported; skipped.\n", kSkipPrefix);
-            return;
+            GTEST_SKIP() << "transformFeedback not supported; skipped.";
         }
 
         ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &pd_features));
@@ -7504,82 +7283,83 @@ TEST_F(VkLayerTest, TransformFeedbackCmdEndTransformFeedbackEXT) {
         (PFN_vkCmdEndTransformFeedbackEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdEndTransformFeedbackEXT");
     ASSERT_TRUE(vkCmdEndTransformFeedbackEXT != nullptr);
 
-    {
-        // Activate transform feedback.
-        auto vkCmdBeginTransformFeedbackEXT =
-            (PFN_vkCmdBeginTransformFeedbackEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdBeginTransformFeedbackEXT");
-        ASSERT_TRUE(vkCmdBeginTransformFeedbackEXT != nullptr);
-        vkCmdBeginTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, nullptr);
-
+    if (!IsDriver(VK_DRIVER_ID_MESA_RADV)) {
         {
-            auto tf_properties = LvlInitStruct<VkPhysicalDeviceTransformFeedbackPropertiesEXT>();
-            auto pd_properties = LvlInitStruct<VkPhysicalDeviceProperties2>(&tf_properties);
-            vk::GetPhysicalDeviceProperties2(gpu(), &pd_properties);
+            // Activate transform feedback.
+            auto vkCmdBeginTransformFeedbackEXT =
+                (PFN_vkCmdBeginTransformFeedbackEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdBeginTransformFeedbackEXT");
+            ASSERT_TRUE(vkCmdBeginTransformFeedbackEXT != nullptr);
+            vkCmdBeginTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, nullptr);
 
-            // Request a firstCounterBuffer that is too large.
             {
-                auto const firstCounterBuffer = tf_properties.maxTransformFeedbackBuffers;
+                auto tf_properties = LvlInitStruct<VkPhysicalDeviceTransformFeedbackPropertiesEXT>();
+                GetPhysicalDeviceProperties2(tf_properties);
 
-                m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-firstCounterBuffer-02376");
-                m_errorMonitor->SetUnexpectedError("VUID-vkCmdEndTransformFeedbackEXT-firstCounterBuffer-02377");
-                vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), firstCounterBuffer, 1, nullptr, nullptr);
+                // Request a firstCounterBuffer that is too large.
+                {
+                    auto const firstCounterBuffer = tf_properties.maxTransformFeedbackBuffers;
+
+                    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-firstCounterBuffer-02376");
+                    m_errorMonitor->SetUnexpectedError("VUID-vkCmdEndTransformFeedbackEXT-firstCounterBuffer-02377");
+                    vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), firstCounterBuffer, 1, nullptr, nullptr);
+                    m_errorMonitor->VerifyFound();
+                }
+
+                // Request too many buffers.
+                if (tf_properties.maxTransformFeedbackBuffers < std::numeric_limits<uint32_t>::max()) {
+                    auto const counterBufferCount = tf_properties.maxTransformFeedbackBuffers + 1;
+
+                    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-firstCounterBuffer-02377");
+                    vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, counterBufferCount, nullptr, nullptr);
+                    m_errorMonitor->VerifyFound();
+                }
+            }
+
+            // Request an out-of-bounds location.
+            {
+                auto info = LvlInitStruct<VkBufferCreateInfo>();
+                info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
+                info.size = 4;
+                VkBufferObj const buffer_obj(*m_device, info);
+
+                VkDeviceSize const offsets[1]{1};
+
+                m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-pCounterBufferOffsets-02378");
+                vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, &buffer_obj.handle(), offsets);
                 m_errorMonitor->VerifyFound();
             }
 
-            // Request too many buffers.
-            if (tf_properties.maxTransformFeedbackBuffers < std::numeric_limits<uint32_t>::max()) {
-                auto const counterBufferCount = tf_properties.maxTransformFeedbackBuffers + 1;
+            // Request specific offsets without specifying buffers.
+            {
+                VkDeviceSize const offsets[1]{};
 
-                m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-firstCounterBuffer-02377");
-                vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, counterBufferCount, nullptr, nullptr);
+                m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-pCounterBuffer-02379");
+                vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, offsets);
+                m_errorMonitor->VerifyFound();
+            }
+
+            // Don't set VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT.
+            {
+                auto info = LvlInitStruct<VkBufferCreateInfo>();
+                // info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
+                info.size = 4;
+                m_errorMonitor->SetUnexpectedError("VUID-VkBufferCreateInfo-usage-requiredbitmask");
+                VkBufferObj const buffer_obj(*m_device, info);
+
+                m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-pCounterBuffers-02380");
+                vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, &buffer_obj.handle(), nullptr);
                 m_errorMonitor->VerifyFound();
             }
         }
 
-        // Request an out-of-bounds location.
+        // End while transform feedback is inactive.
         {
-            auto info = LvlInitStruct<VkBufferCreateInfo>();
-            info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
-            info.size = 4;
-            VkBufferObj const buffer_obj(*m_device, info);
+            vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, nullptr);
 
-            VkDeviceSize const offsets[1]{1};
-
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-pCounterBufferOffsets-02378");
-            vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, &buffer_obj.handle(), offsets);
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-None-02375");
+            vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, nullptr);
             m_errorMonitor->VerifyFound();
         }
-
-        // Request specific offsets without specifying buffers.
-        {
-            VkDeviceSize const offsets[1]{};
-
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-pCounterBuffer-02379");
-            vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, offsets);
-            m_errorMonitor->VerifyFound();
-        }
-
-        // Don't set VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT.
-        {
-            auto info = LvlInitStruct<VkBufferCreateInfo>();
-            // info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
-            info.size = 4;
-            m_errorMonitor->SetUnexpectedError("VUID-VkBufferCreateInfo-usage-parameter");
-            VkBufferObj const buffer_obj(*m_device, info);
-
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-pCounterBuffers-02380");
-            vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, &buffer_obj.handle(), nullptr);
-            m_errorMonitor->VerifyFound();
-        }
-    }
-
-    // End while transform feedback is inactive.
-    {
-        vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, nullptr);
-
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndTransformFeedbackEXT-None-02375");
-        vkCmdEndTransformFeedbackEXT(m_commandBuffer->handle(), 0, 1, nullptr, nullptr);
-        m_errorMonitor->VerifyFound();
     }
 }
 
@@ -7589,14 +7369,13 @@ TEST_F(VkLayerTest, InvalidUnprotectedCommands) {
     // protect memory added in VK 1.1
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
@@ -7680,19 +7459,16 @@ TEST_F(VkLayerTest, InvalidMixingProtectedResources) {
     TEST_DESCRIPTION("Test where there is mixing of protectedMemory backed resource in command buffers");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kShieldTV) || IsPlatform(kShieldTVb)) {
         printf("%s CreateImageView calls crash ShieldTV, skipped for this platform.\n", kSkipPrefix);
         return;
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
@@ -7717,7 +7493,7 @@ TEST_F(VkLayerTest, InvalidMixingProtectedResources) {
     vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
 
     // Turns m_commandBuffer into a unprotected command buffer without passing in a VkCommandPoolCreateFlags
-    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     VkCommandPoolObj protectedCommandPool(m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_PROTECTED_BIT);
     VkCommandBufferObj protectedCommandBuffer(m_device, &protectedCommandPool);
@@ -7761,17 +7537,11 @@ TEST_F(VkLayerTest, InvalidMixingProtectedResources) {
     image_create_info.mipLevels = 1;
     image_create_info.flags = VK_IMAGE_CREATE_PROTECTED_BIT;
     image_protected.init_no_mem(*m_device, image_create_info);
-    image_protected.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
-
     image_protected_descriptor.init_no_mem(*m_device, image_create_info);
-    image_protected_descriptor.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
     image_create_info.flags = 0;
     image_unprotected.init_no_mem(*m_device, image_create_info);
-    image_unprotected.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
-
     image_unprotected_descriptor.init_no_mem(*m_device, image_create_info);
-    image_unprotected_descriptor.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
     // Create protected and unproteced memory
     VkDeviceMemory memory_protected = VK_NULL_HANDLE;
@@ -7826,6 +7596,12 @@ TEST_F(VkLayerTest, InvalidMixingProtectedResources) {
     vk::BindImageMemory(device(), image_unprotected.handle(), memory_unprotected, 0);
     vk::BindImageMemory(device(), image_protected_descriptor.handle(), memory_protected, 0);
     vk::BindImageMemory(device(), image_unprotected_descriptor.handle(), memory_unprotected, 0);
+
+    // Change layout once memory is bound
+    image_protected.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
+    image_protected_descriptor.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
+    image_unprotected.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
+    image_unprotected_descriptor.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
     // need memory bound at image view creation time
     image_views[0] = image_protected.targetView(image_format);
@@ -8116,21 +7892,12 @@ TEST_F(VkLayerTest, InvalidStorageAtomicOperation) {
         "If storage view use atomic operation, the view's format MUST support VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT or "
         "VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT ");
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME);
-    } else {
-        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME);
 
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
@@ -8145,7 +7912,6 @@ TEST_F(VkLayerTest, InvalidStorageAtomicOperation) {
         return;
     }
 
-    m_errorMonitor->ExpectSuccess();
     VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT;
     VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;  // The format doesn't support VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT to
                                                        // cause DesiredFailure. VK_FORMAT_R32_UINT is right format.
@@ -8234,7 +8000,6 @@ TEST_F(VkLayerTest, InvalidStorageAtomicOperation) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(), 0, 1,
                               &g_pipe.descriptor_set_->set_, 0, nullptr);
 
-    m_errorMonitor->VerifyNotFound();
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-02691");
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-02691");
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "UNASSIGNED-None-MismatchAtomicBufferFeature");
@@ -8305,8 +8070,9 @@ TEST_F(VkLayerTest, DrawWithoutUpdatePushConstants) {
     VkPushConstantRange push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128};
     VkPushConstantRange push_constant_range_small = {VK_SHADER_STAGE_VERTEX_BIT, 4, 4};
 
-    VkPipelineLayoutCreateInfo pipeline_layout_info{
-        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, nullptr, 0, 0, nullptr, 1, &push_constant_range};
+    auto pipeline_layout_info = LvlInitStruct<VkPipelineLayoutCreateInfo>();
+    pipeline_layout_info.pushConstantRangeCount = 1;
+    pipeline_layout_info.pPushConstantRanges = &push_constant_range;
 
     VkPipelineLayout pipeline_layout;
     vk::CreatePipelineLayout(m_device->device(), &pipeline_layout_info, NULL, &pipeline_layout);
@@ -8360,11 +8126,15 @@ TEST_F(VkLayerTest, DrawWithoutUpdatePushConstants) {
     // vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
     // m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->ExpectSuccess();
     vk::CmdPushConstants(m_commandBuffer->handle(), pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 32,
                          68, dummy_values);
     vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
-    m_errorMonitor->VerifyNotFound();
+
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    vk::DestroyPipelineLayout(m_device->handle(), pipeline_layout, nullptr);
+    vk::DestroyPipelineLayout(m_device->handle(), pipeline_layout_small, nullptr);
 }
 
 TEST_F(VkLayerTest, VerifyVertextBinding) {
@@ -8450,18 +8220,15 @@ TEST_F(VkLayerTest, VerifyDynamicStateSettingCommands) {
 
 TEST_F(VkLayerTest, VerifyFilterCubicSamplerInCmdDraw) {
     TEST_DESCRIPTION("Verify if sampler is filter cubic, image view needs to support it.");
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_1);
-    if (version < VK_API_VERSION_1_1) {
-        printf("%s At least Vulkan version 1.1 is required, skipping test.\n", kSkipPrefix);
-        return;
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_EXT_FILTER_CUBIC_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_SAMPLER_FILTER_MINMAX_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "Test requires at least Vulkan 1.1";
     }
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_FILTER_CUBIC_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_FILTER_CUBIC_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_EXT_FILTER_CUBIC_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -8473,8 +8240,7 @@ TEST_F(VkLayerTest, VerifyFilterCubicSamplerInCmdDraw) {
     VkFormatProperties format_props;
     vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), format, &format_props);
     if ((format_props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_CUBIC_BIT_EXT) == 0) {
-        printf("%s SAMPLED_IMAGE_FILTER_CUBIC_BIT for format is not supported.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "SAMPLED_IMAGE_FILTER_CUBIC_BIT for format is not supported.";
     }
 
     auto image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 1, 1, format, usage, VK_IMAGE_TILING_OPTIMAL);
@@ -8495,8 +8261,7 @@ TEST_F(VkLayerTest, VerifyFilterCubicSamplerInCmdDraw) {
     vk::GetPhysicalDeviceImageFormatProperties2(gpu(), &image_format_info, &image_format_properties);
 
     if (filter_cubic_props.filterCubic || filter_cubic_props.filterCubicMinmax) {
-        printf("%s Image and ImageView supports filter cubic ; skipped.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Image and ImageView supports filter cubic ; skipped.";
     }
 
     VkImageObj image(m_device);
@@ -8506,14 +8271,13 @@ TEST_F(VkLayerTest, VerifyFilterCubicSamplerInCmdDraw) {
     auto sampler_ci = LvlInitStruct<VkSamplerCreateInfo>();
     sampler_ci.minFilter = VK_FILTER_CUBIC_EXT;
     sampler_ci.magFilter = VK_FILTER_CUBIC_EXT;
-    VkSampler sampler;
-    vk::CreateSampler(m_device->device(), &sampler_ci, NULL, &sampler);
+    vk_testing::Sampler sampler(*m_device, sampler_ci);
+    ASSERT_TRUE(sampler.initialized());
 
     auto reduction_mode_ci = LvlInitStruct<VkSamplerReductionModeCreateInfo>();
     reduction_mode_ci.reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN;
     sampler_ci.pNext = &reduction_mode_ci;
-    VkSampler sampler_rediction;
-    vk::CreateSampler(m_device->device(), &sampler_ci, NULL, &sampler_rediction);
+    vk_testing::Sampler sampler_reduction(*m_device, sampler_ci);
 
     VkShaderObj fs(this, bindStateFragSamplerShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
 
@@ -8524,7 +8288,7 @@ TEST_F(VkLayerTest, VerifyFilterCubicSamplerInCmdDraw) {
     g_pipe.InitState();
     ASSERT_VK_SUCCESS(g_pipe.CreateGraphicsPipeline());
 
-    g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, imageView, sampler_rediction);
+    g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, imageView, sampler_reduction.handle());
     g_pipe.descriptor_set_->UpdateDescriptorSets();
 
     m_commandBuffer->begin();
@@ -8541,7 +8305,7 @@ TEST_F(VkLayerTest, VerifyFilterCubicSamplerInCmdDraw) {
     m_commandBuffer->end();
     m_commandBuffer->reset();
 
-    g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, imageView, sampler);
+    g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, imageView, sampler.handle());
     g_pipe.descriptor_set_->UpdateDescriptorSets();
 
     m_commandBuffer->begin();
@@ -8563,8 +8327,8 @@ TEST_F(VkLayerTest, VerifyImgFilterCubicSamplerInCmdDraw) {
 
     AddRequiredExtensions(VK_IMG_FILTER_CUBIC_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -8592,8 +8356,8 @@ TEST_F(VkLayerTest, VerifyImgFilterCubicSamplerInCmdDraw) {
     auto sampler_ci = LvlInitStruct<VkSamplerCreateInfo>();
     sampler_ci.minFilter = VK_FILTER_CUBIC_EXT;
     sampler_ci.magFilter = VK_FILTER_CUBIC_EXT;
-    VkSampler sampler;
-    vk::CreateSampler(m_device->device(), &sampler_ci, NULL, &sampler);
+    vk_testing::Sampler sampler(*m_device, sampler_ci);
+    ASSERT_TRUE(sampler.initialized());
 
     static const char fs_src[] = R"glsl(
         #version 450
@@ -8612,7 +8376,7 @@ TEST_F(VkLayerTest, VerifyImgFilterCubicSamplerInCmdDraw) {
     g_pipe.InitState();
     ASSERT_VK_SUCCESS(g_pipe.CreateGraphicsPipeline());
 
-    g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, imageView, sampler);
+    g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, imageView, sampler.handle());
     g_pipe.descriptor_set_->UpdateDescriptorSets();
 
     m_commandBuffer->begin();
@@ -8631,25 +8395,15 @@ TEST_F(VkLayerTest, VerifyImgFilterCubicSamplerInCmdDraw) {
 
 TEST_F(VkLayerTest, VerifyMaxMultiviewInstanceIndex) {
     TEST_DESCRIPTION("Verify if instance index in CmdDraw is greater than maxMultiviewInstanceIndex.");
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_1);
-    if (version < VK_API_VERSION_1_1) {
-        printf("%s At least Vulkan version 1.1 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_KHR_MULTIVIEW_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
@@ -9033,66 +8787,30 @@ TEST_F(VkLayerTest, InvalidPrimitiveFragmentShadingRateWriteMultiViewportLimitDy
     TEST_DESCRIPTION("Test dynamic validation of the primitiveFragmentShadingRateWithMultipleViewports limit");
 
     // Enable KHR_fragment_shading_rate and all of its required extensions
-    bool fsr_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    if (fsr_extensions) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    }
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
-    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
-    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MULTIVIEW_EXTENSION_NAME);
-    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
-    if (fsr_extensions) {
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
-    } else {
-        printf("%s requires VK_KHR_fragment_shading_rate.\n", kSkipPrefix);
-        return;
+    AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
 
-    bool eds_extension = DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    if (eds_extension) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    } else {
-        printf("%s requires VK_EXT_extended_dynamic_state.\n", kSkipPrefix);
-        return;
-    }
-
-    PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
-        (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
-    VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties =
-        LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
-    VkPhysicalDeviceProperties2KHR properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
-    vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
+    auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
+    GetPhysicalDeviceProperties2(fsr_properties);
 
     if (fsr_properties.primitiveFragmentShadingRateWithMultipleViewports) {
-        printf("%s requires primitiveFragmentShadingRateWithMultipleViewports to be unsupported.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires primitiveFragmentShadingRateWithMultipleViewports to be unsupported.";
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features =
-        LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>(&eds_features);
-    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto eds_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+    auto fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>(&eds_features);
+    auto features2 = GetPhysicalDeviceFeatures2(fsr_features);
 
     if (!fsr_features.primitiveFragmentShadingRate) {
-        printf("%s requires primitiveFragmentShadingRate to be supported.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires primitiveFragmentShadingRate to be supported.";
     }
 
     if (!features2.features.multiViewport) {
-        printf("%s requires multiViewport to be supported.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "%s requires multiViewport to be supported.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
@@ -9132,12 +8850,9 @@ TEST_F(VkLayerTest, InvalidPrimitiveFragmentShadingRateWriteMultiViewportLimitDy
     vkCmdSetViewportWithCountEXT(m_commandBuffer->handle(), 2, viewports);
 
     // error produced here.
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-primitiveFragmentShadingRateWithMultipleViewports-04552");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
-
     m_errorMonitor->VerifyFound();
-
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
 }
 
 TEST_F(VkLayerTest, InvalidCmdUpdateBufferSize) {
@@ -9203,8 +8918,8 @@ TEST_F(VkLayerTest, InvalidDescriptorSetPipelineBindPoint) {
     ds_pool_ci.flags = 0;
     ds_pool_ci.pPoolSizes = &ds_type_count;
 
-    VkDescriptorPool ds_pool;
-    vk::CreateDescriptorPool(m_device->device(), &ds_pool_ci, nullptr, &ds_pool);
+    vk_testing::DescriptorPool ds_pool(*m_device, ds_pool_ci);
+    ASSERT_TRUE(ds_pool.initialized());
 
     VkDescriptorSetLayoutBinding dsl_binding = {};
     dsl_binding.binding = 0;
@@ -9218,7 +8933,7 @@ TEST_F(VkLayerTest, InvalidDescriptorSetPipelineBindPoint) {
     VkDescriptorSet descriptorSet;
     VkDescriptorSetAllocateInfo alloc_info = LvlInitStruct<VkDescriptorSetAllocateInfo>();
     alloc_info.descriptorSetCount = 1;
-    alloc_info.descriptorPool = ds_pool;
+    alloc_info.descriptorPool = ds_pool.handle();
     alloc_info.pSetLayouts = &ds_layout.handle();
     vk::AllocateDescriptorSets(m_device->device(), &alloc_info, &descriptorSet);
 
@@ -9299,24 +9014,24 @@ TEST_F(VkLayerTest, CmdClearColorImageNullColor) {
 TEST_F(VkLayerTest, InvalidClearColorAttachmentsWithMultiview) {
     TEST_DESCRIPTION("Test cmdClearAttachments with active render pass that uses multiview");
 
-    if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
-    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_KHR_MULTIVIEW_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
-    m_device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
+    auto features2 = GetPhysicalDeviceFeatures2(multiview_features);
+    if (!multiview_features.multiview) {
+        GTEST_SKIP() << "VkPhysicalDeviceMultiviewFeatures::multiview not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkAttachmentDescription attachmentDescription = {};
     attachmentDescription.format = VK_FORMAT_R8G8B8A8_UNORM;
     attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     VkAttachmentReference colorAttachmentReference = {};
@@ -9338,8 +9053,8 @@ TEST_F(VkLayerTest, InvalidClearColorAttachmentsWithMultiview) {
     renderPassCreateInfo.subpassCount = 1;
     renderPassCreateInfo.pSubpasses = &subpassDescription;
 
-    VkRenderPass renderPass;
-    vk::CreateRenderPass(m_device->device(), &renderPassCreateInfo, nullptr, &renderPass);
+    vk_testing::RenderPass renderPass(*m_device, renderPassCreateInfo);
+    ASSERT_TRUE(renderPass.initialized());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
@@ -9363,12 +9078,12 @@ TEST_F(VkLayerTest, InvalidClearColorAttachmentsWithMultiview) {
     framebufferCreateInfo.width = 32;
     framebufferCreateInfo.height = 32;
     framebufferCreateInfo.layers = 1;
-    framebufferCreateInfo.renderPass = renderPass;
+    framebufferCreateInfo.renderPass = renderPass.handle();
     framebufferCreateInfo.attachmentCount = 1;
     framebufferCreateInfo.pAttachments = &imageView;
 
-    VkFramebuffer framebuffer = VK_NULL_HANDLE;
-    vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
+    vk_testing::Framebuffer framebuffer(*m_device, framebufferCreateInfo);
+    ASSERT_TRUE(framebuffer.initialized());
 
     // Start no RenderPass
     m_commandBuffer->begin();
@@ -9386,8 +9101,8 @@ TEST_F(VkLayerTest, InvalidClearColorAttachmentsWithMultiview) {
     clear_rect.rect.extent.height = 32;
 
     VkRenderPassBeginInfo render_pass_begin_info = LvlInitStruct<VkRenderPassBeginInfo>();
-    render_pass_begin_info.renderPass = renderPass;
-    render_pass_begin_info.framebuffer = framebuffer;
+    render_pass_begin_info.renderPass = renderPass.handle();
+    render_pass_begin_info.framebuffer = framebuffer.handle();
     render_pass_begin_info.renderArea.extent.width = 32;
     render_pass_begin_info.renderArea.extent.height = 32;
 
@@ -9407,21 +9122,19 @@ TEST_F(VkLayerTest, InvalidClearColorAttachmentsWithMultiview) {
 TEST_F(VkLayerTest, TestEndCommandBufferWithConditionalRendering) {
     TEST_DESCRIPTION("Call EndCommandBuffer when conditional rendering is active");
 
+    AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
-    } else {
-        printf("%s %s not supported, skipping test\n", kSkipPrefix, VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     PFN_vkCmdBeginConditionalRenderingEXT vkCmdBeginConditionalRenderingEXT =
         (PFN_vkCmdBeginConditionalRenderingEXT)vk::GetInstanceProcAddr(instance(), "vkCmdBeginConditionalRenderingEXT");
 
-    VkBufferObj buffer;
-    VkMemoryPropertyFlags reqs = 0;
-    buffer.init_as_storage(*m_device, 32, reqs);
+    auto buffer_ci =
+        vk_testing::Buffer::create_info(32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT);
+    vk_testing::Buffer buffer(*m_device, buffer_ci);
 
     VkConditionalRenderingBeginInfoEXT conditional_rendering_begin = LvlInitStruct<VkConditionalRenderingBeginInfoEXT>();
     conditional_rendering_begin.buffer = buffer.handle();
@@ -9438,23 +9151,18 @@ TEST_F(VkLayerTest, TestEndCommandBufferWithConditionalRendering) {
 TEST_F(VkLayerTest, BindPipelineDuringTransformFeedback) {
     TEST_DESCRIPTION("Call CmdBindPipeline when transform feedback is active");
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-    } else {
-        printf("%s VK_EXT_transform_feedback extension not supported, skipping test\n", kSkipPrefix);
-        return;
+    AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
 
-    ASSERT_NO_FATAL_FAILURE(InitState());
+    auto xfb_features = LvlInitStruct<VkPhysicalDeviceTransformFeedbackFeaturesEXT>();
+    auto features2 = GetPhysicalDeviceFeatures2(xfb_features);
+    if (!xfb_features.transformFeedback) {
+        GTEST_SKIP() << "VkPhysicalDeviceTransformFeedbackFeaturesEXT::transformFeedback not supported.";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     CreatePipelineHelper pipe_one(*this);
@@ -9491,11 +9199,8 @@ TEST_F(VkLayerTest, DrawBlendEnabledFormatFeatures) {
 
     PFN_vkSetPhysicalDeviceFormatPropertiesEXT fpvkSetPhysicalDeviceFormatPropertiesEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceFormatPropertiesEXT fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT = nullptr;
-
-    // Load required functions
     if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFormatPropertiesEXT, fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT)) {
-        printf("%s Failed to device profile layer.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Failed to load device profile layer.";
     }
 
     VkFormat render_format = VkTestFramework::GetFormat(instance_, m_device);
@@ -9537,12 +9242,11 @@ TEST_F(VkLayerTest, DrawBlendEnabledFormatFeatures) {
 TEST_F(VkLayerTest, InvalidEndConditionalRendering) {
     TEST_DESCRIPTION("Invalid calls to vkCmdEndConditionalRenderingEXT.");
 
+    AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME)) {
-        printf("%s Did not find required device extension %s; test skipped.\n", kSkipPrefix, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
-    m_device_extension_names.push_back(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     VkAttachmentDescription attach[] = {
@@ -9574,6 +9278,7 @@ TEST_F(VkLayerTest, InvalidEndConditionalRendering) {
 
     vk_testing::RenderPass render_pass;
     render_pass.init(*m_device, rpci);
+    ASSERT_TRUE(render_pass.initialized());
 
     VkImageObj image(m_device);
     image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
@@ -9586,8 +9291,8 @@ TEST_F(VkLayerTest, InvalidEndConditionalRendering) {
     fbci.width = 32;
     fbci.height = 32;
     fbci.layers = 1;
-    VkFramebuffer framebuffer;
-    vk::CreateFramebuffer(device(), &fbci, nullptr, &framebuffer);
+    vk_testing::Framebuffer framebuffer(*m_device, fbci);
+    ASSERT_TRUE(framebuffer.initialized());
 
     PFN_vkCmdBeginConditionalRenderingEXT vkCmdBeginConditionalRenderingEXT =
         (PFN_vkCmdBeginConditionalRenderingEXT)vk::GetDeviceProcAddr(m_device->handle(), "vkCmdBeginConditionalRenderingEXT");
@@ -9608,7 +9313,7 @@ TEST_F(VkLayerTest, InvalidEndConditionalRendering) {
 
     VkRenderPassBeginInfo rpbi = LvlInitStruct<VkRenderPassBeginInfo>();
     rpbi.renderPass = render_pass.handle();
-    rpbi.framebuffer = framebuffer;
+    rpbi.framebuffer = framebuffer.handle();
     rpbi.renderArea = {{0, 0}, {32, 32}};
     rpbi.clearValueCount = 1;
     rpbi.pClearValues = &clear_value;
@@ -9619,59 +9324,43 @@ TEST_F(VkLayerTest, InvalidEndConditionalRendering) {
     vkCmdEndConditionalRenderingEXT(m_commandBuffer->handle());
     m_errorMonitor->VerifyFound();
 
+    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
+    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndConditionalRenderingEXT-None-01986");
-    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
-    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndConditionalRenderingEXT(m_commandBuffer->handle());
+    m_errorMonitor->VerifyFound();
     vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     vkCmdEndConditionalRenderingEXT(m_commandBuffer->handle());
-    m_errorMonitor->VerifyFound();
 
+    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
+    vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndConditionalRenderingEXT-None-01987");
-    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
-    vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndConditionalRenderingEXT(m_commandBuffer->handle());
-    vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_errorMonitor->VerifyFound();
-
-    m_commandBuffer->end();
+    vk::CmdEndRenderPass(m_commandBuffer->handle());
 }
 
 TEST_F(VkLayerTest, InvalidBeginTransformFeedbackInMultiviewRenderPass) {
     TEST_DESCRIPTION("Test beginning transform feedback in a render pass with multiview enabled");
 
-    if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
-    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
+    AddRequiredExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_KHR_MULTIVIEW_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-        return;
-    }
-    m_device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
-    m_device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
 
-    auto tf_features = LvlInitStruct<VkPhysicalDeviceTransformFeedbackFeaturesEXT>();
-    auto pd_features = LvlInitStruct<VkPhysicalDeviceFeatures2>(&tf_features);
-
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &pd_features);
+    auto mv_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeaturesKHR>();
+    auto tf_features = LvlInitStruct<VkPhysicalDeviceTransformFeedbackFeaturesEXT>(&mv_features);
+    auto pd_features = GetPhysicalDeviceFeatures2(tf_features);
 
     if (!tf_features.transformFeedback) {
-        printf("%s transformFeedback not supported; skipped.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "transformFeedback not supported; skipped.";
+    }
+    if (!mv_features.multiview) {
+        GTEST_SKIP() << "multiview not supported.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &pd_features));
@@ -9680,6 +9369,7 @@ TEST_F(VkLayerTest, InvalidBeginTransformFeedbackInMultiviewRenderPass) {
     VkAttachmentDescription attachmentDescription = {};
     attachmentDescription.format = VK_FORMAT_R8G8B8A8_UNORM;
     attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     VkAttachmentReference colorAttachmentReference = {};
@@ -9719,7 +9409,9 @@ TEST_F(VkLayerTest, InvalidBeginTransformFeedbackInMultiviewRenderPass) {
 
     VkImageObj image(m_device);
     image.Init(image_create_info);
-    VkImageView imageView = image.targetView(VK_FORMAT_R8G8B8A8_UNORM);
+    auto image_view_ci = image.TargetViewCI(VK_FORMAT_R8G8B8A8_UNORM);
+    image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    VkImageView imageView = image.targetView(image_view_ci);
 
     VkFramebufferCreateInfo framebufferCreateInfo = LvlInitStruct<VkFramebufferCreateInfo>();
     framebufferCreateInfo.width = 32;
@@ -9762,8 +9454,8 @@ TEST_F(VkLayerTest, BeginRenderingWithSecondaryContents) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -9857,8 +9549,8 @@ TEST_F(VkLayerTest, BadRenderPassContentsWhenCallingCmdExecuteCommandsWithBeginR
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -9889,6 +9581,7 @@ TEST_F(VkLayerTest, BadRenderPassContentsWhenCallingCmdExecuteCommandsWithBeginR
     VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
     begin_rendering_info.colorAttachmentCount = 1;
     begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
 
     VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
@@ -9922,7 +9615,7 @@ TEST_F(VkLayerTest, BadRenderPassContentsWhenCallingCmdExecuteCommandsWithBeginR
 TEST_F(VkLayerTest, BadExecuteCommandsSubpassIndices) {
     TEST_DESCRIPTION("Test invalid subpass when calling CmdExecuteCommands");
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     // A renderpass with two subpasses, both writing the same attachment.
@@ -9937,28 +9630,43 @@ TEST_F(VkLayerTest, BadExecuteCommandsSubpassIndices) {
         {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 1, &ref, nullptr, nullptr, 0, nullptr},
     };
 
-    VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, 1, attach, 2, subpasses, 0, nullptr};
-    VkRenderPass render_pass;
-    VkResult err = vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &render_pass);
-    ASSERT_VK_SUCCESS(err);
+    VkSubpassDependency dependencies = {
+        0,                                     // srcSubpass
+        1,                                     // dstSubpass
+        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,    // srcStageMask
+        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,    // dstStageMask
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  // srcAccessMask
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  // dstAccessMask
+        0,                                     // dependencyFlags
+    };
+
+    auto rpci = LvlInitStruct<VkRenderPassCreateInfo>();
+    rpci.attachmentCount = 1;
+    rpci.pAttachments = attach;
+    rpci.subpassCount = 2;
+    rpci.pSubpasses = subpasses;
+    rpci.dependencyCount = 1;
+    rpci.pDependencies = &dependencies;
+    vk_testing::RenderPass render_pass(*m_device, rpci);
+    ASSERT_TRUE(render_pass.initialized());
 
     VkImageObj image(m_device);
     image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
     VkImageView imageView = image.targetView(VK_FORMAT_R8G8B8A8_UNORM);
 
-    VkFramebufferCreateInfo fbci = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, nullptr, 0, render_pass, 1, &imageView, 32, 32, 1};
-    VkFramebuffer framebuffer;
-    err = vk::CreateFramebuffer(m_device->device(), &fbci, nullptr, &framebuffer);
-    ASSERT_VK_SUCCESS(err);
+    VkFramebufferCreateInfo fbci = {
+        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, nullptr, 0, render_pass.handle(), 1, &imageView, 32, 32, 1};
+    vk_testing::Framebuffer framebuffer(*m_device, fbci);
+    ASSERT_TRUE(framebuffer.initialized());
 
     VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     const VkCommandBufferInheritanceInfo cmdbuff_ii = {
         VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
         nullptr,  // pNext
-        render_pass,
+        render_pass.handle(),
         1,  // subpass
-        framebuffer,
+        framebuffer.handle(),
     };
 
     VkCommandBufferBeginInfo cmdbuff__bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -9970,8 +9678,8 @@ TEST_F(VkLayerTest, BadExecuteCommandsSubpassIndices) {
 
     const VkRenderPassBeginInfo rp_bi{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                                       nullptr,  // pNext
-                                      render_pass,
-                                      framebuffer,
+                                      render_pass.handle(),
+                                      framebuffer.handle(),
                                       {{0, 0}, {32, 32}},
                                       0,
                                       nullptr};
@@ -9983,12 +9691,6 @@ TEST_F(VkLayerTest, BadExecuteCommandsSubpassIndices) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-pCommandBuffers-00097");
     vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
     m_errorMonitor->VerifyFound();
-
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-
-    vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    vk::DestroyRenderPass(m_device->device(), render_pass, nullptr);
 }
 
 TEST_F(VkLayerTest, IncompatibleRenderPassesInExecuteCommands) {
@@ -10080,8 +9782,8 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithNonNullRenderPass) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -10129,6 +9831,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithNonNullRenderPass) {
     begin_rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
     begin_rendering_info.colorAttachmentCount = 1;
     begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
 
     VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
@@ -10170,8 +9873,8 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingFlags) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -10204,6 +9907,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingFlags) {
         VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR | VK_RENDERING_SUSPENDING_BIT_KHR | VK_RENDERING_RESUMING_BIT_KHR;
     begin_rendering_info.colorAttachmentCount = 1;
     begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
 
     VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
@@ -10244,8 +9948,8 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorAttach
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -10277,6 +9981,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorAttach
     begin_rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
     begin_rendering_info.colorAttachmentCount = 1;
     begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
 
     VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
@@ -10317,8 +10022,8 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorImageV
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -10355,6 +10060,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorImageV
     begin_rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
     begin_rendering_info.colorAttachmentCount = 1;
     begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
 
     VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
@@ -10396,8 +10102,8 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingDepthStenci
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -10429,14 +10135,15 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingDepthStenci
 
     VkCommandBufferInheritanceRenderingInfoKHR inheritance_rendering_info =
         LvlInitStruct<VkCommandBufferInheritanceRenderingInfoKHR>();
-    inheritance_rendering_info.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
-    inheritance_rendering_info.stencilAttachmentFormat = VK_FORMAT_S8_UINT;
+    inheritance_rendering_info.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    inheritance_rendering_info.stencilAttachmentFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
     inheritance_rendering_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
     VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
     begin_rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
     begin_rendering_info.pDepthAttachment = &depth_stencil_attachment;
     begin_rendering_info.pStencilAttachment = &depth_stencil_attachment;
+    begin_rendering_info.layerCount = 1;
 
     VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
@@ -10463,9 +10170,6 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingDepthStenci
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-pStencilAttachment-06030");
     vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
     m_errorMonitor->VerifyFound();
-
-    m_commandBuffer->EndRendering();
-    m_commandBuffer->end();
 }
 
 TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingViewMask) {
@@ -10478,20 +10182,22 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingViewMask) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto mv_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeaturesKHR>();
+    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>(&mv_features);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
-        printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering , skipping.";
+    }
+    if (!mv_features.multiview) {
+        GTEST_SKIP() << "multiview feature not supported.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
@@ -10538,9 +10244,6 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingViewMask) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-viewMask-06031");
     vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
     m_errorMonitor->VerifyFound();
-
-    m_commandBuffer->EndRendering();
-    m_commandBuffer->end();
 }
 
 TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewRasterizationSamples) {
@@ -10553,8 +10256,8 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewRa
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -10591,6 +10294,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewRa
     begin_rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
     begin_rendering_info.colorAttachmentCount = 1;
     begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
 
     // A pool we can reset in.
     VkCommandPoolObj pool(m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -10679,8 +10383,8 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewAt
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -10739,6 +10443,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewAt
     begin_rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
     begin_rendering_info.colorAttachmentCount = 1;
     begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
 
     // A pool we can reset in.
     VkCommandPoolObj pool(m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -10953,48 +10658,48 @@ TEST_F(VkLayerTest, ValidateMultiviewUnboundResourcesAfterBeginRenderPassAndNext
     TEST_DESCRIPTION(
         "Validate all required resources are bound if multiview is enabled after vkCmdBeginRenderPass and vkCmdNextSubpass");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_1);
-    if (version < VK_API_VERSION_1_1) {
-        if (!AddRequiredInstanceExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-            printf("%s At least Vulkan version 1.1 is required or instance extension %s, skipping test.\n", kSkipPrefix,
-                   VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-            return;
-        }
-    }
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    constexpr unsigned multiview_count = 2u;
+    constexpr unsigned extra_subpass_count = multiview_count - 1u;
 
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        if (!AddRequiredDeviceExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
-            printf("%s At least Vulkan version 1.1 is required or device extension %s, skipping test.\n", kSkipPrefix,
-                   VK_KHR_MULTIVIEW_EXTENSION_NAME);
-            return;
-        }
+    AddRequiredExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
-    multiview_features.multiview = VK_TRUE;
-    VkPhysicalDeviceFeatures2 pd_features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&multiview_features);
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&multiview_features);
+    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    if (multiview_features.multiview == VK_FALSE) {
+        GTEST_SKIP() << "Device does not support multiview.";
+    }
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &pd_features2));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
     VkAttachmentDescription attachmentDescription = {};
     attachmentDescription.format = VK_FORMAT_R8G8B8A8_UNORM;
     attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     VkAttachmentReference colorAttachmentReference = {};
     colorAttachmentReference.layout = VK_IMAGE_LAYOUT_GENERAL;
     colorAttachmentReference.attachment = 0;
 
-    m_renderPass_subpasses.resize(2);
-    m_renderPass_subpasses[0].colorAttachmentCount = 1;
-    m_renderPass_subpasses[0].pColorAttachments = &colorAttachmentReference;
-    m_renderPass_subpasses[1].colorAttachmentCount = 1;
-    m_renderPass_subpasses[1].pColorAttachments = &colorAttachmentReference;
+    m_renderPass_subpasses.resize(multiview_count);
+    for (unsigned i = 0; i < multiview_count; ++i) {
+        m_renderPass_subpasses[i].colorAttachmentCount = 1;
+        m_renderPass_subpasses[i].pColorAttachments = &colorAttachmentReference;
+    }
 
-    uint32_t viewMasks[] = {0x1u, 0x2u};
-    VkRenderPassMultiviewCreateInfo renderPassMultiviewCreateInfo = LvlInitStruct<VkRenderPassMultiviewCreateInfo>();
-    renderPassMultiviewCreateInfo.subpassCount = 2;
+    uint32_t viewMasks[multiview_count] = {};
+    for (unsigned i = 0; i < multiview_count; ++i) {
+        viewMasks[i] = 1u << i;
+    }
+    auto renderPassMultiviewCreateInfo = LvlInitStruct<VkRenderPassMultiviewCreateInfo>();
+    renderPassMultiviewCreateInfo.subpassCount = multiview_count;
     renderPassMultiviewCreateInfo.pViewMasks = viewMasks;
 
     m_renderPass_info = LvlInitStruct<VkRenderPassCreateInfo>(&renderPassMultiviewCreateInfo);
@@ -11003,41 +10708,42 @@ TEST_F(VkLayerTest, ValidateMultiviewUnboundResourcesAfterBeginRenderPassAndNext
     m_renderPass_info.subpassCount = m_renderPass_subpasses.size();
     m_renderPass_info.pSubpasses = m_renderPass_subpasses.data();
 
-    m_renderPass_dependencies.resize(1);
-    VkSubpassDependency &subpass_dep = m_renderPass_dependencies[0];
-    subpass_dep.srcSubpass = 0;
-    subpass_dep.dstSubpass = 1;
-    // Just using all framebuffer-space pipeline stages in order to get a reasonably large
-    //  set of bits that can be used for both src & dst
-    subpass_dep.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                               VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    subpass_dep.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                               VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    // Add all of the gfx mem access bits that correlate to the fb-space pipeline stages
-    subpass_dep.srcAccessMask = VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
-                                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    subpass_dep.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
-                                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    // Must include dep_by_region bit when src & dst both include framebuffer-space stages
-    subpass_dep.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    m_renderPass_dependencies.resize(extra_subpass_count);
+    for (unsigned i = 0; i < m_renderPass_dependencies.size(); ++i) {
+        auto &subpass_dep = m_renderPass_dependencies[i];
+        subpass_dep.srcSubpass = i;
+        subpass_dep.dstSubpass = i + 1;
+
+        subpass_dep.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        subpass_dep.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        subpass_dep.srcAccessMask = VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
+                                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        subpass_dep.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
+                                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        subpass_dep.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    }
 
     m_renderPass_info.dependencyCount = static_cast<uint32_t>(m_renderPass_dependencies.size());
     m_renderPass_info.pDependencies = m_renderPass_dependencies.data();
 
     vk::CreateRenderPass(m_device->handle(), &m_renderPass_info, nullptr, &m_renderPass);
 
-    VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
+    auto image_create_info = LvlInitStruct<VkImageCreateInfo>();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
     image_create_info.extent.width = static_cast<uint32_t>(m_width);
     image_create_info.extent.height = static_cast<uint32_t>(m_height);
     image_create_info.extent.depth = 1;
     image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 2;
+    image_create_info.arrayLayers = multiview_count;
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -11045,10 +10751,11 @@ TEST_F(VkLayerTest, ValidateMultiviewUnboundResourcesAfterBeginRenderPassAndNext
 
     VkImageObj image(m_device);
     image.Init(image_create_info);
+    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
     VkImageView imageView = image.targetView(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0,
                                              VK_REMAINING_ARRAY_LAYERS, VK_IMAGE_VIEW_TYPE_2D_ARRAY);
 
-    VkFramebufferCreateInfo framebufferCreateInfo = LvlInitStruct<VkFramebufferCreateInfo>();
+    auto framebufferCreateInfo = LvlInitStruct<VkFramebufferCreateInfo>();
     framebufferCreateInfo.width = static_cast<uint32_t>(m_width);
     framebufferCreateInfo.height = static_cast<uint32_t>(m_height);
     framebufferCreateInfo.layers = 1;
@@ -11068,30 +10775,390 @@ TEST_F(VkLayerTest, ValidateMultiviewUnboundResourcesAfterBeginRenderPassAndNext
     m_renderPassBeginInfo.clearValueCount = m_renderPassClearValues.size();
     m_renderPassBeginInfo.pClearValues = m_renderPassClearValues.data();
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
-    pipe.InitState();
-    pipe.CreateGraphicsPipeline();
+    // Pipeline not bound test
+    {
+        // No need to create individual pipelines for each subpass since we are checking no bound pipeline
+        CreatePipelineHelper pipe(*this);
+        pipe.InitInfo();
+        pipe.InitState();
+        pipe.CreateGraphicsPipeline();
 
-    // This bind should not be valid after we begin the renderpass
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02700");
+        m_commandBuffer->begin();
+        // This bind should not be valid after we begin the renderpass
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
 
-    m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    m_commandBuffer->Draw(1, 0, 0, 0);
-    m_errorMonitor->VerifyFound();
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02700");
+        m_commandBuffer->Draw(1, 0, 0, 0);
+        m_errorMonitor->VerifyFound();
 
-    // This bind should not be valid for next subpass
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            // This bind should not be valid for next subpass
+            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+            vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02700");
-    vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
-    m_commandBuffer->Draw(1, 0, 0, 0);
-    m_errorMonitor->VerifyFound();
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02700");
+            m_commandBuffer->Draw(1, 0, 0, 0);
+            m_errorMonitor->VerifyFound();
+        }
 
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
+        m_commandBuffer->EndRenderPass();
+        m_commandBuffer->end();
+    }
+
+    m_commandBuffer->reset();
+
+    // Dynamic state (checking with line width)
+    {
+        // Pipeline for subpass 0
+        CreatePipelineHelper pipe(*this);
+        pipe.InitInfo();
+
+        VkDynamicState dyn_states = VK_DYNAMIC_STATE_LINE_WIDTH;
+        pipe.ia_ci_.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+        pipe.dyn_state_ci_ = LvlInitStruct<VkPipelineDynamicStateCreateInfo>();
+        pipe.dyn_state_ci_.dynamicStateCount = 1;
+        pipe.dyn_state_ci_.pDynamicStates = &dyn_states;
+        pipe.InitState();
+        pipe.CreateGraphicsPipeline();
+
+        // Pipelines for all other subpasses
+        vk_testing::Pipeline pipelines[extra_subpass_count];
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            auto pipe_info = pipe.gp_ci_;
+            pipe_info.subpass = i + 1;
+            pipelines[i].init(*m_device, pipe_info);
+        }
+
+        m_commandBuffer->begin();
+        // This line width set should not be valid for next subpass
+        vk::CmdSetLineWidth(m_commandBuffer->handle(), 1.0f);
+        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-commandBuffer-02701");
+        vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
+        m_errorMonitor->VerifyFound();
+
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            // This line width set should not be valid for next subpass
+            vk::CmdSetLineWidth(m_commandBuffer->handle(), 1.0f);
+            vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
+            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[i].handle());
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-commandBuffer-02701");
+            m_commandBuffer->Draw(1, 0, 0, 0);
+            m_errorMonitor->VerifyFound();
+        }
+
+        m_commandBuffer->EndRenderPass();
+        m_commandBuffer->end();
+    }
+
+    m_commandBuffer->reset();
+
+    // Push constants
+    {
+        char const *const vsSource = R"glsl(
+        #version 450
+        layout(push_constant, std430) uniform foo {
+           mat3 m;
+        } constants;
+        void main(){
+            vec3 v3 = constants.m[0];
+        }
+    )glsl";
+
+        VkShaderObj const vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
+        VkShaderObj const fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+        VkPushConstantRange push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 16};
+        auto pipeline_layout_info = LvlInitStruct<VkPipelineLayoutCreateInfo>();
+        pipeline_layout_info.pushConstantRangeCount = 1;
+        pipeline_layout_info.pPushConstantRanges = &push_constant_range;
+
+        vk_testing::PipelineLayout layout;
+        layout.init(*m_device, pipeline_layout_info, std::vector<const vk_testing::DescriptorSetLayout *>{});
+
+        CreatePipelineHelper pipe(*this);
+        pipe.InitInfo();
+        pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+        pipe.pipeline_layout_ci_ = pipeline_layout_info;
+        pipe.InitState();
+        pipe.CreateGraphicsPipeline();
+
+        // Pipelines for all other subpasses
+        vk_testing::Pipeline pipelines[extra_subpass_count];
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            auto pipe_info = pipe.gp_ci_;
+            pipe_info.subpass = i + 1;
+            pipelines[i].init(*m_device, pipe_info);
+        }
+        // Set up complete
+
+        const float dummy_values[16] = {};
+        m_commandBuffer->begin();
+        // This push constants should not be counted when render pass begins
+        vk::CmdPushConstants(m_commandBuffer->handle(), layout.handle(), VK_SHADER_STAGE_VERTEX_BIT, push_constant_range.offset,
+                             push_constant_range.size, dummy_values);
+        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-maintenance4-06425");
+        m_commandBuffer->Draw(1, 0, 0, 0);
+        m_errorMonitor->VerifyFound();
+
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            // This push constants should not be counted when we change subpass
+            vk::CmdPushConstants(m_commandBuffer->handle(), layout.handle(), VK_SHADER_STAGE_VERTEX_BIT, push_constant_range.offset,
+                                 push_constant_range.size, dummy_values);
+            vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
+            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[i].handle());
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-maintenance4-06425");
+            m_commandBuffer->Draw(1, 0, 0, 0);
+            m_errorMonitor->VerifyFound();
+        }
+
+        m_commandBuffer->EndRenderPass();
+        m_commandBuffer->end();
+    }
+
+    m_commandBuffer->reset();
+
+    // Descriptor sets
+    {
+        OneOffDescriptorSet descriptor_set{m_device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}}};
+
+        auto bci = LvlInitStruct<VkBufferCreateInfo>();
+        bci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        bci.size = 8;
+        VkBufferObj buffer;
+        buffer.init(*m_device, bci);
+        VkDescriptorBufferInfo buffer_info;
+        buffer_info.buffer = buffer.handle();
+        buffer_info.offset = 0;
+        buffer_info.range = VK_WHOLE_SIZE;
+        auto descriptor_write = LvlInitStruct<VkWriteDescriptorSet>();
+        descriptor_write.dstSet = descriptor_set.set_;
+        descriptor_write.dstBinding = 0;
+        descriptor_write.descriptorCount = 1;
+        descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptor_write.pBufferInfo = &buffer_info;
+        vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, NULL);
+
+        auto pipeline_layout_info = LvlInitStruct<VkPipelineLayoutCreateInfo>();
+        pipeline_layout_info.setLayoutCount = 1;
+        pipeline_layout_info.pSetLayouts = &descriptor_set.layout_.handle();
+
+        vk_testing::PipelineLayout layout;
+        layout.init(*m_device, pipeline_layout_info, std::vector<vk_testing::DescriptorSetLayout const *>{});
+
+        VkShaderObj const vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT);
+        VkShaderObj const fs(this, bindStateFragUniformShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+        CreatePipelineHelper pipe(*this);
+        pipe.InitInfo();
+        pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+        pipe.pipeline_layout_ci_ = pipeline_layout_info;
+        pipe.InitState();
+        pipe.CreateGraphicsPipeline();
+
+        // Pipelines for all other subpasses
+        vk_testing::Pipeline pipelines[extra_subpass_count];
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            auto pipe_info = pipe.gp_ci_;
+            pipe_info.subpass = i + 1;
+            pipelines[i].init(*m_device, pipe_info);
+        }
+        // Set up complete
+
+        m_commandBuffer->begin();
+        // This descriptor bind should not be counted when render pass begins
+        vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0, 1,
+                                  &descriptor_set.set_, 0, nullptr);
+        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02697");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-DescriptorSetNotBound");
+        m_commandBuffer->Draw(1, 0, 0, 0);
+        m_errorMonitor->VerifyFound();
+
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            // This descriptor bind should not be counted when next subpass begins
+            vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0,
+                                      1, &descriptor_set.set_, 0, nullptr);
+            vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
+            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[i].handle());
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02697");
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-DescriptorSetNotBound");
+            m_commandBuffer->Draw(1, 0, 0, 0);
+            m_errorMonitor->VerifyFound();
+        }
+
+        m_commandBuffer->EndRenderPass();
+        m_commandBuffer->end();
+    }
+
+    m_commandBuffer->reset();
+
+    // Vertex buffer
+    {
+        float const vertex_data[] = {1.0f, 0.0f};
+        VkConstantBufferObj vbo(m_device, static_cast<int>(sizeof(vertex_data)), reinterpret_cast<const void *>(vertex_data),
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+        VkVertexInputBindingDescription input_binding{};
+        input_binding.binding = 0;
+        input_binding.stride = sizeof(vertex_data);
+        input_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        VkVertexInputAttributeDescription input_attribs{};
+        input_attribs.binding = 0;
+        input_attribs.location = 0;
+        input_attribs.format = VK_FORMAT_R32G32_SFLOAT;
+        input_attribs.offset = 0;
+
+        char const *const vsSource = R"glsl(
+        #version 450
+        layout(location = 0) in vec2 input0;
+        void main(){
+           gl_Position = vec4(input0.x, input0.y, 0.0f, 1.0f);
+        }
+    )glsl";
+
+        VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
+        VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+        CreatePipelineHelper pipe(*this);
+        pipe.InitInfo();
+        pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+        pipe.vi_ci_.vertexBindingDescriptionCount = 1;
+        pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
+        pipe.vi_ci_.vertexAttributeDescriptionCount = 1;
+        pipe.vi_ci_.pVertexAttributeDescriptions = &input_attribs;
+        pipe.InitState();
+        pipe.CreateGraphicsPipeline();
+
+        // Pipelines for all other subpasses
+        vk_testing::Pipeline pipelines[extra_subpass_count];
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            auto pipe_info = pipe.gp_ci_;
+            pipe_info.subpass = i + 1;
+            pipelines[i].init(*m_device, pipe_info);
+        }
+        // Set up complete
+        VkDeviceSize offset = 0;
+
+        m_commandBuffer->begin();
+        // This vertex buffer bind should not be counted when render pass begins
+        vk::CmdBindVertexBuffers(m_commandBuffer->handle(), 0, 1, &vbo.handle(), &offset);
+        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-04007");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02721");
+        m_commandBuffer->Draw(1, 0, 0, 0);
+        m_errorMonitor->VerifyFound();
+
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            // This vertex buffer bind should not be counted when next subpass begins
+            vk::CmdBindVertexBuffers(m_commandBuffer->handle(), 0, 1, &vbo.handle(), &offset);
+            vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
+            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[i].handle());
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-04007");
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02721");
+            m_commandBuffer->Draw(1, 0, 0, 0);
+            m_errorMonitor->VerifyFound();
+        }
+
+        m_commandBuffer->EndRenderPass();
+        m_commandBuffer->end();
+    }
+
+    m_commandBuffer->reset();
+
+    // Index buffer
+    {
+        float const vertex_data[] = {1.0f, 0.0f};
+        VkConstantBufferObj vbo(m_device, static_cast<int>(sizeof(vertex_data)), reinterpret_cast<const void *>(vertex_data),
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+        uint32_t const index_data[] = {0};
+        VkConstantBufferObj ibo(m_device, static_cast<int>(sizeof(index_data)), reinterpret_cast<const void *>(index_data),
+                                VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+
+        VkVertexInputBindingDescription input_binding{};
+        input_binding.binding = 0;
+        input_binding.stride = sizeof(vertex_data);
+        input_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        VkVertexInputAttributeDescription input_attribs{};
+        input_attribs.binding = 0;
+        input_attribs.location = 0;
+        input_attribs.format = VK_FORMAT_R32G32_SFLOAT;
+        input_attribs.offset = 0;
+
+        char const *const vsSource = R"glsl(
+        #version 450
+        layout(location = 0) in vec2 input0;
+        void main(){
+           gl_Position = vec4(input0.x, input0.y, 0.0f, 1.0f);
+        }
+    )glsl";
+
+        VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
+        VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+        CreatePipelineHelper pipe(*this);
+        pipe.InitInfo();
+        pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+        pipe.vi_ci_.vertexBindingDescriptionCount = 1;
+        pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
+        pipe.vi_ci_.vertexAttributeDescriptionCount = 1;
+        pipe.vi_ci_.pVertexAttributeDescriptions = &input_attribs;
+        pipe.InitState();
+        pipe.CreateGraphicsPipeline();
+
+        // Pipelines for all other subpasses
+        vk_testing::Pipeline pipelines[extra_subpass_count];
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            auto pipe_info = pipe.gp_ci_;
+            pipe_info.subpass = i + 1;
+            pipelines[i].init(*m_device, pipe_info);
+        }
+        // Set up complete
+
+        VkDeviceSize offset = 0;
+        m_commandBuffer->begin();
+        // This index buffer bind should not be counted when render pass begins
+        vk::CmdBindIndexBuffer(m_commandBuffer->handle(), ibo.handle(), 0, VK_INDEX_TYPE_UINT32);
+        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+        vk::CmdBindVertexBuffers(m_commandBuffer->handle(), 0, 1, &vbo.handle(), &offset);
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexed-commandBuffer-02701");
+        m_commandBuffer->DrawIndexed(0, 1, 0, 0, 0);
+        m_errorMonitor->VerifyFound();
+
+        for (unsigned i = 0; i < extra_subpass_count; ++i) {
+            // This index buffer bind should not be counted when next subpass begins
+            vk::CmdBindIndexBuffer(m_commandBuffer->handle(), ibo.handle(), 0, VK_INDEX_TYPE_UINT32);
+            vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
+            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[i].handle());
+            vk::CmdBindVertexBuffers(m_commandBuffer->handle(), 0, 1, &vbo.handle(), &offset);
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexed-commandBuffer-02701");
+            m_commandBuffer->DrawIndexed(0, 1, 0, 0, 0);
+            m_errorMonitor->VerifyFound();
+        }
+
+        m_commandBuffer->EndRenderPass();
+        m_commandBuffer->end();
+    }
 }
 
 TEST_F(VkLayerTest, TestCommandBufferInheritanceWithInvalidDepthFormat) {
@@ -11104,8 +11171,8 @@ TEST_F(VkLayerTest, TestCommandBufferInheritanceWithInvalidDepthFormat) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -11147,20 +11214,16 @@ TEST_F(VkLayerTest, TestCommandBufferInheritanceWithInvalidDepthFormat) {
 TEST_F(VkLayerTest, ResolveInvalidUsage) {
     TEST_DESCRIPTION("Resolve image with missing usage flags.");
 
-    if (!EnableDeviceProfileLayer()) {
-        printf("%s Failed to enable device profile layer.\n", kSkipPrefix);
-        return;
+    if (!OverrideDevsimForDeviceProfileLayer()) {
+        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
     }
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
     PFN_vkSetPhysicalDeviceFormatPropertiesEXT fpvkSetPhysicalDeviceFormatPropertiesEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceFormatPropertiesEXT fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT = nullptr;
-
-    // Load required functions
     if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFormatPropertiesEXT, fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT)) {
-        printf("%s Failed to device profile layer.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Failed to load device profile layer.";
     }
 
     VkFormat src_format = VK_FORMAT_R8_UNORM;
@@ -11274,4 +11337,64 @@ TEST_F(VkLayerTest, ResolveInvalidUsage) {
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->end();
+}
+
+TEST_F(VkLayerTest, DynamicRenderingInSecondaryCommandBuffers) {
+    TEST_DESCRIPTION("Test drawing in secondary command buffers with dynamic rendering");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
+
+    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
+    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    if (!dynamic_rendering_features.dynamicRendering) {
+        printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    VkFormat format = VK_FORMAT_R32G32B32A32_UINT;
+
+    auto pipeline_rendering_info = LvlInitStruct<VkPipelineRenderingCreateInfoKHR>();
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &format;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    pipe.InitState();
+    pipe.CreateGraphicsPipeline();
+
+    VkCommandBufferInheritanceRenderingInfoKHR inheritanceRenderingInfo =
+        LvlInitStruct<VkCommandBufferInheritanceRenderingInfoKHR>();
+    inheritanceRenderingInfo.colorAttachmentCount = 1;
+    inheritanceRenderingInfo.pColorAttachmentFormats = &format;
+    inheritanceRenderingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkCommandBufferInheritanceInfo cbii = LvlInitStruct<VkCommandBufferInheritanceInfo>(&inheritanceRenderingInfo);
+    cbii.renderPass = m_renderPass;
+    cbii.framebuffer = m_framebuffer;
+
+    VkCommandBufferBeginInfo cbbi = LvlInitStruct<VkCommandBufferBeginInfo>();
+    cbbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+    cbbi.pInheritanceInfo = &cbii;
+
+    VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    secondary.begin(&cbbi);
+    vk::CmdBindPipeline(secondary.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    secondary.Draw(3, 1, 0, 0);
+    secondary.end();
 }

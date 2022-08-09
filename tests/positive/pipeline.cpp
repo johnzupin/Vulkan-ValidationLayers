@@ -82,9 +82,7 @@ TEST_F(VkPositiveLayerTest, ViewportWithCountNoMultiViewport) {
     pipe.vp_state_ci_.viewportCount = 0;
     pipe.vp_state_ci_.scissorCount = 0;
     pipe.InitState();
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineComplexTypes) {
@@ -96,8 +94,6 @@ TEST_F(VkPositiveLayerTest, CreatePipelineComplexTypes) {
         printf("%s Device does not support tessellation shaders; skipped.\n", kSkipPrefix);
         return;
     }
-
-    m_errorMonitor->ExpectSuccess();
 
     VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT);
     VkShaderObj tcs(this, bindStateTscShaderText, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
@@ -115,12 +111,10 @@ TEST_F(VkPositiveLayerTest, CreatePipelineComplexTypes) {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), tcs.GetStageCreateInfo(), tes.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineAttribMatrixType) {
     TEST_DESCRIPTION("Test that pipeline validation accepts matrices passed as vertex attributes");
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -157,12 +151,9 @@ TEST_F(VkPositiveLayerTest, CreatePipelineAttribMatrixType) {
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
     /* expect success */
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineAttribArrayType) {
-    m_errorMonitor->ExpectSuccess();
-
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -197,8 +188,6 @@ TEST_F(VkPositiveLayerTest, CreatePipelineAttribArrayType) {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineAttribComponents) {
@@ -206,7 +195,6 @@ TEST_F(VkPositiveLayerTest, CreatePipelineAttribComponents) {
         "Test that pipeline validation accepts consuming a vertex attribute through multiple vertex shader inputs, each consuming "
         "a different subset of the components, and that fragment shader-attachment validation tolerates multiple duplicate "
         "location outputs");
-    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -299,13 +287,9 @@ TEST_F(VkPositiveLayerTest, CreatePipelineAttribComponents) {
     pipe.AddVertexInputAttribs(input_attribs, 3);
     pipe.CreateVKPipeline(descriptorSet.GetPipelineLayout(), renderpass);
     vk::DestroyRenderPass(m_device->device(), renderpass, nullptr);
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineSimplePositive) {
-    m_errorMonitor->ExpectSuccess();
-
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -313,19 +297,30 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSimplePositive) {
     pipe.InitInfo();
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineRelaxedTypeMatch) {
     TEST_DESCRIPTION(
-        "Test that pipeline validation accepts the relaxed type matching rules set out in 14.1.3: fundamental type must match, and "
-        "producer side must have at least as many components");
-    m_errorMonitor->ExpectSuccess();
+        "Test that pipeline validation accepts the relaxed type matching rules set out in VK_KHR_maintenance4 (default in Vulkan "
+        "1.3) device extension:"
+        "fundamental type must match, and producer side must have at least as many components");
 
-    // VK 1.0.8 Specification, 14.1.3 "Additionally,..." block
-
-    ASSERT_NO_FATAL_FAILURE(Init());
+    SetTargetApiVersion(VK_API_VERSION_1_1); // At least 1.1 is required for maintenance4
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan 1.1 is required";
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " required but not supported";
+    }
+    auto maint4features = LvlInitStruct<VkPhysicalDeviceMaintenance4FeaturesKHR>();
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&maint4features);
+    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    if (!maint4features.maintenance4) {
+        GTEST_SKIP() << "VkPhysicalDeviceMaintenance4FeaturesKHR::maintenance4 is required but not enabled.";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     char const *vsSource = R"glsl(
@@ -357,13 +352,10 @@ TEST_F(VkPositiveLayerTest, CreatePipelineRelaxedTypeMatch) {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineTessPerVertex) {
     TEST_DESCRIPTION("Test that pipeline validation accepts per-vertex variables passed between the TCS and TES stages");
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -410,14 +402,12 @@ TEST_F(VkPositiveLayerTest, CreatePipelineTessPerVertex) {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), tcs.GetStageCreateInfo(), tes.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineGeometryInputBlockPositive) {
     TEST_DESCRIPTION(
         "Test that pipeline validation accepts a user-defined interface block passed into the geometry shader. This is interesting "
         "because the 'extra' array level is not present on the member type, but on the block instance.");
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -457,18 +447,15 @@ TEST_F(VkPositiveLayerTest, CreatePipelineGeometryInputBlockPositive) {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), gs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipeline64BitAttributesPositive) {
     TEST_DESCRIPTION(
         "Test that pipeline validation accepts basic use of 64bit vertex attributes. This is interesting because they consume "
         "multiple locations.");
-    m_errorMonitor->ExpectSuccess();
 
-    if (!EnableDeviceProfileLayer()) {
-        printf("%s Failed to enable device profile layer.\n", kSkipPrefix);
-        return;
+    if (!OverrideDevsimForDeviceProfileLayer()) {
+        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -525,12 +512,10 @@ TEST_F(VkPositiveLayerTest, CreatePipeline64BitAttributesPositive) {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineInputAttachmentPositive) {
     TEST_DESCRIPTION("Positive test for a correctly matched input attachment");
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -582,8 +567,6 @@ TEST_F(VkPositiveLayerTest, CreatePipelineInputAttachmentPositive) {
     // should be OK. would go wrong here if it's going to...
     pipe.CreateVKPipeline(pl.handle(), rp);
 
-    m_errorMonitor->VerifyNotFound();
-
     vk::DestroyRenderPass(m_device->device(), rp, nullptr);
 }
 
@@ -592,7 +575,6 @@ TEST_F(VkPositiveLayerTest, CreateComputePipelineMissingDescriptorUnusedPositive
         "Test that pipeline validation accepts a compute pipeline which declares a descriptor-backed resource which is not "
         "provided, but the shader does not statically use it. This is interesting because it requires compute pipelines to have a "
         "proper descriptor use walk, which they didn't for some time.");
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -610,13 +592,10 @@ TEST_F(VkPositiveLayerTest, CreateComputePipelineMissingDescriptorUnusedPositive
     pipe.cs_.reset(new VkShaderObj(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT));
     pipe.InitState();
     pipe.CreateComputePipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreateComputePipelineFragmentShadingRate) {
     TEST_DESCRIPTION("Verify that pipeline validation accepts a compute pipeline with fragment shading rate extension enabled");
-    m_errorMonitor->ExpectSuccess();
 
     // Enable KHR_fragment_shading_rate and all of its required extensions
     bool fsr_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -663,14 +642,11 @@ TEST_F(VkPositiveLayerTest, CreateComputePipelineFragmentShadingRate) {
     pipe.cs_.reset(new VkShaderObj(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT));
     pipe.InitState();
     pipe.CreateComputePipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreateComputePipelineCombinedImageSamplerConsumedAsSampler) {
     TEST_DESCRIPTION(
         "Test that pipeline validation accepts a shader consuming only the sampler portion of a combined image + sampler");
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -696,16 +672,12 @@ TEST_F(VkPositiveLayerTest, CreateComputePipelineCombinedImageSamplerConsumedAsS
     memcpy(pipe.dsl_bindings_.data(), bindings.data(), bindings.size() * sizeof(VkDescriptorSetLayoutBinding));
     pipe.cs_.reset(new VkShaderObj(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT));
     pipe.InitState();
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateComputePipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreateComputePipelineCombinedImageSamplerConsumedAsImage) {
     TEST_DESCRIPTION(
         "Test that pipeline validation accepts a shader consuming only the image portion of a combined image + sampler");
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -731,17 +703,13 @@ TEST_F(VkPositiveLayerTest, CreateComputePipelineCombinedImageSamplerConsumedAsI
     memcpy(pipe.dsl_bindings_.data(), bindings.data(), bindings.size() * sizeof(VkDescriptorSetLayoutBinding));
     pipe.cs_.reset(new VkShaderObj(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT));
     pipe.InitState();
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateComputePipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreateComputePipelineCombinedImageSamplerConsumedAsBoth) {
     TEST_DESCRIPTION(
         "Test that pipeline validation accepts a shader consuming both the sampler and the image of a combined image+sampler but "
         "via separate variables");
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -766,10 +734,7 @@ TEST_F(VkPositiveLayerTest, CreateComputePipelineCombinedImageSamplerConsumedAsB
     memcpy(pipe.dsl_bindings_.data(), bindings.data(), bindings.size() * sizeof(VkDescriptorSetLayoutBinding));
     pipe.cs_.reset(new VkShaderObj(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT));
     pipe.InitState();
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateComputePipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, PSOPolygonModeValid) {
@@ -799,11 +764,10 @@ TEST_F(VkPositiveLayerTest, PSOPolygonModeValid) {
 
     VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL_TRY);
     VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL_TRY);
-    vs.InitFromGLSLTry(bindStateVertShaderText, false, SPV_ENV_VULKAN_1_0, &test_device);
-    fs.InitFromGLSLTry(bindStateFragShaderText, false, SPV_ENV_VULKAN_1_0, &test_device);
+    vs.InitFromGLSLTry(false, &test_device);
+    fs.InitFromGLSLTry(false, &test_device);
 
     // Set polygonMode=FILL. No error is expected
-    m_errorMonitor->ExpectSuccess();
     {
         VkPipelineObj pipe(&test_device);
         pipe.AddShader(&vs);
@@ -814,7 +778,6 @@ TEST_F(VkPositiveLayerTest, PSOPolygonModeValid) {
         pipe.SetRasterization(&rs_ci);
         pipe.CreateVKPipeline(pipeline_layout.handle(), render_pass.handle());
     }
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
@@ -839,6 +802,8 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
         sizeof(void *) == 8 ? reinterpret_cast<void *>(fake_address_64) : reinterpret_cast<void *>(fake_address_32);
 
     VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT);
+    VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
+    VkPipelineShaderStageCreateInfo stages[2] = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
 
     const VkPipelineVertexInputStateCreateInfo pipeline_vertex_input_state_create_info{
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -874,7 +839,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
         1.0f   // lineWidth
     };
 
-    VkPipelineLayout pipeline_layout;
+    vk_testing::PipelineLayout pipeline_layout;
     {
         VkPipelineLayoutCreateInfo pipeline_layout_create_info{
             VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -886,24 +851,21 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
             nullptr  // push constants
         };
 
-        VkResult err = vk::CreatePipelineLayout(m_device->device(), &pipeline_layout_create_info, nullptr, &pipeline_layout);
-        ASSERT_VK_SUCCESS(err);
+        pipeline_layout.init(*m_device, pipeline_layout_create_info, {});
     }
 
     // try disabled rasterizer and no tessellation
     {
-        m_errorMonitor->ExpectSuccess();
-
         VkPipelineRasterizationStateCreateInfo pipeline_rasterization_state_create_info =
             pipeline_rasterization_state_create_info_template;
         pipeline_rasterization_state_create_info.rasterizerDiscardEnable = VK_TRUE;
 
         VkGraphicsPipelineCreateInfo graphics_pipeline_create_info{
             VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            nullptr,  // pNext
-            0,        // flags
-            1,        // stageCount
-            &vs.GetStageCreateInfo(),
+            nullptr,                              // pNext
+            0,                                    // flags
+            static_cast<uint32_t>(size(stages)),  // stageCount
+            stages,
             &pipeline_vertex_input_state_create_info,
             &pipeline_input_assembly_state_create_info,
             reinterpret_cast<const VkPipelineTessellationStateCreateInfo *>(hopefully_undereferencable_pointer),
@@ -913,21 +875,16 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
             reinterpret_cast<const VkPipelineDepthStencilStateCreateInfo *>(hopefully_undereferencable_pointer),
             reinterpret_cast<const VkPipelineColorBlendStateCreateInfo *>(hopefully_undereferencable_pointer),
             nullptr,  // dynamic states
-            pipeline_layout,
+            pipeline_layout.handle(),
             m_renderPass,
             0,  // subpass
             VK_NULL_HANDLE,
             0};
 
-        VkPipeline pipeline;
-        vk::CreateGraphicsPipelines(m_device->handle(), VK_NULL_HANDLE, 1, &graphics_pipeline_create_info, nullptr, &pipeline);
-        m_errorMonitor->VerifyNotFound();
+        vk_testing::Pipeline pipeline(*m_device, graphics_pipeline_create_info);
 
-        m_errorMonitor->ExpectSuccess();
         m_commandBuffer->begin();
-        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        m_errorMonitor->VerifyNotFound();
-        vk::DestroyPipeline(m_device->handle(), pipeline, nullptr);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
     }
 
     const VkPipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info{
@@ -944,8 +901,6 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
 
     // try enabled rasterizer but no subpass attachments
     {
-        m_errorMonitor->ExpectSuccess();
-
         VkPipelineRasterizationStateCreateInfo pipeline_rasterization_state_create_info =
             pipeline_rasterization_state_create_info_template;
         pipeline_rasterization_state_create_info.rasterizerDiscardEnable = VK_FALSE;
@@ -962,7 +917,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
             1,
             &scissor};
 
-        VkRenderPass render_pass;
+        vk_testing::RenderPass render_pass;
         {
             VkSubpassDescription subpass_desc = {};
 
@@ -978,16 +933,15 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
                 nullptr  // subpass dependencies
             };
 
-            VkResult err = vk::CreateRenderPass(m_device->handle(), &render_pass_create_info, nullptr, &render_pass);
-            ASSERT_VK_SUCCESS(err);
+            render_pass.init(*m_device, render_pass_create_info);
         }
 
         VkGraphicsPipelineCreateInfo graphics_pipeline_create_info{
             VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            nullptr,  // pNext
-            0,        // flags
-            1,        // stageCount
-            &vs.GetStageCreateInfo(),
+            nullptr,                              // pNext
+            0,                                    // flags
+            static_cast<uint32_t>(size(stages)),  // stageCount
+            stages,
             &pipeline_vertex_input_state_create_info,
             &pipeline_input_assembly_state_create_info,
             nullptr,
@@ -997,25 +951,17 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
             reinterpret_cast<const VkPipelineDepthStencilStateCreateInfo *>(hopefully_undereferencable_pointer),
             reinterpret_cast<const VkPipelineColorBlendStateCreateInfo *>(hopefully_undereferencable_pointer),
             nullptr,  // dynamic states
-            pipeline_layout,
-            render_pass,
+            pipeline_layout.handle(),
+            render_pass.handle(),
             0,  // subpass
             VK_NULL_HANDLE,
             0};
 
-        VkPipeline pipeline;
-        vk::CreateGraphicsPipelines(m_device->handle(), VK_NULL_HANDLE, 1, &graphics_pipeline_create_info, nullptr, &pipeline);
-
-        m_errorMonitor->VerifyNotFound();
-
-        vk::DestroyPipeline(m_device->handle(), pipeline, nullptr);
-        vk::DestroyRenderPass(m_device->handle(), render_pass, nullptr);
+        vk_testing::Pipeline pipeline(*m_device, graphics_pipeline_create_info);
     }
 
     // try dynamic viewport and scissor
     {
-        m_errorMonitor->ExpectSuccess();
-
         VkPipelineRasterizationStateCreateInfo pipeline_rasterization_state_create_info =
             pipeline_rasterization_state_create_info_template;
         pipeline_rasterization_state_create_info.rasterizerDiscardEnable = VK_FALSE;
@@ -1056,10 +1002,10 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
             2, dynamic_states};
 
         VkGraphicsPipelineCreateInfo graphics_pipeline_create_info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                                                                   nullptr,  // pNext
-                                                                   0,        // flags
-                                                                   1,        // stageCount
-                                                                   &vs.GetStageCreateInfo(),
+                                                                   nullptr,                              // pNext
+                                                                   0,                                    // flags
+                                                                   static_cast<uint32_t>(size(stages)),  // stageCount
+                                                                   stages,
                                                                    &pipeline_vertex_input_state_create_info,
                                                                    &pipeline_input_assembly_state_create_info,
                                                                    nullptr,
@@ -1069,21 +1015,14 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
                                                                    &pipeline_depth_stencil_state_create_info,
                                                                    &pipeline_color_blend_state_create_info,
                                                                    &pipeline_dynamic_state_create_info,  // dynamic states
-                                                                   pipeline_layout,
+                                                                   pipeline_layout.handle(),
                                                                    m_renderPass,
                                                                    0,  // subpass
                                                                    VK_NULL_HANDLE,
                                                                    0};
 
-        VkPipeline pipeline;
-        vk::CreateGraphicsPipelines(m_device->handle(), VK_NULL_HANDLE, 1, &graphics_pipeline_create_info, nullptr, &pipeline);
-
-        m_errorMonitor->VerifyNotFound();
-
-        vk::DestroyPipeline(m_device->handle(), pipeline, nullptr);
+        vk_testing::Pipeline pipeline(*m_device, graphics_pipeline_create_info);
     }
-
-    vk::DestroyPipelineLayout(m_device->handle(), pipeline_layout, nullptr);
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineWithCoreChecksDisabled) {
@@ -1108,9 +1047,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineWithCoreChecksDisabled) {
     pipe.gp_ci_.pInputAssemblyState = &iasci;
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipeineWithTessellationDomainOrigin) {
@@ -1148,9 +1085,7 @@ TEST_F(VkPositiveLayerTest, CreatePipeineWithTessellationDomainOrigin) {
     pipe.gp_ci_.pInputAssemblyState = &iasci;
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), tcs.GetStageCreateInfo(), tes.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, ViewportArray2NV) {
@@ -1214,8 +1149,6 @@ TEST_F(VkPositiveLayerTest, ViewportArray2NV) {
     // Verify that the usage of gl_ViewportMask[] in the allowed vertex processing
     // stages does not cause any errors.
     for (auto stage : vertex_stages) {
-        m_errorMonitor->ExpectSuccess();
-
         VkPipelineInputAssemblyStateCreateInfo iaci = LvlInitStruct<VkPipelineInputAssemblyStateCreateInfo>();
         iaci.topology = (stage != TestStage::VERTEX) ? VK_PRIMITIVE_TOPOLOGY_PATCH_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
@@ -1271,7 +1204,8 @@ TEST_F(VkPositiveLayerTest, ViewportArray2NV) {
             }
             tes_src << "}";
 
-            tes = std::unique_ptr<VkShaderObj>(new VkShaderObj(this, tes_src.str(), VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT));
+            tes = std::unique_ptr<VkShaderObj>(
+                new VkShaderObj(this, tes_src.str().c_str(), VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT));
             pipe.AddShader(tes.get());
             pipe.AddShader(&tcs);
             pipe.SetTessellation(&tsci);
@@ -1292,12 +1226,11 @@ TEST_F(VkPositiveLayerTest, ViewportArray2NV) {
                     }
                 })";
 
-            geom = std::unique_ptr<VkShaderObj>(new VkShaderObj(this, geom_src.str(), VK_SHADER_STAGE_GEOMETRY_BIT));
+            geom = std::unique_ptr<VkShaderObj>(new VkShaderObj(this, geom_src.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT));
             pipe.AddShader(geom.get());
         }
 
         pipe.CreateVKPipeline(pl.handle(), renderPass());
-        m_errorMonitor->VerifyNotFound();
     }
 }
 
@@ -1316,7 +1249,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineFragmentOutputNotConsumedButAlphaToCov
         helper.pipe_ms_state_ci_ = ms_state_ci;
         helper.cb_ci_.attachmentCount = 0;
     };
-    CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit, "", true);
+    CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit);
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineAttachmentUnused) {
@@ -1359,7 +1292,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineAttachmentUnused) {
         helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
         helper.gp_ci_.renderPass = render_pass;
     };
-    CreatePipelineHelper::OneshotTest(*this, override_info, kErrorBit | kWarningBit, "", true);
+    CreatePipelineHelper::OneshotTest(*this, override_info, kErrorBit | kWarningBit);
 
     vk::DestroyRenderPass(m_device->device(), render_pass, nullptr);
 }
@@ -1367,22 +1300,17 @@ TEST_F(VkPositiveLayerTest, CreatePipelineAttachmentUnused) {
 TEST_F(VkPositiveLayerTest, CreateSurface) {
     TEST_DESCRIPTION("Create and destroy a surface without ever creating a swapchain");
 
-    if (!AddSurfaceInstanceExtension()) {
-        printf("%s surface extensions not supported, skipping CreateSurface  test\n", kSkipPrefix);
-        return;
-    }
+    AddSurfaceExtension();
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    m_errorMonitor->ExpectSuccess();
     if (!InitSurface()) {
         printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
         return;
     }
     DestroySwapchain();  // cleans up both surface and swapchain, if they were created
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, SampleMaskOverrideCoverageNV) {
@@ -1429,8 +1357,6 @@ TEST_F(VkPositiveLayerTest, SampleMaskOverrideCoverageNV) {
             outColor = fragColor;
         }
     )glsl";
-
-    m_errorMonitor->ExpectSuccess();
 
     const VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_8_BIT;
 
@@ -1485,22 +1411,20 @@ TEST_F(VkPositiveLayerTest, SampleMaskOverrideCoverageNV) {
     pipe.CreateVKPipeline(pl.handle(), rp);
 
     vk::DestroyRenderPass(m_device->device(), rp, nullptr);
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestRasterizationDiscardEnableTrue) {
     TEST_DESCRIPTION("Ensure it doesn't crash and trigger error msg when rasterizerDiscardEnable = true");
     ASSERT_NO_FATAL_FAILURE(Init());
     if (IsPlatform(kNexusPlayer)) {
-        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "This test should not run on Nexus Player";
     }
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkAttachmentDescription att[1] = {{}};
     att[0].format = VK_FORMAT_R8G8B8A8_UNORM;
     att[0].samples = VK_SAMPLE_COUNT_4_BIT;
+    att[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     att[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     att[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     VkAttachmentReference cr = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
@@ -1513,8 +1437,8 @@ TEST_F(VkPositiveLayerTest, TestRasterizationDiscardEnableTrue) {
     rpi.pAttachments = att;
     rpi.subpassCount = 1;
     rpi.pSubpasses = &sp;
-    VkRenderPass rp;
-    vk::CreateRenderPass(m_device->device(), &rpi, nullptr, &rp);
+    vk_testing::RenderPass rp(*m_device, rpi);
+    ASSERT_TRUE(rp.initialized());
 
     CreatePipelineHelper pipe(*this);
     pipe.InitInfo();
@@ -1522,16 +1446,13 @@ TEST_F(VkPositiveLayerTest, TestRasterizationDiscardEnableTrue) {
     pipe.gp_ci_.pMultisampleState = nullptr;
     pipe.gp_ci_.pDepthStencilState = nullptr;
     pipe.gp_ci_.pColorBlendState = nullptr;
-    pipe.gp_ci_.renderPass = rp;
+    pipe.gp_ci_.renderPass = rp.handle();
 
-    m_errorMonitor->ExpectSuccess();
     // Skip the test in NexusPlayer. The driver crashes when pViewportState, pMultisampleState, pDepthStencilState, pColorBlendState
     // are NULL.
     pipe.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
-    vk::DestroyRenderPass(m_device->device(), rp, nullptr);
 }
 
 TEST_F(VkPositiveLayerTest, TestSamplerDataForCombinedImageSampler) {
@@ -1539,7 +1460,7 @@ TEST_F(VkPositiveLayerTest, TestSamplerDataForCombinedImageSampler) {
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    const std::string fsSource = R"(
+    const char *fsSource = R"(
                    OpCapability Shader
                    OpMemoryModel Logical GLSL450
                    OpEntryPoint Fragment %main "main"
@@ -1605,9 +1526,7 @@ TEST_F(VkPositiveLayerTest, TestSamplerDataForCombinedImageSampler) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0, 1,
                               &pipe.descriptor_set_->set_, 0, NULL);
 
-    m_errorMonitor->ExpectSuccess();
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
-    m_errorMonitor->VerifyNotFound();
 
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
@@ -1634,9 +1553,7 @@ TEST_F(VkPositiveLayerTest, NotPointSizeGeometryShaderSuccess) {
     pipe.ia_ci_.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
     pipe.InitState();
 
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, SubpassWithReadOnlyLayoutWithoutDependency) {
@@ -1787,8 +1704,6 @@ TEST_F(VkPositiveLayerTest, GeometryShaderPassthroughNV) {
         }
     )glsl";
 
-    m_errorMonitor->ExpectSuccess();
-
     const VkPipelineLayoutObj pl(m_device);
 
     VkPipelineObj pipe(m_device);
@@ -1806,14 +1721,11 @@ TEST_F(VkPositiveLayerTest, GeometryShaderPassthroughNV) {
     // Create pipeline and make sure that the usage of NV_geometry_shader_passthrough
     // in the fragment shader does not cause any errors.
     pipe.CreateVKPipeline(pl.handle(), renderPass());
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, PipelineStageConditionalRendering) {
     TEST_DESCRIPTION("Create renderpass and CmdPipelineBarrier with VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT");
 
-    m_errorMonitor->ExpectSuccess();
     if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
         printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
                VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -1868,9 +1780,7 @@ TEST_F(VkPositiveLayerTest, PipelineStageConditionalRendering) {
     VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, 1, attach, 1, subpasses, 1, &dependency};
     VkRenderPass rp;
 
-    m_errorMonitor->ExpectSuccess();
     vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &rp);
-    m_errorMonitor->VerifyNotFound();
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
@@ -1908,10 +1818,8 @@ TEST_F(VkPositiveLayerTest, PipelineStageConditionalRendering) {
     imb.subresourceRange.baseArrayLayer = 0;
     imb.subresourceRange.layerCount = 1;
 
-    m_errorMonitor->ExpectSuccess();
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
                            VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0, 0, nullptr, 0, nullptr, 1, &imb);
-    m_errorMonitor->VerifyNotFound();
 
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
@@ -1921,8 +1829,6 @@ TEST_F(VkPositiveLayerTest, PipelineStageConditionalRendering) {
 
 TEST_F(VkPositiveLayerTest, CreatePipelineOverlappingPushConstantRange) {
     TEST_DESCRIPTION("Test overlapping push-constant ranges.");
-
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -1960,14 +1866,10 @@ TEST_F(VkPositiveLayerTest, CreatePipelineOverlappingPushConstantRange) {
     pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, MultipleEntryPointPushConstantVertNormalFrag) {
     TEST_DESCRIPTION("Test push-constant only being used by single entrypoint.");
-
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -2050,33 +1952,33 @@ TEST_F(VkPositiveLayerTest, MultipleEntryPointPushConstantVertNormalFrag) {
 
     // Vertex entry point first
     {
-        VkShaderObj const vs(this, vert_first, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr, "main_v");
-        VkShaderObj const fs(this, vert_first, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr, "main_f");
+        VkShaderObj const vs(this, vert_first.c_str(), VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr,
+                             "main_v");
+        VkShaderObj const fs(this, vert_first.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr,
+                             "main_f");
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
             helper.pipeline_layout_ci_ = pipeline_layout_info;
         };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 
     // Fragment entry point first
     {
-        VkShaderObj const vs(this, frag_first, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr, "main_v");
-        VkShaderObj const fs(this, frag_first, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr, "main_f");
+        VkShaderObj const vs(this, frag_first.c_str(), VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr,
+                             "main_v");
+        VkShaderObj const fs(this, frag_first.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr,
+                             "main_f");
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
             helper.pipeline_layout_ci_ = pipeline_layout_info;
         };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, MultipleEntryPointNormalVertPushConstantFrag) {
     TEST_DESCRIPTION("Test push-constant only being used by single entrypoint.");
-
-    m_errorMonitor->ExpectSuccess();
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -2159,27 +2061,29 @@ TEST_F(VkPositiveLayerTest, MultipleEntryPointNormalVertPushConstantFrag) {
 
     // Vertex entry point first
     {
-        VkShaderObj const vs(this, vert_first, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr, "main_v");
-        VkShaderObj const fs(this, vert_first, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr, "main_f");
+        VkShaderObj const vs(this, vert_first.c_str(), VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr,
+                             "main_v");
+        VkShaderObj const fs(this, vert_first.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr,
+                             "main_f");
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
             helper.pipeline_layout_ci_ = pipeline_layout_info;
         };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 
     // Fragment entry point first
     {
-        VkShaderObj const vs(this, frag_first, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr, "main_v");
-        VkShaderObj const fs(this, frag_first, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr, "main_f");
+        VkShaderObj const vs(this, frag_first.c_str(), VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr,
+                             "main_v");
+        VkShaderObj const fs(this, frag_first.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, nullptr,
+                             "main_f");
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
             helper.pipeline_layout_ci_ = pipeline_layout_info;
         };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, PushConstantsCompatibilityGraphicsOnly) {
@@ -2188,7 +2092,6 @@ TEST_F(VkPositiveLayerTest, PushConstantsCompatibilityGraphicsOnly) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     ASSERT_NO_FATAL_FAILURE(InitViewport());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-    m_errorMonitor->ExpectSuccess();
 
     char const *const vsSource = R"glsl(
         #version 450
@@ -2323,8 +2226,6 @@ TEST_F(VkPositiveLayerTest, PushConstantsCompatibilityGraphicsOnly) {
     m_commandBuffer->Draw(1, 0, 0, 0);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, PushConstantsStaticallyUnused) {
@@ -2333,7 +2234,6 @@ TEST_F(VkPositiveLayerTest, PushConstantsStaticallyUnused) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     ASSERT_NO_FATAL_FAILURE(InitViewport());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-    m_errorMonitor->ExpectSuccess();
 
     // Create set of Pipeline Layouts that cover variations of ranges
     VkPushConstantRange push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 4};
@@ -2394,14 +2294,10 @@ TEST_F(VkPositiveLayerTest, PushConstantsStaticallyUnused) {
     m_commandBuffer->Draw(1, 0, 0, 0);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt8) {
     TEST_DESCRIPTION("Test int8 specialization.");
-
-    m_errorMonitor->ExpectSuccess();
 
     if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
         m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -2433,7 +2329,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt8) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    std::string const fs_src = R"(
+    const char *fs_src = R"(
                OpCapability Shader
                OpCapability Int8
           %1 = OpExtInstImport "GLSL.std.450"
@@ -2476,14 +2372,10 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt8) {
     pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt16) {
     TEST_DESCRIPTION("Test int16 specialization.");
-
-    m_errorMonitor->ExpectSuccess();
 
     if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
         m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -2508,7 +2400,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt16) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    std::string const fs_src = R"(
+    const char *fs_src = R"(
                OpCapability Shader
                OpCapability Int16
           %1 = OpExtInstImport "GLSL.std.450"
@@ -2551,19 +2443,15 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt16) {
     pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt32) {
     TEST_DESCRIPTION("Test int32 specialization.");
 
-    m_errorMonitor->ExpectSuccess();
-
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    std::string const fs_src = R"(
+    const char *fs_src = R"(
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
@@ -2605,14 +2493,10 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt32) {
     pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt64) {
     TEST_DESCRIPTION("Test int64 specialization.");
-
-    m_errorMonitor->ExpectSuccess();
 
     if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
         m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -2637,7 +2521,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt64) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    std::string const fs_src = R"(
+    const char *fs_src = R"(
                OpCapability Shader
                OpCapability Int64
           %1 = OpExtInstImport "GLSL.std.450"
@@ -2680,8 +2564,6 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt64) {
     pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
@@ -2691,9 +2573,8 @@ TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
 
-    if (!AreRequestedExtensionsEnabled()) {
+    if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME << " not supported";
     }
 
@@ -2705,8 +2586,6 @@ TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
         return;
     }
 
-    m_errorMonitor->VerifyNotFound();
-    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
     VkFormat ds_format = VK_FORMAT_D24_UNORM_S8_UINT;
@@ -2869,22 +2748,21 @@ TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
 
     m_commandBuffer->end();
     m_commandBuffer->QueueCommandBuffer(false);
-    m_errorMonitor->VerifyNotFound();
+
+    vk::DestroyRenderPass(device(), render_pass_separate, nullptr);
+    vk::DestroyRenderPass(device(), render_pass_combined, nullptr);
+    vk::DestroyFramebuffer(device(), framebuffer_separate, nullptr);
+    vk::DestroyFramebuffer(device(), framebuffer_combined, nullptr);
 }
 
 TEST_F(VkPositiveLayerTest, SwapchainImageFormatProps) {
     TEST_DESCRIPTION("Try using special format props on a swapchain image");
 
-    if (!AddSurfaceInstanceExtension()) {
-        printf("%s surface extensions not supported, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
-        return;
-    }
-
+    AddSurfaceExtension();
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AddSwapchainDeviceExtension()) {
-        printf("%s swapchain extensions not supported, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -2967,29 +2845,22 @@ TEST_F(VkPositiveLayerTest, SwapchainImageFormatProps) {
     rpbi.renderArea = {{0, 0}, {1, 1}};
     cmdbuff.BeginRenderPass(rpbi);
 
-    Monitor().ExpectSuccess();
     vk::CmdBindPipeline(cmdbuff.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
-    Monitor().VerifyNotFound();
 
     // teardown
     vk::DestroyImageView(device(), image_view, nullptr);
     vk::DestroyFramebuffer(device(), framebuffer, nullptr);
-    DestroySwapchain();
 }
 
 TEST_F(VkPositiveLayerTest, SwapchainExclusiveModeQueueFamilyPropertiesReferences) {
     TEST_DESCRIPTION("Try using special format props on a swapchain image");
 
-    if (!AddSurfaceInstanceExtension()) {
-        printf("%s surface extensions not supported, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
-        return;
-    }
+    AddSurfaceExtension();
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AddSwapchainDeviceExtension()) {
-        printf("%s swapchain extensions not supported, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -2998,7 +2869,6 @@ TEST_F(VkPositiveLayerTest, SwapchainExclusiveModeQueueFamilyPropertiesReference
         return;
     }
     InitSwapchainInfo();
-    m_errorMonitor->ExpectSuccess();
 
     VkBool32 supported;
     vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), m_device->graphics_queue_node_index_, m_surface, &supported);
@@ -3063,14 +2933,11 @@ TEST_F(VkPositiveLayerTest, SwapchainExclusiveModeQueueFamilyPropertiesReference
         vk::DestroySurfaceKHR(instance(), m_surface, nullptr);
         m_surface = VK_NULL_HANDLE;
     }
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, ProtectedAndUnprotectedQueue) {
     TEST_DESCRIPTION("Test creating 2 queues, 1 protected, and getting both with vkGetDeviceQueue2");
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    m_errorMonitor->ExpectSuccess();
 
     if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
         m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -3173,13 +3040,10 @@ TEST_F(VkPositiveLayerTest, ProtectedAndUnprotectedQueue) {
     vkGetDeviceQueue2(test_device, &queue_info_2, &test_queue_unprotected);
 
     vk::DestroyDevice(test_device, nullptr);
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, ShaderFloatControl) {
     TEST_DESCRIPTION("Test VK_KHR_float_controls");
-    m_errorMonitor->ExpectSuccess();
 
     // Need 1.1 to get SPIR-V 1.3 since OpExecutionModeId was added in SPIR-V 1.2
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3251,9 +3115,10 @@ TEST_F(VkPositiveLayerTest, ShaderFloatControl) {
 )" + source_body;
 
         const auto set_info = [&](CreateComputePipelineHelper &helper) {
-            helper.cs_.reset(new VkShaderObj(this, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
+            helper.cs_.reset(
+                new VkShaderObj(this, spv_source.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
         };
-        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 
     if (denorm_preserve) {
@@ -3268,9 +3133,10 @@ TEST_F(VkPositiveLayerTest, ShaderFloatControl) {
 )" + source_body;
 
         const auto set_info = [&](CreateComputePipelineHelper &helper) {
-            helper.cs_.reset(new VkShaderObj(this, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
+            helper.cs_.reset(
+                new VkShaderObj(this, spv_source.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
         };
-        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 
     if (denorm_flush_to_zero) {
@@ -3285,9 +3151,10 @@ TEST_F(VkPositiveLayerTest, ShaderFloatControl) {
 )" + source_body;
 
         const auto set_info = [&](CreateComputePipelineHelper &helper) {
-            helper.cs_.reset(new VkShaderObj(this, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
+            helper.cs_.reset(
+                new VkShaderObj(this, spv_source.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
         };
-        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 
     if (rounding_mode_rte) {
@@ -3302,9 +3169,10 @@ TEST_F(VkPositiveLayerTest, ShaderFloatControl) {
 )" + source_body;
 
         const auto set_info = [&](CreateComputePipelineHelper &helper) {
-            helper.cs_.reset(new VkShaderObj(this, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
+            helper.cs_.reset(
+                new VkShaderObj(this, spv_source.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
         };
-        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 
     if (rounding_mode_rtz) {
@@ -3319,17 +3187,15 @@ TEST_F(VkPositiveLayerTest, ShaderFloatControl) {
 )" + source_body;
 
         const auto set_info = [&](CreateComputePipelineHelper &helper) {
-            helper.cs_.reset(new VkShaderObj(this, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
+            helper.cs_.reset(
+                new VkShaderObj(this, spv_source.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM));
         };
-        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, Storage8and16bit) {
     TEST_DESCRIPTION("Test VK_KHR_8bit_storage and VK_KHR_16bit_storage");
-    m_errorMonitor->ExpectSuccess();
 
     if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
         m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -3392,7 +3258,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
 
         if (storage_8_bit_features.uniformAndStorageBuffer8BitAccess == VK_TRUE) {
@@ -3412,7 +3278,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
 
         if (storage_8_bit_features.storagePushConstant8 == VK_TRUE) {
@@ -3435,7 +3301,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.pipeline_layout_ci_ = pipeline_layout_info;
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
     }
 
@@ -3458,7 +3324,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
 
         if (storage_16_bit_features.uniformAndStorageBuffer16BitAccess == VK_TRUE) {
@@ -3478,7 +3344,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
 
         if (storage_16_bit_features.storagePushConstant16 == VK_TRUE) {
@@ -3501,7 +3367,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.pipeline_layout_ci_ = pipeline_layout_info;
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
 
         if (storage_16_bit_features.storageInputOutput16 == VK_TRUE) {
@@ -3533,7 +3399,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
             const auto set_info = [&](CreatePipelineHelper &helper) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
     }
 
@@ -3556,7 +3422,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
 
         if (storage_16_bit_features.uniformAndStorageBuffer16BitAccess == VK_TRUE) {
@@ -3576,7 +3442,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
 
         if (storage_16_bit_features.storagePushConstant16 == VK_TRUE) {
@@ -3599,7 +3465,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
                 helper.pipeline_layout_ci_ = pipeline_layout_info;
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
 
         if (storage_16_bit_features.storageInputOutput16 == VK_TRUE) {
@@ -3631,10 +3497,9 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
             const auto set_info = [&](CreatePipelineHelper &helper) {
                 helper.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
             };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
         }
     }
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, ReadShaderClock) {
@@ -3698,14 +3563,14 @@ TEST_F(VkPositiveLayerTest, ReadShaderClock) {
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {vs_device.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
         };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 
     if (shader_clock_features.shaderSubgroupClock == VK_TRUE) {
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {vs_subgroup.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
         };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 }
 
@@ -3715,6 +3580,7 @@ TEST_F(VkPositiveLayerTest, ReadShaderClock) {
 TEST_F(VkPositiveLayerTest, AndroidHardwareBufferMemoryRequirements) {
     TEST_DESCRIPTION("Verify AndroidHardwareBuffer doesn't conflict with memory requirements.");
 
+    AddRequiredExtensions(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kGalaxyS10)) {
@@ -3722,20 +3588,8 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferMemoryRequirements) {
         return;
     }
 
-    if ((DeviceExtensionSupported(gpu(), nullptr, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME)) &&
-        // Also skip on devices that advertise AHB, but not the pre-requisite foreign_queue extension
-        (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME))) {
-        m_device_extension_names.push_back(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
-    } else {
-        printf("%s %s extension not supported, skipping tests\n", kSkipPrefix,
-               VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -3797,10 +3651,8 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferMemoryRequirements) {
 
     // Should be able to bind memory with no error
     VkDeviceMemory memory;
-    m_errorMonitor->ExpectSuccess();
     vk::AllocateMemory(m_device->device(), &memory_allocate_info, nullptr, &memory);
     vk::BindBufferMemory(m_device->device(), buffer, memory, 0);
-    m_errorMonitor->VerifyNotFound();
 
     vk::DestroyBuffer(m_device->device(), buffer, nullptr);
     vk::FreeMemory(m_device->device(), memory, nullptr);
@@ -3809,6 +3661,7 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferMemoryRequirements) {
 TEST_F(VkPositiveLayerTest, AndroidHardwareBufferDepthStencil) {
     TEST_DESCRIPTION("Verify AndroidHardwareBuffer can import Depth/Stencil");
 
+    AddRequiredExtensions(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kGalaxyS10) || IsPlatform(kShieldTV) || IsPlatform(kShieldTVb)) {
@@ -3816,21 +3669,8 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferDepthStencil) {
         return;
     }
 
-    if ((DeviceExtensionSupported(gpu(), nullptr, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME)) &&
-        // Also skip on devices that advertise AHB, but not the pre-requisite foreign_queue extension
-        (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME))) {
-        m_device_extension_names.push_back(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-    } else {
-        printf("%s %s extension not supported, skipping tests\n", kSkipPrefix,
-               VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -3907,10 +3747,8 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferDepthStencil) {
     }
 
     VkDeviceMemory memory;
-    m_errorMonitor->ExpectSuccess();
     vk::AllocateMemory(m_device->device(), &memory_allocate_info, nullptr, &memory);
     vk::BindImageMemory(m_device->device(), dsImage, memory, 0);
-    m_errorMonitor->VerifyNotFound();
 
     vk::DestroyImage(m_device->device(), dsImage, nullptr);
     vk::FreeMemory(m_device->device(), memory, nullptr);
@@ -3920,26 +3758,11 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferBindBufferMemory) {
     TEST_DESCRIPTION("Verify AndroidHardwareBuffer Buffers can be queried for mem requirements while unbound.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kGalaxyS10)) {
         printf("%s This test should not run on Galaxy S10\n", kSkipPrefix);
-        return;
-    }
-
-    if ((DeviceExtensionSupported(gpu(), nullptr, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME)) &&
-        // Also skip on devices that advertise AHB, but not the pre-requisite foreign_queue extension
-        (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME))) {
-        m_device_extension_names.push_back(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
-    } else {
-        printf("%s %s extension not supported, skipping tests\n", kSkipPrefix,
-               VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
         return;
     }
 
@@ -3971,7 +3794,6 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferBindBufferMemory) {
     VkBuffer buffer = VK_NULL_HANDLE;
     vk::CreateBuffer(m_device->device(), &buffer_create_info, nullptr, &buffer);
 
-    m_errorMonitor->ExpectSuccess();
     // Try to get memory requirements prior to binding memory
     VkMemoryRequirements mem_reqs;
     vk::GetBufferMemoryRequirements(m_device->device(), buffer, &mem_reqs);
@@ -4001,8 +3823,6 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferBindBufferMemory) {
     vk::AllocateMemory(m_device->device(), &memory_info, NULL, &memory);
     vk::BindBufferMemory(m_device->device(), buffer, memory, mem_reqs.alignment);
 
-    m_errorMonitor->VerifyNotFound();
-
     vk::DestroyBuffer(m_device->device(), buffer, nullptr);
     vk::FreeMemory(m_device->device(), memory, nullptr);
 }
@@ -4011,22 +3831,11 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExportBuffer) {
     TEST_DESCRIPTION("Verify VkBuffers can export to an AHB.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    if ((DeviceExtensionSupported(gpu(), nullptr, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME)) &&
-        // Also skip on devices that advertise AHB, but not the pre-requisite foreign_queue extension
-        (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME))) {
-        m_device_extension_names.push_back(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
-    } else {
-        printf("%s %s extension not supported, skipping tests\n", kSkipPrefix,
-               VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -4034,8 +3843,6 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExportBuffer) {
     PFN_vkGetMemoryAndroidHardwareBufferANDROID vkGetMemoryAndroidHardwareBufferANDROID =
         (PFN_vkGetMemoryAndroidHardwareBufferANDROID)vk::GetDeviceProcAddr(device(), "vkGetMemoryAndroidHardwareBufferANDROID");
     ASSERT_TRUE(vkGetMemoryAndroidHardwareBufferANDROID != nullptr);
-
-    m_errorMonitor->ExpectSuccess();
 
     // Create VkBuffer to be exported to an AHB
     VkBuffer buffer = VK_NULL_HANDLE;
@@ -4074,8 +3881,6 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExportBuffer) {
     get_ahb_info.memory = memory;
     vkGetMemoryAndroidHardwareBufferANDROID(device(), &get_ahb_info, &ahb);
 
-    m_errorMonitor->VerifyNotFound();
-
     // App in charge of releasing after exporting
     AHardwareBuffer_release(ahb);
     vk::FreeMemory(device(), memory, NULL);
@@ -4086,22 +3891,11 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExportImage) {
     TEST_DESCRIPTION("Verify VkImages can export to an AHB.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    if ((DeviceExtensionSupported(gpu(), nullptr, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME)) &&
-        // Also skip on devices that advertise AHB, but not the pre-requisite foreign_queue extension
-        (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME))) {
-        m_device_extension_names.push_back(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
-    } else {
-        printf("%s %s extension not supported, skipping tests\n", kSkipPrefix,
-               VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -4109,8 +3903,6 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExportImage) {
     PFN_vkGetMemoryAndroidHardwareBufferANDROID vkGetMemoryAndroidHardwareBufferANDROID =
         (PFN_vkGetMemoryAndroidHardwareBufferANDROID)vk::GetDeviceProcAddr(device(), "vkGetMemoryAndroidHardwareBufferANDROID");
     ASSERT_TRUE(vkGetMemoryAndroidHardwareBufferANDROID != nullptr);
-
-    m_errorMonitor->ExpectSuccess();
 
     // Create VkImage to be exported to an AHB
     VkExternalMemoryImageCreateInfo ext_image_info = LvlInitStruct<VkExternalMemoryImageCreateInfo>();
@@ -4163,8 +3955,6 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExportImage) {
     get_ahb_info.memory = memory;
     vkGetMemoryAndroidHardwareBufferANDROID(device(), &get_ahb_info, &ahb);
 
-    m_errorMonitor->VerifyNotFound();
-
     // App in charge of releasing after exporting
     AHardwareBuffer_release(ahb);
     vk::FreeMemory(device(), memory, NULL);
@@ -4174,6 +3964,7 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExportImage) {
 TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalImage) {
     TEST_DESCRIPTION("Verify AndroidHardwareBuffer can import AHB with external format");
 
+    AddRequiredExtensions(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kGalaxyS10)) {
@@ -4181,21 +3972,8 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalImage) {
         return;
     }
 
-    if ((DeviceExtensionSupported(gpu(), nullptr, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME)) &&
-        // Also skip on devices that advertise AHB, but not the pre-requisite foreign_queue extension
-        (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME))) {
-        m_device_extension_names.push_back(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-    } else {
-        printf("%s %s extension not supported, skipping tests\n", kSkipPrefix,
-               VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -4290,10 +4068,8 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalImage) {
     }
 
     VkDeviceMemory memory;
-    m_errorMonitor->ExpectSuccess();
     vk::AllocateMemory(m_device->device(), &memory_allocate_info, nullptr, &memory);
     vk::BindImageMemory(m_device->device(), image, memory, 0);
-    m_errorMonitor->VerifyNotFound();
 
     vk::DestroyImage(m_device->device(), image, nullptr);
     vk::FreeMemory(m_device->device(), memory, nullptr);
@@ -4302,6 +4078,7 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalImage) {
 TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalCameraFormat) {
     TEST_DESCRIPTION("Verify AndroidHardwareBuffer can import AHB with external format");
 
+    AddRequiredExtensions(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     if (IsPlatform(kGalaxyS10)) {
@@ -4309,21 +4086,8 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalCameraFormat) {
         return;
     }
 
-    if ((DeviceExtensionSupported(gpu(), nullptr, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME)) &&
-        // Also skip on devices that advertise AHB, but not the pre-requisite foreign_queue extension
-        (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME))) {
-        m_device_extension_names.push_back(VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-    } else {
-        printf("%s %s extension not supported, skipping tests\n", kSkipPrefix,
-               VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -4332,8 +4096,6 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalCameraFormat) {
         (PFN_vkGetAndroidHardwareBufferPropertiesANDROID)vk::GetDeviceProcAddr(m_device->device(),
                                                                                "vkGetAndroidHardwareBufferPropertiesANDROID");
     ASSERT_TRUE(pfn_GetAHBProps != nullptr);
-
-    m_errorMonitor->ExpectSuccess();
 
     // Simulate camera usage of AHB
     AHardwareBuffer *ahb;
@@ -4422,7 +4184,6 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalCameraFormat) {
     VkDeviceMemory memory;
     vk::AllocateMemory(m_device->device(), &memory_allocate_info, nullptr, &memory);
     vk::BindImageMemory(m_device->device(), image, memory, 0);
-    m_errorMonitor->VerifyNotFound();
 
     vk::DestroyImage(m_device->device(), image, nullptr);
     vk::FreeMemory(m_device->device(), memory, nullptr);
@@ -4502,8 +4263,6 @@ void main() {
     )glsl";
     const VkShaderObj fs(this, fragment_source, VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    m_errorMonitor->ExpectSuccess();
-
     std::array<VkPushConstantRange, 2> push_ranges;
     push_ranges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     push_ranges[0].size = sizeof(uint64_t);
@@ -4521,9 +4280,7 @@ void main() {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.pipeline_layout_ci_ = pipeline_layout_info;
     pipe.InitState();
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, OpCopyObjectSampler) {
@@ -4587,39 +4344,31 @@ void main() {
     };
     pipe.InitState();
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, InitSwapchain) {
     TEST_DESCRIPTION("Make sure InitSwapchain is not producing anying invalid usage");
 
-    if (!AddSurfaceInstanceExtension()) {
-        printf("%s surface extensions not supported, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
-        return;
-    }
+    AddSurfaceExtension();
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    if (!AddSwapchainDeviceExtension()) {
-        printf("%s swapchain extensions not supported, skipping CmdCopySwapchainImage test\n", kSkipPrefix);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    m_errorMonitor->ExpectSuccess();
     if (InitSwapchain()) {
         DestroySwapchain();
     }
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, DestroySwapchainWithBoundImages) {
     TEST_DESCRIPTION("Try destroying a swapchain which has multiple images");
 
-    if (!AddSurfaceInstanceExtension()) return;
+    AddSurfaceExtension();
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     // Check for VK_KHR_get_memory_requirements2 extension
     if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME)) {
@@ -4629,7 +4378,9 @@ TEST_F(VkPositiveLayerTest, DestroySwapchainWithBoundImages) {
         return;
     }
 
-    if (!AddSwapchainDeviceExtension()) return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
     ASSERT_NO_FATAL_FAILURE(InitState());
     if (!InitSwapchain()) {
         printf("%s Cannot create surface or swapchain, skipping test\n", kSkipPrefix);
@@ -4657,24 +4408,22 @@ TEST_F(VkPositiveLayerTest, DestroySwapchainWithBoundImages) {
     image_swapchain_create_info.swapchain = m_swapchain;
 
     image_create_info.pNext = &image_swapchain_create_info;
-    std::array<VkImage, 3> images;
+    std::vector<vk_testing::Image> images(m_surface_capabilities.minImageCount);
 
-    m_errorMonitor->ExpectSuccess();
+    int i = 0;
     for (auto &image : images) {
-        vk::CreateImage(m_device->device(), &image_create_info, NULL, &image);
+        image.init_no_mem(*m_device, image_create_info);
         auto bind_swapchain_info = LvlInitStruct<VkBindImageMemorySwapchainInfoKHR>();
         bind_swapchain_info.swapchain = m_swapchain;
-        bind_swapchain_info.imageIndex = 0;
+        bind_swapchain_info.imageIndex = i++;
 
         auto bind_info = LvlInitStruct<VkBindImageMemoryInfo>(&bind_swapchain_info);
-        bind_info.image = image;
+        bind_info.image = image.handle();
         bind_info.memory = VK_NULL_HANDLE;
         bind_info.memoryOffset = 0;
 
         vkBindImageMemory2KHR(m_device->device(), 1, &bind_info);
     }
-    DestroySwapchain();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
@@ -4689,51 +4438,31 @@ TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
     return;
 #endif
 
-    m_errorMonitor->ExpectSuccess();
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
-    if (!AddSurfaceInstanceExtension()) {
-        printf("%s surface extensions not supported, skipping ProtectedSwapchainImageColorAttachment test\n", kSkipPrefix);
-        return;
+    AddSurfaceExtension();
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
-
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
-    if (!AddSwapchainDeviceExtension()) {
-        printf("%s swapchain extensions not supported, skipping ProtectedSwapchainImageColorAttachment test\n", kSkipPrefix);
-        return;
-    }
-
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
-    auto protected_memory_features = LvlInitStruct<VkPhysicalDeviceProtectedMemoryFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&protected_memory_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
-    if (protected_memory_features.protectedMemory == VK_FALSE) {
-        printf("%s protectedMemory feature not supported, skipped.\n", kSkipPrefix);
-        return;
-    };
-
-    // Turns m_commandBuffer into a unprotected command buffer
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
+    auto protected_memory_features = LvlInitStruct<VkPhysicalDeviceProtectedMemoryFeatures>();
+    GetPhysicalDeviceFeatures2(protected_memory_features);
+
+    if (protected_memory_features.protectedMemory == VK_FALSE) {
+        GTEST_SKIP() << "protectedMemory feature not supported, skipped.";
+    };
+
+    // Turns m_commandBuffer into a unprotected command buffer
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &protected_memory_features));
+
     if (!InitSurface()) {
-        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Cannot create surface, skipping test";
     }
     InitSwapchainInfo();
 
@@ -4741,8 +4470,7 @@ TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
     VkBool32 supported;
     vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), m_device->graphics_queue_node_index_, m_surface, &supported);
     if (!supported) {
-        printf("%s Graphics queue does not support present, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Graphics queue does not support present, skipping test";
     }
 
     auto surface = m_surface;
@@ -4781,7 +4509,6 @@ TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
     VkImage protected_image = swapchain_images.at(0);  // only need 1 image to test
 
     // Create a protected image view
-    VkImageView image_view;
     VkImageViewCreateInfo image_view_create_info = {
         VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         nullptr,
@@ -4793,7 +4520,7 @@ TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
          VK_COMPONENT_SWIZZLE_IDENTITY},
         {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
     };
-    ASSERT_VK_SUCCESS(vk::CreateImageView(device(), &image_view_create_info, nullptr, &image_view));
+    vk_testing::ImageView image_view(*m_device, image_view_create_info);
 
     // A renderpass and framebuffer that contains a protected color image view
     VkAttachmentDescription attachments[1] = {{0, swapchain_create_info.imageFormat, VK_SAMPLE_COUNT_1_BIT,
@@ -4817,7 +4544,7 @@ TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
                           0,
                           m_renderPass,
                           1,
-                          &image_view,
+                          &image_view.handle(),
                           swapchain_create_info.imageExtent.width,
                           swapchain_create_info.imageExtent.height,
                           1};
@@ -4846,9 +4573,6 @@ TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
     vk::CmdDraw(protectedCommandBuffer.handle(), 3, 1, 0, 0);
     vk::CmdEndRenderPass(protectedCommandBuffer.handle());
     protectedCommandBuffer.end();
-
-    DestroySwapchain();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, ImageDrmFormatModifier) {
@@ -4856,23 +4580,20 @@ TEST_F(VkPositiveLayerTest, ImageDrmFormatModifier) {
     TEST_DESCRIPTION("Create image and imageView using VK_EXT_image_drm_format_modifier");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);  // for extension dependencies
+    AddRequiredExtensions(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
 
     if (IsPlatform(kMockICD)) {
-        printf("%s Test not supported by MockICD, skipping tests\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test not supported by MockICD, skipping tests";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
-    if (!DeviceExtensionSupported(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME)) {
-        printf("%s VK_EXT_image_drm_format_modifier is not supported but required. Skipping\n", kSkipPrefix);
-        return;
-    }
-
-    m_device_extension_names.push_back(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     // we just hope that one of these formats supports modifiers
@@ -4938,10 +4659,8 @@ TEST_F(VkPositiveLayerTest, ImageDrmFormatModifier) {
         ci.pNext = &mod_list;
 
         VkImage image;
-        m_errorMonitor->ExpectSuccess();
         VkResult err = vk::CreateImage(device(), &ci, nullptr, &image);
         ASSERT_VK_SUCCESS(err);
-        m_errorMonitor->VerifyNotFound();
 
         // bind memory
         VkPhysicalDeviceMemoryProperties phys_mem_props;
@@ -5003,9 +4722,7 @@ TEST_F(VkPositiveLayerTest, AllowedDuplicateStype) {
     auto dbgUtils1 = LvlInitStruct<VkDebugUtilsMessengerCreateInfoEXT>(&dbgUtils0);
     ici.pNext = &dbgUtils1;
 
-    m_errorMonitor->ExpectSuccess();
     ASSERT_VK_SUCCESS(vk::CreateInstance(&ici, nullptr, &instance));
-    m_errorMonitor->VerifyNotFound();
 
     ASSERT_NO_FATAL_FAILURE(vk::DestroyInstance(instance, nullptr));
 }
@@ -5033,8 +4750,7 @@ TEST_F(VkPositiveLayerTest, MeshShaderOnly) {
     }
 
     if (IsPlatform(kMockICD) || DeviceSimulation()) {
-        printf("%sNot suppored by MockICD, skipping tests\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test not supported by MockICD";
     }
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
@@ -5085,9 +4801,7 @@ TEST_F(VkPositiveLayerTest, MeshShaderOnly) {
 
     helper.InitState();
 
-    m_errorMonitor->ExpectSuccess();
     helper.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CopyImageSubresource) {
@@ -5101,8 +4815,6 @@ TEST_F(VkPositiveLayerTest, CopyImageSubresource) {
     auto image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 2, 5, format, usage, VK_IMAGE_TILING_OPTIMAL);
     image.InitNoLayout(image_ci);
     ASSERT_TRUE(image.initialized());
-
-    m_errorMonitor->ExpectSuccess();
 
     VkImageSubresourceLayers src_layer{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     VkImageSubresourceLayers dst_layer{VK_IMAGE_ASPECT_COLOR_BIT, 1, 3, 1};
@@ -5171,7 +4883,6 @@ TEST_F(VkPositiveLayerTest, CopyImageSubresource) {
 
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     vk::QueueWaitIdle(m_device->m_queue);
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, ImageDescriptorSubresourceLayout) {
@@ -5270,7 +4981,6 @@ TEST_F(VkPositiveLayerTest, ImageDescriptorSubresourceLayout) {
             auto image_barrier = LvlInitStruct<VkImageMemoryBarrier>();
 
             cmd_buf.begin();
-            m_errorMonitor->ExpectSuccess();
             image_barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
             image_barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
             image_barrier.image = image->handle();
@@ -5292,19 +5002,15 @@ TEST_F(VkPositiveLayerTest, ImageDescriptorSubresourceLayout) {
             image_barrier.newLayout = descriptor_layout;
             cmd_buf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0,
                                     nullptr, 1, &image_barrier);
-            m_errorMonitor->VerifyNotFound();
 
             if (test_type == kExternal) {
                 // The image layout is external to the command buffer we are recording to test.  Submit to push to instance scope.
                 cmd_buf.end();
-                m_errorMonitor->ExpectSuccess();
                 vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
                 vk::QueueWaitIdle(m_device->m_queue);
-                m_errorMonitor->VerifyNotFound();
                 cmd_buf.begin();
             }
 
-            m_errorMonitor->ExpectSuccess();
             cmd_buf.BeginRenderPass(m_renderPassBeginInfo);
             vk::CmdBindPipeline(cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.handle());
             vk::CmdBindDescriptorSets(cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
@@ -5316,13 +5022,10 @@ TEST_F(VkPositiveLayerTest, ImageDescriptorSubresourceLayout) {
 
             cmd_buf.EndRenderPass();
             cmd_buf.end();
-            m_errorMonitor->VerifyNotFound();
 
             // Submit cmd buffer
-            m_errorMonitor->ExpectSuccess();
             vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
             vk::QueueWaitIdle(m_device->m_queue);
-            m_errorMonitor->VerifyNotFound();
         }
     };
     do_test(&image, &view, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -5342,7 +5045,17 @@ TEST_F(VkPositiveLayerTest, ExtensionsInCreateInstance) {
     for (const auto &ext : InstanceExtensions::get_info_map()) {
         // Add all "real" instance extensions
         if (InstanceExtensionSupported(ext.first.c_str())) {
-            m_instance_extension_names.emplace_back(ext.first.c_str());
+            bool version_required = false;
+            for (const auto &req : ext.second.requirements) {
+                std::string name(req.name);
+                if (name.find("VK_VERSION") != std::string::npos) {
+                    version_required = true;
+                    break;
+                }
+            }
+            if (!version_required) {
+                m_instance_extension_names.emplace_back(ext.first.c_str());
+            }
         }
     }
 
@@ -5351,7 +5064,6 @@ TEST_F(VkPositiveLayerTest, ExtensionsInCreateInstance) {
 
 TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
     TEST_DESCRIPTION("Verify renderpass layout transitions for a 2d ImageView created from a 3d Image.");
-    m_errorMonitor->ExpectSuccess();
     SetTargetApiVersion(VK_API_VERSION_1_1);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -5544,7 +5256,6 @@ TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
                 cmd_buf.begin();
             }
 
-            m_errorMonitor->ExpectSuccess();
             m_renderPassBeginInfo.renderPass = rp;
             m_renderPassBeginInfo.framebuffer = fb;
             m_renderPassBeginInfo.renderArea = {{0, 0}, {kWidth, kHeight}};
@@ -5569,7 +5280,6 @@ TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
     };
     do_test(&image_3d, &view_2d, &other_image, &other_view, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     vk::DestroyRenderPass(m_device->device(), rp, nullptr);
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, RenderPassInputResolve) {
@@ -5640,7 +5350,7 @@ TEST_F(VkPositiveLayerTest, SpecializationUnused) {
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     // layout (constant_id = 2) const int a = 3;
-    std::string cs_src = R"(
+    const char *cs_src = R"(
                OpCapability Shader
                OpMemoryModel Logical GLSL450
                OpEntryPoint GLCompute %main "main"
@@ -5676,15 +5386,15 @@ TEST_F(VkPositiveLayerTest, SpecializationUnused) {
         helper.cs_.reset(
             new VkShaderObj(this, cs_src, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM, &specialization_info));
     };
-    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit, "", true);
+    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit);
 
     // Even if the ID is never seen in VkSpecializationMapEntry the OpSpecConstant will use the default and still is valid
     specialization_info.mapEntryCount = 1;
-    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit, "", true);
+    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit);
 
     // try another random unused value other than zero
     entries[0].constantID = 100;
-    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit, "", true);
+    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit);
 }
 
 TEST_F(VkPositiveLayerTest, FillBufferCmdPoolTransferQueue) {
@@ -5696,7 +5406,6 @@ TEST_F(VkPositiveLayerTest, FillBufferCmdPoolTransferQueue) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    m_errorMonitor->ExpectSuccess();
 
     uint32_t transfer = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
     if (transfer == UINT32_MAX) {
@@ -5715,7 +5424,6 @@ TEST_F(VkPositiveLayerTest, FillBufferCmdPoolTransferQueue) {
     cb.begin();
     cb.FillBuffer(buffer.handle(), 0, 12, 0x11111111);
     cb.end();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, ShaderAtomicInt64) {
@@ -5808,14 +5516,14 @@ TEST_F(VkPositiveLayerTest, ShaderAtomicInt64) {
     };
 
     current_shader = cs_storage_buffer.c_str();
-    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 
     current_shader = cs_store.c_str();
-    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 
     if (atomic_int64_features.shaderSharedInt64Atomics == VK_TRUE) {
         current_shader = cs_workgroup.c_str();
-        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "", true);
+        CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
     }
 }
 
@@ -5830,8 +5538,6 @@ TEST_F(VkPositiveLayerTest, TopologyAtRasterizer) {
         printf("%s Device does not support tessellation shaders; skipped.\n", kSkipPrefix);
         return;
     }
-
-    m_errorMonitor->ExpectSuccess();
 
     char const *tcsSource = R"glsl(
         #version 450
@@ -5900,7 +5606,6 @@ TEST_F(VkPositiveLayerTest, TopologyAtRasterizer) {
     vk::CmdDraw(m_commandBuffer->handle(), 4, 1, 0, 0);
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestDynamicVertexInput) {
@@ -5941,9 +5646,7 @@ TEST_F(VkPositiveLayerTest, TestDynamicVertexInput) {
     pipe.dyn_state_ci_ = dyn_state_ci;
     pipe.InitState();
     pipe.gp_ci_.pVertexInputState = nullptr;
-    m_errorMonitor->ExpectSuccess();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestCmdSetVertexInputEXT) {
@@ -6000,7 +5703,6 @@ TEST_F(VkPositiveLayerTest, TestCmdSetVertexInputEXT) {
     attribute.format = VK_FORMAT_R32_SFLOAT;
     attribute.offset = 0;
 
-    m_errorMonitor->ExpectSuccess();
     m_commandBuffer->begin();
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
     vkCmdSetVertexInputEXT(m_commandBuffer->handle(), 1, &binding, 1, &attribute);
@@ -6008,33 +5710,32 @@ TEST_F(VkPositiveLayerTest, TestCmdSetVertexInputEXT) {
     vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestCmdSetVertexInputEXTStride) {
     TEST_DESCRIPTION("Test CmdSetVertexInputEXT");
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
+    AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
-    } else {
-        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
     }
 
-    auto vertex_input_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&vertex_input_dynamic_state_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto extdyn_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+    auto vertex_input_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT>(&extdyn_features);
+    auto features2 = GetPhysicalDeviceFeatures2(vertex_input_dynamic_state_features);
 
     if (!vertex_input_dynamic_state_features.vertexInputDynamicState) {
-        printf("%s Feature vertexInputDynamicState is not supported.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Feature vertexInputDynamicState is not supported.";
+    }
+    if (!extdyn_features.extendedDynamicState) {
+        GTEST_SKIP() << "Feature extendedDynamicState is not supported.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
@@ -6042,6 +5743,7 @@ TEST_F(VkPositiveLayerTest, TestCmdSetVertexInputEXTStride) {
 
     auto vkCmdSetVertexInputEXT =
         reinterpret_cast<PFN_vkCmdSetVertexInputEXT>(vk::GetDeviceProcAddr(m_device->device(), "vkCmdSetVertexInputEXT"));
+    ASSERT_NE(vkCmdSetVertexInputEXT, nullptr);
 
     CreatePipelineHelper pipe(*this);
     pipe.InitInfo();
@@ -6065,7 +5767,6 @@ TEST_F(VkPositiveLayerTest, TestCmdSetVertexInputEXTStride) {
     attribute.format = VK_FORMAT_R32_SFLOAT;
     attribute.offset = 0;
 
-    m_errorMonitor->ExpectSuccess();
     m_commandBuffer->begin();
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
     vkCmdSetVertexInputEXT(m_commandBuffer->handle(), 1, &binding, 1, &attribute);
@@ -6073,7 +5774,6 @@ TEST_F(VkPositiveLayerTest, TestCmdSetVertexInputEXTStride) {
     vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestPervertexNVShaderAttributes) {
@@ -6081,8 +5781,8 @@ TEST_F(VkPositiveLayerTest, TestPervertexNVShaderAttributes) {
 
     AddRequiredExtensions(VK_NV_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV fragment_shader_barycentric_features =
@@ -6137,7 +5837,6 @@ TEST_F(VkPositiveLayerTest, TestPervertexNVShaderAttributes) {
                 }
             )glsl";
 
-    m_errorMonitor->ExpectSuccess();
     VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
     VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
 
@@ -6146,18 +5845,14 @@ TEST_F(VkPositiveLayerTest, TestPervertexNVShaderAttributes) {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
     TEST_DESCRIPTION("Test that no warning is produced when a library is referenced in the raytracing shader groups.");
     SetTargetApiVersion(VK_API_VERSION_1_2);
-    if (!InitFrameworkForRayTracingTest(this, true, m_instance_extension_names, m_device_extension_names, m_errorMonitor, false,
-                                        false, true)) {
-        return;
+    if (!InitFrameworkForRayTracingTest(this, true, false)) {
+        GTEST_SKIP() << "unable to init ray tracing test";
     }
-
-    m_errorMonitor->ExpectSuccess();
 
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
         vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
@@ -6176,7 +5871,7 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
 
     const VkPipelineLayoutObj empty_pipeline_layout(m_device, {});
 
-    const std::string empty_shader = R"glsl(
+    const char *empty_shader = R"glsl(
         #version 460
         #extension GL_EXT_ray_tracing : require
         void main() {}
@@ -6266,7 +5961,6 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
 
     VkResult err =
         vkCreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &pipeline);
-    m_errorMonitor->VerifyNotFound();
     ASSERT_VK_SUCCESS(err);
     ASSERT_NE(pipeline, VK_NULL_HANDLE);
 
@@ -6276,8 +5970,6 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
 
 TEST_F(VkPositiveLayerTest, LineTopologyClasses) {
     TEST_DESCRIPTION("Check different line topologies within the same topology class");
-
-    m_errorMonitor->ExpectSuccess();
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
@@ -6290,8 +5982,8 @@ TEST_F(VkPositiveLayerTest, LineTopologyClasses) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (!extended_dynamic_state_features.extendedDynamicState) {
@@ -6343,7 +6035,6 @@ TEST_F(VkPositiveLayerTest, LineTopologyClasses) {
     cb.EndRenderPass();
 
     cb.end();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, MutableStorageImageFormatWriteForFormat) {
@@ -6353,25 +6044,22 @@ TEST_F(VkPositiveLayerTest, MutableStorageImageFormatWriteForFormat) {
     const VkFormat image_format = VK_FORMAT_B8G8R8A8_SRGB;
     const VkFormat image_view_format = VK_FORMAT_R32_SFLOAT;
 
-    if (!EnableDeviceProfileLayer()) {
-        printf("%s Failed to enable device profile layer.\n", kSkipPrefix);
-        return;
+    if (!OverrideDevsimForDeviceProfileLayer()) {
+        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
     }
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     PFN_vkSetPhysicalDeviceFormatProperties2EXT fpvkSetPhysicalDeviceFormatProperties2EXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceFormatProperties2EXT fpvkGetOriginalPhysicalDeviceFormatProperties2EXT = nullptr;
     if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFormatProperties2EXT, fpvkGetOriginalPhysicalDeviceFormatProperties2EXT)) {
-        printf("%s Failed to device profile layer.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Failed to load device profile layer.";
     }
 
     auto fmt_props_3 = LvlInitStruct<VkFormatProperties3>();
@@ -6390,10 +6078,8 @@ TEST_F(VkPositiveLayerTest, MutableStorageImageFormatWriteForFormat) {
     fmt_props_3.optimalTilingFeatures |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
     fpvkSetPhysicalDeviceFormatProperties2EXT(gpu(), image_view_format, fmt_props);
 
-    m_errorMonitor->ExpectSuccess();
-
     // Make sure compute pipeline has a compute shader stage set
-    const std::string csSource = R"(
+    const char *csSource = R"(
                   OpCapability Shader
                   OpCapability StorageImageWriteWithoutFormat
              %1 = OpExtInstImport "GLSL.std.450"
@@ -6436,7 +6122,7 @@ TEST_F(VkPositiveLayerTest, MutableStorageImageFormatWriteForFormat) {
 
     CreateComputePipelineHelper cs_pipeline(*this);
     cs_pipeline.InitInfo();
-    cs_pipeline.cs_.reset(new VkShaderObj(this, csSource.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM));
+    cs_pipeline.cs_.reset(new VkShaderObj(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM));
     cs_pipeline.InitState();
     cs_pipeline.pipeline_layout_ = VkPipelineLayoutObj(m_device, {&ds.layout_});
     cs_pipeline.LateBindPipelineInfo();
@@ -6502,7 +6188,6 @@ TEST_F(VkPositiveLayerTest, MutableStorageImageFormatWriteForFormat) {
                               1, &ds.set_, 0, nullptr);
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineDynamicRendering) {
@@ -6513,11 +6198,9 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineDynamicRendering) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
-    m_errorMonitor->ExpectSuccess();
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
     auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
@@ -6582,7 +6265,6 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineDynamicRendering) {
     render_pass.init(*m_device, render_pass_ci);
 
     pipe.CreateVKPipeline(pl.handle(), render_pass.handle(), &create_info);
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineDynamicRenderingNoInfo) {
@@ -6593,11 +6275,9 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineDynamicRenderingNoInfo) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
-    m_errorMonitor->ExpectSuccess();
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
     auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
@@ -6656,12 +6336,10 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineDynamicRenderingNoInfo) {
     pipe.InitGraphicsPipelineCreateInfo(&create_info);
     // if there isn't a VkPipelineRenderingCreateInfoKHR, the driver is supposed to use safe default values
     pipe.CreateVKPipeline(pl.handle(), render_pass.handle(), &create_info);
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineRasterizationOrderAttachmentAccessFlags) {
     TEST_DESCRIPTION("Test for a creating a pipeline with VK_ARM_rasterization_order_attachment_access enabled");
-    m_errorMonitor->ExpectSuccess();
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME);
@@ -6671,8 +6349,8 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineRasterizationOrderAttachmentAc
 
     ASSERT_NO_FATAL_FAILURE(InitFrameworkAndRetrieveFeatures(features2));
 
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (!rasterization_order_features.rasterizationOrderColorAttachmentAccess &&
@@ -6683,8 +6361,6 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineRasterizationOrderAttachmentAc
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
-
-    m_errorMonitor->VerifyNotFound();
 
     auto ds_ci = LvlInitStruct<VkPipelineDepthStencilStateCreateInfo>();
     VkPipelineColorBlendAttachmentState cb_as = {};
@@ -6753,7 +6429,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineRasterizationOrderAttachmentAc
         vk_testing::RenderPass render_pass;
         create_render_pass(VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_COLOR_ACCESS_BIT_ARM, render_pass);
         render_pass_handle = render_pass.handle();
-        CreatePipelineHelper::OneshotTest(*this, set_flgas_pipeline_createinfo, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_flgas_pipeline_createinfo, kErrorBit);
     }
 
     // Depth attachment
@@ -6764,7 +6440,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineRasterizationOrderAttachmentAc
         vk_testing::RenderPass render_pass;
         create_render_pass(VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_DEPTH_ACCESS_BIT_ARM, render_pass);
         render_pass_handle = render_pass.handle();
-        CreatePipelineHelper::OneshotTest(*this, set_flgas_pipeline_createinfo, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_flgas_pipeline_createinfo, kErrorBit);
     }
 
     // Stencil attachment
@@ -6776,22 +6452,19 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineRasterizationOrderAttachmentAc
         create_render_pass(VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_STENCIL_ACCESS_BIT_ARM, render_pass);
         render_pass_handle = render_pass.handle();
 
-        CreatePipelineHelper::OneshotTest(*this, set_flgas_pipeline_createinfo, kErrorBit, "", true);
+        CreatePipelineHelper::OneshotTest(*this, set_flgas_pipeline_createinfo, kErrorBit);
     }
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, AttachmentsDisableRasterization) {
     TEST_DESCRIPTION(
         "Create a pipeline with rasterization disabled, containing a valid pColorBlendState and color attachments, but a fragment "
         "shader that does not have any outputs");
-    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    const std::string fs_src = R"glsl(
+    const char *fs_src = R"glsl(
         #version 450
         void main(){ }
     )glsl";
@@ -6803,8 +6476,6 @@ TEST_F(VkPositiveLayerTest, AttachmentsDisableRasterization) {
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestShaderInputOutputMatch) {
@@ -6812,8 +6483,6 @@ TEST_F(VkPositiveLayerTest, TestShaderInputOutputMatch) {
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-
-    m_errorMonitor->ExpectSuccess();
 
     const char vsSource[] = R"glsl(#version 450
 
@@ -6918,8 +6587,6 @@ TEST_F(VkPositiveLayerTest, TestShaderInputOutputMatch) {
 
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestShaderInputOutputMatch2) {
@@ -6927,8 +6594,6 @@ TEST_F(VkPositiveLayerTest, TestShaderInputOutputMatch2) {
 
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-
-    m_errorMonitor->ExpectSuccess();
 
     const char vsSource[] = R"glsl(#version 450
         layout(location = 0) out vec2 v1;
@@ -6958,8 +6623,6 @@ TEST_F(VkPositiveLayerTest, TestShaderInputOutputMatch2) {
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
     pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestDualBlendShader) {
@@ -6982,8 +6645,6 @@ TEST_F(VkPositiveLayerTest, TestDualBlendShader) {
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-
-    m_errorMonitor->ExpectSuccess();
 
     char const *fsSource = R"glsl(
         #version 450
@@ -7022,7 +6683,6 @@ TEST_F(VkPositiveLayerTest, TestDualBlendShader) {
 
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestDynamicRenderingWithDualSourceBlending) {
@@ -7035,8 +6695,8 @@ TEST_F(VkPositiveLayerTest, TestDynamicRenderingWithDualSourceBlending) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
@@ -7053,8 +6713,6 @@ TEST_F(VkPositiveLayerTest, TestDynamicRenderingWithDualSourceBlending) {
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
-
-    m_errorMonitor->ExpectSuccess();
 
     char const *fsSource = R"glsl(
         #version 450
@@ -7105,8 +6763,6 @@ TEST_F(VkPositiveLayerTest, TestDynamicRenderingWithDualSourceBlending) {
 
     m_commandBuffer->EndRendering();
     m_commandBuffer->end();
-
-    m_errorMonitor->VerifyNotFound();
 }
 
 TEST_F(VkPositiveLayerTest, TestUpdateAfterBind) {
@@ -7120,8 +6776,8 @@ TEST_F(VkPositiveLayerTest, TestUpdateAfterBind) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto descriptor_indexing = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeatures>();
@@ -7144,8 +6800,6 @@ TEST_F(VkPositiveLayerTest, TestUpdateAfterBind) {
     auto vkQueueSubmit2KHR =
         reinterpret_cast<PFN_vkQueueSubmit2KHR>(vk::GetDeviceProcAddr(m_device->device(), "vkQueueSubmit2KHR"));
     assert(vkQueueSubmit2KHR != nullptr);
-
-    m_errorMonitor->ExpectSuccess();
 
     auto buffer_ci = LvlInitStruct<VkBufferCreateInfo>();
     buffer_ci.size = 4096;
@@ -7246,7 +6900,9 @@ TEST_F(VkPositiveLayerTest, TestUpdateAfterBind) {
     vk::DestroyBuffer(device(), buffer2, nullptr);
     vk::DestroyBuffer(device(), buffer3, nullptr);
 
-    m_errorMonitor->VerifyNotFound();
+    vk::FreeMemory(device(), memory1, nullptr);
+    vk::FreeMemory(device(), memory2, nullptr);
+    vk::FreeMemory(device(), memory3, nullptr);
 }
 
 TEST_F(VkPositiveLayerTest, TestPartiallyBoundDescriptors) {
@@ -7260,8 +6916,8 @@ TEST_F(VkPositiveLayerTest, TestPartiallyBoundDescriptors) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (!AreRequestedExtensionsEnabled()) {
-        GTEST_SKIP() << RequestedExtensionsNotSupported() << " not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto descriptor_indexing = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeatures>();
@@ -7284,8 +6940,6 @@ TEST_F(VkPositiveLayerTest, TestPartiallyBoundDescriptors) {
     auto vkQueueSubmit2KHR =
         reinterpret_cast<PFN_vkQueueSubmit2KHR>(vk::GetDeviceProcAddr(m_device->device(), "vkQueueSubmit2KHR"));
     assert(vkQueueSubmit2KHR != nullptr);
-
-    m_errorMonitor->ExpectSuccess();
 
     auto buffer_ci = LvlInitStruct<VkBufferCreateInfo>();
     buffer_ci.size = 4096;
@@ -7380,17 +7034,17 @@ TEST_F(VkPositiveLayerTest, TestPartiallyBoundDescriptors) {
 
     vk::DestroyBuffer(device(), buffer3, nullptr);
 
-    m_errorMonitor->VerifyNotFound();
+    vk::FreeMemory(device(), memory1, nullptr);
+    vk::FreeMemory(device(), memory3, nullptr);
 }
 
 TEST_F(VkPositiveLayerTest, DynamicColorWriteNoColorAttachments) {
     TEST_DESCRIPTION("Create a graphics pipeline with no color attachments, but use dynamic color write enable.");
-    m_errorMonitor->ExpectSuccess();
 
     AddRequiredExtensions(VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (!AreRequestedExtensionsEnabled()) {
+    if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME << " not supported";
     }
 
@@ -7473,6 +7127,4 @@ TEST_F(VkPositiveLayerTest, DynamicColorWriteNoColorAttachments) {
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
-
-    m_errorMonitor->VerifyNotFound();
 }

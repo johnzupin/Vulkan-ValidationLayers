@@ -29,6 +29,7 @@
 
 #include "test_common.h"
 #include "vk_typemap_helper.h"
+#include "vk_format_utils.h"
 
 namespace {
 
@@ -43,9 +44,12 @@ namespace {
         }                                                                                   \
     } while (0)
 
-#define NON_DISPATCHABLE_HANDLE_DTOR(cls, destroy_func)            \
-    cls::~cls() NOEXCEPT {                                         \
-        if (initialized()) destroy_func(device(), handle(), NULL); \
+#define NON_DISPATCHABLE_HANDLE_DTOR(cls, destroy_func) \
+    cls::~cls() NOEXCEPT {                              \
+        if (initialized()) {                            \
+            destroy_func(device(), handle(), NULL);     \
+            handle_ = VK_NULL_HANDLE;                   \
+        }                                               \
     }
 
 #define STRINGIFY(x) #x
@@ -108,22 +112,17 @@ VkPhysicalDeviceFeatures PhysicalDevice::features() const {
  */
 std::vector<VkLayerProperties> GetGlobalLayers() {
     VkResult err;
-    uint32_t layer_count;
-    std::vector<VkLayerProperties> layers;
-
+    uint32_t layer_count = 32;
+    std::vector<VkLayerProperties> layers(layer_count);
     do {
-        err = vk::EnumerateInstanceLayerProperties(&layer_count, nullptr);
-        assert(!err);
-        if (err || 0 == layer_count) return {};
-
-        layers.resize(layer_count);
         err = vk::EnumerateInstanceLayerProperties(&layer_count, layers.data());
+        if (err || 0 == layer_count) return {};
+        if (err == VK_INCOMPLETE) layer_count *= 2; // wasn't enough space, increase it
+        layers.resize(layer_count);
+
     } while (VK_INCOMPLETE == err);
 
     assert(!err);
-    if (err) return {};
-    layers.resize(layer_count);
-
     return layers;
 }
 
@@ -139,22 +138,16 @@ std::vector<VkExtensionProperties> GetGlobalExtensions() { return GetGlobalExten
  */
 std::vector<VkExtensionProperties> GetGlobalExtensions(const char *pLayerName) {
     VkResult err;
-    uint32_t extension_count;
-    std::vector<VkExtensionProperties> extensions;
-
+    uint32_t extension_count = 32;
+    std::vector<VkExtensionProperties> extensions(extension_count);
     do {
-        err = vk::EnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
-        assert(!err);
-        if (err || 0 == extension_count) return {};
-
-        extensions.resize(extension_count);
         err = vk::EnumerateInstanceExtensionProperties(nullptr, &extension_count, extensions.data());
+        if (err || 0 == extension_count) return {};
+        if (err == VK_INCOMPLETE) extension_count *= 2; // wasn't enough space, increase it
+        extensions.resize(extension_count);
     } while (VK_INCOMPLETE == err);
 
     assert(!err);
-    if (err) return {};
-    extensions.resize(extension_count);
-
     return extensions;
 }
 
@@ -164,18 +157,14 @@ std::vector<VkExtensionProperties> GetGlobalExtensions(const char *pLayerName) {
  */
 std::vector<VkExtensionProperties> PhysicalDevice::extensions(const char *pLayerName) const {
     VkResult err;
-    uint32_t extension_count;
-    std::vector<VkExtensionProperties> extensions;
+    uint32_t extension_count = 256;
+    std::vector<VkExtensionProperties> extensions(extension_count);
     do {
-        err = vk::EnumerateDeviceExtensionProperties(handle(), pLayerName, &extension_count, nullptr);
-        if (err || 0 == extension_count) return {};
-
-        extensions.resize(extension_count);
         err = vk::EnumerateDeviceExtensionProperties(handle(), pLayerName, &extension_count, extensions.data());
+        if (err || 0 == extension_count) return {};
+        if (err == VK_INCOMPLETE) extension_count *= 2; // wasn't enough space, increase it
+        extensions.resize(extension_count);
     } while (VK_INCOMPLETE == err);
-
-    if (err) return {};
-    extensions.resize(extension_count);
 
     return extensions;
 }
@@ -188,7 +177,8 @@ bool PhysicalDevice::set_memory_type(const uint32_t type_bits, VkMemoryAllocateI
         if ((type_mask & 1) == 1) {
             // Type is available, does it match user properties?
             if ((memory_properties_.memoryTypes[i].propertyFlags & properties) == properties &&
-                (memory_properties_.memoryTypes[i].propertyFlags & forbid) == 0) {
+                (memory_properties_.memoryTypes[i].propertyFlags & forbid) == 0 &&
+                (memory_properties_.memoryHeaps[memory_properties_.memoryTypes[i].heapIndex].size >= info->allocationSize)) {
                 info->memoryTypeIndex = i;
                 return true;
             }
@@ -204,18 +194,14 @@ bool PhysicalDevice::set_memory_type(const uint32_t type_bits, VkMemoryAllocateI
  */
 std::vector<VkLayerProperties> PhysicalDevice::layers() const {
     VkResult err;
-    uint32_t layer_count;
-    std::vector<VkLayerProperties> layers;
+    uint32_t layer_count = 32;
+    std::vector<VkLayerProperties> layers(layer_count);
     do {
-        err = vk::EnumerateDeviceLayerProperties(handle(), &layer_count, nullptr);
-        if (err || 0 == layer_count) return {};
-
-        layers.resize(layer_count);
         err = vk::EnumerateDeviceLayerProperties(handle(), &layer_count, layers.data());
+        if (err || 0 == layer_count) return {};
+        if (err == VK_INCOMPLETE) layer_count *= 2; // wasn't enough space, increase it
+        layers.resize(layer_count);
     } while (VK_INCOMPLETE == err);
-
-    if (err) return {};
-    layers.resize(layer_count);
 
     return layers;
 }
@@ -316,7 +302,7 @@ void Device::init_queues(const VkDeviceCreateInfo &info) {
         for (uint32_t queue_i = 0; queue_i < queue_create_info.queueCount; ++queue_i) {
             // TODO: Need to add support for separate MEMMGR and work queues,
             // including synchronization
-            VkQueue queue;
+            VkQueue queue = VK_NULL_HANDLE;
             vk::GetDeviceQueue(handle(), queue_family_i, queue_i, &queue);
 
             // Store single copy of the queue object that will self destruct
@@ -395,12 +381,12 @@ VkResult Queue::submit(const std::vector<const CommandBuffer *> &cmds, const Fen
     const std::vector<VkCommandBuffer> cmd_handles = MakeVkHandles<VkCommandBuffer>(cmds);
     VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
     submit_info.waitSemaphoreCount = 0;
-    submit_info.pWaitSemaphores = NULL;
-    submit_info.pWaitDstStageMask = NULL;
-    submit_info.commandBufferCount = (uint32_t)cmd_handles.size();
+    submit_info.pWaitSemaphores = nullptr;
+    submit_info.pWaitDstStageMask = nullptr;
+    submit_info.commandBufferCount = static_cast<uint32_t>(cmd_handles.size());
     submit_info.pCommandBuffers = cmd_handles.data();
     submit_info.signalSemaphoreCount = 0;
-    submit_info.pSignalSemaphores = NULL;
+    submit_info.pSignalSemaphores = nullptr;
 
     VkResult result = vk::QueueSubmit(handle(), 1, &submit_info, fence.handle());
     if (expect_success) EXPECT(result == VK_SUCCESS);
@@ -414,6 +400,34 @@ VkResult Queue::submit(const CommandBuffer &cmd, const Fence &fence, bool expect
 VkResult Queue::submit(const CommandBuffer &cmd, bool expect_success) {
     Fence fence;
     return submit(cmd, fence);
+}
+
+VkResult Queue::submit2(const std::vector<const CommandBuffer *> &cmds, const Fence &fence, bool expect_success) {
+    std::vector<VkCommandBufferSubmitInfo> cmd_submit_infos;
+    for (size_t i = 0; i < cmds.size(); i++) {
+        VkCommandBufferSubmitInfo cmd_submit_info = LvlInitStruct<VkCommandBufferSubmitInfo>();
+        cmd_submit_info.deviceMask = 0;
+        cmd_submit_info.commandBuffer = cmds[i]->handle();
+        cmd_submit_infos.push_back(cmd_submit_info);
+    }
+
+    VkSubmitInfo2 submit_info = LvlInitStruct<VkSubmitInfo2>();
+    submit_info.flags = 0;
+    submit_info.waitSemaphoreInfoCount = 0;
+    submit_info.pWaitSemaphoreInfos = nullptr;
+    submit_info.signalSemaphoreInfoCount = 0;
+    submit_info.pSignalSemaphoreInfos = nullptr;
+    submit_info.commandBufferInfoCount = static_cast<uint32_t>(cmd_submit_infos.size());
+    submit_info.pCommandBufferInfos = cmd_submit_infos.data();
+
+    // requires synchronization2 to be enabled
+    VkResult result = vk::QueueSubmit2(handle(), 1, &submit_info, fence.handle());
+    if (expect_success) EXPECT(result == VK_SUCCESS);
+    return result;
+}
+
+VkResult Queue::submit2(const CommandBuffer &cmd, const Fence &fence, bool expect_success) {
+    return submit2(std::vector<const CommandBuffer *>(1, &cmd), fence, expect_success);
 }
 
 VkResult Queue::wait() {
@@ -490,6 +504,15 @@ void Event::cmd_reset(const CommandBuffer &cmd, VkPipelineStageFlags stage_mask)
     vk::CmdResetEvent(cmd.handle(), handle(), stage_mask);
 }
 
+void Event::cmd_wait(const CommandBuffer &cmd, VkPipelineStageFlags src_stage_mask, VkPipelineStageFlags dst_stage_mask,
+                     const std::vector<VkMemoryBarrier> &memory_barriers, const std::vector<VkBufferMemoryBarrier> &buffer_barriers,
+                     const std::vector<VkImageMemoryBarrier> &image_barriers) {
+    VkEvent event_handle = handle();
+    vk::CmdWaitEvents(cmd.handle(), 1, &event_handle, src_stage_mask, dst_stage_mask, static_cast<uint32_t>(memory_barriers.size()),
+                      memory_barriers.data(), static_cast<uint32_t>(buffer_barriers.size()), buffer_barriers.data(),
+                      static_cast<uint32_t>(image_barriers.size()), image_barriers.data());
+}
+
 void Event::reset() { EXPECT(vk::ResetEvent(device(), handle()) == VK_SUCCESS); }
 
 NON_DISPATCHABLE_HANDLE_DTOR(QueryPool, vk::DestroyQueryPool)
@@ -507,10 +530,13 @@ VkResult QueryPool::results(uint32_t first, uint32_t count, size_t size, void *d
 
 NON_DISPATCHABLE_HANDLE_DTOR(Buffer, vk::DestroyBuffer)
 
-void Buffer::init(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props) {
+void Buffer::init(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props, void *alloc_info_pnext) {
     init_no_mem(dev, info);
 
-    internal_mem_.init(dev, DeviceMemory::get_resource_alloc_info(dev, memory_requirements(), mem_props));
+    auto alloc_info = DeviceMemory::get_resource_alloc_info(dev, memory_requirements(), mem_props);
+    alloc_info.pNext = alloc_info_pnext;
+    internal_mem_.init(dev, alloc_info);
+
     bind_memory(internal_mem_, 0);
 }
 
@@ -529,6 +555,13 @@ VkMemoryRequirements Buffer::memory_requirements() const {
 
 void Buffer::bind_memory(const DeviceMemory &mem, VkDeviceSize mem_offset) {
     EXPECT(vk::BindBufferMemory(device(), handle(), mem.handle(), mem_offset) == VK_SUCCESS);
+}
+
+void Buffer::bind_memory(const Device &dev, VkMemoryPropertyFlags mem_props, VkDeviceSize mem_offset) {
+    if (!internal_mem_.initialized()) {
+        internal_mem_.init(dev, DeviceMemory::get_resource_alloc_info(dev, memory_requirements(), mem_props));
+    }
+    bind_memory(internal_mem_, mem_offset);
 }
 
 NON_DISPATCHABLE_HANDLE_DTOR(BufferView, vk::DestroyBufferView)
@@ -600,6 +633,20 @@ VkSubresourceLayout Image::subresource_layout(const VkImageSubresourceLayers &su
 bool Image::transparent() const {
     return (create_info_.tiling == VK_IMAGE_TILING_LINEAR && create_info_.samples == VK_SAMPLE_COUNT_1_BIT &&
             !(create_info_.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)));
+}
+
+VkImageAspectFlags Image::aspect_mask(VkFormat format) {
+    VkImageAspectFlags image_aspect;
+    if (FormatIsDepthAndStencil(format)) {
+        image_aspect = VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
+    } else if (FormatIsDepthOnly(format)) {
+        image_aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+    } else if (FormatIsStencilOnly(format)) {
+        image_aspect = VK_IMAGE_ASPECT_STENCIL_BIT;
+    } else {  // color
+        image_aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+    return image_aspect;
 }
 
 NON_DISPATCHABLE_HANDLE_DTOR(ImageView, vk::DestroyImageView)
@@ -684,7 +731,8 @@ void AccelerationStructure::init(const Device &dev, const VkAccelerationStructur
         EXPECT(vkGetAccelerationStructureHandleNV(dev.handle(), handle(), sizeof(uint64_t), &opaque_handle_) == VK_SUCCESS);
     }
 }
-void AccelerationStructure::create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo) {
+void AccelerationStructure::create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo,
+                                                  bool buffer_device_address) {
     VkMemoryRequirements scratch_buffer_memory_requirements = build_scratch_memory_requirements().memoryRequirements;
     VkBufferCreateInfo create_info = {};
     create_info.size = scratch_buffer_memory_requirements.size;
@@ -694,8 +742,15 @@ void AccelerationStructure::create_scratch_buffer(const Device &dev, Buffer *buf
     } else {
         create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         create_info.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
+        if (buffer_device_address) create_info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     }
-    buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (buffer_device_address) {
+        auto alloc_flags = LvlInitStruct<VkMemoryAllocateFlagsInfo>();
+        alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+        buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &alloc_flags);
+    } else {
+        buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    }
 }
 
 void AccelerationStructureKHR::init(const Device &dev, const VkAccelerationStructureCreateInfoKHR &info, bool init_memory) {
@@ -705,7 +760,8 @@ void AccelerationStructureKHR::init(const Device &dev, const VkAccelerationStruc
     NON_DISPATCHABLE_HANDLE_INIT(vkCreateAccelerationStructureKHR, dev, &info);
     info_ = info;
 }
-void AccelerationStructureKHR::create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo) {
+void AccelerationStructureKHR::create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo,
+                                                     bool buffer_device_address) {
     VkBufferCreateInfo create_info = {};
     create_info.size = 0;
     if (pCreateInfo) {
@@ -715,8 +771,15 @@ void AccelerationStructureKHR::create_scratch_buffer(const Device &dev, Buffer *
     } else {
         create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         create_info.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
+        if (buffer_device_address) create_info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     }
-    buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (buffer_device_address) {
+        auto alloc_flags = LvlInitStruct<VkMemoryAllocateFlagsInfo>();
+        alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+        buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &alloc_flags);
+    } else {
+        buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    }
 }
 
 NON_DISPATCHABLE_HANDLE_DTOR(ShaderModule, vk::DestroyShaderModule)
@@ -898,8 +961,15 @@ void RenderPass::init(const Device &dev, const VkRenderPassCreateInfo &info) {
     NON_DISPATCHABLE_HANDLE_INIT(vk::CreateRenderPass, dev, &info);
 }
 
-void RenderPass::init(const Device &dev, const VkRenderPassCreateInfo2 &info) {
-    NON_DISPATCHABLE_HANDLE_INIT(vk::CreateRenderPass2, dev, &info);
+void RenderPass::init(const Device &dev, const VkRenderPassCreateInfo2 &info, bool khr) {
+    if (!khr) {
+        NON_DISPATCHABLE_HANDLE_INIT(vk::CreateRenderPass2, dev, &info);
+    } else {
+        auto vkCreateRenderPass2KHR =
+            reinterpret_cast<PFN_vkCreateRenderPass2KHR>(vk::GetDeviceProcAddr(dev.handle(), "vkCreateRenderPass2KHR"));
+        ASSERT_NE(vkCreateRenderPass2KHR, nullptr);
+        NON_DISPATCHABLE_HANDLE_INIT(vkCreateRenderPass2KHR, dev, &info);
+    }
 }
 
 NON_DISPATCHABLE_HANDLE_DTOR(RenderPass, vk::DestroyRenderPass)
@@ -909,4 +979,51 @@ void Framebuffer::init(const Device &dev, const VkFramebufferCreateInfo &info) {
 }
 
 NON_DISPATCHABLE_HANDLE_DTOR(Framebuffer, vk::DestroyFramebuffer)
+
+void SamplerYcbcrConversion::init(const Device &dev, const VkSamplerYcbcrConversionCreateInfo &info, bool khr) {
+    if (!khr) {
+        NON_DISPATCHABLE_HANDLE_INIT(vk::CreateSamplerYcbcrConversion, dev, &info);
+    } else {
+        auto vkCreateSamplerYcbcrConversionKHR = reinterpret_cast<PFN_vkCreateSamplerYcbcrConversionKHR>(
+            vk::GetDeviceProcAddr(dev.handle(), "vkCreateSamplerYcbcrConversionKHR"));
+        ASSERT_NE(vkCreateSamplerYcbcrConversionKHR, nullptr);
+        NON_DISPATCHABLE_HANDLE_INIT(vkCreateSamplerYcbcrConversionKHR, dev, &info);
+    }
+}
+
+VkSamplerYcbcrConversionInfo SamplerYcbcrConversion::ConversionInfo() {
+    VkSamplerYcbcrConversionInfo ycbcr_info = LvlInitStruct<VkSamplerYcbcrConversionInfo>();
+    ycbcr_info.conversion = handle();
+    return ycbcr_info;
+}
+
+// static
+VkSamplerYcbcrConversionCreateInfo SamplerYcbcrConversion::DefaultConversionInfo(VkFormat format) {
+    auto ycbcr_create_info = LvlInitStruct<VkSamplerYcbcrConversionCreateInfo>();
+    ycbcr_create_info.format = format;
+    ycbcr_create_info.ycbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY;
+    ycbcr_create_info.ycbcrRange = VK_SAMPLER_YCBCR_RANGE_ITU_FULL;
+    ycbcr_create_info.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                                    VK_COMPONENT_SWIZZLE_IDENTITY};
+    ycbcr_create_info.xChromaOffset = VK_CHROMA_LOCATION_COSITED_EVEN;
+    ycbcr_create_info.yChromaOffset = VK_CHROMA_LOCATION_COSITED_EVEN;
+    ycbcr_create_info.chromaFilter = VK_FILTER_NEAREST;
+    ycbcr_create_info.forceExplicitReconstruction = false;
+    return ycbcr_create_info;
+}
+
+SamplerYcbcrConversion::~SamplerYcbcrConversion() NOEXCEPT {
+    if (initialized()) {
+        if (!khr_) {
+            vk::DestroySamplerYcbcrConversion(device(), handle(), nullptr);
+        } else {
+            auto vkDestroySamplerYcbcrConversionKHR = reinterpret_cast<PFN_vkDestroySamplerYcbcrConversionKHR>(
+                vk::GetDeviceProcAddr(device(), "vkDestroySamplerYcbcrConversionKHR"));
+            assert(vkDestroySamplerYcbcrConversionKHR != nullptr);
+            vkDestroySamplerYcbcrConversionKHR(device(), handle(), nullptr);
+        }
+        handle_ = VK_NULL_HANDLE;
+    }
+}
+
 }  // namespace vk_testing

@@ -33,7 +33,7 @@
 #include <vulkan/vulkan.h>
 #endif
 
-#include "layers/vk_device_profile_api_layer.h"
+#include "layers/vk_lunarg_device_profile_api_layer.h"
 #include "vk_layer_settings_ext.h"
 
 #if defined(ANDROID)
@@ -176,6 +176,14 @@ static const char bindStateFragUniformShaderText[] = R"glsl(
     }
 )glsl";
 
+static char const bindStateFragSubpassLoadInputText[] = R"glsl(
+        #version 450
+        layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput x;
+        void main() {
+           vec4 color = subpassLoad(x);
+        }
+    )glsl";
+
 // Static arrays helper
 template <class ElementT, size_t array_size>
 size_t size(ElementT (&)[array_size]) {
@@ -258,10 +266,23 @@ class VkLayerTest : public VkRenderFramework {
 
     void Init(VkPhysicalDeviceFeatures *features = nullptr, VkPhysicalDeviceFeatures2 *features2 = nullptr,
               const VkCommandPoolCreateFlags flags = 0, void *instance_pnext = nullptr);
-    bool AddSurfaceInstanceExtension();
-    bool AddSwapchainDeviceExtension();
+    void AddSurfaceExtension();
     VkCommandBufferObj *CommandBuffer();
     void OOBRayTracingShadersTestBody(bool gpu_assisted);
+
+    template <typename Features>
+    VkPhysicalDeviceFeatures2 GetPhysicalDeviceFeatures2(Features &feature_query) {
+        auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&feature_query);
+        return GetPhysicalDeviceFeatures2(features2);
+    }
+
+    template <typename Properties>
+    VkPhysicalDeviceProperties2 GetPhysicalDeviceProperties2(Properties &props_query) {
+        auto props2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&props_query);
+        return GetPhysicalDeviceProperties2(props2);
+    }
+
+    bool IsDriver(VkDriverId driver_id);
 
   protected:
     uint32_t m_instance_api_version = 0;
@@ -278,9 +299,17 @@ class VkLayerTest : public VkRenderFramework {
         PFN_vkGetOriginalPhysicalDeviceFormatProperties2EXT &fpvkGetOriginalPhysicalDeviceFormatProperties2EXT);
     bool LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceLimitsEXT &fpvkSetPhysicalDeviceLimitsEXT,
                                 PFN_vkGetOriginalPhysicalDeviceLimitsEXT &fpvkGetOriginalPhysicalDeviceLimitsEXT);
+    bool LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceFeaturesEXT &fpvkSetPhysicalDeviceFeaturesEXT,
+                                PFN_vkGetOriginalPhysicalDeviceFeaturesEXT &fpvkGetOriginalPhysicalDeviceFeaturesEXT);
 
     VkLayerTest();
 };
+
+template <>
+VkPhysicalDeviceFeatures2 VkLayerTest::GetPhysicalDeviceFeatures2(VkPhysicalDeviceFeatures2 &feature_query);
+
+template <>
+VkPhysicalDeviceProperties2 VkLayerTest::GetPhysicalDeviceProperties2(VkPhysicalDeviceProperties2 &props2);
 
 class VkPositiveLayerTest : public VkLayerTest {
   public:
@@ -335,7 +364,7 @@ class VkDebugPrintfTest : public VkLayerTest {
 
 class VkSyncValTest : public VkLayerTest {
   public:
-    void InitSyncValFramework();
+    void InitSyncValFramework(bool enable_queue_submit_validation = false);
 
   protected:
     VkValidationFeatureEnableEXT enables_[1] = {VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
@@ -479,6 +508,7 @@ struct CreatePipelineHelper {
     void InitViewportInfo();
     void InitDynamicStateInfo();
     void InitShaderInfo();
+    void ResetShaderInfo(const char *vertex_shader_text, const char *fragment_shader_text);
     void InitRasterizationInfo();
     void InitLineRasterizationInfo();
     void InitBlendStateInfo();
@@ -491,6 +521,7 @@ struct CreatePipelineHelper {
     // TDB -- add control for optional and/or additional initialization
     void InitInfo();
     void InitState();
+    void InitPipelineCache();
     void LateBindPipelineInfo();
     VkResult CreateGraphicsPipeline(bool implicit_destroy = true, bool do_late_bind = true);
 
@@ -515,8 +546,7 @@ struct CreatePipelineHelper {
     // info_override can be any callable that takes a CreatePipelineHeper &
     // flags, error can be any args accepted by "SetDesiredFailure".
     template <typename Test, typename OverrideFunc, typename Error>
-    static void OneshotTest(Test &test, const OverrideFunc &info_override, const VkFlags flags, const std::vector<Error> &errors,
-                            bool positive_test = false) {
+    static void OneshotTest(Test &test, const OverrideFunc &info_override, const VkFlags flags, const std::vector<Error> &errors) {
         CreatePipelineHelper helper(test);
         helper.InitInfo();
         info_override(helper);
@@ -525,17 +555,19 @@ struct CreatePipelineHelper {
         for (const auto &error : errors) test.Monitor().SetDesiredFailureMsg(flags, error);
         helper.CreateGraphicsPipeline();
 
-        if (positive_test || (errors.size() == 0)) {
-            test.Monitor().VerifyNotFound();
-        } else {
+        if (!errors.empty()) {
             test.Monitor().VerifyFound();
         }
     }
 
     template <typename Test, typename OverrideFunc, typename Error>
-    static void OneshotTest(Test &test, const OverrideFunc &info_override, const VkFlags flags, Error error,
-                            bool positive_test = false) {
-        OneshotTest(test, info_override, flags, std::vector<Error>(1, error), positive_test);
+    static void OneshotTest(Test &test, const OverrideFunc &info_override, const VkFlags flags, Error error) {
+        OneshotTest(test, info_override, flags, std::vector<Error>(1, error));
+    }
+
+    template <typename Test, typename OverrideFunc>
+    static void OneshotTest(Test &test, const OverrideFunc &info_override, const VkFlags flags) {
+        OneshotTest(test, info_override, flags, std::vector<std::string>{});
     }
 };
 
@@ -564,6 +596,7 @@ struct CreateComputePipelineHelper {
     // TDB -- add control for optional and/or additional initialization
     void InitInfo();
     void InitState();
+    void InitPipelineCache();
     void LateBindPipelineInfo();
     VkResult CreateComputePipeline(bool implicit_destroy = true, bool do_late_bind = true);
 
@@ -587,17 +620,19 @@ struct CreateComputePipelineHelper {
         for (const auto &error : errors) test.Monitor().SetDesiredFailureMsg(flags, error);
         helper.CreateComputePipeline();
 
-        if (positive_test) {
-            test.Monitor().VerifyNotFound();
-        } else {
+        if (!errors.empty()) {
             test.Monitor().VerifyFound();
         }
     }
 
     template <typename Test, typename OverrideFunc, typename Error>
-    static void OneshotTest(Test &test, const OverrideFunc &info_override, const VkFlags flags, Error error,
-                            bool positive_test = false) {
-        OneshotTest(test, info_override, flags, std::vector<Error>(1, error), positive_test);
+    static void OneshotTest(Test &test, const OverrideFunc &info_override, const VkFlags flags, Error error) {
+        OneshotTest(test, info_override, flags, std::vector<Error>(1, error));
+    }
+
+    template <typename Test, typename OverrideFunc>
+    static void OneshotTest(Test &test, const OverrideFunc &info_override, const VkFlags flags) {
+        OneshotTest(test, info_override, flags, std::vector<std::string>{});
     }
 };
 
@@ -640,6 +675,7 @@ struct CreateNVRayTracingPipelineHelper {
     void InitPipelineCacheInfo();
     void InitInfo(bool isKHR = false);
     void InitState();
+    void InitPipelineCache();
     void LateBindPipelineInfo(bool isKHR = false);
     VkResult CreateNVRayTracingPipeline(bool implicit_destroy = true, bool do_late_bind = true);
     VkResult CreateKHRRayTracingPipeline(bool implicit_destroy = true, bool do_late_bind = true);
@@ -672,9 +708,7 @@ struct CreateNVRayTracingPipelineHelper {
         info_override(helper);
         helper.InitState();
 
-        test.Monitor().ExpectSuccess(message_flag_mask);
         ASSERT_VK_SUCCESS(helper.CreateNVRayTracingPipeline());
-        test.Monitor().VerifyNotFound();
     }
 };
 
@@ -766,8 +800,13 @@ class BarrierQueueFamilyTestHelper : public BarrierQueueFamilyBase {
     void Init(std::vector<uint32_t> *families, bool image_memory = true, bool buffer_memory = true);
 
     void operator()(std::string img_err, std::string buf_err = "", uint32_t src = VK_QUEUE_FAMILY_IGNORED,
-                    uint32_t dst = VK_QUEUE_FAMILY_IGNORED, bool positive = false,
-                    uint32_t queue_family_index = kInvalidQueueFamily, Modifier mod = Modifier::NONE);
+                    uint32_t dst = VK_QUEUE_FAMILY_IGNORED, uint32_t queue_family_index = kInvalidQueueFamily,
+                    Modifier mod = Modifier::NONE);
+
+    void operator()(uint32_t src = VK_QUEUE_FAMILY_IGNORED, uint32_t dst = VK_QUEUE_FAMILY_IGNORED,
+                    uint32_t queue_family_index = kInvalidQueueFamily, Modifier mod = Modifier::NONE) {
+        (*this)("", "", src, dst, queue_family_index, mod);
+    }
 
     VkImageMemoryBarrier image_barrier_;
     VkBufferMemoryBarrier buffer_barrier_;
@@ -780,8 +819,13 @@ class Barrier2QueueFamilyTestHelper : public BarrierQueueFamilyBase {
     void Init(std::vector<uint32_t> *families, bool image_memory = true, bool buffer_memory = true);
 
     void operator()(std::string img_err, std::string buf_err = "", uint32_t src = VK_QUEUE_FAMILY_IGNORED,
-                    uint32_t dst = VK_QUEUE_FAMILY_IGNORED, bool positive = false,
-                    uint32_t queue_family_index = kInvalidQueueFamily, Modifier mod = Modifier::NONE);
+                    uint32_t dst = VK_QUEUE_FAMILY_IGNORED, uint32_t queue_family_index = kInvalidQueueFamily,
+                    Modifier mod = Modifier::NONE);
+
+    void operator()(uint32_t src = VK_QUEUE_FAMILY_IGNORED, uint32_t dst = VK_QUEUE_FAMILY_IGNORED,
+                    uint32_t queue_family_index = kInvalidQueueFamily, Modifier mod = Modifier::NONE) {
+        (*this)("", "", src, dst, queue_family_index, mod);
+    }
 
     VkImageMemoryBarrier2KHR image_barrier_;
     VkBufferMemoryBarrier2KHR buffer_barrier_;
@@ -799,7 +843,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(VkDebugUtilsMessageSeverityFla
                                                   const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *pUserData);
 
 #if GTEST_IS_THREADSAFE
-struct thread_data_struct {
+struct ThreadTestData {
     VkCommandBuffer commandBuffer;
     VkDevice device;
     VkEvent event;
@@ -809,11 +853,11 @@ struct thread_data_struct {
     bool *bailout;
 };
 
-extern "C" void *AddToCommandBuffer(void *arg);
-extern "C" void *UpdateDescriptor(void *arg);
+void AddToCommandBuffer(ThreadTestData *);
+void UpdateDescriptor(ThreadTestData *);
 #endif  // GTEST_IS_THREADSAFE
 
-extern "C" void *ReleaseNullFence(void *arg);
+void ReleaseNullFence(ThreadTestData *);
 
 void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, const VkRenderPassCreateInfo *create_info,
                           bool rp2_supported, const char *rp1_vuid, const char *rp2_vuid);
@@ -869,14 +913,11 @@ void CreateBufferViewTest(VkLayerTest &test, const VkBufferViewCreateInfo *pCrea
 
 void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *pCreateInfo, std::string code = "");
 
-bool InitFrameworkForRayTracingTest(VkRenderFramework *renderFramework, bool isKHR,
-                                    std::vector<const char *> &instance_extension_names,
-                                    std::vector<const char *> &device_extension_names, void *user_data,
-                                    bool need_gpu_validation = false, bool need_push_descriptors = false,
-                                    bool deferred_state_init = false, VkPhysicalDeviceFeatures2KHR *features2 = nullptr);
+bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, bool need_gpu_validation = false,
+                                    VkPhysicalDeviceFeatures2KHR *features2 = nullptr, bool mockicd_valid = false);
 
 void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, VkBufferObj *vbo, VkBufferObj *ibo,
-                                                    VkGeometryNV *geometry, VkDeviceSize offset = 0);
+                                                    VkGeometryNV *geometry, VkDeviceSize offset = 0, bool buffer_device_address = false);
 
 void print_android(const char *c);
 #endif  // VKLAYERTEST_H

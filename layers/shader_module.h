@@ -148,6 +148,7 @@ struct decoration_set {
         nonreadable_bit = 1 << 11,
         per_vertex_bit = 1 << 12,
         passthrough_bit = 1 << 13,
+        aliased_bit = 1 << 14,
     };
     static constexpr uint32_t kInvalidValue = std::numeric_limits<uint32_t>::max();
 
@@ -243,6 +244,8 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
         // Find all decoration instructions to prevent relooping module later - many checks need this info
         std::vector<spirv_inst_iter> decoration_inst;
         std::vector<spirv_inst_iter> member_decoration_inst;
+        // Find all variable instructions to prevent relookping module later
+        std::vector<spirv_inst_iter> variable_inst;
         // Execution are not tied to an entry point and are their own mapping tied to entry point function
         // [OpEntryPoint function <id> operand] : [Execution Mode Instruction list]
         layer_data::unordered_map<uint32_t, std::vector<spirv_inst_iter>> execution_mode_inst;
@@ -272,7 +275,8 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
 
     SHADER_MODULE_STATE(const uint32_t *code, std::size_t count, spv_target_env env = SPV_ENV_VULKAN_1_0)
         : BASE_NODE(static_cast<VkShaderModule>(VK_NULL_HANDLE), kVulkanObjectTypeShaderModule),
-          words(code, code + (count / sizeof(uint32_t))) {
+          words(code, code + (count / sizeof(uint32_t))),
+          static_data_(*this) {
         PreprocessShaderBinary(env);
     }
 
@@ -404,8 +408,6 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
     uint32_t GetTypeBytesSize(const spirv_inst_iter &iter) const;
     uint32_t GetBaseType(const spirv_inst_iter &iter) const;
     uint32_t GetTypeId(uint32_t id) const;
-    uint32_t CalcComputeSharedMemory(VkShaderStageFlagBits stage,
-                                     const spirv_inst_iter &insn) const;
 
     bool WritesToGlLayer() const {
         return std::any_of(static_data_.builtin_decoration_list.begin(), static_data_.builtin_decoration_list.end(),
