@@ -342,6 +342,22 @@ class ValidationStateTracker : public ValidationObject {
         return GetStateMap<State>().size();
     }
 
+    template <typename State, typename Fn>
+    void ForEachShared(Fn&& fn) const {
+        const auto& map = GetStateMap<State>();
+        for (const auto& entry : map.snapshot()) {
+            fn(entry.second);
+        }
+    }
+
+    template <typename State, typename Fn>
+    void ForEachShared(Fn&& fn) {
+        auto& map = GetStateMap<State>();
+        for (const auto& entry : map.snapshot()) {
+            fn(entry.second);
+        }
+    }
+
     template <typename State>
     void ForEach(std::function<void(const State& s)> fn) const {
         const auto& map = GetStateMap<State>();
@@ -1339,6 +1355,9 @@ class ValidationStateTracker : public ValidationObject {
     VkDeviceGroupDeviceCreateInfo device_group_create_info = {};
     uint32_t physical_device_count;
     uint32_t custom_border_color_sampler_count = 0;
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    std::vector <VkExportMetalObjectTypeFlagBitsEXT> export_metal_flags;
+#endif // VK_USE_PLATFORM_METAL_EXT
 
     // VK_KHR_format_feature_flags2 changes the behavior of the
     // app/layers/spec if present. So it needs its own special boolean unlike
@@ -1434,14 +1453,13 @@ class ValidationStateTracker : public ValidationObject {
       public:
         void Free(VkDeviceSize fake_address){};  // Define the interface just in case we ever need to be cleverer.
         VkDeviceSize Alloc(VkDeviceSize size) {
-            const auto alloc = free_;
-            assert(std::numeric_limits<VkDeviceSize>::max() - size >= free_);  //  776.722963 days later...
-            free_ = free_ + size;
+            const auto alloc = free_.fetch_add(size);
+            assert(std::numeric_limits<VkDeviceSize>::max() - size >= alloc);  //  776.722963 days later...
             return alloc;
         }
 
       private:
-        VkDeviceSize free_ = 1U << 20; // start at 1mb to leave room for a NULL address
+        std::atomic<VkDeviceSize> free_{1U << 20};  // start at 1mb to leave room for a NULL address
     };
     FakeAllocator fake_memory;
 };

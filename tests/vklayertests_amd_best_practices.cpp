@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2021 The Khronos Group Inc.
- * Copyright (c) 2015-2021 Valve Corporation
- * Copyright (c) 2015-2021 LunarG, Inc.
- * Modifications Copyright (C) 2020-2021 Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2015-2022 The Khronos Group Inc.
+ * Copyright (c) 2015-2022 Valve Corporation
+ * Copyright (c) 2015-2022 LunarG, Inc.
+ * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,6 @@ const char *kEnableAMDValidation = "VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_AMD"
 // disabled for now
 #ifdef AMD_LONG_RUNNING_TEST
 TEST_F(VkAmdBestPracticesLayerTest, TooManyPipelines) {
-    
-
     InitBestPracticesFramework(kEnableAMDValidation);
     InitState();
 
@@ -621,10 +619,12 @@ TEST_F(VkAmdBestPracticesLayerTest, Barriers) {
 }
 
 TEST_F(VkAmdBestPracticesLayerTest, NumberOfSubmissions) {
-    AddSurfaceInstanceExtension();
+    AddSurfaceExtension();
 
     InitBestPracticesFramework(kEnableAMDValidation);
-    AddSwapchainDeviceExtension();
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
 
     InitState();
     ASSERT_NO_FATAL_FAILURE(InitViewport());
@@ -752,8 +752,6 @@ TEST_F(VkAmdBestPracticesLayerTest, SecondaryCmdBuffer) {
     color_attachment.colorAttachment = 0;
     VkClearRect clear_rect = {{{0, 0}, {(uint32_t)m_width, (uint32_t)m_height}}, 0, 1};
 
-    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-DrawState-ClearCmdBeforeDraw");
-
     vk::CmdClearAttachments(secondary_cmd_buf.handle(), 1, &color_attachment, 1, &clear_rect);
 
     secondary_cmd_buf.EndRenderPass();
@@ -761,6 +759,7 @@ TEST_F(VkAmdBestPracticesLayerTest, SecondaryCmdBuffer) {
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "UNASSIGNED-BestPractices-DrawState-ClearCmdBeforeDraw");
     m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
                                          "UNASSIGNED-BestPractices-VkCommandBuffer-AvoidSecondaryCmdBuffers");
 

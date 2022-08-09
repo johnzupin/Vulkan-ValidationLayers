@@ -184,21 +184,16 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(VkDebugUtilsMessageSeverityFla
 }
 
 #if GTEST_IS_THREADSAFE
-extern "C" void *AddToCommandBuffer(void *arg) {
-    struct thread_data_struct *data = (struct thread_data_struct *)arg;
-
+void AddToCommandBuffer(ThreadTestData *data) {
     for (int i = 0; i < 80000; i++) {
         vk::CmdSetEvent(data->commandBuffer, data->event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
         if (*data->bailout) {
             break;
         }
     }
-    return NULL;
 }
 
-extern "C" void *UpdateDescriptor(void *arg) {
-    struct thread_data_struct *data = (struct thread_data_struct *)arg;
-
+void UpdateDescriptor(ThreadTestData *data) {
     VkDescriptorBufferInfo buffer_info = {};
     buffer_info.buffer = data->buffer;
     buffer_info.offset = 0;
@@ -217,21 +212,17 @@ extern "C" void *UpdateDescriptor(void *arg) {
             break;
         }
     }
-    return NULL;
 }
 
 #endif  // GTEST_IS_THREADSAFE
 
-extern "C" void *ReleaseNullFence(void *arg) {
-    struct thread_data_struct *data = (struct thread_data_struct *)arg;
-
+void ReleaseNullFence(ThreadTestData *data) {
     for (int i = 0; i < 40000; i++) {
         vk::DestroyFence(data->device, VK_NULL_HANDLE, NULL);
         if (*data->bailout) {
             break;
         }
     }
-    return NULL;
 }
 
 void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, const VkRenderPassCreateInfo *create_info,
@@ -282,10 +273,8 @@ void PositiveTestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice de
     VkRenderPass render_pass = VK_NULL_HANDLE;
     VkResult err;
 
-    error_monitor->ExpectSuccess();
     err = vk::CreateRenderPass(device, create_info, nullptr, &render_pass);
     if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
-    error_monitor->VerifyNotFound();
 
     if (rp2_supported) {
         PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
@@ -293,10 +282,8 @@ void PositiveTestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice de
         safe_VkRenderPassCreateInfo2 create_info2;
         ConvertVkRenderPassCreateInfoToV2KHR(*create_info, &create_info2);
 
-        error_monitor->ExpectSuccess();
         err = vkCreateRenderPass2KHR(device, create_info2.ptr(), nullptr, &render_pass);
         if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
-        error_monitor->VerifyNotFound();
     }
 }
 
@@ -307,10 +294,8 @@ void PositiveTestRenderPass2KHRCreate(ErrorMonitor *error_monitor, const VkDevic
     PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
         (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2KHR");
 
-    error_monitor->ExpectSuccess();
     err = vkCreateRenderPass2KHR(device, create_info, nullptr, &render_pass);
     if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
-    error_monitor->VerifyNotFound();
 }
 
 void TestRenderPass2KHRCreate(ErrorMonitor *error_monitor, const VkDevice device, const VkRenderPassCreateInfo2KHR *create_info,
@@ -364,14 +349,12 @@ void TestRenderPassBegin(ErrorMonitor *error_monitor, const VkDevice device, con
 void ValidOwnershipTransferOp(ErrorMonitor *monitor, VkCommandBufferObj *cb, VkPipelineStageFlags src_stages,
                               VkPipelineStageFlags dst_stages, const VkBufferMemoryBarrier *buf_barrier,
                               const VkImageMemoryBarrier *img_barrier) {
-    monitor->ExpectSuccess();
     cb->begin();
     uint32_t num_buf_barrier = (buf_barrier) ? 1 : 0;
     uint32_t num_img_barrier = (img_barrier) ? 1 : 0;
     cb->PipelineBarrier(src_stages, dst_stages, 0, 0, nullptr, num_buf_barrier, buf_barrier, num_img_barrier, img_barrier);
     cb->end();
     cb->QueueCommandBuffer();  // Implicitly waits
-    monitor->VerifyNotFound();
 }
 
 void ValidOwnershipTransfer(ErrorMonitor *monitor, VkCommandBufferObj *cb_from, VkCommandBufferObj *cb_to,
@@ -383,7 +366,6 @@ void ValidOwnershipTransfer(ErrorMonitor *monitor, VkCommandBufferObj *cb_from, 
 
 void ValidOwnershipTransferOp(ErrorMonitor *monitor, VkCommandBufferObj *cb, const VkBufferMemoryBarrier2KHR *buf_barrier,
                               const VkImageMemoryBarrier2KHR *img_barrier) {
-    monitor->ExpectSuccess();
     cb->begin();
     auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
     dep_info.bufferMemoryBarrierCount = (buf_barrier) ? 1 : 0;
@@ -393,7 +375,6 @@ void ValidOwnershipTransferOp(ErrorMonitor *monitor, VkCommandBufferObj *cb, con
     cb->PipelineBarrier2KHR(&dep_info);
     cb->end();
     cb->QueueCommandBuffer();  // Implicitly waits
-    monitor->VerifyNotFound();
 }
 
 void ValidOwnershipTransfer(ErrorMonitor *monitor, VkCommandBufferObj *cb_from, VkCommandBufferObj *cb_to,
@@ -602,99 +583,55 @@ void NegHeightViewportTests(VkDeviceObj *m_device, VkCommandBufferObj *m_command
     }
 }
 
-void CreateSamplerTest(VkLayerTest &test, const VkSamplerCreateInfo *pCreateInfo, std::string code) {
-    VkResult err;
-    VkSampler sampler = VK_NULL_HANDLE;
-    if (code.length())
+void CreateSamplerTest(VkLayerTest &test, const VkSamplerCreateInfo *create_info, std::string code) {
+    if (code.length()) {
         test.Monitor().SetDesiredFailureMsg(kErrorBit | kWarningBit, code);
-    else
-        test.Monitor().ExpectSuccess();
+    }
 
-    err = vk::CreateSampler(test.device(), pCreateInfo, NULL, &sampler);
-    if (code.length())
+    vk_testing::Sampler sampler(*test.DeviceObj(), *create_info);
+
+    if (code.length()) {
         test.Monitor().VerifyFound();
-    else
-        test.Monitor().VerifyNotFound();
-
-    if (VK_SUCCESS == err) {
-        vk::DestroySampler(test.device(), sampler, NULL);
     }
 }
 
-void CreateBufferTest(VkLayerTest &test, const VkBufferCreateInfo *pCreateInfo, std::string code) {
-    VkResult err;
-    VkBuffer buffer = VK_NULL_HANDLE;
-    if (code.length())
-        test.Monitor().SetDesiredFailureMsg(kErrorBit, code);
-    else
-        test.Monitor().ExpectSuccess();
-
-    err = vk::CreateBuffer(test.device(), pCreateInfo, NULL, &buffer);
-    if (code.length())
-        test.Monitor().VerifyFound();
-    else
-        test.Monitor().VerifyNotFound();
-
-    if (VK_SUCCESS == err) {
-        vk::DestroyBuffer(test.device(), buffer, NULL);
-    }
-}
-
-void CreateImageTest(VkLayerTest &test, const VkImageCreateInfo *pCreateInfo, std::string code) {
-    VkResult err;
-    VkImage image = VK_NULL_HANDLE;
+void CreateBufferTest(VkLayerTest &test, const VkBufferCreateInfo *create_info, std::string code) {
     if (code.length()) {
         test.Monitor().SetDesiredFailureMsg(kErrorBit, code);
-    } else {
-        test.Monitor().ExpectSuccess();
     }
-
-    err = vk::CreateImage(test.device(), pCreateInfo, NULL, &image);
-    if (code.length())
+    vk_testing::Buffer buffer(*test.DeviceObj(), *create_info, vk_testing::no_mem);
+    if (code.length()) {
         test.Monitor().VerifyFound();
-    else
-        test.Monitor().VerifyNotFound();
-
-    if (VK_SUCCESS == err) {
-        vk::DestroyImage(test.device(), image, NULL);
     }
 }
 
-void CreateBufferViewTest(VkLayerTest &test, const VkBufferViewCreateInfo *pCreateInfo, const std::vector<std::string> &codes) {
-    VkResult err;
-    VkBufferView view = VK_NULL_HANDLE;
-    if (codes.size())
-        std::for_each(codes.begin(), codes.end(), [&](const std::string &s) { test.Monitor().SetDesiredFailureMsg(kErrorBit, s); });
-    else
-        test.Monitor().ExpectSuccess();
-
-    err = vk::CreateBufferView(test.device(), pCreateInfo, NULL, &view);
-    if (codes.size())
-        test.Monitor().VerifyFound();
-    else
-        test.Monitor().VerifyNotFound();
-
-    if (VK_SUCCESS == err) {
-        vk::DestroyBufferView(test.device(), view, NULL);
-    }
-}
-
-void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *pCreateInfo, std::string code) {
-    VkResult err;
-    VkImageView view = VK_NULL_HANDLE;
-    if (code.length())
+void CreateImageTest(VkLayerTest &test, const VkImageCreateInfo *create_info, std::string code) {
+    if (code.length()) {
         test.Monitor().SetDesiredFailureMsg(kErrorBit, code);
-    else
-        test.Monitor().ExpectSuccess();
-
-    err = vk::CreateImageView(test.device(), pCreateInfo, NULL, &view);
-    if (code.length())
+    }
+    vk_testing::Image image(*test.DeviceObj(), *create_info, vk_testing::no_mem);
+    if (code.length()) {
         test.Monitor().VerifyFound();
-    else
-        test.Monitor().VerifyNotFound();
+    }
+}
 
-    if (VK_SUCCESS == err) {
-        vk::DestroyImageView(test.device(), view, NULL);
+void CreateBufferViewTest(VkLayerTest &test, const VkBufferViewCreateInfo *create_info, const std::vector<std::string> &codes) {
+    if (codes.size()) {
+        std::for_each(codes.begin(), codes.end(), [&](const std::string &s) { test.Monitor().SetDesiredFailureMsg(kErrorBit, s); });
+    }
+    vk_testing::BufferView view(*test.DeviceObj(), *create_info);
+    if (codes.size()) {
+        test.Monitor().VerifyFound();
+    }
+}
+
+void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *create_info, std::string code) {
+    if (code.length()) {
+        test.Monitor().SetDesiredFailureMsg(kErrorBit, code);
+    }
+    vk_testing::ImageView view(*test.DeviceObj(), *create_info);
+    if (code.length()) {
+        test.Monitor().VerifyFound();
     }
 }
 
@@ -1033,6 +970,8 @@ VkLayerTest::VkLayerTest() {
 
     instance_layers_.push_back(kValidationLayerName);
 
+    // Devsim and device profile layer can't be on at the same time as they both override the vkGetPhysicalDevice* calls. Always try
+    // to set device profile unless running with devsim explicitly set
     if (VkTestFramework::m_devsim_layer) {
         if (InstanceLayerSupported("VK_LAYER_LUNARG_device_simulation")) {
             instance_layers_.push_back("VK_LAYER_LUNARG_device_simulation");
@@ -1049,8 +988,7 @@ VkLayerTest::VkLayerTest() {
         instance_layers_.push_back(kSynchronization2LayerName);
     }
 
-    app_info_.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    app_info_.pNext = NULL;
+    app_info_ = LvlInitStruct<VkApplicationInfo>();
     app_info_.pApplicationName = "layer_tests";
     app_info_.applicationVersion = 1;
     app_info_.pEngineName = "unittest";
@@ -1067,73 +1005,42 @@ VkLayerTest::VkLayerTest() {
     m_target_api_version = app_info_.apiVersion;
 }
 
-bool VkLayerTest::AddSurfaceInstanceExtension() {
+void VkLayerTest::AddSurfaceExtension() {
     m_enableWSI = true;
-    if (!InstanceExtensionSupported(VK_KHR_SURFACE_EXTENSION_NAME)) {
-        printf("%s %s extension not supported\n", kSkipPrefix, VK_KHR_SURFACE_EXTENSION_NAME);
-        return false;
-    }
-    instance_extensions_.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-
-    bool bSupport = false;
+    bool bHasXlib = false;
+    // Instance Extensions
+    AddRequiredExtensions(VK_KHR_SURFACE_EXTENSION_NAME);
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-    if (!InstanceExtensionSupported(VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) {
-        printf("%s %s extension not supported\n", kSkipPrefix, VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-        return false;
-    }
-    instance_extensions_.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-    bSupport = true;
+    AddRequiredExtensions(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 #endif
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR) && defined(VALIDATION_APK)
-    if (!InstanceExtensionSupported(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
-        printf("%s %s extension not supported\n", kSkipPrefix, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-        return false;
-    }
-    instance_extensions_.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-    bSupport = true;
+    AddRequiredExtensions(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
 #endif
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-    if (!InstanceExtensionSupported(VK_KHR_XLIB_SURFACE_EXTENSION_NAME)) {
-        printf("%s %s extension not supported\n", kSkipPrefix, VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
-        return false;
-    }
     auto temp_dpy = XOpenDisplay(NULL);
     if (temp_dpy) {
-        instance_extensions_.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
-        bSupport = true;
+        AddRequiredExtensions(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+        bHasXlib = true;
         XCloseDisplay(temp_dpy);
     }
 #endif
 
 #if defined(VK_USE_PLATFORM_XCB_KHR)
-    if (!InstanceExtensionSupported(VK_KHR_XCB_SURFACE_EXTENSION_NAME)) {
-        printf("%s %s extension not supported\n", kSkipPrefix, VK_KHR_XCB_SURFACE_EXTENSION_NAME);
-        return false;
-    }
-    if (!bSupport) {
+    if (!bHasXlib) {
         auto temp_xcb = xcb_connect(NULL, NULL);
         if (temp_xcb) {
-            instance_extensions_.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
-            bSupport = true;
+            AddRequiredExtensions(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
             xcb_disconnect(temp_xcb);
         }
     }
+#else
+    (void)bHasXlib;
 #endif
 
-    if (bSupport) return true;
-    printf("%s No platform's surface extension supported\n", kSkipPrefix);
-    return false;
-}
-
-bool VkLayerTest::AddSwapchainDeviceExtension() {
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
-        printf("%s %s extension not supported\n", kSkipPrefix, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        return false;
-    }
-    m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    return true;
+    // Device extensions
+    AddRequiredExtensions(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 }
 
 uint32_t VkLayerTest::SetTargetApiVersion(uint32_t target_api_version) {
@@ -1153,6 +1060,43 @@ uint32_t VkLayerTest::DeviceValidationVersion() {
     return std::min(m_target_api_version, physDevProps().apiVersion);
 }
 
+template <>
+VkPhysicalDeviceFeatures2 VkLayerTest::GetPhysicalDeviceFeatures2(VkPhysicalDeviceFeatures2 &features2) {
+    if (DeviceValidationVersion() >= VK_API_VERSION_1_1) {
+        vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    } else {
+        auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+            vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
+        assert(vkGetPhysicalDeviceFeatures2KHR);
+        vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    }
+    return features2;
+}
+
+template <>
+VkPhysicalDeviceProperties2 VkLayerTest::GetPhysicalDeviceProperties2(VkPhysicalDeviceProperties2 &props2) {
+    if (DeviceValidationVersion() >= VK_API_VERSION_1_1) {
+        vk::GetPhysicalDeviceProperties2(gpu(), &props2);
+    } else {
+        auto vkGetPhysicalDeviceProperties2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2KHR>(
+            vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR"));
+        assert(vkGetPhysicalDeviceProperties2KHR);
+        vkGetPhysicalDeviceProperties2KHR(gpu(), &props2);
+    }
+    return props2;
+}
+
+bool VkLayerTest::IsDriver(VkDriverId driver_id) {
+    if (VkRenderFramework::IgnoreDisableChecks()) {
+        return false;
+    } else {
+        auto driver_properties = LvlInitStruct<VkPhysicalDeviceDriverProperties>();
+        auto physical_device_properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&driver_properties);
+        GetPhysicalDeviceProperties2(physical_device_properties2);
+        return (driver_properties.driverID == driver_id);
+    }
+}
+
 bool VkLayerTest::LoadDeviceProfileLayer(
     PFN_vkSetPhysicalDeviceFormatPropertiesEXT &fpvkSetPhysicalDeviceFormatPropertiesEXT,
     PFN_vkGetOriginalPhysicalDeviceFormatPropertiesEXT &fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT) {
@@ -1163,11 +1107,14 @@ bool VkLayerTest::LoadDeviceProfileLayer(
         instance(), "vkGetOriginalPhysicalDeviceFormatPropertiesEXT");
 
     if (!(fpvkSetPhysicalDeviceFormatPropertiesEXT) || !(fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT)) {
-        printf("%s Can't find device_profile_api functions; skipped.\n", kSkipPrefix);
-        return 0;
+        printf(
+            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n",
+            kSkipPrefix);
+        return false;
     }
 
-    return 1;
+    return true;
 }
 
 bool VkLayerTest::LoadDeviceProfileLayer(
@@ -1181,7 +1128,10 @@ bool VkLayerTest::LoadDeviceProfileLayer(
             instance(), "vkGetOriginalPhysicalDeviceFormatProperties2EXT");
 
     if (!(fpvkSetPhysicalDeviceFormatProperties2EXT) || !(fpvkGetOriginalPhysicalDeviceFormatProperties2EXT)) {
-        printf("%s Can't find device_profile_api functions; skipped.\n", kSkipPrefix);
+        printf(
+            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n",
+            kSkipPrefix);
         return false;
     }
 
@@ -1197,7 +1147,29 @@ bool VkLayerTest::LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceLimitsEXT &fpvkS
         (PFN_vkGetOriginalPhysicalDeviceLimitsEXT)vk::GetInstanceProcAddr(instance(), "vkGetOriginalPhysicalDeviceLimitsEXT");
 
     if (!(fpvkSetPhysicalDeviceLimitsEXT) || !(fpvkGetOriginalPhysicalDeviceLimitsEXT)) {
-        printf("%s Can't find device_profile_api functions; skipped.\n", kSkipPrefix);
+        printf(
+            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n",
+            kSkipPrefix);
+        return false;
+    }
+
+    return true;
+}
+
+bool VkLayerTest::LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceFeaturesEXT &fpvkSetPhysicalDeviceFeaturesEXT,
+                                         PFN_vkGetOriginalPhysicalDeviceFeaturesEXT &fpvkGetOriginalPhysicalDeviceFeaturesEXT) {
+    // Load required functions
+    fpvkSetPhysicalDeviceFeaturesEXT =
+        (PFN_vkSetPhysicalDeviceFeaturesEXT)vk::GetInstanceProcAddr(instance(), "vkSetPhysicalDeviceFeaturesEXT");
+    fpvkGetOriginalPhysicalDeviceFeaturesEXT =
+        (PFN_vkGetOriginalPhysicalDeviceFeaturesEXT)vk::GetInstanceProcAddr(instance(), "vkGetOriginalPhysicalDeviceFeaturesEXT");
+
+    if (!(fpvkSetPhysicalDeviceFeaturesEXT) || !(fpvkGetOriginalPhysicalDeviceFeaturesEXT)) {
+        printf(
+            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n",
+            kSkipPrefix);
         return false;
     }
 
@@ -1653,9 +1625,11 @@ void CreatePipelineHelper::InitDynamicStateInfo() {
     // during late bind
 }
 
-void CreatePipelineHelper::InitShaderInfo() {
-    vs_.reset(new VkShaderObj(&layer_test_, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT));
-    fs_.reset(new VkShaderObj(&layer_test_, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT));
+void CreatePipelineHelper::InitShaderInfo() { ResetShaderInfo(bindStateVertShaderText, bindStateFragShaderText); }
+
+void CreatePipelineHelper::ResetShaderInfo(const char *vertex_shader_text, const char *fragment_shader_text) {
+    vs_.reset(new VkShaderObj(&layer_test_, vertex_shader_text, VK_SHADER_STAGE_VERTEX_BIT));
+    fs_.reset(new VkShaderObj(&layer_test_, fragment_shader_text, VK_SHADER_STAGE_FRAGMENT_BIT));
     // We shouldn't need a fragment shader but add it to be able to run on more devices
     shader_stages_ = {vs_->GetStageCreateInfo(), fs_->GetStageCreateInfo()};
 }
@@ -1850,7 +1824,6 @@ void CreatePipelineHelper::InitFragmentOutputLibInfo(void *p_next) {
 }
 
 void CreatePipelineHelper::InitState() {
-    VkResult err;
     descriptor_set_.reset(new OneOffDescriptorSet(layer_test_.DeviceObj(), dsl_bindings_));
     ASSERT_TRUE(descriptor_set_->Initialized());
 
@@ -1860,7 +1833,14 @@ void CreatePipelineHelper::InitState() {
     pipeline_layout_ =
         VkPipelineLayoutObj(layer_test_.DeviceObj(), {&descriptor_set_->layout_}, push_ranges, pipeline_layout_ci_.flags);
 
-    err = vk::CreatePipelineCache(layer_test_.device(), &pc_ci_, NULL, &pipeline_cache_);
+    InitPipelineCache();
+}
+
+void CreatePipelineHelper::InitPipelineCache() {
+    if (pipeline_cache_ != VK_NULL_HANDLE) {
+        vk::DestroyPipelineCache(layer_test_.device(), pipeline_cache_, nullptr);
+    }
+    VkResult err = vk::CreatePipelineCache(layer_test_.device(), &pc_ci_, NULL, &pipeline_cache_);
     ASSERT_VK_SUCCESS(err);
 }
 
@@ -1939,7 +1919,6 @@ void CreateComputePipelineHelper::InitInfo() {
 }
 
 void CreateComputePipelineHelper::InitState() {
-    VkResult err;
     descriptor_set_.reset(new OneOffDescriptorSet(layer_test_.DeviceObj(), dsl_bindings_));
     ASSERT_TRUE(descriptor_set_->Initialized());
 
@@ -1948,7 +1927,14 @@ void CreateComputePipelineHelper::InitState() {
         pipeline_layout_ci_.pPushConstantRanges + pipeline_layout_ci_.pushConstantRangeCount);
     pipeline_layout_ = VkPipelineLayoutObj(layer_test_.DeviceObj(), {&descriptor_set_->layout_}, push_ranges);
 
-    err = vk::CreatePipelineCache(layer_test_.device(), &pc_ci_, NULL, &pipeline_cache_);
+    InitPipelineCache();
+}
+
+void CreateComputePipelineHelper::InitPipelineCache() {
+    if (pipeline_cache_ != VK_NULL_HANDLE) {
+        vk::DestroyPipelineCache(layer_test_.device(), pipeline_cache_, nullptr);
+    }
+    VkResult err = vk::CreatePipelineCache(layer_test_.device(), &pc_ci_, NULL, &pipeline_cache_);
     ASSERT_VK_SUCCESS(err);
 }
 
@@ -2222,13 +2208,19 @@ void CreateNVRayTracingPipelineHelper::InitInfo(bool isKHR) {
 }
 
 void CreateNVRayTracingPipelineHelper::InitState() {
-    VkResult err;
     descriptor_set_.reset(new OneOffDescriptorSet(layer_test_.DeviceObj(), dsl_bindings_));
     ASSERT_TRUE(descriptor_set_->Initialized());
 
     pipeline_layout_ = VkPipelineLayoutObj(layer_test_.DeviceObj(), {&descriptor_set_->layout_});
 
-    err = vk::CreatePipelineCache(layer_test_.device(), &pc_ci_, NULL, &pipeline_cache_);
+    InitPipelineCache();
+}
+
+void CreateNVRayTracingPipelineHelper::InitPipelineCache() {
+    if (pipeline_cache_ != VK_NULL_HANDLE) {
+        vk::DestroyPipelineCache(layer_test_.device(), pipeline_cache_, nullptr);
+    }
+    VkResult err = vk::CreatePipelineCache(layer_test_.device(), &pc_ci_, NULL, &pipeline_cache_);
     ASSERT_VK_SUCCESS(err);
 }
 
@@ -2366,17 +2358,14 @@ BarrierQueueFamilyBase::QueueFamilyObjs *BarrierQueueFamilyBase::GetQueueFamilyI
     return qf;
 }
 
-void BarrierQueueFamilyTestHelper::operator()(std::string img_err, std::string buf_err, uint32_t src, uint32_t dst, bool positive,
+void BarrierQueueFamilyTestHelper::operator()(std::string img_err, std::string buf_err, uint32_t src, uint32_t dst,
                                               uint32_t queue_family_index, Modifier mod) {
     auto &monitor = context_->layer_test->Monitor();
     const bool has_img_err = img_err.size() > 0;
     const bool has_buf_err = buf_err.size() > 0;
+    bool positive = !has_img_err && !has_buf_err;
     if (has_img_err) monitor.SetDesiredFailureMsg(kErrorBit | kWarningBit, img_err);
     if (has_buf_err) monitor.SetDesiredFailureMsg(kErrorBit | kWarningBit, buf_err);
-    if (!(has_img_err || has_buf_err)) {
-        monitor.ExpectSuccess();
-        positive = true;
-    }
 
     image_barrier_.srcQueueFamilyIndex = src;
     image_barrier_.dstQueueFamilyIndex = dst;
@@ -2405,19 +2394,24 @@ void BarrierQueueFamilyTestHelper::operator()(std::string img_err, std::string b
         }
     }
 
-    if (positive) {
-        monitor.VerifyNotFound();
-    } else {
+    if (!positive) {
         monitor.VerifyFound();
     }
     context_->Reset();
 };
 
-void Barrier2QueueFamilyTestHelper::operator()(std::string img_err, std::string buf_err, uint32_t src, uint32_t dst, bool positive,
+void Barrier2QueueFamilyTestHelper::operator()(std::string img_err, std::string buf_err, uint32_t src, uint32_t dst,
                                                uint32_t queue_family_index, Modifier mod) {
     auto &monitor = context_->layer_test->Monitor();
-    if (img_err.length()) monitor.SetDesiredFailureMsg(kErrorBit | kWarningBit, img_err);
-    if (buf_err.length()) monitor.SetDesiredFailureMsg(kErrorBit | kWarningBit, buf_err);
+    bool positive = true;
+    if (img_err.length()) {
+        monitor.SetDesiredFailureMsg(kErrorBit | kWarningBit, img_err);
+        positive = false;
+    }
+    if (buf_err.length()) {
+        monitor.SetDesiredFailureMsg(kErrorBit | kWarningBit, buf_err);
+        positive = false;
+    }
 
     image_barrier_.srcQueueFamilyIndex = src;
     image_barrier_.dstQueueFamilyIndex = dst;
@@ -2451,25 +2445,15 @@ void Barrier2QueueFamilyTestHelper::operator()(std::string img_err, std::string 
         }
     }
 
-    if (positive) {
-        monitor.VerifyNotFound();
-    } else {
+    if (!positive) {
         monitor.VerifyFound();
     }
     context_->Reset();
 };
 
-bool InitFrameworkForRayTracingTest(VkRenderFramework *renderFramework, bool isKHR,
-                                    std::vector<const char *> &instance_extension_names,
-                                    std::vector<const char *> &device_extension_names, void *user_data, bool need_gpu_validation,
-                                    bool need_push_descriptors, bool deferred_state_init, VkPhysicalDeviceFeatures2KHR *features2) {
-    const std::array<const char *, 1> required_instance_extensions = {{VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}};
-    for (const char *required_instance_extension : required_instance_extensions) {
-        if (!renderFramework->AddRequiredInstanceExtensions(required_instance_extension)) {
-            printf("%s %s instance extension not supported, skipping test\n", kSkipPrefix, required_instance_extension);
-            return false;
-        }
-    }
+bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, bool need_gpu_validation,
+                                    VkPhysicalDeviceFeatures2KHR *features2, bool mockicd_valid) {
+    framework->AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     VkValidationFeatureEnableEXT enables[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT};
     VkValidationFeatureDisableEXT disables[] = {
@@ -2484,56 +2468,57 @@ bool InitFrameworkForRayTracingTest(VkRenderFramework *renderFramework, bool isK
 
     VkValidationFeaturesEXT *enabled_features = need_gpu_validation ? &features : nullptr;
 
-    renderFramework->InitFramework(user_data, enabled_features);
+    framework->AddRequiredExtensions(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+    if (is_khr) {
+        framework->AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        framework->AddRequiredExtensions(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+        framework->AddRequiredExtensions(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+        framework->AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+        framework->AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+        framework->AddRequiredExtensions(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
+        framework->AddRequiredExtensions(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+        framework->AddRequiredExtensions(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
+    } else {
+        framework->AddRequiredExtensions(VK_NV_RAY_TRACING_EXTENSION_NAME);
+    }
 
-    if (renderFramework->IsPlatform(kMockICD) || renderFramework->DeviceSimulation()) {
+    framework->InitFramework(&framework->Monitor(), enabled_features);
+    if (!framework->AreRequiredExtensionsEnabled()) {
+        printf("%s %s device extension not supported, skipping test\n", kSkipPrefix,
+               framework->RequiredExtensionsNotSupported().c_str());
+        return false;
+    }
+
+    if (!mockicd_valid && (framework->IsPlatform(kMockICD) || framework->DeviceSimulation())) {
         printf("%s Test not supported by MockICD, skipping tests\n", kSkipPrefix);
         return false;
     }
 
-    std::vector<const char *> required_device_extensions;
-    required_device_extensions.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-    if (isKHR) {
-        required_device_extensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-        required_device_extensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-        required_device_extensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-        required_device_extensions.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        required_device_extensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-        required_device_extensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
-        required_device_extensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
-        required_device_extensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
-        required_device_extensions.push_back(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
-    } else {
-        required_device_extensions.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
-    }
-    if (need_push_descriptors) {
-        required_device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    }
-
-    for (const char *required_device_extension : required_device_extensions) {
-        if (!renderFramework->AddRequiredDeviceExtensions(required_device_extension)) {
-            printf("%s %s device extension not supported, skipping test\n", kSkipPrefix, required_device_extension);
-            return false;
-        }
-    }
 
     if (features2) {
         // extension enabled as dependency of RT extension
         auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-            vk::GetInstanceProcAddr(renderFramework->instance(), "vkGetPhysicalDeviceFeatures2KHR"));
+            vk::GetInstanceProcAddr(framework->instance(), "vkGetPhysicalDeviceFeatures2KHR"));
         assert(vkGetPhysicalDeviceFeatures2KHR);
-        vkGetPhysicalDeviceFeatures2KHR(renderFramework->gpu(), features2);
+        vkGetPhysicalDeviceFeatures2KHR(framework->gpu(), features2);
     }
-    if (!deferred_state_init) renderFramework->InitState(nullptr, features2);
     return true;
 }
 
 void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, VkBufferObj *vbo, VkBufferObj *ibo,
-                                                    VkGeometryNV *geometry, VkDeviceSize offset) {
-    vbo->init(device, 1024, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-    ibo->init(device, 1024, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+                                                    VkGeometryNV *geometry, VkDeviceSize offset, bool buffer_device_address) {
+    VkBufferUsageFlags usage =
+        VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+    auto alloc_flags = LvlInitStruct<VkMemoryAllocateFlagsInfo>();
+    void *alloc_pnext = nullptr;
+    if (buffer_device_address) {
+        usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+        alloc_pnext = &alloc_flags;
+    }
+    alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+    vbo->init(device, 1024, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, usage, alloc_pnext);
+    ibo->init(device, 1024, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, usage, alloc_pnext);
 
     const std::vector<float> vertices = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f};
     const std::vector<uint32_t> indicies = {0, 1, 2};
@@ -2590,8 +2575,7 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
         this, m_instance_extension_names, m_device_extension_names, gpu_assisted ? &validation_features : nullptr, m_errorMonitor);
 
     if (IsPlatform(kMockICD) || DeviceSimulation()) {
-        printf("%s Test not supported by MockICD, skipping tests\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test not supported by MockICD";
     }
 
     std::array<const char *, 2> required_device_extensions = {
@@ -2772,7 +2756,6 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     submit_info.pCommandBuffers = &ray_tracing_command_buffer.handle();
     vk::QueueSubmit(ray_tracing_queue, 1, &submit_info, VK_NULL_HANDLE);
     vk::QueueWaitIdle(ray_tracing_queue);
-    m_errorMonitor->VerifyNotFound();
 
     VkTextureObj texture(m_device, nullptr);
     VkSamplerObj sampler(m_device);
@@ -3269,12 +3252,12 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, test.expected_error);
         }
 
-        VkShaderObj rgen_shader(this, test.rgen_shader_source, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-        VkShaderObj ahit_shader(this, test.ahit_shader_source, VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-        VkShaderObj chit_shader(this, test.chit_shader_source, VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-        VkShaderObj miss_shader(this, test.miss_shader_source, VK_SHADER_STAGE_MISS_BIT_NV);
-        VkShaderObj intr_shader(this, test.intr_shader_source, VK_SHADER_STAGE_INTERSECTION_BIT_NV);
-        VkShaderObj call_shader(this, test.call_shader_source, VK_SHADER_STAGE_CALLABLE_BIT_NV);
+        VkShaderObj rgen_shader(this, test.rgen_shader_source.c_str(), VK_SHADER_STAGE_RAYGEN_BIT_NV);
+        VkShaderObj ahit_shader(this, test.ahit_shader_source.c_str(), VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+        VkShaderObj chit_shader(this, test.chit_shader_source.c_str(), VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+        VkShaderObj miss_shader(this, test.miss_shader_source.c_str(), VK_SHADER_STAGE_MISS_BIT_NV);
+        VkShaderObj intr_shader(this, test.intr_shader_source.c_str(), VK_SHADER_STAGE_INTERSECTION_BIT_NV);
+        VkShaderObj call_shader(this, test.call_shader_source.c_str(), VK_SHADER_STAGE_CALLABLE_BIT_NV);
 
         VkPipelineShaderStageCreateInfo stage_create_infos[6] = {};
         stage_create_infos[0] = LvlInitStruct<VkPipelineShaderStageCreateInfo>();
@@ -3580,8 +3563,22 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     }
 }
 
-void VkSyncValTest::InitSyncValFramework() {
+void VkSyncValTest::InitSyncValFramework(bool enable_queue_submit_validation) {
     // Enable synchronization validation
+
+    // Optional feature definition, add if requested (but they can't be defined at the conditional scope)
+    const char *kEnableQueuSubmitSyncValidation = "VALIDATION_CHECK_ENABLE_SYNCHRONIZATION_VALIDATION_QUEUE_SUBMIT";
+    VkLayerSettingValueDataEXT qs_setting_string_value{};
+    qs_setting_string_value.arrayString.pCharArray = kEnableQueuSubmitSyncValidation;
+    qs_setting_string_value.arrayString.count = strlen(qs_setting_string_value.arrayString.pCharArray);
+    VkLayerSettingValueEXT qs_enable_setting_val = {"enables", VK_LAYER_SETTING_VALUE_TYPE_STRING_ARRAY_EXT,
+                                                    qs_setting_string_value};
+    VkLayerSettingsEXT qs_settings{static_cast<VkStructureType>(VK_STRUCTURE_TYPE_INSTANCE_LAYER_SETTINGS_EXT), nullptr, 1,
+                                   &qs_enable_setting_val};
+
+    if (enable_queue_submit_validation) {
+        features_.pNext = &qs_settings;
+    }
     InitFramework(m_errorMonitor, &features_);
 }
 

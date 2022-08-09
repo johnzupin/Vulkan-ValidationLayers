@@ -90,12 +90,15 @@ PIPELINE_STATE::StageStateVec PIPELINE_STATE::GetStageStates(const ValidationSta
                     // If module is null and there is a VkShaderModuleCreateInfo in the pNext chain of the stage info, then this
                     // module is part of a library and the state must be created
                     const auto shader_ci = LvlFindInChain<VkShaderModuleCreateInfo>(shader_stage.pNext);
+                    const uint32_t unique_shader_id = 0;  
                     if (shader_ci) {
-                        const uint32_t unique_shader_id = 0;  // TODO GPU-AV rework required to get this value properly
+                        // TODO GPU-AV rework required to get this value properly
                         module = state_data.CreateShaderModuleState(*shader_ci, unique_shader_id);
                     } else {
-                        // TODO This should be an error of some sort. Just assert for now
-                        assert(false);
+                        // shader_module_identifier could legally provide a null module handle
+                        VkShaderModuleCreateInfo dummy_module_ci = LvlInitStruct<VkShaderModuleCreateInfo>();
+                        dummy_module_ci.pCode = &unique_shader_id; // Ensure tripping invalid spirv
+                        module = state_data.CreateShaderModuleState(dummy_module_ci, unique_shader_id);
                     }
                 }
                 stage_states.emplace_back(&shader_stage, module);
@@ -345,6 +348,21 @@ void AppendDynamicStateFromSubstate(const Substate &substate, std::vector<VkDyna
             }
         }
     }
+}
+
+std::vector<std::shared_ptr<const PIPELINE_LAYOUT_STATE>> PIPELINE_STATE::PipelineLayoutStateUnion() const {
+    std::vector<std::shared_ptr<const PIPELINE_LAYOUT_STATE>> ret;
+    ret.reserve(2);
+    // Only need to check pre-raster _or_ fragment shader layout; if either one is not merged_graphics_layout, then
+    // merged_graphics_layout is a union
+    if (pre_raster_state) {
+        if (pre_raster_state->pipeline_layout != fragment_shader_state->pipeline_layout) {
+            return {pre_raster_state->pipeline_layout, fragment_shader_state->pipeline_layout};
+        } else {
+            return {pre_raster_state->pipeline_layout};
+        }
+    }
+    return {merged_graphics_layout};
 }
 
 template <>

@@ -41,18 +41,15 @@ typename C::iterator RemoveIf(C &container, F &&fn) {
     return container.erase(std::remove_if(container.begin(), container.end(), std::forward<F>(fn)), container.end());
 }
 
-ErrorMonitor::ErrorMonitor(Behavior behavior) : behavior_(behavior) {
-    test_platform_thread_create_mutex(&mutex_);
+ErrorMonitor::ErrorMonitor() {
     MonitorReset();
-    if (behavior_ == Behavior::DefaultSuccess) {
-        ExpectSuccess(kErrorBit);
-    }
+    ExpectSuccess(kErrorBit);
 }
 
-ErrorMonitor::~ErrorMonitor() NOEXCEPT { test_platform_thread_delete_mutex(&mutex_); }
+ErrorMonitor::~ErrorMonitor() NOEXCEPT {}
 
 void ErrorMonitor::MonitorReset() {
-    message_flags_ = 0;
+    message_flags_ = kErrorBit;
     bailout_ = NULL;
     message_found_ = VK_FALSE;
     failure_message_strings_.clear();
@@ -63,9 +60,8 @@ void ErrorMonitor::MonitorReset() {
 }
 
 void ErrorMonitor::Reset() {
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     MonitorReset();
-    test_platform_thread_unlock_mutex(&mutex_);
 }
 
 void ErrorMonitor::SetDesiredFailureMsg(const VkFlags msgFlags, const string msg) { SetDesiredFailureMsg(msgFlags, msg.c_str()); }
@@ -75,30 +71,27 @@ void ErrorMonitor::SetDesiredFailureMsg(const VkFlags msgFlags, const char *cons
         VerifyNotFound();
     }
 
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     desired_message_strings_.insert(msgString);
     message_flags_ |= msgFlags;
-    test_platform_thread_unlock_mutex(&mutex_);
 }
 
 void ErrorMonitor::SetAllowedFailureMsg(const char *const msg) {
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     allowed_message_strings_.emplace_back(msg);
-    test_platform_thread_unlock_mutex(&mutex_);
 }
 
 void ErrorMonitor::SetUnexpectedError(const char *const msg) {
     if (NeedCheckSuccess()) {
         VerifyNotFound();
     }
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     ignore_message_strings_.emplace_back(msg);
-    test_platform_thread_unlock_mutex(&mutex_);
 }
 
 VkBool32 ErrorMonitor::CheckForDesiredMsg(const char *const msgString) {
     VkBool32 result = VK_FALSE;
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     if (bailout_ != nullptr) {
         *bailout_ = true;
     }
@@ -143,8 +136,6 @@ VkBool32 ErrorMonitor::CheckForDesiredMsg(const char *const msgString) {
             other_messages_.push_back(errorString);
         }
     }
-
-    test_platform_thread_unlock_mutex(&mutex_);
     return result;
 }
 
@@ -157,16 +148,14 @@ bool ErrorMonitor::AnyDesiredMsgFound() const { return message_found_; }
 bool ErrorMonitor::AllDesiredMsgsFound() const { return desired_message_strings_.empty(); }
 
 void ErrorMonitor::SetError(const char *const errorString) {
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     message_found_ = true;
     failure_message_strings_.insert(errorString);
-    test_platform_thread_unlock_mutex(&mutex_);
 }
 
 void ErrorMonitor::SetBailout(bool *bailout) {
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     bailout_ = bailout;
-    test_platform_thread_unlock_mutex(&mutex_);
 }
 
 void ErrorMonitor::DumpFailureMsgs() const {
@@ -181,41 +170,40 @@ void ErrorMonitor::DumpFailureMsgs() const {
 
 void ErrorMonitor::ExpectSuccess(VkDebugReportFlagsEXT const message_flag_mask) {
     // Match ANY message matching specified type
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     desired_message_strings_.insert("");
     message_flags_ = message_flag_mask;
-    test_platform_thread_unlock_mutex(&mutex_);
 }
 
 void ErrorMonitor::VerifyFound() {
-    test_platform_thread_lock_mutex(&mutex_);
-    // Not receiving expected message(s) is a failure. /Before/ throwing, dump any other messages
-    if (!AllDesiredMsgsFound()) {
-        DumpFailureMsgs();
-        for (const auto &desired_msg : desired_message_strings_) {
-            ADD_FAILURE() << "Did not receive expected error '" << desired_msg << "'";
-        }
-    } else if (GetOtherFailureMsgs().size() > 0) {
-        // Fail test case for any unexpected errors
+    {
+        // the lock must be released before the ExpectSuccess call at the end
+        auto guard = Lock();
+        // Not receiving expected message(s) is a failure. /Before/ throwing, dump any other messages
+        if (!AllDesiredMsgsFound()) {
+            DumpFailureMsgs();
+            for (const auto &desired_msg : desired_message_strings_) {
+                ADD_FAILURE() << "Did not receive expected error '" << desired_msg << "'";
+            }
+        } else if (GetOtherFailureMsgs().size() > 0) {
+            // Fail test case for any unexpected errors
 #if defined(ANDROID)
-        // This will get unexpected errors into the adb log
-        for (auto msg : other_messages_) {
-            __android_log_print(ANDROID_LOG_INFO, "VulkanLayerValidationTests", "[ UNEXPECTED_ERR ] '%s'", msg.c_str());
-        }
+            // This will get unexpected errors into the adb log
+            for (auto msg : other_messages_) {
+                __android_log_print(ANDROID_LOG_INFO, "VulkanLayerValidationTests", "[ UNEXPECTED_ERR ] '%s'", msg.c_str());
+            }
 #else
-        ADD_FAILURE() << "Received unexpected error(s).";
+            ADD_FAILURE() << "Received unexpected error(s).";
 #endif
+        }
+        MonitorReset();
     }
-    MonitorReset();
-    test_platform_thread_unlock_mutex(&mutex_);
 
-    if (behavior_ == Behavior::DefaultSuccess) {
-        ExpectSuccess();
-    }
+    ExpectSuccess();
 }
 
 void ErrorMonitor::VerifyNotFound() {
-    test_platform_thread_lock_mutex(&mutex_);
+    auto guard = Lock();
     // ExpectSuccess() configured us to match anything. Any error is a failure.
     if (AnyDesiredMsgFound()) {
         DumpFailureMsgs();
@@ -234,7 +222,6 @@ void ErrorMonitor::VerifyNotFound() {
 #endif
     }
     MonitorReset();
-    test_platform_thread_unlock_mutex(&mutex_);
 }
 
 bool ErrorMonitor::IgnoreMessage(string const &msg) const {
@@ -339,9 +326,12 @@ VkPhysicalDeviceProperties VkRenderFramework::physDevProps() {
 // Return true if layer name is found and spec+implementation values are >= requested values
 bool VkRenderFramework::InstanceLayerSupported(const char *const layer_name, const uint32_t spec_version,
                                                const uint32_t impl_version) {
-    const auto layers = vk_testing::GetGlobalLayers();
 
-    for (const auto &layer : layers) {
+    if (available_layers_.empty()) {
+        available_layers_ = vk_testing::GetGlobalLayers();
+    }
+
+    for (const auto &layer : available_layers_) {
         if (0 == strncmp(layer_name, layer.layerName, VK_MAX_EXTENSION_NAME_SIZE)) {
             return layer.specVersion >= spec_version && layer.implementationVersion >= impl_version;
         }
@@ -357,28 +347,30 @@ bool VkRenderFramework::InstanceExtensionSupported(const char *const extension_n
     if (0 == strncmp(extension_name, VK_EXT_DEBUG_REPORT_EXTENSION_NAME, VK_MAX_EXTENSION_NAME_SIZE)) return true;
     if (0 == strncmp(extension_name, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME, VK_MAX_EXTENSION_NAME_SIZE)) return true;
 
-    const auto extensions = vk_testing::GetGlobalExtensions();
+    if (available_extensions_.empty()) {
+        available_extensions_ = vk_testing::GetGlobalExtensions();
+    }
 
     const auto IsTheQueriedExtension = [extension_name, spec_version](const VkExtensionProperties &extension) {
         return strncmp(extension_name, extension.extensionName, VK_MAX_EXTENSION_NAME_SIZE) == 0 &&
                extension.specVersion >= spec_version;
     };
 
-    return std::any_of(extensions.begin(), extensions.end(), IsTheQueriedExtension);
+    return std::any_of(available_extensions_.begin(), available_extensions_.end(), IsTheQueriedExtension);
 }
 
 // Enable device profile as last layer on stack overriding devsim if there, or return if not available
-bool VkRenderFramework::EnableDeviceProfileLayer() {
-    if (InstanceLayerSupported("VK_LAYER_LUNARG_device_profile_api")) {
-        if (VkTestFramework::m_devsim_layer) {
+bool VkRenderFramework::OverrideDevsimForDeviceProfileLayer() {
+    if (VkTestFramework::m_devsim_layer) {
+        if (InstanceLayerSupported("VK_LAYER_LUNARG_device_profile_api")) {
             assert(0 == strncmp(instance_layers_.back(), "VK_LAYER_LUNARG_device_simulation", VK_MAX_EXTENSION_NAME_SIZE));
             instance_layers_.back() = "VK_LAYER_LUNARG_device_profile_api";
         } else {
-            instance_layers_.push_back("VK_LAYER_LUNARG_device_profile_api");
+            printf(
+                "             Did not find VK_LAYER_LUNARG_device_profile_api layer; make sure VK_LAYER_PATH is set correctly to "
+                "where the validation layers are built, the device profile layer should be in the same directory.\n");
+            return false;
         }
-    } else {
-        printf("             Did not find VK_LAYER_LUNARG_device_profile_api layer; skipped.\n");
-        return false;
     }
     return true;
 }
@@ -434,6 +426,18 @@ bool VkRenderFramework::DeviceExtensionEnabled(const char *ext_name) {
 bool VkRenderFramework::DeviceSimulation() { return m_devsim_layer; }
 
 VkInstanceCreateInfo VkRenderFramework::GetInstanceCreateInfo() const {
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    return {
+        VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        &debug_reporter_.debug_create_info_,
+        VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
+        &app_info_,
+        static_cast<uint32_t>(instance_layers_.size()),
+        instance_layers_.data(),
+        static_cast<uint32_t>(instance_extensions_.size()),
+        instance_extensions_.data(),
+    };
+#else
     return {
         VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         &debug_reporter_.debug_create_info_,
@@ -444,12 +448,21 @@ VkInstanceCreateInfo VkRenderFramework::GetInstanceCreateInfo() const {
         static_cast<uint32_t>(instance_extensions_.size()),
         instance_extensions_.data(),
     };
+#endif
+}
+
+inline void CheckDisableCoreValidation(VkValidationFeaturesEXT &features) {
+    auto disable = GetEnvironment("VK_LAYER_TESTS_DISABLE_CORE_VALIDATION");
+    std::transform(disable.begin(), disable.end(), disable.begin(), ::tolower);
+    if (disable == "false" || disable == "0" || disable == "FALSE") {       // default is to change nothing, unless flag is correctly specified
+        features.disabledValidationFeatureCount = 0;  // remove all disables to get all validation messages
+    }
 }
 
 void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/, void *instance_pnext) {
     ASSERT_EQ((VkInstance)0, instance_);
 
-    const auto LayerNotSupportedWithReporting = [](const char *layer) {
+    const auto LayerNotSupportedWithReporting = [this](const char *layer) {
         if (InstanceLayerSupported(layer))
             return false;
         else {
@@ -457,7 +470,7 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
             return true;
         }
     };
-    const auto ExtensionNotSupportedWithReporting = [](const char *extension) {
+    const auto ExtensionNotSupportedWithReporting = [this](const char *extension) {
         if (InstanceExtensionSupported(extension))
             return false;
         else {
@@ -473,10 +486,22 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
         instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     }
 
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#endif
+
     RemoveIf(instance_layers_, LayerNotSupportedWithReporting);
     RemoveIf(instance_extensions_, ExtensionNotSupportedWithReporting);
 
     auto ici = GetInstanceCreateInfo();
+
+    // If is validation features then check for disabled validation
+
+    auto bos = reinterpret_cast<VkBaseOutStructure *>(instance_pnext);
+    if (instance_pnext && bos->sType == VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT) {
+        auto features = reinterpret_cast<VkValidationFeaturesEXT *>(instance_pnext);
+        CheckDisableCoreValidation(*features);
+    }
 
     // concatenate pNexts
     void *last_pnext = nullptr;
@@ -545,18 +570,30 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
         driver_printed = true;
     }
 
-    for (const auto &ext : m_requested_extensions) {
-        AddRequiredDeviceExtensions(ext);
+    for (const auto &ext : m_required_extensions) {
+        AddRequestedDeviceExtensions(ext);
+    }
+    for (const auto &ext : m_optional_extensions) {
+        AddRequestedDeviceExtensions(ext);
     }
 }
 
-bool VkRenderFramework::AddRequiredExtensions(const char *ext_name) {
-    m_requested_extensions.push_back(ext_name);
-    return AddRequiredInstanceExtensions(ext_name);
+void VkRenderFramework::AddRequiredExtensions(const char *ext_name) {
+    m_required_extensions.push_back(ext_name);
+    AddRequestedInstanceExtensions(ext_name);
 }
 
-bool VkRenderFramework::AreRequestedExtensionsEnabled() const {
-    for (const auto &ext : m_requested_extensions) {
+void VkRenderFramework::AddOptionalExtensions(const char *ext_name) {
+    m_optional_extensions.push_back(ext_name);
+    AddRequestedInstanceExtensions(ext_name);
+}
+
+bool VkRenderFramework::IsExtensionsEnabled(const char *ext_name) const {
+    return (CanEnableDeviceExtension(ext_name) || CanEnableInstanceExtension(ext_name));
+}
+
+bool VkRenderFramework::AreRequiredExtensionsEnabled() const {
+    for (const auto &ext : m_required_extensions) {
         // `ext` may refer to an instance or device extension
         if (!CanEnableDeviceExtension(ext) && !CanEnableInstanceExtension(ext)) {
             return false;
@@ -565,10 +602,10 @@ bool VkRenderFramework::AreRequestedExtensionsEnabled() const {
     return true;
 }
 
-std::string VkRenderFramework::RequestedExtensionsNotSupported() const {
+std::string VkRenderFramework::RequiredExtensionsNotSupported() const {
     std::stringstream ss;
     bool first = true;
-    for (const auto &ext : m_requested_extensions) {
+    for (const auto &ext : m_required_extensions) {
         if (!CanEnableDeviceExtension(ext) && !CanEnableInstanceExtension(ext)) {
             if (first) {
                 first = false;
@@ -581,7 +618,7 @@ std::string VkRenderFramework::RequestedExtensionsNotSupported() const {
     return ss.str();
 }
 
-bool VkRenderFramework::AddRequiredInstanceExtensions(const char *ext_name) {
+bool VkRenderFramework::AddRequestedInstanceExtensions(const char *ext_name) {
     if (CanEnableInstanceExtension(ext_name)) {
         return true;
     }
@@ -601,7 +638,7 @@ bool VkRenderFramework::AddRequiredInstanceExtensions(const char *ext_name) {
     if (is_instance_ext) {
         const auto &info = InstanceExtensions::get_info(ext_name);
         for (const auto &req : info.requirements) {
-            if (!AddRequiredInstanceExtensions(req.name)) {
+            if (!AddRequestedInstanceExtensions(req.name)) {
                 return false;
             }
         }
@@ -609,7 +646,7 @@ bool VkRenderFramework::AddRequiredInstanceExtensions(const char *ext_name) {
     } else {
         const auto &info = DeviceExtensions::get_info(ext_name);
         for (const auto &req : info.requirements) {
-            if (!AddRequiredInstanceExtensions(req.name)) {
+            if (!AddRequestedInstanceExtensions(req.name)) {
                 return false;
             }
         }
@@ -623,7 +660,7 @@ bool VkRenderFramework::CanEnableInstanceExtension(const std::string &inst_ext_n
                        [&inst_ext_name](const char *ext) { return inst_ext_name == ext; });
 }
 
-bool VkRenderFramework::AddRequiredDeviceExtensions(const char *dev_ext_name) {
+bool VkRenderFramework::AddRequestedDeviceExtensions(const char *dev_ext_name) {
     // Check if the extension has already been added
     if (CanEnableDeviceExtension(dev_ext_name)) {
         return true;
@@ -643,7 +680,7 @@ bool VkRenderFramework::AddRequiredDeviceExtensions(const char *dev_ext_name) {
 
     const auto &info = DeviceExtensions::get_info(dev_ext_name);
     for (const auto &req : info.requirements) {
-        if (!AddRequiredDeviceExtensions(req.name)) {
+        if (!AddRequestedDeviceExtensions(req.name)) {
             return false;
         }
     }
@@ -656,10 +693,12 @@ bool VkRenderFramework::CanEnableDeviceExtension(const std::string &dev_ext_name
 }
 
 void VkRenderFramework::ShutdownFramework() {
-    debug_reporter_.error_monitor_.Reset();
-
     // Nothing to shut down without a VkInstance
     if (!instance_) return;
+
+    if (m_device && m_device->device() != VK_NULL_HANDLE) {
+        vk::DeviceWaitIdle(device());
+    }
 
     delete m_commandBuffer;
     m_commandBuffer = nullptr;
@@ -675,9 +714,7 @@ void VkRenderFramework::ShutdownFramework() {
     delete m_depthStencil;
     m_depthStencil = nullptr;
 
-    if (m_device && m_device->device() != VK_NULL_HANDLE) {
-        DestroySwapchain();
-    }
+    DestroySwapchain();
 
     // reset the driver
     delete m_device;
@@ -685,8 +722,15 @@ void VkRenderFramework::ShutdownFramework() {
 
     debug_reporter_.Destroy(instance_);
 
+    if (m_surface != VK_NULL_HANDLE) {
+        vk::DestroySurfaceKHR(instance_, m_surface, nullptr);
+        m_surface = VK_NULL_HANDLE;
+    }
+
     vk::DestroyInstance(instance_, nullptr);
     instance_ = NULL;  // In case we want to re-initialize
+
+    debug_reporter_.error_monitor_.Finish();
 }
 
 ErrorMonitor &VkRenderFramework::Monitor() { return debug_reporter_.error_monitor_; }
@@ -712,18 +756,6 @@ bool VkRenderFramework::IsPlatform(PlatformType platform) {
         return false;
     } else {
         return (!vk_gpu_table.find(platform)->second.compare(physDevProps().deviceName));
-    }
-}
-
-bool VkRenderFramework::IsDriver(VkDriverId driver_id) {
-    if (VkRenderFramework::IgnoreDisableChecks()) {
-        return false;
-    } else {
-        // Assumes api version 1.2+
-        auto driver_properties = LvlInitStruct<VkPhysicalDeviceDriverProperties>();
-        auto physical_device_properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&driver_properties);
-        vk::GetPhysicalDeviceProperties2(gpu_, &physical_device_properties2);
-        return (driver_properties.driverID == driver_id);
     }
 }
 
@@ -861,7 +893,6 @@ bool VkRenderFramework::InitSurface(float width, float height, VkSurfaceKHR &sur
         }
     }
 #endif
-
     return (m_surface == VK_NULL_HANDLE) ? false : true;
 }
 
@@ -959,15 +990,14 @@ int IgnoreXErrors(Display *, XErrorEvent *) { return 0; }
 #endif
 
 void VkRenderFramework::DestroySwapchain() {
-    if (m_swapchain != VK_NULL_HANDLE) {
-        vk::DestroySwapchainKHR(device(), m_swapchain, nullptr);
-        m_swapchain = VK_NULL_HANDLE;
+    if (m_device && m_device->device() != VK_NULL_HANDLE) {
+        vk::DeviceWaitIdle(device());
+        if (m_swapchain != VK_NULL_HANDLE) {
+            vk::DestroySwapchainKHR(device(), m_swapchain, nullptr);
+            m_swapchain = VK_NULL_HANDLE;
+        }
     }
-    if (m_surface != VK_NULL_HANDLE) {
-        vk::DestroySurfaceKHR(instance(), m_surface, nullptr);
-        m_surface = VK_NULL_HANDLE;
-    }
-    vk::DeviceWaitIdle(device());
+
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
     if (m_surface_dpy != nullptr) {
         // Ignore BadDrawable errors we seem to get during shutdown.
@@ -986,6 +1016,11 @@ void VkRenderFramework::DestroySwapchain() {
         m_surface_xcb_conn = nullptr;
     }
 #endif
+
+    if (m_surface != VK_NULL_HANDLE) {
+        vk::DestroySurfaceKHR(instance(), m_surface, nullptr);
+        m_surface = VK_NULL_HANDLE;
+    }
 }
 
 void VkRenderFramework::InitRenderTarget() { InitRenderTarget(1); }
@@ -1226,7 +1261,8 @@ uint32_t VkDeviceObj::QueueFamilyMatching(VkQueueFlags with, VkQueueFlags withou
 
 void VkDeviceObj::SetDeviceQueue() {
     ASSERT_NE(true, graphics_queues().empty());
-    m_queue = graphics_queues()[0]->handle();
+    m_queue_obj = graphics_queues()[0];
+    m_queue = m_queue_obj->handle();
 }
 
 VkQueueObj *VkDeviceObj::GetDefaultQueue() {
@@ -1392,6 +1428,7 @@ VkRenderpassObj::VkRenderpassObj(VkDeviceObj *dev, const VkFormat format) {
     attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
     attach_desc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attach_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+    attach_desc.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
     rpci.pAttachments = &attach_desc;
 
@@ -1710,17 +1747,7 @@ void VkImageObj::Init(const VkImageCreateInfo &create_info, VkMemoryPropertyFlag
     else
         newLayout = m_descriptorImageInfo.imageLayout;
 
-    VkImageAspectFlags image_aspect = 0;
-    const auto format = create_info.format;
-    if (FormatIsDepthAndStencil(format)) {
-        image_aspect = VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
-    } else if (FormatIsDepthOnly(format)) {
-        image_aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
-    } else if (FormatIsStencilOnly(format)) {
-        image_aspect = VK_IMAGE_ASPECT_STENCIL_BIT;
-    } else {  // color
-        image_aspect = VK_IMAGE_ASPECT_COLOR_BIT;
-    }
+    VkImageAspectFlags image_aspect = aspect_mask(create_info.format);
     SetLayout(image_aspect, newLayout);
 }
 
@@ -1775,6 +1802,13 @@ void VkImageObj::init(const VkImageCreateInfo *create_info) {
         image_aspect = VK_IMAGE_ASPECT_COLOR_BIT;
     }
     SetLayout(image_aspect, VK_IMAGE_LAYOUT_GENERAL);
+}
+
+void VkImageObj::init_no_mem(const vk_testing::Device &dev, const VkImageCreateInfo &info) {
+    vk_testing::Image::init_no_mem(dev, info);
+    Layout(info.initialLayout);
+    m_mipLevels = info.mipLevels;
+    m_arrayLayers = info.arrayLayers;
 }
 
 VkResult VkImageObj::CopyImage(VkImageObj &src_image) {
@@ -2006,10 +2040,9 @@ VkConstantBufferObj::VkConstantBufferObj(VkDeviceObj *device, VkDeviceSize alloc
 
 VkPipelineShaderStageCreateInfo const &VkShaderObj::GetStageCreateInfo() const { return m_stage_info; }
 
-VkShaderObj::VkShaderObj(VkRenderFramework *framework, const std::string source, VkShaderStageFlagBits stage,
-                         const spv_target_env env, SpvSourceType source_type, const VkSpecializationInfo *spec_info,
-                         char const *name, bool debug)
-    : m_framework(*framework), m_device(*(framework->DeviceObj())) {
+VkShaderObj::VkShaderObj(VkRenderFramework *framework, const char *source, VkShaderStageFlagBits stage, const spv_target_env env,
+                         SpvSourceType source_type, const VkSpecializationInfo *spec_info, char const *name, bool debug)
+    : m_framework(*framework), m_device(*(framework->DeviceObj())), m_source(source), m_spv_env(env) {
     m_stage_info = LvlInitStruct<VkPipelineShaderStageCreateInfo>();
     m_stage_info.flags = 0;
     m_stage_info.stage = stage;
@@ -2017,15 +2050,15 @@ VkShaderObj::VkShaderObj(VkRenderFramework *framework, const std::string source,
     m_stage_info.pName = name;
     m_stage_info.pSpecializationInfo = spec_info;
     if (source_type == SPV_SOURCE_GLSL) {
-        InitFromGLSL(source.c_str(), debug, env);
+        InitFromGLSL(debug);
     } else if (source_type == SPV_SOURCE_ASM) {
-        InitFromASM(source, env);
+        InitFromASM();
     }
 }
 
-bool VkShaderObj::InitFromGLSL(const char *shader_code, bool debug, const spv_target_env env) {
+bool VkShaderObj::InitFromGLSL(bool debug) {
     std::vector<uint32_t> spv;
-    m_framework.GLSLtoSPV(&m_device.props.limits, m_stage_info.stage, shader_code, spv, debug, env);
+    m_framework.GLSLtoSPV(&m_device.props.limits, m_stage_info.stage, m_source, spv, debug, m_spv_env);
 
     VkShaderModuleCreateInfo moduleCreateInfo = LvlInitStruct<VkShaderModuleCreateInfo>();
     moduleCreateInfo.codeSize = spv.size() * sizeof(uint32_t);
@@ -2039,13 +2072,12 @@ bool VkShaderObj::InitFromGLSL(const char *shader_code, bool debug, const spv_ta
 // Because shaders are currently validated at pipeline creation time, there are test cases that might fail shader module creation
 // due to supplying an invalid/unknown SPIR-V capability/operation. This is called after VkShaderObj creation when tests are found
 // to crash on a CI device
-VkResult VkShaderObj::InitFromGLSLTry(const char *shader_code, bool debug, const spv_target_env env,
-                                      const VkDeviceObj *custom_device) {
+VkResult VkShaderObj::InitFromGLSLTry(bool debug, const VkDeviceObj *custom_device) {
     std::vector<uint32_t> spv;
     // 99% of tests just use the framework's VkDevice, but this allows for tests to use custom device object
     // Can't set at contructor time since all reference members need to be initialized then.
     VkPhysicalDeviceLimits limits = (custom_device) ? custom_device->props.limits : m_device.props.limits;
-    m_framework.GLSLtoSPV(&limits, m_stage_info.stage, shader_code, spv, debug, env);
+    m_framework.GLSLtoSPV(&limits, m_stage_info.stage, m_source, spv, debug, m_spv_env);
 
     VkShaderModuleCreateInfo moduleCreateInfo = LvlInitStruct<VkShaderModuleCreateInfo>();
     moduleCreateInfo.codeSize = spv.size() * sizeof(uint32_t);
@@ -2056,9 +2088,9 @@ VkResult VkShaderObj::InitFromGLSLTry(const char *shader_code, bool debug, const
     return result;
 }
 
-bool VkShaderObj::InitFromASM(const std::string &spv_source, const spv_target_env env) {
+bool VkShaderObj::InitFromASM() {
     vector<uint32_t> spv;
-    m_framework.ASMtoSPV(env, 0, spv_source.data(), spv);
+    m_framework.ASMtoSPV(m_spv_env, 0, m_source, spv);
 
     VkShaderModuleCreateInfo moduleCreateInfo = LvlInitStruct<VkShaderModuleCreateInfo>();
     moduleCreateInfo.codeSize = spv.size() * sizeof(uint32_t);
@@ -2069,9 +2101,9 @@ bool VkShaderObj::InitFromASM(const std::string &spv_source, const spv_target_en
     return VK_NULL_HANDLE != handle();
 }
 
-VkResult VkShaderObj::InitFromASMTry(const std::string &spv_source, const spv_target_env spv_env) {
+VkResult VkShaderObj::InitFromASMTry() {
     vector<uint32_t> spv;
-    m_framework.ASMtoSPV(spv_env, 0, spv_source.data(), spv);
+    m_framework.ASMtoSPV(m_spv_env, 0, m_source, spv);
 
     VkShaderModuleCreateInfo moduleCreateInfo = LvlInitStruct<VkShaderModuleCreateInfo>();
     moduleCreateInfo.codeSize = spv.size() * sizeof(uint32_t);
@@ -2087,9 +2119,9 @@ std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromGLSL(VkRenderFramework &fram
                                                          const std::string &code, const char *entry_point,
                                                          const VkSpecializationInfo *spec_info, const spv_target_env spv_env,
                                                          bool debug) {
-    auto shader =
-        layer_data::make_unique<VkShaderObj>(&framework, "", stage, spv_env, SPV_SOURCE_GLSL_TRY, spec_info, entry_point, debug);
-    if (VK_SUCCESS == shader->InitFromGLSLTry(code.c_str(), debug, spv_env)) {
+    auto shader = layer_data::make_unique<VkShaderObj>(&framework, code.c_str(), stage, spv_env, SPV_SOURCE_GLSL_TRY, spec_info,
+                                                       entry_point, debug);
+    if (VK_SUCCESS == shader->InitFromGLSLTry(debug)) {
         return shader;
     }
     return {};
@@ -2099,8 +2131,9 @@ std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromGLSL(VkRenderFramework &fram
 std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromASM(VkRenderFramework &framework, VkShaderStageFlagBits stage,
                                                         const std::string &code, const char *entry_point,
                                                         const VkSpecializationInfo *spec_info, const spv_target_env spv_env) {
-    auto shader = layer_data::make_unique<VkShaderObj>(&framework, "", stage, spv_env, SPV_SOURCE_ASM_TRY, spec_info, entry_point);
-    if (VK_SUCCESS == shader->InitFromASMTry(code.c_str(), spv_env)) {
+    auto shader =
+        layer_data::make_unique<VkShaderObj>(&framework, code.c_str(), stage, spv_env, SPV_SOURCE_ASM_TRY, spec_info, entry_point);
+    if (VK_SUCCESS == shader->InitFromASMTry()) {
         return shader;
     }
     return {};
@@ -2265,14 +2298,26 @@ void VkPipelineObj::InitGraphicsPipelineCreateInfo(VkGraphicsPipelineCreateInfo 
         m_vp_state.viewportCount = m_viewports.size();
         m_vp_state.pViewports = m_viewports.data();
     } else {
-        MakeDynamic(VK_DYNAMIC_STATE_VIEWPORT);
+        if (std::find(m_dynamic_state_enables.cbegin(), m_dynamic_state_enables.cend(), VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT) ==
+            m_dynamic_state_enables.cend()) {
+            MakeDynamic(VK_DYNAMIC_STATE_VIEWPORT);
+            m_vp_state.viewportCount = 1;
+        } else {
+            m_vp_state.viewportCount = 0;
+        }
+        m_vp_state.pViewports = nullptr;
     }
 
     if (m_scissors.size() > 0) {
         m_vp_state.scissorCount = m_scissors.size();
         m_vp_state.pScissors = m_scissors.data();
     } else {
-        MakeDynamic(VK_DYNAMIC_STATE_SCISSOR);
+        if (std::find(m_dynamic_state_enables.cbegin(), m_dynamic_state_enables.cend(), VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT) ==
+            m_dynamic_state_enables.cend()) {
+            MakeDynamic(VK_DYNAMIC_STATE_SCISSOR);
+        }
+        m_vp_state.scissorCount = 1;
+        m_vp_state.pScissors = nullptr;
     }
 
     memset(&m_pd_state, 0, sizeof(m_pd_state));
@@ -2307,7 +2352,7 @@ VkResult VkPipelineObj::CreateVKPipeline(VkPipelineLayout layout, VkRenderPass r
     return init_try(*m_device, *gp_ci);
 }
 
-VkCommandBufferObj::VkCommandBufferObj(VkDeviceObj *device, VkCommandPoolObj *pool, VkCommandBufferLevel level, VkQueueObj *queue) {
+void VkCommandBufferObj::Init(VkDeviceObj *device, VkCommandPoolObj *pool, VkCommandBufferLevel level, VkQueueObj *queue) {
     m_device = device;
     if (queue) {
         m_queue = queue;
@@ -2319,6 +2364,10 @@ VkCommandBufferObj::VkCommandBufferObj(VkDeviceObj *device, VkCommandPoolObj *po
     auto create_info = vk_testing::CommandBuffer::create_info(pool->handle());
     create_info.level = level;
     init(*device, create_info);
+}
+
+VkCommandBufferObj::VkCommandBufferObj(VkDeviceObj *device, VkCommandPoolObj *pool, VkCommandBufferLevel level, VkQueueObj *queue) {
+    Init(device, pool, level, queue);
 }
 
 void VkCommandBufferObj::PipelineBarrier(VkPipelineStageFlags src_stages, VkPipelineStageFlags dest_stages,
@@ -2433,6 +2482,8 @@ void VkCommandBufferObj::BeginRenderPass(const VkRenderPassBeginInfo &info, VkSu
     vk::CmdBeginRenderPass(handle(), &info, contents);
 }
 
+void VkCommandBufferObj::NextSubpass(VkSubpassContents contents) { vk::CmdNextSubpass(handle(), contents); }
+
 void VkCommandBufferObj::EndRenderPass() { vk::CmdEndRenderPass(handle()); }
 
 void VkCommandBufferObj::BeginRendering(const VkRenderingInfoKHR &renderingInfo) {
@@ -2468,21 +2519,25 @@ void VkCommandBufferObj::Draw(uint32_t vertexCount, uint32_t instanceCount, uint
     vk::CmdDraw(handle(), vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
-void VkCommandBufferObj::QueueCommandBuffer(bool checkSuccess) {
-    VkFenceObj nullFence;
-    QueueCommandBuffer(nullFence, checkSuccess);
+void VkCommandBufferObj::QueueCommandBuffer(bool check_success) {
+    VkFenceObj null_fence;
+    QueueCommandBuffer(null_fence, check_success);
 }
 
-void VkCommandBufferObj::QueueCommandBuffer(const VkFenceObj &fence, bool checkSuccess) {
+void VkCommandBufferObj::QueueCommandBuffer(const VkFenceObj &fence, bool check_success, bool submit_2) {
     VkResult err = VK_SUCCESS;
 
-    err = m_queue->submit(*this, fence, checkSuccess);
-    if (checkSuccess) {
+    if (submit_2) {
+        err = m_queue->submit2(*this, fence, check_success);
+    } else {
+        err = m_queue->submit(*this, fence, check_success);
+    }
+    if (check_success) {
         ASSERT_VK_SUCCESS(err);
     }
 
     err = m_queue->wait();
-    if (checkSuccess) {
+    if (check_success) {
         ASSERT_VK_SUCCESS(err);
     }
 
@@ -2490,7 +2545,6 @@ void VkCommandBufferObj::QueueCommandBuffer(const VkFenceObj &fence, bool checkS
     // Wait for work to finish before cleaning up.
     vk::DeviceWaitIdle(m_device->device());
 }
-
 void VkCommandBufferObj::BindDescriptorSet(VkDescriptorSetObj &descriptorSet) {
     VkDescriptorSet set_obj = descriptorSet.GetDescriptorSetHandle();
 
@@ -2509,8 +2563,12 @@ void VkCommandBufferObj::BindVertexBuffer(VkConstantBufferObj *vertexBuffer, VkD
     vk::CmdBindVertexBuffers(handle(), binding, 1, &vertexBuffer->handle(), &offset);
 }
 
-VkCommandPoolObj::VkCommandPoolObj(VkDeviceObj *device, uint32_t queue_family_index, VkCommandPoolCreateFlags flags) {
+void VkCommandPoolObj::Init(VkDeviceObj *device, uint32_t queue_family_index, VkCommandPoolCreateFlags flags) {
     init(*device, vk_testing::CommandPool::create_info(queue_family_index, flags));
+}
+
+VkCommandPoolObj::VkCommandPoolObj(VkDeviceObj *device, uint32_t queue_family_index, VkCommandPoolCreateFlags flags) {
+    Init(device, queue_family_index, flags);
 }
 
 bool VkDepthStencilObj::Initialized() { return m_initialized; }

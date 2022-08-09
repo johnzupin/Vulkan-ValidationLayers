@@ -12,12 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# Author: Lenny Komow <lenny@lunarg.com>
-# Author: Nathaniel Cesario <nathaniel@lunarg.com>
-# Author: Mark Lobodzinski <mark@lunarg.com>
 
-name: Windows (build)
+name: macOS (build)
 
 on:
     push:
@@ -26,19 +22,12 @@ on:
             - master
 
 jobs:
-  windows:
-    runs-on: ${{matrix.os}}
+  macos:
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
-        arch: [ x64, Win32 ]
-        config: [ debug, release ]
-        os: [ windows-latest ]
-        exclude:
-          - arch: Win32
-            config: release
-          - arch: x64
-            config: debug
+        config: [Debug, Release]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -48,9 +37,11 @@ jobs:
         id: cache-deps
         uses: actions/cache@v3
         env:
-          cache-name: cache-windows
+          cache-name: cache-macos
         with:
           path: external
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ matrix.arch }}-${{ matrix.os }}-${{ matrix.config }}-${{ hashfiles('scripts/known_good.json') }}
-      - name: Build and Test Vulkan-ValidationLayers
-        run: python3 scripts/github_ci_build_desktop.py --config ${{ matrix.config }} --arch ${{ matrix.arch }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ matrix.config }}-${{ hashfiles('scripts/known_good.json') }}
+      - name: Generate build files and dependencies
+        run: cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=${{matrix.config}} -DBUILD_TESTS=ON -DUPDATE_DEPS=ON
+      - name: Build Vulkan-ValidationLayers
+        run: cmake --build build --parallel $(sysctl -n hw.logicalcpu)
