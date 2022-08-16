@@ -570,6 +570,38 @@ bool CoreChecks::ValidateSubpassCompatibility(const char *type1_string, const RE
                                        error_code);
     }
 
+    // Find Fragment Shading Rate attachment entries in render passes if they
+    // exist.
+    const auto fsr1 = LvlFindInChain<VkFragmentShadingRateAttachmentInfoKHR>(
+        primary_desc.pNext);
+    const auto fsr2 = LvlFindInChain<VkFragmentShadingRateAttachmentInfoKHR>(
+        secondary_desc.pNext);
+
+    if (fsr1 && fsr2) {
+      if ((fsr1->shadingRateAttachmentTexelSize.width !=
+           fsr2->shadingRateAttachmentTexelSize.width) ||
+          (fsr1->shadingRateAttachmentTexelSize.height !=
+           fsr2->shadingRateAttachmentTexelSize.height)) {
+        std::stringstream ss;
+          ss << "Shading rate attachment texel sizes do not match (width is " << fsr1->shadingRateAttachmentTexelSize.width << " and "
+             << fsr2->shadingRateAttachmentTexelSize.width << ", height is " << fsr1->shadingRateAttachmentTexelSize.height << " and "
+             << fsr1->shadingRateAttachmentTexelSize.height << ".";
+        skip |= LogInvalidPnextMessage(type1_string, rp1_state, type2_string, rp2_state, ss.str().c_str(), caller, error_code);
+      }
+    } else if (fsr1) {
+      skip |= LogInvalidPnextMessage(type1_string, rp1_state, type2_string,
+                                     rp2_state, "The first uses a fragment "
+                                                "shading rate attachment while "
+                                                "the second one does not.",
+                                     caller, error_code);
+    } else if (fsr2) {
+      skip |= LogInvalidPnextMessage(type1_string, rp1_state, type2_string,
+                                     rp2_state, "The second uses a fragment "
+                                                "shading rate attachment while "
+                                                "the first one does not.",
+                                     caller, error_code);
+    }
+
     return skip;
 }
 
@@ -3389,6 +3421,17 @@ bool CoreChecks::ValidatePipeline(std::vector<std::shared_ptr<PIPELINE_STATE>> c
                                          "] has VK_PIPELINE_CREATE_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT set, but "
                                          "VK_PIPELINE_CREATE_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT is not set for the %s "
                                          "library included in VkPipelineLibraryCreateInfoKHR.",
+                                         pipe_index, string_VkGraphicsPipelineLibraryFlagsEXT(lib->graphics_lib_type).c_str());
+                    }
+                    if ((lib->uses_shader_module_id) &&
+                        !(pipeline->GetPipelineCreateFlags() & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT)) {
+                        LogObjectList objs(device);
+                        skip |= LogError(objs, "VUID-VkPipelineLibraryCreateInfoKHR-pLibraries-06855",
+                                         "vkCreateGraphicsPipelines(): pCreateInfos[%" PRIu32
+                                         "] does not have the VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT set, but "
+                                         "the %s "
+                                         "library included in VkPipelineLibraryCreateInfoKHR was created with a shader stage with "
+                                         "VkPipelineShaderStageModuleIdentifierCreateInfoEXT and identifierSize not equal to 0",
                                          pipe_index, string_VkGraphicsPipelineLibraryFlagsEXT(lib->graphics_lib_type).c_str());
                     }
                 }
@@ -9412,7 +9455,7 @@ bool CoreChecks::PreCallValidateCmdBindPipeline(VkCommandBuffer commandBuffer, V
             }
         }
         if ((cb_state->commands_since_begin_rendering > 0) && cb_state->activeRenderPass &&
-            cb_state->activeRenderPass->UsesDynamicRendering() && cb_state->hasDrawCmd) {
+            cb_state->activeRenderPass->UsesDynamicRendering() && cb_state->has_draw_cmd) {
             const auto rendering_struct = LvlFindInChain<VkPipelineRenderingCreateInfo>(pipeline_state->PNext());
             const auto last_pipeline = cb_state->GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
             const auto *last_rendering_struct =

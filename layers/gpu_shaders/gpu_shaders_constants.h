@@ -16,16 +16,29 @@
 //
 // * Author: Tony Barbour <tony@lunarg.com>
 //
-// Values used in the pre draw validation shader and then mapped and checked in gpu_validation
+// Values used between the GLSL shaders and the GPU-AV logic
 
-#ifndef GPU_PRE_DRAW_CONSTANTS
-#define GPU_PRE_DRAW_CONSTANTS
+#ifndef GPU_SHADER_CONSTANTS
+#define GPU_SHADER_CONSTANTS
 
-// values match those found in SPIRV-Tools instrument.hpp file
-#define _kInstErrorPreDrawValidate 8
+// values match those found in SPIRV-Tools instrument.hpp file.
+#define _kInstErrorMax 7
 #define _kInstValidationOutError 7
+// The values in instrument.hpp are for the spirv-opt pass but these values are for the
+// internal gpu_shaders in the VVL. GLSL can't understand .hpp header file so these
+// are defined internally here extending the max values
+#define _kInstErrorPreDrawValidate _kInstErrorMax + 1
+#define _kInstErrorPreDispatchValidate _kInstErrorMax + 2
+#define _kPreValidateSubError _kInstValidationOutError + 1
+
+// These values all share the byte at (_kPreValidateSubError + 1) location since only
+// one will be used at a time. Also equivalent to (kInstStageOutCnt + 1)
 // debug buffer is memset to 0 so need to start at index 1
 #define pre_draw_count_exceeds_bufsize_error 1
 #define pre_draw_count_exceeds_limit_error 2
 #define pre_draw_first_instance_error 3
+#define pre_dispatch_count_exceeds_limit_x_error 1
+#define pre_dispatch_count_exceeds_limit_y_error 2
+#define pre_dispatch_count_exceeds_limit_z_error 3
+
 #endif

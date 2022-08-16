@@ -301,6 +301,7 @@ class VkLayerTest : public VkRenderFramework {
                                 PFN_vkGetOriginalPhysicalDeviceLimitsEXT &fpvkGetOriginalPhysicalDeviceLimitsEXT);
     bool LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceFeaturesEXT &fpvkSetPhysicalDeviceFeaturesEXT,
                                 PFN_vkGetOriginalPhysicalDeviceFeaturesEXT &fpvkGetOriginalPhysicalDeviceFeaturesEXT);
+    bool LoadDeviceProfileLayer(PFN_VkSetPhysicalDeviceProperties2EXT &fpvkSetPhysicalDeviceProperties2EXT);
 
     VkLayerTest();
 };
@@ -339,6 +340,7 @@ class VkArmBestPracticesLayerTest : public VkBestPracticesLayerTest {
     VkFramebuffer CreateFramebuffer(const uint32_t width, const uint32_t height, VkImageView image_view, VkRenderPass renderpass);
     VkSampler CreateDefaultSampler();
 };
+class VkNvidiaBestPracticesLayerTest : public VkBestPracticesLayerTest {};
 
 class VkWsiEnabledLayerTest : public VkLayerTest {
   public:
@@ -850,7 +852,7 @@ struct ThreadTestData {
     VkDescriptorSet descriptorSet;
     VkBuffer buffer;
     uint32_t binding;
-    bool *bailout;
+    std::atomic<bool> *bailout;
 };
 
 void AddToCommandBuffer(ThreadTestData *);

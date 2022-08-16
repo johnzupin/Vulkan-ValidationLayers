@@ -201,6 +201,7 @@ class PIPELINE_STATE : public BASE_NODE {
     // Flag of which shader stages are active for this pipeline
     const uint32_t active_shaders = 0;
     const VkPrimitiveTopology topology_at_rasterizer;
+    const bool uses_shader_module_id;
 
     // Executable or legacy pipeline
     PIPELINE_STATE(const ValidationStateTracker *state_data, const VkGraphicsPipelineCreateInfo *pCreateInfo,
@@ -619,9 +620,11 @@ VkShaderModule PIPELINE_STATE::GetShaderModuleByCIIndex<VkRayTracingPipelineCrea
 
 // Track last states that are bound per pipeline bind point (Gfx & Compute)
 struct LAST_BOUND_STATE {
-    LAST_BOUND_STATE() { Reset(); }  // must define default constructor for portability reasons
-    PIPELINE_STATE *pipeline_state;
-    VkPipelineLayout pipeline_layout;
+    LAST_BOUND_STATE(CMD_BUFFER_STATE &cb) : cb_state(cb) {}
+
+    CMD_BUFFER_STATE &cb_state;
+    PIPELINE_STATE *pipeline_state{nullptr};
+    VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
     std::shared_ptr<cvdescriptorset::DescriptorSet> push_descriptor_set;
 
     // Ordered bound set tracking where index is set# that given set is bound to
@@ -642,7 +645,7 @@ struct LAST_BOUND_STATE {
 
     void Reset();
 
-    void UnbindAndResetPushDescriptorSet(CMD_BUFFER_STATE *cb_state, std::shared_ptr<cvdescriptorset::DescriptorSet> &&ds);
+    void UnbindAndResetPushDescriptorSet(std::shared_ptr<cvdescriptorset::DescriptorSet> &&ds);
 
     inline bool IsUsing() const { return pipeline_state ? true : false; }
 };
