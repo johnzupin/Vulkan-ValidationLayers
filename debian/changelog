@@ -1,3 +1,131 @@
+vulkan-validationlayers (1.3.224.0~rc2-1lunarg20.04-1) focal; urgency=medium
+
+  [ sjfricke ]
+  * layers: Add static assert for instrument.hpp values
+
+  [ John Zulauf ]
+  * syncval: Make RP access context pointers stable
+
+  [ sjfricke ]
+  * layers: Clean up CB state used in GPU-AV
+  * scripts: Update generate_spirv.py for GPU-AV
+
+  [ Jeremy Gebben ]
+  * tests: Print SKIPPED tests correctly in android logcat output
+  * layers: Fix deadlock in vkCmdBeginRenderPass()
+  * tests: Add VkLayerTest.PushDescriptorUniformDestroySignaled
+  * tests: Add VkPositiveLayerTest.BeginRenderPassWithViewMask
+
+  [ janharaldfredriksen-arm ]
+  * layers: Test fragment shading rate renderpass compatibility
+  * test: Add test for Fragment Shading Rate rp compatibility
+
+  [ Nathaniel Cesario ]
+  * tests: Fix DSBufferLimitErrors
+
+  [ Jeremy Gebben ]
+  * scripts: Update syncval stage and access masks snippets
+
+  [ Tony-LunarG ]
+  * layers: Add validation for VK_EXT_shader_module_identifier
+  * tests: Tests for VK_EXT_shader_module_identifier
+
+  [ sjfricke ]
+  * layers: Add indirect dispatch to GPU-AV
+  * tests: Add indirect dispatch to GPU-AV
+  * layers: Move GetConstantValue
+
+  [ Jeremy Gebben ]
+  * layers: Hold the write lock in CMD_BUFFER_STATE::Destroy()
+  * tests: Make ErrorMonitor::SetBailout use an atomic flag
+  * corechecks: Use ValidateObjectNotInUse() for VkBuffers
+
+  [ John Zulauf ]
+  * json: Add SyncVal QueueSubmit as ALPHA
+  * docs: Add alpha info for Sync QueueSubmit val
+
+  [ Antonio Maiorano ]
+  * scripts: Add back 'outfilename' arg to generate_spirv.py
+
+  [ Jeremy Gebben ]
+  * build-android: Use c++_shared
+
+  [ sjfricke ]
+  * layers: Add remaining VK_EXT_blend_operation_advanced
+  * tests: Add SetPhysicalDeviceProperties2EXT to device profile
+  * tests: Add remaining VK_EXT_blend_operation_advanced
+  * tests: Add AccessMask2 tests
+  * tests: Use GTEST_SKIP for sync2 check
+
+  [ Mike Schuchardt ]
+  * build: Update shader toolchain
+
+  [ sjfricke ]
+  * layers: Update drawIndirectFirstInstance VUID
+  * layers: Add OpInBoundsAccessChain to shader val
+
+  [ ZaOniRinku ]
+  * layers: Explicit incomplete validation support
+
+  [ ndahmani ]
+  * layers: Explicit incomplete validation support for chassis
+
+  [ Nathaniel Cesario ]
+  * build: Fix test compilation failure
+
+  [ sjfricke ]
+  * tests: Add OpTypeArray spec constant tests
+
+  [ ziga-lunarg ]
+  * layers: Validate instance create enumerate portability
+  * tests: Test instance create enumerate portability
+
+  [ Tony-LunarG ]
+  * gpu: Use VMA v3.0.1
+  * gpu: Accomodate new VMA
+  * gpu: Re-apply previous changes to VMA
+
+  [ Rodrigo Locatti ]
+  * practices: Add settings for NVIDIA Best Practices
+  * practices: Collect available extensions in CreateDevice
+  * practices: Warn when pageable memory isn't enabled
+  * practices: Warn images created with VK_IMAGE_TILING_LINEAR
+  * practices: Warn when 32-bit depth formats are used
+  * practices: Warn QueueBindSparse on non-transfer
+  * practices: Warn accel structs builds on graphics
+  * practices: Warn when vkAllocateMemory has no priority
+  * practices: Add bp_state::DeviceMemory
+  * practices: Warn missing dynamic memory priority
+  * practices: Warn when separate samplers are used
+  * practices: Warn when pipeline layouts are too large
+  * practices: Warn recycleable memory allocations
+  * practices: Warn shader stages enables/disables
+  * practices: Add AMD VUIDs to NVIDIA best practices
+  * practices: Add Mali VUID to NVIDIA best practices
+  * practices: Fix ValidateCmdDrawType calls in CmdDraw*Indirect
+  * practices: Add missing draw methods
+  * practices: Flag conflicting depth directions
+  * practices: Warn when clears are not compressed
+  * practices: Warn missing ONE_TIME_SUBMIT
+  * tests: Setup NVIDIA best practices test framework
+  * tests: Test PageableDeviceLocalMemory
+  * tests: Test TilingLinear
+  * tests: Test Depth32Float
+  * tests: Test QueueBindSparse_NotAsync
+  * tests: Test AccelerationStructure_NotAsync
+  * tests: Test AllocateMemory_SetPriority
+  * tests: Test BindMemory_NoPriority
+  * tests: Test CreatePipelineLayout_SeparateSampler
+  * tests: Test CreatePipelineLayout_LargePipelineLayout
+  * tests: Test AllocateMemory_ReuseAllocations
+  * tests: Test BindPipeline_SwitchTessGeometryMesh
+  * tests: Test Zcull_LessGreaterRatio
+  * tests: Test ClearColor_NotCompressed
+  * tests: Test BeginCommandBuffer_OneTimeSubmit
+  * tests: Disable acceleration structure test on AMD
+
+ -- john <john@odin>  Tue, 16 Aug 2022 10:50:10 -0600
+
 vulkan-validationlayers (1.3.224.0~rc1-1lunarg20.04-1) focal; urgency=medium
 
   [ Jeremy Gebben ]
