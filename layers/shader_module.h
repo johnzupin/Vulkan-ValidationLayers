@@ -121,7 +121,6 @@ struct interface_var {
 };
 
 // Utils taking a spirv_inst_iter
-uint32_t GetConstantValue(const spirv_inst_iter &itr);
 std::vector<uint32_t> FindEntrypointInterfaces(const spirv_inst_iter &entrypoint);
 
 enum FORMAT_TYPE {
@@ -218,8 +217,6 @@ struct shader_struct_member {
   private:
     std::vector<uint8_t> used_bytes;  // This only works for root. 0: not used. 1: used. The totally array * size.
 };
-
-struct shader_module_used_operators;
 
 struct SHADER_MODULE_STATE : public BASE_NODE {
     struct EntryPoint {
@@ -365,6 +362,7 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
                        uint32_t &local_size_z) const;
 
     spirv_inst_iter GetConstantDef(uint32_t id) const;
+    uint32_t GetConstantValue(const spirv_inst_iter &itr) const;
     uint32_t GetConstantValueById(uint32_t id) const;
     int32_t GetShaderResourceDimensionality(const interface_var &resource) const;
     uint32_t GetLocationsConsumedByType(uint32_t type, bool strip_array_level) const;
@@ -391,7 +389,7 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
 
     // State tracking helpers for collecting interface information
     void IsSpecificDescriptorType(const spirv_inst_iter &id_it, bool is_storage_buffer, bool is_check_writable,
-                                  interface_var &out_interface_var, shader_module_used_operators &used_operators) const;
+                                  interface_var &out_interface_var) const;
     std::vector<std::pair<DescriptorSlot, interface_var>> CollectInterfaceByDescriptorSlot(
         layer_data::unordered_set<uint32_t> const &accessible_ids) const;
     layer_data::unordered_set<uint32_t> CollectWritableOutputLocationinFS(const spirv_inst_iter &entrypoint) const;
