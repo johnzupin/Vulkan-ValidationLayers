@@ -1,3 +1,19 @@
+vulkan-validationlayers (1.3.224.0~rc4-1lunarg18.04-1) bionic; urgency=medium
+
+  [ Tony-LunarG ]
+  * gpu: Fix new VMA by supplying Get*ProcAddr
+
+  [ Mark Young ]
+  * layers: Fix hangs in NV best practices
+
+  [ Rodrigo Locatti ]
+  * layers: Add vendor check in ClearDepthStencilImage
+
+  [ John Zupin ]
+  * packaging: update control deps
+
+ -- john <john@odin>  Thu, 18 Aug 2022 14:08:57 -0600
+
 vulkan-validationlayers (1.3.224.0~rc3-1lunarg18.04-1) bionic; urgency=medium
 
   [ John Zulauf ]
