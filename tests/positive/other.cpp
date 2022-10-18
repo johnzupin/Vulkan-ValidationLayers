@@ -248,14 +248,10 @@ TEST_F(VkPositiveLayerTest, ParameterLayerFeatures2Capture) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     VkResult err;
 
-    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>();
+    GetPhysicalDeviceFeatures2(features2);
 
     // We're not creating a valid m_device, but the phy wrapper is useful
     vk_testing::PhysicalDevice physical_device(gpu());
@@ -523,15 +519,8 @@ TEST_F(VkPositiveLayerTest, Vulkan12Features) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
-    VkPhysicalDeviceFeatures2 features2 = {};
     auto bda_features = LvlInitStruct<VkPhysicalDeviceBufferDeviceAddressFeatures>();
-    PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
-        (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2 != nullptr);
-
-    features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&bda_features);
-    vkGetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(bda_features);
     if (!bda_features.bufferDeviceAddress) {
         printf("Buffer Device Address feature not supported, skipping test\n");
         return;
@@ -752,7 +741,7 @@ TEST_F(VkPositiveLayerTest, ValidateGetAccelerationStructureBuildSizes) {
     auto ray_query_features = LvlInitStruct<VkPhysicalDeviceRayQueryFeaturesKHR>();
     auto ray_tracing_features = LvlInitStruct<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>(&ray_query_features);
     auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&ray_tracing_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    GetPhysicalDeviceFeatures2(features2);
 
     if (ray_tracing_features.rayTracingPipeline == VK_FALSE) {
         printf("%s rayTracingPipeline feature not supported, skipping tests\n", kSkipPrefix);
@@ -844,4 +833,33 @@ TEST_F(VkPositiveLayerTest, TestSwapchainImageFenceWait) {
     vk::QueuePresentKHR(m_device->m_queue, &present);
 
     vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(VkPositiveLayerTest, EnumeratePhysicalDeviceGroups) {
+    TEST_DESCRIPTION("Test using VkPhysicalDevice handles obtained with vkEnumeratePhysicalDeviceGroups");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    auto ici = GetInstanceCreateInfo();
+
+    VkInstance test_instance = VK_NULL_HANDLE;
+    ASSERT_VK_SUCCESS(vk::CreateInstance(&ici, nullptr, &test_instance));
+    DebugReporter debug_reporter;
+    debug_reporter.Create(test_instance);
+
+    uint32_t physical_device_group_count = 0;
+    vk::EnumeratePhysicalDeviceGroups(test_instance, &physical_device_group_count, nullptr);
+    std::vector<VkPhysicalDeviceGroupProperties> device_groups(physical_device_group_count,
+                                                               {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES});
+    vk::EnumeratePhysicalDeviceGroups(test_instance, &physical_device_group_count, device_groups.data());
+
+    if (physical_device_group_count > 0) {
+        VkPhysicalDevice physicalDevice = device_groups[0].physicalDevices[0];
+
+        uint32_t queueFamilyPropertyCount = 0;
+        vk::GetPhysicalDeviceQueueFamilyProperties2(physicalDevice, &queueFamilyPropertyCount, nullptr);
+    }
+
+    debug_reporter.Destroy(test_instance);
+    vk::DestroyInstance(test_instance, nullptr);
 }

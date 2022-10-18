@@ -133,35 +133,6 @@ bool BufferFormatAndFeaturesSupported(VkPhysicalDevice phy, VkFormat format, VkF
     return (features == (phy_features & features));
 }
 
-VkPhysicalDevicePushDescriptorPropertiesKHR GetPushDescriptorProperties(VkInstance instance, VkPhysicalDevice gpu) {
-    // Find address of extension call and make the call -- assumes needed extensions are enabled.
-    PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
-        (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties2KHR");
-    assert(vkGetPhysicalDeviceProperties2KHR != nullptr);
-
-    // Get the push descriptor limits
-    auto push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
-    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&push_descriptor_prop);
-    vkGetPhysicalDeviceProperties2KHR(gpu, &prop2);
-    return push_descriptor_prop;
-}
-
-VkPhysicalDeviceSubgroupProperties GetSubgroupProperties(VkInstance instance, VkPhysicalDevice gpu) {
-    auto subgroup_prop = LvlInitStruct<VkPhysicalDeviceSubgroupProperties>();
-
-    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&subgroup_prop);
-    vk::GetPhysicalDeviceProperties2(gpu, &prop2);
-    return subgroup_prop;
-}
-
-VkPhysicalDeviceDescriptorIndexingProperties GetDescriptorIndexingProperties(VkInstance instance, VkPhysicalDevice gpu) {
-    auto descriptor_indexing_prop = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingProperties>();
-
-    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&descriptor_indexing_prop);
-    vk::GetPhysicalDeviceProperties2(gpu, &prop2);
-    return descriptor_indexing_prop;
-}
-
 bool operator==(const VkDebugUtilsLabelEXT &rhs, const VkDebugUtilsLabelEXT &lhs) {
     bool is_equal = (rhs.color[0] == lhs.color[0]) && (rhs.color[1] == lhs.color[1]) && (rhs.color[2] == lhs.color[2]) &&
                     (rhs.color[3] == lhs.color[3]);
@@ -230,9 +201,13 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
     VkRenderPass render_pass = VK_NULL_HANDLE;
     VkResult err;
 
-    if (rp1_vuid) {
-        // Some tests mismatch attachment type with layout
-        error_monitor->SetUnexpectedError("VUID-VkSubpassDescription-None-04437");
+    if (nullptr != rp1_vuid) {
+        // If the second VUID is not provided, set it equal to the first VUID.  In this way,
+        // we can check both vkCreateRenderPass and vkCreateRenderPass2 with the same VUID
+        // if rp2_supported is true;
+        if (rp2_supported && nullptr == rp2_vuid) {
+            rp2_vuid = rp1_vuid;
+        }
 
         error_monitor->SetDesiredFailureMsg(kErrorBit, rp1_vuid);
         err = vk::CreateRenderPass(device, create_info, nullptr, &render_pass);
@@ -240,14 +215,11 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
         error_monitor->VerifyFound();
     }
 
-    if (rp2_supported && rp2_vuid) {
+    if (rp2_supported && nullptr != rp2_vuid) {
         PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
             (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2KHR");
         safe_VkRenderPassCreateInfo2 create_info2;
         ConvertVkRenderPassCreateInfoToV2KHR(*create_info, &create_info2);
-
-        // Some tests mismatch attachment type with layout
-        error_monitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
 
         error_monitor->SetDesiredFailureMsg(kErrorBit, rp2_vuid);
         err = vkCreateRenderPass2KHR(device, create_info2.ptr(), nullptr, &render_pass);
@@ -257,9 +229,6 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
         // For api version >= 1.2, try core entrypoint
         PFN_vkCreateRenderPass2 vkCreateRenderPass2 = (PFN_vkCreateRenderPass2)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2");
         if (vkCreateRenderPass2) {
-            // Some tests mismatch attachment type with layout
-            error_monitor->SetUnexpectedError("VUID-VkSubpassDescription2-None-04439");
-
             error_monitor->SetDesiredFailureMsg(kErrorBit, rp2_vuid);
             err = vkCreateRenderPass2(device, create_info2.ptr(), nullptr, &render_pass);
             if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
@@ -683,27 +652,6 @@ bool CheckCreateRenderPass2Support(VkRenderFramework *renderFramework, std::vect
     return false;
 }
 
-bool CheckDescriptorIndexingSupportAndInitFramework(VkRenderFramework *renderFramework,
-                                                    std::vector<const char *> &instance_extension_names,
-                                                    std::vector<const char *> &device_extension_names,
-                                                    VkValidationFeaturesEXT *features, void *userData) {
-    bool descriptor_indexing = renderFramework->InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    if (descriptor_indexing) {
-        instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    }
-    renderFramework->InitFramework(userData, features);
-    descriptor_indexing = descriptor_indexing && renderFramework->DeviceExtensionSupported(renderFramework->gpu(), nullptr,
-                                                                                           VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
-    descriptor_indexing = descriptor_indexing && renderFramework->DeviceExtensionSupported(
-                                                     renderFramework->gpu(), nullptr, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-    if (descriptor_indexing) {
-        device_extension_names.push_back(VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
-        device_extension_names.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-        return true;
-    }
-    return false;
-}
-
 bool CheckTimelineSemaphoreSupportAndInitState(VkRenderFramework *renderFramework) {
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(renderFramework->instance(),
@@ -727,7 +675,7 @@ bool CheckTimelineSemaphoreSupportAndInitState(VkRenderFramework *renderFramewor
         return false;
     }
 
-    renderFramework->InitState(nullptr, &features2);
+    renderFramework->InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     return true;
 }
 
@@ -735,13 +683,20 @@ bool CheckSynchronization2SupportAndInitState(VkRenderFramework *framework) {
     PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
         (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(framework->instance(),
                                                                      "vkGetPhysicalDeviceFeatures2");
-    auto sync2_features = lvl_init_struct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&sync2_features);
-    vkGetPhysicalDeviceFeatures2(framework->gpu(), &features2);
-    if (!sync2_features.synchronization2) {
-        return false;
+
+    {
+        auto sync2_features = lvl_init_struct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
+        auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&sync2_features);
+        vkGetPhysicalDeviceFeatures2(framework->gpu(), &features2);
+        if (!sync2_features.synchronization2) {
+            return false;
+        }
     }
-    framework->InitState(nullptr, &features2,VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+
+    auto sync2_features = lvl_init_struct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
+    sync2_features.synchronization2 = VK_TRUE;
+    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&sync2_features);
+    framework->InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     return true;
 }
 
@@ -1043,16 +998,11 @@ void VkLayerTest::AddSurfaceExtension() {
     AddRequiredExtensions(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 }
 
-uint32_t VkLayerTest::SetTargetApiVersion(uint32_t target_api_version) {
+void VkLayerTest::SetTargetApiVersion(uint32_t target_api_version) {
     if (target_api_version == 0) target_api_version = VK_API_VERSION_1_0;
-    if (target_api_version <= m_instance_api_version) {
-        m_target_api_version = target_api_version;
-        app_info_.apiVersion = m_target_api_version;
-    } else {
-        m_target_api_version = m_instance_api_version;
-        app_info_.apiVersion = m_target_api_version;
-    }
-    return m_target_api_version;
+
+    m_target_api_version = std::min(target_api_version, m_instance_api_version);
+    app_info_.apiVersion = m_target_api_version;
 }
 
 uint32_t VkLayerTest::DeviceValidationVersion() {
@@ -2467,23 +2417,9 @@ void Barrier2QueueFamilyTestHelper::operator()(std::string img_err, std::string 
     context_->Reset();
 };
 
-bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, bool need_gpu_validation,
-                                    VkPhysicalDeviceFeatures2KHR *features2, bool mockicd_valid) {
+bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, VkPhysicalDeviceFeatures2KHR *features2,
+                                    VkValidationFeaturesEXT *enabled_features, bool mockicd_valid) {
     framework->AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-    VkValidationFeatureEnableEXT enables[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT};
-    VkValidationFeatureDisableEXT disables[] = {
-        VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
-        VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT, VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
-    VkValidationFeaturesEXT features = {};
-    features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-    features.enabledValidationFeatureCount = 1;
-    features.pEnabledValidationFeatures = enables;
-    features.disabledValidationFeatureCount = 4;
-    features.pDisabledValidationFeatures = disables;
-
-    VkValidationFeaturesEXT *enabled_features = need_gpu_validation ? &features : nullptr;
-
     framework->AddRequiredExtensions(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
     if (is_khr) {
         framework->AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
@@ -2567,16 +2503,9 @@ void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, V
 }
 
 void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
-    std::array<const char *, 1> required_instance_extensions = {{VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}};
-    for (auto instance_extension : required_instance_extensions) {
-        if (InstanceExtensionSupported(instance_extension)) {
-            m_instance_extension_names.push_back(instance_extension);
-        } else {
-            printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix, instance_extension);
-            return;
-        }
-    }
-
+    AddRequiredExtensions(VK_NV_RAY_TRACING_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+    AddOptionalExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
     VkValidationFeatureEnableEXT validation_feature_enables[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT};
     VkValidationFeatureDisableEXT validation_feature_disables[] = {
         VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
@@ -2587,34 +2516,20 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     validation_features.pEnabledValidationFeatures = validation_feature_enables;
     validation_features.disabledValidationFeatureCount = 4;
     validation_features.pDisabledValidationFeatures = validation_feature_disables;
-    bool descriptor_indexing = CheckDescriptorIndexingSupportAndInitFramework(
-        this, m_instance_extension_names, m_device_extension_names, gpu_assisted ? &validation_features : nullptr, m_errorMonitor);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor, gpu_assisted ? &validation_features : nullptr));
+    bool descriptor_indexing = IsExtensionsEnabled(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
 
     if (IsPlatform(kMockICD) || DeviceSimulation()) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
-    std::array<const char *, 2> required_device_extensions = {
-        {VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_NV_RAY_TRACING_EXTENSION_NAME}};
-    for (auto device_extension : required_device_extensions) {
-        if (DeviceExtensionSupported(gpu(), nullptr, device_extension)) {
-            m_device_extension_names.push_back(device_extension);
-        } else {
-            printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, device_extension);
-            return;
-        }
-    }
-
-    VkPhysicalDeviceFeatures2KHR features2 = {};
-    auto indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
+    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
     if (descriptor_indexing) {
-        PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-            (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-        ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
-        features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
-        vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+        auto indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
+        features2 = GetPhysicalDeviceFeatures2(indexing_features);
         if (!indexing_features.runtimeDescriptorArray || !indexing_features.descriptorBindingPartiallyBound ||
             !indexing_features.descriptorBindingSampledImageUpdateAfterBind ||
             !indexing_features.descriptorBindingVariableDescriptorCount) {
@@ -2622,6 +2537,7 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
             descriptor_indexing = false;
         }
     }
+
     VkCommandPoolCreateFlags pool_flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, pool_flags));
 
@@ -3370,6 +3286,8 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
         }
 
         if (gpu_assisted) {
+            m_errorMonitor->SetUnexpectedError("VUID-vkCmdTraceRaysNV-callableShaderBindingOffset-02462");
+            m_errorMonitor->SetUnexpectedError("VUID-vkCmdTraceRaysNV-missShaderBindingOffset-02458");
             // Need these values to pass mapped storage buffer checks
             vkCmdTraceRaysNV(ray_tracing_command_buffer.handle(), shader_binding_table_buffer.handle(),
                              ray_tracing_properties.shaderGroupHandleSize * 0ull, shader_binding_table_buffer.handle(),

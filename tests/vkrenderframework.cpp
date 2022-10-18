@@ -31,6 +31,7 @@
 
 #include "vk_format_utils.h"
 #include "vk_extension_helper.h"
+#include "vk_layer_settings_ext.h"
 
 using std::string;
 using std::strncmp;
@@ -46,7 +47,7 @@ ErrorMonitor::ErrorMonitor() {
     ExpectSuccess(kErrorBit);
 }
 
-ErrorMonitor::~ErrorMonitor() NOEXCEPT {}
+ErrorMonitor::~ErrorMonitor() noexcept {}
 
 void ErrorMonitor::MonitorReset() {
     message_flags_ = kErrorBit;
@@ -101,15 +102,7 @@ VkBool32 ErrorMonitor::CheckForDesiredMsg(const char *const msgString) {
     if (!IgnoreMessage(errorString)) {
         for (auto desired_msg_it = desired_message_strings_.begin(); desired_msg_it != desired_message_strings_.end();
              ++desired_msg_it) {
-            if ((*desired_msg_it).length() == 0) {
-                // An empty desired_msg string "" indicates a positive test - not expecting an error.
-                // Return true to avoid calling layers/driver with this error.
-                // And don't erase the "" string, so it remains if another error is found.
-                result = VK_TRUE;
-                found_expected = true;
-                message_found_ = true;
-                failure_message_strings_.insert(errorString);
-            } else if (errorString.find(*desired_msg_it) != string::npos) {
+            if (errorString.find(*desired_msg_it) != string::npos) {
                 found_expected = true;
                 failure_message_strings_.insert(errorString);
                 message_found_ = true;
@@ -132,6 +125,7 @@ VkBool32 ErrorMonitor::CheckForDesiredMsg(const char *const msgString) {
         }
 
         if (!found_expected) {
+            result = VK_TRUE;
             printf("Unexpected: %s\n", msgString);
             other_messages_.push_back(errorString);
         }
@@ -171,7 +165,7 @@ void ErrorMonitor::DumpFailureMsgs() const {
 void ErrorMonitor::ExpectSuccess(VkDebugReportFlagsEXT const message_flag_mask) {
     // Match ANY message matching specified type
     auto guard = Lock();
-    desired_message_strings_.insert("");
+    desired_message_strings_.clear();
     message_flags_ = message_flag_mask;
 }
 
@@ -181,7 +175,6 @@ void ErrorMonitor::VerifyFound() {
         auto guard = Lock();
         // Not receiving expected message(s) is a failure. /Before/ throwing, dump any other messages
         if (!AllDesiredMsgsFound()) {
-            DumpFailureMsgs();
             for (const auto &desired_msg : desired_message_strings_) {
                 ADD_FAILURE() << "Did not receive expected error '" << desired_msg << "'";
             }
@@ -206,7 +199,6 @@ void ErrorMonitor::VerifyNotFound() {
     auto guard = Lock();
     // ExpectSuccess() configured us to match anything. Any error is a failure.
     if (AnyDesiredMsgFound()) {
-        DumpFailureMsgs();
         for (const auto &msg : failure_message_strings_) {
             ADD_FAILURE() << "Expected to succeed but got error: " << msg;
         }
@@ -233,7 +225,7 @@ bool ErrorMonitor::IgnoreMessage(string const &msg) const {
                         [&msg](string const &str) { return msg.find(str) != string::npos; }) != ignore_message_strings_.end();
 }
 
-void DebugReporter::Create(VkInstance instance) NOEXCEPT {
+void DebugReporter::Create(VkInstance instance) noexcept {
     assert(instance);
     assert(!debug_obj_);
 
@@ -244,7 +236,7 @@ void DebugReporter::Create(VkInstance instance) NOEXCEPT {
     if (err) debug_obj_ = VK_NULL_HANDLE;
 }
 
-void DebugReporter::Destroy(VkInstance instance) NOEXCEPT {
+void DebugReporter::Destroy(VkInstance instance) noexcept {
     assert(instance);
     assert(debug_obj_);  // valid to call with null object, but probably bug
 
@@ -318,7 +310,7 @@ VkPhysicalDevice VkRenderFramework::gpu() {
     return gpu_;
 }
 
-VkPhysicalDeviceProperties VkRenderFramework::physDevProps() {
+const VkPhysicalDeviceProperties &VkRenderFramework::physDevProps() {
     EXPECT_NE((VkPhysicalDevice)0, gpu_);  // Invalid to request physical device properties before gpu
     return physDevProps_;
 }
@@ -455,8 +447,39 @@ inline void CheckDisableCoreValidation(VkValidationFeaturesEXT &features) {
     auto disable = GetEnvironment("VK_LAYER_TESTS_DISABLE_CORE_VALIDATION");
     std::transform(disable.begin(), disable.end(), disable.begin(), ::tolower);
     if (disable == "false" || disable == "0" || disable == "FALSE") {       // default is to change nothing, unless flag is correctly specified
-        features.disabledValidationFeatureCount = 0;  // remove all disables to get all validation messages
+        features.disabledValidationFeatureCount = 0;                        // remove all disables to get all validation messages
     }
+}
+
+void *VkRenderFramework::SetupValidationSettings(void *first_pnext) {
+    auto validation = GetEnvironment("VK_LAYER_TESTS_VALIDATION_FEATURES");
+    std::transform(validation.begin(), validation.end(), validation.begin(), ::tolower);
+    VkValidationFeaturesEXT *features = LvlFindModInChain<VkValidationFeaturesEXT>(first_pnext);
+    if (features) {
+        CheckDisableCoreValidation(*features);
+    }
+    if (validation == "all" || validation == "core" || validation == "none") {
+        if (!features) {
+            features = &validation_features;
+            features->sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+            features->pNext = first_pnext;
+            first_pnext = features;
+        }
+
+        if (validation == "all") {
+            features->enabledValidationFeatureCount = 4;
+            features->pEnabledValidationFeatures = validation_enable_all;
+            features->disabledValidationFeatureCount = 0;
+        } else if (validation == "core") {
+            features->disabledValidationFeatureCount = 0;
+        } else if (validation == "none") {
+            features->disabledValidationFeatureCount = 1;
+            features->pDisabledValidationFeatures = &validation_disable_all;
+            features->enabledValidationFeatureCount = 0;
+        }
+    }
+
+    return first_pnext;
 }
 
 void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/, void *instance_pnext) {
@@ -497,11 +520,7 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
 
     // If is validation features then check for disabled validation
 
-    auto bos = reinterpret_cast<VkBaseOutStructure *>(instance_pnext);
-    if (instance_pnext && bos->sType == VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT) {
-        auto features = reinterpret_cast<VkValidationFeaturesEXT *>(instance_pnext);
-        CheckDisableCoreValidation(*features);
-    }
+    instance_pnext = SetupValidationSettings(instance_pnext);
 
     // concatenate pNexts
     void *last_pnext = nullptr;
@@ -638,6 +657,9 @@ bool VkRenderFramework::AddRequestedInstanceExtensions(const char *ext_name) {
     if (is_instance_ext) {
         const auto &info = InstanceExtensions::get_info(ext_name);
         for (const auto &req : info.requirements) {
+            if (0 == strncmp(req.name, "VK_VERSION", 10)) {
+                continue;
+            }
             if (!AddRequestedInstanceExtensions(req.name)) {
                 return false;
             }
@@ -755,7 +777,11 @@ bool VkRenderFramework::IsPlatform(PlatformType platform) {
     if (VkRenderFramework::IgnoreDisableChecks()) {
         return false;
     } else {
-        return (!vk_gpu_table.find(platform)->second.compare(physDevProps().deviceName));
+        const auto search = vk_gpu_table.find(platform);
+        if (search != vk_gpu_table.end()) {
+            return 0 == search->second.compare(physDevProps().deviceName);
+        }
+        return false;
     }
 }
 
@@ -1044,7 +1070,7 @@ void VkRenderFramework::InitRenderTarget(uint32_t targets, VkImageView *dsBindin
     att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    att.initialLayout = (m_clear_via_load_op) ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_GENERAL;
+    att.initialLayout = (m_clear_via_load_op) ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     att.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentReference ref = {};
@@ -1288,7 +1314,7 @@ VkDescriptorSetLayoutObj::VkDescriptorSetLayoutObj(const VkDeviceObj *device,
 
 VkDescriptorSetObj::VkDescriptorSetObj(VkDeviceObj *device) : m_device(device), m_nextSlot(0) {}
 
-VkDescriptorSetObj::~VkDescriptorSetObj() NOEXCEPT {
+VkDescriptorSetObj::~VkDescriptorSetObj() noexcept {
     if (m_set) {
         delete m_set;
     }
@@ -1429,6 +1455,7 @@ VkRenderpassObj::VkRenderpassObj(VkDeviceObj *dev, const VkFormat format) {
     attach_desc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attach_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
     attach_desc.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attach_desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
     rpci.pAttachments = &attach_desc;
 
@@ -1456,6 +1483,8 @@ VkRenderpassObj::VkRenderpassObj(VkDeviceObj *dev, VkFormat format, bool depthSt
         attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
         attach_desc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attach_desc.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        attach_desc.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attach_desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
         rpci.pAttachments = &attach_desc;
 

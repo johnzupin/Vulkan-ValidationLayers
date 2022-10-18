@@ -221,12 +221,6 @@ VkImageViewCreateInfo SafeSaneImageViewCreateInfo(const VkImageObj &image, VkFor
 // Helper for checking createRenderPass2 support and adding related extensions.
 bool CheckCreateRenderPass2Support(VkRenderFramework *renderFramework, std::vector<const char *> &device_extension_names);
 
-// Helper for checking descriptor_indexing support and adding related extensions.
-bool CheckDescriptorIndexingSupportAndInitFramework(VkRenderFramework *renderFramework,
-                                                    std::vector<const char *> &instance_extension_names,
-                                                    std::vector<const char *> &device_extension_names,
-                                                    VkValidationFeaturesEXT *features, void *userData);
-
 // Helper for checking timeline semaphore support and initializing
 bool CheckTimelineSemaphoreSupportAndInitState(VkRenderFramework *renderFramework);
 
@@ -289,7 +283,7 @@ class VkLayerTest : public VkRenderFramework {
     uint32_t m_target_api_version = 0;
     bool m_enableWSI;
 
-    uint32_t SetTargetApiVersion(uint32_t target_api_version);
+    void SetTargetApiVersion(uint32_t target_api_version);
     uint32_t DeviceValidationVersion();
     bool LoadDeviceProfileLayer(
         PFN_vkSetPhysicalDeviceFormatPropertiesEXT &fpvkSetPhysicalDeviceFormatPropertiesEXT,
@@ -350,11 +344,12 @@ class VkWsiEnabledLayerTest : public VkLayerTest {
 
 class VkGpuAssistedLayerTest : public VkLayerTest {
   public:
-    bool InitGpuAssistedFramework(bool request_descriptor_indexing);
+    VkValidationFeaturesEXT GetValidationFeatures();
     void ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSize binding_offset, VkDeviceSize binding_range,
                               VkDescriptorType descriptor_type, const char *fragment_shader, const char *expected_error);
 
   protected:
+    bool CanEnableGpuAV();
 };
 
 class VkDebugPrintfTest : public VkLayerTest {
@@ -749,15 +744,6 @@ class ExtensionChain {
 };
 }  // namespace chain_util
 
-// PushDescriptorProperties helper
-VkPhysicalDevicePushDescriptorPropertiesKHR GetPushDescriptorProperties(VkInstance instance, VkPhysicalDevice gpu);
-
-// Subgroup properties helper
-VkPhysicalDeviceSubgroupProperties GetSubgroupProperties(VkInstance instance, VkPhysicalDevice gpu);
-
-// Descriptor Indexing properties helper
-VkPhysicalDeviceDescriptorIndexingProperties GetDescriptorIndexingProperties(VkInstance instance, VkPhysicalDevice gpu);
-
 class BarrierQueueFamilyBase {
   public:
     struct QueueFamilyObjs {
@@ -915,8 +901,8 @@ void CreateBufferViewTest(VkLayerTest &test, const VkBufferViewCreateInfo *pCrea
 
 void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *pCreateInfo, std::string code = "");
 
-bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, bool need_gpu_validation = false,
-                                    VkPhysicalDeviceFeatures2KHR *features2 = nullptr, bool mockicd_valid = false);
+bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, VkPhysicalDeviceFeatures2KHR *features2 = nullptr,
+                                    VkValidationFeaturesEXT *enabled_features = nullptr, bool mockicd_valid = false);
 
 void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, VkBufferObj *vbo, VkBufferObj *ibo,
                                                     VkGeometryNV *geometry, VkDeviceSize offset = 0, bool buffer_device_address = false);

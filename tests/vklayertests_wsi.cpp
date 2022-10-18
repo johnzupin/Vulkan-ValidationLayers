@@ -29,6 +29,89 @@
 #include "layer_validation_tests.h"
 #include "core_validation_error_enums.h"
 
+TEST_F(VkLayerTest, InitSwapchainPotentiallyIncompatibleFlag) {
+    TEST_DESCRIPTION("Initialize swapchain with potentially incompatible flags");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    AddRequiredExtensions(VK_KHR_SURFACE_PROTECTED_CAPABILITIES_EXTENSION_NAME);
+    AddSurfaceExtension();
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    if (!InitSurface()) {
+        GTEST_SKIP() << "Cannot create surface, skipping test";
+    }
+    InitSwapchainInfo();
+
+    VkSwapchainCreateInfoKHR swapchain_ci = LvlInitStruct<VkSwapchainCreateInfoKHR>();
+    swapchain_ci.surface = m_surface;
+    swapchain_ci.minImageCount = m_surface_capabilities.minImageCount;
+    swapchain_ci.imageFormat = m_surface_formats[0].format;
+    swapchain_ci.imageColorSpace = m_surface_formats[0].colorSpace;
+    swapchain_ci.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_ci.imageArrayLayers = 1;
+    swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_ci.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    swapchain_ci.compositeAlpha = m_surface_composite_alpha;
+    swapchain_ci.presentMode = m_surface_non_shared_present_mode;
+    swapchain_ci.clipped = VK_FALSE;
+    swapchain_ci.oldSwapchain = 0;
+
+    // "protected" flag support is device defined
+    {
+        swapchain_ci.flags = VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR;
+
+        PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR vkGetPhysicalDeviceSurfaceCapabilities2KHR =
+            reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR>(
+                vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceSurfaceCapabilities2KHR"));
+        ASSERT_TRUE(vkGetPhysicalDeviceSurfaceCapabilities2KHR != nullptr);
+
+        // Get surface protected capabilities
+        VkPhysicalDeviceSurfaceInfo2KHR surface_info = LvlInitStruct<VkPhysicalDeviceSurfaceInfo2KHR>();
+        surface_info.surface = swapchain_ci.surface;
+        VkSurfaceProtectedCapabilitiesKHR surface_protected_capabilities = LvlInitStruct<VkSurfaceProtectedCapabilitiesKHR>();
+        VkSurfaceCapabilities2KHR surface_capabilities = LvlInitStruct<VkSurfaceCapabilities2KHR>();
+        surface_capabilities.pNext = &surface_protected_capabilities;
+        vkGetPhysicalDeviceSurfaceCapabilities2KHR(gpu(), &surface_info, &surface_capabilities);
+
+        // Create swapchain, monitor potential validation error
+        if (!surface_protected_capabilities.supportsProtected) {
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSwapchainCreateInfoKHR-flags-03187");
+        }
+
+        vk::CreateSwapchainKHR(device(), &swapchain_ci, nullptr, &m_swapchain);
+
+        if (!surface_protected_capabilities.supportsProtected) {
+            m_errorMonitor->VerifyFound();
+            m_swapchain = VK_NULL_HANDLE;  // swapchain was not created, so prevent destroy
+        } else {
+            vk::DestroySwapchainKHR(device(), m_swapchain, nullptr);
+            m_swapchain = VK_NULL_HANDLE;
+        }
+    }
+
+    // "split instance bind regions" not supported when there is only one device
+    {
+        swapchain_ci.flags = VK_SWAPCHAIN_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT_KHR;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSwapchainCreateInfoKHR-physicalDeviceCount-01429");
+        vk::CreateSwapchainKHR(device(), &swapchain_ci, nullptr, &m_swapchain);
+        m_errorMonitor->VerifyFound();
+        m_swapchain = VK_NULL_HANDLE;  // swapchain was not created, so prevent destroy
+    }
+}
+
 TEST_F(VkLayerTest, BindImageMemorySwapchain) {
     TEST_DESCRIPTION("Invalid bind image with a swapchain");
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -86,6 +169,9 @@ TEST_F(VkLayerTest, BindImageMemorySwapchain) {
     auto alloc_info = LvlInitStruct<VkMemoryAllocateInfo>();
     alloc_info.memoryTypeIndex = 0;
     alloc_info.allocationSize = mem_reqs.size;
+    if (alloc_info.allocationSize == 0) {
+        GTEST_SKIP() << "Driver seems to not be returning an valid allocation size and need to end test";
+    }
 
     vk_testing::DeviceMemory mem;
     bool pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info, 0);
@@ -358,10 +444,6 @@ TEST_F(VkLayerTest, ValidSwapchainImageParams) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
-    }
-
     VkDeviceGroupDeviceCreateInfo device_group_ci = LvlInitStruct<VkDeviceGroupDeviceCreateInfo>();
     device_group_ci.physicalDeviceCount = 1;
     VkPhysicalDevice pdev = gpu();
@@ -369,8 +451,7 @@ TEST_F(VkLayerTest, ValidSwapchainImageParams) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &device_group_ci));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
     if (!InitSurface()) {
-        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Cannot create surface, skipping test";
     }
     InitSwapchainInfo();
 
@@ -1765,11 +1846,7 @@ TEST_F(VkLayerTest, DisplayPresentInfoSrcRect) {
 
 TEST_F(VkLayerTest, PresentIdWait) {
     TEST_DESCRIPTION("Test present wait extension");
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_1);
-    if (version < VK_API_VERSION_1_1) {
-        printf("%s At least Vulkan version 1.1 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_1);
     AddSurfaceExtension();
     auto present_id_features = LvlInitStruct<VkPhysicalDevicePresentIdFeaturesKHR>();
     auto present_wait_features = LvlInitStruct<VkPhysicalDevicePresentWaitFeaturesKHR>(&present_id_features);
@@ -1788,6 +1865,10 @@ TEST_F(VkLayerTest, PresentIdWait) {
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required, skipping test.";
+    }
+
     ASSERT_TRUE(InitSwapchain());
     VkSurfaceKHR surface2;
     VkSwapchainKHR swapchain2;
@@ -1874,11 +1955,7 @@ TEST_F(VkLayerTest, PresentIdWait) {
 
 TEST_F(VkLayerTest, PresentIdWaitFeatures) {
     TEST_DESCRIPTION("Test present wait extension");
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_1);
-    if (version < VK_API_VERSION_1_1) {
-        printf("%s At least Vulkan version 1.1 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_1);
     AddSurfaceExtension();
     auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
     m_device_extension_names.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
@@ -1891,6 +1968,10 @@ TEST_F(VkLayerTest, PresentIdWaitFeatures) {
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required, skipping test.";
+    }
+
     ASSERT_TRUE(InitSwapchain());
 
     auto vkWaitForPresentKHR = (PFN_vkWaitForPresentKHR)vk::GetDeviceProcAddr(m_device->device(), "vkWaitForPresentKHR");

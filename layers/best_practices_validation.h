@@ -177,26 +177,41 @@ class Image : public IMAGE_STATE {
         SetupUsages();
     }
 
-    IMAGE_SUBRESOURCE_USAGE_BP UpdateUsage(uint32_t array_layer, uint32_t mip_level, IMAGE_SUBRESOURCE_USAGE_BP usage) {
+    struct Usage {
+        IMAGE_SUBRESOURCE_USAGE_BP type;
+        uint32_t queue_family_index;
+    };
+
+    Usage UpdateUsage(uint32_t array_layer, uint32_t mip_level, IMAGE_SUBRESOURCE_USAGE_BP usage, uint32_t queue_family) {
         auto last_usage = usages_[array_layer][mip_level];
-        usages_[array_layer][mip_level] = usage;
+        usages_[array_layer][mip_level].type = usage;
+        usages_[array_layer][mip_level].queue_family_index = queue_family;
         return last_usage;
     }
 
-    IMAGE_SUBRESOURCE_USAGE_BP GetUsage(uint32_t array_layer, uint32_t mip_level) { return usages_[array_layer][mip_level]; }
+    Usage GetUsage(uint32_t array_layer, uint32_t mip_level) const { return usages_[array_layer][mip_level]; }
+
+    IMAGE_SUBRESOURCE_USAGE_BP GetUsageType(uint32_t array_layer, uint32_t mip_level) const {
+        return GetUsage(array_layer, mip_level).type;
+    }
+
+    uint32_t GetLastQueueFamily(uint32_t array_layer, uint32_t mip_level) const {
+        return GetUsage(array_layer, mip_level).queue_family_index;
+    }
 
   private:
     void SetupUsages() {
         usages_.resize(createInfo.arrayLayers);
         for (auto& mip_vec : usages_) {
-            mip_vec.resize(createInfo.mipLevels, IMAGE_SUBRESOURCE_USAGE_BP::UNDEFINED);
+            mip_vec.resize(createInfo.mipLevels, {IMAGE_SUBRESOURCE_USAGE_BP::UNDEFINED, VK_QUEUE_FAMILY_IGNORED});
         }
     }
     // A 2d vector for all the array layers and mip levels.
     // This does not split usages per aspect.
     // Aspects are generally read and written together,
     // and tracking them independently could be misleading.
-    std::vector<std::vector<IMAGE_SUBRESOURCE_USAGE_BP>> usages_;
+    // second/uint32_t is last queue family usage
+    std::vector<std::vector<Usage>> usages_;
 };
 
 using ImageNoBinding = MEMORY_TRACKED_RESOURCE_STATE<Image, BindableNoMemoryTracker>;
@@ -528,7 +543,8 @@ class BestPractices : public ValidationStateTracker {
                                             const VkSubpassBeginInfo* pSubpassBeginInfo) const override;
     bool PreCallValidateCmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo) const override;
     bool PreCallValidateCmdBeginRenderingKHR(VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo) const override;
-    void ValidateBoundDescriptorSets(bp_state::CommandBuffer& commandBuffer, const char* function_name);
+    void ValidateBoundDescriptorSets(bp_state::CommandBuffer& commandBuffer, VkPipelineBindPoint bind_point,
+                                     const char* function_name);
     bool PreCallValidateCmdEndRendering(VkCommandBuffer commandBuffer) const override;
     bool PreCallValidateCmdEndRenderingKHR(VkCommandBuffer commandBuffer) const override;
 
@@ -692,8 +708,8 @@ class BestPractices : public ValidationStateTracker {
                             IMAGE_SUBRESOURCE_USAGE_BP usage, const VkImageSubresourceLayers& range);
     void QueueValidateImage(QueueCallbacks& func, const char* function_name, std::shared_ptr<bp_state::Image>& state,
                             IMAGE_SUBRESOURCE_USAGE_BP usage, uint32_t array_layer, uint32_t mip_level);
-    void ValidateImageInQueue(const char* function_name, bp_state::Image& state, IMAGE_SUBRESOURCE_USAGE_BP usage,
-                              uint32_t array_layer, uint32_t mip_level);
+    void ValidateImageInQueue(const QUEUE_STATE& qs, const CMD_BUFFER_STATE& cbs, const char* function_name, bp_state::Image& state,
+                              IMAGE_SUBRESOURCE_USAGE_BP usage, uint32_t array_layer, uint32_t mip_level);
     void ValidateImageInQueueArmImg(const char* function_name, const bp_state::Image& image, IMAGE_SUBRESOURCE_USAGE_BP last_usage,
                                  IMAGE_SUBRESOURCE_USAGE_BP usage, uint32_t array_layer, uint32_t mip_level);
 

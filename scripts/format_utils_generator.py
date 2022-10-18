@@ -206,12 +206,6 @@ extern "C" {
             'components' : []
         }
 
-        # TODO - The current XML has a bug, remove when new headers with fix are added
-        # Was setting theses as 8 instead of 16
-        # https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/4975
-        if formatName == 'VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK' or formatName == 'VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK':
-            self.allFormats[formatName]['blockSize'] = 16
-
         if elem.get('blockExtent'):
             self.allFormats[formatName]['blockExtent'] = elem.get('blockExtent')
 
@@ -320,7 +314,7 @@ struct FORMAT_INFO {
 namespace std {
 template <>
 struct hash<VkFormat> {
-    size_t operator()(VkFormat fmt) const NOEXCEPT {
+    size_t operator()(VkFormat fmt) const noexcept {
         return hash<uint32_t>()(static_cast<uint32_t>(fmt));
     }
 };

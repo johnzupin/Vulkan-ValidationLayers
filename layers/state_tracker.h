@@ -437,7 +437,7 @@ class ValidationStateTracker : public ValidationObject {
         if (found_it == map.end()) {
             return nullptr;
         }
-        return std::move(found_it->second);
+        return found_it->second;
     };
 
     std::shared_ptr<BUFFER_STATE> GetBufferByAddress(VkDeviceAddress address) {
@@ -469,23 +469,6 @@ class ValidationStateTracker : public ValidationObject {
             result.push_back(entry.first);
         }
         return result;
-    }
-
-    using CommandBufferResetCallback = std::function<void(VkCommandBuffer)>;
-    template <typename Fn>
-    void SetCommandBufferResetCallback(Fn&& fn) {
-        command_buffer_reset_callback.reset(new CommandBufferResetCallback(std::forward<Fn>(fn)));
-    }
-
-    using CommandBufferFreeCallback = std::function<void(VkCommandBuffer)>;
-    template <typename Fn>
-    void SetCommandBufferFreeCallback(Fn&& fn) {
-        command_buffer_free_callback.reset(new CommandBufferFreeCallback(std::forward<Fn>(fn)));
-    }
-
-    void ResetCommandBufferCallbacks() {
-        command_buffer_reset_callback.reset();
-        command_buffer_free_callback.reset();
     }
 
     using SetImageViewInitialLayoutCallback = std::function<void(CMD_BUFFER_STATE*, const IMAGE_VIEW_STATE&, VkImageLayout)>;
@@ -600,7 +583,10 @@ class ValidationStateTracker : public ValidationObject {
                                                      const VkImportSemaphoreWin32HandleInfoKHR* pImportSemaphoreWin32HandleInfo,
                                                      VkResult result) override;
 #endif  // VK_USE_PLATFORM_WIN32_KHR
+    void PreCallRecordSignalSemaphoreKHR(VkDevice device, const VkSemaphoreSignalInfo* pSignalInfo) override;
+    void PreCallRecordSignalSemaphore(VkDevice device, const VkSemaphoreSignalInfo* pSignalInfo) override;
     void PostCallRecordSignalSemaphoreKHR(VkDevice device, const VkSemaphoreSignalInfo* pSignalInfo, VkResult result) override;
+    void PostCallRecordSignalSemaphore(VkDevice device, const VkSemaphoreSignalInfo* pSignalInfo, VkResult result) override;
 
     // Create/Destroy/Bind
     void PostCallRecordBindAccelerationStructureMemoryNV(VkDevice device, uint32_t bindInfoCount,
@@ -836,15 +822,16 @@ class ValidationStateTracker : public ValidationObject {
     void PreCallRecordBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo) override;
     void PostCallRecordDeviceWaitIdle(VkDevice device, VkResult result) override;
     void PostCallRecordEndCommandBuffer(VkCommandBuffer commandBuffer, VkResult result) override;
-    void PostCallRecordQueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence,
-                                       VkResult result) override;
+    void PreCallRecordQueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo,
+                                      VkFence fence) override;
     void PostCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo, VkResult result) override;
-    void PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence,
-                                   VkResult result) override;
+    void PreCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) override;
     void PostCallRecordQueueWaitIdle(VkQueue queue, VkResult result) override;
     void PreCallRecordSetEvent(VkDevice device, VkEvent event) override;
     void PostCallRecordWaitForFences(VkDevice device, uint32_t fenceCount, const VkFence* pFences, VkBool32 waitAll,
                                      uint64_t timeout, VkResult result) override;
+    void PreCallRecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) override;
+    void PreCallRecordWaitSemaphoresKHR(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) override;
     void PostCallRecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout,
                                       VkResult result) override;
     void PostCallRecordWaitSemaphoresKHR(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout,
@@ -1206,7 +1193,8 @@ class ValidationStateTracker : public ValidationObject {
     void RecordMappedMemory(VkDeviceMemory mem, VkDeviceSize offset, VkDeviceSize size, void** ppData);
     void RecordCmdEndRenderingRenderPassState(VkCommandBuffer commandBuffer);
     void RecordVulkanSurface(VkSurfaceKHR* pSurface);
-    void RecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout, VkResult result);
+    void PreRecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout);
+    void PostRecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout, VkResult result);
     void RecordGetSemaphoreCounterValue(VkDevice device, VkSemaphore semaphore, uint64_t* pValue, VkResult result);
     void UpdateBindBufferMemoryState(VkBuffer buffer, VkDeviceMemory mem, VkDeviceSize memoryOffset);
     void UpdateBindImageMemoryState(const VkBindImageMemoryInfo& bindInfo);
@@ -1301,11 +1289,10 @@ class ValidationStateTracker : public ValidationObject {
                                              uint32_t query) override;
     void PostCallRecordCmdWriteTimestamp2(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkQueryPool queryPool,
                                           uint32_t query) override;
-    void RecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR* pSubmits, VkFence fence, VkResult result);
-    void PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR* pSubmits, VkFence fence,
-                                       VkResult result) override;
-    void PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence,
-                                    VkResult result) override;
+    void RecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR* pSubmits, VkFence fence);
+    void PreCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR* pSubmits,
+                                      VkFence fence) override;
+    void PreCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence) override;
 
     void RecordGetBufferDeviceAddress(const VkBufferDeviceAddressInfo* pInfo, VkDeviceAddress address);
     void PostCallRecordGetBufferDeviceAddress(VkDevice device, const VkBufferDeviceAddressInfo* pInfo,
@@ -1348,8 +1335,6 @@ class ValidationStateTracker : public ValidationObject {
     // Link for derived device objects back to their parent instance object
     ValidationStateTracker* instance_state;
 
-    std::unique_ptr<CommandBufferResetCallback> command_buffer_reset_callback;
-    std::unique_ptr<CommandBufferFreeCallback> command_buffer_free_callback;
     std::unique_ptr<SetImageViewInitialLayoutCallback> set_image_view_initial_layout_callback;
 
     DeviceFeatures enabled_features = {};

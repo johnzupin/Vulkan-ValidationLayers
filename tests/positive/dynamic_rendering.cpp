@@ -54,8 +54,7 @@ TEST_F(VkPositiveLayerTest, DynamicRenderingDraw) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -133,8 +132,7 @@ TEST_F(VkPositiveLayerTest, DynamicRenderingDrawMultiBind) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -207,77 +205,11 @@ TEST_F(VkPositiveLayerTest, DynamicRenderingDrawMultiBind) {
     m_commandBuffer->EndRendering();
 
     m_commandBuffer->BeginRendering(begin_rendering_info);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe2.handle());
+    // NOTE: Setting dynamic state does not count as "using" the currently bound pipeline.
     vk::CmdSetViewport(m_commandBuffer->handle(), 0, 1, &viewport);
     vk::CmdSetScissor(m_commandBuffer->handle(), 0, 1, &scissor);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe2.handle());
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
-    m_commandBuffer->EndRendering();
-    m_commandBuffer->end();
-}
-
-TEST_F(VkPositiveLayerTest, CmdClearAttachmentTestsDynamicRendering) {
-    TEST_DESCRIPTION("Various tests for validating usage of vkCmdClearAttachments with Dynamic Rendering");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
-        return;
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-
-    m_commandBuffer->begin();
-
-    // Main thing we care about for this test is that the VkImage obj we're
-    // clearing matches Color Attachment of FB
-    //  Also pass down other dummy params to keep driver and paramchecker happy
-    VkClearAttachment color_attachment;
-    color_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    color_attachment.clearValue.color.float32[0] = 1.0;
-    color_attachment.clearValue.color.float32[1] = 1.0;
-    color_attachment.clearValue.color.float32[2] = 1.0;
-    color_attachment.clearValue.color.float32[3] = 1.0;
-    color_attachment.colorAttachment = 0;
-    VkClearRect clear_rect = {{{0, 0}, {(uint32_t)m_width, (uint32_t)m_height}}, 0, 1};
-
-    clear_rect.rect.extent.width = renderPassBeginInfo().renderArea.extent.width + 4;
-    clear_rect.rect.extent.height = clear_rect.rect.extent.height / 2;
-
-    VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
-    begin_rendering_info.renderArea = clear_rect.rect;
-    begin_rendering_info.layerCount = 1;
-    m_commandBuffer->BeginRendering(begin_rendering_info);
-    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &color_attachment, 1, &clear_rect);
-
-    // baseLayer >= view layers
-    clear_rect.rect.extent.width = (uint32_t)m_width;
-    clear_rect.baseArrayLayer = 1;
-    clear_rect.layerCount = 1;
-    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &color_attachment, 1, &clear_rect);
-
-    // baseLayer + layerCount > view layers
-    clear_rect.rect.extent.width = (uint32_t)m_width;
-    clear_rect.baseArrayLayer = 0;
-    clear_rect.layerCount = 2;
-    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &color_attachment, 1, &clear_rect);
-
     m_commandBuffer->EndRendering();
     m_commandBuffer->end();
 }
@@ -294,8 +226,7 @@ TEST_F(VkPositiveLayerTest, TestBeginQueryInDynamicRendering) {
     }
 
     auto vk13features = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&vk13features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(vk13features);
     if (!vk13features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering, skipping\n", kSkipPrefix);
         return;
@@ -353,8 +284,7 @@ TEST_F(VkPositiveLayerTest, DynamicRenderingPipeWithDiscard) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -418,8 +348,7 @@ TEST_F(VkPositiveLayerTest, UseStencilAttachmentWithIntegerFormatAndDepthStencil
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -435,7 +364,7 @@ TEST_F(VkPositiveLayerTest, UseStencilAttachmentWithIntegerFormatAndDepthStencil
 
     auto depth_stencil_resolve_properties = LvlInitStruct<VkPhysicalDeviceDepthStencilResolveProperties>();
     auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&depth_stencil_resolve_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &properties2);
+    GetPhysicalDeviceProperties2(properties2);
     if (depth_stencil_resolve_properties.supportedStencilResolveModes & VK_RESOLVE_MODE_AVERAGE_BIT) {
         printf("%s VK_RESOLVE_MODE_AVERAGE_BIT not supported for VK_FORMAT_S8_UINT, skipping test.\n", kSkipPrefix);
         return;
@@ -489,8 +418,7 @@ TEST_F(VkPositiveLayerTest, DynamicRenderingFragmentDensityMapSubsampledBit) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -556,8 +484,7 @@ TEST_F(VkPositiveLayerTest, DynamicRenderingSuspendResumeDraw) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering , skipping";
     }
