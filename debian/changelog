@@ -1,3 +1,546 @@
+vulkan-validationlayers (1.3.231.0~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ sjfricke ]
+  * layers: Add runtime SPIRV 8/16bit features
+  * tests: Add runtime SPIRV 8/16bit feature
+  * layers: Rerun spec const fold pass temporarily
+
+  [ John Zulauf ]
+  * syncval: Add queue submit apply barriers support
+
+  [ Tony-LunarG ]
+  * tests: Fix depth image usage if no fsr
+
+  [ Richard S. Wright Jr ]
+  * Corrected path for macOS layer path location.
+
+  [ Tony-LunarG ]
+  * gpu: Fix new VMA by supplying Get*ProcAddr
+
+  [ sjfricke ]
+  * tests: Use new GetPhysicalDevice helpers
+
+  [ Shahbaz Youssefi ]
+  * build: Disable -Wnullability-completeness for VMA
+
+  [ sjfricke ]
+  * layers: Use helper for CooperativeMatrix
+
+  [ Mark Young ]
+  * layers: Fix hangs in NV best practices
+
+  [ Rodrigo Locatti ]
+  * layers: Add vendor check in ClearDepthStencilImage
+
+  [ Tony-LunarG ]
+  * gpu: Use current renderpass for pre-draw pipeline
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.225
+
+  [ sjfricke ]
+  * layers: Remove todo and code workaround
+
+  [ Nathaniel Cesario ]
+  * layers: Add zero-size alloc case
+  * tests: Fix AHB tests
+
+  [ sjfricke ]
+  * tests: Better use of GetPhysicalDeviceFeatures2
+  * layers: Handle OpTypeBool in structs
+
+  [ Mark Young ]
+  * tests: Fix ValidateImportMemoryHandleType test on Nvidia laptop
+  * revert "tests: Fix ValidateImportMemoryHandleType test..."
+
+  [ Yuly Novikov ]
+  * build: Fix BUILD.gn
+
+  [ Tony-LunarG ]
+  * layers: Add compatibility for attachment_feedback_loop_layout
+  * layers: Add checks for VK_EXT_attachment_feedback_loop_layout
+  * tests: Add tests for VK_EXT_attachment_feedback_loop_layout
+
+  [ sjfricke ]
+  * docs: Add new gpu_shader instructions
+
+  [ Tony-LunarG ]
+  * tests: Fix ShaderModuleIdentifier
+
+  [ sjfricke ]
+  * layers: Refactor PreCallValidateCreateDescriptorSetLayout
+
+  [ John Zulauf ]
+  * syncval: Add QueueSubmit2 support
+  * tests: Refactor SyncQSBufferCopyHazards
+  * tests: Add Submit2 SyncVal ULT
+
+  [ paul-lunarg ]
+  * layers: Fix one-time-submit
+  * tests: Add test in OneTimeSubmit
+
+  [ Mark Young ]
+  * layers: Update renderpass layout VUIDs
+  * tests: Update tests for renderpass VUIDs
+
+  [ ziga-lunarg ]
+  * layers: Fix queries with multiview render pass
+  * tests: Test queries in a render pass with multiview
+
+  [ Rodrigo Locatti ]
+  * layers: Fix VK_REMAINING_* on Z-Cull tracking
+  * tests: Add tests for VK_REMAINING_*
+
+  [ Shahbaz Youssefi ]
+  * layers: Fix for VK_EXT_rasterization_order_attachment_access
+
+  [ sjfricke ]
+  * layers: Generate SPIR-V storage class strings
+  * layers: Handle PhysicalStorageBuffer to itself
+
+  [ arno-lunarg ]
+  * tests: Change physDevProps return type
+
+  [ sjfricke ]
+  * layers: Rebuild static data with group decoration
+
+  [ Bob Ellison ]
+  * docs: fix default value of report_flags
+
+  [ arno ]
+  * tests: Fix API version validation
+
+  [ arno-lunarg ]
+  * tests: Switch to GTEST_SKIP()
+  * tests: Fix VkRenderFramework::IsPlatform()
+
+  [ sjfricke ]
+  * layers: Add format_feature_2 wrapper around buffer views
+  * tests: Add single entry for VkGpuAssistedLayerTest
+  * layers: Refactor StorageImageFormat tests
+
+  [ Tony-LunarG ]
+  * layers: Fix ms render to single sampled "enabled"
+
+  [ sjfricke ]
+  * layers: Collapse redundant if statment
+  * layers: Fix VUID 01586 format check
+
+  [ paul-lunarg ]
+  * tests: Remove double unexpected messages
+  * tests: Fix IndirectDrawTests
+  * tests: Fix core errors in best practices
+  * tests: Fix SwapchainCreationTest
+  * tests: Fix tests
+  * tests: Fix tests
+  * tests: Fix Arm BP tests
+  * tests: Fix Amd BP tests
+  * tests: Fix compilation warnings
+  * tests: Fix CI
+  * tests: VK_LAYER_TESTS_VALIDATION_FEATURES env var
+  * tests: Fix vuid check crash
+  * tests: Fix CheckDisableCoreValidation
+  * tests: Fix Amd BP tests
+  * tests: Fix SetupValidationSettings
+  * tests: Fix double error messages
+  * tests: Fix AMD BP tests
+  * tests: Fix GpuValidationArrayOOBRayTracingShaders
+  * tests: Fix MeshTaskShadersPrintf
+  * tests: Fix SyncVal tests
+  * tests: Remove AllowedFailureMsg
+  * tests: Remove comment
+  * tests: Fix SyncCmdDrawDepthStencil
+  * tests: Fixes
+  * tests: Fix SetupValidationSettings
+  * tests: Apply ncesario's fix
+  * tests: Fix RenderPassAsyncHazard
+  * tests: Fix SyncVal tests
+  * tests: Fix more leaks!
+  * tests: Add comments
+  * tests: Fix SetupValidationSettings
+  * tests: Fix SetupValidationSettings
+
+  [ John Zulauf ]
+  * syncval: Fix ILT hazard rules across queues
+
+  [ paul-lunarg ]
+  * tests: Fix unexpected errors not failing tests
+
+  [ Tony-LunarG ]
+  * layers: Remove bad msrtss validation with imageless framebuffers
+  * layers: Use results from RPLayoutAgainstFramebufferImageUsage
+  * layers: Add validation for vuids 07009 and 07010
+  * tests: Add tests for 07009 and 07010
+  * layers: Cache results from GetPhysicalDeviceImageFormatProps
+
+  [ paul-lunarg ]
+  * tests: Add test LoadDeprecatedExtension
+  * tests: Fix LoadDeprecatedExtension
+  * layers: Fix deprecated device extension warning
+  * layers: Fix ValidateDeprecatedExtensions
+  * layers: Compare with min instance/device api version
+
+  [ arno-lunarg ]
+  * build: Fix deprecated CMAKE_COMPILER_IS_GNUCC
+
+  [ sjfricke ]
+  * tests: Fix tests failing on pixel 6
+
+  [ Karl Schultz ]
+  * build: Improve GitHub Actions caching
+
+  [ arno-lunarg ]
+  * layers: Fix copy elision prevention
+  * scripts: Fix copy elision prevention
+
+  [ sjfricke ]
+  * layers: Improve objects reported in shader val messages
+  * layers: Fix error message for kQueueErrorSummary
+
+  [ Mike Schuchardt ]
+  * tests: Fix layer/extension enumeration
+
+  [ paul-lunarg ]
+  * layers: Add check for VK_REMAINING_ARRAY_LAYERS
+  * tests: Add CopyImageRemainingLayers
+
+  [ Brad Smith ]
+  * layers: Add support for OpenBSD
+
+  [ paul-lunarg ]
+  * layers: Change VUIDs for VkImageViewCreateInfo
+  * tests: Change test VUIDs
+
+  [ John Zulauf ]
+  * syncval: Hazard usage message cleanup
+  * syncval: Fix SYNC-HAZARD naming to be consistent
+  * syncval: Fixes to Barrier Hazard logic
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.226
+  * layers: Update VUID 04593
+
+  [ arno-lunarg ]
+  * layers: Fix IsValidOrSpecial(queue_family)
+
+  [ Tony-LunarG ]
+  * gpu: Fix pre draw save/restore
+
+  [ Brad Smith ]
+  * build: Also include XCB header path
+
+  [ arno-lunarg ]
+  * tests: Update test case
+  * scripts: Add VUID exception
+  * layers: Custom VUID check for CmdBindVertexBuffers
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Headers and -Tools for SPV_EXT_mesh_shader
+
+  [ arno-lunarg ]
+  * tests: Fix forgotten param pLayerName
+
+  [ paul-lunarg ]
+  * layers: Fix ForEachSubresource
+  * tests: Change BindPipeline_ZcullDirection
+
+  [ ziga-lunarg ]
+  * layers: Fix checking buffer view format support
+  * tests: Update storage buffer test with unknown format
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.227
+
+  [ paul-lunarg ]
+  * layers: Fix StoreOpDontCareThenLoadOpLoad
+  * layers: Add check for VUID 02686
+  * tests: Rework SubpassInputNotBoundDescriptorSet
+  * layers: Remove outdated comment
+  * layers: Improve message with input attachment index
+  * layers: Add error to enums
+
+  [ sjfricke ]
+  * layers: Rename misleading shader_module variables
+  * layers: Generate ExecutionModel string util
+
+  [ Tony-LunarG ]
+  * layers: Update VUIDs for msrtss
+  * tests: Add tests for new VUIDs for msrtss
+  * layers: Remove duplicate draw VUID init
+
+  [ paul-lunarg ]
+  * tests: Add ExclusiveImageMultiQueueUsage
+  * layers: Add last_queue_family to bp image state
+  * layers: Add queue family to usages
+  * tests: Add test with correct queue transfer
+  * layers: Add check without ownership transfer
+  * layers: Add ImageBarrierInQueue validation
+  * layers: Remove unused capture
+  * tests: Remove unused variable
+  * layers: Change UpdateUsage and PR comments
+  * layers: Use correct attachment storage for imageless
+
+  [ sjfricke ]
+  * layers: Add OpImageWrite component count check
+  * tests: Add OpImageWrite component count check
+
+  [ arno-lunarg ]
+  * layers: Fix for VUID physicalDeviceCount
+  * tests: Fix InvalidImageSplitInstanceBindRegion
+  * tests: Add swapchain flags test cases
+  * layers: Fix for VUID 03187
+  * tests: Fix api version dependency for instance ext
+  * tests: Fix required extension
+
+  [ Jeremy Gebben ]
+  * threading: Use a better thread id
+
+  [ ziga-lunarg ]
+  * layers: Fix checking zero initialize workgroup feature
+  * tests: Test enabling zero initialize feature
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.228
+  * layers: Rename VK_VALVE_mutable_descriptor_type
+
+  [ Hans-Kristian Arntzen ]
+  * layers: Fix check for dynamic rendering attachment format use
+
+  [ Jeremy Gebben ]
+  * layers: Remove vk_loader_platform.h
+
+  [ ziga-lunarg ]
+  * layers: Fix multiview fragment shading rate attachment
+  * tests: Test fragment shading rate attachment
+
+  [ paul-lunarg ]
+  * layers: Rework VUID 02686
+
+  [ sjfricke ]
+  * layers: Calculate OpTypeBool as 32-bit ints for limits
+
+  [ paul-lunarg ]
+  * tests: Add DynamicNullDepthStencilExecuteCommands
+  * layers: Modify messages that weren't adapted to dynamic
+  * layers: Add check for 06774 and 06775
+
+  [ Tony-LunarG ]
+  * layers: Add feature checks for feedback_loop_layout
+  * tests: Add feature tests for feedback_loop_layout
+
+  [ ziga-lunarg ]
+  * layers: Fix checking pipelineCreationCacheControl feature
+  * tests: Test using pipelineCacheControlFeature
+
+  [ paul-lunarg ]
+  * layers: Add check to avoid crash in CTS
+
+  [ Jeremy Gebben ]
+  * layers: Fix check for QUERYSTATE_AVAILABLE state changes
+  * tests: Restore VkLayerTest.Query* tests
+  * layers: Fix CB locking during query callback functions
+
+  [ ziga-lunarg ]
+  * layers: Fix advanced blend attachments check
+
+  [ paul-lunarg ]
+  * layers: Fix validated not being cleared
+  * layers: Remove validated_descriptor_sets
+
+  [ ziga-lunarg ]
+  * tests: Fix pipeline cache control test
+
+  [ Ricardo Garcia ]
+  * layers: Save multisample state if render pass is not null
+
+  [ Jeremy Gebben ]
+  * tests: Add VkPositiveLayerTest.SubmitFenceButWaitIdle
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.229
+
+  [ sjfricke ]
+  * tests: Fix DeviceCoherentMemoryDisabledAMD
+
+  [ Jeremy Gebben ]
+  * layers: Fix FENCE_STATE::Reset()
+  * stateless: Add more external Semaphore and Fence VUIDs
+  * core: Add more external Semaphore and Fence VUIDs
+  * tests: Improve coverage of external Semaphores and Fences
+
+  [ John Zulauf ]
+  * syncval: Reduce long term memory use growth
+  * syncval: Add range_map consolidation to Trim ops
+  * tests: Add grey box testing for trim/consolidation
+  * syncval: Add batch trimming to Wait/Fence ops
+
+  [ sjfricke ]
+  * layers: Label RP1 version of Attachment Ref VU
+
+  [ Nathaniel Cesario ]
+  * layers: Fix Windows build
+
+  [ ziga-lunarg ]
+  * layers: Fix getting ray tracing shader group count
+
+  [ Ricardo Garcia ]
+  * layers: Fix spurious indexed query validation error
+
+  [ arno-lunarg ]
+  * tests: Add test EnumeratePhysicalDeviceGroups
+  * git: Update .gitignore
+  * scripts: Device groups were mismanaged
+  * layers: Track devices coming from groups
+
+  [ Tony-LunarG ]
+  * practices: Fix crash with no rasterization state
+
+  [ Shahbaz Youssefi ]
+  * layers: Don't auto-validate SPIR-V after optimization
+
+  [ paul-lunarg ]
+  * layers: Add null check for descriptor sets
+
+  [ Jeremy Gebben ]
+  * tests: Fix semaphore signal race conditions
+  * layers: Add state tracker PostCallRecordSignalSemaphore
+  * layers: Fix vkQueueBindSparse with timeline semaphores
+  * layers: Make layer_data::optional::emplace match std
+  * layers: Use a thread for QUEUE_STATE submission processing
+  * tests: Add multiple timeline semaphore waiters test
+
+  [ arno-lunarg ]
+  * tests: Add DynamicRenderingClearAttachments
+  * layers: Rework PreCallValidateCmdClearAttachments
+  * tests: Update clear cmd VUIDs
+  * tests: Update cleared rects VUID
+  * tests: Fix CmdClearAttachmentTestsDynamicRendering
+  * layers: Change %u formating to PRIu32
+  * tests: Move CmdClearAttachmentTestsDynamicRendering
+
+  [ Juan Ramos ]
+  * git: Ignore CMakerUserPresets.json
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.230
+  * layers: Tweak previously bound memory validation
+  * layers: Clean up commented-out UNASSIGNED IDs
+
+  [ Juan Ramos ]
+  * build: Fix Wayland CMake warnings
+  * build: Minor build fixes
+
+  [ sjfricke ]
+  * layers: Add Linear Mipmap format feature VU
+  * tests: Add Linear Mipmap format feature VU
+
+  [ Tony-LunarG ]
+  * layers: Fix layers and tests to use new copy VUIDs
+
+  [ sjfricke ]
+  * tests: Fix test group and whitespace
+  * layers: Fix false sampler unnormalized coordinates
+
+  [ arno-lunarg ]
+  * layers: Fix color attachment index handling
+  * tests: Add test case
+
+  [ Nathaniel Cesario ]
+  * build: Update glslang for mesh shader extension
+  * build: Run clang-format on known-good.json files
+
+  [ Juan Ramos ]
+  * build: Use GoogleTest CMake Module
+
+  [ Jeremy Gebben ]
+  * tests: Use standard timeout in ExternalFenceSyncFdLoop
+
+  [ Shahbaz Youssefi ]
+  * layers: Disable friendly names in SPIR-V validation
+
+  [ Eric Werness ]
+  * layers: VK_EXT_opacity_micromap
+
+  [ John Zulauf ]
+  * syncval: Remove an unneeded pointer reference
+  * syncval: Rework async hazard check range bounds
+
+  [ Juan Ramos ]
+  * layers: Update xxhash to 0.8.1
+
+  [ ziga-lunarg ]
+  * layers: Fix null descriptor set crash
+
+  [ Juan Ramos ]
+  * build: Fix xxhash build issues
+
+  [ Ricardo Garcia ]
+  * layers: Fix typo in graphics pipeline library VUID error msg
+
+  [ Juan Ramos ]
+  * build: Propogate XXH_NO_LONG_LONG correctly
+
+  [ Jeremy Gebben ]
+  * syncval: Use subclassed CMD_BUFFER_STATE
+  * syncval: Replace GetAccessContext() with Get<>()
+
+  [ sjfricke ]
+  * scripts: Move CompatibleSpirvImageFormat
+
+  [ Nathaniel Cesario ]
+  * tests: Fix glslang target env
+
+  [ arno-lunarg ]
+  * tests: Add secondary cmd buffer test case
+  * layers: Fix for secondary cmd buffer
+
+  [ Nathaniel Cesario ]
+  * layers: Fix integer overflow bug
+  * layers: Add std::numeric_limits helper
+  * tests: Test integer overflow for VkRect2D
+
+  [ Juan Ramos ]
+  * build: CMake cleanup
+
+  [ Tony-LunarG ]
+  * layers: Add validation for pipeline_protected_access
+  * tests: Add test for pipeline_protected_access
+
+  [ Juan Ramos ]
+  * ci: Use MACOS_DEPLOYMENT_TARGET
+  * cmake: Remove implict ccache/compile_commands.json
+
+  [ Jeremy Gebben ]
+  * syncval: Fix copy/paste error in PreCallRecordCmdExecuteCommands
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.231
+
+  [ Jeremy Gebben ]
+  * layers: Fix a vkQueueSubmit()/vkQueueWaitIdle() race
+
+  [ Juan Ramos ]
+  * cmake: Fix spirv dependency
+
+  [ Jeremy Gebben ]
+  * layers: Fix host side timeline semaphore operation handling
+  * tests: Improve TimelineSemThreadRace tests
+
+  [ John Bauman ]
+  * layers: Validate VK_FUCHSIA_external_semaphore
+
+  [ Juan Ramos ]
+  * docs: Improve BUILD.md
+
+  [ spencer-lunarg ]
+  * layers: Fix VUID name for vkCmdDrawIndexedIndirect offset
+  * tests: Add VUID-vkCmdDrawIndexedIndirect-offset-02710
+
+  [ John Zupin ]
+  * packaging: update deps rev
+
+ -- john <john@odin>  Tue, 18 Oct 2022 11:45:14 -0600
+
 vulkan-validationlayers (1.3.224.0~rc6-1lunarg20.04-1) focal; urgency=medium
 
   [ paul-lunarg ]
