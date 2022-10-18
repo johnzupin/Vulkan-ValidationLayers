@@ -95,7 +95,7 @@ class VkDeviceObj : public vk_testing::Device {
 class ErrorMonitor {
   public:
     ErrorMonitor();
-    ~ErrorMonitor() NOEXCEPT;
+    ~ErrorMonitor() noexcept;
 
     // Set monitor to pristine state
     void Reset();
@@ -164,8 +164,8 @@ class ErrorMonitor {
 };
 
 struct DebugReporter {
-    void Create(VkInstance instance) NOEXCEPT;
-    void Destroy(VkInstance instance) NOEXCEPT;
+    void Create(VkInstance instance) noexcept;
+    void Destroy(VkInstance instance) noexcept;
 
     ErrorMonitor error_monitor_;
 
@@ -245,7 +245,7 @@ class VkRenderFramework : public VkTestFramework {
     const VkRenderPassCreateInfo &RenderPassInfo() const { return m_renderPass_info; };
     VkFramebuffer framebuffer() { return m_framebuffer; }
     ErrorMonitor &Monitor();
-    VkPhysicalDeviceProperties physDevProps();
+    const VkPhysicalDeviceProperties &physDevProps();
 
     bool InstanceLayerSupported(const char *layer_name, uint32_t spec_version = 0, uint32_t impl_version = 0);
     bool InstanceExtensionSupported(const char *extension_name, uint32_t spec_version = 0);
@@ -306,6 +306,8 @@ class VkRenderFramework : public VkTestFramework {
     // if requested extensions are not supported, helper function to get string to print out
     std::string RequiredExtensionsNotSupported() const;
 
+    void *SetupValidationSettings(void *first_pnext);
+
     template <typename GLSLContainer>
     std::vector<uint32_t> GLSLToSPV(VkShaderStageFlagBits stage, const GLSLContainer &code, const char *entry_point = "main",
                                     const VkSpecializationInfo *spec_info = nullptr, const spv_target_env env = SPV_ENV_VULKAN_1_0,
@@ -337,7 +339,7 @@ class VkRenderFramework : public VkTestFramework {
     VkDeviceObj *m_device;
     VkCommandPoolObj *m_commandPool;
     VkCommandBufferObj *m_commandBuffer;
-    VkRenderPass m_renderPass;
+    VkRenderPass m_renderPass = VK_NULL_HANDLE;
     VkRenderPassCreateInfo m_renderPass_info = {};
     std::vector<VkAttachmentDescription> m_renderPass_attachments;
     std::vector<VkSubpassDescription> m_renderPass_subpasses;
@@ -395,6 +397,13 @@ class VkRenderFramework : public VkTestFramework {
     std::vector<const char *> m_optional_extensions;
     // Device extensions to enable
     std::vector<const char *> m_device_extension_names;
+
+    VkValidationFeaturesEXT validation_features;
+    VkValidationFeatureEnableEXT validation_enable_all[4] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+                                                             VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+                                                             VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
+                                                             VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
+    VkValidationFeatureDisableEXT validation_disable_all = VK_VALIDATION_FEATURE_DISABLE_ALL_EXT;
 
   private:
     // Add ext_name, the names of all instance extensions required by ext_name, and return true if ext_name is supported. If the
@@ -663,8 +672,8 @@ class VkDescriptorSetLayoutObj : public vk_testing::DescriptorSetLayout {
                              VkDescriptorSetLayoutCreateFlags flags = 0, void *pNext = NULL);
 
     // Move constructor and move assignment operator for Visual Studio 2013
-    VkDescriptorSetLayoutObj(VkDescriptorSetLayoutObj &&src) NOEXCEPT : DescriptorSetLayout(std::move(src)){};
-    VkDescriptorSetLayoutObj &operator=(VkDescriptorSetLayoutObj &&src) NOEXCEPT {
+    VkDescriptorSetLayoutObj(VkDescriptorSetLayoutObj &&src) noexcept : DescriptorSetLayout(std::move(src)){};
+    VkDescriptorSetLayoutObj &operator=(VkDescriptorSetLayoutObj &&src) noexcept {
         DescriptorSetLayout::operator=(std::move(src));
         return *this;
     }
@@ -673,7 +682,7 @@ class VkDescriptorSetLayoutObj : public vk_testing::DescriptorSetLayout {
 class VkDescriptorSetObj : public vk_testing::DescriptorPool {
   public:
     VkDescriptorSetObj(VkDeviceObj *device);
-    ~VkDescriptorSetObj() NOEXCEPT;
+    ~VkDescriptorSetObj() noexcept;
 
     int AppendDummy();
     int AppendBuffer(VkDescriptorType type, VkConstantBufferObj &constantBuffer);
@@ -754,6 +763,9 @@ class VkShaderObj : public vk_testing::ShaderModule {
                 case SPV_ENV_UNIVERSAL_1_5:
                     language_version = glslang::EShTargetSpv_1_5;
                     break;
+                case SPV_ENV_UNIVERSAL_1_6:
+                    language_version = glslang::EShTargetSpv_1_6;
+                    break;
                 case SPV_ENV_VULKAN_1_0:
                     client_version = glslang::EShTargetVulkan_1_0;
                     break;
@@ -765,7 +777,12 @@ class VkShaderObj : public vk_testing::ShaderModule {
                     client_version = glslang::EShTargetVulkan_1_2;
                     language_version = glslang::EShTargetSpv_1_5;
                     break;
+                case SPV_ENV_VULKAN_1_3:
+                    client_version = glslang::EShTargetVulkan_1_3;
+                    language_version = glslang::EShTargetSpv_1_6;
+                    break;
                 default:
+                    assert(false && "Invalid SPIR-V environment");
                     break;
             }
         }
@@ -800,8 +817,8 @@ class VkPipelineLayoutObj : public vk_testing::PipelineLayout {
                         VkPipelineLayoutCreateFlags flags = static_cast<VkPipelineLayoutCreateFlags>(0));
 
     // Move constructor and move assignment operator for Visual Studio 2013
-    VkPipelineLayoutObj(VkPipelineLayoutObj &&src) NOEXCEPT : PipelineLayout(std::move(src)) {}
-    VkPipelineLayoutObj &operator=(VkPipelineLayoutObj &&src) NOEXCEPT {
+    VkPipelineLayoutObj(VkPipelineLayoutObj &&src) noexcept : PipelineLayout(std::move(src)) {}
+    VkPipelineLayoutObj &operator=(VkPipelineLayoutObj &&src) noexcept {
         PipelineLayout::operator=(std::move(src));
         return *this;
     }

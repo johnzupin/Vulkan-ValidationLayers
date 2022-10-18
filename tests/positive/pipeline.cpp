@@ -44,12 +44,12 @@
 TEST_F(VkPositiveLayerTest, ViewportWithCountNoMultiViewport) {
     TEST_DESCRIPTION("DynamicViewportWithCount/ScissorWithCount without multiViewport feature not enabled.");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_1);
-    if (version < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_1);
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
     if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
         m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     } else {
@@ -58,8 +58,7 @@ TEST_F(VkPositiveLayerTest, ViewportWithCountNoMultiViewport) {
     }
 
     auto extended_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&extended_dynamic_state_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(extended_dynamic_state_features);
     if (!extended_dynamic_state_features.extendedDynamicState) {
         printf("%s Test requires (unsupported) extendedDynamicState, skipping\n", kSkipPrefix);
         return;
@@ -315,8 +314,7 @@ TEST_F(VkPositiveLayerTest, CreatePipelineRelaxedTypeMatch) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " required but not supported";
     }
     auto maint4features = LvlInitStruct<VkPhysicalDeviceMaintenance4FeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&maint4features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(maint4features);
     if (!maint4features.maintenance4) {
         GTEST_SKIP() << "VkPhysicalDeviceMaintenance4FeaturesKHR::maintenance4 is required but not enabled.";
     }
@@ -839,6 +837,18 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
         1.0f   // lineWidth
     };
 
+    const VkPipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info{
+        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        nullptr,  // pNext
+        0,        // flags
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_FALSE,  // sample shading
+        0.0f,      // minSampleShading
+        nullptr,   // pSampleMask
+        VK_FALSE,  // alphaToCoverageEnable
+        VK_FALSE   // alphaToOneEnable
+    };
+
     vk_testing::PipelineLayout pipeline_layout;
     {
         VkPipelineLayoutCreateInfo pipeline_layout_create_info{
@@ -871,7 +881,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
             reinterpret_cast<const VkPipelineTessellationStateCreateInfo *>(hopefully_undereferencable_pointer),
             reinterpret_cast<const VkPipelineViewportStateCreateInfo *>(hopefully_undereferencable_pointer),
             &pipeline_rasterization_state_create_info,
-            reinterpret_cast<const VkPipelineMultisampleStateCreateInfo *>(hopefully_undereferencable_pointer),
+            &pipeline_multisample_state_create_info,
             reinterpret_cast<const VkPipelineDepthStencilStateCreateInfo *>(hopefully_undereferencable_pointer),
             reinterpret_cast<const VkPipelineColorBlendStateCreateInfo *>(hopefully_undereferencable_pointer),
             nullptr,  // dynamic states
@@ -886,18 +896,6 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
         m_commandBuffer->begin();
         vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
     }
-
-    const VkPipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info{
-        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        nullptr,  // pNext
-        0,        // flags
-        VK_SAMPLE_COUNT_1_BIT,
-        VK_FALSE,  // sample shading
-        0.0f,      // minSampleShading
-        nullptr,   // pSampleMask
-        VK_FALSE,  // alphaToCoverageEnable
-        VK_FALSE   // alphaToOneEnable
-    };
 
     // try enabled rasterizer but no subpass attachments
     {
@@ -1741,16 +1739,12 @@ TEST_F(VkPositiveLayerTest, PipelineStageConditionalRendering) {
     }
     m_device_extension_names.push_back(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
 
-    auto vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
     if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME)) {
         printf("%s requires %s.\n", kSkipPrefix, VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
         return;
     }
     auto cond_rendering_feature = LvlInitStruct<VkPhysicalDeviceConditionalRenderingFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&cond_rendering_feature);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(cond_rendering_feature);
     if (cond_rendering_feature.conditionalRendering == VK_FALSE) {
         printf("%s conditionalRendering feature not supported.\n", kSkipPrefix);
         return;
@@ -2314,13 +2308,8 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt8) {
         return;
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto float16int8_features = LvlInitStruct<VkPhysicalDeviceFloat16Int8FeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&float16int8_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(float16int8_features);
     if (float16int8_features.shaderInt8 == VK_FALSE) {
         printf("%s shaderInt8 feature not supported.\n", kSkipPrefix);
         return;
@@ -2386,12 +2375,8 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt16) {
     }
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    GetPhysicalDeviceFeatures2(features2);
     if (features2.features.shaderInt16 == VK_FALSE) {
         printf("%s shaderInt16 feature not supported.\n", kSkipPrefix);
         return;
@@ -2507,12 +2492,8 @@ TEST_F(VkPositiveLayerTest, CreatePipelineSpecializeInt64) {
     }
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    GetPhysicalDeviceFeatures2(features2);
     if (features2.features.shaderInt64 == VK_FALSE) {
         printf("%s shaderInt64 feature not supported.\n", kSkipPrefix);
         return;
@@ -2579,8 +2560,7 @@ TEST_F(VkPositiveLayerTest, SeparateDepthStencilSubresourceLayout) {
     }
 
     auto separate_features = LvlInitStruct<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&separate_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(separate_features);
     if (!separate_features.separateDepthStencilLayouts) {
         printf("separateDepthStencilLayouts feature not supported, skipping tests\n");
         return;
@@ -2960,14 +2940,8 @@ TEST_F(VkPositiveLayerTest, ProtectedAndUnprotectedQueue) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto protected_features = LvlInitStruct<VkPhysicalDeviceProtectedMemoryFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&protected_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    GetPhysicalDeviceFeatures2(protected_features);
     if (protected_features.protectedMemory == VK_FALSE) {
         printf("%s test requires protectedMemory, not available.  Skipping.\n", kSkipPrefix);
         return;
@@ -3197,12 +3171,9 @@ TEST_F(VkPositiveLayerTest, ShaderFloatControl) {
 TEST_F(VkPositiveLayerTest, Storage8and16bit) {
     TEST_DESCRIPTION("Test VK_KHR_8bit_storage and VK_KHR_16bit_storage");
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     bool support_8_bit = DeviceExtensionSupported(gpu(), nullptr, VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
@@ -3212,13 +3183,7 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
         printf("%s Extension %s and %s are not supported.\n", kSkipPrefix, VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
                VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
         return;
-    } else if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == false) {
-        // need for all shaders, but not guaranteed from driver to have support
-        printf("%s Extension %s is not supported.\n", kSkipPrefix, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
-        return;
     } else {
-        m_device_extension_names.push_back(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME);
         if (support_8_bit == true) {
             m_device_extension_names.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
         }
@@ -3227,15 +3192,10 @@ TEST_F(VkPositiveLayerTest, Storage8and16bit) {
         }
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto storage_8_bit_features = LvlInitStruct<VkPhysicalDevice8BitStorageFeaturesKHR>();
     auto storage_16_bit_features = LvlInitStruct<VkPhysicalDevice16BitStorageFeaturesKHR>(&storage_8_bit_features);
     auto float_16_int_8_features = LvlInitStruct<VkPhysicalDeviceShaderFloat16Int8Features>(&storage_16_bit_features);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&float_16_int_8_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(float_16_int_8_features);
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -3520,14 +3480,8 @@ TEST_F(VkPositiveLayerTest, ReadShaderClock) {
         return;
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto shader_clock_features = LvlInitStruct<VkPhysicalDeviceShaderClockFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&shader_clock_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(shader_clock_features);
     if ((shader_clock_features.shaderDeviceClock == VK_FALSE) && (shader_clock_features.shaderSubgroupClock == VK_FALSE)) {
         // shaderSubgroupClock should be supported, but extra check
         printf("%s no support for shaderDeviceClock or shaderSubgroupClock.\n", kSkipPrefix);
@@ -4194,26 +4148,21 @@ TEST_F(VkPositiveLayerTest, AndroidHardwareBufferExternalCameraFormat) {
 TEST_F(VkPositiveLayerTest, PhysicalStorageBuffer) {
     TEST_DESCRIPTION("Reproduces Github issue #2467 and effectively #2465 as well.");
 
-    app_info_.apiVersion = VK_API_VERSION_1_2;
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    std::vector<const char *> exts = {
-        "VK_KHR_shader_non_semantic_info",
-        "VK_EXT_scalar_block_layout",
-    };
-    for (const auto *ext : exts) {
-        if (DeviceExtensionSupported(gpu(), nullptr, ext)) {
-            m_device_extension_names.push_back(ext);
-        } else {
-            printf("%s %s extension not supported. Skipping.\n", kSkipPrefix, ext);
-            return;
-        }
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&features12);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(features12);
     if (VK_TRUE != features12.bufferDeviceAddress) {
         printf("%s VkPhysicalDeviceVulkan12Features::bufferDeviceAddress not supported and is required. Skipping.\n", kSkipPrefix);
         return;
@@ -4283,6 +4232,55 @@ void main() {
     pipe.CreateGraphicsPipeline();
 }
 
+TEST_F(VkPositiveLayerTest, PhysicalStorageBufferStructRecursion) {
+    TEST_DESCRIPTION("Make sure shader can have a buffer_reference that contains itself.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
+    auto features2 = GetPhysicalDeviceFeatures2(features12);
+    if (VK_TRUE != features12.bufferDeviceAddress) {
+        printf("%s VkPhysicalDeviceVulkan12Features::bufferDeviceAddress not supported and is required. Skipping.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    const char *cs_src = R"glsl(
+#version 450 core
+#extension GL_EXT_buffer_reference : enable
+
+layout(buffer_reference) buffer T1;
+
+layout(set = 0, binding = 0, std140) uniform T2 {
+   layout(offset = 0) T1 a[2];
+};
+
+// This struct calls itself which needs to be properly handled in the shader validation or it will infinite loop
+layout(buffer_reference, std140) buffer T1 {
+   layout(offset = 0) T1 b[2];
+};
+
+void main() {}
+        )glsl";
+
+    const auto set_info = [&](CreateComputePipelineHelper &helper) {
+        helper.cs_.reset(new VkShaderObj(this, cs_src, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2));
+    };
+    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit | kWarningBit);
+}
+
 TEST_F(VkPositiveLayerTest, OpCopyObjectSampler) {
     TEST_DESCRIPTION("Reproduces a use case involving GL_EXT_nonuniform_qualifier and image samplers found in Doom Eternal trace");
 
@@ -4290,11 +4288,12 @@ TEST_F(VkPositiveLayerTest, OpCopyObjectSampler) {
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
 
     auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&features12);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(features12);
     if (VK_TRUE != features12.shaderStorageTexelBufferArrayNonUniformIndexing) {
         printf(
             "%s VkPhysicalDeviceVulkan12Features::shaderStorageTexelBufferArrayNonUniformIndexing not supported and is required. "
@@ -4441,7 +4440,7 @@ TEST_F(VkPositiveLayerTest, ProtectedSwapchainImageColorAttachment) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
     AddSurfaceExtension();
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SURFACE_PROTECTED_CAPABILITIES_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
@@ -4753,15 +4752,9 @@ TEST_F(VkPositiveLayerTest, MeshShaderOnly) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     // Create a device that enables mesh_shader
     auto mesh_shader_features = LvlInitStruct<VkPhysicalDeviceMeshShaderFeaturesNV>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&mesh_shader_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(mesh_shader_features);
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     if (mesh_shader_features.meshShader != VK_TRUE) {
         printf("%sMesh shader feature not supported\n", kSkipPrefix);
@@ -5447,14 +5440,9 @@ TEST_F(VkPositiveLayerTest, ShaderAtomicInt64) {
         return;
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
     auto atomic_int64_features = lvl_init_struct<VkPhysicalDeviceShaderAtomicInt64Features>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&atomic_int64_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(atomic_int64_features);
     if (features2.features.shaderInt64 == VK_FALSE) {
         printf("%s shaderInt64 feature not supported, skipping tests\n", kSkipPrefix);
         return;
@@ -5626,9 +5614,7 @@ TEST_F(VkPositiveLayerTest, TestDynamicVertexInput) {
     }
 
     auto vertex_input_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&vertex_input_dynamic_state_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(vertex_input_dynamic_state_features);
     if (!vertex_input_dynamic_state_features.vertexInputDynamicState) {
         printf("%s Feature vertexInputDynamicState is not supported.\n", kSkipPrefix);
         return;
@@ -5667,9 +5653,7 @@ TEST_F(VkPositiveLayerTest, TestCmdSetVertexInputEXT) {
     }
 
     auto vertex_input_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&vertex_input_dynamic_state_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(vertex_input_dynamic_state_features);
     if (!vertex_input_dynamic_state_features.vertexInputDynamicState) {
         printf("%s Feature vertexInputDynamicState is not supported.\n", kSkipPrefix);
         return;
@@ -5850,18 +5834,12 @@ TEST_F(VkPositiveLayerTest, TestPervertexNVShaderAttributes) {
 TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
     TEST_DESCRIPTION("Test that no warning is produced when a library is referenced in the raytracing shader groups.");
     SetTargetApiVersion(VK_API_VERSION_1_2);
-    if (!InitFrameworkForRayTracingTest(this, true, false)) {
+    if (!InitFrameworkForRayTracingTest(this, true)) {
         GTEST_SKIP() << "unable to init ray tracing test";
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto ray_tracing_features = LvlInitStruct<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&ray_tracing_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(ray_tracing_features);
     if (!ray_tracing_features.rayTracingPipeline) {
         printf("%s Feature rayTracing is not supported.\n", kSkipPrefix);
         return;
@@ -6203,8 +6181,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineDynamicRendering) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -6280,8 +6257,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineDynamicRenderingNoInfo) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -6636,7 +6612,7 @@ TEST_F(VkPositiveLayerTest, TestDualBlendShader) {
     }
 
     auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>();
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    GetPhysicalDeviceFeatures2(features2);
 
     if (features2.features.dualSrcBlend == VK_FALSE) {
         printf("%s dualSrcBlend feature is not available, skipping test.\n", kSkipPrefix);
@@ -6700,9 +6676,7 @@ TEST_F(VkPositiveLayerTest, TestDynamicRenderingWithDualSourceBlending) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (features2.features.dualSrcBlend == VK_FALSE) {
         printf("%s dualSrcBlend feature is not available, skipping test.\n", kSkipPrefix);
         return;
@@ -6782,9 +6756,7 @@ TEST_F(VkPositiveLayerTest, TestUpdateAfterBind) {
 
     auto descriptor_indexing = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeatures>();
     auto synchronization2 = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>(&descriptor_indexing);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&synchronization2);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(synchronization2);
     if (descriptor_indexing.descriptorBindingStorageBufferUpdateAfterBind == VK_FALSE) {
         printf("%s descriptorBindingStorageBufferUpdateAfterBind feature is not supported.\n", kSkipPrefix);
         return;
@@ -6922,9 +6894,7 @@ TEST_F(VkPositiveLayerTest, TestPartiallyBoundDescriptors) {
 
     auto descriptor_indexing = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeatures>();
     auto synchronization2 = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>(&descriptor_indexing);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&synchronization2);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(synchronization2);
     if (descriptor_indexing.descriptorBindingStorageBufferUpdateAfterBind == VK_FALSE) {
         printf("%s descriptorBindingStorageBufferUpdateAfterBind feature is not supported.\n", kSkipPrefix);
         return;
@@ -7049,12 +7019,8 @@ TEST_F(VkPositiveLayerTest, DynamicColorWriteNoColorAttachments) {
     }
 
     // Extension enabed as a dependency of VK_EXT_color_write_enable
-    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
     auto color_write_features = LvlInitStruct<VkPhysicalDeviceColorWriteEnableFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&color_write_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(color_write_features);
     if (!color_write_features.colorWriteEnable) {
         GTEST_SKIP() << "colorWriteEnable feature not supported";
     }
@@ -7127,4 +7093,122 @@ TEST_F(VkPositiveLayerTest, DynamicColorWriteNoColorAttachments) {
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
+}
+
+TEST_F(VkPositiveLayerTest, ShaderZeroInitializeWorkgroupMemoryFeature) {
+    TEST_DESCRIPTION("Enable and use shaderZeroInitializeWorkgroupMemory feature");
+
+    AddRequiredExtensions(VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " required but not supported";
+    }
+
+    auto zero_initialize_work_group_memory_features = LvlInitStruct<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR>();
+    auto features2 = GetPhysicalDeviceFeatures2(zero_initialize_work_group_memory_features);
+    if (!zero_initialize_work_group_memory_features.shaderZeroInitializeWorkgroupMemory) {
+        GTEST_SKIP() << "VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR::shaderZeroInitializeWorkgroupMemory is required but not enabled.";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    const char *spv_source = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main"
+               OpExecutionMode %main LocalSize 1 1 1
+               OpSource GLSL 450
+               OpName %main "main"
+               OpName %counter "counter"
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+       %uint = OpTypeInt 32 0
+%_ptr_Workgroup_uint = OpTypePointer Workgroup %uint
+  %zero_uint = OpConstantNull %uint
+    %counter = OpVariable %_ptr_Workgroup_uint Workgroup %zero_uint
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+               OpReturn
+               OpFunctionEnd
+        )";
+
+    auto cs = VkShaderObj::CreateFromASM(*this, VK_SHADER_STAGE_COMPUTE_BIT, spv_source, "main", nullptr);
+    const auto set_info = [&cs](CreateComputePipelineHelper &helper) { helper.cs_ = std::move(cs); };
+    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+}
+
+TEST_F(VkPositiveLayerTest, RayTracingPipelineCacheControl) {
+    TEST_DESCRIPTION("Create ray tracing pipeline with VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT.");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    if (!InitFrameworkForRayTracingTest(this, true)) {
+        GTEST_SKIP() << "unable to init ray tracing test";
+    }
+    if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
+    }
+
+    auto features13 = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
+    auto ray_tracing_features = LvlInitStruct<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>(&features13);
+    auto features2 = GetPhysicalDeviceFeatures2(ray_tracing_features);
+    if (!ray_tracing_features.rayTracingPipeline) {
+        printf("%s Feature rayTracing is not supported.\n", kSkipPrefix);
+        return;
+    }
+    if (!features13.pipelineCreationCacheControl) {
+        printf("%s Feature pipelineCreationCacheControl is not supported.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    const VkPipelineLayoutObj empty_pipeline_layout(m_device, {});
+
+    const char *empty_shader = R"glsl(
+        #version 460
+        #extension GL_EXT_ray_tracing : require
+        void main() {}
+    )glsl";
+
+    VkShaderObj rgen_shader(this, empty_shader, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
+    VkShaderObj chit_shader(this, empty_shader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
+
+    auto vkCreateRayTracingPipelinesKHR =
+        reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vk::GetInstanceProcAddr(instance(), "vkCreateRayTracingPipelinesKHR"));
+    ASSERT_TRUE(vkCreateRayTracingPipelinesKHR != nullptr);
+
+    auto vkDestroyPipeline = reinterpret_cast<PFN_vkDestroyPipeline>(vk::GetInstanceProcAddr(instance(), "vkDestroyPipeline"));
+    ASSERT_TRUE(vkDestroyPipeline != nullptr);
+
+    const VkPipelineLayoutObj pipeline_layout(m_device, {});
+
+    VkPipelineShaderStageCreateInfo stage_create_info = LvlInitStruct<VkPipelineShaderStageCreateInfo>();
+    stage_create_info.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    stage_create_info.module = chit_shader.handle();
+    stage_create_info.pName = "main";
+
+    VkRayTracingShaderGroupCreateInfoKHR group_create_info = LvlInitStruct<VkRayTracingShaderGroupCreateInfoKHR>();
+    group_create_info.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+    group_create_info.generalShader = VK_SHADER_UNUSED_KHR;
+    group_create_info.closestHitShader = 0;
+    group_create_info.anyHitShader = VK_SHADER_UNUSED_KHR;
+    group_create_info.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+    VkRayTracingPipelineInterfaceCreateInfoKHR interface_ci = LvlInitStruct<VkRayTracingPipelineInterfaceCreateInfoKHR>();
+    interface_ci.maxPipelineRayHitAttributeSize = 4;
+    interface_ci.maxPipelineRayPayloadSize = 4;
+
+    VkRayTracingPipelineCreateInfoKHR library_pipeline = LvlInitStruct<VkRayTracingPipelineCreateInfoKHR>();
+    library_pipeline.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR | VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    library_pipeline.stageCount = 1;
+    library_pipeline.pStages = &stage_create_info;
+    library_pipeline.groupCount = 1;
+    library_pipeline.pGroups = &group_create_info;
+    library_pipeline.layout = pipeline_layout.handle();
+    library_pipeline.pLibraryInterface = &interface_ci;
+
+    VkPipeline library = VK_NULL_HANDLE;
+    vkCreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &library_pipeline, nullptr, &library);
+    vk::DestroyPipeline(device(), library, nullptr);
 }

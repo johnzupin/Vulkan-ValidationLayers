@@ -978,9 +978,7 @@ TEST_F(VkPositiveLayerTest, CreateRenderPassWithViewMask) {
     }
 
     auto vulkan_11_features = LvlInitStruct<VkPhysicalDeviceVulkan11Features>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&vulkan_11_features);
-
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(vulkan_11_features);
     if (vulkan_11_features.multiview == VK_FALSE) {
         GTEST_SKIP() << "multiview feature not supported, skipping test.";
     }
@@ -1021,16 +1019,15 @@ TEST_F(VkPositiveLayerTest, BeginRenderPassWithViewMask) {
     }
 
     auto vulkan_11_features = LvlInitStruct<VkPhysicalDeviceVulkan11Features>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&vulkan_11_features);
-
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(vulkan_11_features);
     if (vulkan_11_features.multiview == VK_FALSE) {
         GTEST_SKIP() << "multiview feature not supported, skipping test.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
-    auto push_descriptor_prop = GetPushDescriptorProperties(instance(), gpu());
+    VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+    GetPhysicalDeviceProperties2(push_descriptor_prop);
     if (push_descriptor_prop.maxPushDescriptors < 1) {
         // Some implementations report an invalid maxPushDescriptors of 0
         GTEST_SKIP() << "maxPushDescriptors is zero, skipping tests";
@@ -1131,4 +1128,201 @@ TEST_F(VkPositiveLayerTest, BeginRenderPassWithViewMask) {
     vk::CmdNextSubpass(m_commandBuffer->handle(), VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
+}
+
+TEST_F(VkPositiveLayerTest, QueriesInMultiviewRenderPass) {
+    TEST_DESCRIPTION("Use queries in a render pass instance with multiview enabled.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
+
+    auto vulkan_11_features = LvlInitStruct<VkPhysicalDeviceVulkan11Features>();
+    auto features2 = GetPhysicalDeviceFeatures2(vulkan_11_features);
+
+    if (vulkan_11_features.multiview == VK_FALSE) {
+        GTEST_SKIP() << "multiview feature not supported, skipping test.";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    VkAttachmentDescription attachment = {0,
+                                          VK_FORMAT_R8G8B8A8_UNORM,
+                                          VK_SAMPLE_COUNT_1_BIT,
+                                          VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                          VK_ATTACHMENT_STORE_OP_STORE,
+                                          VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                          VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                          VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    VkAttachmentReference att_ref = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    VkSubpassDescription subpass = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 1, &att_ref, nullptr, nullptr, 0, nullptr};
+
+    uint32_t viewMasks[] = {0x3u};
+    uint32_t correlationMasks[] = {0x1u};
+    auto rpmvci = LvlInitStruct<VkRenderPassMultiviewCreateInfo>();
+    rpmvci.subpassCount = 1;
+    rpmvci.pViewMasks = viewMasks;
+    rpmvci.correlationMaskCount = 1;
+    rpmvci.pCorrelationMasks = correlationMasks;
+
+    VkRenderPassCreateInfo rpci = LvlInitStruct<VkRenderPassCreateInfo>(&rpmvci);
+    rpci.attachmentCount = 1;
+    rpci.pAttachments = &attachment;
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+
+    vk_testing::RenderPass rp;
+    rp.init(*m_device, rpci);
+
+    auto image_ci = LvlInitStruct<VkImageCreateInfo>();
+    image_ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    image_ci.extent.width = 32;
+    image_ci.extent.height = 32;
+    image_ci.extent.depth = 1;
+    image_ci.arrayLayers = 3;
+    image_ci.mipLevels = 2;
+    image_ci.imageType = VK_IMAGE_TYPE_2D;
+    image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+
+    VkImageObj image(m_device);
+    image.Init(image_ci);
+    ASSERT_TRUE(image.initialized());
+
+    VkImageViewCreateInfo ivci = LvlInitStruct<VkImageViewCreateInfo>();
+    ivci.image = image.handle();
+    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    ivci.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ivci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 3};
+    vk_testing::ImageView view;
+    view.init(*m_device, ivci);
+    VkImageView image_view_handle = view.handle();
+
+    VkFramebufferCreateInfo fci = LvlInitStruct<VkFramebufferCreateInfo>();
+    fci.renderPass = rp.handle();
+    fci.attachmentCount = 1;
+    fci.pAttachments = &image_view_handle;
+    fci.width = 32;
+    fci.height = 32;
+    fci.layers = 1;
+    vk_testing::Framebuffer fb;
+    fb.init(*m_device, fci);
+
+    VkBufferObj buffer;
+    buffer.init(*m_device, 256, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkQueryPoolCreateInfo qpci = LvlInitStruct<VkQueryPoolCreateInfo>();
+    qpci.queryType = VK_QUERY_TYPE_OCCLUSION;
+    qpci.queryCount = 2;
+    vk_testing::QueryPool query_pool;
+    query_pool.init(*m_device, qpci);
+
+    VkRenderPassBeginInfo rpbi = LvlInitStruct<VkRenderPassBeginInfo>();
+    rpbi.renderPass = rp.handle();
+    rpbi.framebuffer = fb.handle();
+    rpbi.renderArea = {{0, 0}, {32, 32}};
+
+    m_commandBuffer->begin();
+    vk::CmdResetQueryPool(m_commandBuffer->handle(), query_pool.handle(), 0, 2);
+
+    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CmdBeginQuery(m_commandBuffer->handle(), query_pool.handle(), 0, 0);
+    vk::CmdEndQuery(m_commandBuffer->handle(), query_pool.handle(), 0);
+    vk::CmdEndRenderPass(m_commandBuffer->handle());
+
+    vk::CmdCopyQueryPoolResults(m_commandBuffer->handle(), query_pool.handle(), 0, 2, buffer.handle(), 0, 0, 0);
+    m_commandBuffer->end();
+
+    VkCommandBuffer handle = m_commandBuffer->handle();
+
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.waitSemaphoreCount = 0;
+    submit_info.pWaitSemaphores = nullptr;
+    submit_info.pWaitDstStageMask = nullptr;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &handle;
+    submit_info.signalSemaphoreCount = 0;
+    submit_info.pSignalSemaphores = nullptr;
+
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(VkPositiveLayerTest, FragmentShadingRateAttachment) {
+    TEST_DESCRIPTION("Create framebuffer with a fragment shading rate attachment that has layout count 1.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
+    auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>(&fsr_features);
+    auto features2 = GetPhysicalDeviceFeatures2(multiview_features);
+    if (multiview_features.multiview == VK_FALSE) {
+        GTEST_SKIP() << "multiview feature not supported";
+        return;
+    }
+    if (fsr_features.attachmentFragmentShadingRate != VK_TRUE) {
+        GTEST_SKIP() << "VkPhysicalDeviceFragmentShadingRateFeaturesKHR::attachmentFragmentShadingRate not supported.";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    VkAttachmentReference2 attach = LvlInitStruct<VkAttachmentReference2>();
+    attach.layout = VK_IMAGE_LAYOUT_GENERAL;
+    attach.attachment = 0;
+
+    auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
+    GetPhysicalDeviceProperties2(fsr_properties);
+
+    VkFragmentShadingRateAttachmentInfoKHR fsr_attachment = LvlInitStruct<VkFragmentShadingRateAttachmentInfoKHR>();
+    fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
+    fsr_attachment.pFragmentShadingRateAttachment = &attach;
+
+    VkSubpassDescription2 subpass = LvlInitStruct<VkSubpassDescription2>(&fsr_attachment);
+    subpass.viewMask = 0x2;
+
+    auto attach_desc = LvlInitStruct<VkAttachmentDescription2>();
+    attach_desc.format = VK_FORMAT_R8_UINT;
+    attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
+    attach_desc.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+    attach_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkRenderPassCreateInfo2 rpci = LvlInitStruct<VkRenderPassCreateInfo2>();
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+    rpci.attachmentCount = 1;
+    rpci.pAttachments = &attach_desc;
+
+    vk_testing::RenderPass rp(*m_device, rpci, true);
+    ASSERT_TRUE(rp.initialized());
+
+    VkImageObj image(m_device);
+    image.InitNoLayout(1, 1, 1, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR, VK_IMAGE_TILING_OPTIMAL,
+                       0);
+    VkImageView imageView = image.targetView(VK_FORMAT_R8_UINT);
+
+    VkFramebufferCreateInfo fb_info = LvlInitStruct<VkFramebufferCreateInfo>();
+    fb_info.renderPass = rp.handle();
+    fb_info.attachmentCount = 1;
+    fb_info.pAttachments = &imageView;
+    fb_info.width = fsr_properties.minFragmentShadingRateAttachmentTexelSize.width;
+    fb_info.height = fsr_properties.minFragmentShadingRateAttachmentTexelSize.height;
+    fb_info.layers = 1;
+
+    vk_testing::Framebuffer fb(*m_device, fb_info);
+    ASSERT_TRUE(fb.initialized());
 }

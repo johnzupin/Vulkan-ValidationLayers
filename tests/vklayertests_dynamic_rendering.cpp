@@ -20,11 +20,7 @@
 TEST_F(VkLayerTest, DynamicRenderingCommandBufferInheritanceRenderingInfo) {
     TEST_DESCRIPTION("VkCommandBufferInheritanceRenderingInfoKHR Dynamic Rendering Tests.");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_2);
-    if (version < VK_API_VERSION_1_2) {
-        printf("%s At least Vulkan version 1.2 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_2);
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
@@ -38,8 +34,7 @@ TEST_F(VkLayerTest, DynamicRenderingCommandBufferInheritanceRenderingInfo) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -50,7 +45,7 @@ TEST_F(VkLayerTest, DynamicRenderingCommandBufferInheritanceRenderingInfo) {
 
     VkPhysicalDeviceMultiviewProperties multiview_props = LvlInitStruct<VkPhysicalDeviceMultiviewProperties>();
     VkPhysicalDeviceProperties2 pd_props2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&multiview_props);
-    vk::GetPhysicalDeviceProperties2(gpu(), &pd_props2);
+    GetPhysicalDeviceProperties2(pd_props2);
 
     if (multiview_props.maxMultiviewViewCount == 32) {
         printf("%s VUID is not testable as maxMultiviewViewCount is 32, skipping test\n", kSkipPrefix);
@@ -103,10 +98,7 @@ TEST_F(VkLayerTest, DynamicRenderingCommandBufferInheritanceRenderingInfo) {
 TEST_F(VkLayerTest, DynamicRenderingCommandDraw) {
     TEST_DESCRIPTION("vkCmdDraw* Dynamic Rendering Tests.");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_2);
-    if (version < VK_API_VERSION_1_2) {
-        GTEST_SKIP() << "At least Vulkan version 1.2 is required, skipping test.";
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_2);
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
 
@@ -121,8 +113,7 @@ TEST_F(VkLayerTest, DynamicRenderingCommandDraw) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering , skipping.";
     }
@@ -202,14 +193,504 @@ TEST_F(VkLayerTest, DynamicRenderingCommandDraw) {
     m_commandBuffer->end();
 }
 
+TEST_F(VkPositiveLayerTest, CmdClearAttachmentTestsDynamicRendering) {
+    TEST_DESCRIPTION("Various tests for validating usage of vkCmdClearAttachments with Dynamic Rendering");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
+
+    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
+    if (!dynamic_rendering_features.dynamicRendering) {
+        printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    m_commandBuffer->begin();
+
+    // Main thing we care about for this test is that the VkImage obj we're
+    // clearing matches Color Attachment of FB
+    //  Also pass down other dummy params to keep driver and paramchecker happy
+    VkClearAttachment color_attachment;
+    color_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    color_attachment.clearValue.color.float32[0] = 1.0;
+    color_attachment.clearValue.color.float32[1] = 1.0;
+    color_attachment.clearValue.color.float32[2] = 1.0;
+    color_attachment.clearValue.color.float32[3] = 1.0;
+    color_attachment.colorAttachment = 0;
+    VkClearRect clear_rect = {{{0, 0}, {(uint32_t)m_width, (uint32_t)m_height}}, 0, 1};
+
+    clear_rect.rect.extent.width = renderPassBeginInfo().renderArea.extent.width;
+    clear_rect.rect.extent.height = renderPassBeginInfo().renderArea.extent.height;
+
+    auto color_attachment_info = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    color_attachment_info.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment_info.imageView = m_renderTargets[0]->targetView(m_renderTargets[0]->format());
+
+    auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    begin_rendering_info.renderArea = clear_rect.rect;
+    begin_rendering_info.layerCount = 1;
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment_info;
+
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    clear_rect.baseArrayLayer = 0;
+    clear_rect.layerCount = 1;
+    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &color_attachment, 1, &clear_rect);
+
+    // baseLayer >= view layers
+    clear_rect.baseArrayLayer = 1;
+    clear_rect.layerCount = 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-pRects-06937");
+    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &color_attachment, 1, &clear_rect);
+    m_errorMonitor->VerifyFound();
+
+    // baseLayer + layerCount > view layers
+    clear_rect.baseArrayLayer = 0;
+    clear_rect.layerCount = 2;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-pRects-06937");
+    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &color_attachment, 1, &clear_rect);
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+}
+
+TEST_F(VkLayerTest, DynamicRenderingClearAttachments) {
+    TEST_DESCRIPTION("Call CmdClearAttachments with invalid aspect masks.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+
+    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required.";
+    }
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
+    if (!dynamic_rendering_features.dynamicRendering) {
+        GTEST_SKIP() << "Test requires (unsupported) " VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME ", skipping\n";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    // Create color image
+    const VkFormat color_format = VK_FORMAT_R32_SFLOAT;
+    VkImageObj color_image(m_device);
+    auto imci = LvlInitStruct<VkImageCreateInfo>();
+    imci.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    imci.imageType = VK_IMAGE_TYPE_2D;
+    imci.format = color_format;
+    imci.extent = {32, 32, 1};
+    imci.mipLevels = 1;
+    imci.arrayLayers = 1;
+    imci.samples = VK_SAMPLE_COUNT_1_BIT;
+    imci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imci.queueFamilyIndexCount = 0;
+    imci.pQueueFamilyIndices = nullptr;
+    imci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color_image.Init(imci);
+    ASSERT_TRUE(color_image.initialized());
+
+    // Create correct color image view
+    VkImageViewCreateInfo color_ivci = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                        nullptr,
+                                        0,
+                                        color_image.handle(),
+                                        VK_IMAGE_VIEW_TYPE_2D,
+                                        color_format,
+                                        {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                                         VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
+                                        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    vk_testing::ImageView color_image_view(*m_device, color_ivci);
+
+    // Create depth image
+    const VkFormat depth_format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    VkImageObj depth_image(m_device);
+    depth_image.Init(32, 32, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_TILING_LINEAR);
+    ASSERT_TRUE(depth_image.initialized());
+
+    // Create depth image view
+    VkImageViewCreateInfo depth_stencil_ivci = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                                nullptr,
+                                                0,
+                                                depth_image.handle(),
+                                                VK_IMAGE_VIEW_TYPE_2D,
+                                                depth_format,
+                                                {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                 VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
+                                                {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+    vk_testing::ImageView depth_image_view(*m_device, depth_stencil_ivci);
+    depth_stencil_ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+    vk_testing::ImageView stencil_image_view(*m_device, depth_stencil_ivci);
+    depth_stencil_ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    vk_testing::ImageView depth_stencil_image_view(*m_device, depth_stencil_ivci);
+
+    // Dynamic rendering structs
+    VkRect2D rect{{0, 0}, {32, 32}};
+    auto depth_attachment_info = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    depth_attachment_info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR;
+    depth_attachment_info.imageView = depth_stencil_image_view.handle();
+    auto stencil_attachment_info = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    stencil_attachment_info.imageLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+    stencil_attachment_info.imageView = depth_stencil_image_view.handle();
+    auto color_attachment_info = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    color_attachment_info.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+
+    begin_rendering_info.renderArea = rect;
+    begin_rendering_info.layerCount = 1;
+    begin_rendering_info.pDepthAttachment = &depth_attachment_info;
+    begin_rendering_info.pStencilAttachment = &stencil_attachment_info;
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment_info;
+    begin_rendering_info.viewMask = 0;
+
+    // Render pass structs
+    std::array<VkAttachmentDescription, 2> attachments = {
+        {{0, depth_stencil_ivci.format, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+          VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED,
+          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
+
+         {0, color_ivci.format, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+          VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED,
+          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}};
+
+    std::array<VkAttachmentReference, 4> attachment_references = {{{0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
+                                                                   {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                                                                   {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                                                                   {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}};
+
+    std::array<VkSubpassDescription, 2> subpass_descs = {};
+    subpass_descs[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass_descs[0].colorAttachmentCount = 1;
+    subpass_descs[0].pColorAttachments = &attachment_references[1];
+    subpass_descs[0].pDepthStencilAttachment = &attachment_references[0];
+
+    subpass_descs[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass_descs[1].colorAttachmentCount = 3;
+    subpass_descs[1].pColorAttachments = &attachment_references[1];
+    subpass_descs[1].pDepthStencilAttachment = &attachment_references[0];
+
+    VkSubpassDependency subpass_dependency = {};
+    subpass_dependency.srcSubpass = 0;
+    subpass_dependency.dstSubpass = 1;
+    subpass_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    subpass_dependency.dstStageMask = subpass_dependency.srcStageMask;
+    subpass_dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    subpass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    subpass_dependency.dependencyFlags = 0;
+
+    auto renderpass_ci = LvlInitStruct<VkRenderPassCreateInfo>();
+    renderpass_ci.attachmentCount = static_cast<uint32_t>(attachments.size());
+    renderpass_ci.pAttachments = attachments.data();
+    renderpass_ci.subpassCount = static_cast<uint32_t>(subpass_descs.size());
+    renderpass_ci.pSubpasses = subpass_descs.data();
+    renderpass_ci.dependencyCount = 1;
+    renderpass_ci.pDependencies = &subpass_dependency;
+
+    VkRenderPass renderpass = VK_NULL_HANDLE;
+    VkResult err = vk::CreateRenderPass(m_device->handle(), &renderpass_ci, nullptr, &renderpass);
+    ASSERT_VK_SUCCESS(err);
+
+    std::array<VkImageView, 2> renderpass_image_views = {depth_stencil_image_view.handle(), color_image_view.handle()};
+
+    auto framebuffer_ci = LvlInitStruct<VkFramebufferCreateInfo>();
+    framebuffer_ci.renderPass = renderpass;
+    framebuffer_ci.attachmentCount = 2;
+    framebuffer_ci.pAttachments = renderpass_image_views.data();
+    framebuffer_ci.width = 32;
+    framebuffer_ci.height = 32;
+    framebuffer_ci.layers = 1;
+
+    auto renderpass_bi = LvlInitStruct<VkRenderPassBeginInfo>();
+    renderpass_bi.renderPass = renderpass;
+    renderpass_bi.renderArea = rect;
+    renderpass_bi.clearValueCount = 2;
+    std::array<VkClearValue, 2> renderpass_clear_values;
+    renderpass_clear_values[0].depthStencil.depth = 1.0f;
+    std::fill(&renderpass_clear_values[0].color.float32[0], &renderpass_clear_values[0].color.float32[0] + 4, 0.0f);
+    renderpass_bi.pClearValues = renderpass_clear_values.data();
+
+    auto clear_cmd_test = [&](const bool use_dynamic_rendering) {
+        std::array<VkFramebuffer, 4> framebuffers = {VK_NULL_HANDLE};
+
+        m_commandBuffer->begin();
+
+        // Try to clear stencil, but image view does not have stencil aspect
+        {
+            // setup incorrect image views and begin rendering
+            if (use_dynamic_rendering) {
+                depth_attachment_info.imageView = depth_image_view.handle();
+                stencil_attachment_info.imageView = depth_image_view.handle();
+
+                m_commandBuffer->BeginRendering(begin_rendering_info);
+            } else {
+                renderpass_image_views[0] = depth_image_view.handle();
+
+                const VkResult err = vk::CreateFramebuffer(m_device->handle(), &framebuffer_ci, nullptr, &framebuffers[0]);
+                ASSERT_VK_SUCCESS(err);
+                renderpass_bi.framebuffer = framebuffers[0];
+                m_commandBuffer->BeginRenderPass(renderpass_bi);
+            }
+
+            // issue clear cmd
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-pAttachments-07270");
+            VkClearAttachment clear_stencil_attachment;
+            clear_stencil_attachment.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            clear_stencil_attachment.clearValue.depthStencil.stencil = 0;
+            VkClearRect clear_rect{rect, 0, 1};
+            vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &clear_stencil_attachment, 1, &clear_rect);
+            m_errorMonitor->VerifyFound();
+
+            // end rendering and setup default, correct, image views
+            if (use_dynamic_rendering) {
+                m_commandBuffer->EndRendering();
+
+                depth_attachment_info.imageView = depth_stencil_image_view.handle();
+                stencil_attachment_info.imageView = depth_stencil_image_view.handle();
+            } else {
+                m_commandBuffer->NextSubpass();
+                m_commandBuffer->EndRenderPass();
+
+                renderpass_image_views[0] = depth_stencil_image_view.handle();
+            }
+        }
+
+        // Try to clear depth, but image view does not have depth aspect
+        {
+            // setup incorrect image views and begin rendering
+            if (use_dynamic_rendering) {
+                depth_attachment_info.imageView = stencil_image_view.handle();
+                stencil_attachment_info.imageView = stencil_image_view.handle();
+
+                m_commandBuffer->BeginRendering(begin_rendering_info);
+            } else {
+                renderpass_image_views[0] = stencil_image_view.handle();
+
+                const VkResult err = vk::CreateFramebuffer(m_device->handle(), &framebuffer_ci, nullptr, &framebuffers[1]);
+                ASSERT_VK_SUCCESS(err);
+                renderpass_bi.framebuffer = framebuffers[1];
+                m_commandBuffer->BeginRenderPass(renderpass_bi);
+            }
+
+            // issue clear cmd
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-pAttachments-07270");
+            VkClearAttachment clear_depth_attachment;
+            clear_depth_attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            clear_depth_attachment.clearValue.depthStencil.depth = 1.0f;
+            VkClearRect clear_rect{rect, 0, 1};
+            vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &clear_depth_attachment, 1, &clear_rect);
+            m_errorMonitor->VerifyFound();
+
+            // end rendering and setup default, correct, image views
+            if (use_dynamic_rendering) {
+                m_commandBuffer->EndRendering();
+
+                depth_attachment_info.imageView = depth_stencil_image_view.handle();
+                stencil_attachment_info.imageView = depth_stencil_image_view.handle();
+            } else {
+                m_commandBuffer->NextSubpass();
+                m_commandBuffer->EndRenderPass();
+
+                renderpass_image_views[0] = depth_stencil_image_view.handle();
+            }
+        }
+
+        {
+            if (!use_dynamic_rendering) {
+                const VkResult err = vk::CreateFramebuffer(m_device->handle(), &framebuffer_ci, nullptr, &framebuffers[2]);
+                ASSERT_VK_SUCCESS(err);
+                renderpass_bi.framebuffer = framebuffers[2];
+            }
+
+            // Try to clear color, but aspect also has depth
+            {
+                // begin rendering
+                if (use_dynamic_rendering) {
+                    m_commandBuffer->BeginRendering(begin_rendering_info);
+                } else {
+                    m_commandBuffer->BeginRenderPass(renderpass_bi);
+                }
+
+                // issue clear cmd
+                m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkClearAttachment-aspectMask-00019");
+                VkClearAttachment clear_depth_attachment;
+                clear_depth_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
+                clear_depth_attachment.colorAttachment = 0;
+                VkClearRect clear_rect{rect, 0, 1};
+                vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &clear_depth_attachment, 1, &clear_rect);
+                m_errorMonitor->VerifyFound();
+
+                // end rendering
+                if (use_dynamic_rendering) {
+                    m_commandBuffer->EndRendering();
+                } else {
+                    m_commandBuffer->NextSubpass();
+                    m_commandBuffer->EndRenderPass();
+                }
+            }
+
+            // Try to clear color, but color attachment is out of range
+            {
+                // begin rendering
+                if (use_dynamic_rendering) {
+                    m_commandBuffer->BeginRendering(begin_rendering_info);
+                } else {
+                    m_commandBuffer->BeginRenderPass(renderpass_bi);
+                }
+
+                // issue clear cmd
+                m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-aspectMask-07271");
+                VkClearAttachment clear_depth_attachment;
+                clear_depth_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                clear_depth_attachment.colorAttachment = 2;
+                VkClearRect clear_rect{rect, 0, 1};
+                vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &clear_depth_attachment, 1, &clear_rect);
+                m_errorMonitor->VerifyFound();
+
+                // end rendering
+                if (use_dynamic_rendering) {
+                    m_commandBuffer->EndRendering();
+                } else {
+                    m_commandBuffer->NextSubpass();
+                    m_commandBuffer->EndRenderPass();
+                }
+            }
+
+            // Clear color, subpass has unused attachments
+            if (!use_dynamic_rendering) {
+                m_commandBuffer->BeginRenderPass(renderpass_bi);
+                m_commandBuffer->NextSubpass();
+                std::array<VkClearAttachment, 4> clears = {{{VK_IMAGE_ASPECT_DEPTH_BIT, 0},
+                                                            {VK_IMAGE_ASPECT_COLOR_BIT, 0},
+                                                            {VK_IMAGE_ASPECT_COLOR_BIT, 1},
+                                                            {VK_IMAGE_ASPECT_COLOR_BIT, 2}}};
+                VkClearRect clear_rect{rect, 0, 1};
+                vk::CmdClearAttachments(m_commandBuffer->handle(), static_cast<uint32_t>(clears.size()), clears.data(), 1,
+                                        &clear_rect);
+                m_commandBuffer->EndRenderPass();
+            }
+        }
+
+        m_commandBuffer->end();
+
+        {
+            delete m_commandBuffer;
+            m_commandBuffer = new VkCommandBufferObj(m_device, m_commandPool);
+
+            std::unique_ptr<VkCommandBufferObj> secondary_cmd_buffer(
+                new VkCommandBufferObj(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY));
+
+            auto inheritance_rendering_info = LvlInitStruct<VkCommandBufferInheritanceRenderingInfo>();
+            const VkFormat color_format = VK_FORMAT_R32_SFLOAT;
+            inheritance_rendering_info.colorAttachmentCount = begin_rendering_info.colorAttachmentCount;
+            inheritance_rendering_info.pColorAttachmentFormats = &color_format;
+            inheritance_rendering_info.depthAttachmentFormat = depth_format;
+            inheritance_rendering_info.stencilAttachmentFormat = depth_format;
+            inheritance_rendering_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+            VkCommandBufferBeginInfo cmd_buffer_begin_info = LvlInitStruct<VkCommandBufferBeginInfo>();
+            cmd_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+            VkCommandBufferInheritanceInfo cmd_buffer_inheritance_info = LvlInitStruct<VkCommandBufferInheritanceInfo>();
+            cmd_buffer_begin_info.pInheritanceInfo = &cmd_buffer_inheritance_info;
+            if (use_dynamic_rendering) {
+                cmd_buffer_inheritance_info.pNext = &inheritance_rendering_info;
+            } else {
+                const VkResult err = vk::CreateFramebuffer(m_device->handle(), &framebuffer_ci, nullptr, &framebuffers[3]);
+                ASSERT_VK_SUCCESS(err);
+                renderpass_bi.framebuffer = framebuffers[3];
+                cmd_buffer_inheritance_info.renderPass = renderpass;
+                cmd_buffer_inheritance_info.subpass = 0;
+                cmd_buffer_inheritance_info.framebuffer = framebuffers[3];
+            }
+
+            secondary_cmd_buffer->begin(&cmd_buffer_begin_info);
+            // issue clear cmd to secondary cmd buffer
+            std::array<VkClearAttachment, 3> clear_attachments = {};
+            clear_attachments[0].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            clear_attachments[0].clearValue.depthStencil.depth = 1.0f;
+            clear_attachments[1].aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            clear_attachments[1].clearValue.depthStencil.depth = 1.0f;
+            clear_attachments[2].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            clear_attachments[2].colorAttachment = 0;
+            VkClearRect clear_rect{rect, 0, 1};
+            // Expected to succeeed
+            vk::CmdClearAttachments(secondary_cmd_buffer->handle(), static_cast<uint32_t>(clear_attachments.size()),
+                                    clear_attachments.data(), 1, &clear_rect);
+
+            // Clear color out of range
+            VkClearAttachment clear_color_out_of_range{VK_IMAGE_ASPECT_COLOR_BIT, 1, VkClearValue{}};
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-aspectMask-07271");
+            vk::CmdClearAttachments(secondary_cmd_buffer->handle(), 1, &clear_color_out_of_range, 1, &clear_rect);
+            m_errorMonitor->VerifyFound();
+            secondary_cmd_buffer->end();
+
+            m_commandBuffer->begin();
+
+            // begin rendering
+            if (use_dynamic_rendering) {
+                begin_rendering_info.flags |= VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT;
+                m_commandBuffer->BeginRendering(begin_rendering_info);
+                begin_rendering_info.flags &= ~VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT;
+            } else {
+                m_commandBuffer->BeginRenderPass(renderpass_bi, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+            }
+
+            vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary_cmd_buffer->handle());
+
+            // end rendering
+            if (use_dynamic_rendering) {
+                m_commandBuffer->EndRendering();
+            } else {
+                m_commandBuffer->NextSubpass();
+                m_commandBuffer->EndRenderPass();
+            }
+
+            m_commandBuffer->end();
+        }
+
+        for (auto framebuffer : framebuffers) {
+            vk::DestroyFramebuffer(m_device->handle(), framebuffer, nullptr);
+        }
+    };
+
+    clear_cmd_test(true);
+
+    delete m_commandBuffer;
+    m_commandBuffer = new VkCommandBufferObj(m_device, m_commandPool);
+    clear_cmd_test(false);
+
+    vk::DestroyRenderPass(m_device->handle(), renderpass, nullptr);
+}
+
 TEST_F(VkLayerTest, DynamicRenderingGraphicsPipelineCreateInfo) {
     TEST_DESCRIPTION("Test graphics pipeline creation with dynamic rendering.");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_2);
-    if (version < VK_API_VERSION_1_2) {
-        printf("%s At least Vulkan version 1.2 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_2);
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
 
@@ -224,8 +705,7 @@ TEST_F(VkLayerTest, DynamicRenderingGraphicsPipelineCreateInfo) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -334,8 +814,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithMismatchingViewMask) {
 
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>(&multiview_features);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -423,8 +902,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithMistmatchingAttachments) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -618,8 +1096,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithMistmatchingAttachmentSamples) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -789,8 +1266,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithMismatchingMixedAttachmentSamples) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -970,11 +1446,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithMismatchingMixedAttachmentSamples) {
 TEST_F(VkLayerTest, DynamicRenderingAttachmentInfo) {
     TEST_DESCRIPTION("AttachmentInfo Dynamic Rendering Tests.");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_2);
-    if (version < VK_API_VERSION_1_2) {
-        printf("%s At least Vulkan version 1.2 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_2);
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
 
@@ -1084,11 +1556,7 @@ TEST_F(VkLayerTest, DynamicRenderingAttachmentInfo) {
 TEST_F(VkLayerTest, DynamicRenderingBufferBeginInfoLegacy) {
     TEST_DESCRIPTION("VkCommandBufferBeginInfo Dynamic Rendering Tests.");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_2);
-    if (version < VK_API_VERSION_1_2) {
-        printf("%s At least Vulkan version 1.2 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_2);
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
 
@@ -1150,11 +1618,7 @@ TEST_F(VkLayerTest, DynamicRenderingBufferBeginInfoLegacy) {
 TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBuffer) {
     TEST_DESCRIPTION("VkCommandBufferBeginInfo Dynamic Rendering Tests.");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_3);
-    if (version < VK_API_VERSION_1_3) {
-        printf("%s At least Vulkan version 1.3 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_3);
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -1222,8 +1686,7 @@ TEST_F(VkLayerTest, TestDynamicRenderingPipelineMissingFlags) {
     bool shading_rate = IsExtensionsEnabled(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -1231,7 +1694,7 @@ TEST_F(VkLayerTest, TestDynamicRenderingPipelineMissingFlags) {
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
 
     auto phys_dev_props_2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &phys_dev_props_2);
+    GetPhysicalDeviceProperties2(phys_dev_props_2);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -1248,8 +1711,10 @@ TEST_F(VkLayerTest, TestDynamicRenderingPipelineMissingFlags) {
     image_create_info.arrayLayers = 1;
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (shading_rate) image_create_info.usage |= VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
 
     image.Init(image_create_info);
     ASSERT_TRUE(image.initialized());
@@ -1358,8 +1823,7 @@ TEST_F(VkLayerTest, DynamicRenderingLayerCount) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -1392,8 +1856,7 @@ TEST_F(VkLayerTest, TestRenderingInfoMismatchedSamples) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -1488,8 +1951,7 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRate) {
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
     auto features11 = LvlInitStruct<VkPhysicalDeviceVulkan11Features>(&dynamic_rendering_features);
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&features11);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(features11);
 
     if (features11.multiview == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) multiview";
@@ -1501,7 +1963,7 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRate) {
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
 
     auto phys_dev_props_2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &phys_dev_props_2);
+    GetPhysicalDeviceProperties2(phys_dev_props_2);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -1574,8 +2036,7 @@ TEST_F(VkLayerTest, TestDeviceGroupRenderPassBeginInfo) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -1643,8 +2104,7 @@ TEST_F(VkLayerTest, TestBeginRenderingInvalidFragmentShadingRateImage) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -1652,7 +2112,7 @@ TEST_F(VkLayerTest, TestBeginRenderingInvalidFragmentShadingRateImage) {
 
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
     auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &properties2);
+    GetPhysicalDeviceProperties2(properties2);
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UINT,
@@ -1745,8 +2205,7 @@ TEST_F(VkLayerTest, BeginRenderingInvalidDepthAttachmentFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -1794,8 +2253,7 @@ TEST_F(VkLayerTest, TestFragmentDensityMapRenderArea) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -1804,7 +2262,7 @@ TEST_F(VkLayerTest, TestFragmentDensityMapRenderArea) {
 
     auto fdm_props = LvlInitStruct<VkPhysicalDeviceFragmentDensityMapPropertiesEXT>();
     auto props2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fdm_props);
-    vk::GetPhysicalDeviceProperties2(gpu(), &props2);
+    GetPhysicalDeviceProperties2(props2);
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UINT,
@@ -1826,12 +2284,40 @@ TEST_F(VkLayerTest, TestFragmentDensityMapRenderArea) {
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
+    begin_rendering_info.renderArea.offset.x = 1;
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06112");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.x = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.x);
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06112");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.x = 0;
     begin_rendering_info.renderArea.extent.width = 32 * fdm_props.maxFragmentDensityTexelSize.width;
     begin_rendering_info.renderArea.extent.height = 64 * fdm_props.maxFragmentDensityTexelSize.height;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06114");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = 1;
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06114");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.y);
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06114");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = 0;
+    begin_rendering_info.renderArea.extent.height = 64 * fdm_props.maxFragmentDensityTexelSize.height;
 
     VkRect2D device_render_area = {};
     device_render_area.extent.width = 64 * fdm_props.maxFragmentDensityTexelSize.width;
@@ -1872,13 +2358,8 @@ TEST_F(VkLayerTest, TestFragmentDensityMapRenderAreaWithoutDeviceGroupExt) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&dynamic_rendering_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -1887,7 +2368,7 @@ TEST_F(VkLayerTest, TestFragmentDensityMapRenderAreaWithoutDeviceGroupExt) {
 
     auto fdm_props = LvlInitStruct<VkPhysicalDeviceFragmentDensityMapPropertiesEXT>();
     auto props2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fdm_props);
-    vk::GetPhysicalDeviceProperties2(gpu(), &props2);
+    GetPhysicalDeviceProperties2(props2);
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UINT,
@@ -1931,8 +2412,7 @@ TEST_F(VkLayerTest, TestBarrierWithDynamicRendering) {
     }
 
     auto vk13features = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&vk13features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(vk13features);
     if (!vk13features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering, skipping\n", kSkipPrefix);
         return;
@@ -2005,8 +2485,7 @@ TEST_F(VkLayerTest, BeginRenderingInvalidStencilAttachmentFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2053,8 +2532,7 @@ TEST_F(VkLayerTest, TestInheritanceRenderingInfoStencilAttachmentFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2115,8 +2593,7 @@ TEST_F(VkLayerTest, CreateGraphicsPipelineWithInvalidAttachmentSampleCount) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2187,13 +2664,8 @@ TEST_F(VkLayerTest, DynamicRenderingAreaGreaterThanAttachmentExtent) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&dynamic_rendering_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2221,10 +2693,39 @@ TEST_F(VkLayerTest, DynamicRenderingAreaGreaterThanAttachmentExtent) {
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
+    begin_rendering_info.renderArea.offset.x = 1;
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-imageView-06075");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06073");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.x = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.x);
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-imageView-06075");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06073");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.x = 0;
     begin_rendering_info.renderArea.extent.width = 32;
     begin_rendering_info.renderArea.extent.height = 64;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-imageView-06076");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = 1;
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-imageView-06076");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06074");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.y);
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-imageView-06076");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06074");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
@@ -2240,6 +2741,8 @@ TEST_F(VkLayerTest, DynamicRenderingAreaGreaterThanAttachmentExtent) {
 
         begin_rendering_info.colorAttachmentCount = 0;
         begin_rendering_info.pDepthAttachment = &depth_attachment;
+        begin_rendering_info.renderArea.offset.y = 0;
+        begin_rendering_info.renderArea.extent.height = 64;
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-imageView-06076");
         m_commandBuffer->BeginRendering(begin_rendering_info);
@@ -2264,8 +2767,7 @@ TEST_F(VkLayerTest, DynamicRenderingDeviceGroupAreaGreaterThanAttachmentExtent) 
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2293,9 +2795,34 @@ TEST_F(VkLayerTest, DynamicRenderingDeviceGroupAreaGreaterThanAttachmentExtent) 
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
+    begin_rendering_info.renderArea.offset.x = 1;
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06079");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.x = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.x);
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06079");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.x = 0;
     begin_rendering_info.renderArea.extent.width = 32;
     begin_rendering_info.renderArea.extent.height = 64;
 
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06080");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = 1;
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06080");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.y);
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06080");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
@@ -2312,6 +2839,8 @@ TEST_F(VkLayerTest, DynamicRenderingDeviceGroupAreaGreaterThanAttachmentExtent) 
 
         begin_rendering_info.colorAttachmentCount = 0;
         begin_rendering_info.pDepthAttachment = &depth_attachment;
+        begin_rendering_info.renderArea.offset.y = 0;
+        begin_rendering_info.renderArea.extent.height = 64;
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06080");
         m_commandBuffer->BeginRendering(begin_rendering_info);
@@ -2478,8 +3007,7 @@ TEST_F(VkLayerTest, BindPipelineWithIncompatibleRenderingInfoDepthFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2567,8 +3095,7 @@ TEST_F(VkLayerTest, BindPipelineWithIncompatibleRenderingInfoColorAttachments) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2639,8 +3166,7 @@ TEST_F(VkLayerTest, BindPipelineWithIncompatibleRenderingInfoColorAttachmentCoun
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2711,8 +3237,7 @@ TEST_F(VkLayerTest, BindPipelineWithIncompatibleRenderingInfoStencilFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2801,8 +3326,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithInvalidShaderLayerBuiltIn) {
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>(&dynamic_rendering_features);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&multiview_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(multiview_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2864,8 +3388,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithInputAttachmentCapability) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -2930,8 +3453,7 @@ TEST_F(VkLayerTest, InvalidRenderingInfoColorAttachmentFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3043,8 +3565,7 @@ TEST_F(VkLayerTest, InvalidAttachmentSampleCount) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3170,8 +3691,7 @@ TEST_F(VkLayerTest, InvalidDynamicRenderingLibraryRenderPass) {
 
     auto library_features = LvlInitStruct<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT>();
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>(&library_features);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3238,8 +3758,7 @@ TEST_F(VkLayerTest, PipelineMissingMultisampleState) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3273,8 +3792,7 @@ TEST_F(VkLayerTest, InvalidRenderingFragmentDensityMapAttachment) {
 
     auto multiview_featuers = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>(&multiview_featuers);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3341,8 +3859,7 @@ TEST_F(VkLayerTest, InvalidRenderingFragmentDensityMapAttachmentUsage) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3383,8 +3900,7 @@ TEST_F(VkLayerTest, InvalidRenderingFragmentDensityMapAttachmentCreateFlags) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3437,8 +3953,7 @@ TEST_F(VkLayerTest, InvalidRenderingFragmentDensityMapAttachmentLayerCount) {
 
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>(&multiview_features);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3497,8 +4012,7 @@ TEST_F(VkLayerTest, InvalidRenderingPNextImageView) {
 
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>(&multiview_features);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3512,7 +4026,7 @@ TEST_F(VkLayerTest, InvalidRenderingPNextImageView) {
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
 
     auto phys_dev_props_2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &phys_dev_props_2);
+    GetPhysicalDeviceProperties2(phys_dev_props_2);
 
     VkImageObj image1(m_device);
     image1.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM,
@@ -3558,13 +4072,8 @@ TEST_F(VkLayerTest, InvalidRenderingRenderArea) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&dynamic_rendering_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3597,8 +4106,33 @@ TEST_F(VkLayerTest, InvalidRenderingRenderArea) {
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
+    begin_rendering_info.renderArea.offset.x = 1;
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06073");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.x = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.x);
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06073");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
     begin_rendering_info.renderArea.offset.x = 0;
+    begin_rendering_info.renderArea.extent.width = 32;
     begin_rendering_info.renderArea.offset.y = m_device->phy().properties().limits.maxFramebufferHeight - 16;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06074");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = 1;
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06074");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.y);
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-renderArea-06074");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
@@ -3622,8 +4156,7 @@ TEST_F(VkLayerTest, InvalidRenderingInfoViewMask) {
 
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>(&multiview_features);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3636,7 +4169,7 @@ TEST_F(VkLayerTest, InvalidRenderingInfoViewMask) {
 
     VkPhysicalDeviceMultiviewProperties multiview_props = LvlInitStruct<VkPhysicalDeviceMultiviewProperties>();
     VkPhysicalDeviceProperties2 pd_props2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&multiview_props);
-    vk::GetPhysicalDeviceProperties2(gpu(), &pd_props2);
+    GetPhysicalDeviceProperties2(pd_props2);
 
     if (multiview_props.maxMultiviewViewCount == 32) {
         printf("%s VUID is not testable as maxMultiviewViewCount is 32, skipping test\n", kSkipPrefix);
@@ -3674,8 +4207,7 @@ TEST_F(VkLayerTest, InvalidRenderingColorAttachmentFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3719,8 +4251,7 @@ TEST_F(VkLayerTest, InvalidResolveModeWithNonIntegerColorFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3782,8 +4313,7 @@ TEST_F(VkLayerTest, InvalidResolveModeWithIntegerColorFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3845,8 +4375,7 @@ TEST_F(VkLayerTest, InvalidResolveModeSamples) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3894,8 +4423,7 @@ TEST_F(VkLayerTest, InvalidResolveImageViewSamples) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -3962,8 +4490,7 @@ TEST_F(VkLayerTest, InvalidResolveImageViewFormatMatch) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4025,8 +4552,7 @@ TEST_F(VkLayerTest, InvalidRenderingAttachmentImageViewLayout) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4071,8 +4597,7 @@ TEST_F(VkLayerTest, InvalidResolveImageViewLayout) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4135,8 +4660,7 @@ TEST_F(VkLayerTest, InvalidResolveImageViewLayoutSeparateDepthStencil) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4206,8 +4730,7 @@ TEST_F(VkLayerTest, InvalidRenderingAttachmentImageViewShadingRateLayout) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4263,8 +4786,7 @@ TEST_F(VkLayerTest, InvalidResolveImageViewShadingRateLayout) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4330,8 +4852,7 @@ TEST_F(VkLayerTest, InvalidRenderingAttachmentImageViewFragmentDensityLayout) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4377,8 +4898,7 @@ TEST_F(VkLayerTest, InvalidResolveImageViewFragmentDensityLayout) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4440,8 +4960,7 @@ TEST_F(VkLayerTest, InvalidResolveImageViewReadOnlyOptimalLayout) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
@@ -4510,8 +5029,7 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRateImageView) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
 
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
@@ -4520,7 +5038,7 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRateImageView) {
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
 
     auto phys_dev_props_2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &phys_dev_props_2);
+    GetPhysicalDeviceProperties2(phys_dev_props_2);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -4565,8 +5083,7 @@ TEST_F(VkLayerTest, TestRenderingInfoColorAttachment) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
 
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
@@ -4685,8 +5202,7 @@ TEST_F(VkLayerTest, TestRenderingInfoDepthAttachment) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
 
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
@@ -4703,7 +5219,7 @@ TEST_F(VkLayerTest, TestRenderingInfoDepthAttachment) {
 
     auto depth_stencil_resolve_properties = LvlInitStruct<VkPhysicalDeviceDepthStencilResolveProperties>();
     auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&depth_stencil_resolve_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &properties2);
+    GetPhysicalDeviceProperties2(properties2);
     bool has_depth_resolve_mode_average =
         (depth_stencil_resolve_properties.supportedDepthResolveModes & VK_RESOLVE_MODE_AVERAGE_BIT) != 0;
     bool has_stencil_resolve_mode_average =
@@ -4868,11 +5384,10 @@ TEST_F(VkLayerTest, InvalidRenderingRenderAreaWithDeviceGroupExt) {
     }
 
         auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
+        auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
+        if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
+            GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
+        }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -4916,8 +5431,7 @@ TEST_F(VkLayerTest, TestDynamicRenderingPipeline) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
 
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
@@ -4968,15 +5482,9 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRateAttachmentSize) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeaturesKHR>(&dynamic_rendering_features);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&multiview_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(multiview_features);
     if (multiview_features.multiview == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) multiview";
     }
@@ -4987,7 +5495,7 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRateAttachmentSize) {
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
 
     auto phys_dev_props_2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &phys_dev_props_2);
+    GetPhysicalDeviceProperties2(phys_dev_props_2);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -5044,8 +5552,7 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRateAttachmentSizeWithDevic
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeaturesKHR>(&dynamic_rendering_features);
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&multiview_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(multiview_features);
 
     if (multiview_features.multiview == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) multiview";
@@ -5057,7 +5564,7 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRateAttachmentSizeWithDevic
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
 
     auto phys_dev_props_2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &phys_dev_props_2);
+    GetPhysicalDeviceProperties2(phys_dev_props_2);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -5082,7 +5589,20 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRateAttachmentSizeWithDevic
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
+    begin_rendering_info.renderArea.offset.x = 1;
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06119");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.x = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.x);
+    begin_rendering_info.renderArea.extent.width = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.width);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06119");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
     begin_rendering_info.renderArea.offset.x = 0;
+    begin_rendering_info.renderArea.extent.width = 0;
     begin_rendering_info.renderArea.offset.y = fragment_shading_rate.shadingRateAttachmentTexelSize.height * 64;
 
     VkRect2D render_area = {};
@@ -5100,7 +5620,20 @@ TEST_F(VkLayerTest, TestBeginRenderingFragmentShadingRateAttachmentSizeWithDevic
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
+    begin_rendering_info.renderArea.offset.y = 1;
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height) - 1;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06120");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
+    begin_rendering_info.renderArea.offset.y = layer_data::MaxTypeValue(begin_rendering_info.renderArea.offset.y);
+    begin_rendering_info.renderArea.extent.height = layer_data::MaxTypeValue(begin_rendering_info.renderArea.extent.height);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06120");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+
     render_area.extent.width = 32;
+    begin_rendering_info.renderArea.offset.y = fragment_shading_rate.shadingRateAttachmentTexelSize.height * 64;
     render_area.extent.height = 64 * fragment_shading_rate.shadingRateAttachmentTexelSize.height;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06122");
@@ -5125,8 +5658,7 @@ TEST_F(VkLayerTest, TestSuspendingRenderPassInstance) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
 
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
@@ -5222,8 +5754,7 @@ TEST_F(VkLayerTest, TestSuspendingRenderPassInstanceQueueSubmit2) {
 
     auto synchronization2 = LvlInitStruct<VkPhysicalDeviceSynchronization2Features>();
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>(&synchronization2);
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
 
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
@@ -5311,4 +5842,109 @@ TEST_F(VkLayerTest, TestSuspendingRenderPassInstanceQueueSubmit2) {
     vk::QueueWaitIdle(m_device->m_queue);
 
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkLayerTest, DynamicNullDepthStencilExecuteCommands) {
+    TEST_DESCRIPTION(
+        "Test for NULL depth stencil attachments in dynamic rendering with secondary command buffer with depth stencil format "
+        "inheritance info");
+
+    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
+
+    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
+    dynamic_rendering_features.dynamicRendering = VK_TRUE;
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+
+    // Create secondary command buffer
+    VkCommandPoolObj pool(m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBufferObj secondary(m_device, &pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+
+    VkFormat depth_stencil_format = FindSupportedDepthStencilFormat(gpu());
+
+    if (depth_stencil_format == VK_FORMAT_UNDEFINED) {
+        GTEST_SKIP() << "No found depth stencil format";
+    }
+
+    auto cbiri = LvlInitStruct<VkCommandBufferInheritanceRenderingInfoKHR>();
+    // format is defined, although no image view provided in dynamic rendering
+    cbiri.depthAttachmentFormat = depth_stencil_format;
+    cbiri.stencilAttachmentFormat = depth_stencil_format;
+    cbiri.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    auto cbii = LvlInitStruct<VkCommandBufferInheritanceInfo>(&cbiri);
+
+    auto cbbi = LvlInitStruct<VkCommandBufferBeginInfo>();
+    cbbi.pInheritanceInfo = &cbii;
+    cbbi.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    // Prepare primary dynamic rendering cmd buffer
+    VkDepthStencilObj depth_stencil(m_device);
+    depth_stencil.Init(m_device, 32, 32, depth_stencil_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                       VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+
+    auto rai = LvlInitStruct<VkRenderingAttachmentInfo>();
+    rai.imageView = *depth_stencil.BindInfo();
+    rai.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    auto ri = LvlInitStruct<VkRenderingInfoKHR>();
+    ri.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
+    ri.layerCount = 1;
+    ri.pDepthAttachment = &rai;
+    ri.pStencilAttachment = &rai;
+
+    // Record secondary cmd buffer with depth stencil format
+    secondary.begin(&cbbi);
+    secondary.end();
+
+    // Record primary cmd buffer with depth stencil
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(ri);
+    vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+
+    // Retry with null depth stencil attachment image view
+    rai.imageView = VK_NULL_HANDLE;
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(ri);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-pDepthAttachment-06774");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-pStencilAttachment-06775");
+    vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+
+    // Retry with nullptr attachment struct
+    ri.pDepthAttachment = nullptr;
+    ri.pStencilAttachment = nullptr;
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(ri);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-pDepthAttachment-06774");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-pStencilAttachment-06775");
+    vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+
+    // Retry with no format in inheritance info
+    cbiri.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
+    cbiri.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+
+    secondary.begin(&cbbi);
+    secondary.end();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(ri);
+    vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
 }

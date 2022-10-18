@@ -381,21 +381,19 @@ void ValidationStateTracker::PostCallRecordCreateBufferView(VkDevice device, con
 
     auto buffer_state = Get<BUFFER_STATE>(pCreateInfo->buffer);
 
-    VkFormatFeatureFlags2KHR buffer_features, image_features;
+    VkFormatFeatureFlags2KHR buffer_features;
     if (has_format_feature2) {
         auto fmt_props_3 = LvlInitStruct<VkFormatProperties3KHR>();
         auto fmt_props_2 = LvlInitStruct<VkFormatProperties2>(&fmt_props_3);
         DispatchGetPhysicalDeviceFormatProperties2(physical_device, pCreateInfo->format, &fmt_props_2);
         buffer_features = fmt_props_3.bufferFeatures;
-        image_features = fmt_props_3.linearTilingFeatures;
     } else {
         VkFormatProperties format_properties;
         DispatchGetPhysicalDeviceFormatProperties(physical_device, pCreateInfo->format, &format_properties);
         buffer_features = format_properties.bufferFeatures;
-        image_features = format_properties.linearTilingFeatures;
     }
 
-    Add(std::make_shared<BUFFER_VIEW_STATE>(buffer_state, *pView, pCreateInfo, buffer_features, image_features));
+    Add(std::make_shared<BUFFER_VIEW_STATE>(buffer_state, *pView, pCreateInfo, buffer_features));
 }
 
 void ValidationStateTracker::PostCallRecordCreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo,
@@ -614,7 +612,7 @@ void ValidationStateTracker::PostCallRecordCreateDevice(VkPhysicalDevice gpu, co
 }
 
 std::shared_ptr<QUEUE_STATE> ValidationStateTracker::CreateQueue(VkQueue q, uint32_t index, VkDeviceQueueCreateFlags flags, const VkQueueFamilyProperties &queueFamilyProperties) {
-    return std::make_shared<QUEUE_STATE>(q, index, flags, queueFamilyProperties);
+    return std::make_shared<QUEUE_STATE>(*this, q, index, flags, queueFamilyProperties);
 }
 
 void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
@@ -898,8 +896,15 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
     const auto *device_group_ci = LvlFindInChain<VkDeviceGroupDeviceCreateInfo>(pCreateInfo->pNext);
     if (device_group_ci) {
         physical_device_count = device_group_ci->physicalDeviceCount;
+        if (physical_device_count == 0) {
+            physical_device_count =
+                1;  // see https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDeviceGroupDeviceCreateInfo.html
+        }
         device_group_create_info = *device_group_ci;
     } else {
+        device_group_create_info = LvlInitStruct<VkDeviceGroupDeviceCreateInfo>();
+        device_group_create_info.physicalDeviceCount = 1;  // see previous VkDeviceGroupDeviceCreateInfo link
+        device_group_create_info.pPhysicalDevices = &physical_device;
         physical_device_count = 1;
     }
 
@@ -1176,12 +1181,6 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
             enabled_features.primitive_topology_list_restart_features = *primitive_topology_list_restart_features;
         }
 
-        const auto *zero_initialize_work_group_memory_features =
-            LvlFindInChain<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR>(pCreateInfo->pNext);
-        if (zero_initialize_work_group_memory_features) {
-            enabled_features.zero_initialize_work_group_memory_features = *zero_initialize_work_group_memory_features;
-        }
-
         const auto *rgba10x6_formats_features = LvlFindInChain<VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT>(pCreateInfo->pNext);
         if (rgba10x6_formats_features) {
             enabled_features.rgba10x6_formats_features = *rgba10x6_formats_features;
@@ -1237,6 +1236,18 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
             LvlFindInChain<VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT>(pCreateInfo->pNext);
         if (shader_module_identifier_features) {
             enabled_features.shader_module_identifier_features = *shader_module_identifier_features;
+        }
+
+        const auto attachment_feedback_loop_layout =
+            LvlFindInChain<VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT>(pCreateInfo->pNext);
+        if (attachment_feedback_loop_layout) {
+            enabled_features.attachment_feedback_loop_layout_features = *attachment_feedback_loop_layout;
+        }
+
+        const auto pipeline_protected_access_features =
+            LvlFindInChain<VkPhysicalDevicePipelineProtectedAccessFeaturesEXT>(pCreateInfo->pNext);
+        if (pipeline_protected_access_features) {
+            enabled_features.pipeline_protected_access_features = *pipeline_protected_access_features;
         }
     }
 
@@ -1526,12 +1537,14 @@ void ValidationStateTracker::PreCallRecordDestroyDevice(VkDevice device, const V
     buffer_view_map_.clear();
     buffer_map_.clear();
     // Queues persist until device is destroyed
+    for (auto &entry : queue_map_.snapshot()) {
+        entry.second->Destroy();
+    }
     queue_map_.clear();
 }
 
-void ValidationStateTracker::PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
-                                                       VkFence fence, VkResult result) {
-    if (result != VK_SUCCESS) return;
+void ValidationStateTracker::PreCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
+                                                      VkFence fence) {
     auto queue_state = Get<QUEUE_STATE>(queue);
 
     uint64_t early_retire_seq = 0;
@@ -1582,13 +1595,12 @@ void ValidationStateTracker::PostCallRecordQueueSubmit(VkQueue queue, uint32_t s
     }
 
     if (early_retire_seq) {
-        queue_state->Retire(early_retire_seq);
+        queue_state->NotifyAndWait(early_retire_seq);
     }
 }
 
 void ValidationStateTracker::RecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
-                                                VkFence fence, VkResult result) {
-    if (result != VK_SUCCESS) return;
+                                                VkFence fence) {
     auto queue_state = Get<QUEUE_STATE>(queue);
     uint64_t early_retire_seq = 0;
     if (submitCount == 0) {
@@ -1621,18 +1633,18 @@ void ValidationStateTracker::RecordQueueSubmit2(VkQueue queue, uint32_t submitCo
         early_retire_seq = std::max(early_retire_seq, submit_seq);
     }
     if (early_retire_seq) {
-        queue_state->Retire(early_retire_seq);
+        queue_state->NotifyAndWait(early_retire_seq);
     }
 }
 
-void ValidationStateTracker::PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
-                                                           VkFence fence, VkResult result) {
-    RecordQueueSubmit2(queue, submitCount, pSubmits, fence, result);
+void ValidationStateTracker::PreCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
+                                                          VkFence fence) {
+    RecordQueueSubmit2(queue, submitCount, pSubmits, fence);
 }
 
-void ValidationStateTracker::PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits,
-                                                        VkFence fence, VkResult result) {
-    RecordQueueSubmit2(queue, submitCount, pSubmits, fence, result);
+void ValidationStateTracker::PreCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits,
+                                                       VkFence fence) {
+    RecordQueueSubmit2(queue, submitCount, pSubmits, fence);
 }
 
 void ValidationStateTracker::PostCallRecordAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
@@ -1678,9 +1690,8 @@ void ValidationStateTracker::PreCallRecordFreeMemory(VkDevice device, VkDeviceMe
     Destroy<DEVICE_MEMORY_STATE>(mem);
 }
 
-void ValidationStateTracker::PostCallRecordQueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo *pBindInfo,
-                                                           VkFence fence, VkResult result) {
-    if (result != VK_SUCCESS) return;
+void ValidationStateTracker::PreCallRecordQueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo *pBindInfo,
+                                                          VkFence fence) {
     auto queue_state = Get<QUEUE_STATE>(queue);
 
     uint64_t early_retire_seq = 0;
@@ -1735,12 +1746,21 @@ void ValidationStateTracker::PostCallRecordQueueBindSparse(VkQueue queue, uint32
                 }
             }
         }
+        auto timeline_info = LvlFindInChain<VkTimelineSemaphoreSubmitInfo>(bind_info.pNext);
         CB_SUBMISSION submission;
         for (uint32_t i = 0; i < bind_info.waitSemaphoreCount; ++i) {
-            submission.AddWaitSemaphore(Get<SEMAPHORE_STATE>(bind_info.pWaitSemaphores[i]), 0);
+            uint64_t payload = 0;
+            if (timeline_info && i < timeline_info->waitSemaphoreValueCount) {
+                payload = timeline_info->pWaitSemaphoreValues[i];
+            }
+            submission.AddWaitSemaphore(Get<SEMAPHORE_STATE>(bind_info.pWaitSemaphores[i]), payload);
         }
         for (uint32_t i = 0; i < bind_info.signalSemaphoreCount; ++i) {
-            submission.AddSignalSemaphore(Get<SEMAPHORE_STATE>(bind_info.pSignalSemaphores[i]), 0);
+            uint64_t payload = 0;
+            if (timeline_info && i < timeline_info->signalSemaphoreValueCount) {
+                payload = timeline_info->pSignalSemaphoreValues[i];
+            }
+            submission.AddSignalSemaphore(Get<SEMAPHORE_STATE>(bind_info.pSignalSemaphores[i]), payload);
         }
         if (bind_idx == (bindInfoCount - 1)) {
             submission.AddFence(Get<FENCE_STATE>(fence));
@@ -1750,7 +1770,7 @@ void ValidationStateTracker::PostCallRecordQueueBindSparse(VkQueue queue, uint32
     }
 
     if (early_retire_seq) {
-        queue_state->Retire(early_retire_seq);
+        queue_state->NotifyAndWait(early_retire_seq);
     }
 }
 
@@ -1758,7 +1778,7 @@ void ValidationStateTracker::PostCallRecordCreateSemaphore(VkDevice device, cons
                                                            const VkAllocationCallbacks *pAllocator, VkSemaphore *pSemaphore,
                                                            VkResult result) {
     if (VK_SUCCESS != result) return;
-    Add(std::make_shared<SEMAPHORE_STATE>(*pSemaphore, LvlFindInChain<VkSemaphoreTypeCreateInfo>(pCreateInfo->pNext), pCreateInfo));
+    Add(std::make_shared<SEMAPHORE_STATE>(*this, *pSemaphore, pCreateInfo));
 }
 
 void ValidationStateTracker::RecordImportSemaphoreState(VkSemaphore semaphore, VkExternalSemaphoreHandleTypeFlagBits handle_type,
@@ -1769,12 +1789,29 @@ void ValidationStateTracker::RecordImportSemaphoreState(VkSemaphore semaphore, V
     }
 }
 
-void ValidationStateTracker::PostCallRecordSignalSemaphoreKHR(VkDevice device, const VkSemaphoreSignalInfo *pSignalInfo,
+void ValidationStateTracker::PreCallRecordSignalSemaphore(VkDevice device, const VkSemaphoreSignalInfo *pSignalInfo) {
+    auto semaphore_state = Get<SEMAPHORE_STATE>(pSignalInfo->semaphore);
+    if (semaphore_state) {
+        auto value = pSignalInfo->value;  // const workaround
+        semaphore_state->EnqueueSignal(nullptr, 0, value);
+    }
+}
+
+void ValidationStateTracker::PreCallRecordSignalSemaphoreKHR(VkDevice device, const VkSemaphoreSignalInfo *pSignalInfo) {
+    PreCallRecordSignalSemaphore(device, pSignalInfo);
+}
+
+void ValidationStateTracker::PostCallRecordSignalSemaphore(VkDevice device, const VkSemaphoreSignalInfo *pSignalInfo,
                                                               VkResult result) {
     auto semaphore_state = Get<SEMAPHORE_STATE>(pSignalInfo->semaphore);
     if (semaphore_state) {
-        semaphore_state->RetireTimeline(pSignalInfo->value);
+        semaphore_state->Retire(nullptr, pSignalInfo->value);
     }
+}
+
+void ValidationStateTracker::PostCallRecordSignalSemaphoreKHR(VkDevice device, const VkSemaphoreSignalInfo *pSignalInfo,
+                                                              VkResult result) {
+    PostCallRecordSignalSemaphore(device, pSignalInfo, result);
 }
 
 void ValidationStateTracker::RecordMappedMemory(VkDeviceMemory mem, VkDeviceSize offset, VkDeviceSize size, void **ppData) {
@@ -1795,7 +1832,7 @@ void ValidationStateTracker::PostCallRecordWaitForFences(VkDevice device, uint32
         for (uint32_t i = 0; i < fenceCount; i++) {
             auto fence_state = Get<FENCE_STATE>(pFences[i]);
             if (fence_state) {
-                fence_state->Retire();
+                fence_state->NotifyAndWait();
             }
         }
     }
@@ -1804,8 +1841,27 @@ void ValidationStateTracker::PostCallRecordWaitForFences(VkDevice device, uint32
     //  vkGetFenceStatus() at which point we'll clean/remove their CBs if complete.
 }
 
-void ValidationStateTracker::RecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo, uint64_t timeout,
-                                                  VkResult result) {
+void ValidationStateTracker::PreRecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo, uint64_t timeout) {
+    for (uint32_t i = 0; i < pWaitInfo->semaphoreCount; i++) {
+        auto semaphore_state = Get<SEMAPHORE_STATE>(pWaitInfo->pSemaphores[i]);
+        if (semaphore_state) {
+            auto value = pWaitInfo->pValues[i];  // const workaround
+            semaphore_state->EnqueueWait(nullptr, 0, value);
+        }
+    }
+}
+
+void ValidationStateTracker::PreCallRecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo, uint64_t timeout) {
+    PreRecordWaitSemaphores(device, pWaitInfo, timeout);
+}
+
+void ValidationStateTracker::PreCallRecordWaitSemaphoresKHR(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo,
+                                                             uint64_t timeout) {
+    PreRecordWaitSemaphores(device, pWaitInfo, timeout);
+}
+
+void ValidationStateTracker::PostRecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo, uint64_t timeout,
+                                                      VkResult result) {
     if (VK_SUCCESS != result) return;
 
     // Same logic as vkWaitForFences(). If some semaphores are not signaled, we will get their status when
@@ -1814,7 +1870,7 @@ void ValidationStateTracker::RecordWaitSemaphores(VkDevice device, const VkSemap
         for (uint32_t i = 0; i < pWaitInfo->semaphoreCount; i++) {
             auto semaphore_state = Get<SEMAPHORE_STATE>(pWaitInfo->pSemaphores[i]);
             if (semaphore_state) {
-                semaphore_state->RetireTimeline(pWaitInfo->pValues[i]);
+                semaphore_state->NotifyAndWait(pWaitInfo->pValues[i]);
             }
         }
     }
@@ -1822,12 +1878,12 @@ void ValidationStateTracker::RecordWaitSemaphores(VkDevice device, const VkSemap
 
 void ValidationStateTracker::PostCallRecordWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo, uint64_t timeout,
                                                           VkResult result) {
-    RecordWaitSemaphores(device, pWaitInfo, timeout, result);
+    PostRecordWaitSemaphores(device, pWaitInfo, timeout, result);
 }
 
 void ValidationStateTracker::PostCallRecordWaitSemaphoresKHR(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo,
                                                              uint64_t timeout, VkResult result) {
-    RecordWaitSemaphores(device, pWaitInfo, timeout, result);
+    PostRecordWaitSemaphores(device, pWaitInfo, timeout, result);
 }
 
 void ValidationStateTracker::RecordGetSemaphoreCounterValue(VkDevice device, VkSemaphore semaphore, uint64_t *pValue,
@@ -1836,7 +1892,7 @@ void ValidationStateTracker::RecordGetSemaphoreCounterValue(VkDevice device, VkS
 
     auto semaphore_state = Get<SEMAPHORE_STATE>(semaphore);
     if (semaphore_state) {
-        semaphore_state->RetireTimeline(*pValue);
+        semaphore_state->NotifyAndWait(*pValue);
     }
 }
 
@@ -1844,6 +1900,7 @@ void ValidationStateTracker::PostCallRecordGetSemaphoreCounterValue(VkDevice dev
                                                                     VkResult result) {
     RecordGetSemaphoreCounterValue(device, semaphore, pValue, result);
 }
+
 void ValidationStateTracker::PostCallRecordGetSemaphoreCounterValueKHR(VkDevice device, VkSemaphore semaphore, uint64_t *pValue,
                                                                        VkResult result) {
     RecordGetSemaphoreCounterValue(device, semaphore, pValue, result);
@@ -1853,7 +1910,7 @@ void ValidationStateTracker::PostCallRecordGetFenceStatus(VkDevice device, VkFen
     if (VK_SUCCESS != result) return;
     auto fence_state = Get<FENCE_STATE>(fence);
     if (fence_state) {
-        fence_state->Retire();
+        fence_state->NotifyAndWait();
     }
 }
 
@@ -1881,14 +1938,14 @@ void ValidationStateTracker::PostCallRecordQueueWaitIdle(VkQueue queue, VkResult
     if (VK_SUCCESS != result) return;
     auto queue_state = Get<QUEUE_STATE>(queue);
     if (queue_state) {
-        queue_state->Retire();
+        queue_state->NotifyAndWait();
     }
 }
 
 void ValidationStateTracker::PostCallRecordDeviceWaitIdle(VkDevice device, VkResult result) {
     if (VK_SUCCESS != result) return;
     for (auto &queue : queue_map_.snapshot()) {
-        queue.second->Retire();
+        queue.second->NotifyAndWait();
     }
 }
 
@@ -2149,7 +2206,7 @@ void ValidationStateTracker::PreCallRecordDestroyRenderPass(VkDevice device, VkR
 void ValidationStateTracker::PostCallRecordCreateFence(VkDevice device, const VkFenceCreateInfo *pCreateInfo,
                                                        const VkAllocationCallbacks *pAllocator, VkFence *pFence, VkResult result) {
     if (VK_SUCCESS != result) return;
-    Add(std::make_shared<FENCE_STATE>(*pFence, pCreateInfo));
+    Add(std::make_shared<FENCE_STATE>(*this, *pFence, pCreateInfo));
 }
 
 std::shared_ptr<PIPELINE_STATE> ValidationStateTracker::CreateGraphicsPipelineState(
@@ -3098,30 +3155,47 @@ void ValidationStateTracker::PreCallRecordCmdPipelineBarrier2(VkCommandBuffer co
 void ValidationStateTracker::PostCallRecordCmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t slot,
                                                          VkFlags flags) {
     if (disabled[query_validation]) return;
-
-    QueryObject query = {queryPool, slot};
     auto cb_state = GetWrite<CMD_BUFFER_STATE>(commandBuffer);
-    cb_state->RecordCmd(CMD_BEGINQUERY);
-    if (!disabled[query_validation]) {
-        cb_state->BeginQuery(query);
+
+    uint32_t num_queries = 1;
+    // If render pass instance has multiview enabled, query uses N consecutive query indices
+    if (cb_state->activeRenderPass) {
+        uint32_t bits = cb_state->activeRenderPass->GetViewMaskBits(cb_state->activeSubpass);
+        num_queries = std::max(num_queries, bits);
     }
-    if (!disabled[command_buffer_state]) {
-        auto pool_state = Get<QUERY_POOL_STATE>(query.pool);
-        cb_state->AddChild(pool_state);
+    for (uint32_t i = 0; i < num_queries; ++i) {
+        QueryObject query = {queryPool, slot};
+        cb_state->RecordCmd(CMD_BEGINQUERY);
+        if (!disabled[query_validation]) {
+            cb_state->BeginQuery(query);
+        }
+        if (!disabled[command_buffer_state]) {
+            auto pool_state = Get<QUERY_POOL_STATE>(query.pool);
+            cb_state->AddChild(pool_state);
+        }
     }
 }
 
 void ValidationStateTracker::PostCallRecordCmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t slot) {
     if (disabled[query_validation]) return;
-    QueryObject query_obj = {queryPool, slot};
     auto cb_state = GetWrite<CMD_BUFFER_STATE>(commandBuffer);
-    cb_state->RecordCmd(CMD_ENDQUERY);
-    if (!disabled[query_validation]) {
-        cb_state->EndQuery(query_obj);
+    uint32_t num_queries = 1;
+    // If render pass instance has multiview enabled, query uses N consecutive query indices
+    if (cb_state->activeRenderPass) {
+        uint32_t bits = cb_state->activeRenderPass->GetViewMaskBits(cb_state->activeSubpass);
+        num_queries = std::max(num_queries, bits);
     }
-    if (!disabled[command_buffer_state]) {
-        auto pool_state = Get<QUERY_POOL_STATE>(query_obj.pool);
-        cb_state->AddChild(pool_state);
+
+    for (uint32_t i = 0; i < num_queries; ++i) {
+        QueryObject query_obj = {queryPool, slot + i};
+        cb_state->RecordCmd(CMD_ENDQUERY);
+        if (!disabled[query_validation]) {
+            cb_state->EndQuery(query_obj);
+        }
+        if (!disabled[command_buffer_state]) {
+            auto pool_state = Get<QUERY_POOL_STATE>(query_obj.pool);
+            cb_state->AddChild(pool_state);
+        }
     }
 }
 
@@ -3582,12 +3656,31 @@ void ValidationStateTracker::PostCallRecordCreateDisplayModeKHR(VkPhysicalDevice
 }
 
 void ValidationStateTracker::PostCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo, VkResult result) {
+    // spec: If vkQueuePresentKHR fails to enqueue the corresponding set of queue operations, it may return
+    // VK_ERROR_OUT_OF_HOST_MEMORY or VK_ERROR_OUT_OF_DEVICE_MEMORY. If it does, the implementation must ensure that the state and
+    // contents of any resources or synchronization primitives referenced is unaffected by the call or its failure.
+    //
+    // If vkQueuePresentKHR fails in such a way that the implementation is unable to make that guarantee, the implementation must
+    // return VK_ERROR_DEVICE_LOST.
+    //
+    // However, if the presentation request is rejected by the presentation engine with an error VK_ERROR_OUT_OF_DATE_KHR,
+    // VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT, or VK_ERROR_SURFACE_LOST_KHR, the set of queue operations are still considered
+    // to be enqueued and thus any semaphore wait operation specified in VkPresentInfoKHR will execute when the corresponding queue
+    // operation is complete.
+    //
+    // NOTE: This is the only queue submit-like call that has its state updated in PostCallRecord(). In part that is because of these
+    // non-fatal error cases. Also we need a place to handle the swapchain image bookkeeping, which really should be happening once all
+    // the wait semaphores have completed. Since most of the PostCall queue submit race conditions are related to timeline semaphores,
+    // and acquire sempaphores are always binary, this seems ok-ish.
+    if (result == VK_ERROR_OUT_OF_HOST_MEMORY || result == VK_ERROR_OUT_OF_DEVICE_MEMORY || result == VK_ERROR_DEVICE_LOST) {
+        return;
+    }
     auto queue_state = Get<QUEUE_STATE>(queue);
-    // Semaphore waits occur before error generation, if the call reached the ICD. (Confirm?)
+    CB_SUBMISSION submission;
     for (uint32_t i = 0; i < pPresentInfo->waitSemaphoreCount; ++i) {
         auto semaphore_state = Get<SEMAPHORE_STATE>(pPresentInfo->pWaitSemaphores[i]);
         if (semaphore_state) {
-            semaphore_state->EnqueuePresent(queue_state.get());
+            submission.AddWaitSemaphore(std::move(semaphore_state), 0);
         }
     }
 
@@ -3600,13 +3693,14 @@ void ValidationStateTracker::PostCallRecordQueuePresentKHR(VkQueue queue, const 
         // Mark the image as having been released to the WSI
         auto swapchain_data = Get<SWAPCHAIN_NODE>(pPresentInfo->pSwapchains[i]);
         if (swapchain_data) {
-            swapchain_data->PresentImage(pPresentInfo->pImageIndices[i]);
-            if (present_id_info) {
-                if (i < present_id_info->swapchainCount && present_id_info->pPresentIds[i] > swapchain_data->max_present_id) {
-                    swapchain_data->max_present_id = present_id_info->pPresentIds[i];
-                }
-            }
+            uint64_t present_id = (present_id_info && i < present_id_info->swapchainCount) ? present_id_info->pPresentIds[i] : 0;
+            swapchain_data->PresentImage(pPresentInfo->pImageIndices[i], present_id);
         }
+    }
+
+    auto early_retire_seq = queue_state->Submit(std::move(submission));
+    if (early_retire_seq) {
+        queue_state->NotifyAndWait(early_retire_seq);
     }
 }
 
@@ -4102,18 +4196,36 @@ void ValidationStateTracker::PostCallRecordGetPhysicalDeviceDisplayPlaneProperti
 
 void ValidationStateTracker::PostCallRecordCmdBeginQueryIndexedEXT(VkCommandBuffer commandBuffer, VkQueryPool queryPool,
                                                                    uint32_t query, VkQueryControlFlags flags, uint32_t index) {
-    QueryObject query_obj = {queryPool, query, index};
     auto cb_state = GetWrite<CMD_BUFFER_STATE>(commandBuffer);
-    cb_state->RecordCmd(CMD_BEGINQUERYINDEXEDEXT);
-    cb_state->BeginQuery(query_obj);
+    uint32_t num_queries = 1;
+    // If render pass instance has multiview enabled, query uses N consecutive query indices
+    if (cb_state->activeRenderPass) {
+        uint32_t bits = cb_state->activeRenderPass->GetViewMaskBits(cb_state->activeSubpass);
+        num_queries = std::max(num_queries, bits);
+    }
+
+    for (uint32_t i = 0; i < num_queries; ++i) {
+        QueryObject query_obj = {queryPool, query, index + i};
+        cb_state->RecordCmd(CMD_BEGINQUERYINDEXEDEXT);
+        cb_state->BeginQuery(query_obj);
+    }
 }
 
 void ValidationStateTracker::PostCallRecordCmdEndQueryIndexedEXT(VkCommandBuffer commandBuffer, VkQueryPool queryPool,
                                                                  uint32_t query, uint32_t index) {
-    QueryObject query_obj = {queryPool, query, index};
     auto cb_state = GetWrite<CMD_BUFFER_STATE>(commandBuffer);
-    cb_state->RecordCmd(CMD_ENDQUERYINDEXEDEXT);
-    cb_state->EndQuery(query_obj);
+    uint32_t num_queries = 1;
+    // If render pass instance has multiview enabled, query uses N consecutive query indices
+    if (cb_state->activeRenderPass) {
+        uint32_t bits = cb_state->activeRenderPass->GetViewMaskBits(cb_state->activeSubpass);
+        num_queries = std::max(num_queries, bits);
+    }
+
+    for (uint32_t i = 0; i < num_queries; ++i) {
+        QueryObject query_obj = {queryPool, query, index + i};
+        cb_state->RecordCmd(CMD_ENDQUERYINDEXEDEXT);
+        cb_state->EndQuery(query_obj);
+    }
 }
 
 void ValidationStateTracker::RecordCreateSamplerYcbcrConversionState(const VkSamplerYcbcrConversionCreateInfo *create_info,

@@ -373,7 +373,8 @@ TEST_F(VkPositiveLayerTest, PushDescriptorNullDstSetTest) {
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    auto push_descriptor_prop = GetPushDescriptorProperties(instance(), gpu());
+    VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+    GetPhysicalDeviceProperties2(push_descriptor_prop);
     if (push_descriptor_prop.maxPushDescriptors < 1) {
         // Some implementations report an invalid maxPushDescriptors of 0
         printf("%s maxPushDescriptors is zero, skipping tests\n", kSkipPrefix);
@@ -448,7 +449,8 @@ TEST_F(VkPositiveLayerTest, PushDescriptorUnboundSetTest) {
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    auto push_descriptor_prop = GetPushDescriptorProperties(instance(), gpu());
+    VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+    GetPhysicalDeviceProperties2(push_descriptor_prop);
     if (push_descriptor_prop.maxPushDescriptors < 1) {
         // Some implementations report an invalid maxPushDescriptors of 0
         printf("%s maxPushDescriptors is zero, skipping tests\n", kSkipPrefix);
@@ -649,7 +651,8 @@ TEST_F(VkPositiveLayerTest, PushDescriptorSetUpdatingSetNumber) {
         return;
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
-    auto push_descriptor_prop = GetPushDescriptorProperties(instance(), gpu());
+    VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+    GetPhysicalDeviceProperties2(push_descriptor_prop);
     if (push_descriptor_prop.maxPushDescriptors < 1) {
         // Some implementations report an invalid maxPushDescriptors of 0
         printf("%s maxPushDescriptors is zero, skipping tests\n", kSkipPrefix);
@@ -868,7 +871,10 @@ TEST_F(VkPositiveLayerTest, CreateDescriptorSetBindingWithIgnoredSamplers) {
 
         // In addition to the extension being supported we need to have at least one available
         // Some implementations report an invalid maxPushDescriptors of 0
-        push_descriptor_found = GetPushDescriptorProperties(instance(), gpu()).maxPushDescriptors > 0;
+        VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_prop =
+            LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+        GetPhysicalDeviceProperties2(push_descriptor_prop);
+        push_descriptor_found = push_descriptor_prop.maxPushDescriptors > 0;
     } else {
         printf("%s %s Extension not supported, skipping push descriptor sub-tests\n", kSkipPrefix,
                VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
@@ -943,7 +949,8 @@ TEST_F(VkPositiveLayerTest, PushingDescriptorSetWithImmutableSampler) {
         return;
     }
 
-    auto push_descriptor_prop = GetPushDescriptorProperties(instance(), gpu());
+    VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+    GetPhysicalDeviceProperties2(push_descriptor_prop);
     if (push_descriptor_prop.maxPushDescriptors < 1) {
         // Some implementations report an invalid maxPushDescriptors of 0
         printf("%s maxPushDescriptors is zero, skipping tests\n", kSkipPrefix);
@@ -1017,13 +1024,7 @@ TEST_F(VkPositiveLayerTest, BindVertexBuffers2EXTNullDescriptors) {
     m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
 
     auto robustness2_features = LvlInitStruct<VkPhysicalDeviceRobustness2FeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&robustness2_features);
-
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(robustness2_features);
     if (!robustness2_features.nullDescriptor) {
         printf("%s nullDescriptor feature not supported, skipping test\n", kSkipPrefix);
         return;
@@ -1062,16 +1063,13 @@ TEST_F(VkPositiveLayerTest, BindVertexBuffers2EXTNullDescriptors) {
 TEST_F(VkPositiveLayerTest, CopyMutableDescriptors) {
     TEST_DESCRIPTION("Copy mutable descriptors.");
 
-    AddRequiredExtensions(VK_VALVE_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    auto mutable_descriptor_type_features = LvlInitStruct<VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&mutable_descriptor_type_features);
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto mutable_descriptor_type_features = LvlInitStruct<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT>();
+    auto features2 = GetPhysicalDeviceFeatures2(mutable_descriptor_type_features);
     if (mutable_descriptor_type_features.mutableDescriptorType == VK_FALSE) {
         printf("%s mutableDescriptorType feature not supported. Skipped.\n", kSkipPrefix);
         return;
@@ -1080,20 +1078,20 @@ TEST_F(VkPositiveLayerTest, CopyMutableDescriptors) {
 
     VkDescriptorType descriptor_types[] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER};
 
-    VkMutableDescriptorTypeListVALVE mutable_descriptor_type_lists[2] = {};
+    VkMutableDescriptorTypeListEXT mutable_descriptor_type_lists[2] = {};
     mutable_descriptor_type_lists[0].descriptorTypeCount = 2;
     mutable_descriptor_type_lists[0].pDescriptorTypes = descriptor_types;
     mutable_descriptor_type_lists[1].descriptorTypeCount = 0;
     mutable_descriptor_type_lists[1].pDescriptorTypes = nullptr;
 
-    VkMutableDescriptorTypeCreateInfoVALVE mdtci = LvlInitStruct<VkMutableDescriptorTypeCreateInfoVALVE>();
+    VkMutableDescriptorTypeCreateInfoEXT mdtci = LvlInitStruct<VkMutableDescriptorTypeCreateInfoEXT>();
     mdtci.mutableDescriptorTypeListCount = 2;
     mdtci.pMutableDescriptorTypeLists = mutable_descriptor_type_lists;
 
     VkDescriptorPoolSize pool_sizes[2] = {};
     pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     pool_sizes[0].descriptorCount = 2;
-    pool_sizes[1].type = VK_DESCRIPTOR_TYPE_MUTABLE_VALVE;
+    pool_sizes[1].type = VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
     pool_sizes[1].descriptorCount = 2;
 
     VkDescriptorPoolCreateInfo ds_pool_ci = LvlInitStruct<VkDescriptorPoolCreateInfo>(&mdtci);
@@ -1106,7 +1104,7 @@ TEST_F(VkPositiveLayerTest, CopyMutableDescriptors) {
 
     VkDescriptorSetLayoutBinding bindings[2] = {};
     bindings[0].binding = 0;
-    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_MUTABLE_VALVE;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
     bindings[0].descriptorCount = 1;
     bindings[0].stageFlags = VK_SHADER_STAGE_ALL;
     bindings[0].pImmutableSamplers = nullptr;
@@ -1370,7 +1368,7 @@ TEST_F(VkPositiveLayerTest, MultipleThreadsUsingHostOnlyDescriptorSet) {
     TEST_DESCRIPTION("Test using host only descriptor set in multiple threads");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_VALVE_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
@@ -1380,10 +1378,8 @@ TEST_F(VkPositiveLayerTest, MultipleThreadsUsingHostOnlyDescriptorSet) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    auto mutable_descriptor = LvlInitStruct<VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&mutable_descriptor);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto mutable_descriptor = LvlInitStruct<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT>();
+    auto features2 = GetPhysicalDeviceFeatures2(mutable_descriptor);
     if (mutable_descriptor.mutableDescriptorType == VK_FALSE) {
         printf("%s mutableDescriptorType feature not supported, skipping test.\n", kSkipPrefix);
         return;
@@ -1403,8 +1399,8 @@ TEST_F(VkPositiveLayerTest, MultipleThreadsUsingHostOnlyDescriptorSet) {
                                        {
                                            {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 2, VK_SHADER_STAGE_ALL, nullptr},
                                        },
-                                       VK_DESCRIPTOR_SET_LAYOUT_CREATE_HOST_ONLY_POOL_BIT_VALVE, nullptr,
-                                       VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_VALVE);
+                                       VK_DESCRIPTOR_SET_LAYOUT_CREATE_HOST_ONLY_POOL_BIT_EXT, nullptr,
+                                       VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT);
 
     const auto &testing_thread1 = [&]() {
         VkDescriptorImageInfo image_info = {};

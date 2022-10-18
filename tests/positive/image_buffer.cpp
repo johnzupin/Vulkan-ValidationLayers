@@ -370,10 +370,7 @@ TEST_F(VkPositiveLayerTest, SamplerMirrorClampToEdgeWithFeature) {
 
     auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
     features12.samplerMirrorClampToEdge = VK_TRUE;
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&features12);
-
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(features12);
     if (features12.samplerMirrorClampToEdge != VK_TRUE) {
         printf("samplerMirrorClampToEdge not supported, skipping test\n");
         return;
@@ -2351,6 +2348,7 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
     present.pImageIndices = &current_buffer;
     present.swapchainCount = 1;
     vk::QueuePresentKHR(m_device->m_queue, &present);
+    vk::QueueWaitIdle(m_device->m_queue);
 
     vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
     vk::DestroySemaphore(m_device->device(), image_acquired, nullptr);
@@ -2448,11 +2446,7 @@ TEST_F(VkPositiveLayerTest, PlaneAspectNone) {
 TEST_F(VkPositiveLayerTest, ImageCompressionControl) {
     TEST_DESCRIPTION("Checks for creating fixed rate compression image.");
 
-    uint32_t version = SetTargetApiVersion(VK_API_VERSION_1_2);
-    if (version < VK_API_VERSION_1_2) {
-        printf("%s At least Vulkan version 1.2 is required, skipping test.\n", kSkipPrefix);
-        return;
-    }
+    SetTargetApiVersion(VK_API_VERSION_1_2);
 
     AddRequiredExtensions(VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -2462,13 +2456,16 @@ TEST_F(VkPositiveLayerTest, ImageCompressionControl) {
 
     ASSERT_NO_FATAL_FAILURE(InitFrameworkAndRetrieveFeatures(features2));
 
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required, skipping test.";
+    }
+
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (!image_compression_control.imageCompressionControl) {
-        printf("%s Test requires (unsupported) imageCompressionControl , skipping\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires (unsupported) imageCompressionControl, skipping";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());

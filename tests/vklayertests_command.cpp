@@ -188,14 +188,8 @@ TEST_F(VkLayerTest, DynamicLineStippleNotBound) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto line_rasterization_features = LvlInitStruct<VkPhysicalDeviceLineRasterizationFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&line_rasterization_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(line_rasterization_features);
     if (!line_rasterization_features.stippledBresenhamLines || !line_rasterization_features.bresenhamLines) {
         printf("%sStipple Bresenham lines not supported; skipped.\n", kSkipPrefix);
         return;
@@ -338,7 +332,7 @@ TEST_F(VkLayerTest, IndexBufferBadBindOffset) {
 TEST_F(VkLayerTest, MissingClearAttachment) {
     TEST_DESCRIPTION("Points to a wrong colorAttachment index in a VkClearAttachment structure passed to vkCmdClearAttachments");
     ASSERT_NO_FATAL_FAILURE(Init());
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-aspectMask-02501");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-aspectMask-07271");
 
     VKTriangleTest(BsoFailCmdClearAttachments);
     m_errorMonitor->VerifyFound();
@@ -961,12 +955,12 @@ TEST_F(VkLayerTest, ClearColorAttachmentsDepthStencil) {
     attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &attachment, 1, &clear_rect);
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-aspectMask-02502");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-pAttachments-07270");
     attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &attachment, 1, &clear_rect);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-aspectMask-02503");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdClearAttachments-pAttachments-07270");
     attachment.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
     vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &attachment, 1, &clear_rect);
     m_errorMonitor->VerifyFound();
@@ -1651,14 +1645,16 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     region.imageOffset = {1, 1, 0};
     region.imageExtent = {1, 1, 1};
     // imageOffset not a multiple of block size
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-imageOffset-00205");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-pRegions-07274");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-pRegions-07275");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-vkCmdCopyImageToBuffer-imageOffset-01794");  // image transfer granularity
     vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, buffer_16.handle(), 1, &region);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(
-        kErrorBit, "VUID-vkCmdCopyBufferToImage-imageOffset-00205");  // imageOffset not a multiple of block size
+    // imageOffset not a multiple of block size
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07274");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07275");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-vkCmdCopyBufferToImage-imageOffset-01793");  // image transfer granularity
     vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region);
@@ -1681,8 +1677,9 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
                                                                         VK_IMAGE_LAYOUT_GENERAL,
                                                                         1,
                                                                         &region2};
-        m_errorMonitor->SetDesiredFailureMsg(
-            kErrorBit, "VUID-VkCopyBufferToImageInfo2-imageOffset-00205");  // imageOffset not a multiple of block size
+        // imageOffset not a multiple of block size
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCopyBufferToImageInfo2-pRegions-07274");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCopyBufferToImageInfo2-pRegions-07275");
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                              "VUID-VkCopyBufferToImageInfo2-imageOffset-01793");  // image transfer granularity
         vkCmdCopyBufferToImage2Function(m_commandBuffer->handle(), &copy_buffer_to_image_info2);
@@ -2268,7 +2265,8 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
             region.imageOffset = {0, 0, 0};
 
             // buffer offset must be a multiple of texel block size (16)
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-bufferOffset-00206");
+            // 01558 and 07273 are the same
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-pRegions-07273");
             vuid =
                 mp_extensions ? "VUID-vkCmdCopyImageToBuffer-bufferOffset-01558" : "VUID-vkCmdCopyImageToBuffer-bufferOffset-00193";
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, vuid);
@@ -2350,6 +2348,7 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
 
             // buffer offset must be a multiple of texel block size for VK_FORMAT_R8G8_UNORM (2)
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-bufferOffset-01559");
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07273");
             mp_region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT;
             mp_region.bufferOffset = 5;
             mp_region.imageExtent = {8, 8, 1};
@@ -2416,7 +2415,9 @@ TEST_F(VkLayerTest, MiscImageLayerTests) {
     // BufferOffset must be a multiple of the calling command's VkImage parameter's texel size
     // Introduce failure by setting bufferOffset to 1 and 1/2 texels
     region.bufferOffset = 4;
+    // 00193 and 07273 are the same
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-bufferOffset-00193");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07273");
     vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer.handle(), image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                              &region);
     m_errorMonitor->VerifyFound();
@@ -2981,30 +2982,28 @@ TEST_F(VkLayerTest, CopyImageCompressedBlockAlignment) {
 
     // Src, Dest offsets must be multiples of compressed block sizes {4, 4, 1}
     // Image transfer granularity gets set to compressed block size, so an ITG error is also (unavoidably) triggered.
-    vuid = ycbcr ? "VUID-vkCmdCopyImage-srcImage-01727" : "VUID-vkCmdCopyImage-srcImage-01727";
     copy_region.srcOffset = {2, 4, 0};  // source width
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, vuid);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-pRegions-07278");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-vkCmdCopyImage-srcOffset-01783");  // srcOffset image transfer granularity
     m_commandBuffer->CopyImage(image_1.image(), VK_IMAGE_LAYOUT_GENERAL, image_2.image(), VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
     m_errorMonitor->VerifyFound();
     copy_region.srcOffset = {12, 1, 0};  // source height
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, vuid);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-pRegions-07279");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-vkCmdCopyImage-srcOffset-01783");  // srcOffset image transfer granularity
     m_commandBuffer->CopyImage(image_1.image(), VK_IMAGE_LAYOUT_GENERAL, image_2.image(), VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
     m_errorMonitor->VerifyFound();
     copy_region.srcOffset = {0, 0, 0};
 
-    vuid = ycbcr ? "VUID-vkCmdCopyImage-dstImage-01731" : "VUID-vkCmdCopyImage-dstImage-01731";
     copy_region.dstOffset = {1, 0, 0};  // dest width
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, vuid);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-pRegions-07281");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-vkCmdCopyImage-dstOffset-01784");  // dstOffset image transfer granularity
     m_commandBuffer->CopyImage(image_1.image(), VK_IMAGE_LAYOUT_GENERAL, image_2.image(), VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
     m_errorMonitor->VerifyFound();
     copy_region.dstOffset = {4, 1, 0};  // dest height
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, vuid);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-pRegions-07282");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-vkCmdCopyImage-dstOffset-01784");  // dstOffset image transfer granularity
     m_commandBuffer->CopyImage(image_1.image(), VK_IMAGE_LAYOUT_GENERAL, image_2.image(), VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
@@ -3126,7 +3125,7 @@ TEST_F(VkLayerTest, CopyImageSinglePlane422Alignment) {
 
     // Src offsets must be multiples of compressed block sizes
     copy_region.srcOffset = {3, 4, 0};  // source offset x
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-srcImage-01727");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-pRegions-07278");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-srcOffset-01783");
     m_commandBuffer->CopyImage(image_422.image(), VK_IMAGE_LAYOUT_GENERAL, image_ucmp.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
@@ -3135,7 +3134,7 @@ TEST_F(VkLayerTest, CopyImageSinglePlane422Alignment) {
 
     // Dst offsets must be multiples of compressed block sizes
     copy_region.dstOffset = {1, 0, 0};
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-dstImage-01731");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-pRegions-07281");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-dstOffset-01784");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-dstOffset-00150");
     m_commandBuffer->CopyImage(image_ucmp.image(), VK_IMAGE_LAYOUT_GENERAL, image_422.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
@@ -5077,7 +5076,9 @@ TEST_F(VkLayerTest, ImageCopyTransferQueueFlags) {
     VkCommandBufferObj command_buffer(m_device, &command_pool);
     command_buffer.begin();
 
+    // 00193 and 07273 are the same
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-bufferOffset-00193");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07273");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-commandBuffer-04052");
     vk::CmdCopyBufferToImage(command_buffer.handle(), buffer.handle(), image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                              &region);
@@ -5469,7 +5470,8 @@ TEST_F(VkLayerTest, PushDescriptorSetCmdPushBadArgs) {
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    auto push_descriptor_prop = GetPushDescriptorProperties(instance(), gpu());
+    VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+    GetPhysicalDeviceProperties2(push_descriptor_prop);
     if (push_descriptor_prop.maxPushDescriptors < 1) {
         // Some implementations report an invalid maxPushDescriptors of 0
         printf("%s maxPushDescriptors is zero, skipping tests\n", kSkipPrefix);
@@ -5585,7 +5587,8 @@ TEST_F(VkLayerTest, PushDescriptorSetCmdBufferOffsetUnaligned) {
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    auto const push_descriptor_prop = GetPushDescriptorProperties(instance(), gpu());
+    VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
+    GetPhysicalDeviceProperties2(push_descriptor_prop);
     if (push_descriptor_prop.maxPushDescriptors < 1) {
         // Some implementations report an invalid maxPushDescriptors of 0.
         printf("%s maxPushDescriptors is zero, skipping test\n", kSkipPrefix);
@@ -5740,8 +5743,7 @@ TEST_F(VkLayerTest, MultiDrawTests) {
     }
 
     auto multi_draw_features = LvlInitStruct<VkPhysicalDeviceMultiDrawFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&multi_draw_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(multi_draw_features);
     if (!multi_draw_features.multiDraw) {
         printf("%s Test requires (unsupported) multiDraw, skipping\n", kSkipPrefix);
         return;
@@ -5754,7 +5756,7 @@ TEST_F(VkLayerTest, MultiDrawTests) {
     }
     auto multi_draw_properties = LvlInitStruct<VkPhysicalDeviceMultiDrawPropertiesEXT>();
     auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&multi_draw_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &properties2);
+    GetPhysicalDeviceProperties2(properties2);
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -5846,7 +5848,7 @@ TEST_F(VkLayerTest, MultiDrawFeatures) {
 
     auto multi_draw_props = LvlInitStruct<VkPhysicalDeviceMultiDrawPropertiesEXT>();
     auto pd_props2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&multi_draw_props);
-    vk::GetPhysicalDeviceProperties2(gpu(), &pd_props2);
+    GetPhysicalDeviceProperties2(pd_props2);
     if (multi_draw_props.maxMultiDrawCount == 0) {
         // If using MockICD and devsim the value might be zero'ed and cause false errors
         return;
@@ -5894,7 +5896,16 @@ TEST_F(VkLayerTest, IndirectDrawTests) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    VkPhysicalDeviceFeatures features;
+    vk::GetPhysicalDeviceFeatures(gpu(), &features);
+    if (features.multiDrawIndirect == VK_FALSE) {
+        GTEST_SKIP() << "multiDrawIndirect not supported";
+    }
+
+    VkPhysicalDeviceFeatures requiredFeatures{};
+    requiredFeatures.multiDrawIndirect = VK_TRUE;
+    ASSERT_NO_FATAL_FAILURE(InitState(&requiredFeatures));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     CreatePipelineHelper pipe(*this);
@@ -5929,21 +5940,21 @@ TEST_F(VkLayerTest, IndirectDrawTests) {
     buffer_create_info.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
     draw_buffer_correct.init(*m_device, buffer_create_info);
 
-    // VUID-vkCmdDrawIndirect-buffer-02709
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirect-buffer-02709");
     vk::CmdDrawIndirect(m_commandBuffer->handle(), draw_buffer.handle(), 0, 1, sizeof(VkDrawIndirectCommand));
     m_errorMonitor->VerifyFound();
 
-    // VUID-vkCmdDrawIndirect-drawCount-02718
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirect-drawCount-00488");
     vk::CmdDrawIndirect(m_commandBuffer->handle(), draw_buffer_correct.handle(), 0, 2, sizeof(VkDrawIndirectCommand));
     m_errorMonitor->VerifyFound();
 
-    // VUID-vkCmdDrawIndexedIndirect-commandBuffer-02701
-    // VUID-vkCmdDrawIndexedIndirect-drawCount-00540
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexedIndirect-commandBuffer-02701");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexedIndirect-drawCount-00540");
     vk::CmdDrawIndexedIndirect(m_commandBuffer->handle(), draw_buffer_correct.handle(), 0, 2, sizeof(VkDrawIndexedIndirectCommand));
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexedIndirect-offset-02710");
+    vk::CmdDrawIndexedIndirect(m_commandBuffer->handle(), draw_buffer.handle(), 2, 1, sizeof(VkDrawIndexedIndirectCommand));
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->EndRenderPass();
@@ -5966,7 +5977,7 @@ TEST_F(VkLayerTest, DrawIndirectByteCountEXT) {
 
     auto tf_properties = LvlInitStruct<VkPhysicalDeviceTransformFeedbackPropertiesEXT>();
     auto pd_properties = LvlInitStruct<VkPhysicalDeviceProperties2>(&tf_properties);
-    vk::GetPhysicalDeviceProperties2(gpu(), &pd_properties);
+    GetPhysicalDeviceProperties2(pd_properties);
 
     PFN_vkCmdDrawIndirectByteCountEXT fpvkCmdDrawIndirectByteCountEXT =
         (PFN_vkCmdDrawIndirectByteCountEXT)vk::GetDeviceProcAddr(device(), "vkCmdDrawIndirectByteCountEXT");
@@ -6328,15 +6339,9 @@ TEST_F(VkLayerTest, ExclusiveScissorNV) {
         }
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     // Create a device that enables exclusive scissor but disables multiViewport
     auto exclusive_scissor_features = LvlInitStruct<VkPhysicalDeviceExclusiveScissorFeaturesNV>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&exclusive_scissor_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
-
+    auto features2 = GetPhysicalDeviceFeatures2(exclusive_scissor_features);
     features2.features.multiViewport = VK_FALSE;
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
@@ -6483,14 +6488,9 @@ TEST_F(VkLayerTest, MeshShaderNV) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     // Create a device that enables mesh_shader
     auto mesh_shader_features = LvlInitStruct<VkPhysicalDeviceMeshShaderFeaturesNV>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&mesh_shader_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(mesh_shader_features);
     features2.features.multiDrawIndirect = VK_FALSE;
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
@@ -6915,14 +6915,8 @@ TEST_F(VkLayerTest, TransformFeedbackFeatureEnabled) {
     }
 
     {
-        PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-            (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-        ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
         auto tf_features = LvlInitStruct<VkPhysicalDeviceTransformFeedbackFeaturesEXT>();
-        auto pd_features = LvlInitStruct<VkPhysicalDeviceFeatures2>(&tf_features);
-        vkGetPhysicalDeviceFeatures2KHR(gpu(), &pd_features);
-
+        GetPhysicalDeviceFeatures2(tf_features);
         if (!tf_features.transformFeedback) {
             printf("%s transformFeedback not supported; skipped.\n", kSkipPrefix);
             return;
@@ -7373,13 +7367,8 @@ TEST_F(VkLayerTest, InvalidUnprotectedCommands) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
-
     auto protected_memory_features = LvlInitStruct<VkPhysicalDeviceProtectedMemoryFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&protected_memory_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(protected_memory_features);
 
     if (protected_memory_features.protectedMemory == VK_FALSE) {
         printf("%s protectedMemory feature not supported, skipped.\n", kSkipPrefix);
@@ -7467,16 +7456,12 @@ TEST_F(VkLayerTest, InvalidMixingProtectedResources) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
     PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
         (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
     ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
 
     auto protected_memory_features = LvlInitStruct<VkPhysicalDeviceProtectedMemoryFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&protected_memory_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(protected_memory_features);
 
     if (protected_memory_features.protectedMemory == VK_FALSE) {
         printf("%s protectedMemory feature not supported, skipped.\n", kSkipPrefix);
@@ -7894,13 +7879,9 @@ TEST_F(VkLayerTest, InvalidStorageAtomicOperation) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
 
     auto atomic_float_features = lvl_init_struct<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>();
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2KHR>(&atomic_float_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(atomic_float_features);
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     if (atomic_float_features.shaderImageFloat32Atomics == VK_FALSE) {
@@ -8590,7 +8571,7 @@ TEST_F(VkLayerTest, InvalidSetFragmentShadingRateCombinerOpsNoFeatures) {
     }
 
     VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
-    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
+    VkPhysicalDeviceFeatures2KHR features2 = GetPhysicalDeviceFeatures2(fsr_features);
 
     fsr_features.pipelineFragmentShadingRate = VK_TRUE;
     fsr_features.primitiveFragmentShadingRate = VK_FALSE;
@@ -8653,12 +8634,8 @@ TEST_F(VkLayerTest, InvalidSetFragmentShadingRateCombinerOpsNoPipelineRate) {
         return;
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
     VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
-    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    VkPhysicalDeviceFeatures2KHR features2 = GetPhysicalDeviceFeatures2(fsr_features);
 
     if (fsr_features.attachmentFragmentShadingRate == VK_FALSE && fsr_features.primitiveFragmentShadingRate == VK_FALSE) {
         printf("%s requires attachmentFragmentShadingRate or primitiveFragmentShadingRate.\n", kSkipPrefix);
@@ -8734,12 +8711,8 @@ TEST_F(VkLayerTest, InvalidSetFragmentShadingRateCombinerOpsLimit) {
         return;
     }
 
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
-        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
-    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
     VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
-    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    VkPhysicalDeviceFeatures2KHR features2 = GetPhysicalDeviceFeatures2(fsr_features);
 
     if (!fsr_features.primitiveFragmentShadingRate && !fsr_features.attachmentFragmentShadingRate) {
         printf("%s requires primitiveFragmentShadingRate or attachmentFragmentShadingRate to be supported.\n", kSkipPrefix);
@@ -9459,8 +9432,7 @@ TEST_F(VkLayerTest, BeginRenderingWithSecondaryContents) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -9554,8 +9526,7 @@ TEST_F(VkLayerTest, BadRenderPassContentsWhenCallingCmdExecuteCommandsWithBeginR
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -9787,8 +9758,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithNonNullRenderPass) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -9878,8 +9848,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingFlags) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -9953,8 +9922,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorAttach
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -10027,8 +9995,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorImageV
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -10107,8 +10074,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingDepthStenci
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -10261,8 +10227,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewRa
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -10388,8 +10353,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewAt
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -10664,10 +10628,7 @@ TEST_F(VkLayerTest, ValidateMultiviewUnboundResourcesAfterBeginRenderPassAndNext
     }
 
     auto multiview_features = LvlInitStruct<VkPhysicalDeviceMultiviewFeatures>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&multiview_features);
-    auto vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
-        vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR"));
-    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(multiview_features);
     if (multiview_features.multiview == VK_FALSE) {
         GTEST_SKIP() << "Device does not support multiview.";
     }
@@ -11176,8 +11137,7 @@ TEST_F(VkLayerTest, TestCommandBufferInheritanceWithInvalidDepthFormat) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -11353,8 +11313,7 @@ TEST_F(VkLayerTest, DynamicRenderingInSecondaryCommandBuffers) {
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&dynamic_rendering_features);
-    vk::GetPhysicalDeviceFeatures2(gpu(), &features2);
+    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         printf("%s Test requires (unsupported) dynamicRendering , skipping\n", kSkipPrefix);
         return;
@@ -11619,4 +11578,85 @@ TEST_F(VkLayerTest, IncompatibleFragmentRateShadingAttachmentInExecuteCommands) 
 
     m_commandBuffer->reset();
     secondary.reset();
+}
+
+TEST_F(VkLayerTest, CopyImageRemainingLayers) {
+    TEST_DESCRIPTION("Test copying an image with VkImageSubresourceLayers.layerCount = VK_REMAINING_ARRAY_LAYERS");
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
+
+    VkImageCreateInfo ci = LvlInitStruct<VkImageCreateInfo>();
+    ci.flags = 0;
+    ci.imageType = VK_IMAGE_TYPE_2D;
+    ci.format = image_format;
+    ci.extent = {32, 32, 1};
+    ci.mipLevels = 1;
+    ci.arrayLayers = 8;
+    ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ci.queueFamilyIndexCount = 0;
+    ci.pQueueFamilyIndices = NULL;
+    ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    // 2D images
+    VkImageObj image_a(m_device);
+    VkImageObj image_b(m_device);
+
+    // Copy from a to b
+    ci.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    image_a.init(&ci);
+    ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image_b.init(&ci);
+
+    ASSERT_TRUE(image_a.initialized());
+    ASSERT_TRUE(image_b.initialized());
+
+    m_commandBuffer->begin();
+
+    image_a.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    image_b.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    VkImageCopy copy_region{};
+    copy_region.extent = ci.extent;
+    copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy_region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy_region.srcSubresource.baseArrayLayer = 7;
+    copy_region.dstSubresource.baseArrayLayer = 7;
+    copy_region.srcSubresource.layerCount = VK_REMAINING_ARRAY_LAYERS;  // This value is unsupported by VkImageSubresourceLayers
+    copy_region.dstSubresource.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+    // These vuids will trigger a special message stating that VK_REMAINING_ARRAY_LAYERS is unsupported
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-srcSubresource-01698");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-dstSubresource-01699");
+    m_commandBuffer->CopyImage(image_a.image(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image_b.image(),
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+    m_errorMonitor->VerifyFound();
+
+    VkBufferCreateInfo bci = LvlInitStruct<VkBufferCreateInfo>();
+    bci.size = 32 * 32 * 4;
+    bci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    VkBufferObj buffer(*m_device, bci);
+
+    VkBufferImageCopy buffer_copy{};
+    buffer_copy.bufferImageHeight = ci.extent.height;
+    buffer_copy.bufferRowLength = ci.extent.width;
+    buffer_copy.imageExtent = ci.extent;
+    buffer_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    buffer_copy.imageSubresource.layerCount = VK_REMAINING_ARRAY_LAYERS;  // This value is unsupported by VkImageSubresourceLayers
+    buffer_copy.imageSubresource.mipLevel = 0;
+    buffer_copy.imageSubresource.baseArrayLayer = 5;
+
+    // This error will trigger first stating that the copy is too big for the buffer, because of VK_REMAINING_ARRAY_LAYERS
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-00171");
+    // This error will trigger second stating that VK_REMAINING_ARRAY_LAYERS is unsupported here
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-imageSubresource-01702");
+    vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer.handle(), image_b.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                             &buffer_copy);
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->end();
 }

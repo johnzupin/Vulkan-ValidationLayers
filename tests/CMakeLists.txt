@@ -14,6 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ~~~
+include(GoogleTest) # gtest_discover_tests
+
+# GoogleTest is required for testing framework
+find_package(GTest REQUIRED CONFIG)
+
+# glslang is required for testing framework
+find_package(glslang CONFIG REQUIRED)
 
 # Needed to make structure definitions match with glslang libraries
 add_definitions(-DNV_EXTENSIONS -DAMD_EXTENSIONS)
@@ -103,13 +110,6 @@ set(COMMON_CPP
     vktestbinding.cpp
     vktestframework.cpp)
 
-if(NOT TARGET vulkan)
-    set(
-        CMAKE_PREFIX_PATH
-        ${CMAKE_PREFIX_PATH};${VULKAN_HEADERS_INSTALL_DIR};$ENV{VULKAN_HEADERS_INSTALL_DIR}
-        )
-endif()
-
 set_source_files_properties(${PROJECT_BINARY_DIR}/vk_safe_struct.cpp PROPERTIES GENERATED TRUE)
 add_executable(vk_layer_validation_tests
                layer_validation_tests.cpp
@@ -118,20 +118,24 @@ add_executable(vk_layer_validation_tests
                ../layers/generated/vk_safe_struct.cpp
                ../layers/generated/lvt_function_pointers.cpp
                ${COMMON_CPP})
-add_test(NAME vk_layer_validation_tests COMMAND vk_layer_validation_tests)
+
+# gtest_discover_tests has problem with cross-compiling, but it is faster and more robust
+if (CMAKE_CROSSCOMPILING)
+    gtest_add_tests(TARGET vk_layer_validation_tests)
+else()
+    gtest_discover_tests(vk_layer_validation_tests)
+endif()
+
 add_dependencies(vk_layer_validation_tests VkLayer_khronos_validation VkLayer_khronos_validation-json)
 target_include_directories(vk_layer_validation_tests
                            PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
                                   ${PROJECT_SOURCE_DIR}/layers
                                   ${PROJECT_SOURCE_DIR}/layers/generated
-                                  ${GLSLANG_INCLUDE_DIR}
                                   ${CMAKE_CURRENT_BINARY_DIR}
                                   ${CMAKE_BINARY_DIR}
                                   ${PROJECT_BINARY_DIR}
                                   ${VulkanHeaders_INCLUDE_DIR}
                                   ${PROJECT_BINARY_DIR}/layers)
-add_dependencies(vk_layer_validation_tests
-                 VkLayer_utils)
 
 option(PORTABILITY_TESTS_USE_DEVSIM "Automatically add the devsim layer for portability tests" OFF)
 if (PORTABILITY_TESTS_USE_DEVSIM)
@@ -149,15 +153,26 @@ if (NOT MSVC)
 endif()
 
 target_include_directories(vk_layer_validation_tests PRIVATE ${SPIRV_HEADERS_INCLUDE_DIR})
-# Specify target_link_libraries
-target_link_libraries(vk_layer_validation_tests
-                      PRIVATE VkLayer_utils
-                              ${GLSLANG_LIBRARIES}
-			      ${SPIRV_TOOLS_TARGET} SPIRV-Tools-opt
-			      GTest::gtest GTest::gtest_main)
+
+target_link_libraries(vk_layer_validation_tests PRIVATE
+    VkLayer_utils
+    glslang::glslang
+    glslang::OGLCompiler
+    glslang::OSDependent
+    glslang::MachineIndependent
+    glslang::GenericCodeGen
+    glslang::HLSL
+    glslang::SPIRV
+    glslang::SPVRemapper
+    ${SPIRV_TOOLS_TARGET}
+    SPIRV-Tools-opt
+    GTest::gtest
+    GTest::gtest_main
+)
 
 if(NOT WIN32)
-    target_link_libraries(vk_layer_validation_tests PRIVATE dl)
+    target_link_libraries(vk_layer_validation_tests PRIVATE ${CMAKE_DL_LIBS})
+
     if(BUILD_WSI_XCB_SUPPORT OR BUILD_WSI_XLIB_SUPPORT)
         target_link_libraries(vk_layer_validation_tests
                               PRIVATE ${XCB_LIBRARIES}
