@@ -1,3 +1,46 @@
+vulkan-validationlayers (1.3.231.0~rc2-1lunarg22.04-1) jammy; urgency=medium
+
+  [ Joshua Ashton ]
+  * layers: Fix crash when validating GetDrmDisplayEXT
+
+  [ spencer-lunarg ]
+  * layers: Fix VUID 06415
+
+  [ Piers Daniell ]
+  * layers: Initial VVL for VK_EXT_extended_dynamic_state3
+  * layers: More VUID coverage for color blend state
+  * layers: Update based on feedback
+  * tests: Basic tests for feature enablement
+  * tests: Clang formatting
+  * tests: Updates based on feedback
+  * tests: Some minor test fixes
+  * layers: More baseline dynamic state validation
+  * layers: Add missing include to std::set()
+  * layers: Remove some c++17 usage
+  * layers: Explicit copy operator
+  * layers: Fix dynamic state tracking bug
+  * layer: Add helper CBSTATUS_FIRST_DYNAMIC
+  * layers: Catch unset dynamic state
+  * layers: Some more WIP changes
+  * layers: Fix VVL crash when dynamic line rasterization is used
+  * layers: Handle dynamicPrimitiveTopologyUnrestricted
+  * tests: Test for dupe dynamic states
+  * layers: Minor updates to CBStatusFlags class methods
+  * layers: Use bitset instead of CBStatusFlags class
+  * layers: Fix bad merge
+  * layers: Fix bug with bitset initialization
+  * layers: Fix a few copy and paste errors
+  * tests: Add the remaining self tets
+  * layers: Fix switch to bitset regression
+  * layers: Fix dodgy rebase merge
+
+  [ spencer-lunarg ]
+  * layers: Use GetIndexAlignment everywhere
+  * layers: Move index buffer out of CBStatus
+  * layers: Generate CB dynamic status flags
+
+ -- john <john@odin>  Wed, 19 Oct 2022 11:38:23 -0600
+
 vulkan-validationlayers (1.3.231.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ sjfricke ]
