@@ -76,163 +76,6 @@ const char *CommandTypeString(CMD_TYPE type) {
     return kGeneratedCommandNameList[type];
 }
 
-VkDynamicState ConvertToDynamicState(CBStatusFlagBits flag) {
-    switch (flag) {
-        case CBSTATUS_LINE_WIDTH_SET:
-            return VK_DYNAMIC_STATE_LINE_WIDTH;
-        case CBSTATUS_DEPTH_BIAS_SET:
-            return VK_DYNAMIC_STATE_DEPTH_BIAS;
-        case CBSTATUS_BLEND_CONSTANTS_SET:
-            return VK_DYNAMIC_STATE_BLEND_CONSTANTS;
-        case CBSTATUS_DEPTH_BOUNDS_SET:
-            return VK_DYNAMIC_STATE_DEPTH_BOUNDS;
-        case CBSTATUS_STENCIL_READ_MASK_SET:
-            return VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
-        case CBSTATUS_STENCIL_WRITE_MASK_SET:
-            return VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
-        case CBSTATUS_STENCIL_REFERENCE_SET:
-            return VK_DYNAMIC_STATE_STENCIL_REFERENCE;
-        case CBSTATUS_VIEWPORT_SET:
-            return VK_DYNAMIC_STATE_VIEWPORT;
-        case CBSTATUS_SCISSOR_SET:
-            return VK_DYNAMIC_STATE_SCISSOR;
-        case CBSTATUS_EXCLUSIVE_SCISSOR_SET:
-            return VK_DYNAMIC_STATE_EXCLUSIVE_SCISSOR_NV;
-        case CBSTATUS_SHADING_RATE_PALETTE_SET:
-            return VK_DYNAMIC_STATE_VIEWPORT_SHADING_RATE_PALETTE_NV;
-        case CBSTATUS_LINE_STIPPLE_SET:
-            return VK_DYNAMIC_STATE_LINE_STIPPLE_EXT;
-        case CBSTATUS_VIEWPORT_W_SCALING_SET:
-            return VK_DYNAMIC_STATE_VIEWPORT_W_SCALING_NV;
-        case CBSTATUS_CULL_MODE_SET:
-            return VK_DYNAMIC_STATE_CULL_MODE_EXT;
-        case CBSTATUS_FRONT_FACE_SET:
-            return VK_DYNAMIC_STATE_FRONT_FACE_EXT;
-        case CBSTATUS_PRIMITIVE_TOPOLOGY_SET:
-            return VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT;
-        case CBSTATUS_VIEWPORT_WITH_COUNT_SET:
-            return VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT;
-        case CBSTATUS_SCISSOR_WITH_COUNT_SET:
-            return VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT;
-        case CBSTATUS_VERTEX_INPUT_BINDING_STRIDE_SET:
-            return VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT;
-        case CBSTATUS_DEPTH_TEST_ENABLE_SET:
-            return VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT;
-        case CBSTATUS_DEPTH_WRITE_ENABLE_SET:
-            return VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT;
-        case CBSTATUS_DEPTH_COMPARE_OP_SET:
-            return VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT;
-        case CBSTATUS_DEPTH_BOUNDS_TEST_ENABLE_SET:
-            return VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT;
-        case CBSTATUS_STENCIL_TEST_ENABLE_SET:
-            return VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT;
-        case CBSTATUS_STENCIL_OP_SET:
-            return VK_DYNAMIC_STATE_STENCIL_OP_EXT;
-        case CBSTATUS_DISCARD_RECTANGLE_SET:
-            return VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT;
-        case CBSTATUS_SAMPLE_LOCATIONS_SET:
-            return VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT;
-        case CBSTATUS_COARSE_SAMPLE_ORDER_SET:
-            return VK_DYNAMIC_STATE_VIEWPORT_COARSE_SAMPLE_ORDER_NV;
-        case CBSTATUS_PATCH_CONTROL_POINTS_SET:
-            return VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT;
-        case CBSTATUS_RASTERIZER_DISCARD_ENABLE_SET:
-            return VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT;
-        case CBSTATUS_DEPTH_BIAS_ENABLE_SET:
-            return VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT;
-        case CBSTATUS_LOGIC_OP_SET:
-            return VK_DYNAMIC_STATE_LOGIC_OP_EXT;
-        case CBSTATUS_PRIMITIVE_RESTART_ENABLE_SET:
-            return VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT;
-        case CBSTATUS_VERTEX_INPUT_SET:
-            return VK_DYNAMIC_STATE_VERTEX_INPUT_EXT;
-        case CBSTATUS_COLOR_WRITE_ENABLE_SET:
-            return VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT;
-        default:
-            // CBSTATUS_INDEX_BUFFER_BOUND is not in VkDynamicState
-            return VK_DYNAMIC_STATE_MAX_ENUM;
-    }
-    return VK_DYNAMIC_STATE_MAX_ENUM;
-}
-
-CBStatusFlagBits ConvertToCBStatusFlagBits(VkDynamicState state) {
-    switch (state) {
-        case VK_DYNAMIC_STATE_VIEWPORT:
-            return CBSTATUS_VIEWPORT_SET;
-        case VK_DYNAMIC_STATE_SCISSOR:
-            return CBSTATUS_SCISSOR_SET;
-        case VK_DYNAMIC_STATE_LINE_WIDTH:
-            return CBSTATUS_LINE_WIDTH_SET;
-        case VK_DYNAMIC_STATE_DEPTH_BIAS:
-            return CBSTATUS_DEPTH_BIAS_SET;
-        case VK_DYNAMIC_STATE_BLEND_CONSTANTS:
-            return CBSTATUS_BLEND_CONSTANTS_SET;
-        case VK_DYNAMIC_STATE_DEPTH_BOUNDS:
-            return CBSTATUS_DEPTH_BOUNDS_SET;
-        case VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK:
-            return CBSTATUS_STENCIL_READ_MASK_SET;
-        case VK_DYNAMIC_STATE_STENCIL_WRITE_MASK:
-            return CBSTATUS_STENCIL_WRITE_MASK_SET;
-        case VK_DYNAMIC_STATE_STENCIL_REFERENCE:
-            return CBSTATUS_STENCIL_REFERENCE_SET;
-        case VK_DYNAMIC_STATE_VIEWPORT_W_SCALING_NV:
-            return CBSTATUS_VIEWPORT_W_SCALING_SET;
-        case VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT:
-            return CBSTATUS_DISCARD_RECTANGLE_SET;
-        case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT:
-            return CBSTATUS_SAMPLE_LOCATIONS_SET;
-        case VK_DYNAMIC_STATE_VIEWPORT_SHADING_RATE_PALETTE_NV:
-            return CBSTATUS_SHADING_RATE_PALETTE_SET;
-        case VK_DYNAMIC_STATE_VIEWPORT_COARSE_SAMPLE_ORDER_NV:
-            return CBSTATUS_COARSE_SAMPLE_ORDER_SET;
-        case VK_DYNAMIC_STATE_EXCLUSIVE_SCISSOR_NV:
-            return CBSTATUS_EXCLUSIVE_SCISSOR_SET;
-        case VK_DYNAMIC_STATE_LINE_STIPPLE_EXT:
-            return CBSTATUS_LINE_STIPPLE_SET;
-        case VK_DYNAMIC_STATE_CULL_MODE_EXT:
-            return CBSTATUS_CULL_MODE_SET;
-        case VK_DYNAMIC_STATE_FRONT_FACE_EXT:
-            return CBSTATUS_FRONT_FACE_SET;
-        case VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT:
-            return CBSTATUS_PRIMITIVE_TOPOLOGY_SET;
-        case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT:
-            return CBSTATUS_VIEWPORT_WITH_COUNT_SET;
-        case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT:
-            return CBSTATUS_SCISSOR_WITH_COUNT_SET;
-        case VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT:
-            return CBSTATUS_VERTEX_INPUT_BINDING_STRIDE_SET;
-        case VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT:
-            return CBSTATUS_DEPTH_TEST_ENABLE_SET;
-        case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
-            return CBSTATUS_DEPTH_WRITE_ENABLE_SET;
-        case VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT:
-            return CBSTATUS_DEPTH_COMPARE_OP_SET;
-        case VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT:
-            return CBSTATUS_DEPTH_BOUNDS_TEST_ENABLE_SET;
-        case VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT:
-            return CBSTATUS_STENCIL_TEST_ENABLE_SET;
-        case VK_DYNAMIC_STATE_STENCIL_OP_EXT:
-            return CBSTATUS_STENCIL_OP_SET;
-        case VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT:
-            return CBSTATUS_PATCH_CONTROL_POINTS_SET;
-        case VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT:
-            return CBSTATUS_RASTERIZER_DISCARD_ENABLE_SET;
-        case VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT:
-            return CBSTATUS_DEPTH_BIAS_ENABLE_SET;
-        case VK_DYNAMIC_STATE_LOGIC_OP_EXT:
-            return CBSTATUS_LOGIC_OP_SET;
-        case VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT:
-            return CBSTATUS_PRIMITIVE_RESTART_ENABLE_SET;
-        case VK_DYNAMIC_STATE_VERTEX_INPUT_EXT:
-            return CBSTATUS_VERTEX_INPUT_SET;
-        case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
-            return CBSTATUS_COLOR_WRITE_ENABLE_SET;
-        default:
-            return CBSTATUS_NONE;
-    }
-    return CBSTATUS_NONE;
-}
-
 CMD_BUFFER_STATE::CMD_BUFFER_STATE(ValidationStateTracker *dev, VkCommandBuffer cb, const VkCommandBufferAllocateInfo *pCreateInfo,
                                    const COMMAND_POOL_STATE *pool)
     : REFCOUNTED_NODE(cb, kVulkanObjectTypeCommandBuffer),
@@ -290,8 +133,8 @@ void CMD_BUFFER_STATE::Reset() {
     commandCount = 0;
     submitCount = 0;
     image_layout_change_count = 1;  // Start at 1. 0 is insert value for validation cache versions, s.t. new == dirty
-    status = 0;
-    static_status = 0;
+    status.reset();
+    static_status.reset();
     inheritedViewportDepths.clear();
     usedViewportScissorCount = 0;
     pipelineStaticViewportCount = 0;
@@ -1004,8 +847,8 @@ void CMD_BUFFER_STATE::UpdateDrawCmd(CMD_TYPE cmd_type) {
     uint32_t &used = usedViewportScissorCount;
     used = std::max(used, pipelineStaticViewportCount);
     used = std::max(used, pipelineStaticScissorCount);
-    usedDynamicViewportCount |= !!(dynamic_status & CBSTATUS_VIEWPORT_WITH_COUNT_SET);  // !! silences MSVC warn
-    usedDynamicScissorCount |= !!(dynamic_status & CBSTATUS_SCISSOR_WITH_COUNT_SET);
+    usedDynamicViewportCount |= dynamic_status[CB_DYNAMIC_VIEWPORT_WITH_COUNT_SET];
+    usedDynamicScissorCount |= dynamic_status[CB_DYNAMIC_SCISSOR_WITH_COUNT_SET];
 }
 
 // Generic function to handle state update for all CmdDispatch* type functions
@@ -1260,14 +1103,20 @@ void CMD_BUFFER_STATE::SetImageViewLayout(const IMAGE_VIEW_STATE &view_state, Vk
 
 void CMD_BUFFER_STATE::RecordCmd(CMD_TYPE cmd_type) { commandCount++; }
 
-void CMD_BUFFER_STATE::RecordStateCmd(CMD_TYPE cmd_type, CBStatusFlags state_bits) {
+void CMD_BUFFER_STATE::RecordStateCmd(CMD_TYPE cmd_type, CB_DYNAMIC_STATUS state) {
+    CBDynamicFlags state_bits;
+    state_bits.set(state);
+    RecordStateCmd(cmd_type, state_bits);
+}
+
+void CMD_BUFFER_STATE::RecordStateCmd(CMD_TYPE cmd_type, CBDynamicFlags const &state_bits) {
     RecordCmd(cmd_type);
     status |= state_bits;
     static_status &= ~state_bits;
 }
 
-void CMD_BUFFER_STATE::RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CBStatusFlags state_bits, uint32_t attachment_count) {
-    RecordStateCmd(cmd_type, state_bits);
+void CMD_BUFFER_STATE::RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CB_DYNAMIC_STATUS state, uint32_t attachment_count) {
+    RecordStateCmd(cmd_type, state);
     dynamicColorWriteEnableAttachmentCount = std::max(dynamicColorWriteEnableAttachmentCount, attachment_count);
 }
 
@@ -1444,7 +1293,7 @@ void CMD_BUFFER_STATE::UnbindResources() {
 
     // Reset status of cb to force rebinding of all resources
     // Index buffer included
-    status = CBSTATUS_NONE;
+    status.reset();
 
     // Pipeline and descriptor sets
     lastBound[BindPoint_Graphics].Reset();

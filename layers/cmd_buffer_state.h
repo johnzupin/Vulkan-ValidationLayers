@@ -118,55 +118,6 @@ enum CB_STATE {
     CB_INVALID_INCOMPLETE,  // fouled before recording was completed
 };
 
-// CB Status -- used to track status of various bindings on cmd buffer objects
-typedef uint64_t CBStatusFlags;
-enum CBStatusFlagBits : uint64_t {
-    // clang-format off
-    CBSTATUS_NONE                            = 0x00000000,   // No status is set
-    CBSTATUS_LINE_WIDTH_SET                  = 0x00000001,   // Line width has been set
-    CBSTATUS_DEPTH_BIAS_SET                  = 0x00000002,   // Depth bias has been set
-    CBSTATUS_BLEND_CONSTANTS_SET             = 0x00000004,   // Blend constants state has been set
-    CBSTATUS_DEPTH_BOUNDS_SET                = 0x00000008,   // Depth bounds state object has been set
-    CBSTATUS_STENCIL_READ_MASK_SET           = 0x00000010,   // Stencil read mask has been set
-    CBSTATUS_STENCIL_WRITE_MASK_SET          = 0x00000020,   // Stencil write mask has been set
-    CBSTATUS_STENCIL_REFERENCE_SET           = 0x00000040,   // Stencil reference has been set
-    CBSTATUS_VIEWPORT_SET                    = 0x00000080,
-    CBSTATUS_SCISSOR_SET                     = 0x00000100,
-    CBSTATUS_INDEX_BUFFER_BOUND              = 0x00000200,   // Index buffer has been set
-    CBSTATUS_EXCLUSIVE_SCISSOR_SET           = 0x00000400,
-    CBSTATUS_SHADING_RATE_PALETTE_SET        = 0x00000800,
-    CBSTATUS_LINE_STIPPLE_SET                = 0x00001000,
-    CBSTATUS_VIEWPORT_W_SCALING_SET          = 0x00002000,
-    CBSTATUS_CULL_MODE_SET                   = 0x00004000,
-    CBSTATUS_FRONT_FACE_SET                  = 0x00008000,
-    CBSTATUS_PRIMITIVE_TOPOLOGY_SET          = 0x00010000,
-    CBSTATUS_VIEWPORT_WITH_COUNT_SET         = 0x00020000,
-    CBSTATUS_SCISSOR_WITH_COUNT_SET          = 0x00040000,
-    CBSTATUS_VERTEX_INPUT_BINDING_STRIDE_SET = 0x00080000,
-    CBSTATUS_DEPTH_TEST_ENABLE_SET           = 0x00100000,
-    CBSTATUS_DEPTH_WRITE_ENABLE_SET          = 0x00200000,
-    CBSTATUS_DEPTH_COMPARE_OP_SET            = 0x00400000,
-    CBSTATUS_DEPTH_BOUNDS_TEST_ENABLE_SET    = 0x00800000,
-    CBSTATUS_STENCIL_TEST_ENABLE_SET         = 0x01000000,
-    CBSTATUS_STENCIL_OP_SET                  = 0x02000000,
-    CBSTATUS_DISCARD_RECTANGLE_SET           = 0x04000000,
-    CBSTATUS_SAMPLE_LOCATIONS_SET            = 0x08000000,
-    CBSTATUS_COARSE_SAMPLE_ORDER_SET         = 0x10000000,
-    CBSTATUS_PATCH_CONTROL_POINTS_SET        = 0x20000000,
-    CBSTATUS_RASTERIZER_DISCARD_ENABLE_SET   = 0x40000000,
-    CBSTATUS_DEPTH_BIAS_ENABLE_SET           = 0x80000000,
-    CBSTATUS_LOGIC_OP_SET                    = 0x100000000,
-    CBSTATUS_PRIMITIVE_RESTART_ENABLE_SET    = 0x200000000,
-    CBSTATUS_VERTEX_INPUT_SET                = 0x400000000,
-    CBSTATUS_COLOR_WRITE_ENABLE_SET          = 0x800000000,
-    CBSTATUS_ALL_STATE_SET                   = 0xFFFFFFDFF,   // All state set (intentionally exclude index buffer)
-    // clang-format on
-};
-
-VkDynamicState ConvertToDynamicState(CBStatusFlagBits flag);
-CBStatusFlagBits ConvertToCBStatusFlagBits(VkDynamicState state);
-std::string DynamicStateString(CBStatusFlags input_value);
-
 struct BufferBinding {
     std::shared_ptr<BUFFER_STATE> buffer_state;
     VkDeviceSize size;
@@ -177,6 +128,7 @@ struct BufferBinding {
     virtual ~BufferBinding() {}
 
     virtual void reset() { *this = BufferBinding(); }
+    bool bound() const { return buffer_state && !buffer_state->Destroyed(); }
 };
 
 struct IndexBufferBinding : BufferBinding {
@@ -224,10 +176,10 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     bool pipeline_bound = false;  // True if CmdBindPipeline has been called on this command buffer, false otherwise
     typedef uint64_t ImageLayoutUpdateCount;
     ImageLayoutUpdateCount image_layout_change_count;  // The sequence number for changes to image layout (for cached validation)
-    CBStatusFlags status;                              // Track status of various bindings on cmd buffer
-    CBStatusFlags static_status;                       // All state bits provided by current graphics pipeline
+    CBDynamicFlags status;                             // Track status of various bindings on cmd buffer
+    CBDynamicFlags static_status;                      // All state bits provided by current graphics pipeline
                                                        // rather than dynamic state
-    CBStatusFlags dynamic_status;                      // dynamic state set up in pipeline
+    CBDynamicFlags dynamic_status;                     // dynamic state set up in pipeline
     std::string begin_rendering_func_name;
     // Currently storing "lastBound" objects on per-CB basis
     //  long-term may want to create caches of "lastBound" states and could have
@@ -338,7 +290,6 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
         queryUpdates;
     layer_data::unordered_map<const cvdescriptorset::DescriptorSet *, cvdescriptorset::DescriptorSet::CachedValidation>
         descriptorset_cache;
-    // Contents valid only after an index buffer is bound (CBSTATUS_INDEX_BUFFER_BOUND set)
     IndexBufferBinding index_buffer_binding;
     bool performance_lock_acquired = false;
     bool performance_lock_released = false;
@@ -477,8 +428,9 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     void UpdatePipelineState(CMD_TYPE cmd_type, const VkPipelineBindPoint bind_point);
 
     virtual void RecordCmd(CMD_TYPE cmd_type);
-    void RecordStateCmd(CMD_TYPE cmd_type, CBStatusFlags state_bits);
-    void RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CBStatusFlags state_bits, uint32_t attachment_count);
+    void RecordStateCmd(CMD_TYPE cmd_type, CB_DYNAMIC_STATUS state);
+    void RecordStateCmd(CMD_TYPE cmd_type, CBDynamicFlags const &state_bits);
+    void RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CB_DYNAMIC_STATUS state, uint32_t attachment_count);
     void RecordTransferCmd(CMD_TYPE cmd_type, std::shared_ptr<BINDABLE> &&buf1, std::shared_ptr<BINDABLE> &&buf2 = nullptr);
     void RecordSetEvent(CMD_TYPE cmd_type, VkEvent event, VkPipelineStageFlags2KHR stageMask);
     void RecordResetEvent(CMD_TYPE cmd_type, VkEvent event, VkPipelineStageFlags2KHR stageMask);

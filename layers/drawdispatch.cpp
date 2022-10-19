@@ -199,6 +199,7 @@ struct DispatchVuidsCmdDrawIndexed : DrawDispatchVuid {
     DispatchVuidsCmdDrawIndexed() : DrawDispatchVuid() {
         pipeline_bound                     = "VUID-vkCmdDrawIndexed-None-02700";
         dynamic_state                      = "VUID-vkCmdDrawIndexed-commandBuffer-02701";
+        index_binding                      = "VUID-vkCmdDrawIndexed-None-07312";
         vertex_binding                     = "VUID-vkCmdDrawIndexed-None-04007";
         vertex_binding_null                = "VUID-vkCmdDrawIndexed-None-04008";
         compatible_pipeline                = "VUID-vkCmdDrawIndexed-None-02697";
@@ -275,6 +276,7 @@ struct DispatchVuidsCmdDrawMultiIndexedEXT : DrawDispatchVuid {
     DispatchVuidsCmdDrawMultiIndexedEXT() : DrawDispatchVuid() {
         pipeline_bound                     = "VUID-vkCmdDrawMultiIndexedEXT-None-02700";
         dynamic_state                      = "VUID-vkCmdDrawMultiIndexedEXT-commandBuffer-02701";
+        index_binding                      = "VUID-vkCmdDrawMultiIndexedEXT-None-07312";
         vertex_binding                     = "VUID-vkCmdDrawMultiIndexedEXT-None-04007";
         vertex_binding_null                = "VUID-vkCmdDrawMultiIndexedEXT-None-04008";
         compatible_pipeline                = "VUID-vkCmdDrawMultiIndexedEXT-None-02697";
@@ -429,6 +431,7 @@ struct DispatchVuidsCmdDrawIndexedIndirect : DrawDispatchVuid {
     DispatchVuidsCmdDrawIndexedIndirect() : DrawDispatchVuid() {
         pipeline_bound                     = "VUID-vkCmdDrawIndexedIndirect-None-02700";
         dynamic_state                      = "VUID-vkCmdDrawIndexedIndirect-commandBuffer-02701";
+        index_binding                      = "VUID-vkCmdDrawIndexedIndirect-None-07312";
         vertex_binding                     = "VUID-vkCmdDrawIndexedIndirect-None-04007";
         vertex_binding_null                = "VUID-vkCmdDrawIndexedIndirect-None-04008";
         compatible_pipeline                = "VUID-vkCmdDrawIndexedIndirect-None-02697";
@@ -648,6 +651,7 @@ struct DispatchVuidsCmdDrawIndexedIndirectCount : DrawDispatchVuid {
     DispatchVuidsCmdDrawIndexedIndirectCount() : DrawDispatchVuid() {
         pipeline_bound                     = "VUID-vkCmdDrawIndexedIndirectCount-None-02700";
         dynamic_state                      = "VUID-vkCmdDrawIndexedIndirectCount-commandBuffer-02701";
+        index_binding                      = "VUID-vkCmdDrawIndexedIndirectCount-None-07312";
         vertex_binding                     = "VUID-vkCmdDrawIndexedIndirectCount-None-04007";
         vertex_binding_null                = "VUID-vkCmdDrawIndexedIndirectCount-None-04008";
         compatible_pipeline                = "VUID-vkCmdDrawIndexedIndirectCount-None-02697";
@@ -1266,19 +1270,10 @@ bool CoreChecks::PreCallValidateCmdDrawMultiEXT(VkCommandBuffer commandBuffer, u
 bool CoreChecks::ValidateCmdDrawIndexedBufferSize(const CMD_BUFFER_STATE &cb_state, uint32_t indexCount, uint32_t firstIndex,
                                                   const char *caller, const char *first_index_vuid) const {
     bool skip = false;
-    if (cb_state.status & CBSTATUS_INDEX_BUFFER_BOUND) {
-        unsigned int index_size = 0;
+    if (cb_state.index_buffer_binding.bound()) {
         const auto &index_buffer_binding = cb_state.index_buffer_binding;
-        if (index_buffer_binding.index_type == VK_INDEX_TYPE_UINT16) {
-            index_size = 2;
-        }
-        else if (index_buffer_binding.index_type == VK_INDEX_TYPE_UINT32) {
-            index_size = 4;
-        }
-        else if (index_buffer_binding.index_type == VK_INDEX_TYPE_UINT8_EXT) {
-            index_size = 1;
-        }
-        VkDeviceSize end_offset = (index_size * (static_cast<VkDeviceSize>(firstIndex) + indexCount)) + index_buffer_binding.offset;
+        const uint32_t index_size = GetIndexAlignment(index_buffer_binding.index_type);
+        VkDeviceSize end_offset = static_cast<VkDeviceSize>(index_size * (firstIndex + indexCount)) + index_buffer_binding.offset;
         if (end_offset > index_buffer_binding.size) {
             skip |= LogError(index_buffer_binding.buffer_state->buffer(), first_index_vuid,
                              "%s: index size (%u) * (firstIndex (%u) + indexCount (%u)) "

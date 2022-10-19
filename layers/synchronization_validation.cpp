@@ -607,10 +607,9 @@ class FilteredGeneratorGenerator {
 
 using EventImageRangeGenerator = FilteredGeneratorGenerator<SyncEventState::ScopeMap, subresource_adapter::ImageRangeGenerator>;
 
-
 ResourceAccessRange GetBufferRange(VkDeviceSize offset, VkDeviceSize buf_whole_size, uint32_t first_index, uint32_t count,
-                                   VkDeviceSize stride) {
-    VkDeviceSize range_start = offset + first_index * stride;
+                                   uint32_t stride) {
+    VkDeviceSize range_start = offset + (first_index * stride);
     VkDeviceSize range_size = 0;
     if (count == UINT32_MAX) {
         range_size = buf_whole_size - range_start;
@@ -2324,7 +2323,7 @@ void CommandBufferAccessContext::RecordDrawVertex(uint32_t vertexCount, uint32_t
 
 bool CommandBufferAccessContext::ValidateDrawVertexIndex(uint32_t indexCount, uint32_t firstIndex, CMD_TYPE cmd_type) const {
     bool skip = false;
-    if (cb_state_->index_buffer_binding.buffer_state == nullptr || cb_state_->index_buffer_binding.buffer_state->Destroyed()) {
+    if (!cb_state_->index_buffer_binding.bound()) {
         return skip;
     }
 
@@ -2348,7 +2347,7 @@ bool CommandBufferAccessContext::ValidateDrawVertexIndex(uint32_t indexCount, ui
 }
 
 void CommandBufferAccessContext::RecordDrawVertexIndex(uint32_t indexCount, uint32_t firstIndex, const ResourceUsageTag tag) {
-    if (cb_state_->index_buffer_binding.buffer_state == nullptr || cb_state_->index_buffer_binding.buffer_state->Destroyed()) return;
+    if (!cb_state_->index_buffer_binding.bound()) return;
 
     auto *index_buf_state = cb_state_->index_buffer_binding.buffer_state.get();
     const auto index_size = GetIndexAlignment(cb_state_->index_buffer_binding.index_type);
