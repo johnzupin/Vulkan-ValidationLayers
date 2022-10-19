@@ -40,6 +40,7 @@
 struct DrawDispatchVuid {
     const char* pipeline_bound = kVUIDUndefined;
     const char* dynamic_state = kVUIDUndefined;
+    const char* index_binding = kVUIDUndefined;
     const char* vertex_binding = kVUIDUndefined;
     const char* vertex_binding_null = kVUIDUndefined;
     const char* compatible_pipeline = kVUIDUndefined;
@@ -222,8 +223,8 @@ class CoreChecks : public ValidationStateTracker {
                                      const Location& loc) const;
     bool ValidateMaxTimelineSemaphoreValueDifference(const Location& loc, const SEMAPHORE_STATE& semaphore_state,
                                                      uint64_t value) const;
-    bool ValidateStatus(const CMD_BUFFER_STATE* pNode, CBStatusFlags status_mask, const char* fail_msg, const char* msg_code) const;
-    bool ValidateDrawStateFlags(const CMD_BUFFER_STATE* pCB, const PIPELINE_STATE* pPipe, bool indexed, const char* msg_code) const;
+    bool ValidateStatus(const CMD_BUFFER_STATE* pNode, CB_DYNAMIC_STATUS status, const char* fail_msg, const char* msg_code) const;
+    bool ValidateDrawStateFlags(const CMD_BUFFER_STATE* pCB, const PIPELINE_STATE* pPipe, const char* msg_code) const;
     bool LogInvalidAttachmentMessage(const char* type1_string, const RENDER_PASS_STATE* rp1_state, const char* type2_string,
                                      const RENDER_PASS_STATE* rp2_state, uint32_t primary_attach, uint32_t secondary_attach,
                                      const char* msg, const char* caller, const char* error_code) const;
@@ -1789,6 +1790,61 @@ class CoreChecks : public ValidationStateTracker {
                                            VkStencilOp passOp, VkStencilOp depthFailOp, VkCompareOp compareOp) const override;
     bool PreCallValidateCmdSetStencilOp(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, VkStencilOp failOp,
                                         VkStencilOp passOp, VkStencilOp depthFailOp, VkCompareOp compareOp) const override;
+    bool PreCallValidateCmdSetTessellationDomainOriginEXT(VkCommandBuffer commandBuffer,
+                                                          VkTessellationDomainOrigin domainOrigin) const override;
+    bool PreCallValidateCmdSetDepthClampEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthClampEnable) const override;
+    bool PreCallValidateCmdSetPolygonModeEXT(VkCommandBuffer commandBuffer, VkPolygonMode polygonMode) const override;
+    bool PreCallValidateCmdSetRasterizationSamplesEXT(VkCommandBuffer commandBuffer,
+                                                      VkSampleCountFlagBits rasterizationSamples) const override;
+    bool PreCallValidateCmdSetSampleMaskEXT(VkCommandBuffer commandBuffer, VkSampleCountFlagBits samples,
+                                            const VkSampleMask* pSampleMask) const override;
+    bool PreCallValidateCmdSetAlphaToCoverageEnableEXT(VkCommandBuffer commandBuffer,
+                                                       VkBool32 alphaToCoverageEnable) const override;
+    bool PreCallValidateCmdSetAlphaToOneEnableEXT(VkCommandBuffer commandBuffer, VkBool32 alphaToOneEnable) const override;
+    bool PreCallValidateCmdSetLogicOpEnableEXT(VkCommandBuffer commandBuffer, VkBool32 logicOpEnable) const override;
+    bool PreCallValidateCmdSetColorBlendEnableEXT(VkCommandBuffer commandBuffer, uint32_t firstAttachment, uint32_t attachmentCount,
+                                                  const VkBool32* pColorBlendEnables) const override;
+    bool PreCallValidateCmdSetColorBlendEquationEXT(VkCommandBuffer commandBuffer, uint32_t firstAttachment,
+                                                    uint32_t attachmentCount,
+                                                    const VkColorBlendEquationEXT* pColorBlendEquations) const override;
+    bool PreCallValidateCmdSetColorWriteMaskEXT(VkCommandBuffer commandBuffer, uint32_t firstAttachment, uint32_t attachmentCount,
+                                                const VkColorComponentFlags* pColorWriteMasks) const override;
+    bool PreCallValidateCmdSetRasterizationStreamEXT(VkCommandBuffer commandBuffer, uint32_t rasterizationStream) const override;
+    bool PreCallValidateCmdSetConservativeRasterizationModeEXT(
+        VkCommandBuffer commandBuffer, VkConservativeRasterizationModeEXT conservativeRasterizationMode) const override;
+    bool PreCallValidateCmdSetExtraPrimitiveOverestimationSizeEXT(VkCommandBuffer commandBuffer,
+                                                                  float extraPrimitiveOverestimationSize) const override;
+    bool PreCallValidateCmdSetDepthClipEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthClipEnable) const override;
+    bool PreCallValidateCmdSetSampleLocationsEnableEXT(VkCommandBuffer commandBuffer,
+                                                       VkBool32 sampleLocationsEnable) const override;
+    bool PreCallValidateCmdSetColorBlendAdvancedEXT(VkCommandBuffer commandBuffer, uint32_t firstAttachment,
+                                                    uint32_t attachmentCount,
+                                                    const VkColorBlendAdvancedEXT* pColorBlendAdvanced) const override;
+    bool PreCallValidateCmdSetProvokingVertexModeEXT(VkCommandBuffer commandBuffer,
+                                                     VkProvokingVertexModeEXT provokingVertexMode) const override;
+    bool PreCallValidateCmdSetLineRasterizationModeEXT(VkCommandBuffer commandBuffer,
+                                                       VkLineRasterizationModeEXT lineRasterizationMode) const override;
+    bool PreCallValidateCmdSetLineStippleEnableEXT(VkCommandBuffer commandBuffer, VkBool32 stippledLineEnable) const override;
+    bool PreCallValidateCmdSetDepthClipNegativeOneToOneEXT(VkCommandBuffer commandBuffer, VkBool32 negativeOneToOne) const override;
+    bool PreCallValidateCmdSetViewportWScalingEnableNV(VkCommandBuffer commandBuffer,
+                                                       VkBool32 viewportWScalingEnable) const override;
+    bool PreCallValidateCmdSetViewportSwizzleNV(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount,
+                                                const VkViewportSwizzleNV* pViewportSwizzles) const override;
+    bool PreCallValidateCmdSetCoverageToColorEnableNV(VkCommandBuffer commandBuffer, VkBool32 coverageToColorEnable) const override;
+    bool PreCallValidateCmdSetCoverageToColorLocationNV(VkCommandBuffer commandBuffer,
+                                                        uint32_t coverageToColorLocation) const override;
+    bool PreCallValidateCmdSetCoverageModulationModeNV(VkCommandBuffer commandBuffer,
+                                                       VkCoverageModulationModeNV coverageModulationMode) const override;
+    bool PreCallValidateCmdSetCoverageModulationTableEnableNV(VkCommandBuffer commandBuffer,
+                                                              VkBool32 coverageModulationTableEnable) const override;
+    bool PreCallValidateCmdSetCoverageModulationTableNV(VkCommandBuffer commandBuffer, uint32_t coverageModulationTableCount,
+                                                        const float* pCoverageModulationTable) const override;
+    bool PreCallValidateCmdSetShadingRateImageEnableNV(VkCommandBuffer commandBuffer,
+                                                       VkBool32 shadingRateImageEnable) const override;
+    bool PreCallValidateCmdSetRepresentativeFragmentTestEnableNV(VkCommandBuffer commandBuffer,
+                                                                 VkBool32 representativeFragmentTestEnable) const override;
+    bool PreCallValidateCmdSetCoverageReductionModeNV(VkCommandBuffer commandBuffer,
+                                                      VkCoverageReductionModeNV coverageReductionMode) const override;
     bool PreCallValidateCreateEvent(VkDevice device, const VkEventCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,
                                     VkEvent* pEvent) const override;
     bool PreCallValidateCmdSetFragmentShadingRateKHR(VkCommandBuffer commandBuffer, const VkExtent2D* pFragmentSize,
