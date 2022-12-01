@@ -23,6 +23,7 @@
 #define VKRENDERFRAMEWORK_H
 
 #include "lvt_function_pointers.h"
+#include "vkerrormonitor.h"
 
 #ifdef ANDROID
 #include "vktestframeworkandroid.h"
@@ -46,6 +47,8 @@ class VkImageObj;
 #include <unordered_set>
 
 using vk_testing::MakeVkHandles;
+
+static constexpr uint64_t kWaitTimeout{10000000000};  // 10 seconds in ns
 
 template <class Dst, class Src>
 std::vector<Dst *> MakeTestbindingHandles(const std::vector<Src *> &v) {
@@ -80,89 +83,6 @@ class VkDeviceObj : public vk_testing::Device {
     VkQueueObj *m_queue_obj = nullptr;
     VkQueue m_queue;
 };
-
-// ErrorMonitor Usage:
-//
-// Call SetDesiredFailureMsg with a string to be compared against all
-// encountered log messages, or a validation error enum identifying
-// desired error message. Passing NULL or VALIDATION_ERROR_MAX_ENUM
-// will match all log messages. logMsg will return true for skipCall
-// only if msg is matched or NULL.
-//
-// Call VerifyFound to determine if all desired failure messages
-// were encountered. Call VerifyNotFound to determine if any unexpected
-// failure was encountered.
-class ErrorMonitor {
-  public:
-    ErrorMonitor();
-    ~ErrorMonitor() noexcept;
-
-    // Set monitor to pristine state
-    void Reset();
-
-    // ErrorMonitor will look for an error message containing the specified string(s)
-    void SetDesiredFailureMsg(const VkFlags msgFlags, const std::string msg);
-    void SetDesiredFailureMsg(const VkFlags msgFlags, const char *const msgString);
-
-    // ErrorMonitor will look for an error message containing the specified string(s)
-    template <typename Iter>
-    void SetDesiredFailureMsg(const VkFlags msgFlags, Iter iter, const Iter end) {
-        for (; iter != end; ++iter) {
-            SetDesiredFailureMsg(msgFlags, *iter);
-        }
-    }
-
-    // Set an error that the error monitor will ignore. Do not use this function if you are creating a new test.
-    // TODO: This is stopgap to block new unexpected errors from being introduced. The long-term goal is to remove the use of this
-    // function and its definition.
-    void SetUnexpectedError(const char *const msg);
-
-    // Set an error that should not cause a test failure
-    void SetAllowedFailureMsg(const char *const msg);
-
-    VkBool32 CheckForDesiredMsg(const char *const msgString);
-    VkDebugReportFlagsEXT GetMessageFlags();
-    void SetError(const char *const errorString);
-    void SetBailout(std::atomic<bool> *bailout);
-
-    // Helpers
-
-    void VerifyFound();
-    void Finish() {
-        VerifyNotFound();
-        Reset();
-    }
-
-  private:
-    // ExpectSuccess now takes an optional argument allowing a custom combination of debug flags
-    void ExpectSuccess(VkDebugReportFlagsEXT const message_flag_mask = kErrorBit);
-    bool ExpectingSuccess() const {
-        return (desired_message_strings_.size() == 1) &&
-               (desired_message_strings_.count("") == 1 && ignore_message_strings_.size() == 0);
-    }
-    bool NeedCheckSuccess() const { return ExpectingSuccess(); }
-    void VerifyNotFound();
-    // TODO: This is stopgap to block new unexpected errors from being introduced. The long-term goal is to remove the use of this
-    // function and its definition.
-    bool IgnoreMessage(std::string const &msg) const;
-    std::vector<std::string> GetOtherFailureMsgs() const;
-    bool AnyDesiredMsgFound() const;
-    bool AllDesiredMsgsFound() const;
-    void DumpFailureMsgs() const;
-    void MonitorReset();
-    std::unique_lock<std::mutex> Lock() const { return std::unique_lock<std::mutex>(mutex_); }
-
-    VkFlags message_flags_;
-    std::unordered_multiset<std::string> desired_message_strings_;
-    std::unordered_multiset<std::string> failure_message_strings_;
-    std::vector<std::string> ignore_message_strings_;
-    std::vector<std::string> allowed_message_strings_;
-    std::vector<std::string> other_messages_;
-    mutable std::mutex mutex_;
-    std::atomic<bool> *bailout_;
-    bool message_found_;
-};
-
 struct DebugReporter {
     void Create(VkInstance instance) noexcept;
     void Destroy(VkInstance instance) noexcept;
@@ -257,8 +177,7 @@ class VkRenderFramework : public VkTestFramework {
     void InitViewport(float width, float height);
     void InitViewport();
     bool InitSurface();
-    bool InitSurface(float width, float height);
-    bool InitSurface(float width, float height, VkSurfaceKHR &surface);
+    bool InitSurface(VkSurfaceKHR &surface);
     void InitSwapchainInfo();
     bool InitSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                        VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR);
@@ -351,6 +270,9 @@ class VkRenderFramework : public VkTestFramework {
 
     // WSI items
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+    HWND m_win32Window;
+#endif
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
     Display *m_surface_dpy;
     Window m_surface_window;
@@ -429,6 +351,7 @@ class VkConstantBufferObj;
 class VkPipelineObj;
 typedef vk_testing::Event VkEventObj;
 typedef vk_testing::Fence VkFenceObj;
+typedef vk_testing::Semaphore VkSemaphoreObj;
 typedef vk_testing::Buffer VkBufferObj;
 typedef vk_testing::AccelerationStructure VkAccelerationStructureObj;
 typedef vk_testing::AccelerationStructureKHR VkAccelerationStructurekhrObj;
@@ -848,8 +771,8 @@ class VkPipelineObj : public vk_testing::Pipeline {
     void SetInputAssembly(const VkPipelineInputAssemblyStateCreateInfo *ia_state);
     void SetRasterization(const VkPipelineRasterizationStateCreateInfo *rs_state);
     void SetTessellation(const VkPipelineTessellationStateCreateInfo *te_state);
-    void SetViewport(const std::vector<VkViewport> viewports);
-    void SetScissor(const std::vector<VkRect2D> scissors);
+    void SetViewport(const std::vector<VkViewport> &viewports);
+    void SetScissor(const std::vector<VkRect2D> &scissors);
     void SetLineState(const VkPipelineRasterizationLineStateCreateInfoEXT *line_state);
 
     void InitGraphicsPipelineCreateInfo(VkGraphicsPipelineCreateInfo *gp_ci);

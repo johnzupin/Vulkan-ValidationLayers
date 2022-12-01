@@ -555,6 +555,10 @@ static VKAPI_ATTR void VKAPI_CALL StubGetMicromapBuildSizesEXT(VkDevice         
 static VKAPI_ATTR void VKAPI_CALL StubSetDeviceMemoryPriorityEXT(VkDevice       device, VkDeviceMemory memory, float          priority) {  };
 static VKAPI_ATTR void VKAPI_CALL StubGetDescriptorSetLayoutHostMappingInfoVALVE(VkDevice device, const VkDescriptorSetBindingReferenceVALVE* pBindingReference, VkDescriptorSetLayoutHostMappingInfoVALVE* pHostMapping) {  };
 static VKAPI_ATTR void VKAPI_CALL StubGetDescriptorSetHostMappingVALVE(VkDevice device, VkDescriptorSet descriptorSet, void** ppData) {  };
+static VKAPI_ATTR void VKAPI_CALL StubCmdCopyMemoryIndirectNV(VkCommandBuffer commandBuffer, VkDeviceAddress copyBufferAddress, uint32_t copyCount, uint32_t stride) {  };
+static VKAPI_ATTR void VKAPI_CALL StubCmdCopyMemoryToImageIndirectNV(VkCommandBuffer commandBuffer, VkDeviceAddress copyBufferAddress, uint32_t copyCount, uint32_t stride, VkImage dstImage, VkImageLayout dstImageLayout, const VkImageSubresourceLayers* pImageSubresources) {  };
+static VKAPI_ATTR void VKAPI_CALL StubCmdDecompressMemoryNV(VkCommandBuffer commandBuffer, uint32_t decompressRegionCount, const VkDecompressMemoryRegionNV* pDecompressMemoryRegions) {  };
+static VKAPI_ATTR void VKAPI_CALL StubCmdDecompressMemoryIndirectCountNV(VkCommandBuffer commandBuffer, VkDeviceAddress indirectCommandsAddress, VkDeviceAddress indirectCommandsCountAddress, uint32_t stride) {  };
 static VKAPI_ATTR void VKAPI_CALL StubCmdSetTessellationDomainOriginEXT(VkCommandBuffer commandBuffer, VkTessellationDomainOrigin domainOrigin) {  };
 static VKAPI_ATTR void VKAPI_CALL StubCmdSetDepthClampEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthClampEnable) {  };
 static VKAPI_ATTR void VKAPI_CALL StubCmdSetPolygonModeEXT(VkCommandBuffer commandBuffer, VkPolygonMode polygonMode) {  };
@@ -647,6 +651,8 @@ const layer_data::unordered_map<std::string, std::string> api_extension_map {
     {"vkCmdBeginRenderingKHR", "VK_KHR_dynamic_rendering"},
     {"vkCmdBeginTransformFeedbackEXT", "VK_EXT_transform_feedback"},
     {"vkCmdBeginVideoCodingKHR", "VK_KHR_video_queue"},
+    {"vkCmdBindDescriptorBufferEmbeddedSamplersEXT", "VK_EXT_descriptor_buffer"},
+    {"vkCmdBindDescriptorBuffersEXT", "VK_EXT_descriptor_buffer"},
     {"vkCmdBindInvocationMaskHUAWEI", "VK_HUAWEI_invocation_mask"},
     {"vkCmdBindPipelineShaderGroupNV", "VK_NV_device_generated_commands"},
     {"vkCmdBindShadingRateImageNV", "VK_NV_shading_rate_image"},
@@ -671,7 +677,9 @@ const layer_data::unordered_map<std::string, std::string> api_extension_map {
     {"vkCmdCopyImage2KHR", "VK_KHR_copy_commands2"},
     {"vkCmdCopyImageToBuffer2", "VK_VERSION_1_3"},
     {"vkCmdCopyImageToBuffer2KHR", "VK_KHR_copy_commands2"},
+    {"vkCmdCopyMemoryIndirectNV", "VK_NV_copy_memory_indirect"},
     {"vkCmdCopyMemoryToAccelerationStructureKHR", "VK_KHR_acceleration_structure"},
+    {"vkCmdCopyMemoryToImageIndirectNV", "VK_NV_copy_memory_indirect"},
     {"vkCmdCopyMemoryToMicromapEXT", "VK_EXT_opacity_micromap"},
     {"vkCmdCopyMicromapEXT", "VK_EXT_opacity_micromap"},
     {"vkCmdCopyMicromapToMemoryEXT", "VK_EXT_opacity_micromap"},
@@ -680,6 +688,8 @@ const layer_data::unordered_map<std::string, std::string> api_extension_map {
     {"vkCmdDebugMarkerEndEXT", "VK_EXT_debug_marker"},
     {"vkCmdDebugMarkerInsertEXT", "VK_EXT_debug_marker"},
     {"vkCmdDecodeVideoKHR", "VK_KHR_video_decode_queue"},
+    {"vkCmdDecompressMemoryIndirectCountNV", "VK_NV_memory_decompression"},
+    {"vkCmdDecompressMemoryNV", "VK_NV_memory_decompression"},
     {"vkCmdDispatchBase", "VK_VERSION_1_1"},
     {"vkCmdDispatchBaseKHR", "VK_KHR_device_group"},
     {"vkCmdDrawIndexedIndirectCount", "VK_VERSION_1_2"},
@@ -752,6 +762,7 @@ const layer_data::unordered_map<std::string, std::string> api_extension_map {
     {"vkCmdSetDepthTestEnableEXT", "VK_EXT_extended_dynamic_state"},
     {"vkCmdSetDepthWriteEnable", "VK_VERSION_1_3"},
     {"vkCmdSetDepthWriteEnableEXT", "VK_EXT_extended_dynamic_state"},
+    {"vkCmdSetDescriptorBufferOffsetsEXT", "VK_EXT_descriptor_buffer"},
     {"vkCmdSetDeviceMask", "VK_VERSION_1_1"},
     {"vkCmdSetDeviceMaskKHR", "VK_KHR_device_group"},
     {"vkCmdSetDiscardRectangleEXT", "VK_EXT_discard_rectangles"},
@@ -875,6 +886,7 @@ const layer_data::unordered_map<std::string, std::string> api_extension_map {
     {"vkGetAccelerationStructureDeviceAddressKHR", "VK_KHR_acceleration_structure"},
     {"vkGetAccelerationStructureHandleNV", "VK_NV_ray_tracing"},
     {"vkGetAccelerationStructureMemoryRequirementsNV", "VK_NV_ray_tracing"},
+    {"vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT", "VK_EXT_descriptor_buffer"},
     {"vkGetAndroidHardwareBufferPropertiesANDROID", "VK_ANDROID_external_memory_android_hardware_buffer"},
     {"vkGetBufferCollectionPropertiesFUCHSIA", "VK_FUCHSIA_buffer_collection"},
     {"vkGetBufferDeviceAddress", "VK_VERSION_1_2"},
@@ -884,11 +896,15 @@ const layer_data::unordered_map<std::string, std::string> api_extension_map {
     {"vkGetBufferMemoryRequirements2KHR", "VK_KHR_get_memory_requirements2"},
     {"vkGetBufferOpaqueCaptureAddress", "VK_VERSION_1_2"},
     {"vkGetBufferOpaqueCaptureAddressKHR", "VK_KHR_buffer_device_address"},
+    {"vkGetBufferOpaqueCaptureDescriptorDataEXT", "VK_EXT_descriptor_buffer"},
     {"vkGetCalibratedTimestampsEXT", "VK_EXT_calibrated_timestamps"},
     {"vkGetDeferredOperationMaxConcurrencyKHR", "VK_KHR_deferred_host_operations"},
     {"vkGetDeferredOperationResultKHR", "VK_KHR_deferred_host_operations"},
+    {"vkGetDescriptorEXT", "VK_EXT_descriptor_buffer"},
     {"vkGetDescriptorSetHostMappingVALVE", "VK_VALVE_descriptor_set_host_mapping"},
+    {"vkGetDescriptorSetLayoutBindingOffsetEXT", "VK_EXT_descriptor_buffer"},
     {"vkGetDescriptorSetLayoutHostMappingInfoVALVE", "VK_VALVE_descriptor_set_host_mapping"},
+    {"vkGetDescriptorSetLayoutSizeEXT", "VK_EXT_descriptor_buffer"},
     {"vkGetDescriptorSetLayoutSupport", "VK_VERSION_1_1"},
     {"vkGetDescriptorSetLayoutSupportKHR", "VK_KHR_maintenance3"},
     {"vkGetDeviceAccelerationStructureCompatibilityKHR", "VK_KHR_acceleration_structure"},
@@ -917,11 +933,13 @@ const layer_data::unordered_map<std::string, std::string> api_extension_map {
     {"vkGetImageDrmFormatModifierPropertiesEXT", "VK_EXT_image_drm_format_modifier"},
     {"vkGetImageMemoryRequirements2", "VK_VERSION_1_1"},
     {"vkGetImageMemoryRequirements2KHR", "VK_KHR_get_memory_requirements2"},
+    {"vkGetImageOpaqueCaptureDescriptorDataEXT", "VK_EXT_descriptor_buffer"},
     {"vkGetImageSparseMemoryRequirements2", "VK_VERSION_1_1"},
     {"vkGetImageSparseMemoryRequirements2KHR", "VK_KHR_get_memory_requirements2"},
     {"vkGetImageSubresourceLayout2EXT", "VK_EXT_image_compression_control"},
     {"vkGetImageViewAddressNVX", "VK_NVX_image_view_handle"},
     {"vkGetImageViewHandleNVX", "VK_NVX_image_view_handle"},
+    {"vkGetImageViewOpaqueCaptureDescriptorDataEXT", "VK_EXT_descriptor_buffer"},
     {"vkGetMemoryAndroidHardwareBufferANDROID", "VK_ANDROID_external_memory_android_hardware_buffer"},
     {"vkGetMemoryFdKHR", "VK_KHR_external_memory_fd"},
     {"vkGetMemoryFdPropertiesKHR", "VK_KHR_external_memory_fd"},
@@ -948,6 +966,7 @@ const layer_data::unordered_map<std::string, std::string> api_extension_map {
     {"vkGetRayTracingShaderGroupHandlesNV", "VK_NV_ray_tracing"},
     {"vkGetRayTracingShaderGroupStackSizeKHR", "VK_KHR_ray_tracing_pipeline"},
     {"vkGetRefreshCycleDurationGOOGLE", "VK_GOOGLE_display_timing"},
+    {"vkGetSamplerOpaqueCaptureDescriptorDataEXT", "VK_EXT_descriptor_buffer"},
     {"vkGetSemaphoreCounterValue", "VK_VERSION_1_2"},
     {"vkGetSemaphoreCounterValueKHR", "VK_KHR_timeline_semaphore"},
     {"vkGetSemaphoreFdKHR", "VK_KHR_external_semaphore_fd"},
@@ -1849,6 +1868,14 @@ static inline void layer_init_device_dispatch_table(VkDevice device, VkLayerDisp
     if (table->GetDescriptorSetLayoutHostMappingInfoVALVE == nullptr) { table->GetDescriptorSetLayoutHostMappingInfoVALVE = (PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE)StubGetDescriptorSetLayoutHostMappingInfoVALVE; }
     table->GetDescriptorSetHostMappingVALVE = (PFN_vkGetDescriptorSetHostMappingVALVE) gpa(device, "vkGetDescriptorSetHostMappingVALVE");
     if (table->GetDescriptorSetHostMappingVALVE == nullptr) { table->GetDescriptorSetHostMappingVALVE = (PFN_vkGetDescriptorSetHostMappingVALVE)StubGetDescriptorSetHostMappingVALVE; }
+    table->CmdCopyMemoryIndirectNV = (PFN_vkCmdCopyMemoryIndirectNV) gpa(device, "vkCmdCopyMemoryIndirectNV");
+    if (table->CmdCopyMemoryIndirectNV == nullptr) { table->CmdCopyMemoryIndirectNV = (PFN_vkCmdCopyMemoryIndirectNV)StubCmdCopyMemoryIndirectNV; }
+    table->CmdCopyMemoryToImageIndirectNV = (PFN_vkCmdCopyMemoryToImageIndirectNV) gpa(device, "vkCmdCopyMemoryToImageIndirectNV");
+    if (table->CmdCopyMemoryToImageIndirectNV == nullptr) { table->CmdCopyMemoryToImageIndirectNV = (PFN_vkCmdCopyMemoryToImageIndirectNV)StubCmdCopyMemoryToImageIndirectNV; }
+    table->CmdDecompressMemoryNV = (PFN_vkCmdDecompressMemoryNV) gpa(device, "vkCmdDecompressMemoryNV");
+    if (table->CmdDecompressMemoryNV == nullptr) { table->CmdDecompressMemoryNV = (PFN_vkCmdDecompressMemoryNV)StubCmdDecompressMemoryNV; }
+    table->CmdDecompressMemoryIndirectCountNV = (PFN_vkCmdDecompressMemoryIndirectCountNV) gpa(device, "vkCmdDecompressMemoryIndirectCountNV");
+    if (table->CmdDecompressMemoryIndirectCountNV == nullptr) { table->CmdDecompressMemoryIndirectCountNV = (PFN_vkCmdDecompressMemoryIndirectCountNV)StubCmdDecompressMemoryIndirectCountNV; }
     table->CmdSetTessellationDomainOriginEXT = (PFN_vkCmdSetTessellationDomainOriginEXT) gpa(device, "vkCmdSetTessellationDomainOriginEXT");
     if (table->CmdSetTessellationDomainOriginEXT == nullptr) { table->CmdSetTessellationDomainOriginEXT = (PFN_vkCmdSetTessellationDomainOriginEXT)StubCmdSetTessellationDomainOriginEXT; }
     table->CmdSetDepthClampEnableEXT = (PFN_vkCmdSetDepthClampEnableEXT) gpa(device, "vkCmdSetDepthClampEnableEXT");

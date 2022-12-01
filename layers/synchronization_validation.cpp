@@ -107,6 +107,18 @@ static const char *string_SyncHazardVUID(SyncHazard hazard) {
         case SyncHazard::WRITE_RACING_READ:
             return "SYNC-HAZARD-WRITE-RACING-READ";
             break;
+        case SyncHazard::READ_AFTER_PRESENT:
+            return "SYNC-HAZARD-READ-AFTER-PRESENT";
+            break;
+        case SyncHazard::WRITE_AFTER_PRESENT:
+            return "SYNC-HAZARD-WRITE-AFTER-PRESENT";
+            break;
+        case SyncHazard::PRESENT_AFTER_WRITE:
+            return "SYNC-HAZARD-PRESENT-AFTER-WRITE";
+            break;
+        case SyncHazard::PRESENT_AFTER_READ:
+            return "SYNC-HAZARD-PRESENT-AFTER-READ";
+            break;
         default:
             assert(0);
     }
@@ -114,38 +126,27 @@ static const char *string_SyncHazardVUID(SyncHazard hazard) {
 }
 
 static bool IsHazardVsRead(SyncHazard hazard) {
+    bool vs_read = false;
     switch (hazard) {
-        case SyncHazard::NONE:
-            return false;
-            break;
-        case SyncHazard::READ_AFTER_WRITE:
-            return false;
-            break;
         case SyncHazard::WRITE_AFTER_READ:
-            return true;
-            break;
-        case SyncHazard::WRITE_AFTER_WRITE:
-            return false;
-            break;
-        case SyncHazard::READ_RACING_WRITE:
-            return false;
-            break;
-        case SyncHazard::WRITE_RACING_WRITE:
-            return false;
+            vs_read = true;
             break;
         case SyncHazard::WRITE_RACING_READ:
-            return true;
+            vs_read = true;
+            break;
+        case SyncHazard::PRESENT_AFTER_READ:
+            vs_read = true;
             break;
         default:
-            assert(0);
+            break;
     }
-    return false;
+    return vs_read;
 }
 
 static const char *string_SyncHazard(SyncHazard hazard) {
     switch (hazard) {
         case SyncHazard::NONE:
-            return "NONR";
+            return "NONE";
             break;
         case SyncHazard::READ_AFTER_WRITE:
             return "READ_AFTER_WRITE";
@@ -164,6 +165,18 @@ static const char *string_SyncHazard(SyncHazard hazard) {
             break;
         case SyncHazard::WRITE_RACING_READ:
             return "WRITE_RACING_READ";
+            break;
+        case SyncHazard::READ_AFTER_PRESENT:
+            return "READ_AFTER_PRESENT";
+            break;
+        case SyncHazard::WRITE_AFTER_PRESENT:
+            return "WRITE_AFTER_PRESENT";
+            break;
+        case SyncHazard::PRESENT_AFTER_WRITE:
+            return "PRESENT_AFTER_WRITE";
+            break;
+        case SyncHazard::PRESENT_AFTER_READ:
+            return "PRESENT_AFTER_READ";
             break;
         default:
             assert(0);
@@ -204,15 +217,6 @@ static std::string string_SyncStageAccessFlags(const SyncStageAccessFlags &flags
     return out_str;
 }
 
-std::ostream &operator<<(std::ostream &out, const ResourceUsageRecord &record) {
-    out << "command: " << CommandTypeString(record.command);
-    out << ", seq_no: " << record.seq_num;
-    if (record.sub_command != 0) {
-        out << ", subcmd: " << record.sub_command;
-    }
-    return out;
-}
-
 static std::string string_UsageIndex(SyncStageAccessIndex usage_index) {
     const char *stage_access_name = "INVALID_STAGE_ACCESS";
     if (usage_index < static_cast<SyncStageAccessIndex>(syncStageAccessInfoByStageAccessIndex.size())) {
@@ -228,18 +232,65 @@ struct SyncNodeFormatter {
 
     SyncNodeFormatter(const SyncValidator &sync_state, const CMD_BUFFER_STATE *cb_state)
         : report_data(sync_state.report_data), node(cb_state), label("command_buffer") {}
+    SyncNodeFormatter(const SyncValidator &sync_state, const IMAGE_STATE *image)
+        : report_data(sync_state.report_data), node(image), label("image") {}
     SyncNodeFormatter(const SyncValidator &sync_state, const QUEUE_STATE *q_state)
         : report_data(sync_state.report_data), node(q_state), label("queue") {}
+    SyncNodeFormatter(const SyncValidator &sync_state, const BASE_NODE *base_node, const char *label_ = nullptr)
+        : report_data(sync_state.report_data), node(base_node), label(label_) {}
 };
 
-std::ostream &operator<<(std::ostream &out, const SyncNodeFormatter &formater) {
-    if (formater.node) {
-        out << formater.label << ": " << formater.report_data->FormatHandle(formater.node->Handle()).c_str();
-        if (formater.node->Destroyed()) {
+std::ostream &operator<<(std::ostream &out, const SyncNodeFormatter &formatter) {
+    if (formatter.label) {
+        out << formatter.label << ": ";
+    }
+    if (formatter.node) {
+        out << formatter.report_data->FormatHandle(formatter.node->Handle()).c_str();
+        if (formatter.node->Destroyed()) {
             out << " (destroyed)";
         }
     } else {
-        out << formater.label << ": null handle";
+        out << "null handle";
+    }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const NamedHandle::FormatterState &formatter) {
+    const NamedHandle &handle = formatter.that;
+    bool labeled = false;
+    if (!handle.name.empty()) {
+        out << handle.name;
+        labeled = true;
+    }
+    if (handle.IsIndexed()) {
+        out << "[" << handle.index << "]";
+        labeled = true;
+    }
+    if (labeled) {
+        out << ": ";
+    }
+    out << formatter.state.report_data->FormatHandle(handle.handle);
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ResourceUsageRecord::FormatterState &formatter) {
+    const ResourceUsageRecord &record = formatter.record;
+    if (record.alt_usage) {
+        out << record.alt_usage.Formatter(formatter.sync_state);
+    } else {
+        out << "command: " << CommandTypeString(record.command);
+        out << ", seq_no: " << record.seq_num;
+        if (record.sub_command != 0) {
+            out << ", subcmd: " << record.sub_command;
+        }
+        // Note: ex_cb_state set to null forces output of record.cb_state
+        if (!formatter.ex_cb_state || (formatter.ex_cb_state != record.cb_state)) {
+            out << ", " << SyncNodeFormatter(formatter.sync_state, record.cb_state);
+        }
+        for (const auto &named_handle : record.handles) {
+            out << "," << named_handle.Formatter(formatter.sync_state);
+        }
+        out << ", reset_no: " << std::to_string(record.reset_count);
     }
     return out;
 }
@@ -315,11 +366,7 @@ std::string CommandBufferAccessContext::FormatUsage(const ResourceUsageTag tag) 
     std::stringstream out;
     assert(tag < access_log_->size());
     const auto &record = (*access_log_)[tag];
-    out << record;
-    if (cb_state_ != record.cb_state) {
-        out << ", " << SyncNodeFormatter(*sync_state_, record.cb_state);
-    }
-    out << ", reset_no: " << std::to_string(record.reset_count);
+    out << record.Formatter(*sync_state_, cb_state_);
     return out.str();
 }
 
@@ -619,7 +666,8 @@ ResourceAccessRange GetBufferRange(VkDeviceSize offset, VkDeviceSize buf_whole_s
     return MakeRange(range_start, range_size);
 }
 
-SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType descriptor_type, const interface_var &descriptor_data,
+SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType descriptor_type,
+                                                             const InterfaceVariable &interface_var,
                                                              VkShaderStageFlagBits stage_flag) {
     if (descriptor_type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) {
         assert(stage_flag == VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -636,7 +684,7 @@ SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType de
     // If the desriptorSet is writable, we don't need to care SHADER_READ. SHADER_WRITE is enough.
     // Because if write hazard happens, read hazard might or might not happen.
     // But if write hazard doesn't happen, read hazard is impossible to happen.
-    if (descriptor_data.is_writable) {
+    if (interface_var.is_writable) {
         return stage_access->second.storage_write;
     }
     // TODO: sampled_read
@@ -793,15 +841,31 @@ class UpdateStateResolveAction {
 
 void HazardResult::Set(const ResourceAccessState *access_state_, SyncStageAccessIndex usage_index_, SyncHazard hazard_,
                        const SyncStageAccessFlags &prior_, const ResourceUsageTag tag_) {
-    access_state = layer_data::make_unique<const ResourceAccessState>(*access_state_);
+    access_state = std::make_unique<const ResourceAccessState>(*access_state_);
     usage_index = usage_index_;
     hazard = hazard_;
     prior_access = prior_;
     tag = tag_;
+
+    // Touchup the hazard to reflect "present as release" semantics
+    // NOTE: For implementing QFO release/acquire semantics... touch up here as well
+    if (access_state->LastWriteOp() == SYNC_PRESENT_ENGINE_BIT_SYNCVAL_PRESENT_PRESENTED_BIT_SYNCVAL) {
+        if (hazard == SyncHazard::READ_AFTER_WRITE) {
+            hazard = SyncHazard::READ_AFTER_PRESENT;
+        } else if (hazard == SyncHazard::WRITE_AFTER_WRITE) {
+            hazard = SyncHazard::WRITE_AFTER_PRESENT;
+        }
+    } else if (usage_index_ == SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_PRESENTED_SYNCVAL) {
+        if (hazard == SyncHazard::WRITE_AFTER_READ) {
+            hazard = SyncHazard::PRESENT_AFTER_READ;
+        } else if (hazard == SyncHazard::WRITE_AFTER_WRITE) {
+            hazard = SyncHazard::PRESENT_AFTER_WRITE;
+        }
+    }
 }
 
 void HazardResult::AddRecordedAccess(const ResourceFirstAccess &first_access) {
-    recorded_access = layer_data::make_unique<const ResourceFirstAccess>(first_access);
+    recorded_access = std::make_unique<const ResourceFirstAccess>(first_access);
 }
 
 void AccessContext::DeleteAccess(const AddressRange &address) { GetAccessStateMap(address.type).erase_range(address.range); }
@@ -902,6 +966,16 @@ void AccessContext::EraseIf(Predicate &&pred) {
         // Note: Don't forward, we don't want r-values moved, since we're going to make multiple calls.
         layer_data::EraseIf(accesses, pred);
     }
+}
+
+template <typename Detector, typename RangeGen>
+HazardResult AccessContext::DetectHazard(AccessAddressType address_type, Detector &detector, RangeGen &range_gen,
+                                         DetectOptions options) const {
+    for (; range_gen->non_empty(); ++range_gen) {
+        HazardResult hazard = DetectHazard(address_type, detector, *range_gen, options);
+        if (hazard.hazard) return hazard;
+    }
+    return HazardResult();
 }
 
 // A recursive range walker for hazard detection, first for the current context and the (DetectHazardRecur) to walk
@@ -1020,9 +1094,9 @@ struct ApplyTrackbackStackAction {
 // Returns the position past the last resolved range -- the entry covering the remainder of entry->first not included in the
 // range [first, last)
 template <typename BarrierAction>
-static void ResolveMapToEntry(ResourceAccessRangeMap *dest, ResourceAccessRangeMap::iterator entry,
-                              ResourceAccessRangeMap::const_iterator first, ResourceAccessRangeMap::const_iterator last,
-                              BarrierAction &barrier_action) {
+static void ResolveMapToEntry(ResourceAccessRangeMap *dest, const ResourceAccessRangeMap::iterator &entry,
+                              const ResourceAccessRangeMap::const_iterator &first,
+                              const ResourceAccessRangeMap::const_iterator &last, BarrierAction &barrier_action) {
     auto at = entry;
     for (auto pos = first; pos != last; ++pos) {
         // Every member of the input iterator range must fit within the remaining portion of entry
@@ -1200,6 +1274,15 @@ void AccessContext::ResolveFromContext(ResolveOp &&resolve_op, const AccessConte
     for (auto address_type : kAddressTypes) {
         from_context.ResolveAccessRange(address_type, kFullRange, resolve_op, &GetAccessStateMap(address_type), infill_state,
                                         recur_to_infill);
+    }
+}
+
+template <typename ResolveOp, typename RangeGenerator>
+void AccessContext::ResolveFromContext(ResolveOp &&resolve_op, const AccessContext &from_context, AccessAddressType address_type,
+                                       RangeGenerator range_gen, const ResourceAccessState *infill_state, bool recur_to_infill) {
+    ResourceAccessRangeMap &destination_map = GetAccessStateMap(address_type);
+    for (; range_gen->non_empty(); ++range_gen) {
+        from_context.ResolveAccessRange(address_type, *range_gen, resolve_op, &destination_map, infill_state, recur_to_infill);
     }
 }
 
@@ -1442,12 +1525,7 @@ HazardResult AccessContext::DetectHazard(Detector &detector, const AttachmentVie
 
     subresource_adapter::ImageRangeGenerator range_gen(*attachment_gen);
     const auto address_type = view_gen.GetAddressType();
-    for (; range_gen->non_empty(); ++range_gen) {
-        HazardResult hazard = DetectHazard(address_type, detector, *range_gen, options);
-        if (hazard.hazard) return hazard;
-    }
-
-    return HazardResult();
+    return DetectHazard(address_type, detector, range_gen, options);
 }
 
 template <typename Detector>
@@ -1459,12 +1537,9 @@ HazardResult AccessContext::DetectHazard(Detector &detector, const IMAGE_STATE &
     subresource_adapter::ImageRangeGenerator range_gen(*image.fragment_encoder.get(), subresource_range, offset, extent,
                                                        base_address, is_depth_sliced);
     const auto address_type = ImageAddressType(image);
-    for (; range_gen->non_empty(); ++range_gen) {
-        HazardResult hazard = DetectHazard(address_type, detector, *range_gen, options);
-        if (hazard.hazard) return hazard;
-    }
-    return HazardResult();
+    return DetectHazard(address_type, detector, range_gen, options);
 }
+
 template <typename Detector>
 HazardResult AccessContext::DetectHazard(Detector &detector, const IMAGE_STATE &image,
                                          const VkImageSubresourceRange &subresource_range, bool is_depth_sliced,
@@ -1474,11 +1549,7 @@ HazardResult AccessContext::DetectHazard(Detector &detector, const IMAGE_STATE &
     subresource_adapter::ImageRangeGenerator range_gen(*image.fragment_encoder.get(), subresource_range, base_address,
                                                        is_depth_sliced);
     const auto address_type = ImageAddressType(image);
-    for (; range_gen->non_empty(); ++range_gen) {
-        HazardResult hazard = DetectHazard(address_type, detector, *range_gen, options);
-        if (hazard.hazard) return hazard;
-    }
-    return HazardResult();
+    return DetectHazard(address_type, detector, range_gen, options);
 }
 
 HazardResult AccessContext::DetectHazard(const IMAGE_STATE &image, SyncStageAccessIndex current_usage,
@@ -1741,14 +1812,14 @@ void UpdateMemoryAccessState(ResourceAccessRangeMap *accesses, const Action &act
 }
 struct UpdateMemoryAccessStateFunctor {
     using Iterator = ResourceAccessRangeMap::iterator;
-    Iterator Infill(ResourceAccessRangeMap *accesses, Iterator pos, ResourceAccessRange range) const {
+    Iterator Infill(ResourceAccessRangeMap *accesses, const Iterator &pos, const ResourceAccessRange &range) const {
         // this is only called on gaps, and never returns a gap.
         ResourceAccessState default_state;
         context.ResolvePreviousAccess(type, range, accesses, &default_state);
         return accesses->lower_bound(range);
     }
 
-    Iterator operator()(ResourceAccessRangeMap *accesses, Iterator pos) const {
+    Iterator operator()(ResourceAccessRangeMap *accesses, const Iterator &pos) const {
         auto &access_state = pos->second;
         access_state.Update(usage, ordering_rule, tag);
         return pos;
@@ -2379,9 +2450,10 @@ ResourceUsageTag CommandBufferAccessContext::RecordBeginRenderPass(CMD_TYPE cmd_
                                                                    const VkRect2D &render_area,
                                                                    const std::vector<const IMAGE_VIEW_STATE *> &attachment_views) {
     // Create an access context the current renderpass.
-    const auto barrier_tag = NextCommandTag(cmd_type, ResourceUsageRecord::SubcommandType::kSubpassTransition);
+    const auto barrier_tag = NextCommandTag(cmd_type, NamedHandle("renderpass", rp_state.Handle()),
+                                            ResourceUsageRecord::SubcommandType::kSubpassTransition);
     const auto load_tag = NextSubcommandTag(cmd_type, ResourceUsageRecord::SubcommandType::kLoadOp);
-    render_pass_contexts_.emplace_back(layer_data::make_unique<RenderPassAccessContext>(rp_state, render_area, GetQueueFlags(),
+    render_pass_contexts_.emplace_back(std::make_unique<RenderPassAccessContext>(rp_state, render_area, GetQueueFlags(),
                                                                                         attachment_views, &cb_access_context_));
     current_renderpass_context_ = render_pass_contexts_.back().get();
     current_renderpass_context_->RecordBeginRenderPass(barrier_tag, load_tag);
@@ -2393,7 +2465,9 @@ ResourceUsageTag CommandBufferAccessContext::RecordNextSubpass(const CMD_TYPE cm
     assert(current_renderpass_context_);
     if (!current_renderpass_context_) return NextCommandTag(cmd_type);
 
-    auto store_tag = NextCommandTag(cmd_type, ResourceUsageRecord::SubcommandType::kStoreOp);
+    auto store_tag =
+        NextCommandTag(cmd_type, NamedHandle("renderpass", current_renderpass_context_->GetRenderPassState()->Handle()),
+                       ResourceUsageRecord::SubcommandType::kStoreOp);
     auto barrier_tag = NextSubcommandTag(cmd_type, ResourceUsageRecord::SubcommandType::kSubpassTransition);
     auto load_tag = NextSubcommandTag(cmd_type, ResourceUsageRecord::SubcommandType::kLoadOp);
 
@@ -2406,7 +2480,9 @@ ResourceUsageTag CommandBufferAccessContext::RecordEndRenderPass(const CMD_TYPE 
     assert(current_renderpass_context_);
     if (!current_renderpass_context_) return NextCommandTag(cmd_type);
 
-    auto store_tag = NextCommandTag(cmd_type, ResourceUsageRecord::SubcommandType::kStoreOp);
+    auto store_tag =
+        NextCommandTag(cmd_type, NamedHandle("renderpass", current_renderpass_context_->GetRenderPassState()->Handle()),
+                       ResourceUsageRecord::SubcommandType::kStoreOp);
     auto barrier_tag = NextSubcommandTag(cmd_type, ResourceUsageRecord::SubcommandType::kSubpassTransition);
 
     current_renderpass_context_->RecordEndRenderPass(&cb_access_context_, store_tag, barrier_tag);
@@ -2509,16 +2585,37 @@ void CommandBufferAccessContext::InsertRecordedAccessLogEntries(const CommandBuf
 }
 
 ResourceUsageTag CommandBufferAccessContext::NextSubcommandTag(CMD_TYPE command, ResourceUsageRecord::SubcommandType subcommand) {
+    return NextSubcommandTag(command, NamedHandle(), subcommand);
+}
+ResourceUsageTag CommandBufferAccessContext::NextSubcommandTag(CMD_TYPE command, NamedHandle &&handle,
+                                                               ResourceUsageRecord::SubcommandType subcommand) {
     ResourceUsageTag next = access_log_->size();
     access_log_->emplace_back(command, command_number_, subcommand, ++subcommand_number_, cb_state_, reset_count_);
+    if (command_handles_.size()) {
+        // This is a duplication, but it keeps tags->log information flat (i.e not depending on some "command tag" entry
+        access_log_->back().handles = command_handles_;
+    }
+    if (handle) {
+        access_log_->back().AddHandle(std::move(handle));
+    }
     return next;
 }
 
 ResourceUsageTag CommandBufferAccessContext::NextCommandTag(CMD_TYPE command, ResourceUsageRecord::SubcommandType subcommand) {
+    return NextCommandTag(command, NamedHandle(), subcommand);
+}
+
+ResourceUsageTag CommandBufferAccessContext::NextCommandTag(CMD_TYPE command, NamedHandle &&handle,
+                                                            ResourceUsageRecord::SubcommandType subcommand) {
     command_number_++;
+    command_handles_.clear();
     subcommand_number_ = 0;
     ResourceUsageTag next = access_log_->size();
     access_log_->emplace_back(command, command_number_, subcommand, subcommand_number_, cb_state_, reset_count_);
+    if (handle) {
+        access_log_->back().AddHandle(handle);
+        command_handles_.emplace_back(std::move(handle));
+    }
     return next;
 }
 
@@ -2972,7 +3069,7 @@ SyncBarrier::SyncBarrier(const SyncExecScope &src, const SyncExecScope &dst)
     : src_exec_scope(src), src_access_scope(0), dst_exec_scope(dst), dst_access_scope(0) {}
 
 SyncBarrier::SyncBarrier(const SyncExecScope &src, const SyncExecScope &dst, const SyncBarrier::AllAccess &)
-    : src_exec_scope(src), src_access_scope(src.valid_accesses), dst_exec_scope(dst), dst_access_scope(src.valid_accesses) {}
+    : src_exec_scope(src), src_access_scope(src.valid_accesses), dst_exec_scope(dst), dst_access_scope(dst.valid_accesses) {}
 
 template <typename Barrier>
 SyncBarrier::SyncBarrier(const Barrier &barrier, const SyncExecScope &src, const SyncExecScope &dst)
@@ -3537,7 +3634,7 @@ void ResourceAccessState::ApplyBarrier(ScopeOps &&scope, const SyncBarrier &barr
                 // If this stage, or any stage known to be synchronized after it are in scope, apply the barrier to this read
                 // NOTE: Forwarding barriers to known prior stages changes the sync_stages from shallow to deep, because the
                 //       barriers used to determine sync_stages have been propagated to all known earlier stages
-                read_access.pending_dep_chain |= barrier.dst_exec_scope.exec_scope;
+                read_access.ApplyReadBarrier(barrier.dst_exec_scope.exec_scope);
             }
         }
     }
@@ -3556,9 +3653,7 @@ void ResourceAccessState::ApplyPendingBarriers(const ResourceUsageTag tag) {
     // Apply the accumulate execution barriers (and thus update chaining information)
     // for layout transition, last_reads is reset by SetWrite, so this will be skipped.
     for (auto &read_access : last_reads) {
-        read_access.barriers |= read_access.pending_dep_chain;
-        read_execution_barriers |= read_access.barriers;
-        read_access.pending_dep_chain = 0;
+        read_execution_barriers |= read_access.ApplyPendingBarriers();
     }
 
     // We OR in the accumulated write chain and barriers even in the case of a layout transition as SetWrite zeros them.
@@ -3593,23 +3688,42 @@ void ResourceAccessState::ApplySemaphore(const SemaphoreScope &signal, const Sem
     write_dependency_chain = read_execution_barriers;
 }
 
-bool ResourceAccessState::QueueTagPredicate::operator()(QueueId usage_queue, ResourceUsageTag usage_tag) const {
-    return (usage_queue == queue) && (usage_tag <= tag);
+// Read access predicate for queue wait
+bool ResourceAccessState::WaitQueueTagPredicate::operator()(const ResourceAccessState::ReadState &read_access) const {
+    return (read_access.queue == queue) && (read_access.tag <= tag) &&
+           (read_access.stage != VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL);
+}
+bool ResourceAccessState::WaitQueueTagPredicate::operator()(const ResourceAccessState &access) const {
+    return (access.write_queue == queue) && (access.write_tag <= tag) &&
+           (access.last_write != SYNC_PRESENT_ENGINE_BIT_SYNCVAL_PRESENT_PRESENTED_BIT_SYNCVAL);
 }
 
-bool ResourceAccessState::QueuePredicate::operator()(QueueId usage_queue, ResourceUsageTag) const { return queue == usage_queue; }
+// Read access predicate for queue wait
+bool ResourceAccessState::WaitTagPredicate::operator()(const ResourceAccessState::ReadState &read_access) const {
+    return (read_access.tag <= tag) && (read_access.stage != VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL);
+}
+bool ResourceAccessState::WaitTagPredicate::operator()(const ResourceAccessState &access) const {
+    return (access.write_tag <= tag) && (access.last_write != SYNC_PRESENT_ENGINE_BIT_SYNCVAL_PRESENT_PRESENTED_BIT_SYNCVAL);
+}
 
-bool ResourceAccessState::TagPredicate::operator()(QueueId, ResourceUsageTag usage_tag) const { return tag <= usage_tag; }
+// Present operations only matching only the *exactly* tagged present and acquire operations
+bool ResourceAccessState::WaitAcquirePredicate::operator()(const ResourceAccessState::ReadState &read_access) const {
+    return (read_access.tag == acquire_tag) && (read_access.stage == VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL);
+}
+bool ResourceAccessState::WaitAcquirePredicate::operator()(const ResourceAccessState &access) const {
+    return (access.write_tag == present_tag) &&
+           (access.last_write == SYNC_PRESENT_ENGINE_BIT_SYNCVAL_PRESENT_PRESENTED_BIT_SYNCVAL);
+}
 
 // Return if the resulting state is "empty"
-template <typename Pred>
-bool ResourceAccessState::ApplyQueueTagWait(Pred &&queue_tag_test) {
+template <typename Predicate>
+bool ResourceAccessState::ApplyPredicatedWait(Predicate &predicate) {
     VkPipelineStageFlags2KHR sync_reads = VK_PIPELINE_STAGE_2_NONE;
 
     // Use the predicate to build a mask of the read stages we are synchronizing
     // Use the sync_stages to also detect reads known to be before any synchronized reads (first pass)
     for (auto &read_access : last_reads) {
-        if (queue_tag_test(read_access.queue, read_access.tag)) {
+        if (predicate(read_access)) {
             // If we know this stage is before any stage we syncing, or if the predicate tells us that we are waited for..
             sync_reads |= read_access.stage;
         }
@@ -3649,7 +3763,7 @@ bool ResourceAccessState::ApplyQueueTagWait(Pred &&queue_tag_test) {
 
     bool all_clear = last_reads.size() == 0;
     if (last_write.any()) {
-        if (queue_tag_test(write_queue, write_tag) || sync_reads) {
+        if (predicate(*this) || sync_reads) {
             // Clear any predicated write, or any the write from any any access with synchronized reads.
             // This could drop RAW detection, but only if the synchronized reads were RAW hazards, and given
             // MRR approach to reporting, this is consistent with other drops, especially since fixing the
@@ -3875,6 +3989,12 @@ bool ResourceAccessState::ReadState::ReadInQueueScopeOrChain(QueueId scope_queue
     return (exec_scope & effective_stages) != 0;
 }
 
+VkPipelineStageFlags2 ResourceAccessState::ReadState::ApplyPendingBarriers() {
+    barriers |= pending_dep_chain;
+    pending_dep_chain = 0;
+    return barriers;
+}
+
 ResourceUsageRange SyncValidator::ReserveGlobalTagRange(size_t tag_count) const {
     ResourceUsageRange reserve;
     reserve.begin = tag_limit_.fetch_add(tag_count);
@@ -3883,24 +4003,49 @@ ResourceUsageRange SyncValidator::ReserveGlobalTagRange(size_t tag_count) const 
 }
 
 void SyncValidator::ApplyTaggedWait(QueueId queue_id, ResourceUsageTag tag) {
-    // We need to go through every queue batch context and clear all accesses this wait synchronizes
-    // As usual -- two groups, the "last batch" and the signaled semaphores
-    // NOTE: Since ApplyTaggedWait crawls through every usage in every ResourceAccessState in the AccessContext of *every*
-    // QueueBatchContext, track which we've done to avoid duplicate traversals
-    QueueBatchContext::BatchSet queue_batch_contexts = GetQueueBatchSnapshot();
-    for (auto &batch : queue_batch_contexts) {
+    auto tagged_wait_op = [queue_id, tag](const std::shared_ptr<QueueBatchContext> &batch) {
         batch->ApplyTaggedWait(queue_id, tag);
         batch->Trim();
+    };
+    ForAllQueueBatchContexts(tagged_wait_op);
+}
+
+void SyncValidator::ApplyAcquireWait(const AcquiredImage &acquired) {
+    auto acq_wait_op = [&acquired](const std::shared_ptr<QueueBatchContext> &batch) {
+        batch->ApplyAcquireWait(acquired);
+        batch->Trim();
+    };
+    ForAllQueueBatchContexts(acq_wait_op);
+}
+
+template <typename BatchOp>
+void SyncValidator::ForAllQueueBatchContexts(BatchOp &&op) {
+    // Often we need to go through every queue batch context and apply synchronization operations
+    // As usual -- two groups, the "last batch" and the signaled semaphores
+    QueueBatchContext::BatchSet queue_batch_contexts = GetQueueBatchSnapshot();
+
+    // Note: The const is to force the reference to const be on all platforms.
+    //
+    // It's not obivious (nor cross platform consitent), that the batch reference should be const
+    // but since it's pointing to the actual *key* for the set it must be. This doesn't make the
+    // object the shared pointer is referencing constant however.
+    for (const auto &batch : queue_batch_contexts) {
+        op(batch);
     }
 }
 
 void SyncValidator::UpdateFenceWaitInfo(VkFence fence, QueueId queue_id, ResourceUsageTag tag) {
-    if (fence != VK_NULL_HANDLE) {
-        // Overwrite the current fence wait information
-        // NOTE: Not doing fence usage validation here, leaving that in CoreChecks intentionally
-        auto fence_state = Get<FENCE_STATE>(fence);
-        waitable_fences_[fence] = {fence_state, tag, queue_id};
-    }
+    std::shared_ptr<const FENCE_STATE> fence_state = Get<FENCE_STATE>(fence);
+    UpdateFenceWaitInfo(fence_state, FenceSyncState(fence_state, queue_id, tag));
+}
+void SyncValidator::UpdateFenceWaitInfo(VkFence fence, const PresentedImage &image, ResourceUsageTag tag) {
+    std::shared_ptr<const FENCE_STATE> fence_state = Get<FENCE_STATE>(fence);
+    UpdateFenceWaitInfo(fence_state, FenceSyncState(fence_state, image, tag));
+}
+
+void SyncValidator::UpdateFenceWaitInfo(std::shared_ptr<const FENCE_STATE> &fence_state, FenceSyncState &&wait_info) {
+    if (BASE_NODE::Invalid(fence_state)) return;
+    waitable_fences_[fence_state->fence()] = std::move(wait_info);
 }
 
 void SyncValidator::WaitForFence(VkFence fence) {
@@ -3908,7 +4053,13 @@ void SyncValidator::WaitForFence(VkFence fence) {
     if (fence_it != waitable_fences_.end()) {
         // The fence may no longer be waitable for several valid reasons.
         FenceSyncState &wait_for = fence_it->second;
-        ApplyTaggedWait(wait_for.queue_id, wait_for.tag);
+        if (wait_for.acquired.Invalid()) {
+            // This is just a normal fence wait
+            ApplyTaggedWait(wait_for.queue_id, wait_for.tag);
+        } else {
+            // This a fence wait for a present operation
+            ApplyAcquireWait(wait_for.acquired);
+        }
         waitable_fences_.erase(fence_it);
     }
 }
@@ -3964,7 +4115,7 @@ QueueBatchContext::BatchSet SyncValidator::GetQueueLastBatchSnapshot(Predicate &
 
 QueueBatchContext::BatchSet SyncValidator::GetQueueBatchSnapshot() {
     QueueBatchContext::BatchSet snapshot = GetQueueLastBatchSnapshot();
-    auto append = [&snapshot](const std::shared_ptr<QueueBatchContext> batch) {
+    auto append = [&snapshot](const std::shared_ptr<QueueBatchContext> &batch) {
         if (batch && !layer_data::Contains(snapshot, batch)) {
             snapshot.emplace(batch);
         }
@@ -4009,6 +4160,11 @@ bool SignaledSemaphores::SignalSemaphore(const std::shared_ptr<const SEMAPHORE_S
     assert(batch);
     const SyncExecScope exec_scope =
         SyncExecScope::MakeSrc(batch->GetQueueFlags(), signal_info.stageMask, VK_PIPELINE_STAGE_2_HOST_BIT);
+    std::shared_ptr<Signal> signal = std::make_shared<Signal>(sem_state, batch, exec_scope);
+    return Insert(sem_state, std::move(signal));
+}
+
+bool SignaledSemaphores::Insert(const std::shared_ptr<const SEMAPHORE_STATE> &sem_state, std::shared_ptr<Signal> &&signal) {
     const VkSemaphore sem = sem_state->semaphore();
     auto signal_it = signaled_.find(sem);
     std::shared_ptr<Signal> insert_signal;
@@ -4026,11 +4182,18 @@ bool SignaledSemaphores::SignalSemaphore(const std::shared_ptr<const SEMAPHORE_S
 
     bool success = false;
     if (!signal_it->second) {
-        signal_it->second = std::make_shared<Signal>(sem_state, batch, exec_scope);
+        signal_it->second = std::move(signal);
         success = true;
     }
 
     return success;
+}
+
+bool SignaledSemaphores::SignalSemaphore(const std::shared_ptr<const SEMAPHORE_STATE> &sem_state, const PresentedImage &presented,
+                                         ResourceUsageTag acq_tag) {
+    // Ignore any signal we haven't waited... CoreChecks should have reported this
+    std::shared_ptr<Signal> signal = std::make_shared<Signal>(sem_state, presented, acq_tag);
+    return Insert(sem_state, std::move(signal));
 }
 
 std::shared_ptr<const SignaledSemaphores::Signal> SignaledSemaphores::Unsignal(VkSemaphore sem) {
@@ -4056,6 +4219,29 @@ std::shared_ptr<const SignaledSemaphores::Signal> SignaledSemaphores::Unsignal(V
 
     // If unsignaled is null, there was a missing pending semaphore, and that's also issue CoreChecks reports
     return unsignaled;
+}
+
+void SignaledSemaphores::Resolve(SignaledSemaphores &parent, std::shared_ptr<QueueBatchContext> &last_batch) {
+    // Must only be called on child objects, with the non-const reference of the parent/previous object passed in
+    assert(prev_ == &parent);
+
+    // The global  the semaphores we applied to the cmd_state QueueBatchContexts
+    // NOTE: All conserved QueueBatchContext's need to have there access logs reset to use the global logger and the only conserved
+    //       QBC's are those referenced by unwaited signals and the last batch.
+    for (auto &sig_sem : signaled_) {
+        if (sig_sem.second && sig_sem.second->batch) {
+            auto &sig_batch = sig_sem.second->batch;
+            // Batches retained for signalled semaphore don't need to retain event data, unless it's the last batch in the submit
+            if (sig_batch != last_batch) {
+                sig_batch->ResetEventsContext();
+                // Make sure that retained batches are minimal, and trim after the events contexts has been cleared.
+                sig_batch->Trim();
+            }
+        }
+        // Import clears in the parent any signal waited in the
+        parent.Import(sig_sem.first, std::move(sig_sem.second));
+    }
+    Reset();
 }
 
 void SignaledSemaphores::Import(VkSemaphore sem, std::shared_ptr<Signal> &&from) {
@@ -4107,6 +4293,11 @@ std::shared_ptr<CMD_BUFFER_STATE> SyncValidator::CreateCmdBufferState(VkCommandB
         cb_state->access_context.SetSelfReference();
     }
     return std::static_pointer_cast<CMD_BUFFER_STATE>(cb_state);
+}
+
+std::shared_ptr<SWAPCHAIN_NODE> SyncValidator::CreateSwapchainState(const VkSwapchainCreateInfoKHR *create_info,
+                                                                    VkSwapchainKHR swapchain) {
+    return std::static_pointer_cast<SWAPCHAIN_NODE>(std::make_shared<syncval_state::Swapchain>(this, create_info, swapchain));
 }
 
 bool SyncValidator::PreCallValidateCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer,
@@ -7391,9 +7582,10 @@ void SyncValidator::PreCallRecordCmdExecuteCommands(VkCommandBuffer commandBuffe
     if (!cb_state) return;
     auto *cb_context = &cb_state->access_context;
     for (uint32_t cb_index = 0; cb_index < commandBufferCount; ++cb_index) {
-        cb_context->NextIndexedCommandTag(CMD_EXECUTECOMMANDS, cb_index);
+        const ResourceUsageTag cb_tag = cb_context->NextIndexedCommandTag(CMD_EXECUTECOMMANDS, cb_index);
         const auto recorded_cb = Get<syncval_state::CommandBuffer>(pCommandBuffers[cb_index]);
         if (!recorded_cb) continue;
+        cb_context->AddHandle(cb_tag, "pCommandBuffers", recorded_cb->Handle(), cb_index);
         const auto *recorded_cb_context = &recorded_cb->access_context;
         cb_context->RecordExecutedCommandBuffer(*recorded_cb_context);
     }
@@ -7415,13 +7607,161 @@ void SyncValidator::PostCallRecordQueueWaitIdle(VkQueue queue, VkResult result) 
 void SyncValidator::PostCallRecordDeviceWaitIdle(VkDevice device, VkResult result) {
     StateTracker::PostCallRecordDeviceWaitIdle(device, result);
 
-    QueueBatchContext::BatchSet queue_batch_contexts = GetQueueBatchSnapshot();
-    for (auto &batch : queue_batch_contexts) {
-        batch->ApplyDeviceWait();
+    // We need to treat this a fence waits for all queues... noting that present engine ops will be preserved.
+    ForAllQueueBatchContexts([](const std::shared_ptr<QueueBatchContext> &batch) {
+        batch->ApplyTaggedWait(QueueSyncState::kQueueAny, ResourceUsageRecord::kMaxIndex);
+    });
+
+    // As we we've waited for everything on device, any waits are mooted. (except for acquires)
+    layer_data::EraseIf(waitable_fences_, [](SignaledFences::value_type &waitable) { return waitable.second.acquired.Invalid(); });
+}
+
+struct QueuePresentCmdState {
+    std::shared_ptr<const QueueSyncState> queue;
+    std::shared_ptr<QueueBatchContext> present_batch;
+    SignaledSemaphores signaled;
+    PresentedImages presented_images;
+    QueuePresentCmdState(const SignaledSemaphores &parent_semaphores) : signaled(parent_semaphores) {}
+};
+
+template <>
+thread_local layer_data::optional<QueuePresentCmdState> layer_data::TlsGuard<QueuePresentCmdState>::payload_{};
+
+bool SyncValidator::PreCallValidateQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo) const {
+    bool skip = false;
+
+    // Since this early return is above the TlsGuard, the Record phase must also be.
+    if (!enabled[sync_validation_queue_submit]) return skip;
+
+    layer_data::TlsGuard<QueuePresentCmdState> cmd_state(&skip, signaled_semaphores_);
+    cmd_state->queue = GetQueueSyncStateShared(queue);
+    if (!cmd_state->queue) return skip;  // Invalid Queue
+
+    // The submit id is a mutable automic which is not recoverable on a skip == true condition
+    uint64_t submit_id = cmd_state->queue->ReserveSubmitId();
+
+    std::shared_ptr<const QueueBatchContext> last_batch = cmd_state->queue->LastBatch();
+    std::shared_ptr<QueueBatchContext> batch(std::make_shared<QueueBatchContext>(*this, *cmd_state->queue, submit_id, 0));
+
+    ResourceUsageRange tag_range = SetupPresentInfo(*pPresentInfo, batch, cmd_state->presented_images);
+    batch->SetupAccessContext(last_batch, *pPresentInfo, cmd_state->presented_images, cmd_state->signaled);
+    batch->SetupBatchTags(tag_range);
+    // Update the present tags
+    for (auto &presented : cmd_state->presented_images) {
+        presented.tag += batch->GetTagRange().begin;
     }
 
-    // As we we've waited for everything on device, any waits are mooted.
-    waitable_fences_.clear();
+    skip |= batch->DoQueuePresentValidate("vkQueuePresentKHR", cmd_state->presented_images);
+    batch->DoPresentOperations(cmd_state->presented_images);
+    batch->LogPresentOperations(cmd_state->presented_images);
+    batch->Cleanup();
+
+    if (!skip) {
+        cmd_state->present_batch = std::move(batch);
+    }
+    return skip;
+}
+
+ResourceUsageRange SyncValidator::SetupPresentInfo(const VkPresentInfoKHR &present_info, std::shared_ptr<QueueBatchContext> &batch,
+                                                   PresentedImages &presented_images) const {
+    const VkSwapchainKHR *const swapchains = present_info.pSwapchains;
+    const uint32_t *const image_indices = present_info.pImageIndices;
+    const uint32_t swap_count = present_info.swapchainCount;
+
+    // Create the working list of presented images
+    presented_images.reserve(swap_count);
+    for (uint32_t present_index = 0; present_index < swap_count; present_index++) {
+        // Note: Given the "EraseIf" implementation for acquire fence waits, each presentation needs a unique tag.
+        const ResourceUsageTag tag = presented_images.size();
+        presented_images.emplace_back(*this, batch, swapchains[present_index], image_indices[present_index], present_index, tag);
+        if (presented_images.back().Invalid()) {
+            presented_images.pop_back();
+        }
+    }
+
+    // Present is tagged for each swap.
+    return ResourceUsageRange(0, presented_images.size());
+}
+
+void SyncValidator::PostCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo, VkResult result) {
+    StateTracker::PostCallRecordQueuePresentKHR(queue, pPresentInfo, result);
+    if (!enabled[sync_validation_queue_submit]) return;
+
+    // The earliest return (when enabled), must be *after* the TlsGuard, as it is the TlsGuard that cleans up the cmd_state
+    // static payload
+    layer_data::TlsGuard<QueuePresentCmdState> cmd_state;
+
+    // See ValidationStateTracker::PostCallRecordQueuePresentKHR for spec excerpt supporting
+    if (result == VK_ERROR_OUT_OF_HOST_MEMORY || result == VK_ERROR_OUT_OF_DEVICE_MEMORY || result == VK_ERROR_DEVICE_LOST) {
+        return;
+    }
+
+    // Update the state with the data from the validate phase
+    cmd_state->signaled.Resolve(signaled_semaphores_, cmd_state->present_batch);
+    std::shared_ptr<QueueSyncState> queue_state = std::const_pointer_cast<QueueSyncState>(std::move(cmd_state->queue));
+    for (auto &presented : cmd_state->presented_images) {
+        presented.ExportToSwapchain(*this);
+    }
+    queue_state->UpdateLastBatch(std::move(cmd_state->present_batch));
+}
+
+void SyncValidator::PostCallRecordAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
+                                                      VkSemaphore semaphore, VkFence fence, uint32_t *pImageIndex,
+                                                      VkResult result) {
+    StateTracker::PostCallRecordAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, pImageIndex, result);
+    if (!enabled[sync_validation_queue_submit]) return;
+    RecordAcquireNextImageState(device, swapchain, timeout, semaphore, fence, pImageIndex, result, "vkAcquireNextImageKHR");
+}
+
+void SyncValidator::PostCallRecordAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR *pAcquireInfo,
+                                                       uint32_t *pImageIndex, VkResult result) {
+    StateTracker::PostCallRecordAcquireNextImage2KHR(device, pAcquireInfo, pImageIndex, result);
+    if (!enabled[sync_validation_queue_submit]) return;
+    RecordAcquireNextImageState(device, pAcquireInfo->swapchain, pAcquireInfo->timeout, pAcquireInfo->semaphore,
+                                pAcquireInfo->fence, pImageIndex, result, "vkAcquireNextImage2KHR");
+}
+
+void SyncValidator::RecordAcquireNextImageState(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore,
+                                                VkFence fence, uint32_t *pImageIndex, VkResult result, const char *func_name) {
+    if ((VK_SUCCESS != result) && (VK_SUBOPTIMAL_KHR != result)) return;
+
+    // Get the image out of the presented list and create apppropriate fences/semaphores.
+    auto swapchain_state = Get<syncval_state::Swapchain>(swapchain);
+    if (BASE_NODE::Invalid(swapchain_state)) return;  // Invalid acquire calls to be caught in CoreCheck/Parameter validation
+
+    PresentedImage presented = swapchain_state->MovePresentedImage(*pImageIndex);
+    if (presented.Invalid()) return;
+
+    // No way to make access safe, so nothing to record
+    if ((semaphore == VK_NULL_HANDLE) && (fence == VK_NULL_HANDLE)) return;
+
+    // We create a queue-less QBC for the Semaphore and fences to wait on
+
+    // Note: this is a heavyweight way to deal with the fact that all operation logs live in the QueueBatchContext... and
+    // acquire doesn't happen on a queue, but we need a place to put the acquire operation access record.
+    auto batch = std::make_shared<QueueBatchContext>(*this);
+    batch->SetupAccessContext(presented);
+    ResourceUsageRange acquire_tag_range(0, 1);
+    batch->SetupBatchTags(ResourceUsageRange(0, 1));
+    const ResourceUsageTag acquire_tag = batch->GetTagRange().begin;
+    batch->DoAcquireOperation(presented);
+    batch->LogAcquireOperation(presented, func_name);
+
+    // Now swap out the present queue batch with the acquired one.
+    // Note that fence and signal will read the acquire batch from presented, so this needs to be done before
+    // setting up the synchronization
+    presented.batch = std::move(batch);
+
+    if (semaphore != VK_NULL_HANDLE) {
+        std::shared_ptr<const SEMAPHORE_STATE> sem_state = Get<SEMAPHORE_STATE>(semaphore);
+
+        if (bool(sem_state)) {
+            signaled_semaphores_.SignalSemaphore(sem_state, presented, acquire_tag);
+        }
+    }
+    if (fence != VK_NULL_HANDLE) {
+        UpdateFenceWaitInfo(fence, presented, acquire_tag);
+    }
 }
 
 template <>
@@ -7429,7 +7769,9 @@ thread_local layer_data::optional<QueueSubmitCmdState> layer_data::TlsGuard<Queu
 
 bool SyncValidator::PreCallValidateQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
                                                VkFence fence) const {
-    SubmitInfoConverter submit_info(submitCount, pSubmits);
+    auto queue_state = GetQueueSyncStateShared(queue);
+    if (!bool(queue_state)) return false;
+    SubmitInfoConverter submit_info(submitCount, pSubmits, queue_state->GetQueueFlags());
     return ValidateQueueSubmit(queue, submitCount, submit_info.info2s.data(), fence, "vkQueueSubmit");
 }
 
@@ -7474,6 +7816,7 @@ bool SyncValidator::ValidateQueueSubmit(VkQueue queue, uint32_t submitCount, con
         }
         // Unless the previous batch was referenced by a signal, the QueueBatchContext will self destruct, but as
         // we ResolvePrevious as we can let any contexts we've fully referenced go.
+        batch->Cleanup();  // Clear the temporaries that the batch holds.
         last_batch = batch;
     }
     // The most recently created batch will become the queue's "last batch" in the record phase
@@ -7506,34 +7849,8 @@ void SyncValidator::RecordQueueSubmit(VkQueue queue, VkFence fence, VkResult res
     // Don't need to look up the queue state again, but we need a non-const version
     std::shared_ptr<QueueSyncState> queue_state = std::const_pointer_cast<QueueSyncState>(std::move(cmd_state->queue));
 
-    // The global  the semaphores we applied to the cmd_state QueueBatchContexts
-    // NOTE: All conserved QueueBatchContext's need to have there access logs reset to use the global logger and the only conserved
-    //       QBC's are those referenced by unwaited signals and the last batch.
-    for (auto &sig_sem : cmd_state->signaled) {
-        if (sig_sem.second && sig_sem.second->batch) {
-            auto &sig_batch = sig_sem.second->batch;
-            // Batches retained for signalled semaphore don't need to retain event data, unless it's the last batch in the submit
-            if (sig_batch != cmd_state->last_batch) {
-                sig_batch->ResetEventsContext();
-                // Make sure that retained batches are minimal, and trim after the events contexts has been cleared.
-                sig_batch->Trim();
-            }
-        }
-        signaled_semaphores_.Import(sig_sem.first, std::move(sig_sem.second));
-    }
-    cmd_state->signaled.Reset();
-
-    // Update the queue to point to the last batch from the submit
-    if (cmd_state->last_batch) {
-        // Clean up the events data in the previous last batch on queue, as only the subsequent batches have valid use for them
-        // and the QueueBatchContext::Setup calls have be copying them along from batch to batch during submit.
-        auto last_batch = queue_state->LastBatch();
-        if (last_batch) {
-            last_batch->ResetEventsContext();
-        }
-        cmd_state->last_batch->Trim();
-        queue_state->SetLastBatch(std::move(cmd_state->last_batch));
-    }
+    cmd_state->signaled.Resolve(signaled_semaphores_, cmd_state->last_batch);
+    queue_state->UpdateLastBatch(std::move(cmd_state->last_batch));
 
     ResourceUsageRange fence_tag_range = ReserveGlobalTagRange(1U);
     UpdateFenceWaitInfo(fence, queue_state->GetQueueId(), fence_tag_range.begin);
@@ -7614,18 +7931,18 @@ const ImageRangeGen *AttachmentViewGen::GetRangeGen(AttachmentViewGen::Gen gen_t
     const ImageRangeGen *got = nullptr;
     switch (gen_type) {
         case kViewSubresource:
-            got = &gen_store_[kViewSubresource];
+            got = &(*gen_store_[kViewSubresource]);
             break;
         case kRenderArea:
-            got = &gen_store_[kRenderArea];
+            got = &(*gen_store_[kRenderArea]);
             break;
         case kDepthOnlyRenderArea:
-            got =
-                (view_mask_ == VK_IMAGE_ASPECT_DEPTH_BIT) ? &gen_store_[Gen::kRenderArea] : &gen_store_[Gen::kDepthOnlyRenderArea];
+            got = (view_mask_ == VK_IMAGE_ASPECT_DEPTH_BIT) ? &(*gen_store_[Gen::kRenderArea])
+                                                            : &(*gen_store_[Gen::kDepthOnlyRenderArea]);
             break;
         case kStencilOnlyRenderArea:
-            got = (view_mask_ == VK_IMAGE_ASPECT_STENCIL_BIT) ? &gen_store_[Gen::kRenderArea]
-                                                              : &gen_store_[Gen::kStencilOnlyRenderArea];
+            got = (view_mask_ == VK_IMAGE_ASPECT_STENCIL_BIT) ? &(*gen_store_[Gen::kRenderArea])
+                                                              : &(*gen_store_[Gen::kStencilOnlyRenderArea]);
             break;
         default:
             assert(got);
@@ -7700,8 +8017,17 @@ QueueBatchContext::QueueBatchContext(const SyncValidator &sync_state, const Queu
       tag_range_(0, 0),
       current_access_context_(&access_context_),
       batch_log_(),
-      batch_(queue_state, submit_index, batch_index),
-      queue_sync_tag_(sync_state.GetQueueIdLimit(), ResourceUsageTag(0)) {}
+      queue_sync_tag_(sync_state.GetQueueIdLimit(), ResourceUsageTag(0)),
+      batch_(queue_state, submit_index, batch_index) {}
+
+QueueBatchContext::QueueBatchContext(const SyncValidator &sync_state)
+    : CommandExecutionContext(&sync_state),
+      queue_state_(),
+      tag_range_(0, 0),
+      current_access_context_(&access_context_),
+      batch_log_(),
+      queue_sync_tag_(sync_state.GetQueueIdLimit(), ResourceUsageTag(0)),
+      batch_() {}
 
 void QueueBatchContext::Trim() {
     // Clean up unneeded access context contents and log information
@@ -7723,23 +8049,36 @@ void QueueBatchContext::ResolveSubmittedCommandBuffer(const AccessContext &recor
 
 VulkanTypedHandle QueueBatchContext::Handle() const { return queue_state_->Handle(); }
 
-void QueueBatchContext::ApplyTaggedWait(QueueId queue_id, ResourceUsageTag tag) {
-    ResourceAccessState::QueueTagPredicate predicate{queue_id, tag};
+template <typename Predicate>
+void QueueBatchContext::ApplyPredicatedWait(Predicate &predicate) {
     access_context_.EraseIf([&predicate](ResourceAccessRangeMap::value_type &access) {
         // Apply..Wait returns true if the waited access is empty...
-        return access.second.ApplyQueueTagWait(predicate);
+        return access.second.ApplyPredicatedWait<Predicate>(predicate);
     });
+}
 
-    if (queue_id == GetQueueId()) {
+void QueueBatchContext::ApplyTaggedWait(QueueId queue_id, ResourceUsageTag tag) {
+    const bool any_queue = (queue_id == QueueSyncState::kQueueAny);
+
+    if (any_queue) {
+        // This isn't just avoid an unneeded test, but to allow *all* queues to to be waited in a single pass
+        // (and it does avoid doing the same test for every access, as well as avoiding the need for the predicate
+        // to grok Queue/Device/Wait differences.
+        ResourceAccessState::WaitTagPredicate predicate{tag};
+        ApplyPredicatedWait(predicate);
+    } else {
+        ResourceAccessState::WaitQueueTagPredicate predicate{queue_id, tag};
+        ApplyPredicatedWait(predicate);
+    }
+
+    if (queue_id == GetQueueId() || any_queue) {
         events_context_.ApplyTaggedWait(GetQueueFlags(), tag);
     }
 }
 
-// Clear all accesses
-void QueueBatchContext::ApplyDeviceWait() {
-    access_context_.Reset();
-    events_context_.ApplyTaggedWait(GetQueueFlags(), ResourceUsageRecord::kMaxIndex);
-    Trim();
+void QueueBatchContext::ApplyAcquireWait(const AcquiredImage &acquired) {
+    ResourceAccessState::WaitAcquirePredicate predicate{acquired.present_tag, acquired.acquire_tag};
+    ApplyPredicatedWait(predicate);
 }
 
 HazardResult QueueBatchContext::DetectFirstUseHazard(const ResourceUsageRange &tag_range) {
@@ -7763,6 +8102,14 @@ void QueueBatchContext::NextSubpassReplay() {
 void QueueBatchContext::EndRenderPassReplay() {
     rp_replay_.End(access_context_);
     current_access_context_ = &access_context_;
+}
+
+void QueueBatchContext::Cleanup() {
+    // Clear these after validation and import, not valid after.
+    batch_ = BatchAccessLog::BatchRecord();
+    command_buffers_.clear();
+    async_batches_.clear();
+    rp_replay_.Reset();
 }
 
 AccessContext *QueueBatchContext::RenderPassReplayState::Begin(VkQueueFlags queue_flags, const SyncOpBeginRenderPass &begin_op_,
@@ -7804,6 +8151,84 @@ class ApplySemaphoreBarrierAction {
     const SemaphoreScope wait_;
 };
 
+class ApplyAcquireNextSemaphoreAction {
+  public:
+    static const SyncStageAccessFlags kPresentValidAccesses;
+    static const SyncExecScope kPresentSrcScope;
+    ApplyAcquireNextSemaphoreAction(const SyncExecScope &wait_scope, ResourceUsageTag acquire_tag)
+        : barrier_(1, SyncBarrier(kPresentSrcScope, kPresentValidAccesses, wait_scope, SyncStageAccessFlags())),
+          acq_tag_(acquire_tag) {}
+    void operator()(ResourceAccessState *access) const {
+        // Note that the present operations may or may not be present, given that the fence wait may have cleared them out.
+        // Also, if a subsequent present has happened, we *don't* want to protect that...
+        if (access->LastWriteTag() <= acq_tag_) {
+            access->ApplyBarriersImmediate(barrier_);
+        }
+    }
+
+  private:
+    std::vector<SyncBarrier> barrier_;
+    ResourceUsageTag acq_tag_;
+};
+
+const SyncStageAccessFlags ApplyAcquireNextSemaphoreAction::kPresentValidAccesses =
+    SyncStageAccessFlags(SyncStageAccess::AccessScopeByStage(VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL));
+const SyncExecScope ApplyAcquireNextSemaphoreAction::kPresentSrcScope =
+    SyncExecScope(VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL,           // mask_param (unused)
+                  VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL,           // expanded_mask
+                  VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL,           // exec_scope
+                  ApplyAcquireNextSemaphoreAction::kPresentValidAccesses);  // valid_accesses
+
+// Overload for QueuePresent semaphore waiting.  Not applicable to QueueSubmit semaphores
+std::shared_ptr<QueueBatchContext> QueueBatchContext::ResolveOneWaitSemaphore(VkSemaphore sem,
+                                                                              const PresentedImages &presented_images,
+                                                                              SignaledSemaphores &signaled) {
+    auto sem_state = sync_state_->Get<SEMAPHORE_STATE>(sem);
+    if (!sem_state) return nullptr;  // Semaphore validity is handled by CoreChecks
+
+    // When signal_state goes out of scope, the signal information will be dropped, as Unsignal has released ownership.
+    auto signal_state = signaled.Unsignal(sem);
+    if (!signal_state) return nullptr;  // Invalid signal, skip it.
+
+    assert(signal_state->batch);
+
+    const AccessContext &from_context = signal_state->batch->access_context_;
+    const SemaphoreScope &signal_scope = signal_state->first_scope;
+    const QueueId queue_id = GetQueueId();
+    const auto queue_flags = queue_state_->GetQueueFlags();
+    SemaphoreScope wait_scope{queue_id, SyncExecScope::MakeDst(queue_flags, VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL)};
+
+    // If signal queue == wait queue, signal is treated as a memory barrier with an access scope equal to the present accesses
+    SyncBarrier sem_barrier(signal_scope, wait_scope, SyncBarrier::AllAccess());
+    const BatchBarrierOp sem_same_queue_op(wait_scope.queue, sem_barrier);
+
+    // Need to import the rest of the same queue contents without modification
+    SyncBarrier noop_barrier;
+    const BatchBarrierOp noop_barrier_op(wait_scope.queue, noop_barrier);
+
+    // Otherwise apply semaphore rules apply
+    const ApplySemaphoreBarrierAction sem_not_same_queue_op(signal_scope, wait_scope);
+    const SemaphoreScope noop_semaphore_scope(queue_id, noop_barrier.dst_exec_scope);
+    const ApplySemaphoreBarrierAction noop_sem_op(signal_scope, noop_semaphore_scope);
+
+    // For each presented image
+    for (const auto &presented : presented_images) {
+        // Need a copy that can be used as the pseudo-iterator...
+        subresource_adapter::ImageRangeGenerator range_gen(presented.range_gen);
+        if (signal_scope.queue == wait_scope.queue) {
+            // If signal queue == wait queue, signal is treated as a memory barrier with an access scope equal to the
+            // valid accesses for the sync scope.
+            access_context_.ResolveFromContext(sem_same_queue_op, from_context, presented.address_type, range_gen);
+            access_context_.ResolveFromContext(noop_barrier_op, from_context);
+        } else {
+            access_context_.ResolveFromContext(sem_not_same_queue_op, from_context, presented.address_type, range_gen);
+            access_context_.ResolveFromContext(noop_sem_op, from_context);
+        }
+    }
+
+    return signal_state->batch;
+}
+
 std::shared_ptr<QueueBatchContext> QueueBatchContext::ResolveOneWaitSemaphore(VkSemaphore sem, VkPipelineStageFlags2 wait_mask,
                                                                               SignaledSemaphores &signaled) {
     auto sem_state = sync_state_->Get<SEMAPHORE_STATE>(sem);
@@ -7818,16 +8243,30 @@ std::shared_ptr<QueueBatchContext> QueueBatchContext::ResolveOneWaitSemaphore(Vk
     const SemaphoreScope &signal_scope = signal_state->first_scope;
     const auto queue_flags = queue_state_->GetQueueFlags();
     SemaphoreScope wait_scope{GetQueueId(), SyncExecScope::MakeDst(queue_flags, wait_mask)};
-    if (signal_scope.queue == wait_scope.queue) {
-        // If signal queue == wait queue, signal is treated as a memory barrier with an access scope equal to the
-        // valid accesses for the sync scope.
-        SyncBarrier sem_barrier(signal_scope, wait_scope, SyncBarrier::AllAccess());
-        const BatchBarrierOp sem_barrier_op(wait_scope.queue, sem_barrier);
-        access_context_.ResolveFromContext(sem_barrier_op, signal_state->batch->access_context_);
-        events_context_.ApplyBarrier(sem_barrier.src_exec_scope, sem_barrier.dst_exec_scope, ResourceUsageRecord::kMaxIndex);
+
+    const AccessContext &from_context = signal_state->batch->access_context_;
+    if (signal_state->acquired.image) {
+        // Import the *presenting* batch, but replacing presenting with acquired.
+        ApplyAcquireNextSemaphoreAction apply_acq(wait_scope, signal_state->acquired.acquire_tag);
+        access_context_.ResolveFromContext(apply_acq, from_context, signal_state->acquired.address_type,
+                                           signal_state->acquired.generator);
+
+        // Grab the reset of the presenting QBC, with no effective barrier, won't overwrite the acquire, as the tag is newer
+        SyncBarrier noop_barrier;
+        const BatchBarrierOp noop_barrier_op(wait_scope.queue, noop_barrier);
+        access_context_.ResolveFromContext(noop_barrier_op, from_context);
     } else {
-        ApplySemaphoreBarrierAction sem_op(signal_scope, wait_scope);
-        access_context_.ResolveFromContext(sem_op, signal_state->batch->access_context_);
+        if (signal_scope.queue == wait_scope.queue) {
+            // If signal queue == wait queue, signal is treated as a memory barrier with an access scope equal to the
+            // valid accesses for the sync scope.
+            SyncBarrier sem_barrier(signal_scope, wait_scope, SyncBarrier::AllAccess());
+            const BatchBarrierOp sem_barrier_op(wait_scope.queue, sem_barrier);
+            access_context_.ResolveFromContext(sem_barrier_op, from_context);
+            events_context_.ApplyBarrier(sem_barrier.src_exec_scope, sem_barrier.dst_exec_scope, ResourceUsageRecord::kMaxIndex);
+        } else {
+            ApplySemaphoreBarrierAction sem_op(signal_scope, wait_scope);
+            access_context_.ResolveFromContext(sem_op, signal_state->batch->access_context_);
+        }
     }
     // Cannot move from the signal state because it could be from the const global state, and C++ doesn't
     // enforce deep constness.
@@ -7843,15 +8282,82 @@ void QueueBatchContext::ImportSyncTags(const QueueBatchContext &from) {
     }
 }
 
+void QueueBatchContext::SetupAccessContext(const std::shared_ptr<const QueueBatchContext> &prev,
+                                           const VkPresentInfoKHR &present_info, const PresentedImages &presented_images,
+                                           SignaledSemaphores &signaled) {
+    ConstBatchSet batches_resolved;
+    for (VkSemaphore sem : layer_data::make_span(present_info.pWaitSemaphores, present_info.waitSemaphoreCount)) {
+        std::shared_ptr<QueueBatchContext> resolved = ResolveOneWaitSemaphore(sem, presented_images, signaled);
+        if (resolved) {
+            batches_resolved.emplace(std::move(resolved));
+        }
+    }
+    CommonSetupAccessContext(prev, batches_resolved);
+}
+
+bool QueueBatchContext::DoQueuePresentValidate(const char *func_name, const PresentedImages &presented_images) {
+    bool skip = false;
+
+    HazardDetector detector(SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_PRESENTED_SYNCVAL);
+    // Tag the presented images so record doesn't have to know the tagging scheme
+    for (size_t index = 0; index < presented_images.size(); ++index) {
+        const PresentedImage &presented = presented_images[index];
+
+        // Need a copy that can be used as the pseudo-iterator...
+        HazardResult hazard = access_context_.DetectHazard(presented.address_type, detector, presented.range_gen,
+                                                           AccessContext::DetectOptions::kDetectAll);
+        if (hazard.hazard) {
+            const auto queue_handle = queue_state_->Handle();
+            const auto swap_handle = presented.swapchain_state->Handle();
+            const auto image_handle = presented.image->Handle();
+            const auto *report_data = sync_state_->report_data;
+            skip = sync_state_->LogError(queue_handle, string_SyncHazardVUID(hazard.hazard),
+                                         "%s: Hazard %s for present pSwapchains[%" PRIu32 "] , swapchain %s, image index %" PRIu32
+                                         " %s, Access info %s.",
+                                         func_name, string_SyncHazard(hazard.hazard), presented.present_index,
+                                         report_data->FormatHandle(swap_handle).c_str(), presented.image_index,
+                                         report_data->FormatHandle(image_handle).c_str(), FormatHazard(hazard).c_str());
+            if (skip) break;
+        }
+    }
+    return skip;
+}
+
+void QueueBatchContext::DoPresentOperations(const PresentedImages &presented_images) {
+    // For present, tagging is internal to the presented image record.
+    for (const auto &presented : presented_images) {
+        // Update memory state
+        presented.UpdateMemoryAccess(SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_PRESENTED_SYNCVAL, presented.tag, access_context_);
+    }
+}
+
+void QueueBatchContext::LogPresentOperations(const PresentedImages &presented_images) {
+    if (tag_range_.size()) {
+        auto access_log = std::make_shared<AccessLog>();
+        batch_log_.Insert(batch_, tag_range_, access_log);
+        access_log->reserve(tag_range_.size());
+        assert(tag_range_.size() == presented_images.size());
+        for (const auto &presented : presented_images) {
+            access_log->emplace_back(PresentResourceRecord(static_cast<const PresentedImageRecord>(presented)));
+        }
+    }
+}
+
+void QueueBatchContext::DoAcquireOperation(const PresentedImage &presented) {
+    // Only one tag for acquire.  The tag in presented is the present tag
+    presented.UpdateMemoryAccess(SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_ACQUIRE_READ_SYNCVAL, tag_range_.begin, access_context_);
+}
+
+void QueueBatchContext::LogAcquireOperation(const PresentedImage &presented, const char *func_name) {
+    auto access_log = std::make_shared<AccessLog>();
+    batch_log_.Insert(batch_, tag_range_, access_log);
+    access_log->emplace_back(AcquireResourceRecord(presented, tag_range_.begin, func_name));
+}
+
 void QueueBatchContext::SetupAccessContext(const std::shared_ptr<const QueueBatchContext> &prev, const VkSubmitInfo2 &submit_info,
                                            SignaledSemaphores &signaled) {
-    // Copy in the event state from the previous batch (on this queue)
-    if (prev) {
-        events_context_.DeepCopy(prev->events_context_);
-    }
-
     // Import (resolve) the batches that are waited on, with the semaphore's effective barriers applied
-    layer_data::unordered_set<std::shared_ptr<const QueueBatchContext>> batches_resolved;
+    ConstBatchSet batches_resolved;
     const uint32_t wait_count = submit_info.waitSemaphoreInfoCount;
     const VkSemaphoreSubmitInfo *wait_infos = submit_info.pWaitSemaphoreInfos;
     for (const auto &wait_info : layer_data::make_span(wait_infos, wait_count)) {
@@ -7860,11 +8366,28 @@ void QueueBatchContext::SetupAccessContext(const std::shared_ptr<const QueueBatc
             batches_resolved.emplace(std::move(resolved));
         }
     }
+    CommonSetupAccessContext(prev, batches_resolved);
+}
 
-    // If there are no semaphores to the previous batch, make sure a "submit order" non-barriered import is done
-    if (prev && !layer_data::Contains(batches_resolved, prev)) {
-        access_context_.ResolveFromContext(NoopBarrierAction(), prev->access_context_);
-        batches_resolved.emplace(prev);
+void QueueBatchContext::SetupAccessContext(const PresentedImage &presented) {
+    if (presented.batch) {
+        access_context_.ResolveFromContext(NoopBarrierAction(), presented.batch->access_context_);
+        batch_log_.Import(presented.batch->batch_log_);
+        ImportSyncTags(*presented.batch);
+    }
+}
+
+void QueueBatchContext::CommonSetupAccessContext(const std::shared_ptr<const QueueBatchContext> &prev,
+                                                 QueueBatchContext::ConstBatchSet &batches_resolved) {
+    // Import the previous batch information
+    if (prev) {
+        // Copy in the event state from the previous batch (on this queue)
+        events_context_.DeepCopy(prev->events_context_);
+        if (!layer_data::Contains(batches_resolved, prev)) {
+            // If there are no semaphores to the previous batch, make sure a "submit order" non-barriered import is done
+            access_context_.ResolveFromContext(NoopBarrierAction(), prev->access_context_);
+            batches_resolved.emplace(prev);
+        }
     }
 
     // Get all the log and tag sync information for the resolved contexts
@@ -7917,14 +8440,15 @@ std::string QueueBatchContext::FormatUsage(ResourceUsageTag tag) const {
     if (access.IsValid()) {
         const BatchAccessLog::BatchRecord &batch = *access.batch;
         const ResourceUsageRecord &record = *access.record;
-        // Queue and Batch information
-        out << SyncNodeFormatter(*sync_state_, batch.queue->GetQueueState());
-        out << ", submit: " << batch.submit_index << ", batch: " << batch.batch_index;
+        if (batch.queue) {
+            // Queue and Batch information (for enqueued operations)
+            out << SyncNodeFormatter(*sync_state_, batch.queue->GetQueueState());
+            out << ", submit: " << batch.submit_index << ", batch: " << batch.batch_index;
+        }
+        out << ", batch_tag: " << batch.bias;
 
         // Commandbuffer Usages Information
-        out << ", " << record;
-        out << ", " << SyncNodeFormatter(*sync_state_, record.cb_state);
-        out << ", reset_no: " << std::to_string(record.reset_count);
+        out << ", " << record.Formatter(*sync_state_, nullptr);
     }
     return out.str();
 }
@@ -7936,6 +8460,14 @@ QueueId QueueBatchContext::GetQueueId() const {
     return id;
 }
 
+// For QueuePresent, the tag range is defined externally and must be passed in
+void QueueBatchContext::SetupBatchTags(const ResourceUsageRange &tag_range) {
+    tag_range_ = tag_range;
+    SetupBatchTags();
+}
+
+// For QueueSubmit, the tag range is defined by the CommandBuffer setup.
+// For QueuePresent, this is called when the tag_range is specified
 void QueueBatchContext::SetupBatchTags() {
     // Need new global tags for all accesses... the Reserve updates a mutable atomic
     ResourceUsageRange global_tags = sync_state_->ReserveGlobalTagRange(GetTagRange().size());
@@ -7958,6 +8490,7 @@ void QueueBatchContext::SetTagBias(ResourceUsageTag bias) {
     // Needed for ImportSyncTags to pick up the "from" own sync tag.
     const QueueId this_q = GetQueueId();
     if (this_q < queue_sync_tag_.size()) {
+        // If this is a non-queued operation we'll get a "special" value like invalid
         queue_sync_tag_[this_q] = tag_range_.end;
     }
 }
@@ -7966,8 +8499,17 @@ void QueueBatchContext::SetTagBias(ResourceUsageTag bias) {
 // Batch Contexts saved during signalling have their AccessLog reset when the pending signals are signalled.
 // NOTE: By design, QueueBatchContexts that are neither last, nor referenced by a signal are abandoned as unowned, since
 //       the contexts Resolve all history from previous all contexts when created
-void QueueSyncState::SetLastBatch(std::shared_ptr<QueueBatchContext> &&last) {
-    last_batch_ = std::move(last);
+void QueueSyncState::UpdateLastBatch(std::shared_ptr<QueueBatchContext> &&new_last) {
+    // Update the queue to point to the last batch from the submit
+    if (new_last) {
+        // Clean up the events data in the previous last batch on queue, as only the subsequent batches have valid use for them
+        // and the QueueBatchContext::Setup calls have be copying them along from batch to batch during submit.
+        if (last_batch_) {
+            last_batch_->ResetEventsContext();
+        }
+        new_last->Trim();
+        last_batch_ = std::move(new_last);
+    }
 }
 
 // Note that function is const, but updates mutable submit_index to allow Validate to create correct tagging for command invocation
@@ -7993,6 +8535,14 @@ SignaledSemaphores::Signal::Signal(const std::shared_ptr<const SEMAPHORE_STATE> 
     assert(sem_state);
 }
 
+SignaledSemaphores::Signal::Signal(const std::shared_ptr<const SEMAPHORE_STATE> &sem_state_, const PresentedImage &presented,
+                                   ResourceUsageTag acq_tag)
+    : sem_state(sem_state_), batch(presented.batch), first_scope(), acquired(presented, acq_tag) {
+    // Illegal to create a signal from no batch or an invalid semaphore... caller must assure validity
+    assert(batch);
+    assert(sem_state);
+}
+
 FenceSyncState::FenceSyncState() : fence(), tag(kInvalidTag), queue_id(QueueSyncState::kQueueIdInvalid) {}
 
 VkSemaphoreSubmitInfo SubmitInfoConverter::BatchStore::WaitSemaphore(const VkSubmitInfo &info, uint32_t index) {
@@ -8007,14 +8557,17 @@ VkCommandBufferSubmitInfo SubmitInfoConverter::BatchStore::CommandBuffer(const V
     return cb_info;
 }
 
-VkSemaphoreSubmitInfo SubmitInfoConverter::BatchStore::SignalSemaphore(const VkSubmitInfo &info, uint32_t index) {
+VkSemaphoreSubmitInfo SubmitInfoConverter::BatchStore::SignalSemaphore(const VkSubmitInfo &info, uint32_t index,
+                                                                       VkQueueFlags queue_flags) {
     auto semaphore_info = lvl_init_struct<VkSemaphoreSubmitInfo>();
     semaphore_info.semaphore = info.pSignalSemaphores[index];
-    semaphore_info.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    // Can't just use BOTTOM, because of how access expansion is done
+    semaphore_info.stageMask =
+        sync_utils::ExpandPipelineStages(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, queue_flags, VK_PIPELINE_STAGE_2_HOST_BIT);
     return semaphore_info;
 }
 
-SubmitInfoConverter::BatchStore::BatchStore(const VkSubmitInfo &info) {
+SubmitInfoConverter::BatchStore::BatchStore(const VkSubmitInfo &info, VkQueueFlags queue_flags) {
     info2 = lvl_init_struct<VkSubmitInfo2>();
 
     info2.waitSemaphoreInfoCount = info.waitSemaphoreCount;
@@ -8034,16 +8587,16 @@ SubmitInfoConverter::BatchStore::BatchStore(const VkSubmitInfo &info) {
     info2.signalSemaphoreInfoCount = info.signalSemaphoreCount;
     signals.reserve(info2.signalSemaphoreInfoCount);
     for (uint32_t i = 0; i < info2.signalSemaphoreInfoCount; ++i) {
-        signals.emplace_back(SignalSemaphore(info, i));
+        signals.emplace_back(SignalSemaphore(info, i, queue_flags));
     }
     info2.pSignalSemaphoreInfos = signals.data();
 }
 
-SubmitInfoConverter::SubmitInfoConverter(uint32_t count, const VkSubmitInfo *infos) {
+SubmitInfoConverter::SubmitInfoConverter(uint32_t count, const VkSubmitInfo *infos, VkQueueFlags queue_flags) {
     info_store.reserve(count);
     info2s.reserve(count);
     for (uint32_t batch = 0; batch < count; ++batch) {
-        info_store.emplace_back(infos[batch]);
+        info_store.emplace_back(infos[batch], queue_flags);
         info2s.emplace_back(info_store.back().info2);
     }
 }
@@ -8060,6 +8613,11 @@ void BatchAccessLog::Import(const BatchAccessLog &other) {
     for (const auto &entry : other.log_map_) {
         log_map_.insert(entry);
     }
+}
+
+void BatchAccessLog::Insert(const BatchRecord &batch, const ResourceUsageRange &range,
+                            std::shared_ptr<const CommandExecutionContext::AccessLog> log) {
+    log_map_.insert(std::make_pair(range, CBSubmitLog(batch, nullptr, std::move(log))));
 }
 
 // Trim: Remove any unreferenced AccessLog ranges from a BatchAccessLog
@@ -8133,3 +8691,109 @@ BatchAccessLog::AccessRecord BatchAccessLog::CBSubmitLog::operator[](ResourceUsa
     assert(index < log_->size());
     return AccessRecord{&batch_, &(*log_)[index]};
 }
+
+PresentedImage::PresentedImage(const SyncValidator &sync_state, const std::shared_ptr<QueueBatchContext> batch_,
+                               VkSwapchainKHR swapchain, uint32_t image_index_, uint32_t present_index_, ResourceUsageTag tag_)
+    : PresentedImageRecord{tag_, image_index_, present_index_, sync_state.Get<syncval_state::Swapchain>(swapchain)},
+      batch(std::move(batch_)) {
+    SetImage(image_index_);
+}
+
+PresentedImage::PresentedImage(std::shared_ptr<const syncval_state::Swapchain> swapchain, uint32_t at_index) : PresentedImage() {
+    swapchain_state = std::move(swapchain);
+    tag = kInvalidTag;
+    SetImage(at_index);
+}
+
+// Export uses move semantics...
+void PresentedImage::ExportToSwapchain(SyncValidator &) {  // Include this argument to prove the const cast is safe
+    // If the swapchain is dead just ignore the present
+    if (BASE_NODE::Invalid(swapchain_state)) return;
+    auto swap = std::const_pointer_cast<syncval_state::Swapchain>(swapchain_state);
+    swap->RecordPresentedImage(std::move(*this));
+}
+
+void PresentedImage::SetImage(uint32_t at_index) {
+    image_index = at_index;
+
+    if (BASE_NODE::Invalid(swapchain_state)) return;
+    image = swapchain_state->GetSwapChainImageShared(image_index);
+    if (Invalid()) return;
+    // For valid images create the type/range_gen to used to scope the semaphore operations
+    address_type = AccessContext::ImageAddressType(*image);
+    range_gen = subresource_adapter::ImageRangeGenerator(*image->fragment_encoder.get(), image->full_range,
+                                                         ResourceBaseAddress(*image), false);
+}
+
+void PresentedImage::UpdateMemoryAccess(SyncStageAccessIndex usage, ResourceUsageTag tag, AccessContext &access_context) const {
+    // Intentional copy. The range_gen argument is not copied by the Update... call below
+    subresource_adapter::ImageRangeGenerator generator = range_gen;
+    UpdateMemoryAccessStateFunctor action(address_type, access_context, usage, SyncOrdering::kNonAttachment, tag);
+    UpdateMemoryAccessState(&access_context.GetAccessStateMap(address_type), action, &generator);
+}
+
+QueueBatchContext::PresentResourceRecord::Base_::Record QueueBatchContext::PresentResourceRecord::MakeRecord() const {
+    return std::make_unique<PresentResourceRecord>(presented_);
+}
+
+std::ostream &QueueBatchContext::PresentResourceRecord::Format(std::ostream &out, const SyncValidator &sync_state) const {
+    out << "vkQueuePresentKHR ";
+    out << "present_tag:" << presented_.tag;
+    out << ", pSwapchains[" << presented_.present_index << "]";
+    out << ": " << SyncNodeFormatter(sync_state, presented_.swapchain_state.get());
+    out << ", image_index: " << presented_.image_index;
+    out << SyncNodeFormatter(sync_state, presented_.image.get());
+
+    return out;
+}
+
+QueueBatchContext::AcquireResourceRecord::Base_::Record QueueBatchContext::AcquireResourceRecord::MakeRecord() const {
+    return std::make_unique<AcquireResourceRecord>(presented_, acquire_tag_, func_name_.c_str());
+}
+
+std::ostream &QueueBatchContext::AcquireResourceRecord::Format(std::ostream &out, const SyncValidator &sync_state) const {
+    out << func_name_ << " ";
+    out << "aquire_tag:" << acquire_tag_;
+    out << ": " << SyncNodeFormatter(sync_state, presented_.swapchain_state.get());
+    out << ", image_index: " << presented_.image_index;
+    out << SyncNodeFormatter(sync_state, presented_.image.get());
+
+    return out;
+}
+
+syncval_state::Swapchain::Swapchain(ValidationStateTracker *dev_data, const VkSwapchainCreateInfoKHR *pCreateInfo,
+                                    VkSwapchainKHR swapchain)
+    : SWAPCHAIN_NODE(dev_data, pCreateInfo, swapchain) {}
+
+void syncval_state::Swapchain::RecordPresentedImage(PresentedImage &&presented_image) {
+    // All presented images are stored within the swapchain until the are reaquired.
+    const uint32_t image_index = presented_image.image_index;
+    if (image_index >= presented.size()) presented.resize(image_index + 1);
+
+    // Use move semantics to avoid atomic operations on the contained shared_ptrs
+    presented[image_index] = std::move(presented_image);
+}
+
+// We move from the presented images array 1) so we don't copy shared_ptr, and 2) to mark it acquired
+PresentedImage syncval_state::Swapchain::MovePresentedImage(uint32_t image_index) {
+    if (presented.size() <= image_index) presented.resize(image_index + 1);
+    PresentedImage ret_val = std::move(presented[image_index]);
+    if (ret_val.Invalid()) {
+        // If this is the first time the image has been acquired, then it's valid to have no present record, so we create one
+        // Note: It's also possible this is an invalid acquire... but that's CoreChecks/Parameter validation's job to report
+        ret_val = PresentedImage(static_cast<const syncval_state::Swapchain *>(this)->shared_from_this(), image_index);
+    }
+    return ret_val;
+}
+
+AcquiredImage::AcquiredImage(const PresentedImage &presented, ResourceUsageTag acq_tag)
+    : image(presented.image),
+      address_type(presented.address_type),
+      generator(presented.range_gen),
+      present_tag(presented.tag),
+      acquire_tag(acq_tag) {}
+
+FenceSyncState::FenceSyncState(const std::shared_ptr<const FENCE_STATE> &fence_, QueueId queue_id_, ResourceUsageTag tag_)
+    : fence(fence_), tag(tag_), queue_id(queue_id_) {}
+FenceSyncState::FenceSyncState(const std::shared_ptr<const FENCE_STATE> &fence_, const PresentedImage &image, ResourceUsageTag tag_)
+    : fence(fence_), tag(tag_), queue_id(QueueSyncState::kQueueIdInvalid), acquired(image, tag) {}

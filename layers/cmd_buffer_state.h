@@ -165,7 +165,6 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     // Track if certain commands have been called at least once in lifetime of the command buffer
     // primary command buffers values are set true if a secondary command buffer has a command
     bool has_draw_cmd;
-    bool has_draw_cmd_in_current_render_pass;
     bool has_dispatch_cmd;
     bool has_trace_rays_cmd;
     bool has_build_as_cmd;
@@ -312,7 +311,7 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     bool conditional_rendering_inside_render_pass{false};
     uint32_t conditional_rendering_subpass{0};
     uint32_t dynamicColorWriteEnableAttachmentCount{0};
-    mutable ReadWriteLock lock;
+    mutable std::shared_mutex lock;
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock); }
     WriteLockGuard WriteLock() { return WriteLockGuard(lock); }
 
@@ -376,12 +375,12 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     void GetCurrentPipelineAndDesriptorSets(VkPipelineBindPoint pipelineBindPoint, const PIPELINE_STATE **rtn_pipe,
                                             const std::vector<LAST_BOUND_STATE::PER_SET> **rtn_sets) const {
         const auto lv_bind_point = ConvertToLvlBindPoint(pipelineBindPoint);
-        const auto &last_bound_it = lastBound[lv_bind_point];
-        if (!last_bound_it.IsUsing()) {
+        const auto &last_bound = lastBound[lv_bind_point];
+        if (!last_bound.IsUsing()) {
             return;
         }
-        *rtn_pipe = last_bound_it.pipeline_state;
-        *rtn_sets = &(last_bound_it.per_set);
+        *rtn_pipe = last_bound.pipeline_state;
+        *rtn_sets = &(last_bound.per_set);
     }
 
     VkQueueFlags GetQueueFlags() const {
@@ -428,9 +427,9 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     void UpdatePipelineState(CMD_TYPE cmd_type, const VkPipelineBindPoint bind_point);
 
     virtual void RecordCmd(CMD_TYPE cmd_type);
-    void RecordStateCmd(CMD_TYPE cmd_type, CB_DYNAMIC_STATUS state);
+    void RecordStateCmd(CMD_TYPE cmd_type, CBDynamicStatus state);
     void RecordStateCmd(CMD_TYPE cmd_type, CBDynamicFlags const &state_bits);
-    void RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CB_DYNAMIC_STATUS state, uint32_t attachment_count);
+    void RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CBDynamicStatus state, uint32_t attachment_count);
     void RecordTransferCmd(CMD_TYPE cmd_type, std::shared_ptr<BINDABLE> &&buf1, std::shared_ptr<BINDABLE> &&buf2 = nullptr);
     void RecordSetEvent(CMD_TYPE cmd_type, VkEvent event, VkPipelineStageFlags2KHR stageMask);
     void RecordResetEvent(CMD_TYPE cmd_type, VkEvent event, VkPipelineStageFlags2KHR stageMask);

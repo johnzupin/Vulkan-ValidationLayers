@@ -205,6 +205,8 @@ class ParameterValidationOutputGenerator(OutputGenerator):
             'vkCmdDrawMeshTasksNV',
             'vkCmdDrawMeshTasksIndirectNV',
             'vkCmdDrawMeshTasksIndirectCountNV',
+            'vkCmdDrawMeshTasksEXT',
+            'vkCmdDrawMeshTasksIndirectEXT',
             'vkAllocateMemory',
             'vkCreateAccelerationStructureNV',
             'vkCreateAccelerationStructureKHR',
@@ -308,6 +310,8 @@ class ParameterValidationOutputGenerator(OutputGenerator):
         self.structMemberBlacklist = { 'VkWriteDescriptorSet' : ['dstSet'], 'VkAccelerationStructureGeometryKHR' :['geometry'] }
         # Validation conditions for some special case struct members that are conditionally validated
         self.structMemberValidationConditions = { 'VkPipelineColorBlendStateCreateInfo' : { 'logicOp' : '{}logicOpEnable == VK_TRUE' } }
+        # FlagBits that should also be array
+        self.flagBitsAsArray = ['VkShaderStageFlags']
         # Header version
         self.headerVersion = None
         # Internal state - accumulators for different inner block text
@@ -321,6 +325,7 @@ class ParameterValidationOutputGenerator(OutputGenerator):
         self.enumRanges = set()                           # Set of enum names
         self.enum_values_definitions = dict()             # [enum, string] containing enumerated type map definitions
         self.flag_values_definitions = dict()             # [flag, string] containing flag type map definitions
+        self.flag_array_values_definitions = dict()       # [flag, string] containing flag type map definitions to be used as an array
         self.stype_version_dict = dict()                  # String containing structtype to version map data
         self.flags = set()                                # Map of flags typenames
         self.flagBits = dict()                            # Map of flag bits typename to list of values
@@ -335,6 +340,7 @@ class ParameterValidationOutputGenerator(OutputGenerator):
         self.alias_dict = dict()                          # Dict of cmd|struct aliases
         self.header_file = False                          # Header file generation flag
         self.source_file = False                          # Source file generation flag
+        self.enum_file = False                            # Enum helper header file generation flag
         self.instance_extension_list = ''                 # List of instance extension name defines
         self.device_extension_list = ''                   # List of device extension name defines
         self.returnedonly_structs = []                    # List of structs with 'returnonly' attribute
@@ -406,17 +412,18 @@ class ParameterValidationOutputGenerator(OutputGenerator):
         OutputGenerator.beginFile(self, genOpts)
         self.header_file = (genOpts.filename == 'parameter_validation.h')
         self.source_file = (genOpts.filename == 'parameter_validation.cpp')
+        self.enum_file = (genOpts.filename == 'enum_flag_bits.h')
 
-        if not self.header_file and not self.source_file:
+        if not self.header_file and not self.source_file and not self.enum_file:
             print("Error: Output Filenames have changed, update generator source.\n")
             sys.exit(1)
 
-        if self.source_file or self.header_file:
+        if self.source_file or self.header_file or self.enum_file:
             # Output Copyright text
             s = self.GenerateCopyright()
             write(s, file=self.outFile)
 
-        if self.header_file:
+        if not self.source_file:
             return
 
         stype_map = ''
@@ -464,13 +471,15 @@ class ParameterValidationOutputGenerator(OutputGenerator):
         write('#include "chassis.h"', file=self.outFile)
         self.newline()
         write('#include "stateless_validation.h"', file=self.outFile)
+        write('#include "enum_flag_bits.h"', file=self.outFile)
         self.newline()
     #
     # Called at end-time for final content output
     def endFile(self):
-        if self.source_file:
-            # C-specific
-            self.newline()
+        if self.enum_file:
+            # Write the declaration for the HeaderVersion
+            if self.headerVersion:
+                write('const uint32_t GeneratedVulkanHeaderVersion = {};'.format(self.headerVersion), file=self.outFile)
 
             # Don't need flag/enum lists if app can never call it to be validated
             # But need to save everything as not all information is known until endFile()
@@ -482,13 +491,15 @@ class ParameterValidationOutputGenerator(OutputGenerator):
                 if flag in self.called_types or flagBits in self.called_types:
                     write(string, file=self.outFile)
 
+            for flag, string in self.flag_array_values_definitions.items():
+                # These are custom selected flags, so will always write
+                write(string, file=self.outFile)
+
             for enum, string in self.enum_values_definitions.items():
                 if enum in self.called_types:
                     write(string, file=self.outFile)
 
-            self.newline()
-            self.newline()
-
+        elif self.source_file:
             api_func  = 'bool StatelessValidation::CheckPromotedApiAgainstVulkanVersion(VkInstance instance, const char *api_name, const uint32_t promoted_version) const {\n'
             api_func += '    bool skip = false;\n'
             api_func += '    if (api_version < promoted_version) {\n'
@@ -631,7 +642,6 @@ class ParameterValidationOutputGenerator(OutputGenerator):
         # C-specific
         # Accumulate includes, defines, types, enums, function pointer typedefs, end function prototypes separately for this
         # feature. They're only printed in endFeature().
-        self.headerVersion = None
         self.stypes = []
         self.commands = []
         self.structMembers = []
@@ -699,19 +709,17 @@ class ParameterValidationOutputGenerator(OutputGenerator):
             self.processStructMemberData()
             # Generate the command parameter checking code from the captured data
             self.processCmdData()
-            # Write the declaration for the HeaderVersion
-            if self.headerVersion:
-                write('const uint32_t GeneratedVulkanHeaderVersion = {};'.format(self.headerVersion), file=self.outFile)
             # Write the declarations for the VkFlags values combining all flag bits
             for flag in sorted(self.newFlags):
                 flagBits = flag.replace('Flags', 'FlagBits')
                 if flagBits in self.flagBits:
                     bits = self.flagBits[flagBits]
-                    decl = 'const {} All{} = {}'.format(flag, flagBits, bits[0])
-                    for bit in bits[1:]:
-                        decl += '|' + bit
-                    decl += ';'
+                    decl = 'const {} All{} = {};'.format(flag, flagBits, '|'.join(bits))
                     self.flag_values_definitions[flag] = Guarded(self.featureExtraProtect, decl)
+                    if flag in self.flagBitsAsArray:
+                        decl = 'const std::array<%s, %d> All%s = {%s};' % (flag, len(bits), flag, ','.join(bits))
+                        self.flag_array_values_definitions[flag] = Guarded(self.featureExtraProtect, decl)
+
             endif = '\n'
             if (self.featureExtraProtect is not None):
                 endif = '#endif // %s\n' % self.featureExtraProtect
@@ -745,7 +753,7 @@ class ParameterValidationOutputGenerator(OutputGenerator):
     # type declarations. The <member> tags are just like <param> tags - they are a declaration of a struct or union member.
     # Only simple member declarations are supported (no nested structs etc.)
     def genStruct(self, typeinfo, typeName, alias):
-        if not self.source_file:
+        if self.header_file:
             return
         # alias has already been recorded in genType, above
         OutputGenerator.genStruct(self, typeinfo, typeName, alias)
@@ -801,6 +809,10 @@ class ParameterValidationOutputGenerator(OutputGenerator):
                 if not returned_only and (not ispointer or isconst):
                     self.called_types.add(type)
 
+            # enum file just needs the called_types
+            if self.enum_file:
+                continue
+
             structextends = False
             membersInfo.append(self.CommandParam(type=type, name=name,
                                                 ispointer=ispointer,
@@ -828,7 +840,7 @@ class ParameterValidationOutputGenerator(OutputGenerator):
     # Capture group (e.g. C "enum" type) info to be used for param check code generation.
     # These are concatenated together with other types.
     def genGroup(self, groupinfo, groupName, alias):
-        if not self.source_file:
+        if self.header_file:
             return
         # record the name/alias pair
         if alias is not None:
@@ -842,7 +854,7 @@ class ParameterValidationOutputGenerator(OutputGenerator):
         elif 'FlagBits' in groupName:
             bits = []
             for elem in groupElem.findall('enum'):
-                if elem.get('supported') != 'disabled':
+                if elem.get('supported') != 'disabled' and elem.get('alias') is None:
                     bits.append(elem.get('name'))
             if bits:
                 self.flagBits[groupName] = bits
@@ -864,12 +876,14 @@ class ParameterValidationOutputGenerator(OutputGenerator):
                     enum_entry = '#ifdef %s\n' % self.featureExtraProtect
                 else:
                     enum_entry = ''
-                enum_entry += 'const std::vector<%s> All%sEnums = {' % (groupName, groupName)
+                entry = ''
+                entry_len = 0
                 for enum in groupElem:
                     name = enum.get('name')
-                    if name is not None and enum.get('supported') != 'disabled':
-                        enum_entry += '%s, ' % name
-                enum_entry += '};'
+                    if name is not None and enum.get('alias') is None and enum.get('supported') != 'disabled':
+                        entry += '%s, ' % name
+                        entry_len += 1
+                enum_entry += 'const std::array<%s, %d> All%sEnums = {%s};' % (groupName, entry_len, groupName, entry)
                 if self.featureExtraProtect is not None:
                     enum_entry += '\n#endif // %s' % self.featureExtraProtect
                 self.enum_values_definitions[groupName] = enum_entry
@@ -896,7 +910,7 @@ class ParameterValidationOutputGenerator(OutputGenerator):
                 self.declarations += [ decl ]
                 if (self.featureExtraProtect is not None):
                     self.declarations += [ '#endif' ]
-        if self.source_file:
+        if self.source_file or self.enum_file:
             if name not in self.blacklist:
                 params = cmdinfo.elem.findall('param')
                 # Get list of array lengths

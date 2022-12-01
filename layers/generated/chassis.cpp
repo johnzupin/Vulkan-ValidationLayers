@@ -268,15 +268,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *pCreat
     if (fpCreateInstance == NULL) return VK_ERROR_INITIALIZATION_FAILED;
     chain_info->u.pLayerInfo = chain_info->u.pLayerInfo->pNext;
     uint32_t specified_version = (pCreateInfo->pApplicationInfo ? pCreateInfo->pApplicationInfo->apiVersion : VK_API_VERSION_1_0);
-    uint32_t api_version;
-    if (specified_version < VK_API_VERSION_1_1)
-        api_version = VK_API_VERSION_1_0;
-    else if (specified_version < VK_API_VERSION_1_2)
-        api_version = VK_API_VERSION_1_1;
-    else if (specified_version < VK_API_VERSION_1_3)
-        api_version = VK_API_VERSION_1_2;
-    else
-        api_version = VK_API_VERSION_1_3;
+    uint32_t api_version = VK_MAKE_API_VERSION(0, VK_API_VERSION_MAJOR(specified_version), VK_API_VERSION_MINOR(specified_version), 0);
+
     auto report_data = new debug_report_data{};
     report_data->instance_pnext_chain = SafePnextCopy(pCreateInfo->pNext);
     ActivateInstanceDebugCallbacks(report_data);
@@ -13200,6 +13193,102 @@ VKAPI_ATTR void VKAPI_CALL GetDescriptorSetHostMappingVALVE(
 
 
 
+VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryIndirectNV(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             copyBufferAddress,
+    uint32_t                                    copyCount,
+    uint32_t                                    stride) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPreCallValidateCmdCopyMemoryIndirectNV]) {
+        auto lock = intercept->ReadLock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdCopyMemoryIndirectNV(commandBuffer, copyBufferAddress, copyCount, stride);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdCopyMemoryIndirectNV]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdCopyMemoryIndirectNV(commandBuffer, copyBufferAddress, copyCount, stride);
+    }
+    DispatchCmdCopyMemoryIndirectNV(commandBuffer, copyBufferAddress, copyCount, stride);
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdCopyMemoryIndirectNV]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdCopyMemoryIndirectNV(commandBuffer, copyBufferAddress, copyCount, stride);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdCopyMemoryToImageIndirectNV(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             copyBufferAddress,
+    uint32_t                                    copyCount,
+    uint32_t                                    stride,
+    VkImage                                     dstImage,
+    VkImageLayout                               dstImageLayout,
+    const VkImageSubresourceLayers*             pImageSubresources) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPreCallValidateCmdCopyMemoryToImageIndirectNV]) {
+        auto lock = intercept->ReadLock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdCopyMemoryToImageIndirectNV(commandBuffer, copyBufferAddress, copyCount, stride, dstImage, dstImageLayout, pImageSubresources);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdCopyMemoryToImageIndirectNV]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdCopyMemoryToImageIndirectNV(commandBuffer, copyBufferAddress, copyCount, stride, dstImage, dstImageLayout, pImageSubresources);
+    }
+    DispatchCmdCopyMemoryToImageIndirectNV(commandBuffer, copyBufferAddress, copyCount, stride, dstImage, dstImageLayout, pImageSubresources);
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdCopyMemoryToImageIndirectNV]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdCopyMemoryToImageIndirectNV(commandBuffer, copyBufferAddress, copyCount, stride, dstImage, dstImageLayout, pImageSubresources);
+    }
+}
+
+
+VKAPI_ATTR void VKAPI_CALL CmdDecompressMemoryNV(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    decompressRegionCount,
+    const VkDecompressMemoryRegionNV*           pDecompressMemoryRegions) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPreCallValidateCmdDecompressMemoryNV]) {
+        auto lock = intercept->ReadLock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdDecompressMemoryNV(commandBuffer, decompressRegionCount, pDecompressMemoryRegions);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdDecompressMemoryNV]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdDecompressMemoryNV(commandBuffer, decompressRegionCount, pDecompressMemoryRegions);
+    }
+    DispatchCmdDecompressMemoryNV(commandBuffer, decompressRegionCount, pDecompressMemoryRegions);
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdDecompressMemoryNV]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdDecompressMemoryNV(commandBuffer, decompressRegionCount, pDecompressMemoryRegions);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdDecompressMemoryIndirectCountNV(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             indirectCommandsAddress,
+    VkDeviceAddress                             indirectCommandsCountAddress,
+    uint32_t                                    stride) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPreCallValidateCmdDecompressMemoryIndirectCountNV]) {
+        auto lock = intercept->ReadLock();
+        skip |= (const_cast<const ValidationObject*>(intercept))->PreCallValidateCmdDecompressMemoryIndirectCountNV(commandBuffer, indirectCommandsAddress, indirectCommandsCountAddress, stride);
+        if (skip) return;
+    }
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdDecompressMemoryIndirectCountNV]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdDecompressMemoryIndirectCountNV(commandBuffer, indirectCommandsAddress, indirectCommandsCountAddress, stride);
+    }
+    DispatchCmdDecompressMemoryIndirectCountNV(commandBuffer, indirectCommandsAddress, indirectCommandsCountAddress, stride);
+    for (auto intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdDecompressMemoryIndirectCountNV]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdDecompressMemoryIndirectCountNV(commandBuffer, indirectCommandsAddress, indirectCommandsCountAddress, stride);
+    }
+}
+
+
 
 
 
@@ -14081,6 +14170,7 @@ VKAPI_ATTR VkResult VKAPI_CALL GetDynamicRenderingTilePropertiesQCOM(
     }
     return result;
 }
+
 
 
 
@@ -15323,6 +15413,10 @@ const layer_data::unordered_map<std::string, function_data> name_to_funcptr_map 
     {"vkSetDeviceMemoryPriorityEXT", {kFuncTypeDev, (void*)SetDeviceMemoryPriorityEXT}},
     {"vkGetDescriptorSetLayoutHostMappingInfoVALVE", {kFuncTypeDev, (void*)GetDescriptorSetLayoutHostMappingInfoVALVE}},
     {"vkGetDescriptorSetHostMappingVALVE", {kFuncTypeDev, (void*)GetDescriptorSetHostMappingVALVE}},
+    {"vkCmdCopyMemoryIndirectNV", {kFuncTypeDev, (void*)CmdCopyMemoryIndirectNV}},
+    {"vkCmdCopyMemoryToImageIndirectNV", {kFuncTypeDev, (void*)CmdCopyMemoryToImageIndirectNV}},
+    {"vkCmdDecompressMemoryNV", {kFuncTypeDev, (void*)CmdDecompressMemoryNV}},
+    {"vkCmdDecompressMemoryIndirectCountNV", {kFuncTypeDev, (void*)CmdDecompressMemoryIndirectCountNV}},
     {"vkCmdSetTessellationDomainOriginEXT", {kFuncTypeDev, (void*)CmdSetTessellationDomainOriginEXT}},
     {"vkCmdSetDepthClampEnableEXT", {kFuncTypeDev, (void*)CmdSetDepthClampEnableEXT}},
     {"vkCmdSetPolygonModeEXT", {kFuncTypeDev, (void*)CmdSetPolygonModeEXT}},

@@ -87,10 +87,12 @@ struct create_shader_module_api_state {
 };
 
 // This structure is used to save data across the CreateGraphicsPipelines down-chain API call
+// CreateShaderModuleStates[i] = ith shader state
+using CreateShaderModuleStates = std::array<create_shader_module_api_state, 32>;
 struct create_graphics_pipeline_api_state {
     std::vector<safe_VkGraphicsPipelineCreateInfo> modified_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
-    std::vector<std::vector<create_shader_module_api_state>> shader_states;
+    std::vector<CreateShaderModuleStates> shader_states;
     const VkGraphicsPipelineCreateInfo* pCreateInfos;
 };
 
@@ -98,6 +100,7 @@ struct create_graphics_pipeline_api_state {
 struct create_compute_pipeline_api_state {
     std::vector<safe_VkComputePipelineCreateInfo> modified_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
+    std::vector<CreateShaderModuleStates> shader_states;
     const VkComputePipelineCreateInfo* pCreateInfos;
 };
 
@@ -105,6 +108,7 @@ struct create_compute_pipeline_api_state {
 struct create_ray_tracing_pipeline_api_state {
     std::vector<safe_VkRayTracingPipelineCreateInfoCommon> modified_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
+    std::vector<CreateShaderModuleStates> shader_states;
     const VkRayTracingPipelineCreateInfoNV* pCreateInfos;
 };
 
@@ -112,6 +116,7 @@ struct create_ray_tracing_pipeline_api_state {
 struct create_ray_tracing_pipeline_khr_api_state {
     std::vector<safe_VkRayTracingPipelineCreateInfoCommon> modified_create_infos;
     std::vector<std::shared_ptr<PIPELINE_STATE>> pipe_state;
+    std::vector<CreateShaderModuleStates> shader_states;
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfos;
 };
 
@@ -387,7 +392,7 @@ class ValidationStateTracker : public ValidationObject {
         // NOTE: vl_concurrent_unordered_map::find() makes a copy of the value, so it is safe to move out.
         // But this will break everything, when switching to a different map type.
         return std::static_pointer_cast<State>(std::move(found_it->second));
-    };
+    }
 
     template <typename State, typename Traits = typename state_object::Traits<State>>
     typename Traits::ConstSharedType Get(typename Traits::HandleType handle) const {
@@ -397,7 +402,7 @@ class ValidationStateTracker : public ValidationObject {
             return nullptr;
         }
         return std::static_pointer_cast<State>(std::move(found_it->second));
-    };
+    }
 
     // GetRead() and GetWrite() return an already locked state object. Currently this is only supported by
     // CMD_BUFFER_STATE, because it has public ReadLock() and WriteLock() methods.
@@ -414,7 +419,7 @@ class ValidationStateTracker : public ValidationObject {
         } else {
             return ReadLockedType();
         }
-    };
+    }
 
     template <typename State, typename Traits = state_object::Traits<State>,
               typename WriteLockedType = typename Traits::WriteLockedType>
@@ -426,7 +431,7 @@ class ValidationStateTracker : public ValidationObject {
         } else {
             return WriteLockedType();
         }
-    };
+    }
 
     // When needing to share ownership, control over constness of access with another object (i.e. adding references while
     // not modifying the contents of the ValidationStateTracker)
@@ -438,7 +443,7 @@ class ValidationStateTracker : public ValidationObject {
             return nullptr;
         }
         return found_it->second;
-    };
+    }
 
     std::shared_ptr<BUFFER_STATE> GetBufferByAddress(VkDeviceAddress address) {
         ReadLockGuard guard(buffer_address_lock_);
@@ -708,9 +713,10 @@ class ValidationStateTracker : public ValidationObject {
     void PreCallRecordDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer,
                                          const VkAllocationCallbacks* pAllocator) override;
 
-    virtual std::shared_ptr<PIPELINE_STATE> CreateGraphicsPipelineState(
-        const VkGraphicsPipelineCreateInfo* pCreateInfo, std::shared_ptr<const RENDER_PASS_STATE>&& render_pass,
-        std::shared_ptr<const PIPELINE_LAYOUT_STATE>&& layout) const;
+    virtual std::shared_ptr<PIPELINE_STATE> CreateGraphicsPipelineState(const VkGraphicsPipelineCreateInfo* pCreateInfo,
+                                                                        std::shared_ptr<const RENDER_PASS_STATE>&& render_pass,
+                                                                        std::shared_ptr<const PIPELINE_LAYOUT_STATE>&& layout,
+                                                                        CreateShaderModuleStates* csm_states) const;
     bool PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
                                                 const VkGraphicsPipelineCreateInfo* pCreateInfos,
                                                 const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
@@ -795,9 +801,8 @@ class ValidationStateTracker : public ValidationObject {
     void PreCallRecordDestroySemaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks* pAllocator) override;
 
     std::shared_ptr<SHADER_MODULE_STATE> CreateShaderModuleState(const VkShaderModuleCreateInfo& create_info,
-                                                                 uint32_t unique_shader_id) const;
-    std::shared_ptr<SHADER_MODULE_STATE> CreateShaderModuleState(const VkShaderModuleCreateInfo& create_info,
-                                                                 uint32_t unique_shader_id, VkShaderModule handle) const;
+                                                                 uint32_t unique_shader_id,
+                                                                 VkShaderModule handle = VK_NULL_HANDLE) const;
     void PostCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo,
                                           const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule, VkResult result,
                                           void* csm_state) override;
@@ -1098,6 +1103,10 @@ class ValidationStateTracker : public ValidationObject {
                                            const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions) override;
     void PreCallRecordCmdSetColorWriteEnableEXT(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
                                                 const VkBool32* pColorWriteEnables) override;
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    void PostCallRecordAcquireFullScreenExclusiveModeEXT(VkDevice device, VkSwapchainKHR swapchain, VkResult result) override;
+    void PostCallRecordReleaseFullScreenExclusiveModeEXT(VkDevice device, VkSwapchainKHR swapchain, VkResult result) override;
+#endif
     void PreCallRecordCmdSetTessellationDomainOriginEXT(VkCommandBuffer commandBuffer,
                                                         VkTessellationDomainOrigin domainOrigin) override;
     void PreCallRecordCmdSetDepthClampEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthClampEnable) override;
@@ -1165,6 +1174,11 @@ class ValidationStateTracker : public ValidationObject {
                                                const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface,
                                                VkResult result) override;
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_FUCHSIA
+    void PostCallRecordCreateImagePipeSurfaceFUCHSIA(VkInstance instance, const VkImagePipeSurfaceCreateInfoFUCHSIA* pCreateInfo,
+                                                     const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface,
+                                                     VkResult result) override;
+#endif  // VK_USE_PLATFORM_FUCHSIA
 #ifdef VK_USE_PLATFORM_IOS_MVK
     void PostCallRecordCreateIOSSurfaceMVK(VkInstance instance, const VkIOSSurfaceCreateInfoMVK* pCreateInfo,
                                            const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface,
@@ -1410,7 +1424,8 @@ class ValidationStateTracker : public ValidationObject {
     struct DeviceExtensionProperties {
         VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_props;
         VkPhysicalDeviceShadingRateImagePropertiesNV shading_rate_image_props;
-        VkPhysicalDeviceMeshShaderPropertiesNV mesh_shader_props;
+        VkPhysicalDeviceMeshShaderPropertiesNV mesh_shader_props_NV;
+        VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_props;
         VkPhysicalDeviceInlineUniformBlockPropertiesEXT inline_uniform_block_props;
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT vtx_attrib_divisor_props;
         VkPhysicalDeviceCooperativeMatrixPropertiesNV cooperative_matrix_props;
@@ -1455,7 +1470,7 @@ class ValidationStateTracker : public ValidationObject {
     std::vector<DeviceQueueInfo> device_queue_info_list;
     // If vkGetBufferDeviceAddress is called, keep track of buffer <-> address mapping.
     sparse_container::range_map<VkDeviceAddress, std::shared_ptr<BUFFER_STATE>> buffer_address_map_;
-    mutable ReadWriteLock buffer_address_lock_;
+    mutable std::shared_mutex buffer_address_lock_;
 
     vl_concurrent_unordered_map<uint64_t, VkFormatFeatureFlags2KHR> ahb_ext_formats_map;
 
@@ -1488,7 +1503,7 @@ class ValidationStateTracker : public ValidationObject {
     VALSTATETRACK_MAP_AND_TRAITS(VkAccelerationStructureKHR, ACCELERATION_STRUCTURE_STATE_KHR, acceleration_structure_khr_map_)
     VALSTATETRACK_MAP_AND_TRAITS_INSTANCE_SCOPE(VkSurfaceKHR, SURFACE_STATE, surface_map_)
     VALSTATETRACK_MAP_AND_TRAITS_INSTANCE_SCOPE(VkDisplayModeKHR, DISPLAY_MODE_STATE, display_mode_map_)
-    VALSTATETRACK_MAP_AND_TRAITS_INSTANCE_SCOPE(VkPhysicalDevice, PHYSICAL_DEVICE_STATE, physical_device_map_);
+    VALSTATETRACK_MAP_AND_TRAITS_INSTANCE_SCOPE(VkPhysicalDevice, PHYSICAL_DEVICE_STATE, physical_device_map_)
 
     // Simple base address allocator allow allow VkDeviceMemory allocations to appear to exist in a common address space.
     // At 256GB allocated/sec  ( > 8GB at 30Hz), will overflow in just over 2 years

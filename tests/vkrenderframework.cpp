@@ -42,189 +42,6 @@ typename C::iterator RemoveIf(C &container, F &&fn) {
     return container.erase(std::remove_if(container.begin(), container.end(), std::forward<F>(fn)), container.end());
 }
 
-ErrorMonitor::ErrorMonitor() {
-    MonitorReset();
-    ExpectSuccess(kErrorBit);
-}
-
-ErrorMonitor::~ErrorMonitor() noexcept {}
-
-void ErrorMonitor::MonitorReset() {
-    message_flags_ = kErrorBit;
-    bailout_ = NULL;
-    message_found_ = VK_FALSE;
-    failure_message_strings_.clear();
-    desired_message_strings_.clear();
-    ignore_message_strings_.clear();
-    allowed_message_strings_.clear();
-    other_messages_.clear();
-}
-
-void ErrorMonitor::Reset() {
-    auto guard = Lock();
-    MonitorReset();
-}
-
-void ErrorMonitor::SetDesiredFailureMsg(const VkFlags msgFlags, const string msg) { SetDesiredFailureMsg(msgFlags, msg.c_str()); }
-
-void ErrorMonitor::SetDesiredFailureMsg(const VkFlags msgFlags, const char *const msgString) {
-    if (NeedCheckSuccess()) {
-        VerifyNotFound();
-    }
-
-    auto guard = Lock();
-    desired_message_strings_.insert(msgString);
-    message_flags_ |= msgFlags;
-}
-
-void ErrorMonitor::SetAllowedFailureMsg(const char *const msg) {
-    auto guard = Lock();
-    allowed_message_strings_.emplace_back(msg);
-}
-
-void ErrorMonitor::SetUnexpectedError(const char *const msg) {
-    if (NeedCheckSuccess()) {
-        VerifyNotFound();
-    }
-    auto guard = Lock();
-    ignore_message_strings_.emplace_back(msg);
-}
-
-VkBool32 ErrorMonitor::CheckForDesiredMsg(const char *const msgString) {
-    VkBool32 result = VK_FALSE;
-    auto guard = Lock();
-    if (bailout_ != nullptr) {
-        *bailout_ = true;
-    }
-    string errorString(msgString);
-    bool found_expected = false;
-
-    if (!IgnoreMessage(errorString)) {
-        for (auto desired_msg_it = desired_message_strings_.begin(); desired_msg_it != desired_message_strings_.end();
-             ++desired_msg_it) {
-            if (errorString.find(*desired_msg_it) != string::npos) {
-                found_expected = true;
-                failure_message_strings_.insert(errorString);
-                message_found_ = true;
-                result = VK_TRUE;
-                // Remove a maximum of one failure message from the set
-                // Multiset mutation is acceptable because `break` causes flow of control to exit the for loop
-                desired_message_strings_.erase(desired_msg_it);
-                break;
-            }
-        }
-
-        if (!found_expected && allowed_message_strings_.size()) {
-            for (auto allowed_msg_it = allowed_message_strings_.begin(); allowed_msg_it != allowed_message_strings_.end();
-                 ++allowed_msg_it) {
-                if (errorString.find(*allowed_msg_it) != string::npos) {
-                    found_expected = true;
-                    break;
-                }
-            }
-        }
-
-        if (!found_expected) {
-            result = VK_TRUE;
-            printf("Unexpected: %s\n", msgString);
-            other_messages_.push_back(errorString);
-        }
-    }
-    return result;
-}
-
-vector<string> ErrorMonitor::GetOtherFailureMsgs() const { return other_messages_; }
-
-VkDebugReportFlagsEXT ErrorMonitor::GetMessageFlags() { return message_flags_; }
-
-bool ErrorMonitor::AnyDesiredMsgFound() const { return message_found_; }
-
-bool ErrorMonitor::AllDesiredMsgsFound() const { return desired_message_strings_.empty(); }
-
-void ErrorMonitor::SetError(const char *const errorString) {
-    auto guard = Lock();
-    message_found_ = true;
-    failure_message_strings_.insert(errorString);
-}
-
-void ErrorMonitor::SetBailout(std::atomic<bool> *bailout) {
-    auto guard = Lock();
-    bailout_ = bailout;
-}
-
-void ErrorMonitor::DumpFailureMsgs() const {
-    vector<string> otherMsgs = GetOtherFailureMsgs();
-    if (otherMsgs.size()) {
-        std::cout << "Other error messages logged for this test were:" << std::endl;
-        for (auto iter = otherMsgs.begin(); iter != otherMsgs.end(); iter++) {
-            std::cout << "     " << *iter << std::endl;
-        }
-    }
-}
-
-void ErrorMonitor::ExpectSuccess(VkDebugReportFlagsEXT const message_flag_mask) {
-    // Match ANY message matching specified type
-    auto guard = Lock();
-    desired_message_strings_.clear();
-    message_flags_ = message_flag_mask;
-}
-
-void ErrorMonitor::VerifyFound() {
-    {
-        // the lock must be released before the ExpectSuccess call at the end
-        auto guard = Lock();
-        // Not receiving expected message(s) is a failure. /Before/ throwing, dump any other messages
-        if (!AllDesiredMsgsFound()) {
-            for (const auto &desired_msg : desired_message_strings_) {
-                ADD_FAILURE() << "Did not receive expected error '" << desired_msg << "'";
-            }
-        } else if (GetOtherFailureMsgs().size() > 0) {
-            // Fail test case for any unexpected errors
-#if defined(ANDROID)
-            // This will get unexpected errors into the adb log
-            for (auto msg : other_messages_) {
-                __android_log_print(ANDROID_LOG_INFO, "VulkanLayerValidationTests", "[ UNEXPECTED_ERR ] '%s'", msg.c_str());
-            }
-#else
-            ADD_FAILURE() << "Received unexpected error(s).";
-#endif
-        }
-        MonitorReset();
-    }
-
-    ExpectSuccess();
-}
-
-void ErrorMonitor::VerifyNotFound() {
-    auto guard = Lock();
-    // ExpectSuccess() configured us to match anything. Any error is a failure.
-    if (AnyDesiredMsgFound()) {
-        for (const auto &msg : failure_message_strings_) {
-            ADD_FAILURE() << "Expected to succeed but got error: " << msg;
-        }
-    } else if (GetOtherFailureMsgs().size() > 0) {
-        // Fail test case for any unexpected errors
-#if defined(ANDROID)
-        // This will get unexpected errors into the adb log
-        for (auto msg : other_messages_) {
-            __android_log_print(ANDROID_LOG_INFO, "VulkanLayerValidationTests", "[ UNEXPECTED_ERR ] '%s'", msg.c_str());
-        }
-#else
-        ADD_FAILURE() << "Received unexpected error(s).";
-#endif
-    }
-    MonitorReset();
-}
-
-bool ErrorMonitor::IgnoreMessage(string const &msg) const {
-    if (ignore_message_strings_.empty()) {
-        return false;
-    }
-
-    return std::find_if(ignore_message_strings_.begin(), ignore_message_strings_.end(),
-                        [&msg](string const &str) { return msg.find(str) != string::npos; }) != ignore_message_strings_.end();
-}
-
 void DebugReporter::Create(VkInstance instance) noexcept {
     assert(instance);
     assert(!debug_obj_);
@@ -275,6 +92,9 @@ VkRenderFramework::VkRenderFramework()
       m_renderPass(VK_NULL_HANDLE),
       m_framebuffer(VK_NULL_HANDLE),
       m_surface(VK_NULL_HANDLE),
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+      m_win32Window(nullptr),
+#endif
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
       m_surface_dpy(nullptr),
       m_surface_window(None),
@@ -303,7 +123,10 @@ VkRenderFramework::VkRenderFramework()
     m_clear_color.float32[3] = 0.0f;
 }
 
-VkRenderFramework::~VkRenderFramework() { ShutdownFramework(); }
+VkRenderFramework::~VkRenderFramework() {
+    ShutdownFramework();
+    debug_reporter_.error_monitor_.Finish();
+}
 
 VkPhysicalDevice VkRenderFramework::gpu() {
     EXPECT_NE((VkInstance)0, instance_);  // Invalid to request gpu before instance exists
@@ -751,20 +574,12 @@ void VkRenderFramework::ShutdownFramework() {
 
     vk::DestroyInstance(instance_, nullptr);
     instance_ = NULL;  // In case we want to re-initialize
-
-    debug_reporter_.error_monitor_.Finish();
 }
 
 ErrorMonitor &VkRenderFramework::Monitor() { return debug_reporter_.error_monitor_; }
 
 void VkRenderFramework::GetPhysicalDeviceFeatures(VkPhysicalDeviceFeatures *features) {
-    if (NULL == m_device) {
-        VkDeviceObj *temp_device = new VkDeviceObj(0, gpu_, m_device_extension_names);
-        *features = temp_device->phy().features();
-        delete (temp_device);
-    } else {
-        *features = m_device->phy().features();
-    }
+    vk::GetPhysicalDeviceFeatures(gpu(), features);
 }
 
 // static
@@ -854,9 +669,7 @@ void VkRenderFramework::InitViewport(float width, float height) {
 
 void VkRenderFramework::InitViewport() { InitViewport(m_width, m_height); }
 
-bool VkRenderFramework::InitSurface() { return InitSurface(m_width, m_height, m_surface); }
-
-bool VkRenderFramework::InitSurface(float width, float height) { return InitSurface(width, height, m_surface); }
+bool VkRenderFramework::InitSurface() { return InitSurface(m_surface); }
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -864,7 +677,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 #endif  // VK_USE_PLATFORM_WIN32_KHR
 
-bool VkRenderFramework::InitSurface(float width, float height, VkSurfaceKHR &surface) {
+bool VkRenderFramework::InitSurface(VkSurfaceKHR &surface) {
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
     HINSTANCE window_instance = GetModuleHandle(nullptr);
     const char class_name[] = "test";
@@ -880,18 +693,21 @@ bool VkRenderFramework::InitSurface(float width, float height, VkSurfaceKHR &sur
     surface_create_info.hinstance = window_instance;
     surface_create_info.hwnd = window;
     VkResult err = vk::CreateWin32SurfaceKHR(instance(), &surface_create_info, nullptr, &surface);
+
+    // NOTE: Currently InitSurface can leak a WIN32 handle if called multiple times.
+    // This is intentional. Each swapchain/surface combo needs a unique HWND.
+    m_win32Window = window;
     if (err != VK_SUCCESS) return false;
 #endif
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR) && defined(VALIDATION_APK)
     VkAndroidSurfaceCreateInfoKHR surface_create_info = LvlInitStruct<VkAndroidSurfaceCreateInfoKHR>();
     surface_create_info.window = VkTestFramework::window;
-    VkResult err = vk::CreateAndroidSurfaceKHR(instance(), &surface_create_info, nullptr, &m_surface);
+    VkResult err = vk::CreateAndroidSurfaceKHR(instance(), &surface_create_info, nullptr, &surface);
     if (err != VK_SUCCESS) return false;
 #endif
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-    assert(m_surface_dpy == nullptr);
     m_surface_dpy = XOpenDisplay(NULL);
     if (m_surface_dpy) {
         int s = DefaultScreen(m_surface_dpy);
@@ -900,31 +716,32 @@ bool VkRenderFramework::InitSurface(float width, float height, VkSurfaceKHR &sur
         VkXlibSurfaceCreateInfoKHR surface_create_info = LvlInitStruct<VkXlibSurfaceCreateInfoKHR>();
         surface_create_info.dpy = m_surface_dpy;
         surface_create_info.window = m_surface_window;
-        VkResult err = vk::CreateXlibSurfaceKHR(instance(), &surface_create_info, nullptr, &m_surface);
+        VkResult err = vk::CreateXlibSurfaceKHR(instance(), &surface_create_info, nullptr, &surface);
         if (err != VK_SUCCESS) return false;
     }
 #endif
 
 #if defined(VK_USE_PLATFORM_XCB_KHR)
-    if (m_surface == VK_NULL_HANDLE) {
-        assert(m_surface_xcb_conn == nullptr);
+    if (surface == VK_NULL_HANDLE) {
         m_surface_xcb_conn = xcb_connect(NULL, NULL);
         if (m_surface_xcb_conn) {
             xcb_window_t window = xcb_generate_id(m_surface_xcb_conn);
             VkXcbSurfaceCreateInfoKHR surface_create_info = LvlInitStruct<VkXcbSurfaceCreateInfoKHR>();
             surface_create_info.connection = m_surface_xcb_conn;
             surface_create_info.window = window;
-            VkResult err = vk::CreateXcbSurfaceKHR(instance(), &surface_create_info, nullptr, &m_surface);
+            VkResult err = vk::CreateXcbSurfaceKHR(instance(), &surface_create_info, nullptr, &surface);
             if (err != VK_SUCCESS) return false;
         }
     }
 #endif
-    return (m_surface == VK_NULL_HANDLE) ? false : true;
+    return (surface != VK_NULL_HANDLE);
 }
 
 // Makes query to get information about swapchain needed to create a valid swapchain object each test creating a swapchain will need
 void VkRenderFramework::InitSwapchainInfo() {
     const VkPhysicalDevice physicalDevice = gpu();
+
+    assert(m_surface != VK_NULL_HANDLE);
 
     vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, m_surface, &m_surface_capabilities);
 
@@ -1023,6 +840,12 @@ void VkRenderFramework::DestroySwapchain() {
             m_swapchain = VK_NULL_HANDLE;
         }
     }
+
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+    if (m_win32Window != nullptr) {
+        DestroyWindow(m_win32Window);
+    }
+#endif
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
     if (m_surface_dpy != nullptr) {
@@ -2148,8 +1971,8 @@ std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromGLSL(VkRenderFramework &fram
                                                          const std::string &code, const char *entry_point,
                                                          const VkSpecializationInfo *spec_info, const spv_target_env spv_env,
                                                          bool debug) {
-    auto shader = layer_data::make_unique<VkShaderObj>(&framework, code.c_str(), stage, spv_env, SPV_SOURCE_GLSL_TRY, spec_info,
-                                                       entry_point, debug);
+    auto shader =
+        std::make_unique<VkShaderObj>(&framework, code.c_str(), stage, spv_env, SPV_SOURCE_GLSL_TRY, spec_info, entry_point, debug);
     if (VK_SUCCESS == shader->InitFromGLSLTry(debug)) {
         return shader;
     }
@@ -2161,7 +1984,7 @@ std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromASM(VkRenderFramework &frame
                                                         const std::string &code, const char *entry_point,
                                                         const VkSpecializationInfo *spec_info, const spv_target_env spv_env) {
     auto shader =
-        layer_data::make_unique<VkShaderObj>(&framework, code.c_str(), stage, spv_env, SPV_SOURCE_ASM_TRY, spec_info, entry_point);
+        std::make_unique<VkShaderObj>(&framework, code.c_str(), stage, spv_env, SPV_SOURCE_ASM_TRY, spec_info, entry_point);
     if (VK_SUCCESS == shader->InitFromASMTry()) {
         return shader;
     }
@@ -2270,7 +2093,7 @@ void VkPipelineObj::AddColorAttachment(uint32_t binding, const VkPipelineColorBl
 
 void VkPipelineObj::SetDepthStencil(const VkPipelineDepthStencilStateCreateInfo *ds_state) { m_ds_state = ds_state; }
 
-void VkPipelineObj::SetViewport(const vector<VkViewport> viewports) {
+void VkPipelineObj::SetViewport(const vector<VkViewport> &viewports) {
     m_viewports = viewports;
     // If we explicitly set a null viewport, pass it through to create info
     // but preserve viewportCount because it musn't change
@@ -2279,7 +2102,7 @@ void VkPipelineObj::SetViewport(const vector<VkViewport> viewports) {
     }
 }
 
-void VkPipelineObj::SetScissor(const vector<VkRect2D> scissors) {
+void VkPipelineObj::SetScissor(const vector<VkRect2D> &scissors) {
     m_scissors = scissors;
     // If we explicitly set a null scissor, pass it through to create info
     // but preserve scissorCount because it musn't change

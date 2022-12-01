@@ -39,6 +39,7 @@ VkFormat FindSupportedDepthOnlyFormat(VkPhysicalDevice phy) {
             return ds_formats[i];
         }
     }
+    assert(false);  // Vulkan drivers are guaranteed to have at least one supported format
     return VK_FORMAT_UNDEFINED;
 }
 
@@ -65,6 +66,7 @@ VkFormat FindSupportedDepthStencilFormat(VkPhysicalDevice phy) {
             return ds_formats[i];
         }
     }
+    assert(false);  // Vulkan drivers are guaranteed to have at least one supported format
     return VK_FORMAT_UNDEFINED;
 }
 
@@ -552,7 +554,7 @@ void NegHeightViewportTests(VkDeviceObj *m_device, VkCommandBufferObj *m_command
     }
 }
 
-void CreateSamplerTest(VkLayerTest &test, const VkSamplerCreateInfo *create_info, std::string code) {
+void CreateSamplerTest(VkLayerTest &test, const VkSamplerCreateInfo *create_info, const std::string &code) {
     if (code.length()) {
         test.Monitor().SetDesiredFailureMsg(kErrorBit | kWarningBit, code);
     }
@@ -564,7 +566,7 @@ void CreateSamplerTest(VkLayerTest &test, const VkSamplerCreateInfo *create_info
     }
 }
 
-void CreateBufferTest(VkLayerTest &test, const VkBufferCreateInfo *create_info, std::string code) {
+void CreateBufferTest(VkLayerTest &test, const VkBufferCreateInfo *create_info, const std::string &code) {
     if (code.length()) {
         test.Monitor().SetDesiredFailureMsg(kErrorBit, code);
     }
@@ -574,7 +576,7 @@ void CreateBufferTest(VkLayerTest &test, const VkBufferCreateInfo *create_info, 
     }
 }
 
-void CreateImageTest(VkLayerTest &test, const VkImageCreateInfo *create_info, std::string code) {
+void CreateImageTest(VkLayerTest &test, const VkImageCreateInfo *create_info, const std::string &code) {
     if (code.length()) {
         test.Monitor().SetDesiredFailureMsg(kErrorBit, code);
     }
@@ -594,7 +596,7 @@ void CreateBufferViewTest(VkLayerTest &test, const VkBufferViewCreateInfo *creat
     }
 }
 
-void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *create_info, std::string code) {
+void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *create_info, const std::string &code) {
     if (code.length()) {
         test.Monitor().SetDesiredFailureMsg(kErrorBit, code);
     }
@@ -681,8 +683,7 @@ bool CheckTimelineSemaphoreSupportAndInitState(VkRenderFramework *renderFramewor
 
 bool CheckSynchronization2SupportAndInitState(VkRenderFramework *framework) {
     PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 =
-        (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(framework->instance(),
-                                                                     "vkGetPhysicalDeviceFeatures2");
+        (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(framework->instance(), "vkGetPhysicalDeviceFeatures2");
 
     {
         auto sync2_features = lvl_init_struct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
@@ -814,7 +815,6 @@ void VkLayerTest::VKTriangleTest(BsoFailSelect failCase) {
     VkImageView *depth_attachment = nullptr;
     if (failcase_needs_depth) {
         m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
-        ASSERT_TRUE(m_depth_stencil_fmt != VK_FORMAT_UNDEFINED);
 
         m_depthStencil->Init(m_device, static_cast<uint32_t>(m_width), static_cast<uint32_t>(m_height), m_depth_stencil_fmt,
                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -1058,9 +1058,8 @@ bool VkLayerTest::LoadDeviceProfileLayer(
 
     if (!(fpvkSetPhysicalDeviceFormatPropertiesEXT) || !(fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT)) {
         printf(
-            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
-            "are built, the device profile layer should be in the same directory.\n",
-            kSkipPrefix);
+            "Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n");
         return false;
     }
 
@@ -1079,9 +1078,8 @@ bool VkLayerTest::LoadDeviceProfileLayer(
 
     if (!(fpvkSetPhysicalDeviceFormatProperties2EXT) || !(fpvkGetOriginalPhysicalDeviceFormatProperties2EXT)) {
         printf(
-            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
-            "are built, the device profile layer should be in the same directory.\n",
-            kSkipPrefix);
+            "Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n");
         return false;
     }
 
@@ -1098,9 +1096,8 @@ bool VkLayerTest::LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceLimitsEXT &fpvkS
 
     if (!(fpvkSetPhysicalDeviceLimitsEXT) || !(fpvkGetOriginalPhysicalDeviceLimitsEXT)) {
         printf(
-            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
-            "are built, the device profile layer should be in the same directory.\n",
-            kSkipPrefix);
+            "Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n");
         return false;
     }
 
@@ -1117,9 +1114,8 @@ bool VkLayerTest::LoadDeviceProfileLayer(PFN_vkSetPhysicalDeviceFeaturesEXT &fpv
 
     if (!(fpvkSetPhysicalDeviceFeaturesEXT) || !(fpvkGetOriginalPhysicalDeviceFeaturesEXT)) {
         printf(
-            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
-            "are built, the device profile layer should be in the same directory.\n",
-            kSkipPrefix);
+            "Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n");
         return false;
     }
 
@@ -1133,9 +1129,8 @@ bool VkLayerTest::LoadDeviceProfileLayer(PFN_VkSetPhysicalDeviceProperties2EXT &
 
     if (!fpvkSetPhysicalDeviceProperties2EXT) {
         printf(
-            "%s Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
-            "are built, the device profile layer should be in the same directory.\n",
-            kSkipPrefix);
+            "Can't find device_profile_api functions; make sure VK_LAYER_PATH is set correctly to where the validation layers "
+            "are built, the device profile layer should be in the same directory.\n");
         return false;
     }
 
@@ -1234,7 +1229,7 @@ void SetImageLayout(VkDeviceObj *device, VkImageAspectFlags aspect, VkImage imag
     VkCommandBufferObj cmd_buf(device, &pool);
 
     cmd_buf.begin();
-    VkImageMemoryBarrier layout_barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    VkImageMemoryBarrier layout_barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                         nullptr,
                                         0,
                                         VK_ACCESS_MEMORY_READ_BIT,
@@ -1243,22 +1238,20 @@ void SetImageLayout(VkDeviceObj *device, VkImageAspectFlags aspect, VkImage imag
                                         VK_QUEUE_FAMILY_IGNORED,
                                         VK_QUEUE_FAMILY_IGNORED,
                                         image,
-                                        {aspect, 0, 1, 0, 1} };
+                                        {aspect, 0, 1, 0, 1}};
 
     cmd_buf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1,
-        &layout_barrier);
+                            &layout_barrier);
     cmd_buf.end();
 
     cmd_buf.QueueCommandBuffer();
 }
 
-std::unique_ptr<VkImageObj> VkArmBestPracticesLayerTest::CreateImage(VkFormat format, const uint32_t width,
-                                                                     const uint32_t height,
+std::unique_ptr<VkImageObj> VkArmBestPracticesLayerTest::CreateImage(VkFormat format, const uint32_t width, const uint32_t height,
                                                                      VkImageUsageFlags attachment_usage) {
     auto img = std::unique_ptr<VkImageObj>(new VkImageObj(m_device));
     img->Init(width, height, 1, format,
-              VK_IMAGE_USAGE_SAMPLED_BIT | attachment_usage |
-              VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+              VK_IMAGE_USAGE_SAMPLED_BIT | attachment_usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
               VK_IMAGE_TILING_OPTIMAL);
     return img;
 }
@@ -1292,7 +1285,9 @@ VkRenderPass VkArmBestPracticesLayerTest::CreateRenderPass(VkFormat format, VkAt
     rpinf.dependencyCount = 0;
     rpinf.pDependencies = nullptr;
 
-    vk::CreateRenderPass(m_device->handle(), &rpinf, nullptr, &renderpass);
+    VkResult result = vk::CreateRenderPass(m_device->handle(), &rpinf, nullptr, &renderpass);
+    assert(result == VK_SUCCESS);
+    (void)result;
 
     return renderpass;
 }
@@ -1309,7 +1304,9 @@ VkFramebuffer VkArmBestPracticesLayerTest::CreateFramebuffer(const uint32_t widt
     framebuffer_create_info.height = height;
     framebuffer_create_info.layers = 1;
 
-    vk::CreateFramebuffer(m_device->handle(), &framebuffer_create_info, nullptr, &framebuffer);
+    VkResult result = vk::CreateFramebuffer(m_device->handle(), &framebuffer_create_info, nullptr, &framebuffer);
+    assert(result == VK_SUCCESS);
+    (void)result;
 
     return framebuffer;
 }
@@ -1327,7 +1324,9 @@ VkSampler VkArmBestPracticesLayerTest::CreateDefaultSampler() {
     sampler_create_info.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
     sampler_create_info.maxLod = VK_LOD_CLAMP_NONE;
 
-    vk::CreateSampler(m_device->handle(), &sampler_create_info, nullptr, &sampler);
+    VkResult result = vk::CreateSampler(m_device->handle(), &sampler_create_info, nullptr, &sampler);
+    assert(result == VK_SUCCESS);
+    (void)result;
 
     return sampler;
 }
@@ -1607,7 +1606,7 @@ void CreatePipelineHelper::InitRasterizationInfo() {
     rs_state_ci_.rasterizerDiscardEnable = VK_FALSE;
     rs_state_ci_.polygonMode = VK_POLYGON_MODE_FILL;
     rs_state_ci_.cullMode = VK_CULL_MODE_BACK_BIT;
-    rs_state_ci_.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rs_state_ci_.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rs_state_ci_.depthBiasEnable = VK_FALSE;
     rs_state_ci_.lineWidth = 1.0F;
 }
@@ -1935,8 +1934,7 @@ bool CreateNVRayTracingPipelineHelper::InitInstanceExtensions(VkLayerTest &test,
     if (test.InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
         instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        printf("Did not find required instance extension %s; skipped.\n", VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
         return false;
     }
     return true;
@@ -1949,7 +1947,7 @@ bool CreateNVRayTracingPipelineHelper::InitDeviceExtensions(VkLayerTest &test, s
         if (test.DeviceExtensionSupported(test.gpu(), nullptr, device_extension)) {
             device_extension_names.push_back(device_extension);
         } else {
-            printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, device_extension);
+            printf("%s Extension not supported, skipping tests\n", device_extension);
             return false;
         }
     }
@@ -2324,7 +2322,7 @@ BarrierQueueFamilyBase::QueueFamilyObjs *BarrierQueueFamilyBase::GetQueueFamilyI
     return qf;
 }
 
-void BarrierQueueFamilyTestHelper::operator()(std::string img_err, std::string buf_err, uint32_t src, uint32_t dst,
+void BarrierQueueFamilyTestHelper::operator()(const std::string &img_err, const std::string &buf_err, uint32_t src, uint32_t dst,
                                               uint32_t queue_family_index, Modifier mod) {
     auto &monitor = context_->layer_test->Monitor();
     const bool has_img_err = img_err.size() > 0;
@@ -2366,7 +2364,7 @@ void BarrierQueueFamilyTestHelper::operator()(std::string img_err, std::string b
     context_->Reset();
 };
 
-void Barrier2QueueFamilyTestHelper::operator()(std::string img_err, std::string buf_err, uint32_t src, uint32_t dst,
+void Barrier2QueueFamilyTestHelper::operator()(const std::string &img_err, const std::string &buf_err, uint32_t src, uint32_t dst,
                                                uint32_t queue_family_index, Modifier mod) {
     auto &monitor = context_->layer_test->Monitor();
     bool positive = true;
@@ -2436,13 +2434,12 @@ bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, V
 
     framework->InitFramework(&framework->Monitor(), enabled_features);
     if (!framework->AreRequiredExtensionsEnabled()) {
-        printf("%s %s device extension not supported, skipping test\n", kSkipPrefix,
-               framework->RequiredExtensionsNotSupported().c_str());
+        printf("%s device extension not supported, skipping test\n", framework->RequiredExtensionsNotSupported().c_str());
         return false;
     }
 
     if (!mockicd_valid && (framework->IsPlatform(kMockICD) || framework->DeviceSimulation())) {
-        printf("%s Test not supported by MockICD, skipping tests\n", kSkipPrefix);
+        printf("Test not supported by MockICD, skipping tests\n");
         return false;
     }
 
@@ -2527,8 +2524,8 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     }
 
     VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
+    auto indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
     if (descriptor_indexing) {
-        auto indexing_features = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
         features2 = GetPhysicalDeviceFeatures2(indexing_features);
         if (!indexing_features.runtimeDescriptorArray || !indexing_features.descriptorBindingPartiallyBound ||
             !indexing_features.descriptorBindingSampledImageUpdateAfterBind ||
@@ -2549,8 +2546,7 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&ray_tracing_properties);
     vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
     if (ray_tracing_properties.maxTriangleCount == 0) {
-        printf("%s Did not find required ray tracing properties; skipped.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Did not find required ray tracing properties";
     }
 
     VkQueue ray_tracing_queue = m_device->m_queue;
@@ -3282,7 +3278,6 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
                                       test.variable_length ? &ds_variable.set_ : &ds.set_, 0, nullptr);
         } else {
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdTraceRaysNV-None-02697");
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-DescriptorSetNotBound");
         }
 
         if (gpu_assisted) {

@@ -87,7 +87,7 @@ extern DescriptorReqFlags DescriptorRequirementsBitsFromFormat(VkFormat fmt);
 struct DescriptorRequirement {
     DescriptorReqFlags reqs;
     bool is_writable;
-    // Copy from StageState.interface_var. It combines from plural shader stages. The index of array is index of image.
+    // Copy from StageState.InterfaceVariable. It combines from plural shader stages. The index of array is index of image.
     std::vector<layer_data::unordered_set<SamplerUsedByImage>> samplers_used_by_image;
     DescriptorRequirement() : reqs(0), is_writable(false) {}
 };
@@ -102,9 +102,10 @@ struct PipelineStageState {
     std::shared_ptr<const SHADER_MODULE_STATE> module_state;
     const safe_VkPipelineShaderStageCreateInfo *create_info;
     VkShaderStageFlagBits stage_flag;
-    spirv_inst_iter entrypoint;
-    layer_data::unordered_set<uint32_t> accessible_ids;
-    using DescriptorUse = std::pair<DescriptorSlot, interface_var>;
+    layer_data::optional<Instruction> entrypoint;
+    // Used to map each descriptor binding to the OpVariable decorated with it
+    // <(set, binding), OpVariable>
+    using DescriptorUse = std::pair<DescriptorSlot, InterfaceVariable>;
     std::vector<DescriptorUse> descriptor_uses;
     bool has_writable_descriptor;
     bool has_atomic_descriptor;
@@ -188,6 +189,14 @@ class PIPELINE_STATE : public BASE_NODE {
     // Additional metadata needed by pipeline_state initialization and validation
     using StageStateVec = std::vector<PipelineStageState>;
     const StageStateVec stage_state;
+    bool HasShaderStage(VkShaderStageFlagBits stage_flag) const {
+        for (const auto &state : stage_state) {
+            if (state.stage_flag == stage_flag) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     const layer_data::unordered_set<uint32_t> fragmentShader_writable_output_location_list;
 
@@ -203,24 +212,28 @@ class PIPELINE_STATE : public BASE_NODE {
     const uint32_t active_shaders = 0;
     const VkPrimitiveTopology topology_at_rasterizer;
     const bool uses_shader_module_id;
+    const bool uses_pipeline_robustness;
+
+    CreateShaderModuleStates *csm_states = nullptr;
 
     // Executable or legacy pipeline
     PIPELINE_STATE(const ValidationStateTracker *state_data, const VkGraphicsPipelineCreateInfo *pCreateInfo,
-                   std::shared_ptr<const RENDER_PASS_STATE> &&rpstate, std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout);
+                   std::shared_ptr<const RENDER_PASS_STATE> &&rpstate, std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout,
+                   CreateShaderModuleStates *csm_states = nullptr);
 
     // Compute pipeline
     PIPELINE_STATE(const ValidationStateTracker *state_data, const VkComputePipelineCreateInfo *pCreateInfo,
-                   std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout);
+                   std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout, CreateShaderModuleStates *csm_states = nullptr);
 
     PIPELINE_STATE(const ValidationStateTracker *state_data, const VkRayTracingPipelineCreateInfoKHR *pCreateInfo,
-                   std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout);
+                   std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout, CreateShaderModuleStates *csm_states = nullptr);
 
     PIPELINE_STATE(const ValidationStateTracker *state_data, const VkRayTracingPipelineCreateInfoNV *pCreateInfo,
-                   std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout);
+                   std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout, CreateShaderModuleStates *csm_states = nullptr);
 
     // Executable pipeline with all state defined within linked pipeline libraries
     PIPELINE_STATE(const ValidationStateTracker *state_data, const VkGraphicsPipelineCreateInfo *pCreateInfo,
-                   std::shared_ptr<const RENDER_PASS_STATE> &&rpstate = {});
+                   std::shared_ptr<const RENDER_PASS_STATE> &&rpstate = {}, CreateShaderModuleStates *csm_states = nullptr);
 
     VkPipeline pipeline() const { return handle_.Cast<VkPipeline>(); }
 
@@ -267,6 +280,8 @@ class PIPELINE_STATE : public BASE_NODE {
     static inline typename SubStateTraits<type_flag>::type GetSubState(const PIPELINE_STATE &) {
         return {};
     }
+
+    std::shared_ptr<const SHADER_MODULE_STATE> GetSubStateShader(VkShaderStageFlagBits state) const;
 
     template <VkGraphicsPipelineLibraryFlagBitsEXT type_flag>
     static inline typename SubStateTraits<type_flag>::type GetLibSubState(const ValidationStateTracker &state,
@@ -431,6 +446,15 @@ class PIPELINE_STATE : public BASE_NODE {
         return {};
     }
 
+    std::shared_ptr<const SHADER_MODULE_STATE> GetShaderModuleState(VkShaderStageFlagBits stage) {
+        for (auto &s : stage_state) {
+            if (s.stage_flag == stage) {
+                return s.module_state;
+            }
+        }
+        return {};
+    }
+
     const safe_VkPipelineDynamicStateCreateInfo *DynamicState() const {
         // TODO Each library can contain its own dynamic state (apparently?). Which one should be returned here? Union?
         return create_info.graphics.pDynamicState;
@@ -474,7 +498,8 @@ class PIPELINE_STATE : public BASE_NODE {
     const void *PNext() const { return create_info.graphics.pNext; }
 
     static ActiveSlotMap GetActiveSlots(const StageStateVec &stage_states);
-    static StageStateVec GetStageStates(const ValidationStateTracker &state_data, const PIPELINE_STATE &pipe_state);
+    static StageStateVec GetStageStates(const ValidationStateTracker &state_data, const PIPELINE_STATE &pipe_state,
+                                        CreateShaderModuleStates *csm_states);
 
     // Return true if for a given PSO, the given state enum is dynamic, else return false
     bool IsDynamic(const VkDynamicState state) const {
@@ -492,17 +517,17 @@ class PIPELINE_STATE : public BASE_NODE {
                                                                     const safe_VkGraphicsPipelineCreateInfo &create_info);
     static std::shared_ptr<PreRasterState> CreatePreRasterState(const PIPELINE_STATE &p, const ValidationStateTracker &state,
                                                                 const safe_VkGraphicsPipelineCreateInfo &create_info,
-                                                                std::shared_ptr<const RENDER_PASS_STATE> rp);
+                                                                const std::shared_ptr<const RENDER_PASS_STATE> &rp);
     static std::shared_ptr<FragmentShaderState> CreateFragmentShaderState(const PIPELINE_STATE &p,
                                                                           const ValidationStateTracker &state,
                                                                           const VkGraphicsPipelineCreateInfo &create_info,
                                                                           const safe_VkGraphicsPipelineCreateInfo &safe_create_info,
-                                                                          std::shared_ptr<const RENDER_PASS_STATE> rp);
+                                                                          const std::shared_ptr<const RENDER_PASS_STATE> &rp);
     static std::shared_ptr<FragmentOutputState> CreateFragmentOutputState(const PIPELINE_STATE &p,
                                                                           const ValidationStateTracker &state,
                                                                           const VkGraphicsPipelineCreateInfo &create_info,
                                                                           const safe_VkGraphicsPipelineCreateInfo &safe_create_info,
-                                                                          std::shared_ptr<const RENDER_PASS_STATE> rp);
+                                                                          const std::shared_ptr<const RENDER_PASS_STATE> &rp);
 
     // Merged layouts
     std::shared_ptr<const PIPELINE_LAYOUT_STATE> merged_graphics_layout;
@@ -651,15 +676,17 @@ struct LAST_BOUND_STATE {
     inline bool IsUsing() const { return pipeline_state ? true : false; }
 };
 
-static inline bool CompatForSet(uint32_t set, const LAST_BOUND_STATE &a, const std::vector<PipelineLayoutCompatId> &b) {
-    bool result = (set < a.per_set.size()) && (set < b.size()) && (*(a.per_set[set].compat_id_for_set) == *b[set]);
+static inline bool IsBoundSetCompat(uint32_t set, const LAST_BOUND_STATE &last_bound,
+                                    const PIPELINE_LAYOUT_STATE *pipeline_layout) {
+    bool result = (set < last_bound.per_set.size()) && (set < pipeline_layout->set_compat_ids.size()) &&
+                  (*(last_bound.per_set[set].compat_id_for_set) == *(pipeline_layout->set_compat_ids[set]));
     return result;
 }
 
-static inline bool CompatForSet(uint32_t set, const PIPELINE_LAYOUT_STATE *a, const PIPELINE_LAYOUT_STATE *b) {
+static inline bool IsPipelineLayoutSetCompat(uint32_t set, const PIPELINE_LAYOUT_STATE *a, const PIPELINE_LAYOUT_STATE *b) {
     // Intentionally have a result variable to simplify debugging
-    bool result = a && b && (set < a->compat_for_set.size()) && (set < b->compat_for_set.size()) &&
-                  (a->compat_for_set[set] == b->compat_for_set[set]);
+    bool result = a && b && (set < a->set_compat_ids.size()) && (set < b->set_compat_ids.size()) &&
+                  (a->set_compat_ids[set] == b->set_compat_ids[set]);
     return result;
 }
 

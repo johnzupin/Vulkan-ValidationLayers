@@ -260,6 +260,80 @@ TEST_F(VkPositiveLayerTest, BasicQuery) {
     vk::DestroyQueryPool(m_device->handle(), query_pool, NULL);
 }
 
+TEST_F(VkPositiveLayerTest, DestroyQueryPoolBasedOnQueryPoolResults) {
+    TEST_DESCRIPTION("Destroy a QueryPool based on vkGetQueryPoolResults");
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    VkCommandPoolCreateFlags pool_flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, pool_flags));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    std::array<uint64_t, 4> samples_passed = {};
+    constexpr uint64_t sizeof_samples_passed = samples_passed.size() * sizeof(uint64_t);
+    constexpr VkDeviceSize sample_stride = sizeof(uint64_t);
+
+    uint32_t qfi = 0;
+    VkBufferCreateInfo bci = LvlInitStruct<VkBufferCreateInfo>();
+    bci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bci.size = sizeof_samples_passed;
+    bci.queueFamilyIndexCount = 1;
+    bci.pQueueFamilyIndices = &qfi;
+    VkBufferObj buffer;
+    VkMemoryPropertyFlags mem_props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    buffer.init(*m_device, bci, mem_props);
+
+    constexpr uint32_t query_count = 2;
+
+    VkQueryPoolCreateInfo query_pool_info = LvlInitStruct<VkQueryPoolCreateInfo>();
+    query_pool_info.queryType = VK_QUERY_TYPE_OCCLUSION;
+    query_pool_info.flags = 0;
+    query_pool_info.queryCount = query_count;
+    query_pool_info.pipelineStatistics = 0;
+
+    VkQueryPool query_pool;
+    VkResult res = vk::CreateQueryPool(m_device->handle(), &query_pool_info, nullptr, &query_pool);
+    ASSERT_VK_SUCCESS(res);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.InitState();
+    pipe.CreateGraphicsPipeline();
+
+    // If VK_QUERY_RESULT_WAIT_BIT is not set, vkGetQueryPoolResults may return VK_NOT_READY
+    constexpr VkQueryResultFlags query_flags = VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT;
+
+    m_commandBuffer->begin();
+    vk::CmdResetQueryPool(m_commandBuffer->handle(), query_pool, 0, query_count);
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBeginQuery(m_commandBuffer->handle(), query_pool, 0, 0);
+    vk::CmdEndQuery(m_commandBuffer->handle(), query_pool, 0);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vk::CmdBeginQuery(m_commandBuffer->handle(), query_pool, 1, 0);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    vk::CmdEndRenderPass(m_commandBuffer->handle());
+    vk::CmdEndQuery(m_commandBuffer->handle(), query_pool, 1);
+    vk::CmdCopyQueryPoolResults(m_commandBuffer->handle(), query_pool, 0, query_count, buffer.handle(), 0, sample_stride,
+                                query_flags);
+    m_commandBuffer->end();
+
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+    res = vk::GetQueryPoolResults(m_device->handle(), query_pool, 0, query_count, sizeof_samples_passed, samples_passed.data(),
+                                  sample_stride, query_flags);
+    ASSERT_VK_SUCCESS(res);
+
+    // "Applications can verify that queryPool can be destroyed by checking that vkGetQueryPoolResults() without the
+    // VK_QUERY_RESULT_PARTIAL_BIT flag returns VK_SUCCESS for all queries that are used in command buffers submitted for
+    // execution."
+    //
+    // i.e. You don't have to wait for an idle queue to destroy the query pool.
+    vk::DestroyQueryPool(m_device->handle(), query_pool, nullptr);
+
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
 TEST_F(VkPositiveLayerTest, ConfirmNoVLErrorWhenVkCmdClearAttachmentsCalledInSecondaryCB) {
     TEST_DESCRIPTION(
         "This test is to verify that when vkCmdClearAttachments is called by a secondary commandbuffer, the validation layers do "
@@ -392,10 +466,6 @@ TEST_F(VkPositiveLayerTest, SecondaryCommandBufferImageLayoutTransitions) {
     VkResult err;
     ASSERT_NO_FATAL_FAILURE(Init());
     auto depth_format = FindSupportedDepthStencilFormat(gpu());
-    if (!depth_format) {
-        printf("%s Couldn't find depth stencil format.\n", kSkipPrefix);
-        return;
-    }
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
     // Allocate a secondary and primary cmd buffer
     VkCommandBufferAllocateInfo command_buffer_allocate_info = LvlInitStruct<VkCommandBufferAllocateInfo>();
@@ -473,12 +543,10 @@ TEST_F(VkPositiveLayerTest, DrawIndirectCountWithoutFeature) {
     TEST_DESCRIPTION("Use VK_KHR_draw_indirect_count in 1.1 before drawIndirectCount feature was added");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-        return;
+    AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -529,11 +597,14 @@ TEST_F(VkPositiveLayerTest, DrawIndirectCountWithoutFeature12) {
     TEST_DESCRIPTION("Use VK_KHR_draw_indirect_count in 1.2 using the extension");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
 
-    // Devsim won't read in values like maxDescriptorSetUpdateAfterBindUniformBuffers which cause OneshotTest to fail pipeline
-    // layout creation if using 1.2 devsim as it enables VK_EXT_descriptor_indexing
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    // TODO Issue 4867 - MockICD doesn't return proper values
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -541,12 +612,6 @@ TEST_F(VkPositiveLayerTest, DrawIndirectCountWithoutFeature12) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping tests\n", kSkipPrefix, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-        return;
-    }
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -589,9 +654,8 @@ TEST_F(VkPositiveLayerTest, DrawIndirectCountWithFeature) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    // Devsim won't read in values like maxDescriptorSetUpdateAfterBindUniformBuffers which cause OneshotTest to fail pipeline
-    // layout creation if using 1.2 devsim as it enables VK_EXT_descriptor_indexing
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    // TODO Issue 4867 - MockICD doesn't return proper values
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -676,7 +740,7 @@ TEST_F(VkPositiveLayerTest, CommandBufferSimultaneousUseSync) {
     ASSERT_VK_SUCCESS(err);
 
     // Wait for fence.
-    err = vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    err = vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
     ASSERT_VK_SUCCESS(err);
 
     // CB is still in flight from second submission, but semaphore s1 is no
@@ -767,8 +831,7 @@ TEST_F(VkPositiveLayerTest, FramebufferCreateDepthStencilLayoutTransitionForDept
     VkFormatProperties format_properties;
     vk::GetPhysicalDeviceFormatProperties(gpu(), VK_FORMAT_D32_SFLOAT_S8_UINT, &format_properties);
     if (!(format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) {
-        printf("%s Image format does not support sampling.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Image format does not support sampling";
     }
 
     VkAttachmentDescription attachment = {0,
@@ -845,20 +908,17 @@ TEST_F(VkPositiveLayerTest, QueryAndCopySecondaryCommandBuffers) {
 
     ASSERT_NO_FATAL_FAILURE(Init());
     if (IsPlatform(kNexusPlayer)) {
-        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "This test should not run on Nexus Player";
     }
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Queue family needs to have multiple queues to run this test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
     }
     uint32_t queue_count;
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, NULL);
     std::vector<VkQueueFamilyProperties> queue_props(queue_count);
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props.data());
     if (queue_props[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
-        printf("%s Device graphic queue has timestampValidBits of 0, skipping.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Device graphic queue has timestampValidBits of 0, skipping.\n";
     }
 
     VkQueryPool query_pool;
@@ -918,20 +978,17 @@ TEST_F(VkPositiveLayerTest, QueryAndCopyMultipleCommandBuffers) {
 
     ASSERT_NO_FATAL_FAILURE(Init());
     if (IsPlatform(kNexusPlayer)) {
-        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "This test should not run on Nexus Player";
     }
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Queue family needs to have multiple queues to run this test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
     }
     uint32_t queue_count;
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, NULL);
     std::vector<VkQueueFamilyProperties> queue_props(queue_count);
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props.data());
     if (queue_props[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
-        printf("%s Device graphic queue has timestampValidBits of 0, skipping.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Device graphic queue has timestampValidBits of 0, skipping.\n";
     }
 
     VkQueryPool query_pool;
@@ -1007,8 +1064,7 @@ TEST_F(VkPositiveLayerTest, DestroyQueryPoolAfterGetQueryPoolResults) {
     std::vector<VkQueueFamilyProperties> queue_props(queue_count);
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props.data());
     if (queue_props[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
-        printf("%s Device graphic queue has timestampValidBits of 0, skipping.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Device graphic queue has timestampValidBits of 0, skipping.\n";
     }
 
     VkQueryPoolCreateInfo query_pool_create_info = LvlInitStruct<VkQueryPoolCreateInfo>();
@@ -1150,8 +1206,7 @@ TEST_F(VkPositiveLayerTest, WriteTimestampNoneAndAll) {
     features2.pNext = &synchronization2;
     InitState(nullptr, &features2);
     if (synchronization2.synchronization2 != VK_TRUE) {
-        printf("%s VkPhysicalDeviceSynchronization2FeaturesKHR::synchronization2 not supported, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "VkPhysicalDeviceSynchronization2FeaturesKHR::synchronization2 not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -1160,8 +1215,7 @@ TEST_F(VkPositiveLayerTest, WriteTimestampNoneAndAll) {
     std::vector<VkQueueFamilyProperties> queue_props(queue_count);
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props.data());
     if (queue_props[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
-        printf("%s Device graphic queue has timestampValidBits of 0, skipping.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Device graphic queue has timestampValidBits of 0, skipping.\n";
     }
 
     auto vkCmdWriteTimestamp2KHR =

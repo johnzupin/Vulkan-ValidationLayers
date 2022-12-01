@@ -117,12 +117,10 @@ void CMD_BUFFER_STATE::RemoveChild(std::shared_ptr<BASE_NODE> &child_node) {
 // Reset the command buffer state
 //  Maintain the createInfo and set state to CB_NEW, but clear all other state
 void CMD_BUFFER_STATE::Reset() {
-    assert(!InUse());
     // Reset CB state (note that createInfo is not cleared)
     memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
     memset(&inheritanceInfo, 0, sizeof(VkCommandBufferInheritanceInfo));
     has_draw_cmd = false;
-    has_draw_cmd_in_current_render_pass = false;
     has_dispatch_cmd = false;
     has_trace_rays_cmd = false;
     has_build_as_cmd = false;
@@ -369,7 +367,7 @@ ImageSubresourceLayoutMap *CMD_BUFFER_STATE::GetImageSubresourceLayoutMap(const 
     return layout_map.get();
 }
 
-static bool SetQueryState(QueryObject object, QueryState value, QueryMap *localQueryToStateMap) {
+static bool SetQueryState(const QueryObject &object, QueryState value, QueryMap *localQueryToStateMap) {
     (*localQueryToStateMap)[object] = value;
     return false;
 }
@@ -529,7 +527,6 @@ void CMD_BUFFER_STATE::BeginRenderPass(CMD_TYPE cmd_type, const VkRenderPassBegi
 
     active_subpasses = nullptr;
     active_attachments = nullptr;
-    has_draw_cmd_in_current_render_pass = false;
 
     if (activeFramebuffer) {
         framebuffers.insert(activeFramebuffer);
@@ -601,7 +598,6 @@ void CMD_BUFFER_STATE::BeginRendering(CMD_TYPE cmd_type, const VkRenderingInfo *
     hasRenderPassInstance = true;
 
     active_attachments = nullptr;
-    has_draw_cmd_in_current_render_pass = false;
     uint32_t attachment_count = (pRenderingInfo->colorAttachmentCount + 2) * 2;
 
     // Set cb_state->active_attachments & cb_state->attachments_view_states
@@ -825,7 +821,7 @@ void CMD_BUFFER_STATE::PushDescriptorSetState(VkPipelineBindPoint pipelineBindPo
     auto &last_bound = lastBound[lv_bind_point];
     auto &push_descriptor_set = last_bound.push_descriptor_set;
     // If we are disturbing the current push_desriptor_set clear it
-    if (!push_descriptor_set || !CompatForSet(set, last_bound, pipeline_layout->compat_for_set)) {
+    if (!push_descriptor_set || !IsBoundSetCompat(set, last_bound, pipeline_layout)) {
         last_bound.UnbindAndResetPushDescriptorSet(
             std::make_shared<cvdescriptorset::DescriptorSet>(VK_NULL_HANDLE, nullptr, dsl, 0, dev_data));
     }
@@ -840,7 +836,6 @@ void CMD_BUFFER_STATE::PushDescriptorSetState(VkPipelineBindPoint pipelineBindPo
 // Generic function to handle state update for all CmdDraw* type functions
 void CMD_BUFFER_STATE::UpdateDrawCmd(CMD_TYPE cmd_type) {
     has_draw_cmd = true;
-    has_draw_cmd_in_current_render_pass = true;
     UpdatePipelineState(cmd_type, VK_PIPELINE_BIND_POINT_GRAPHICS);
 
     // Update the consumed viewport/scissor count.
@@ -868,16 +863,17 @@ void CMD_BUFFER_STATE::UpdatePipelineState(CMD_TYPE cmd_type, const VkPipelineBi
     RecordCmd(cmd_type);
 
     const auto lv_bind_point = ConvertToLvlBindPoint(bind_point);
-    auto &state = lastBound[lv_bind_point];
-    PIPELINE_STATE *pipe = state.pipeline_state;
-    if (VK_NULL_HANDLE != state.pipeline_layout) {
+    auto &last_bound = lastBound[lv_bind_point];
+    PIPELINE_STATE *pipe = last_bound.pipeline_state;
+    if (VK_NULL_HANDLE != last_bound.pipeline_layout) {
         for (const auto &set_binding_pair : pipe->active_slots) {
             uint32_t set_index = set_binding_pair.first;
-            if (set_index >= state.per_set.size()) {
+            if (set_index >= last_bound.per_set.size()) {
                 continue;
             }
+            auto &set_info = last_bound.per_set[set_index];
             // Pull the set node
-            auto &descriptor_set = state.per_set[set_index].bound_descriptor_set;
+            auto &descriptor_set = set_info.bound_descriptor_set;
             if (!descriptor_set) {
                 continue;
             }
@@ -896,18 +892,17 @@ void CMD_BUFFER_STATE::UpdatePipelineState(CMD_TYPE cmd_type, const VkPipelineBi
 
             // We can skip updating the state if "nothing" has changed since the last validation.
             // See CoreChecks::ValidateCmdBufDrawState for more details.
-            bool descriptor_set_changed =
-                !reduced_map.IsManyDescriptors() ||
-                // Update if descriptor set (or contents) has changed
-                state.per_set[set_index].validated_set != descriptor_set.get() ||
-                state.per_set[set_index].validated_set_change_count != descriptor_set->GetChangeCount() ||
-                (!dev_data->disabled[image_layout_validation] &&
-                 state.per_set[set_index].validated_set_image_layout_change_count != image_layout_change_count);
-            bool need_update = descriptor_set_changed ||
-                               // Update if previous bindingReqMap doesn't include new bindingReqMap
-                               !std::includes(state.per_set[set_index].validated_set_binding_req_map.begin(),
-                                              state.per_set[set_index].validated_set_binding_req_map.end(), binding_req_map.begin(),
-                                              binding_req_map.end());
+            bool descriptor_set_changed = !reduced_map.IsManyDescriptors() ||
+                                          // Update if descriptor set (or contents) has changed
+                                          set_info.validated_set != descriptor_set.get() ||
+                                          set_info.validated_set_change_count != descriptor_set->GetChangeCount() ||
+                                          (!dev_data->disabled[image_layout_validation] &&
+                                           set_info.validated_set_image_layout_change_count != image_layout_change_count);
+            bool need_update =
+                descriptor_set_changed ||
+                // Update if previous bindingReqMap doesn't include new bindingReqMap
+                !std::includes(set_info.validated_set_binding_req_map.begin(), set_info.validated_set_binding_req_map.end(),
+                               binding_req_map.begin(), binding_req_map.end());
 
             if (need_update) {
                 if (!dev_data->disabled[command_buffer_state] && !descriptor_set->IsPushDescriptor()) {
@@ -919,25 +914,25 @@ void CMD_BUFFER_STATE::UpdatePipelineState(CMD_TYPE cmd_type, const VkPipelineBi
                     // Only record the bindings that haven't already been recorded
                     BindingReqMap delta_reqs;
                     std::set_difference(binding_req_map.begin(), binding_req_map.end(),
-                                        state.per_set[set_index].validated_set_binding_req_map.begin(),
-                                        state.per_set[set_index].validated_set_binding_req_map.end(),
+                                        set_info.validated_set_binding_req_map.begin(),
+                                        set_info.validated_set_binding_req_map.end(),
                                         layer_data::insert_iterator<BindingReqMap>(delta_reqs, delta_reqs.begin()));
                     descriptor_set->UpdateDrawState(dev_data, this, cmd_type, pipe, delta_reqs);
                 } else {
                     descriptor_set->UpdateDrawState(dev_data, this, cmd_type, pipe, binding_req_map);
                 }
 
-                state.per_set[set_index].validated_set = descriptor_set.get();
-                state.per_set[set_index].validated_set_change_count = descriptor_set->GetChangeCount();
-                state.per_set[set_index].validated_set_image_layout_change_count = image_layout_change_count;
+                set_info.validated_set = descriptor_set.get();
+                set_info.validated_set_change_count = descriptor_set->GetChangeCount();
+                set_info.validated_set_image_layout_change_count = image_layout_change_count;
                 if (reduced_map.IsManyDescriptors()) {
                     // Check whether old == new before assigning, the equality check is much cheaper than
                     // freeing and reallocating the map.
-                    if (state.per_set[set_index].validated_set_binding_req_map != set_binding_pair.second) {
-                        state.per_set[set_index].validated_set_binding_req_map = set_binding_pair.second;
+                    if (set_info.validated_set_binding_req_map != set_binding_pair.second) {
+                        set_info.validated_set_binding_req_map = set_binding_pair.second;
                     }
                 } else {
-                    state.per_set[set_index].validated_set_binding_req_map = BindingReqMap();
+                    set_info.validated_set_binding_req_map = BindingReqMap();
                 }
             }
         }
@@ -962,13 +957,13 @@ void CMD_BUFFER_STATE::UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipelin
 
     uint32_t required_size = first_set + set_count;
     const uint32_t last_binding_index = required_size - 1;
-    assert(last_binding_index < pipeline_layout->compat_for_set.size());
+    assert(last_binding_index < pipeline_layout->set_compat_ids.size());
 
     // Some useful shorthand
     const auto lv_bind_point = ConvertToLvlBindPoint(pipeline_bind_point);
     auto &last_bound = lastBound[lv_bind_point];
     last_bound.pipeline_layout = pipeline_layout->layout();
-    auto &pipe_compat_ids = pipeline_layout->compat_for_set;
+    auto &pipe_compat_ids = pipeline_layout->set_compat_ids;
     // Resize binding arrays
     uint32_t last_set_index = first_set + set_count - 1;
     if (last_set_index >= last_bound.per_set.size()) {
@@ -1006,11 +1001,12 @@ void CMD_BUFFER_STATE::UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipelin
 
     // For any previously bound sets, need to set them to "invalid" if they were disturbed by this update
     for (uint32_t set_idx = 0; set_idx < first_set; ++set_idx) {
-        if (last_bound.per_set[set_idx].compat_id_for_set != pipe_compat_ids[set_idx]) {
-            push_descriptor_cleanup(last_bound.per_set[set_idx].bound_descriptor_set);
-            last_bound.per_set[set_idx].bound_descriptor_set = nullptr;
-            last_bound.per_set[set_idx].dynamicOffsets.clear();
-            last_bound.per_set[set_idx].compat_id_for_set = pipe_compat_ids[set_idx];
+        auto &set_info = last_bound.per_set[set_idx];
+        if (set_info.compat_id_for_set != pipe_compat_ids[set_idx]) {
+            push_descriptor_cleanup(set_info.bound_descriptor_set);
+            set_info.bound_descriptor_set = nullptr;
+            set_info.dynamicOffsets.clear();
+            set_info.compat_id_for_set = pipe_compat_ids[set_idx];
         }
     }
 
@@ -1018,27 +1014,28 @@ void CMD_BUFFER_STATE::UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipelin
     const uint32_t *input_dynamic_offsets = p_dynamic_offsets;  // "read" pointer for dynamic offset data
     for (uint32_t input_idx = 0; input_idx < set_count; input_idx++) {
         auto set_idx = input_idx + first_set;  // set_idx is index within layout, input_idx is index within input descriptor sets
+        auto &set_info = last_bound.per_set[set_idx];
         auto descriptor_set =
             push_descriptor_set ? push_descriptor_set : dev_data->Get<cvdescriptorset::DescriptorSet>(pDescriptorSets[input_idx]);
 
         // Record binding (or push)
         if (descriptor_set != last_bound.push_descriptor_set) {
             // Only cleanup the push descriptors if they aren't the currently used set.
-            push_descriptor_cleanup(last_bound.per_set[set_idx].bound_descriptor_set);
+            push_descriptor_cleanup(set_info.bound_descriptor_set);
         }
-        last_bound.per_set[set_idx].bound_descriptor_set = descriptor_set;
-        last_bound.per_set[set_idx].compat_id_for_set = pipe_compat_ids[set_idx];  // compat ids are canonical *per* set index
+        set_info.bound_descriptor_set = descriptor_set;
+        set_info.compat_id_for_set = pipe_compat_ids[set_idx];  // compat ids are canonical *per* set index
 
         if (descriptor_set) {
             auto set_dynamic_descriptor_count = descriptor_set->GetDynamicDescriptorCount();
             // TODO: Add logic for tracking push_descriptor offsets (here or in caller)
             if (set_dynamic_descriptor_count && input_dynamic_offsets) {
                 const uint32_t *end_offset = input_dynamic_offsets + set_dynamic_descriptor_count;
-                last_bound.per_set[set_idx].dynamicOffsets = std::vector<uint32_t>(input_dynamic_offsets, end_offset);
+                set_info.dynamicOffsets = std::vector<uint32_t>(input_dynamic_offsets, end_offset);
                 input_dynamic_offsets = end_offset;
                 assert(input_dynamic_offsets <= (p_dynamic_offsets + dynamic_offset_count));
             } else {
-                last_bound.per_set[set_idx].dynamicOffsets.clear();
+                set_info.dynamicOffsets.clear();
             }
         }
     }
@@ -1103,7 +1100,7 @@ void CMD_BUFFER_STATE::SetImageViewLayout(const IMAGE_VIEW_STATE &view_state, Vk
 
 void CMD_BUFFER_STATE::RecordCmd(CMD_TYPE cmd_type) { commandCount++; }
 
-void CMD_BUFFER_STATE::RecordStateCmd(CMD_TYPE cmd_type, CB_DYNAMIC_STATUS state) {
+void CMD_BUFFER_STATE::RecordStateCmd(CMD_TYPE cmd_type, CBDynamicStatus state) {
     CBDynamicFlags state_bits;
     state_bits.set(state);
     RecordStateCmd(cmd_type, state_bits);
@@ -1115,7 +1112,7 @@ void CMD_BUFFER_STATE::RecordStateCmd(CMD_TYPE cmd_type, CBDynamicFlags const &s
     static_status &= ~state_bits;
 }
 
-void CMD_BUFFER_STATE::RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CB_DYNAMIC_STATUS state, uint32_t attachment_count) {
+void CMD_BUFFER_STATE::RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CBDynamicStatus state, uint32_t attachment_count) {
     RecordStateCmd(cmd_type, state);
     dynamicColorWriteEnableAttachmentCount = std::max(dynamicColorWriteEnableAttachmentCount, attachment_count);
 }
@@ -1274,7 +1271,10 @@ void CMD_BUFFER_STATE::Retire(uint32_t perf_submit_pass, const std::function<boo
     for (const auto &query_state_pair : local_query_to_state_map) {
         if (query_state_pair.second == QUERYSTATE_ENDED && !is_query_updated_after(query_state_pair.first)) {
             auto query_pool_state = dev_data->Get<QUERY_POOL_STATE>(query_state_pair.first.pool);
-            query_pool_state->SetQueryState(query_state_pair.first.query, query_state_pair.first.perf_pass, QUERYSTATE_AVAILABLE);
+            if (query_pool_state) {
+                query_pool_state->SetQueryState(query_state_pair.first.query, query_state_pair.first.perf_pass,
+                                                QUERYSTATE_AVAILABLE);
+            }
         }
     }
 }

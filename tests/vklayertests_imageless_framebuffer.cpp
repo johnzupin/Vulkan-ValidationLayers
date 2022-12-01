@@ -438,13 +438,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferFeatureEnableTest) {
 TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     TEST_DESCRIPTION("Create an imageless framebuffer in various invalid ways");
 
-    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s Did not find required instance extension %s; skipped.\n", kSkipPrefix,
-               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME);
@@ -952,10 +946,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
     uint32_t attachmentWidth = 512;
     uint32_t attachmentHeight = 512;
     VkFormat attachmentFormat = FindSupportedDepthStencilFormat(gpu());
-    if (attachmentFormat == VK_FORMAT_UNDEFINED) {
-        printf("%s Did not find a supported depth stencil format; skipped.\n", kSkipPrefix);
-        return;
-    }
 
     VkAttachmentDescription2KHR attachmentDescriptions[2] = {};
     // Depth/stencil attachment
@@ -1485,15 +1475,12 @@ TEST_F(VkLayerTest, RenderPassCreateFragmentDensityMapReferenceToInvalidAttachme
 
     SetTargetApiVersion(VK_API_VERSION_1_0);
 
-    if (!InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
-        return;
-    }
-    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME)) {
-        printf("%s %s extension not supported skipped.\n", kSkipPrefix, VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {

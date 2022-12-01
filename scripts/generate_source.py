@@ -44,6 +44,8 @@ def main(argv):
     gen_cmds = [*[[common_codegen.repo_relative('scripts/lvl_genvk.py'),
                    '-registry', os.path.abspath(os.path.join(args.registry,  'vk.xml')),
                    '-grammar', os.path.abspath(os.path.join(args.grammar,  'spirv.core.grammar.json')),
+                   # Temporarily disable VK_EXT_descriptor_buffer codegen until more complete support lands
+                   '-removeExtensions', 'VK_EXT_descriptor_buffer',
                    '-quiet',
                    filename] for filename in ["chassis.cpp",
                                               "chassis.h",
@@ -54,6 +56,7 @@ def main(argv):
                                               "object_tracker.h",
                                               "parameter_validation.cpp",
                                               "parameter_validation.h",
+                                              "enum_flag_bits.h",
                                               "synchronization_validation_types.cpp",
                                               "synchronization_validation_types.h",
                                               "thread_safety.cpp",
