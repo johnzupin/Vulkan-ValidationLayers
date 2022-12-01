@@ -1,3 +1,534 @@
+vulkan-validationlayers (1.3.235.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ ziga-lunarg ]
+  * layers: Validate acquire and release full screen exclusive
+
+  [ spencer-lunarg ]
+  * tests: Test full-screen exclusive access
+
+  [ ziga-lunarg ]
+  * layers: Validate image barrier access layout combinations
+
+  [ spencer-lunarg ]
+  * tests: Test image barrier access layout combinations
+
+  [ ziga-lunarg ]
+  * layers: Validate creating image view with video image usage
+
+  [ spencer-lunarg ]
+  * tests: Test creating image view with video image usage
+
+  [ Joshua Ashton ]
+  * layers: Fix crash when validating GetDrmDisplayEXT
+
+  [ Charles Giessen ]
+  * layers: Make Device version less than instance INFO
+  * layers: Simplify initial version parsing
+
+  [ spencer-lunarg ]
+  * layers: Fix VUID 06415
+
+  [ Piers Daniell ]
+  * layers: Initial VVL for VK_EXT_extended_dynamic_state3
+  * layers: More VUID coverage for color blend state
+  * layers: Update based on feedback
+  * tests: Basic tests for feature enablement
+  * tests: Clang formatting
+  * tests: Updates based on feedback
+  * tests: Some minor test fixes
+  * layers: More baseline dynamic state validation
+  * layers: Add missing include to std::set()
+  * layers: Remove some c++17 usage
+  * layers: Explicit copy operator
+  * layers: Fix dynamic state tracking bug
+  * layer: Add helper CBSTATUS_FIRST_DYNAMIC
+  * layers: Catch unset dynamic state
+  * layers: Some more WIP changes
+  * layers: Fix VVL crash when dynamic line rasterization is used
+  * layers: Handle dynamicPrimitiveTopologyUnrestricted
+  * tests: Test for dupe dynamic states
+  * layers: Minor updates to CBStatusFlags class methods
+  * layers: Use bitset instead of CBStatusFlags class
+  * layers: Fix bad merge
+  * layers: Fix bug with bitset initialization
+  * layers: Fix a few copy and paste errors
+  * tests: Add the remaining self tets
+  * layers: Fix switch to bitset regression
+  * layers: Fix dodgy rebase merge
+
+  [ paul-lunarg ]
+  * tests: Fix InUseDestroyedSignaled
+  * tests: Fix SubgroupSupportedProperties
+  * tests: Fix CreateImageMiscErrors
+  * tests: Fix FragmentDensityMapEnabled
+  * tests: Fix CommandBufferMissingOcclusionQueryEnabled
+  * tests: Rework GetPhysicalDeviceFeatures
+  * tests: Fix BindImageMemorySwapchain
+  * tests: Fix UseDeprecatedInstanceExtensions
+  * tests: Fix LoadDeprecatedExtension
+
+  [ Juan Ramos ]
+  * fix: EnumeratePhysicalDeviceGroups
+  * tests: Fix unexpected messages
+
+  [ sjfricke ]
+  * layers: SPIR-V Instruction class
+  * layers: Renaming shader instruction class"
+  * layers: Make shader module static data const
+  * layers: Move push constant functions together
+  * layers: Set shader module entrypoint to ref
+  * layers: Make entrypoint layer_data::optional
+  * layers: Use small_vector for instruction
+  * layers: Simpler small_vector not equal operator
+  * layers: Add std::reference_wrapper around inst
+  * layers: Fix storage class checking bug
+
+  [ spencer-lunarg ]
+  * layers: Fix StaticData move operator
+  * layers: Use GetIndexAlignment everywhere
+
+  [ sjfricke ]
+  * layers: Remove temp fix for re-running spirv-opt
+
+  [ spencer-lunarg ]
+  * layers: Move index buffer out of CBStatus
+  * layers: Add Dual Source Blending helper
+
+  [ Lars-Ivar Hesselberg Simonsen ]
+  * tests: Add positive host built TLAS test
+
+  [ spencer-lunarg ]
+  * layers: Generate CB dynamic status flags
+
+  [ John Bauman ]
+  * build: Run gn format on BUILD.gn
+
+  [ Try ]
+  * layers: Fix state tracking of VkCopyDescriptorSet
+
+  [ Hyunjun Ko ]
+  * layers: Add check for 02267, 02268 and 02269
+
+  [ Jeremy Gebben ]
+  * practices: Fix VK_IMAGE_LAYOUT_PRESENT_SRC_KHR access mask check
+  * tests: Add checks in ImageMemoryBarrierAccessLayoutCombinations
+
+  [ Juan Ramos ]
+  * build: Remove CMAKE_MACOSX_RPATH
+  * cmake: Remove FindX11_XCB.cmake
+  * cmake: Remove no-op
+
+  [ ziga-lunarg ]
+  * layers: Validate GetPhysicalDeviceSurfaceCapabilities
+
+  [ spencer-lunarg ]
+  * tests: Check pNext in GetPhysicalDeviceSurfaceCapabilities2
+  * layers: Rename CB_DYNAMIC_STATUS to CBDynamicStatus
+  * layers: More dynamic state refactoring
+  * layers: Use Contain helper for dynamic state
+
+  [ ziga-lunarg ]
+  * layers: Validate viewportCount with extended dynamic state
+
+  [ spencer-lunarg ]
+  * layers: Fix extendedDynamicState2 bug
+
+  [ ziga-lunarg ]
+  * layers: Validate EndRenderPass with transform feedback
+  * tests: Test EndRenderPass with active transform feedback
+
+  [ Juan Ramos ]
+  * cmake: Cleanup find_package SPIRV code
+  * cmake: Cleanup Linux WSI code
+  * cmake: Use MSVC_IDE,XCODE, and LINUX
+  * docs: Update requirement for VulkanVL_generated_source
+
+  [ spencer-lunarg ]
+  * layers: Check TransformFeedback bound pipeline
+  * tests: Check TransformFeedback bound pipeline
+
+  [ ziga-lunarg ]
+  * layers: CmdExecuteCommands and transform feedback
+  * tests: Call CmdExecuteCommands during transform feedback
+  * layers: Validate CmdNextSubpass transform feedback
+  * tests: Check transform feedback is inactive in CmdNextSubpass
+
+  [ spencer-lunarg ]
+  * tests: Clear custom_stype_info before use
+
+  [ Jeremy Gebben ]
+  * tests: Don't wait for all the nanoseconds
+
+  [ spencer-lunarg ]
+  * tests: Clean up checking for depth stencil format
+
+  [ Juan Ramos ]
+  * tests: Partially cleanup HWND mem leak
+
+  [ Tony-LunarG ]
+  * gpu: Add input buffer allocation to BindDescriptorSets
+  * gpu: Store input buffers in command buffer state
+  * gpu: Write new input buffers in QueueSubmit
+  * gpu: Remove per draw input buffers
+  * gpu: Move input buffer write to BindDescriptorSets
+
+  [ Juan Ramos ]
+  * tests: Remove pointless try/catch
+
+  [ spencer-lunarg ]
+  * layers: Move some utils into Instruction
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.232
+
+  [ spencer-lunarg ]
+  * layers: Generate Instruction storage class
+  * layers: Add comment of auto gen spirv func
+  * layers: Fix vkSetDebugUtilsObjectNameEXT VUID label
+  * layers: Label VK_EXT_extended_dynamic_state3 draw
+
+  [ Juan Ramos ]
+  * cleanup: Fix `performance-unnecessary-value-param`
+  * cleanup: Fix `performance-for-range-copy`
+  * cleanup: Fix `performance-faster-string-find`
+  * cleanup: Fix `performance-type-promotion-in-math-fn`
+  * tests: LeakASwapchain
+
+  [ spencer-lunarg ]
+  * layers: Use array for enum list
+  * layers: Add VUID 06417
+  * tests: Add VUID 06417
+  * layers: Improve 06417 error message
+
+  [ Juan Ramos ]
+  * cmake: Cleanup BUILD_WERROR
+
+  [ Jeremy Gebben ]
+  * corechecks: Add VUID 03881 checking
+  * tests: Add checks for VUIDs 03881 and 03882
+
+  [ Juan Ramos ]
+  * cmake: Add toolchain file support to update_deps.py
+
+  [ Piers Daniell ]
+  * layers: Fix missing linear_color_attachment validation
+  * layers: Improve error message
+  * layers: Revert feature vs extension check
+  * layers: Improve the logic to closer match the spec
+  * tests: Test coverage for the new linear color attachment VUIDs
+  * tests: Code formatting
+
+  [ Tony-LunarG ]
+  * gpu: Fix location of vma pool destroy
+  * layers: Remove problematic assert
+
+  [ Juan Ramos ]
+  * tests: Workaround PresentId driver bugs
+
+  [ Jeremy Gebben ]
+  * practices: Fix BestPractices-ImageBarrierAccessLayout again
+  * tests: Add more BestPractices-ImageBarrierAccessLayout cases
+
+  [ Mátyás Császár ]
+  * layers: Fix validation of raytracing pipeline creation
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.233
+
+  [ Jeremy Gebben ]
+  * corechecks: Improve timeline semaphore VUID checks
+  * tests: Add more timeline semaphore tests
+  * corechecks: Fix reporting of VUID 01116
+  * tests: Add test for VUIDs 01116 and 03871
+  * layers: Fix reporting of VUIDs 03245 and 01117
+  * tests: Add tests for VUIDs 03245 and 03873
+  * corechecks: Stop error spam about VkTimelineSemaphoreSubmitInfo
+  * build: Do not include vk_sdk_platform.h
+
+  [ Juan Ramos ]
+  * tests: Add assert to ValidateImportMemoryHandleType
+  * layers: Add VUID-VkMemoryAllocateInfo-None-06657
+
+  [ John Zulauf ]
+  * syncval: Fixes for semaphore second wait scope
+  * tests: Add additional async hazard detection check
+  * scripts: Add fake present engine stages to sync
+  * layers: Utility helper functions for state nodes
+  * syncval: Acquire Present initial support
+  * tests: Add acquire/present test
+  * syncval: Avoid QBC leak in access log
+
+  [ spencer-lunarg ]
+  * layers: Improve error message for VkShaderStageFlags
+
+  [ John Bauman ]
+  * layers: Improve ImportSemphoreFUCHSIA validation
+  * layers: Add validation of VK_FUCHSIA_imagepipe_surface
+
+  [ John Zulauf ]
+  * syncval: Improve access log informaiton
+  * tests: Rework require_success to REQUIRE_SUCCESS
+
+  [ Simon Ser ]
+  * layers: Insert wait operation on SYNC_FD export
+  * layers: Fix typo in semaphore export handle type checks
+
+  [ spencer-lunarg ]
+  * layers: Move ResolveImage type mismatch to BP
+  * layers: Remove unused UNASSIGNED VUID
+  * layers: Fix PIPELINE_STATE::GetStageStates bug
+  * layers: Add comment about VK_SHADER_STAGE_ALL
+  * layers: Don't generate alias flag names
+
+  [ Henrik Rydgård ]
+  * layers: Log VkImageView object on viewtype mismatches
+
+  [ Juan Ramos ]
+  * tests: Fix ValidateImportMemoryHandleType
+  * tests: Update style
+  * cmake: Use new VulkanHeaders cmake support
+  * cmake: Remove DEMOS_WSI_SELECTION
+  * tests: Add vuid 02279
+
+  [ Tony-LunarG ]
+  * tests: Fix out of scope variable
+
+  [ John Bauman ]
+  * build: Add Fuchsia build
+
+  [ Juan Ramos ]
+  * scripts: Address python tarfile exploit
+
+  [ spencer-lunarg ]
+  * layers: Cleanup Shader Module interface
+  * layers: Unify pipeline creation error message
+  * tests: Pixel6 failure tests fixed
+  * layers: Clean up outdated UNASSIGNED VUIDs
+  * layers: Use last_bound name for LAST_BOUND_SET
+  * layers: Use set_info instead of indexing always
+  * layers: Better names for Layout Compat helpers
+  * layers: Replace unassigned VUs with draw 02697
+  * layers: Remove extra check for set being in range
+  * layers: Remove extra CommandTypeString call
+  * layers: Move Graphics Bind Point func together
+  * layers: Fixes for CI
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.234
+
+  [ spencer-lunarg ]
+  * layers: Remove unused ValidateViConsistency
+
+  [ Juan Ramos ]
+  * layers: Fix vkDestroyQueryPool edge case
+
+  [ spencer-lunarg ]
+  * tests: Fix AHB tests
+
+  [ Nathaniel Cesario ]
+  * layers: Fix null DSLs
+
+  [ Yuly Novikov ]
+  * build: Fix MSVC GN build
+
+  [ Mike Schuchardt ]
+  * build: Remove Android dependency on Vulkan-Tools
+
+  [ spencer-lunarg ]
+  * layers: Move InvalidExtents to BP
+  * tests: Remove kSkipPrefix
+  * tests: Move AHB tests to own file
+
+  [ ziga-lunarg ]
+  * layers: Validate copy image usage
+
+  [ spencer-lunarg ]
+  * tests: Test copying from src image with invalid usage
+
+  [ ziga-lunarg ]
+  * layers: Fix validating pipeline creation feedback
+
+  [ spencer-lunarg ]
+  * tests: Test pipeline creation feedback count 0
+
+  [ Juan Ramos ]
+  * cmake: Cleanup layers/CMakeLists.txt
+  * tests: Move ErrorMonitor into it's own files
+  * tests: Cleanup ErrorMonitor
+
+  [ spencer-lunarg ]
+  * tests: Fix tests on Mesa
+  * layers: Improve shader descriptor error message
+
+  [ Charles Giessen ]
+  * test: Increase gtest discovery timeout
+
+  [ spencer-lunarg ]
+  * tests: Add and fix unknown format shader test
+  * tests: Use vk_testing renderpass
+  * tests: Disable DRM Format Modifier disjoint check
+
+  [ Tony-LunarG ]
+  * layers: Handle invalid pipeline layout
+
+  [ Juan Ramos ]
+  * cmake: Make BUILD_WERROR off by default
+  * cmake: Add CMakePresets.json
+  * cmake: Fix json generation
+  * cmake: Install during CI builds
+
+  [ Nathaniel Cesario ]
+  * build: Make C++17 minimum required standard
+  * layers: Use std::optional after update to C++17
+  * layers: Add operator bool to VulkanTypedHandle
+  * layers: Use span for InstrumentShader input
+  * layers: Refactor CreatePipelineTraits
+  * layers: Add GPL GPUAV support
+  * layers: Fix shader module reference for GPL
+  * layers: Track mesh shaders in sub-state
+  * tests: Fix frontFace value for pipeline helper
+  * tests: Add some GPL testing helpers
+  * tests: Add GPL GPUAV test
+  * tests: Add test for debug printf + GPL
+  * tests: Move debug printf tests to separate file
+  * tests: GPL + GPUAV + Independent sets
+  * build: Fix MSVC compile warning
+  * gpu: Fix pipeline layout after GPL changes
+  * gpu: Update shader module safe struct
+  * tests: Remove ugly const_cast
+  * layers: Replace const_cast with const_pointer_cast
+
+  [ spencer-lunarg ]
+  * layers: Refactor ValidateDescriptorWrite to use switch
+  * tests: Add VUID 07683
+  * layers: Fix descriptor validation message
+  * layers: Fix descriptor error messages
+
+  [ Juan Ramos ]
+  * cmake: Avoid duplicate VkLayer_khronos_validation.json
+
+  [ spencer-lunarg ]
+  * layers: Remove unused cmd buffer state
+  * layers: Improve readability of struct info variable
+  * layers: Improve Dynamic Rendering format error messages
+  * layers: Improve Dynaimc Rendering SecondaryCmdBuf
+  * layers: Use KHR alias name for shading rate
+  * test: Move all Dynamic Rendering test together
+  * layers: Fix ValidateImageUsageFlags
+  * layers: ValidatePipelineDrawtimeState reduce indentation
+  * layers: Move dynamic state status together
+  * layers: Improve CBDynamicStatus message code
+  * layers: Fix off-by-one CBDynamicStatus
+  * layers: Move more logic to ValidateDrawDynamicState
+  * layers: PR 4758 code hygiene
+  * scripts: Remove extensionExcludeList
+  * tests: Use profile layer for BlitToDepthImageTests
+  * tests: Remove unhelpful todo
+  * tests: Check formats in MiscImageLayerTests
+  * tests: Re-enable all of InvalidGetDeviceQueue
+  * layers: Move TODO into issue 4047
+  * tests: Remove old TODO
+  * layers: Automate VkFragmentShadingRateCombinerOpKHR
+  * tests: Disable InvalidGetDeviceQueue on RADV
+  * docs: Documentation cleanup
+
+  [ Rutwik Choughule ]
+  * layers: Add validation for mesh shader extension
+  * tests: Add VK_EXT_mesh_shader test cases
+  * tests: Update VK_EXT_mesh_shader test cases
+  * layers: Add validation for VK_EXT_mesh_shader
+  * tests: Update VK_EXT_mesh_shader test cases
+
+  [ Juan Ramos ]
+  * build: Fix extra semicolon
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.235
+
+  [ Juan Ramos ]
+  * cpp: Use std::make_unique (C++14)
+  * cmake: Simplify profile layer CMake code
+
+  [ spencer-lunarg ]
+  * tests: Move mesh shader limits to SPIR-V
+
+  [ Jeremy Gebben ]
+  * layers: Attempt (again) to solve semaphore race conditions
+  * tests: Remove TestMultipleQueuesWaitingOnSemaphore
+
+  [ Juan Ramos ]
+  * cmake: Remove mk_layer_config_dir
+
+  [ Jeremy Gebben ]
+  * layers: Always use std::shared_mutex now that we're c++17
+
+  [ Tony-LunarG ]
+  * layers: Track pipeline_robustness
+  * tests: Fix unintentional robustness enable
+  * build: Update to spirv-tools instrumentation for robustness
+  * gpu: Add robustness handling
+  * tests: Add GPU-AV test for pipeline_robustness
+  * gpu: Add setting for robust oob warnings
+
+  [ spencer-lunarg ]
+  * layers: Move accessible ids to shader module state
+
+  [ Jeremy Gebben ]
+  * layers: Fix invalid memory access in UpdatePipelineState()
+
+  [ John Bauman ]
+  * layers: Fix fuchsia buffer import check
+
+  [ Nathaniel Cesario ]
+  * tests: Remove unnecessary vector::clear
+
+  [ Juan Ramos ]
+  * cmake: Layers should be MODULE instead of SHARED
+
+  [ spencer-lunarg ]
+  * layers: Fix sync2 string print helper
+  * layers: Fix extra space in VUID
+
+  [ Charlie Turner ]
+  * layers: Adds missing null check for raster_state
+
+  [ Juan Ramos ]
+  * tests: Add FragmentMixedAttachmentSamplesAMD
+
+  [ spencer-lunarg ]
+  * layers: Fix PointSize Logic
+  * layers: Add DS draw time read only VUID
+  * tests: Add DS draw time read only VUID
+
+  [ Juan Ramos ]
+  * cmake: Install PDBs
+  * cmake: Fix incorrect WIN32 install location
+  * cmake: Clarify usage of BINDIR for WIN32
+
+  [ Karl Schultz ]
+  * cmake: Fix incorrect else() argument warning
+
+  [ ziga-lunarg ]
+  * test: Fix tests creating unsupported images
+  * layers: Fix crash with null layout
+
+  [ spencer-lunarg ]
+  * layers: Move 03371 to other non-GPL check
+  * layers: Use common variable name
+  * layers: Fix vkCreateRayTracingPipelinesNV stage index
+  * layers: Make pipeline noautovalidity struct helper functions
+  * layers: Move Tessellation param val together
+  * tests: Remove extra pnext error
+  * layers: Use const ref and std::array
+
+  [ Christophe ]
+  * gpu: Improve warn robust oob setting dependency
+
+  [ spencer-lunarg ]
+  * tests: Add skip for 1.2+ tests using MockICD with limits
+
+ -- john <john@odin>  Thu, 01 Dec 2022 09:07:40 -0700
+
 vulkan-validationlayers (1.3.231.0~rc2-1lunarg20.04-1) focal; urgency=medium
 
   [ Joshua Ashton ]
