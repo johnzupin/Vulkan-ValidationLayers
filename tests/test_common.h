@@ -40,9 +40,6 @@
 #include <winsock2.h>
 #endif
 
-// sdk_platform header redefines NOMINMAX
-#undef NOMINMAX
-#include <vulkan/vk_sdk_platform.h>
 #include <vulkan/vulkan.h>
 
 #ifdef _MSC_VER
@@ -136,5 +133,25 @@ static inline const char *vk_result_string(VkResult err) {
 static inline void test_error_callback(const char *expr, const char *file, unsigned int line, const char *function) {
     ADD_FAILURE_AT(file, line) << "Assertion: `" << expr << "'";
 }
+
+// Wrap FAIL:
+//  * DRY for common messages
+//  * for test stability reasons sometimes cleanup code is required *prior* to the return hidden in FAIL
+//  * result_arg_ *can* (should) have side-effect, but is referenced exactly once
+//  * label_ must be converitble to bool, and *should* *not* have side-effects
+//  * clean_ *can* (should) have side-effects
+//    * "{}" or ";" are valid clean_ values for noop
+#define REQUIRE_SUCCESS(result_arg_, label_, clean_)                    \
+    {                                                                   \
+        const VkResult result_ = (result_arg_);                         \
+        if (result_ != VK_SUCCESS) {                                    \
+            { clean_; }                                                 \
+            if (bool(label_)) {                                         \
+                FAIL() << string_VkResult(result_) << ": " << (label_); \
+            } else {                                                    \
+                FAIL() << string_VkResult(result_);                     \
+            }                                                           \
+        }                                                               \
+    }
 
 #endif  // TEST_COMMON_H

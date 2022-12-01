@@ -34,6 +34,8 @@
 #include <algorithm>
 #include <iterator>
 #include <type_traits>
+#include <optional>
+#include <utility>
 
 #ifdef USE_ROBIN_HOOD_HASHING
 #include "robin_hood.h"
@@ -110,13 +112,6 @@ using map_entry = std::pair<Key, T>;
 template <typename T>
 using insert_iterator = std::insert_iterator<T>;
 #endif
-
-// Can't alias variadic functions even on C++14, and wrapping the 14 implementation wouldn't gain us anything...
-// leave it in unconditionally and for backwards compatibility
-template<typename T, typename... Args>
-constexpr std::unique_ptr<T> make_unique(Args&&... args) {
-    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
 
 }  // namespace layer_data
 
@@ -199,6 +194,8 @@ class small_vector {
         }
         return true;
     }
+
+    bool operator!=(const small_vector &rhs) const { return !(*this == rhs); }
 
     small_vector &operator=(const small_vector &other) {
         if (this != &other) {
@@ -758,109 +755,10 @@ void FreeLayerDataPtr(void *data_key, std::unordered_map<void *, DATA_T *> &laye
 
 namespace layer_data {
 
-struct in_place_t {};
-static constexpr in_place_t in_place{};
+inline constexpr std::in_place_t in_place{};
 
-// A C++11 approximation of std::optional
 template <typename T>
-class optional {
-  protected:
-    union Store {
-        Store(){};   // Do nothing.  That's the point.
-        ~Store(){};  // Not safe to destroy this object outside of its stateful container to clean up T if any.
-        typename std::aligned_storage<sizeof(T), alignof(T)>::type backing;
-        T obj;
-    };
-
-  public:
-    optional() : init_(false) {}
-
-    template <typename... Args>
-    explicit optional(in_place_t, const Args &...args) { emplace(args...); }
-    optional(const optional &other) : init_(false) { *this = other; }
-    optional(optional &&other) : init_(false) { *this = std::move(other); }
-
-    ~optional() { DeInit(); }
-    void reset() { DeInit(); }
-
-    template <typename... Args>
-    T &emplace(Args &&...args) {
-        init_ = true;
-        new (&store_.backing) T(std::forward<Args>(args)...);
-        return store_.obj;
-    }
-
-    T *operator&() {
-        if (init_) return &store_.obj;
-        return nullptr;
-    }
-    const T *operator&() const {
-        if (init_) return &store_.obj;
-        return nullptr;
-    }
-    T *operator->() {
-        if (init_) return &store_.obj;
-        return nullptr;
-    }
-    const T *operator->() const {
-        if (init_) return &store_.obj;
-        return nullptr;
-    }
-    operator bool() const { return init_; }
-    bool has_value() const { return init_; }
-
-    optional &operator=(const optional &other) {
-        if (other.has_value()) {
-            if (has_value()) {
-                store_.obj = other.store_.obj;
-            } else {
-                emplace(other.store_.obj);
-            }
-        } else {
-            DeInit();
-        }
-        return *this;
-    }
-
-    optional &operator=(optional &&other) {
-        if (other.has_value()) {
-            if (has_value()) {
-                store_.obj = std::move(other.store_.obj);
-            } else {
-                emplace(std::move(other.store_.obj));
-            }
-        } else {
-            DeInit();
-        }
-        return *this;
-    }
-
-    T& operator*() & {
-        assert(init_);
-        return store_.obj;
-    }
-    const T& operator*() const& {
-        assert(init_);
-        return store_.obj;
-    }
-    T&& operator*() && {
-        assert(init_);
-        return std::move(store_.obj);
-    }
-    const T&& operator*() const&& {
-        assert(init_);
-        return std::move(store_.obj);
-    }
-  protected:
-    inline void DeInit() {
-        if (init_) {
-            store_.obj.~T();
-            init_ = false;
-        }
-    }
-    Store store_;
-    bool init_;
-};
+using optional = std::optional<T>;
 
 // Partial implementation of std::span for C++11
 template <typename T>
@@ -875,7 +773,7 @@ class span {
     template <typename Iterator>
     span(Iterator start, Iterator end) : data_(&(*start)), count_(end - start) {}
     template <typename Container>
-    span(const Container &c) : data_(c.data()), count_(c.size()) {}
+    span(Container &c) : data_(c.data()), count_(c.size()) {}
 
     iterator begin() { return data_; }
     const_iterator begin() const { return data_; }
@@ -920,8 +818,8 @@ using base_type =
 // Define T unique to each entrypoint which will persist data
 // Use only in with singleton (leaf) validation objects
 // State machine transition state changes of payload relative to TlsGuard object lifecycle:
-//  State INIT: bool(payload_) 
-//  State RESET: NOT bool(payload_) 
+//  State INIT: bool(payload_)
+//  State RESET: NOT bool(payload_)
 //    * PreCallValidate* phase
 //        * Initialized with skip (in PreCallValidate*)
 //            * RESET -> INIT

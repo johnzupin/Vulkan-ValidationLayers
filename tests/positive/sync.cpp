@@ -37,7 +37,6 @@
 
 #include "cast_utils.h"
 
-static constexpr uint64_t kWaitTimeout{10000000000}; // 10 seconds in ns
 //
 // POSITIVE VALIDATION TESTS
 //
@@ -46,16 +45,12 @@ static constexpr uint64_t kWaitTimeout{10000000000}; // 10 seconds in ns
 TEST_F(VkPositiveLayerTest, ThreadSafetyDisplayObjects) {
     TEST_DESCRIPTION("Create and use VkDisplayKHR objects with GetPhysicalDeviceDisplayPropertiesKHR in thread-safety.");
 
-    bool mp_extensions =
-        InstanceExtensionSupported(VK_KHR_SURFACE_EXTENSION_NAME) && InstanceExtensionSupported(VK_KHR_DISPLAY_EXTENSION_NAME);
-    if (mp_extensions) {
-        m_instance_extension_names.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-        m_instance_extension_names.push_back(VK_KHR_DISPLAY_EXTENSION_NAME);
-    } else {
-        printf("%s test requires KHR SURFACE and DISPLAY extensions, not available.  Skipping.\n", kSkipPrefix);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_SURFACE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_DISPLAY_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     PFN_vkGetPhysicalDeviceDisplayPropertiesKHR vkGetPhysicalDeviceDisplayPropertiesKHR =
@@ -80,16 +75,12 @@ TEST_F(VkPositiveLayerTest, ThreadSafetyDisplayObjects) {
 TEST_F(VkPositiveLayerTest, ThreadSafetyDisplayPlaneObjects) {
     TEST_DESCRIPTION("Create and use VkDisplayKHR objects with GetPhysicalDeviceDisplayPlanePropertiesKHR in thread-safety.");
 
-    bool mp_extensions =
-        InstanceExtensionSupported(VK_KHR_SURFACE_EXTENSION_NAME) && InstanceExtensionSupported(VK_KHR_DISPLAY_EXTENSION_NAME);
-    if (mp_extensions) {
-        m_instance_extension_names.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-        m_instance_extension_names.push_back(VK_KHR_DISPLAY_EXTENSION_NAME);
-    } else {
-        printf("%s test requires KHR SURFACE and DISPLAY extensions, not available.  Skipping.\n", kSkipPrefix);
-        return;
-    }
+    AddRequiredExtensions(VK_KHR_SURFACE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_DISPLAY_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR vkGetPhysicalDeviceDisplayPlanePropertiesKHR =
@@ -130,8 +121,7 @@ TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersImage) {
 
     uint32_t no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
     if (no_gfx == UINT32_MAX) {
-        printf("%s Required queue families not present (non-graphics capable required).\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Required queue families not present (non-graphics capable required)";
     }
     VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx)[0].get();
 
@@ -183,8 +173,7 @@ TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersBuffer) {
 
     uint32_t no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
     if (no_gfx == UINT32_MAX) {
-        printf("%s Required queue families not present (non-graphics capable required).\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Required queue families not present (non-graphics capable required)";
     }
     VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx)[0].get();
 
@@ -384,7 +373,7 @@ TEST_F(VkPositiveLayerTest, FenceCreateSignaledWaitHandling) {
 
     // Wait on both fences, with signaled first.
     VkFence fences[] = {f1, f2};
-    vk::WaitForFences(m_device->device(), 2, fences, VK_TRUE, UINT64_MAX);
+    vk::WaitForFences(m_device->device(), 2, fences, VK_TRUE, kWaitTimeout);
 
     // Should have both retired!
     vk::DestroyFence(m_device->device(), f1, nullptr);
@@ -444,7 +433,7 @@ TEST_F(VkPositiveLayerTest, TwoFencesThreeFrames) {
             // Submit cmd buffer and wait for fence
             err = vk::QueueSubmit(queue, 1, &submit_info, fences[obj]);
             ASSERT_VK_SUCCESS(err);
-            err = vk::WaitForFences(m_device->device(), 1, &fences[obj], VK_TRUE, UINT64_MAX);
+            err = vk::WaitForFences(m_device->device(), 1, &fences[obj], VK_TRUE, kWaitTimeout);
             ASSERT_VK_SUCCESS(err);
             err = vk::ResetFences(m_device->device(), 1, &fences[obj]);
             ASSERT_VK_SUCCESS(err);
@@ -462,8 +451,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenc
 
     ASSERT_NO_FATAL_FAILURE(Init());
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Queue family needs to have multiple queues to run this test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
     }
 
     VkSemaphore semaphore;
@@ -551,8 +539,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenc
 
     ASSERT_NO_FATAL_FAILURE(Init());
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Queue family needs to have multiple queues to run this test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
     }
 
     VkFence fence;
@@ -645,8 +632,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenc
 
     ASSERT_NO_FATAL_FAILURE(Init());
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Queue family needs to have multiple queues to run this test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
     }
 
     VkFence fence;
@@ -723,8 +709,8 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenc
         vk::QueueSubmit(m_device->m_queue, 1, &submit_info, fence);
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
-    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
 
     vk::DestroyFence(m_device->device(), fence, nullptr);
     vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
@@ -735,8 +721,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenc
 TEST_F(VkPositiveLayerTest, TwoQueuesEnsureCorrectRetirementWithWorkStolen) {
     ASSERT_NO_FATAL_FAILURE(Init());
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Test requires two queues, skipping\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires two queues";
     }
 
     VkResult err;
@@ -803,8 +788,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenc
 
     ASSERT_NO_FATAL_FAILURE(Init());
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Queue family needs to have multiple queues to run this test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
     }
 
     VkFence fence;
@@ -881,7 +865,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenc
         vk::QueueSubmit(m_device->m_queue, 1, &submit_info, fence);
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
 
     vk::DestroyFence(m_device->device(), fence, nullptr);
     vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
@@ -904,13 +888,11 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithTimelineSemaphoreAn
     }
 
     if (!CheckTimelineSemaphoreSupportAndInitState(this)) {
-        printf("%s Timeline semaphore not supported, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Timeline semaphore not supported.";
     }
 
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Queue family needs to have multiple queues to run this test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
     }
 
     VkFence fence;
@@ -998,7 +980,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithTimelineSemaphoreAn
         ASSERT_VK_SUCCESS(vk::QueueSubmit(m_device->m_queue, 1, &submit_info, fence));
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
 
     vk::DestroyFence(m_device->device(), fence, nullptr);
     vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
@@ -1084,7 +1066,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsOneQueueWithSemaphoreAndOneFence) {
         vk::QueueSubmit(m_device->m_queue, 1, &submit_info, fence);
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
 
     vk::DestroyFence(m_device->device(), fence, nullptr);
     vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
@@ -1168,7 +1150,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsOneQueueNullQueueSubmitWithFence) {
 
     vk::QueueSubmit(m_device->m_queue, 0, NULL, fence);
 
-    VkResult err = vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    VkResult err = vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
     ASSERT_VK_SUCCESS(err);
 
     vk::DestroyFence(m_device->device(), fence, nullptr);
@@ -1250,7 +1232,7 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsOneQueueOneFence) {
         vk::QueueSubmit(m_device->m_queue, 1, &submit_info, fence);
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
 
     vk::DestroyFence(m_device->device(), fence, nullptr);
     vk::FreeCommandBuffers(m_device->device(), command_pool, 2, &command_buffer[0]);
@@ -1339,7 +1321,7 @@ TEST_F(VkPositiveLayerTest, TwoSubmitInfosWithSemaphoreOneQueueSubmitsOneFence) 
         vk::QueueSubmit(m_device->m_queue, 2, &submit_info[0], fence);
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
 
     vk::DestroyFence(m_device->device(), fence, nullptr);
     vk::FreeCommandBuffers(m_device->device(), command_pool, 2, &command_buffer[0]);
@@ -1385,7 +1367,7 @@ TEST_F(VkPositiveLayerTest, LongSemaphoreChain) {
     err = vk::QueueSubmit(m_device->m_queue, 1, &si, fence);
     ASSERT_VK_SUCCESS(err);
 
-    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
 
     for (auto semaphore : semaphores) vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
 
@@ -1400,23 +1382,14 @@ TEST_F(VkPositiveLayerTest, ExternalSemaphore) {
     const auto extension_name = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
     const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
 #endif
-    // Check for external semaphore instance extensions
-    if (InstanceExtensionSupported(VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME)) {
-        m_instance_extension_names.push_back(VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME);
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    } else {
-        printf("%s External semaphore extension not supported, skipping test\n", kSkipPrefix);
-        return;
-    }
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    // Check for external semaphore device extensions
-    if (DeviceExtensionSupported(gpu(), nullptr, extension_name)) {
-        m_device_extension_names.push_back(extension_name);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
-    } else {
-        printf("%s External semaphore extension not supported, skipping test\n", kSkipPrefix);
-        return;
+    AddRequiredExtensions(extension_name);
+    AddRequiredExtensions(VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -1431,8 +1404,7 @@ TEST_F(VkPositiveLayerTest, ExternalSemaphore) {
 
     if (!(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR) ||
         !(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT_KHR)) {
-        printf("%s External semaphore does not support importing and exporting, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "External semaphore does not support importing and exporting";
     }
 
     VkResult err;
@@ -1861,8 +1833,7 @@ TEST_F(VkPositiveLayerTest, QueueSubmitTimelineSemaphore2Queue) {
     }
 
     if (!CheckTimelineSemaphoreSupportAndInitState(this)) {
-        printf("%s Timeline semaphore not supported, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Timeline semaphore not supported";
     }
     auto fpWaitSemaphores =
         reinterpret_cast<PFN_vkWaitSemaphoresKHR>(vk::GetDeviceProcAddr(m_device->device(), "vkWaitSemaphoresKHR"));
@@ -1892,13 +1863,12 @@ TEST_F(VkPositiveLayerTest, QueueSubmitTimelineSemaphore2Queue) {
         }
     }
     if (q1 == nullptr) {
-        printf("%s Test requires 2 queues, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires 2 queues";
     }
 
-    auto buffer_a = layer_data::make_unique<VkBufferObj>();
-    auto buffer_b = layer_data::make_unique<VkBufferObj>();
-    auto buffer_c = layer_data::make_unique<VkBufferObj>();
+    auto buffer_a = std::make_unique<VkBufferObj>();
+    auto buffer_b = std::make_unique<VkBufferObj>();
+    auto buffer_c = std::make_unique<VkBufferObj>();
     VkMemoryPropertyFlags mem_prop = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     buffer_a->init_as_src_and_dst(*m_device, 256, mem_prop);
     buffer_b->init_as_src_and_dst(*m_device, 256, mem_prop);
@@ -1998,8 +1968,7 @@ TEST_F(VkPositiveLayerTest, ResetQueryPoolFromDifferentCBWithFenceAfter) {
     std::vector<VkQueueFamilyProperties> queue_props(queue_count);
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props.data());
     if (queue_props[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
-        printf("%s Device graphic queue has timestampValidBits of 0, skipping.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Device graphic queue has timestampValidBits of 0, skipping.\n";
     }
 
     VkFenceCreateInfo fence_info = LvlInitStruct<VkFenceCreateInfo>();
@@ -2059,7 +2028,7 @@ TEST_F(VkPositiveLayerTest, ResetQueryPoolFromDifferentCBWithFenceAfter) {
     // Finally, write a second timestamp, but before that, wait for the fence.
     {
         submit_info.pCommandBuffers = &command_buffer[1];
-        vk::WaitForFences(m_device->device(), 1, &fence_handle, true, std::numeric_limits<uint64_t>::max());
+        vk::WaitForFences(m_device->device(), 1, &fence_handle, true, kWaitTimeout);
         vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     }
 
@@ -2187,7 +2156,7 @@ TEST_F(VkPositiveLayerTest, SubmitFenceButWaitIdle) {
     auto err = vk::AllocateCommandBuffers(m_device->handle(), &alloc_info, &command_buffer);
     ASSERT_VK_SUCCESS(err);
 
-    err = vk::AcquireNextImageKHR(m_device->handle(), m_swapchain, UINT64_MAX, sem.handle(), VK_NULL_HANDLE, &image_index);
+    err = vk::AcquireNextImageKHR(m_device->handle(), m_swapchain, kWaitTimeout, sem.handle(), VK_NULL_HANDLE, &image_index);
     ASSERT_VK_SUCCESS(err);
 
     auto begin_info = LvlInitStruct<VkCommandBufferBeginInfo>();
@@ -2295,7 +2264,7 @@ struct SemBufferRaceData {
             VkCommandBufferObj cb(&dev, &command_pool);
 
             VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            auto buffer = layer_data::make_unique<vk_testing::Buffer>();
+            auto buffer = std::make_unique<vk_testing::Buffer>();
             buffer->init_as_dst(dev, (VkDeviceSize)20, reqs);
 
             // main thread sets up buffer

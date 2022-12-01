@@ -41,18 +41,7 @@ elseif(ANDROID)
     add_definitions(-DVK_USE_PLATFORM_ANDROID_KHR)
 elseif(APPLE)
     add_definitions(-DVK_USE_PLATFORM_METAL_EXT)
-elseif(UNIX AND NOT APPLE) # i.e. Linux
-    if(BUILD_WSI_XCB_SUPPORT)
-        add_definitions(-DVK_USE_PLATFORM_XCB_KHR)
-    endif()
-
-    if(BUILD_WSI_XLIB_SUPPORT)
-        add_definitions(-DVK_USE_PLATFORM_XLIB_KHR)
-    endif()
-
-    if(BUILD_WSI_WAYLAND_SUPPORT)
-        add_definitions(-DVK_USE_PLATFORM_WAYLAND_KHR)
-    endif()
+elseif(LINUX)
 else()
     message(FATAL_ERROR "Unsupported Platform!")
 endif()
@@ -69,8 +58,6 @@ if(WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4267")
     endif()
 
-else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 
 set(LIBGLM_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/libs)
@@ -84,6 +71,7 @@ set(COMMON_CPP
     vklayertests_arm_best_practices.cpp
     vklayertests_amd_best_practices.cpp
     vklayertests_gpu.cpp
+    vklayertests_debug_printf.cpp
     vklayertests_descriptor_renderpass_framebuffer.cpp
     vklayertests_dynamic_rendering.cpp
     vklayertests_command.cpp
@@ -93,6 +81,7 @@ set(COMMON_CPP
     vklayertests_viewport_inheritance.cpp
     vklayertests_wsi.cpp
     vklayertests_graphics_library.cpp
+    vklayertests_android_hardware_buffer.cpp
     positive/command.cpp
     positive/descriptors.cpp
     positive/dynamic_rendering.cpp
@@ -105,8 +94,12 @@ set(COMMON_CPP
     positive/sync.cpp
     positive/tooling.cpp
     positive/graphics_library.cpp
+    positive/android_hardware_buffer.cpp
     vksyncvaltests.cpp
+    vkerrormonitor.h
+    vkerrormonitor.cpp
     vkrenderframework.cpp
+    vkrenderframework.h
     vktestbinding.cpp
     vktestframework.cpp)
 
@@ -118,15 +111,16 @@ add_executable(vk_layer_validation_tests
                ../layers/generated/vk_safe_struct.cpp
                ../layers/generated/lvt_function_pointers.cpp
                ${COMMON_CPP})
+set_target_properties(vk_layer_validation_tests PROPERTIES CXX_STANDARD ${VVL_CPP_STANDARD})
 
 # gtest_discover_tests has problem with cross-compiling, but it is faster and more robust
 if (CMAKE_CROSSCOMPILING)
     gtest_add_tests(TARGET vk_layer_validation_tests)
 else()
-    gtest_discover_tests(vk_layer_validation_tests)
+    gtest_discover_tests(vk_layer_validation_tests DISCOVERY_TIMEOUT 100)
 endif()
 
-add_dependencies(vk_layer_validation_tests VkLayer_khronos_validation VkLayer_khronos_validation-json)
+add_dependencies(vk_layer_validation_tests VkLayer_khronos_validation)
 target_include_directories(vk_layer_validation_tests
                            PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
                                   ${PROJECT_SOURCE_DIR}/layers
@@ -134,7 +128,6 @@ target_include_directories(vk_layer_validation_tests
                                   ${CMAKE_CURRENT_BINARY_DIR}
                                   ${CMAKE_BINARY_DIR}
                                   ${PROJECT_BINARY_DIR}
-                                  ${VulkanHeaders_INCLUDE_DIR}
                                   ${PROJECT_BINARY_DIR}/layers)
 
 option(PORTABILITY_TESTS_USE_DEVSIM "Automatically add the devsim layer for portability tests" OFF)
@@ -170,13 +163,15 @@ target_link_libraries(vk_layer_validation_tests PRIVATE
     GTest::gtest_main
 )
 
-if(NOT WIN32)
+if (NOT WIN32)
     target_link_libraries(vk_layer_validation_tests PRIVATE ${CMAKE_DL_LIBS})
 
-    if(BUILD_WSI_XCB_SUPPORT OR BUILD_WSI_XLIB_SUPPORT)
-        target_link_libraries(vk_layer_validation_tests
-                              PRIVATE ${XCB_LIBRARIES}
-                                      ${X11_LIBRARIES})
+    if(BUILD_WSI_XCB_SUPPORT)
+        target_link_libraries(vk_layer_validation_tests PRIVATE PkgConfig::XCB)
+    endif()
+
+    if (BUILD_WSI_XLIB_SUPPORT)
+        target_link_libraries(vk_layer_validation_tests PRIVATE PkgConfig::X11)
     endif()
 endif()
 

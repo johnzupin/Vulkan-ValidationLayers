@@ -134,7 +134,12 @@ class HelperFileOutputGenerator(OutputGenerator):
         # Note that adding an API here requires that all three pre/post routines be added to inline_corechecks_instrumentation_source.
         self.inst_manually_written_functions = [
             'vkQueuePresentKHR',
-            ]
+        ]
+
+        # Some bits are helper that include multiple bits, but it is more useful to use the flag name instead
+        self.custom_bit_flag_print = {
+            'VkShaderStageFlags' : ['VK_SHADER_STAGE_ALL', 'VK_SHADER_STAGE_ALL_GRAPHICS']
+        }
 
     inline_corechecks_instrumentation_source = """
 
@@ -595,6 +600,9 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             intsuffix = 'ULL' if bitwidth == 64 else 'U'
             outstring += 'static inline std::string string_%s(%s input_value)\n' % (flagsName, flagsName)
             outstring += '{\n'
+            if flagsName in self.custom_bit_flag_print:
+                for custom in self.custom_bit_flag_print[flagsName]:
+                    outstring += '    if (input_value == %s) { return "%s"; }\n' % (custom, custom)
             outstring += '    std::string ret;\n'
             outstring += '    int index = 0;\n'
             outstring += '    while(input_value) {\n'
@@ -679,6 +687,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
         safe_struct_helper_header += '#pragma once\n'
         safe_struct_helper_header += '#include <vulkan/vulkan.h>\n'
         safe_struct_helper_header += '#include <stdlib.h>\n'
+        safe_struct_helper_header += '#include <algorithm>\n'
         safe_struct_helper_header += '\n'
         safe_struct_helper_header += 'void *SafePnextCopy(const void *pNext);\n'
         safe_struct_helper_header += 'void FreePnextChain(const void *pNext);\n'
@@ -721,6 +730,19 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                 safe_struct_header += '    void initialize(const safe_%s* copy_src);\n' % (item.name)
                 safe_struct_header += '    %s *ptr() { return reinterpret_cast<%s *>(this); }\n' % (item.name, item.name)
                 safe_struct_header += '    %s const *ptr() const { return reinterpret_cast<%s const *>(this); }\n' % (item.name, item.name)
+                if item.name == 'VkShaderModuleCreateInfo':
+                    safe_struct_header += '''
+    // Primarily intended for use by GPUAV when replacing shader module code with instrumented code
+    template<typename Container>
+    void SetCode(const Container &code) {
+        if (pCode) {
+            delete[] pCode;
+        }
+        codeSize = static_cast<uint32_t>(code.size() * sizeof(uint32_t));
+        pCode = new uint32_t[code.size()];
+        std::copy(&code.front(), &code.back() + 1, const_cast<uint32_t*>(pCode));
+    }
+'''
                 safe_struct_header += '};\n'
                 if item.ifdef_protect is not None:
                     safe_struct_header += '#endif // %s\n' % item.ifdef_protect
@@ -833,7 +855,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             'VK_EXT_pipeline_creation_cache_control',
             'VK_EXT_pipeline_creation_feedback',
             'VK_EXT_private_data',
-            'VK_EXT_shader_demote_to_helper_invocation',      
+            'VK_EXT_shader_demote_to_helper_invocation',
             'VK_EXT_subgroup_size_control',
             'VK_EXT_texel_buffer_alignment',
             'VK_EXT_texture_compression_astc_hdr',
@@ -1280,6 +1302,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                 VulkanTypedHandle() :
                     handle(CastToUint64(VK_NULL_HANDLE)),
                     type(kVulkanObjectTypeUnknown) {}
+                operator bool() const { return handle != 0; }
             }; ''')  +'\n'
 
         return object_types_header
@@ -1743,6 +1766,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                 # VkGraphicsPipelineCreateInfo is special case because it has custom construct parameters
                 'VkGraphicsPipelineCreateInfo' :
                     '    pNext = SafePnextCopy(copy_src.pNext);\n'
+                    '    bool is_graphics_library = LvlFindInChain<VkGraphicsPipelineLibraryCreateInfoEXT>(copy_src.pNext);\n'
                     '    if (stageCount && copy_src.pStages) {\n'
                     '        pStages = new safe_VkPipelineShaderStageCreateInfo[stageCount];\n'
                     '        for (uint32_t i = 0; i < stageCount; ++i) {\n'
@@ -1773,7 +1797,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                     '                is_dynamic_has_rasterization = true;\n'
                     '    }\n'
                     '    bool has_rasterization = copy_src.pRasterizationState ? (is_dynamic_has_rasterization || !copy_src.pRasterizationState->rasterizerDiscardEnable) : false;\n'
-                    '    if (copy_src.pViewportState && has_rasterization) {\n'
+                    '    if (copy_src.pViewportState && (has_rasterization || is_graphics_library)) {\n'
                     '        pViewportState = new safe_VkPipelineViewportStateCreateInfo(*copy_src.pViewportState);\n'
                     '    } else\n'
                     '        pViewportState = NULL; // original pViewportState pointer ignored\n'
@@ -1781,15 +1805,15 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                     '        pRasterizationState = new safe_VkPipelineRasterizationStateCreateInfo(*copy_src.pRasterizationState);\n'
                     '    else\n'
                     '        pRasterizationState = NULL;\n'
-                    '    if (copy_src.pMultisampleState && has_rasterization)\n'
+                    '    if (copy_src.pMultisampleState && (has_rasterization || is_graphics_library))\n'
                     '        pMultisampleState = new safe_VkPipelineMultisampleStateCreateInfo(*copy_src.pMultisampleState);\n'
                     '    else\n'
                     '        pMultisampleState = NULL; // original pMultisampleState pointer ignored\n'
-                    '    if (copy_src.pDepthStencilState && has_rasterization)\n'
+                    '    if (copy_src.pDepthStencilState && (has_rasterization || is_graphics_library))\n'
                     '        pDepthStencilState = new safe_VkPipelineDepthStencilStateCreateInfo(*copy_src.pDepthStencilState);\n'
                     '    else\n'
                     '        pDepthStencilState = NULL; // original pDepthStencilState pointer ignored\n'
-                    '    if (copy_src.pColorBlendState && has_rasterization)\n'
+                    '    if (copy_src.pColorBlendState && (has_rasterization || is_graphics_library))\n'
                     '        pColorBlendState = new safe_VkPipelineColorBlendStateCreateInfo(*copy_src.pColorBlendState);\n'
                     '    else\n'
                     '        pColorBlendState = NULL; // original pColorBlendState pointer ignored\n'

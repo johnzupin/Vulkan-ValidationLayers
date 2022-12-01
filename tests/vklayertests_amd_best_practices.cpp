@@ -499,8 +499,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ImageToImageCopy) {
     VkImageObj image_1D_2(m_device);
     image_1D_2.init(&img_info);
     if (!image_1D_2.initialized()) {
-        printf("%s Could not initilize Linear image, skipping image to image copy test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Could not initilize Linear image, skipping image to image copy test";
     }
 
     m_commandBuffer->begin();
@@ -676,8 +675,7 @@ TEST_F(VkAmdBestPracticesLayerTest, NumberOfSubmissions) {
     VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
     vk_testing::Semaphore image_acquired(*m_device, semaphore_create_info);
     ASSERT_TRUE(image_acquired.initialized());
-    vk::AcquireNextImageKHR(device(), m_swapchain, std::numeric_limits<uint64_t>::max(), image_acquired.handle(), VK_NULL_HANDLE,
-                            &current_buffer);
+    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, image_acquired.handle(), VK_NULL_HANDLE, &current_buffer);
 
     VkPresentInfoKHR present_info = {};
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;

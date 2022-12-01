@@ -62,6 +62,9 @@ static const char DECORATE_UNUSED *kVUID_BestPractices_CreateDevice_SpecialUseEx
     "UNASSIGNED-BestPractices-vkCreateDevice-specialuse-extension-glemulation";
 static const char DECORATE_UNUSED *kVUID_BestPractices_CreateDevice_API_Mismatch =
     "UNASSIGNED-BestPractices-vkCreateDevice-API-version-mismatch";
+static const char DECORATE_UNUSED *kVUID_BestPractices_DevLimit_MustQueryCount = "UNASSIGNED-BestPractices-DevLimit-MustQueryCount";
+static const char DECORATE_UNUSED *kVUID_BestPractices_DevLimit_CountMismatch = "UNASSIGNED-BestPractices-DevLimit-CountMismatch";
+static const char DECORATE_UNUSED *kVUID_BestPractices_DevLimit_MissingQueryCount = "UNASSIGNED-BestPractices-DevLimit-MissingQueryCount";
 static const char DECORATE_UNUSED *kVUID_BestPractices_SharingModeExclusive =
     "UNASSIGNED-BestPractices-vkCreateBuffer-sharing-mode-exclusive";
 static const char DECORATE_UNUSED *kVUID_BestPractices_RenderPass_Attatchment =
@@ -82,6 +85,7 @@ static const char DECORATE_UNUSED *kVUID_BestPractices_Swapchain_GetSurfaceNotCa
     "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-surface-not-retrieved";
 static const char DECORATE_UNUSED *kVUID_BestPractices_DisplayPlane_PropertiesNotCalled =
     "UNASSIGNED-BestPractices-vkGetDisplayPlaneSupportedDisplaysKHR-properties-not-retrieved";
+static const char DECORATE_UNUSED *kVUID_BestPractices_MemTrack_InvalidState = "UNASSIGNED-BestPractices-MemTrack-InvalidState";
 static const char DECORATE_UNUSED *kVUID_BestPractices_BufferMemReqNotCalled =
     "UNASSIGNED-BestPractices-vkBindBufferMemory-requirements-not-retrieved";
 static const char DECORATE_UNUSED *kVUID_BestPractices_ImageMemReqNotCalled =
@@ -132,6 +136,11 @@ static const char DECORATE_UNUSED *kVUID_BestPractices_ClearValueWithoutLoadOpCl
 static const char DECORATE_UNUSED *kVUID_BestPractices_ClearValueCountHigherThanAttachmentCount = "UNASSIGNED-BestPractices-vkCmdBeginRenderPass-ClearValueCountHigherThanAttachmentCount";
 static const char DECORATE_UNUSED *kVUID_BestPractices_StoreOpDontCareThenLoadOpLoad = "UNASSIGNED-BestPractices-vkCmdBeginRenderPass-StoreOpDontCareThenLoadOpLoad";
 static const char DECORATE_UNUSED *kVUID_BestPractices_ConcurrentUsageOfExclusiveImage = "UNASSIGNED-BestPractices-ConcurrentUsageOfExclusiveImage";
+static const char DECORATE_UNUSED *kVUID_BestPractices_ImageBarrierAccessLayout =
+    "UNASSIGNED-BestPractices-ImageBarrierAccessLayout";
+static const char DECORATE_UNUSED *kVUID_BestPractices_DrawState_SwapchainImagesNotFound = "UNASSIGNED-BestPractices-DrawState-SwapchainImagesNotFound";
+static const char DECORATE_UNUSED *kVUID_BestPractices_DrawState_MismatchedImageType = "UNASSIGNED-BestPractices-DrawState-MismatchedImageType";
+static const char DECORATE_UNUSED *kVUID_BestPractices_DrawState_InvalidExtents = "UNASSIGNED-BestPractices-DrawState-InvalidExtents";
 
 // Arm-specific best practice
 static const char DECORATE_UNUSED *kVUID_BestPractices_AllocateDescriptorSets_SuboptimalReuse =
@@ -161,10 +170,6 @@ static const char DECORATE_UNUSED *kVUID_BestPractices_CreateSampler_Anisotropy 
     "UNASSIGNED-BestPractices-vkCreateSampler-anisotropy";
 static const char DECORATE_UNUSED *kVUID_BestPractices_CmdResolveImage_ResolvingImage =
     "UNASSIGNED-BestPractices-vkCmdResolveImage-resolving-image";
-static const char DECORATE_UNUSED *kVUID_BestPractices_CmdResolveImage2KHR_ResolvingImage =
-    "UNASSIGNED-BestPractices-vkCmdResolveImage2KHR-resolving-image";
-static const char DECORATE_UNUSED *kVUID_BestPractices_CmdResolveImage2_ResolvingImage =
-    "UNASSIGNED-BestPractices-vkCmdResolveImage2-resolving-image";
 static const char DECORATE_UNUSED *kVUID_BestPractices_CmdDrawIndexed_ManySmallIndexedDrawcalls =
     "UNASSIGNED-BestPractices-vkCmdDrawIndexed-many-small-indexed-drawcalls";
 static const char DECORATE_UNUSED *kVUID_BestPractices_CmdDrawIndexed_SparseIndexBuffer =

@@ -203,7 +203,7 @@ TEST_F(VkSyncValTest, SyncBufferCopyHazards) {
         auto fpCmdWriteBufferMarkerAMD =
             (PFN_vkCmdWriteBufferMarkerAMD)vk::GetDeviceProcAddr(m_device->device(), "vkCmdWriteBufferMarkerAMD");
         if (!fpCmdWriteBufferMarkerAMD) {
-            printf("%s Test requires unsupported vkCmdWriteBufferMarkerAMD feature. Skipped.\n", kSkipPrefix);
+            printf("Test requires unsupported vkCmdWriteBufferMarkerAMD feature. Skipped.\n");
         } else {
             m_commandBuffer->reset();
             m_commandBuffer->begin();
@@ -219,7 +219,7 @@ TEST_F(VkSyncValTest, SyncBufferCopyHazards) {
             m_commandBuffer->end();
         }
     } else {
-        printf("%s Test requires unsupported vkCmdWriteBufferMarkerAMD feature. Skipped.\n", kSkipPrefix);
+        printf("Test requires unsupported vkCmdWriteBufferMarkerAMD feature. Skipped.\n");
     }
 }
 
@@ -467,7 +467,7 @@ TEST_F(VkSyncValTest, SyncCopyOptimalImageHazards) {
                                                VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 0, &formProps);
 
     if (!(formProps.sampleCounts & VK_SAMPLE_COUNT_2_BIT)) {
-        printf("%s CmdResolveImage Test requires unsupported VK_SAMPLE_COUNT_2_BIT feature. Skipped.\n", kSkipPrefix);
+        printf("CmdResolveImage Test requires unsupported VK_SAMPLE_COUNT_2_BIT feature. Skipped.\n");
     } else {
         VkImageObj image_s2_a(m_device), image_s2_b(m_device);
         image_ci.samples = VK_SAMPLE_COUNT_2_BIT;
@@ -630,26 +630,10 @@ TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
 }
 
 TEST_F(VkSyncValTest, SyncCopyOptimalMultiPlanarHazards) {
-    // TODO: Add code to enable sync validation
-    // Enable KHR multiplane req'd extensions
-    bool mp_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-                                                    VK_KHR_GET_MEMORY_REQUIREMENTS_2_SPEC_VERSION);
-    if (mp_extensions) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    }
+    AddRequiredExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-    if (mp_extensions) {
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-    } else {
-        printf("%s test requires KHR multiplane extensions, not available.  Skipping.\n", kSkipPrefix);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -662,8 +646,8 @@ TEST_F(VkSyncValTest, SyncCopyOptimalMultiPlanarHazards) {
     bool supported = ImageFormatAndFeaturesSupported(instance(), gpu(), image_ci,
                                                      VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
     if (!supported) {
-        printf("%s Multiplane image format not supported.  Skipping test.\n", kSkipPrefix);
-        return;  // Assume there's low ROI on searching for different mp formats
+        // Assume there's low ROI on searching for different mp formats
+        GTEST_SKIP() << "Multiplane image format not supported";
     }
 
     image_a.Init(image_ci);
@@ -839,26 +823,10 @@ TEST_F(VkSyncValTest, SyncCopyLinearImageHazards) {
 }
 
 TEST_F(VkSyncValTest, SyncCopyLinearMultiPlanarHazards) {
-    // TODO: Add code to enable sync validation
-    // Enable KHR multiplane req'd extensions
-    bool mp_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-                                                    VK_KHR_GET_MEMORY_REQUIREMENTS_2_SPEC_VERSION);
-    if (mp_extensions) {
-        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    }
+    AddRequiredExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-    mp_extensions = mp_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-    if (mp_extensions) {
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-        m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-    } else {
-        printf("%s test requires KHR multiplane extensions, not available.  Skipping.\n", kSkipPrefix);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -871,8 +839,8 @@ TEST_F(VkSyncValTest, SyncCopyLinearMultiPlanarHazards) {
     bool supported = ImageFormatAndFeaturesSupported(instance(), gpu(), image_ci,
                                                      VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
     if (!supported) {
-        printf("%s Multiplane image format not supported.  Skipping test.\n", kSkipPrefix);
-        return;  // Assume there's low ROI on searching for different mp formats
+        // Assume there's low ROI on searching for different mp formats
+        GTEST_SKIP() << "Multiplane image format not supported";
     }
 
     image_a.Init(image_ci);
@@ -1229,7 +1197,6 @@ TEST_F(VkSyncValTest, SyncRenderPassBeginTransitionHazard) {
 }
 
 TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
-    // TODO: Add code to enable sync validation
     SetTargetApiVersion(VK_API_VERSION_1_2);
 
     // Enable VK_KHR_draw_indirect_count for KHR variants
@@ -1635,7 +1602,7 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
         auto fpCmdDrawIndirectCountKHR =
             (PFN_vkCmdDrawIndirectCount)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawIndirectCountKHR");
         if (!fpCmdDrawIndirectCountKHR) {
-            printf("%s Test requires unsupported vkCmdDrawIndirectCountKHR feature. Skipped.\n", kSkipPrefix);
+            printf("Test requires unsupported vkCmdDrawIndirectCountKHR feature. Skipped.\n");
         } else {
             VkBufferObj buffer_count, buffer_count2;
             buffer_usage =
@@ -1685,7 +1652,7 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
         auto fpCmdDrawIndexIndirectCountKHR =
             (PFN_vkCmdDrawIndirectCount)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawIndexedIndirectCountKHR");
         if (!fpCmdDrawIndexIndirectCountKHR) {
-            printf("%s Test requires unsupported vkCmdDrawIndexedIndirectCountKHR feature. Skipped.\n", kSkipPrefix);
+            printf("Test requires unsupported vkCmdDrawIndexedIndirectCountKHR feature. Skipped.\n");
         } else {
             VkBufferObj buffer_count, buffer_count2;
             buffer_usage =
@@ -1733,8 +1700,7 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
             m_commandBuffer->end();
         }
     } else {
-        printf("%s Test requires unsupported vkCmdDrawIndirectCountKHR & vkDrawIndexedIndirectCountKHR feature. Skipped.\n",
-               kSkipPrefix);
+        printf("Test requires unsupported vkCmdDrawIndirectCountKHR & vkDrawIndexedIndirectCountKHR feature. Skipped.\n");
     }
 }
 
@@ -1780,10 +1746,6 @@ TEST_F(VkSyncValTest, SyncCmdClear) {
 
     // CmdClearDepthStencilImage
     format = FindSupportedDepthStencilFormat(gpu());
-    if (!format) {
-        printf("%s No Depth + Stencil format found. Skipped.\n", kSkipPrefix);
-        return;
-    }
     VkImageObj image_ds_a(m_device), image_ds_b(m_device);
     image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 1, 1, format, usage, VK_IMAGE_TILING_OPTIMAL);
     image_ds_a.Init(image_ci);
@@ -1824,20 +1786,17 @@ TEST_F(VkSyncValTest, SyncCmdQuery) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     if (IsPlatform(kNexusPlayer)) {
-        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "This test should not run on Nexus Player";
     }
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
-        printf("%s Queue family needs to have multiple queues to run this test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
     }
     uint32_t queue_count;
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, NULL);
     std::vector<VkQueueFamilyProperties> queue_props(queue_count);
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props.data());
     if (queue_props[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
-        printf("%s Device graphic queue has timestampValidBits of 0, skipping.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Device graphic queue has timestampValidBits of 0, skipping.\n";
     }
 
     vk_testing::QueryPool query_pool;
@@ -1881,9 +1840,6 @@ TEST_F(VkSyncValTest, SyncCmdDrawDepthStencil) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
     auto format_ds = FindSupportedDepthStencilFormat(gpu());
-    if (!format_ds) {
-        GTEST_SKIP() << "No Depth + Stencil format found. Skipped.";
-    }
 
     // Vulkan doesn't support copying between different depth stencil formats, so the formats have to change.
     auto format_dp = format_ds;
@@ -2110,7 +2066,7 @@ TEST_F(VkSyncValTest, RenderPassLoadHazardVsInitialLayout) {
         m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
         m_commandBuffer->EndRenderPass();
     } else {
-        printf("%s VK_EXT_load_store_op_none not supported, skipping sub-test\n", kSkipPrefix);
+        printf("VK_EXT_load_store_op_none not supported, skipping sub-test\n");
     }
 }
 
@@ -2118,18 +2074,13 @@ TEST_F(VkSyncValTest, SyncRenderPassWithWrongDepthStencilInitialLayout) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
     if (IsPlatform(kNexusPlayer)) {
-        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "This test should not run on Nexus Player";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkFormat color_format = VK_FORMAT_R8G8B8A8_UNORM;
     VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
-    if (!ds_format) {
-        printf("%s No Depth + Stencil format found. Skipped.\n", kSkipPrefix);
-        return;
-    }
     VkImageUsageFlags usage_color = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     VkImageUsageFlags usage_ds = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     VkImageObj image_color(m_device), image_color2(m_device);
@@ -2408,7 +2359,7 @@ struct CreateRenderPassHelper {
         }
     }
 
-    void AddSubpassDescription(const std::vector<VkAttachmentReference>& input, const std::vector<VkAttachmentReference> color) {
+    void AddSubpassDescription(const std::vector<VkAttachmentReference>& input, const std::vector<VkAttachmentReference>& color) {
         subpass_description_store.emplace_back(input, color);
     }
 
@@ -2630,8 +2581,7 @@ TEST_F(VkSyncValTest, SyncSubpassMultiDep) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
     if (IsPlatform(kNexusPlayer)) {
-        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "This test should not run on Nexus Player";
     }
 
     CreateRenderPassHelper rp_helper_positive(m_device);
@@ -3616,12 +3566,10 @@ TEST_F(VkSyncValTest, DestroyedUnusedDescriptors) {
     auto features2 = GetPhysicalDeviceFeatures2(indexing_features);
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     if (!indexing_features.descriptorBindingPartiallyBound) {
-        printf("%s Partially bound bindings not supported, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Partially bound bindings not supported, skipping test\n";
     }
     if (!indexing_features.descriptorBindingUpdateUnusedWhilePending) {
-        printf("%s Updating unused while pending is not supported, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Updating unused while pending is not supported, skipping test\n";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitViewport());
@@ -3661,7 +3609,7 @@ TEST_F(VkSyncValTest, DestroyedUnusedDescriptors) {
     VkBufferObj doit_buffer;
     doit_buffer.init(*m_device, buffer_create_info);
 
-    auto buffer = layer_data::make_unique<VkBufferObj>();
+    auto buffer = std::make_unique<VkBufferObj>();
     buffer->init(*m_device, buffer_create_info);
 
     VkDescriptorBufferInfo buffer_info[2] = {};
@@ -3682,7 +3630,7 @@ TEST_F(VkSyncValTest, DestroyedUnusedDescriptors) {
     bvci.offset = 0;
     bvci.range = VK_WHOLE_SIZE;
 
-    auto texel_bufferview = layer_data::make_unique<vk_testing::BufferView>();
+    auto texel_bufferview = std::make_unique<vk_testing::BufferView>();
     texel_bufferview->init(*m_device, bvci);
 
     auto index_buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
@@ -3695,7 +3643,7 @@ TEST_F(VkSyncValTest, DestroyedUnusedDescriptors) {
     VkImageObj sampled_image(m_device);
     auto image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 1, 1, format, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TILING_OPTIMAL);
     sampled_image.Init(image_ci);
-    auto sampled_view = layer_data::make_unique<vk_testing::ImageView>();
+    auto sampled_view = std::make_unique<vk_testing::ImageView>();
     auto imageview_ci = SafeSaneImageViewCreateInfo(sampled_image, format, VK_IMAGE_ASPECT_COLOR_BIT);
     sampled_view->init(*m_device, imageview_ci);
 
@@ -3703,7 +3651,7 @@ TEST_F(VkSyncValTest, DestroyedUnusedDescriptors) {
     image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 1, 1, format, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TILING_OPTIMAL);
     combined_image.Init(image_ci);
     imageview_ci = SafeSaneImageViewCreateInfo(combined_image, format, VK_IMAGE_ASPECT_COLOR_BIT);
-    auto combined_view = layer_data::make_unique<vk_testing::ImageView>();
+    auto combined_view = std::make_unique<vk_testing::ImageView>();
     combined_view->init(*m_device, imageview_ci);
 
     vk_testing::Sampler sampler;
@@ -3964,10 +3912,8 @@ TEST_F(VkSyncValTest, TestCopyingToCompressedImage) {
     VkFormat mp_format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
     vk::GetPhysicalDeviceFormatProperties(gpu(), mp_format, &format_properties);
     if ((format_properties.linearTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) == 0) {
-        printf(
-            "%s Device does not support VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT for VK_FORMAT_BC1_RGBA_UNORM_BLOCK, skipping test.\n",
-            kSkipPrefix);
-        return;
+        GTEST_SKIP()
+            << "Device does not support VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT for VK_FORMAT_BC1_RGBA_UNORM_BLOCK, skipping test.\n";
     }
 
     VkImageObj src_image(m_device);
@@ -4269,6 +4215,7 @@ struct QSTestContext {
 
     QSTestContext(VkDeviceObj* device, VkQueueObj* force_q0 = nullptr, VkQueueObj* force_q1 = nullptr);
     VkCommandBuffer InitFromPool(VkCommandBufferObj& cb_obj);
+    void InitBuffer(VkBufferObj& buf);
     bool Valid() const { return q1 != VK_NULL_HANDLE; }
 
     void Begin(VkCommandBufferObj& cb);
@@ -4379,10 +4326,9 @@ QSTestContext::QSTestContext(VkDeviceObj* device, VkQueueObj* force_q0, VkQueueO
 
     if (!Valid()) return;
 
-    VkMemoryPropertyFlags mem_prop = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    buffer_a.init_as_src_and_dst(*device, 256, mem_prop);
-    buffer_b.init_as_src_and_dst(*device, 256, mem_prop);
-    buffer_c.init_as_src_and_dst(*device, 256, mem_prop);
+    InitBuffer(buffer_a);
+    InitBuffer(buffer_b);
+    InitBuffer(buffer_c);
 
     VkDeviceSize size = 256;
     VkDeviceSize half_size = size / 2;
@@ -4408,6 +4354,11 @@ QSTestContext::QSTestContext(VkDeviceObj* device, VkQueueObj* force_q0, VkQueueO
 VkCommandBuffer QSTestContext::InitFromPool(VkCommandBufferObj& cb_obj) {
     cb_obj.Init(dev, &pool);
     return cb_obj.handle();
+}
+
+void QSTestContext::InitBuffer(VkBufferObj& buf) {
+    VkMemoryPropertyFlags mem_prop = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    buf.init_as_src_and_dst(*dev, 256, mem_prop);
 }
 
 void QSTestContext::Begin(VkCommandBufferObj& cb) {
@@ -4692,9 +4643,16 @@ TEST_F(VkSyncValTest, SyncQSBufferCopyQSORules) {
 
     QSTestContext test(m_device);
     if (!test.Valid()) {
-        printf("%s Test requires at least 2 TRANSFER capable queues in the same queue_family. Skipped.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires at least 2 TRANSFER capable queues in the same queue_family";
     }
+
+    // Need an extra buffer and CB
+    VkBufferObj buffer_d;
+    test.InitBuffer(buffer_d);
+    VkCommandBufferObj cbd;
+    test.InitFromPool(cbd);
+    // This gives a noop command buffer w.r.t. buffers a, b, and c.
+    test.RecordCopy(cbd, buffer_d, buffer_d, test.first_to_second);
 
     // Command Buffer A reads froms buffer A and writes to buffer B
     test.RecordCopy(test.cba, test.buffer_a, test.buffer_b);
@@ -4720,8 +4678,16 @@ TEST_F(VkSyncValTest, SyncQSBufferCopyQSORules) {
 
     // Submit A and B on the different queues. Since no semaphore is used between the queues, CB B hazards asynchronously with,
     // CB A with A being read and written on independent queues.
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-RACING-READ");
     test.Submit0(test.cba);
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-RACING-READ");
+    test.Submit1(test.cbb);
+    m_errorMonitor->VerifyFound();
+    m_device->wait();  // DeviceWaitIdle, clearing the field for the next subcase
+
+    // Test full async detection
+    test.Submit0(test.cba);
+    test.Submit0(cbd);
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-RACING-READ");
     test.Submit1(test.cbb);
     m_errorMonitor->VerifyFound();
 
@@ -4761,8 +4727,7 @@ TEST_F(VkSyncValTest, SyncQSBufferEvents) {
 
     QSTestContext test(m_device);
     if (!test.Valid()) {
-        printf("%s Test requires at least 2 TRANSFER capable queues in the same queue_family. Skipped.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires at least 2 TRANSFER capable queues in the same queue_family";
     }
 
     // Command Buffer A reads froms buffer A and writes to buffer B
@@ -4893,8 +4858,7 @@ TEST_F(VkSyncValTest, SyncQSRenderPass) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     if (IsPlatform(kNexusPlayer)) {
-        printf("%s This test should not run on Nexus Player\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "This test should not run on Nexus Player";
     }
 
     CreateRenderPassHelper rp_helper(m_device);
@@ -4954,4 +4918,174 @@ TEST_F(VkSyncValTest, SyncQSRenderPass) {
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-AFTER-WRITE");
     vk::QueueSubmit(m_device->m_queue, 1, &submit2, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkSyncValTest, SyncQSPresentAcquire) {
+    TEST_DESCRIPTION("Try destroying a swapchain presentable image with vkDestroyImage");
+
+    AddSurfaceExtension();
+    ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_TRUE(InitSwapchain());
+    uint32_t image_count;
+    std::vector<VkImage> images;
+    ASSERT_VK_SUCCESS(vk::GetSwapchainImagesKHR(device(), m_swapchain, &image_count, nullptr));
+    images.resize(image_count, VK_NULL_HANDLE);
+    ASSERT_VK_SUCCESS(vk::GetSwapchainImagesKHR(device(), m_swapchain, &image_count, images.data()));
+
+    std::vector<bool> image_used(images.size(), false);
+
+    const VkCommandBuffer cb = m_commandBuffer->handle();
+    const VkQueue q = m_device->m_queue;
+    const VkDevice dev = m_device->handle();
+
+    auto fence_ci = lvl_init_struct<VkFenceCreateInfo>();
+    VkFenceObj fence(*m_device, fence_ci);
+    VkFence h_fence = fence.handle();
+
+    // Test stability requires that we wait on pending operations before returning starts the Vk*Obj destructors
+    auto cleanup = [this]() { m_device->wait(); };
+
+    // Loop through the indices until we find one we are reusing...
+    // When fence is non-null this can timeout so we need to track results
+    auto present_image = [this, q](uint32_t index, VkSemaphoreObj* sem, VkFenceObj* fence) {
+        VkResult result = VK_SUCCESS;
+        if (fence) {
+            result = fence->wait(kWaitTimeout);
+            if (VK_SUCCESS == result) {
+                fence->reset();
+            }
+        }
+
+        if (VK_SUCCESS == result) {
+            auto present_info = lvl_init_struct<VkPresentInfoKHR>();
+            present_info.swapchainCount = 1;
+            present_info.pSwapchains = &m_swapchain;
+            present_info.pImageIndices = &index;
+            VkSemaphore h_sem = VK_NULL_HANDLE;
+            if (sem) {
+                h_sem = sem->handle();
+                present_info.waitSemaphoreCount = 1;
+                present_info.pWaitSemaphores = &h_sem;
+            }
+            vk::QueuePresentKHR(q, &present_info);
+        }
+        return result;
+    };
+
+    // Acquire can always timeout, so we need to track results
+    auto acquire_used_image = [this, &image_used, dev, &present_image](VkSemaphoreObj* sem, VkFenceObj* fence, uint32_t& index) {
+        VkSemaphore h_sem = sem ? sem->handle() : VK_NULL_HANDLE;
+        VkFence h_fence = fence ? fence->handle() : VK_NULL_HANDLE;
+        VkResult result = VK_SUCCESS;
+
+        while (true) {
+            result = vk::AcquireNextImageKHR(dev, m_swapchain, kWaitTimeout, h_sem, h_fence, &index);
+            if ((result != VK_SUCCESS) || image_used[index]) break;
+
+            result = present_image(index, sem, fence);
+            if (result != VK_SUCCESS) break;
+            image_used[index] = true;
+        }
+        return result;
+    };
+
+    uint32_t acquired_index = 0;
+    REQUIRE_SUCCESS(acquire_used_image(nullptr, &fence, acquired_index), "acquire_used_image", cleanup());
+
+    auto write_barrier_cb = [this](const VkImage h_image, VkImageLayout from, VkImageLayout to) {
+        VkImageSubresourceRange full_image{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        auto image_barrier = lvl_init_struct<VkImageMemoryBarrier>();
+        image_barrier.srcAccessMask = 0U;
+        image_barrier.dstAccessMask = 0U;
+        image_barrier.oldLayout = from;
+        image_barrier.newLayout = to;
+        image_barrier.image = h_image;
+
+        image_barrier.subresourceRange = full_image;
+        m_commandBuffer->begin();
+        vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                               nullptr, 0, nullptr, 1, &image_barrier);
+        m_commandBuffer->end();
+    };
+    write_barrier_cb(images[acquired_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+    // Look for errors between the acquire and first use...
+    auto submit1 = lvl_init_struct<VkSubmitInfo>();
+    submit1.commandBufferCount = 1;
+    submit1.pCommandBuffers = &cb;
+    // No sync operations...
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-AFTER-PRESENT");
+    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // Sync operations that should ignore present operations
+    m_device->wait();
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-AFTER-PRESENT");
+    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // Finally we wait for the fence associated with the acquire
+    REQUIRE_SUCCESS(vk::WaitForFences(m_device->handle(), 1, &h_fence, VK_TRUE, kWaitTimeout), "WaitForFences", cleanup());
+    fence.reset();
+    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_device->wait();
+
+    // Release the image back to the present engine, so we don't run out
+    present_image(acquired_index, nullptr, nullptr);  // present without fence can't timeout
+
+    auto semaphore_ci = VkSemaphoreObj::create_info(0);
+    VkSemaphoreObj sem(*m_device, semaphore_ci);
+    const VkSemaphore h_sem = sem.handle();
+    REQUIRE_SUCCESS(acquire_used_image(&sem, nullptr, acquired_index), "acquire_used_image", cleanup());
+
+    m_commandBuffer->reset();
+    write_barrier_cb(images[acquired_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+    VkPipelineStageFlags wait_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    submit1.waitSemaphoreCount = 1;
+    submit1.pWaitDstStageMask = &wait_mask;
+    submit1.pWaitSemaphores = &h_sem;
+
+    // The wait mask doesn't match the operations in the command buffer
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-AFTER-READ");
+    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // Now then wait mask matches the operations in the command buffer
+    wait_mask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+
+    // Try presenting without waiting for the ILT to finish
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-PRESENT-AFTER-WRITE");
+    present_image(acquired_index, nullptr, nullptr);  // present without fence can't timeout
+    m_errorMonitor->VerifyFound();
+
+    // Let the ILT complete, and the release the image back
+    m_device->wait();
+    present_image(acquired_index, nullptr, nullptr);  // present without fence can't timeout
+
+    REQUIRE_SUCCESS(acquire_used_image(VK_NULL_HANDLE, &fence, acquired_index), "acquire_used_index", cleanup());
+    REQUIRE_SUCCESS(fence.wait(kWaitTimeout), "WaitForFences", cleanup());
+
+    m_commandBuffer->reset();
+    write_barrier_cb(images[acquired_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+    fence.reset();
+    submit1.waitSemaphoreCount = 0;
+    submit1.pWaitDstStageMask = nullptr;
+    submit1.pWaitSemaphores = nullptr;
+    submit1.signalSemaphoreCount = 1;
+    submit1.pSignalSemaphores = &h_sem;
+    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-PRESENT-AFTER-WRITE");
+    present_image(acquired_index, nullptr, nullptr);  // present without fence can't timeout
+    m_errorMonitor->VerifyFound();
+
+    present_image(acquired_index, &sem, nullptr);  // present without fence can't timeout
+    m_device->wait();
 }

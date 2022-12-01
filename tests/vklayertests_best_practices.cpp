@@ -85,8 +85,7 @@ TEST_F(VkBestPracticesLayerTest, ValidateReturnCodes) {
     std::vector<VkSurfaceFormatKHR> formats;
     result = vk::GetPhysicalDeviceSurfaceFormatsKHR(gpu(), m_surface, &format_count, NULL);
     if (result != VK_SUCCESS || format_count <= 1) {
-        printf("%s test requires 2 or more extensions available, skipping test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "test requires 2 or more extensions available";
     }
     format_count -= 1;
     formats.resize(format_count);
@@ -100,7 +99,6 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedInstanceExtensions) {
     TEST_DESCRIPTION("Create an instance with a deprecated extension.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
 
@@ -111,6 +109,8 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedInstanceExtensions) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
+
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     // Create a 1.1 vulkan instance and request an extension promoted to core in 1.1
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkCreateInstance-deprecated-extension");
@@ -179,13 +179,10 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedDeviceExtensions) {
 TEST_F(VkBestPracticesLayerTest, SpecialUseExtensions) {
     TEST_DESCRIPTION("Create a device with a 'specialuse' extension.");
 
+    AddRequiredExtensions(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
-
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
-    } else {
-        printf("%s %s Extension not supported, skipping test\n", kSkipPrefix, VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
-        return;
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     VkDevice local_device;
@@ -247,8 +244,7 @@ TEST_F(VkBestPracticesLayerTest, CmdClearAttachmentTestSecondary) {
     InitState();
 
     if (IsPlatform(PlatformType::kShieldTV) || IsPlatform(PlatformType::kShieldTVb)) {
-        printf("%s Test CmdClearAttachmentTestSecondary is unstable on ShieldTV, skipping test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test CmdClearAttachmentTestSecondary is unstable on ShieldTV";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -315,6 +311,97 @@ TEST_F(VkBestPracticesLayerTest, CmdClearAttachmentTestSecondary) {
         m_errorMonitor->VerifyFound();
     }
     m_commandBuffer->EndRenderPass();
+}
+
+TEST_F(VkBestPracticesLayerTest, CmdResolveImageTypeMismatch) {
+    InitBestPracticesFramework();
+    InitState();
+
+    // Create two images of different types and try to copy between them
+    VkImageObj srcImage(m_device);
+    VkImageObj dstImage(m_device);
+
+    VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_B8G8R8A8_UNORM;
+    image_create_info.extent.width = 32;
+    image_create_info.extent.height = 1;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 1;
+    image_create_info.arrayLayers = 1;
+    image_create_info.samples = VK_SAMPLE_COUNT_4_BIT;  // guarantee support from sampledImageColorSampleCounts
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    // Note: Some implementations expect color attachment usage for any
+    // multisample surface
+    image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    image_create_info.flags = 0;
+    srcImage.init(&image_create_info);
+
+    image_create_info.imageType = VK_IMAGE_TYPE_1D;
+    // Note: Some implementations expect color attachment usage for any
+    // multisample surface
+    image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    dstImage.init(&image_create_info);
+
+    m_commandBuffer->begin();
+    // Need memory barrier to VK_IMAGE_LAYOUT_GENERAL for source and dest?
+    // VK_IMAGE_LAYOUT_UNDEFINED = 0,
+    // VK_IMAGE_LAYOUT_GENERAL = 1,
+    VkImageResolve resolveRegion;
+    resolveRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    resolveRegion.srcSubresource.mipLevel = 0;
+    resolveRegion.srcSubresource.baseArrayLayer = 0;
+    resolveRegion.srcSubresource.layerCount = 1;
+    resolveRegion.srcOffset.x = 0;
+    resolveRegion.srcOffset.y = 0;
+    resolveRegion.srcOffset.z = 0;
+    resolveRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    resolveRegion.dstSubresource.mipLevel = 0;
+    resolveRegion.dstSubresource.baseArrayLayer = 0;
+    resolveRegion.dstSubresource.layerCount = 1;
+    resolveRegion.dstOffset.x = 0;
+    resolveRegion.dstOffset.y = 0;
+    resolveRegion.dstOffset.z = 0;
+    resolveRegion.extent.width = 1;
+    resolveRegion.extent.height = 1;
+    resolveRegion.extent.depth = 1;
+
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "UNASSIGNED-BestPractices-DrawState-MismatchedImageType");
+    m_commandBuffer->ResolveImage(srcImage.handle(), VK_IMAGE_LAYOUT_GENERAL, dstImage.handle(), VK_IMAGE_LAYOUT_GENERAL, 1,
+                                  &resolveRegion);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(VkBestPracticesLayerTest, ZeroSizeBlitRegion) {
+    TEST_DESCRIPTION("vkCmdBlitImage with a zero area region");
+
+    InitBestPracticesFramework();
+    InitState();
+
+    VkImageObj image_src(m_device);
+    image_src.Init(128, 128, 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
+    image_src.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
+    VkImageObj image_dst(m_device);
+    image_dst.Init(128, 128, 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
+    image_dst.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
+
+    VkImageBlit blit_region = {};
+    blit_region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0};
+    blit_region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0};
+    blit_region.srcOffsets[0] = {128, 0, 0};
+    blit_region.srcOffsets[1] = {128, 128, 1};
+    blit_region.dstOffsets[0] = {0, 128, 0};
+    blit_region.dstOffsets[1] = {128, 128, 1};
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-DrawState-InvalidExtents");
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-DrawState-InvalidExtents");
+    vk::CmdBlitImage(m_commandBuffer->handle(), image_src.handle(), image_src.Layout(), image_dst.handle(), image_dst.Layout(), 1,
+                     &blit_region, VK_FILTER_LINEAR);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
 }
 
 TEST_F(VkBestPracticesLayerTest, CmdBeginRenderPassZeroSizeRenderArea) {
@@ -606,8 +693,7 @@ TEST_F(VkBestPracticesLayerTest, AttachmentShouldNotBeTransient) {
 
     if (IsPlatform(kPixel2XL) || IsPlatform(kPixel3) || IsPlatform(kPixel3aXL) || IsPlatform(kShieldTV) || IsPlatform(kShieldTVb) ||
         IsPlatform(kNexusPlayer)) {
-        printf("%s This test seems super-picky on Android platforms\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "This test seems super-picky on Android platforms";
     }
 
     m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
@@ -779,8 +865,7 @@ TEST_F(VkBestPracticesLayerTest, ClearAttachmentsAfterLoadSecondary) {
     InitState();
 
     if (IsPlatform(PlatformType::kShieldTV) || IsPlatform(PlatformType::kShieldTVb)) {
-        printf("%s Test CmdClearAttachmentAfterLoadSecondary is unstable on ShieldTV, skipping test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test CmdClearAttachmentAfterLoadSecondary is unstable on ShieldTV";
     }
 
     m_clear_via_load_op = false;  // Force LOAD_OP_LOAD
@@ -915,16 +1000,14 @@ TEST_F(VkBestPracticesLayerTest, TripleBufferingTest) {
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
                                          "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-suboptimal-swapchain-image-count");
     if (!InitSurface()) {
-        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Cannot create surface";
     }
     InitSwapchainInfo();
 
     VkBool32 supported;
     vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), m_device->graphics_queue_node_index_, m_surface, &supported);
     if (!supported) {
-        printf("%s Graphics queue does not support present, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Graphics queue does not support present";
     }
 
     bool fifo_present = false;
@@ -935,8 +1018,7 @@ TEST_F(VkBestPracticesLayerTest, TripleBufferingTest) {
         }
     }
     if (!fifo_present) {
-        printf("%s fifo present mode not supported, skipping test.\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "fifo present mode not supported";
     }
 
     VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -976,8 +1058,7 @@ TEST_F(VkBestPracticesLayerTest, SwapchainCreationTest) {
     }
     InitState();
     if (!InitSurface()) {
-        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Cannot create surface";
     }
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
@@ -1086,7 +1167,7 @@ TEST_F(VkBestPracticesLayerTest, MissingQueryDetails) {
     std::vector<VkQueueFamilyProperties> queue_family_props(1);
     uint32_t queue_count = static_cast<uint32_t>(queue_family_props.size());
 
-    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-CoreValidation-DevLimit-MissingQueryCount");
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-DevLimit-MissingQueryCount");
     vk::GetPhysicalDeviceQueueFamilyProperties(phys_device_obj.handle(), &queue_count, queue_family_props.data());
     m_errorMonitor->VerifyFound();
 
@@ -1133,8 +1214,7 @@ TEST_F(VkBestPracticesLayerTest, GetSwapchainImagesInvalidCount) {
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
     if (!InitSwapchain()) {
-        printf("%s Cannot create surface or swapchain, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Cannot create surface or swapchain";
     }
 
     uint32_t swapchain_images_count = 0;
@@ -1308,8 +1388,7 @@ TEST_F(VkBestPracticesLayerTest, ThreadUpdateDescriptorUpdateAfterBindNoCollisio
     auto features2 = GetPhysicalDeviceFeatures2(indexing_features);
 
     if (VK_FALSE == indexing_features.descriptorBindingStorageBufferUpdateAfterBind) {
-        printf("%s Test requires (unsupported) descriptorBindingStorageBufferUpdateAfterBind, skipping\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Test requires (unsupported) descriptorBindingStorageBufferUpdateAfterBind";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -1381,7 +1460,7 @@ TEST_F(VkBestPracticesLayerTest, TransitionFromUndefinedToReadOnly) {
 
     VkImageMemoryBarrier img_barrier = LvlInitStruct<VkImageMemoryBarrier>();
     img_barrier.srcAccessMask = 0;
-    img_barrier.dstAccessMask = 0;
+    img_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
     img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     img_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     img_barrier.image = image.handle();
@@ -1413,16 +1492,14 @@ TEST_F(VkBestPracticesLayerTest, CreateFifoRelaxedSwapchain) {
     }
     InitState();
     if (!InitSurface()) {
-        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Cannot create surface";
     }
     InitSwapchainInfo();
 
     VkBool32 supported;
     vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), m_device->graphics_queue_node_index_, m_surface, &supported);
     if (!supported) {
-        printf("%s Graphics queue does not support present, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "Graphics queue does not support present";
     }
 
     bool fifo_relaxed = false;
@@ -1433,8 +1510,7 @@ TEST_F(VkBestPracticesLayerTest, CreateFifoRelaxedSwapchain) {
         }
     }
     if (!fifo_relaxed) {
-        printf("%s fifo relaxed present mode not supported, skipping test\n", kSkipPrefix);
-        return;
+        GTEST_SKIP() << "fifo relaxed present mode not supported";
     }
 
     VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -1868,6 +1944,10 @@ TEST_F(VkBestPracticesLayerTest, LoadDeprecatedExtension) {
 
     const char *extension = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
 
+    if (!DeviceExtensionSupported(extension)) {
+        GTEST_SKIP() << extension << " not supported.";
+    }
+
     VkDeviceQueueCreateInfo qci = LvlInitStruct<VkDeviceQueueCreateInfo>();
     qci.queueFamilyIndex = 0;
     float priority = 1;
@@ -2003,7 +2083,7 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
 
     CreateComputePipelineHelper pipe(*this);
     pipe.InitInfo();
-    pipe.cs_ = layer_data::make_unique<VkShaderObj>(this, cs, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs, VK_SHADER_STAGE_COMPUTE_BIT);
     pipe.InitDescriptorSetInfo();
     pipe.dsl_bindings_[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     pipe.dsl_bindings_[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -2101,4 +2181,122 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-ConcurrentUsageOfExclusiveImage");
     compute_buffer.QueueCommandBuffer();
     m_errorMonitor->Finish();
+}
+
+TEST_F(VkBestPracticesLayerTest, ImageMemoryBarrierAccessLayoutCombinations) {
+    TEST_DESCRIPTION("Transition image layout from undefined to read only");
+
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    bool sync2 = AreRequiredExtensionsEnabled();
+
+    VkImageObj image(m_device);
+    image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+               VK_IMAGE_TILING_OPTIMAL, 0);
+
+    VkClearColorValue color_clear_value = {};
+    color_clear_value.uint32[0] = 255;
+    VkImageSubresourceRange clear_range;
+    clear_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    clear_range.baseMipLevel = 0;
+    clear_range.baseArrayLayer = 0;
+    clear_range.layerCount = 1;
+    clear_range.levelCount = 1;
+
+    auto img_barrier = LvlInitStruct<VkImageMemoryBarrier>();
+    img_barrier.srcAccessMask = 0;
+    img_barrier.dstAccessMask = 0;
+    img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    img_barrier.image = image.handle();
+    img_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    img_barrier.subresourceRange.baseArrayLayer = 0;
+    img_barrier.subresourceRange.baseMipLevel = 0;
+    img_barrier.subresourceRange.layerCount = 1;
+    img_barrier.subresourceRange.levelCount = 1;
+
+    m_commandBuffer->begin();
+
+    m_commandBuffer->ClearColorImage(image.handle(), VK_IMAGE_LAYOUT_GENERAL, &color_clear_value, 1, &clear_range);
+
+    // GENERAL - Any
+    // note: the table in PR 2918 originally said that 0 was not allowed, but this was incorrect. See Issue #4735
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    img_barrier.dstAccessMask = 0;
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    img_barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+
+    // Every table entry includes an implicit "can be 0"
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    img_barrier.dstAccessMask = 0;
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    img_barrier.dstAccessMask = 0;
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+
+    // PRESENT_SRC_KHR	- Must be 0
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    img_barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-ImageBarrierAccessLayout");
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+    m_errorMonitor->VerifyFound();
+
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    img_barrier.dstAccessMask = 0;
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+                           nullptr, 0, nullptr, 1, &img_barrier);
+
+    if (sync2) {
+        auto vkCmdPipelineBarrier2KHR =
+            reinterpret_cast<PFN_vkCmdPipelineBarrier2KHR>(vk::GetDeviceProcAddr(m_device->device(), "vkCmdPipelineBarrier2KHR"));
+
+        auto img_barrier2 = LvlInitStruct<VkImageMemoryBarrier2KHR>();
+        img_barrier2.srcAccessMask = 0;
+        img_barrier2.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        img_barrier2.image = image.handle();
+        img_barrier2.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        img_barrier2.subresourceRange.baseArrayLayer = 0;
+        img_barrier2.subresourceRange.baseMipLevel = 0;
+        img_barrier2.subresourceRange.layerCount = 1;
+        img_barrier2.subresourceRange.levelCount = 1;
+
+        auto dependency_info = LvlInitStruct<VkDependencyInfoKHR>();
+        dependency_info.imageMemoryBarrierCount = 1;
+        dependency_info.pImageMemoryBarriers = &img_barrier2;
+
+        img_barrier2.dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+        img_barrier2.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+        m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-ImageBarrierAccessLayout");
+        vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+        m_errorMonitor->VerifyFound();
+
+        img_barrier2.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        img_barrier2.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+
+        // make sure bits above UINT32_MAX are detected
+        img_barrier2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        img_barrier2.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+        m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-ImageBarrierAccessLayout");
+        vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+        m_errorMonitor->VerifyFound();
+
+        img_barrier2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        img_barrier2.dstAccessMask = 0;
+        vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+
+        m_commandBuffer->end();
+    }
 }

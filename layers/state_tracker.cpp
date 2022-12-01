@@ -920,7 +920,15 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
             enabled_features.shading_rate_image_features = *shading_rate_image_features;
         }
 
-        const auto *mesh_shader_features = LvlFindInChain<VkPhysicalDeviceMeshShaderFeaturesNV>(pCreateInfo->pNext);
+        const auto *mesh_shader_features_NV = LvlFindInChain<VkPhysicalDeviceMeshShaderFeaturesNV>(pCreateInfo->pNext);
+        if (mesh_shader_features_NV) {
+            enabled_features.mesh_shader_features.sType = mesh_shader_features_NV->sType;
+            enabled_features.mesh_shader_features.pNext = mesh_shader_features_NV->pNext;
+            enabled_features.mesh_shader_features.meshShader = mesh_shader_features_NV->meshShader;
+            enabled_features.mesh_shader_features.taskShader = mesh_shader_features_NV->taskShader;
+        }
+
+        const auto *mesh_shader_features = LvlFindInChain<VkPhysicalDeviceMeshShaderFeaturesEXT>(pCreateInfo->pNext);
         if (mesh_shader_features) {
             enabled_features.mesh_shader_features = *mesh_shader_features;
         }
@@ -1270,6 +1278,17 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
         if (pipeline_protected_access_features) {
             enabled_features.pipeline_protected_access_features = *pipeline_protected_access_features;
         }
+
+        const auto linear_color_attachment_features =
+            LvlFindInChain<VkPhysicalDeviceLinearColorAttachmentFeaturesNV>(pCreateInfo->pNext);
+        if (linear_color_attachment_features) {
+            enabled_features.linear_color_attachment_features = *linear_color_attachment_features;
+        }
+
+        const auto shader_core_builtins_features = LvlFindInChain<VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM>(pCreateInfo->pNext);
+        if (shader_core_builtins_features) {
+            enabled_features.shader_core_builtins_features= *shader_core_builtins_features;
+        }
     }
 
     // Store physical device properties and physical device mem limits into CoreChecks structs
@@ -1445,7 +1464,8 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
     // Extensions with properties to extract to DeviceExtensionProperties
     GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_khr_push_descriptor, &phys_dev_props->push_descriptor_props);
     GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_nv_shading_rate_image, &phys_dev_props->shading_rate_image_props);
-    GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_nv_mesh_shader, &phys_dev_props->mesh_shader_props);
+    GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_nv_mesh_shader, &phys_dev_props->mesh_shader_props_NV);
+    GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_ext_mesh_shader, &phys_dev_props->mesh_shader_props);
     GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_ext_inline_uniform_block,
                                    &phys_dev_props->inline_uniform_block_props);
     GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_ext_vertex_attribute_divisor,
@@ -1743,7 +1763,7 @@ void ValidationStateTracker::PreCallRecordQueueBindSparse(VkQueue queue, uint32_
                     // See: VUID-vkGetImageSubresourceLayout-image-01895
                     if (!image_state->fragment_encoder) {
                         image_state->fragment_encoder =
-                            layer_data::make_unique<const subresource_adapter::ImageRangeEncoder>(*image_state);
+                            std::make_unique<const subresource_adapter::ImageRangeEncoder>(*image_state);
                     }
                     image_state->BindMemory(image_state.get(), mem_state, sparse_binding.memoryOffset,
                                             sparse_binding.resourceOffset, sparse_binding.size);
@@ -1763,7 +1783,7 @@ void ValidationStateTracker::PreCallRecordQueueBindSparse(VkQueue queue, uint32_
                     // See: VUID-vkGetImageSubresourceLayout-image-01895
                     if (!image_state->fragment_encoder) {
                         image_state->fragment_encoder =
-                            layer_data::make_unique<const subresource_adapter::ImageRangeEncoder>(*image_state);
+                            std::make_unique<const subresource_adapter::ImageRangeEncoder>(*image_state);
                     }
                     image_state->BindMemory(image_state.get(), mem_state, sparse_binding.memoryOffset, offset, size);
                 }
@@ -1826,6 +1846,8 @@ void ValidationStateTracker::PreCallRecordSignalSemaphoreKHR(VkDevice device, co
 
 void ValidationStateTracker::PostCallRecordSignalSemaphore(VkDevice device, const VkSemaphoreSignalInfo *pSignalInfo,
                                                               VkResult result) {
+    if (result != VK_SUCCESS) return;
+
     auto semaphore_state = Get<SEMAPHORE_STATE>(pSignalInfo->semaphore);
     if (semaphore_state) {
         semaphore_state->Retire(nullptr, pSignalInfo->value);
@@ -2234,8 +2256,8 @@ void ValidationStateTracker::PostCallRecordCreateFence(VkDevice device, const Vk
 
 std::shared_ptr<PIPELINE_STATE> ValidationStateTracker::CreateGraphicsPipelineState(
     const VkGraphicsPipelineCreateInfo *pCreateInfo, std::shared_ptr<const RENDER_PASS_STATE> &&render_pass,
-    std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout) const {
-    return std::make_shared<PIPELINE_STATE>(this, pCreateInfo, std::move(render_pass), std::move(layout));
+    std::shared_ptr<const PIPELINE_LAYOUT_STATE> &&layout, CreateShaderModuleStates *csm_states) const {
+    return std::make_shared<PIPELINE_STATE>(this, pCreateInfo, std::move(render_pass), std::move(layout), csm_states);
 }
 
 bool ValidationStateTracker::PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
@@ -2264,8 +2286,9 @@ bool ValidationStateTracker::PreCallValidateCreateGraphicsPipelines(VkDevice dev
                 skip = true;
             }
         }
+        auto csm_states = (cgpl_state->shader_states.size() > i) ? &cgpl_state->shader_states[i] : nullptr;
         cgpl_state->pipe_state.push_back(
-            CreateGraphicsPipelineState(&create_info, std::move(render_pass), std::move(layout_state)));
+            CreateGraphicsPipelineState(&create_info, std::move(render_pass), std::move(layout_state), csm_states));
     }
     return skip;
 }
@@ -3854,6 +3877,16 @@ void ValidationStateTracker::PostCallRecordCreateAndroidSurfaceKHR(VkInstance in
 }
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
 
+#ifdef VK_USE_PLATFORM_FUCHSIA
+void ValidationStateTracker::PostCallRecordCreateImagePipeSurfaceFUCHSIA(VkInstance instance,
+                                                                         const VkImagePipeSurfaceCreateInfoFUCHSIA *pCreateInfo,
+                                                                         const VkAllocationCallbacks *pAllocator,
+                                                                         VkSurfaceKHR *pSurface, VkResult result) {
+    if (VK_SUCCESS != result) return;
+    RecordVulkanSurface(pSurface);
+}
+#endif  // VK_USE_PLATFORM_FUCHSIA
+
 #ifdef VK_USE_PLATFORM_IOS_MVK
 void ValidationStateTracker::PostCallRecordCreateIOSSurfaceMVK(VkInstance instance, const VkIOSSurfaceCreateInfoMVK *pCreateInfo,
                                                                const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface,
@@ -4539,14 +4572,6 @@ void ValidationStateTracker::PostCallRecordCmdTraceRaysIndirectKHR(VkCommandBuff
 }
 
 std::shared_ptr<SHADER_MODULE_STATE> ValidationStateTracker::CreateShaderModuleState(const VkShaderModuleCreateInfo &create_info,
-                                                                                     uint32_t unique_shader_id) const {
-    spv_target_env spirv_environment = PickSpirvEnv(api_version, IsExtEnabled(device_extensions.vk_khr_spirv_1_4));
-    bool is_spirv = (create_info.pCode[0] == spv::MagicNumber);
-    return is_spirv ? std::make_shared<SHADER_MODULE_STATE>(create_info, spirv_environment, unique_shader_id)
-                    : std::make_shared<SHADER_MODULE_STATE>();
-}
-
-std::shared_ptr<SHADER_MODULE_STATE> ValidationStateTracker::CreateShaderModuleState(const VkShaderModuleCreateInfo &create_info,
                                                                                      uint32_t unique_shader_id,
                                                                                      VkShaderModule handle) const {
     spv_target_env spirv_environment = PickSpirvEnv(api_version, IsExtEnabled(device_extensions.vk_khr_spirv_1_4));
@@ -4954,6 +4979,23 @@ void ValidationStateTracker::PreCallRecordCmdSetColorWriteEnableEXT(VkCommandBuf
     cb_state->RecordColorWriteEnableStateCmd(CMD_SETCOLORWRITEENABLEEXT, CB_DYNAMIC_COLOR_WRITE_ENABLE_EXT_SET, attachmentCount);
 }
 
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+void ValidationStateTracker::PostCallRecordAcquireFullScreenExclusiveModeEXT(VkDevice device, VkSwapchainKHR swapchain,
+                                                                             VkResult result) {
+    if (result != VK_SUCCESS) return;
+
+    auto swapchain_state = Get<SWAPCHAIN_NODE>(swapchain);
+    swapchain_state->exclusive_full_screen_access = true;
+}
+
+void ValidationStateTracker::PostCallRecordReleaseFullScreenExclusiveModeEXT(VkDevice device, VkSwapchainKHR swapchain,
+                                                                             VkResult result) {
+    if (result != VK_SUCCESS) return;
+
+    auto swapchain_state = Get<SWAPCHAIN_NODE>(swapchain);
+    swapchain_state->exclusive_full_screen_access = false;
+}
+#endif
 
 void ValidationStateTracker::PreCallRecordCmdSetTessellationDomainOriginEXT(VkCommandBuffer commandBuffer,
                                                                             VkTessellationDomainOrigin domainOrigin) {

@@ -74,7 +74,9 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedMustBeRecordingL
     "VUID-vkCmdCopyImageToBuffer-commandBuffer-recording",
     "VUID-vkCmdCopyImageToBuffer2-commandBuffer-recording",
     "VUID-vkCmdCopyImageToBuffer2-commandBuffer-recording",
+    "VUID-vkCmdCopyMemoryIndirectNV-commandBuffer-recording",
     "VUID-vkCmdCopyMemoryToAccelerationStructureKHR-commandBuffer-recording",
+    "VUID-vkCmdCopyMemoryToImageIndirectNV-commandBuffer-recording",
     "VUID-vkCmdCopyMemoryToMicromapEXT-commandBuffer-recording",
     "VUID-vkCmdCopyMicromapEXT-commandBuffer-recording",
     "VUID-vkCmdCopyMicromapToMemoryEXT-commandBuffer-recording",
@@ -84,6 +86,8 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedMustBeRecordingL
     "VUID-vkCmdDebugMarkerEndEXT-commandBuffer-recording",
     "VUID-vkCmdDebugMarkerInsertEXT-commandBuffer-recording",
     "VUID-vkCmdDecodeVideoKHR-commandBuffer-recording",
+    "VUID-vkCmdDecompressMemoryIndirectCountNV-commandBuffer-recording",
+    "VUID-vkCmdDecompressMemoryNV-commandBuffer-recording",
     "VUID-vkCmdDispatch-commandBuffer-recording",
     "VUID-vkCmdDispatchBase-commandBuffer-recording",
     "VUID-vkCmdDispatchBase-commandBuffer-recording",
@@ -304,7 +308,9 @@ static const std::array<CommandSupportedQueueType, CMD_RANGE_SIZE> kGeneratedQue
     {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyImageToBuffer-commandBuffer-cmdpool"},
     {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyImageToBuffer2-commandBuffer-cmdpool"},
     {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyImageToBuffer2-commandBuffer-cmdpool"},
+    {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyMemoryIndirectNV-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyMemoryToAccelerationStructureKHR-commandBuffer-cmdpool"},
+    {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyMemoryToImageIndirectNV-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyMemoryToMicromapEXT-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyMicromapEXT-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdCopyMicromapToMemoryEXT-commandBuffer-cmdpool"},
@@ -314,6 +320,8 @@ static const std::array<CommandSupportedQueueType, CMD_RANGE_SIZE> kGeneratedQue
     {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDebugMarkerEndEXT-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDebugMarkerInsertEXT-commandBuffer-cmdpool"},
     {VK_QUEUE_VIDEO_DECODE_BIT_KHR, "VUID-vkCmdDecodeVideoKHR-commandBuffer-cmdpool"},
+    {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDecompressMemoryIndirectCountNV-commandBuffer-cmdpool"},
+    {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDecompressMemoryNV-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDispatch-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDispatchBase-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDispatchBase-commandBuffer-cmdpool"},
@@ -539,7 +547,9 @@ static const std::array<CommandSupportedRenderPass, CMD_RANGE_SIZE> kGeneratedRe
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyImageToBuffer-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyImageToBuffer2-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyImageToBuffer2-renderpass"},
+    {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyMemoryIndirectNV-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyMemoryToAccelerationStructureKHR-renderpass"},
+    {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyMemoryToImageIndirectNV-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyMemoryToMicromapEXT-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyMicromapEXT-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdCopyMicromapToMemoryEXT-renderpass"},
@@ -549,6 +559,8 @@ static const std::array<CommandSupportedRenderPass, CMD_RANGE_SIZE> kGeneratedRe
     {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
     {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdDecodeVideoKHR-renderpass"},
+    {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdDecompressMemoryIndirectCountNV-renderpass"},
+    {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdDecompressMemoryNV-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdDispatch-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdDispatchBase-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdDispatchBase-renderpass"},
@@ -774,7 +786,11 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedBufferLevelList 
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
+    nullptr,
     "VUID-vkCmdDecodeVideoKHR-bufferlevel",
+    nullptr,
+    nullptr,
     nullptr,
     nullptr,
     nullptr,
@@ -987,7 +1003,7 @@ bool CoreChecks::ValidateCmd(const CMD_BUFFER_STATE *cb_state, const CMD_TYPE cm
     return skip;
 }
 
-static VkDynamicState ConvertToDynamicState(CB_DYNAMIC_STATUS flag) {
+static VkDynamicState ConvertToDynamicState(CBDynamicStatus flag) {
     switch (flag) {
         case CB_DYNAMIC_VIEWPORT_SET:
             return VK_DYNAMIC_STATE_VIEWPORT;
@@ -1130,7 +1146,7 @@ static VkDynamicState ConvertToDynamicState(CB_DYNAMIC_STATUS flag) {
     }
 }
 
-static CB_DYNAMIC_STATUS ConvertToCBDynamicStatus(VkDynamicState state) {
+static CBDynamicStatus ConvertToCBDynamicStatus(VkDynamicState state) {
     switch (state) {
         case VK_DYNAMIC_STATE_VIEWPORT:
             return CB_DYNAMIC_VIEWPORT_SET;
@@ -1275,8 +1291,9 @@ static CB_DYNAMIC_STATUS ConvertToCBDynamicStatus(VkDynamicState state) {
 
 std::string DynamicStateString(CBDynamicFlags const &dynamic_state) {
     std::string ret;
-    for (int index = 0; index < CB_DYNAMIC_STATUS_NUM; ++index) {
-        CB_DYNAMIC_STATUS status = static_cast<CB_DYNAMIC_STATUS>(index);
+    // enum is not zero based
+    for (int index = 1; index < CB_DYNAMIC_STATUS_NUM; ++index) {
+        CBDynamicStatus status = static_cast<CBDynamicStatus>(index);
         if (dynamic_state[status]) {
             if (!ret.empty()) ret.append("|");
             ret.append(string_VkDynamicState(ConvertToDynamicState(status)));

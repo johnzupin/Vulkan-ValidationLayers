@@ -27,11 +27,7 @@
 #ifndef VKLAYERTEST_H
 #define VKLAYERTEST_H
 
-#ifdef ANDROID
-#include "vulkan_wrapper.h"
-#else
 #include <vulkan/vulkan.h>
-#endif
 
 #include "layers/vk_lunarg_device_profile_api_layer.h"
 #include "vk_layer_settings_ext.h"
@@ -66,8 +62,6 @@ using std::vector;
 //--------------------------------------------------------------------------------------
 // Mesh and VertexFormat Data
 //--------------------------------------------------------------------------------------
-
-static const char kSkipPrefix[] = "             TEST SKIPPED:";
 
 enum BsoFailSelect {
     BsoFailNone,
@@ -787,7 +781,7 @@ class BarrierQueueFamilyTestHelper : public BarrierQueueFamilyBase {
     // Init with queue families non-null for CONCURRENT sharing mode (which requires them)
     void Init(std::vector<uint32_t> *families, bool image_memory = true, bool buffer_memory = true);
 
-    void operator()(std::string img_err, std::string buf_err = "", uint32_t src = VK_QUEUE_FAMILY_IGNORED,
+    void operator()(const std::string &img_err, const std::string &buf_err = "", uint32_t src = VK_QUEUE_FAMILY_IGNORED,
                     uint32_t dst = VK_QUEUE_FAMILY_IGNORED, uint32_t queue_family_index = kInvalidQueueFamily,
                     Modifier mod = Modifier::NONE);
 
@@ -806,7 +800,7 @@ class Barrier2QueueFamilyTestHelper : public BarrierQueueFamilyBase {
     // Init with queue families non-null for CONCURRENT sharing mode (which requires them)
     void Init(std::vector<uint32_t> *families, bool image_memory = true, bool buffer_memory = true);
 
-    void operator()(std::string img_err, std::string buf_err = "", uint32_t src = VK_QUEUE_FAMILY_IGNORED,
+    void operator()(const std::string &img_err, const std::string &buf_err = "", uint32_t src = VK_QUEUE_FAMILY_IGNORED,
                     uint32_t dst = VK_QUEUE_FAMILY_IGNORED, uint32_t queue_family_index = kInvalidQueueFamily,
                     Modifier mod = Modifier::NONE);
 
@@ -891,15 +885,15 @@ void AllocateDisjointMemory(VkDeviceObj *device, PFN_vkGetImageMemoryRequirement
 
 void NegHeightViewportTests(VkDeviceObj *m_device, VkCommandBufferObj *m_commandBuffer, ErrorMonitor *m_errorMonitor);
 
-void CreateSamplerTest(VkLayerTest &test, const VkSamplerCreateInfo *pCreateInfo, std::string code = "");
+void CreateSamplerTest(VkLayerTest &test, const VkSamplerCreateInfo *pCreateInfo, const std::string &code = "");
 
-void CreateBufferTest(VkLayerTest &test, const VkBufferCreateInfo *pCreateInfo, std::string code = "");
+void CreateBufferTest(VkLayerTest &test, const VkBufferCreateInfo *pCreateInfo, const std::string &code = "");
 
-void CreateImageTest(VkLayerTest &test, const VkImageCreateInfo *pCreateInfo, std::string code = "");
+void CreateImageTest(VkLayerTest &test, const VkImageCreateInfo *pCreateInfo, const std::string &code = "");
 
 void CreateBufferViewTest(VkLayerTest &test, const VkBufferViewCreateInfo *pCreateInfo, const std::vector<std::string> &codes);
 
-void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *pCreateInfo, std::string code = "");
+void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *pCreateInfo, const std::string &code = "");
 
 bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, VkPhysicalDeviceFeatures2KHR *features2 = nullptr,
                                     VkValidationFeaturesEXT *enabled_features = nullptr, bool mockicd_valid = false);

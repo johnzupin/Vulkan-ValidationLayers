@@ -17,9 +17,9 @@
 cmake_minimum_required(VERSION 3.10.2)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-project(Vulkan-ValidationLayers LANGUAGES CXX C)
+project(VVL LANGUAGES CXX C)
 
-set(VVL_CPP_STANDARD 11 CACHE STRING "Set the C++ standard to build against. The value will be passed to cmake's CXX_STANDARD property.")
+set(VVL_CPP_STANDARD 17 CACHE STRING "Set the C++ standard to build against. The value will be passed to cmake's CXX_STANDARD property.")
 
 option(VVL_ENABLE_ASAN "Use address sanitization (specifically -fsanitize=address)" OFF)
 
@@ -51,27 +51,36 @@ if (UPDATE_DEPS)
     message("*       dependencies.                                                          *")
     message("********************************************************************************")
 
-    set(_update_deps_arg "")
+    set(optional_args)
     if (NOT BUILD_TESTS)
-        set(_update_deps_arg "--optional=tests")
+        set(optional_args "--optional=tests")
     endif()
 
     if (UPDATE_DEPS_SKIP_EXISTING_INSTALL)
-        set(_update_deps_arg ${_update_deps_arg} "--skip-existing-install")
+        set(optional_args ${optional_args} "--skip-existing-install")
+    endif()
+
+    if (DEFINED CMAKE_TOOLCHAIN_FILE)
+        set(optional_args ${optional_args} "--cmake_var")
+        set(optional_args ${optional_args} "CMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
     endif()
 
     # Add a target so that update_deps.py will run when necessary
     # NOTE: This is triggered off of the timestamps of known_good.json and helper.cmake
-    add_custom_command(OUTPUT ${CMAKE_CURRENT_LIST_DIR}/external/helper.cmake
-                       COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/scripts/update_deps.py --dir ${CMAKE_CURRENT_LIST_DIR}/external --arch ${_target_arch} --config ${_build_type} --generator "${CMAKE_GENERATOR}" ${_update_deps_arg}
-                       DEPENDS ${CMAKE_CURRENT_LIST_DIR}/scripts/known_good.json)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_LIST_DIR}/external/helper.cmake
+        COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/scripts/update_deps.py 
+            --dir ${CMAKE_CURRENT_LIST_DIR}/external --arch ${_target_arch} --config ${_build_type} --generator "${CMAKE_GENERATOR}" ${optional_args}
+        DEPENDS ${CMAKE_CURRENT_LIST_DIR}/scripts/known_good.json
+    )
 
     add_custom_target(vvl_update_deps ALL DEPENDS ${CMAKE_CURRENT_LIST_DIR}/external/helper.cmake)
 
     # Check if update_deps.py needs to be run on first cmake run
     if (${CMAKE_CURRENT_LIST_DIR}/scripts/known_good.json IS_NEWER_THAN ${CMAKE_CURRENT_LIST_DIR}/external/helper.cmake)
         execute_process(
-            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/scripts/update_deps.py --dir ${CMAKE_CURRENT_LIST_DIR}/external --arch ${_target_arch} --config ${_build_type} --generator "${CMAKE_GENERATOR}" ${_update_deps_arg}
+            COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/scripts/update_deps.py
+                --dir ${CMAKE_CURRENT_LIST_DIR}/external --arch ${_target_arch} --config ${_build_type} --generator "${CMAKE_GENERATOR}" ${optional_args}
             WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
             RESULT_VARIABLE _update_deps_result
         )
@@ -102,11 +111,11 @@ endif()
 if (GOOGLETEST_INSTALL_DIR)
     list(APPEND CMAKE_PREFIX_PATH ${GOOGLETEST_INSTALL_DIR})
 endif()
+if (VULKAN_HEADERS_INSTALL_DIR)
+    list(APPEND CMAKE_PREFIX_PATH ${VULKAN_HEADERS_INSTALL_DIR})
+endif()
 
-find_package(VulkanHeaders REQUIRED)
-add_library(Vulkan-Headers INTERFACE)
-target_include_directories(Vulkan-Headers INTERFACE ${VulkanHeaders_INCLUDE_DIRS})
-add_library(Vulkan::Headers ALIAS Vulkan-Headers)
+find_package(VulkanHeaders REQUIRED CONFIG QUIET)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
@@ -120,36 +129,44 @@ if(WIN32 AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "default install path" FORCE)
 endif()
 
-if(APPLE)
-    # CMake versions 3 or later need CMAKE_MACOSX_RPATH defined. This avoids the CMP0042 policy message.
-    set(CMAKE_MACOSX_RPATH 1)
-endif()
-
-# Enable IDE GUI folders
+# Enable GUI folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # "Helper" targets that don't have interesting source code should set their FOLDER property to this
 set(LAYERS_HELPER_FOLDER "Helper Targets")
 
-# Options for Linux only
-if(UNIX AND NOT APPLE) # i.e. Linux
-    include(FindPkgConfig)
+set(LINUX OFF) # NOTE: Variable as of 3.25
+if (UNIX AND NOT APPLE) # Options for Linux only
+    set(LINUX ON)
+
     option(BUILD_WSI_XCB_SUPPORT "Build XCB WSI support" ON)
     option(BUILD_WSI_XLIB_SUPPORT "Build Xlib WSI support" ON)
     option(BUILD_WSI_WAYLAND_SUPPORT "Build Wayland WSI support" ON)
-    set(DEMOS_WSI_SELECTION "XCB" CACHE STRING "Select WSI target for demos (XCB, XLIB, WAYLAND, DISPLAY)")
+
+    find_package(PkgConfig REQUIRED QUIET) # Use PkgConfig to find Linux system libraries
 
     if(BUILD_WSI_XCB_SUPPORT)
-        find_package(XCB REQUIRED)
-        include_directories(${XCB_INCLUDE_DIR})
+        pkg_check_modules(XCB REQUIRED QUIET IMPORTED_TARGET xcb)
+        add_definitions(-DVK_USE_PLATFORM_XCB_KHR)
     endif()
 
     if(BUILD_WSI_XLIB_SUPPORT)
-        find_package(X11 REQUIRED)
+        pkg_check_modules(X11 REQUIRED QUIET IMPORTED_TARGET x11)
+        add_definitions(-DVK_USE_PLATFORM_XLIB_KHR -DVK_USE_PLATFORM_XLIB_XRANDR_EXT)
+    endif()
+
+    if(BUILD_WSI_WAYLAND_SUPPORT)
+        add_definitions(-DVK_USE_PLATFORM_WAYLAND_KHR)
     endif()
 endif()
 
+# NOTE: The idiom for open source projects is to not enable warnings as errors.
+# This reduces problems for users who simply want to build the repository.
+option(BUILD_WERROR "Treat compiler warnings as errors" OFF)
+if (BUILD_WERROR)
+    add_compile_options("$<IF:$<CXX_COMPILER_ID:MSVC>,/WX,-Werror>")
+endif()
+
 # Platform-specific compiler switches
-option(BUILD_WERROR "Treat compiler warnings as errors" ON)
 if(${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
     add_compile_options(-Wconversion
 
@@ -170,14 +187,6 @@ if(${CMAKE_C_COMPILER_ID} MATCHES "(GNU|Clang)")
                         -fno-strict-aliasing
                         -fno-builtin-memcmp)
 
-    # Treat warnings as errors for versions of GCC and c++11-compliant Clang versions that are shipped on Ubuntu 18.04 or older.
-    if(BUILD_WERROR OR
-      (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS_EQUAL 7.3.0) OR
-      (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 6.0.0))
-        add_compile_options(-Werror)
-    endif()
-
-
     set(CMAKE_C_STANDARD 99)
 
     # For GCC version 7.1 or greater, we need to disable the implicit fallthrough warning since there's no consistent way to satisfy
@@ -186,10 +195,6 @@ if(${CMAKE_C_COMPILER_ID} MATCHES "(GNU|Clang)")
         add_compile_options(-Wimplicit-fallthrough=0)
     endif()
 elseif(MSVC)
-    if(BUILD_WERROR)
-        # Treat warnings as errors
-        add_compile_options("/WX")
-    endif()
     # Warn about nested declarations
     add_compile_options("/w34456")
     # Warn about potentially uninitialized variables
@@ -210,51 +215,26 @@ if (USE_ROBIN_HOOD_HASHING)
 endif()
 
 if(BUILD_LAYERS OR BUILD_TESTS)
-    find_package(SPIRV-Headers CONFIG QUIET)
-    if(SPIRV-Headers_FOUND)
-        # Prefer the package if found. Note that if SPIRV_HEADERS_INSTALL_DIR points at an 'installed'
-        # version of SPIRV-Headers, the package will be found.
-        get_target_property(SPIRV_HEADERS_INCLUDE_DIR SPIRV-Headers::SPIRV-Headers INTERFACE_INCLUDE_DIRECTORIES)
-    elseif(SPIRV_HEADERS_INCLUDE_DIR)
-        # This is set by SPIRV-Tools (in parent scope!) and also some packages that include VVL with add_subdirectory
-	    if (NOT EXISTS "${SPIRV_HEADERS_INCLUDE_DIR}/spirv/unified1/spirv.h")
-	        message(FATAL_ERROR "Cannot find SPIRV-Headers from SPIRV_HEADERS_INCLUDE_DIR: ${SPIRV_HEADERS_INCLUDE_DIR}")
-        endif()
-    elseif(SPIRV_HEADERS_INSTALL_DIR)
-        # This is our official variable for setting SPIRV-Headers location, but pointing at the raw source of SPIRV-Headers
-        if (NOT EXISTS "${SPIRV_HEADERS_INSTALL_DIR}/include/spirv/unified1/spirv.h")
-            message(FATAL_ERROR "Cannot find SPIRV-Headers from SPIRV_HEADERS_INSTALL_DIR: ${SPIRV_HEADERS_INSTALL_DIR}")
-        endif()
-	    set(SPIRV_HEADERS_INCLUDE_DIR "${SPIRV_HEADERS_INSTALL_DIR}/include")
-    endif()
+    find_package(SPIRV-Headers REQUIRED CONFIG QUIET)
 
-    # VVLGenerateSourceCode depends on spirv/unified1
     include(VVLGenerateSourceCode)
 
-    if (NOT TARGET SPIRV-Tools-opt)
-        find_package(SPIRV-Tools-opt REQUIRED CONFIG)
-    endif()
+    find_package(SPIRV-Tools-opt REQUIRED CONFIG QUIET)
 
-    if (NOT TARGET SPIRV-Tools)
-        find_package(SPIRV-Tools REQUIRED CONFIG)
-        # See https://github.com/KhronosGroup/SPIRV-Tools/issues/3909 for background on this.
-        # The targets available from SPIRV-Tools change depending on how SPIRV_TOOLS_BUILD_STATIC is set.
-        # Try to handle all possible combinations so that we work with externally built packages.
-        if (TARGET SPIRV-Tools)
-            set(SPIRV_TOOLS_TARGET "SPIRV-Tools")
-        elseif(TARGET SPIRV-Tools-static)
-            set(SPIRV_TOOLS_TARGET "SPIRV-Tools-static")
-        elseif(TARGET SPIRV-Tools-shared)
-            set(SPIRV_TOOLS_TARGET "SPIRV-Tools-shared")
-        else()
-            message(FATAL_ERROR "Cannot determine SPIRV-Tools target name")
-        endif()
+    find_package(SPIRV-Tools REQUIRED CONFIG QUIET)
+    # See https://github.com/KhronosGroup/SPIRV-Tools/issues/3909 for background on this.
+    # The targets available from SPIRV-Tools change depending on how SPIRV_TOOLS_BUILD_STATIC is set.
+    # Try to handle all possible combinations so that we work with externally built packages.
+    if (TARGET SPIRV-Tools)
+        set(SPIRV_TOOLS_TARGET "SPIRV-Tools")
+    elseif(TARGET SPIRV-Tools-static)
+        set(SPIRV_TOOLS_TARGET "SPIRV-Tools-static")
+    elseif(TARGET SPIRV-Tools-shared)
+        set(SPIRV_TOOLS_TARGET "SPIRV-Tools-shared")
+    else()
+        message(FATAL_ERROR "Cannot determine SPIRV-Tools target name")
     endif()
 endif()
-
-# Generate dependent helper files ------------------------------------------------------------------------------------------------
-
-set(SCRIPTS_DIR "${PROJECT_SOURCE_DIR}/scripts")
 
 # VkLayer_utils library ----------------------------------------------------------------------------------------------------------
 # For Windows, we use a static lib because the Windows loader has a fairly restrictive loader search path that can't be easily
@@ -280,15 +260,13 @@ if(WIN32)
         target_compile_definitions(VkLayer_utils PUBLIC "_WIN32_WINNT=0x0600")
     endif()
 endif()
-install(TARGETS VkLayer_utils DESTINATION ${CMAKE_INSTALL_LIBDIR})
 set_target_properties(VkLayer_utils PROPERTIES LINKER_LANGUAGE CXX)
 target_include_directories(VkLayer_utils
                            PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/layers
                                   ${CMAKE_CURRENT_SOURCE_DIR}/layers/generated
                                   ${CMAKE_CURRENT_BINARY_DIR}
                                   ${CMAKE_CURRENT_BINARY_DIR}/layers
-                                  ${PROJECT_BINARY_DIR}
-                                  ${VulkanHeaders_INCLUDE_DIR})
+                                  ${PROJECT_BINARY_DIR})
 
 if (USE_ROBIN_HOOD_HASHING)
     target_link_libraries(VkLayer_utils PUBLIC robin_hood::robin_hood)
