@@ -38,6 +38,8 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedMustBeRecordingL
     "VUID-vkCmdBeginRendering-commandBuffer-recording",
     "VUID-vkCmdBeginTransformFeedbackEXT-commandBuffer-recording",
     "VUID-vkCmdBeginVideoCodingKHR-commandBuffer-recording",
+    "VUID-vkCmdBindDescriptorBufferEmbeddedSamplersEXT-commandBuffer-recording",
+    "VUID-vkCmdBindDescriptorBuffersEXT-commandBuffer-recording",
     "VUID-vkCmdBindDescriptorSets-commandBuffer-recording",
     "VUID-vkCmdBindIndexBuffer-commandBuffer-recording",
     "VUID-vkCmdBindInvocationMaskHUAWEI-commandBuffer-recording",
@@ -179,6 +181,7 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedMustBeRecordingL
     "VUID-vkCmdSetDepthTestEnable-commandBuffer-recording",
     "VUID-vkCmdSetDepthWriteEnable-commandBuffer-recording",
     "VUID-vkCmdSetDepthWriteEnable-commandBuffer-recording",
+    "VUID-vkCmdSetDescriptorBufferOffsetsEXT-commandBuffer-recording",
     "VUID-vkCmdSetDeviceMask-commandBuffer-recording",
     "VUID-vkCmdSetDeviceMask-commandBuffer-recording",
     "VUID-vkCmdSetDiscardRectangleEXT-commandBuffer-recording",
@@ -272,6 +275,8 @@ static const std::array<CommandSupportedQueueType, CMD_RANGE_SIZE> kGeneratedQue
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdBeginRendering-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdBeginTransformFeedbackEXT-commandBuffer-cmdpool"},
     {VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "VUID-vkCmdBeginVideoCodingKHR-commandBuffer-cmdpool"},
+    {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdBindDescriptorBufferEmbeddedSamplersEXT-commandBuffer-cmdpool"},
+    {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdBindDescriptorBuffersEXT-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdBindDescriptorSets-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdBindIndexBuffer-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdBindInvocationMaskHUAWEI-commandBuffer-cmdpool"},
@@ -375,7 +380,7 @@ static const std::array<CommandSupportedQueueType, CMD_RANGE_SIZE> kGeneratedQue
     {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "VUID-vkCmdResetEvent-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "VUID-vkCmdResetEvent2-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "VUID-vkCmdResetEvent2-commandBuffer-cmdpool"},
-    {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "VUID-vkCmdResetQueryPool-commandBuffer-cmdpool"},
+    {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_OPTICAL_FLOW_BIT_NV, "VUID-vkCmdResetQueryPool-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdResolveImage-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdResolveImage2-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdResolveImage2-commandBuffer-cmdpool"},
@@ -413,6 +418,7 @@ static const std::array<CommandSupportedQueueType, CMD_RANGE_SIZE> kGeneratedQue
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdSetDepthTestEnable-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdSetDepthWriteEnable-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdSetDepthWriteEnable-commandBuffer-cmdpool"},
+    {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdSetDescriptorBufferOffsetsEXT-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT, "VUID-vkCmdSetDeviceMask-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT, "VUID-vkCmdSetDeviceMask-commandBuffer-cmdpool"},
     {VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdSetDiscardRectangleEXT-commandBuffer-cmdpool"},
@@ -484,7 +490,7 @@ static const std::array<CommandSupportedQueueType, CMD_RANGE_SIZE> kGeneratedQue
     {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdWriteBufferMarker2AMD-commandBuffer-cmdpool"},
     {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdWriteBufferMarkerAMD-commandBuffer-cmdpool"},
     {VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdWriteMicromapsPropertiesEXT-commandBuffer-cmdpool"},
-    {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "VUID-vkCmdWriteTimestamp-commandBuffer-cmdpool"},
+    {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_OPTICAL_FLOW_BIT_NV, "VUID-vkCmdWriteTimestamp-commandBuffer-cmdpool"},
     {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "VUID-vkCmdWriteTimestamp2-commandBuffer-cmdpool"},
     {VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "VUID-vkCmdWriteTimestamp2-commandBuffer-cmdpool"},
 }};
@@ -511,6 +517,8 @@ static const std::array<CommandSupportedRenderPass, CMD_RANGE_SIZE> kGeneratedRe
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdBeginRendering-renderpass"},
     {CMD_RENDER_PASS_INSIDE, "VUID-vkCmdBeginTransformFeedbackEXT-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdBeginVideoCodingKHR-renderpass"},
+    {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
+    {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
     {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
     {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdBindInvocationMaskHUAWEI-renderpass"},
@@ -655,6 +663,7 @@ static const std::array<CommandSupportedRenderPass, CMD_RANGE_SIZE> kGeneratedRe
     {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
     {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
     {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
+    {CMD_RENDER_PASS_BOTH, kVUIDUndefined},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdSetEvent-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdSetEvent2-renderpass"},
     {CMD_RENDER_PASS_OUTSIDE, "VUID-vkCmdSetEvent2-renderpass"},
@@ -741,6 +750,8 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedBufferLevelList 
     nullptr,
     nullptr,
     "VUID-vkCmdBeginVideoCodingKHR-bufferlevel",
+    nullptr,
+    nullptr,
     nullptr,
     nullptr,
     nullptr,
@@ -956,16 +967,17 @@ static const std::array<const char *, CMD_RANGE_SIZE> kGeneratedBufferLevelList 
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
 }};
 
 // Used to handle all the implicit VUs that are autogenerated from the registry
-bool CoreChecks::ValidateCmd(const CMD_BUFFER_STATE *cb_state, const CMD_TYPE cmd) const {
+bool CoreChecks::ValidateCmd(const CMD_BUFFER_STATE &cb_state, const CMD_TYPE cmd) const {
     bool skip = false;
     const char *caller_name = CommandTypeString(cmd);
 
     // Validate the given command being added to the specified cmd buffer,
     // flagging errors if CB is not in the recording state or if there's an issue with the Cmd ordering
-    switch (cb_state->state) {
+    switch (cb_state.state) {
         case CB_RECORDING:
             skip |= ValidateCmdSubpassState(cb_state, cmd);
             break;
@@ -978,7 +990,7 @@ bool CoreChecks::ValidateCmd(const CMD_BUFFER_STATE *cb_state, const CMD_TYPE cm
         default:
             assert(cmd != CMD_NONE);
             const auto error = kGeneratedMustBeRecordingList[cmd];
-            skip |= LogError(cb_state->commandBuffer(), error, "You must call vkBeginCommandBuffer() before this call to %s.",
+            skip |= LogError(cb_state.commandBuffer(), error, "You must call vkBeginCommandBuffer() before this call to %s.",
                             caller_name);
     }
 

@@ -490,7 +490,7 @@ void ThreadSafety::PostCallRecordGetSwapchainImagesKHR(VkDevice device, VkSwapch
                                                        VkImage *pSwapchainImages, VkResult result) {
     FinishReadObjectParentInstance(device, "vkGetSwapchainImagesKHR");
     FinishReadObjectParentInstance(swapchain, "vkGetSwapchainImagesKHR");
-    if (pSwapchainImages != NULL) {
+    if (pSwapchainImages != nullptr) {
         auto lock = WriteLockGuard(thread_safety_lock);
         auto &wrapped_swapchain_image_handles = swapchain_wrapped_image_handle_map[swapchain];
         for (uint32_t i = static_cast<uint32_t>(wrapped_swapchain_image_handles.size()); i < *pSwapchainImageCount; i++) {
@@ -8414,6 +8414,193 @@ void ThreadSafety::PostCallRecordExportMetalObjectsEXT(
     FinishReadObjectParentInstance(device, "vkExportMetalObjectsEXT");
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
+
+void ThreadSafety::PreCallRecordGetDescriptorSetLayoutSizeEXT(
+    VkDevice                                    device,
+    VkDescriptorSetLayout                       layout,
+    VkDeviceSize*                               pLayoutSizeInBytes) {
+    StartReadObjectParentInstance(device, "vkGetDescriptorSetLayoutSizeEXT");
+    StartReadObject(layout, "vkGetDescriptorSetLayoutSizeEXT");
+}
+
+void ThreadSafety::PostCallRecordGetDescriptorSetLayoutSizeEXT(
+    VkDevice                                    device,
+    VkDescriptorSetLayout                       layout,
+    VkDeviceSize*                               pLayoutSizeInBytes) {
+    FinishReadObjectParentInstance(device, "vkGetDescriptorSetLayoutSizeEXT");
+    FinishReadObject(layout, "vkGetDescriptorSetLayoutSizeEXT");
+}
+
+void ThreadSafety::PreCallRecordGetDescriptorSetLayoutBindingOffsetEXT(
+    VkDevice                                    device,
+    VkDescriptorSetLayout                       layout,
+    uint32_t                                    binding,
+    VkDeviceSize*                               pOffset) {
+    StartReadObjectParentInstance(device, "vkGetDescriptorSetLayoutBindingOffsetEXT");
+    StartReadObject(layout, "vkGetDescriptorSetLayoutBindingOffsetEXT");
+}
+
+void ThreadSafety::PostCallRecordGetDescriptorSetLayoutBindingOffsetEXT(
+    VkDevice                                    device,
+    VkDescriptorSetLayout                       layout,
+    uint32_t                                    binding,
+    VkDeviceSize*                               pOffset) {
+    FinishReadObjectParentInstance(device, "vkGetDescriptorSetLayoutBindingOffsetEXT");
+    FinishReadObject(layout, "vkGetDescriptorSetLayoutBindingOffsetEXT");
+}
+
+void ThreadSafety::PreCallRecordGetDescriptorEXT(
+    VkDevice                                    device,
+    const VkDescriptorGetInfoEXT*               pDescriptorInfo,
+    size_t                                      dataSize,
+    void*                                       pDescriptor) {
+    StartReadObjectParentInstance(device, "vkGetDescriptorEXT");
+}
+
+void ThreadSafety::PostCallRecordGetDescriptorEXT(
+    VkDevice                                    device,
+    const VkDescriptorGetInfoEXT*               pDescriptorInfo,
+    size_t                                      dataSize,
+    void*                                       pDescriptor) {
+    FinishReadObjectParentInstance(device, "vkGetDescriptorEXT");
+}
+
+void ThreadSafety::PreCallRecordCmdBindDescriptorBuffersEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    bufferCount,
+    const VkDescriptorBufferBindingInfoEXT*     pBindingInfos) {
+    StartWriteObject(commandBuffer, "vkCmdBindDescriptorBuffersEXT");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdBindDescriptorBuffersEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    bufferCount,
+    const VkDescriptorBufferBindingInfoEXT*     pBindingInfos) {
+    FinishWriteObject(commandBuffer, "vkCmdBindDescriptorBuffersEXT");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdSetDescriptorBufferOffsetsEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    firstSet,
+    uint32_t                                    setCount,
+    const uint32_t*                             pBufferIndices,
+    const VkDeviceSize*                         pOffsets) {
+    StartWriteObject(commandBuffer, "vkCmdSetDescriptorBufferOffsetsEXT");
+    StartReadObject(layout, "vkCmdSetDescriptorBufferOffsetsEXT");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdSetDescriptorBufferOffsetsEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    firstSet,
+    uint32_t                                    setCount,
+    const uint32_t*                             pBufferIndices,
+    const VkDeviceSize*                         pOffsets) {
+    FinishWriteObject(commandBuffer, "vkCmdSetDescriptorBufferOffsetsEXT");
+    FinishReadObject(layout, "vkCmdSetDescriptorBufferOffsetsEXT");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplersEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set) {
+    StartWriteObject(commandBuffer, "vkCmdBindDescriptorBufferEmbeddedSamplersEXT");
+    StartReadObject(layout, "vkCmdBindDescriptorBufferEmbeddedSamplersEXT");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdBindDescriptorBufferEmbeddedSamplersEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipelineLayout                            layout,
+    uint32_t                                    set) {
+    FinishWriteObject(commandBuffer, "vkCmdBindDescriptorBufferEmbeddedSamplersEXT");
+    FinishReadObject(layout, "vkCmdBindDescriptorBufferEmbeddedSamplersEXT");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordGetBufferOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkBufferCaptureDescriptorDataInfoEXT* pInfo,
+    void*                                       pData) {
+    StartReadObjectParentInstance(device, "vkGetBufferOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PostCallRecordGetBufferOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkBufferCaptureDescriptorDataInfoEXT* pInfo,
+    void*                                       pData,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkGetBufferOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PreCallRecordGetImageOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkImageCaptureDescriptorDataInfoEXT*  pInfo,
+    void*                                       pData) {
+    StartReadObjectParentInstance(device, "vkGetImageOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PostCallRecordGetImageOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkImageCaptureDescriptorDataInfoEXT*  pInfo,
+    void*                                       pData,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkGetImageOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PreCallRecordGetImageViewOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkImageViewCaptureDescriptorDataInfoEXT* pInfo,
+    void*                                       pData) {
+    StartReadObjectParentInstance(device, "vkGetImageViewOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PostCallRecordGetImageViewOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkImageViewCaptureDescriptorDataInfoEXT* pInfo,
+    void*                                       pData,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkGetImageViewOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PreCallRecordGetSamplerOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkSamplerCaptureDescriptorDataInfoEXT* pInfo,
+    void*                                       pData) {
+    StartReadObjectParentInstance(device, "vkGetSamplerOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PostCallRecordGetSamplerOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkSamplerCaptureDescriptorDataInfoEXT* pInfo,
+    void*                                       pData,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkGetSamplerOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PreCallRecordGetAccelerationStructureOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkAccelerationStructureCaptureDescriptorDataInfoEXT* pInfo,
+    void*                                       pData) {
+    StartReadObjectParentInstance(device, "vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT");
+}
+
+void ThreadSafety::PostCallRecordGetAccelerationStructureOpaqueCaptureDescriptorDataEXT(
+    VkDevice                                    device,
+    const VkAccelerationStructureCaptureDescriptorDataInfoEXT* pInfo,
+    void*                                       pData,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT");
+}
 
 void ThreadSafety::PreCallRecordCmdSetFragmentShadingRateEnumNV(
     VkCommandBuffer                             commandBuffer,

@@ -187,6 +187,7 @@ PIPELINE_STATE::ActiveSlotMap PIPELINE_STATE::GetActiveSlots(const StageStateVec
                     ++image_index;
                 }
             }
+            entry.write_without_formats_component_count_list = use.second.write_without_formats_component_count_list;
         }
     }
     return active_slots;
@@ -257,10 +258,11 @@ static layer_data::unordered_set<uint32_t> GetFSOutputLocations(const PIPELINE_S
     return result;
 }
 
-static VkPrimitiveTopology GetTopologyAtRasterizer(const PIPELINE_STATE::StageStateVec &stage_states,
-                                                   const safe_VkPipelineInputAssemblyStateCreateInfo *assembly_state) {
-    VkPrimitiveTopology result = assembly_state ? assembly_state->topology : static_cast<VkPrimitiveTopology>(0);
-    for (const auto &stage : stage_states) {
+static VkPrimitiveTopology GetTopologyAtRasterizer(const PIPELINE_STATE &pipeline) {
+    auto result = (pipeline.vertex_input_state && pipeline.vertex_input_state->input_assembly_state)
+                      ? pipeline.vertex_input_state->input_assembly_state->topology
+                      : VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
+    for (const auto &stage : pipeline.stage_state) {
         if (!stage.entrypoint) {
             continue;
         }
@@ -535,10 +537,11 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       active_slots(GetActiveSlots(stage_state)),
       max_active_slot(GetMaxActiveSlot(active_slots)),
       active_shaders(GetActiveShaders(stage_state)),
-      topology_at_rasterizer(GetTopologyAtRasterizer(stage_state, create_info.graphics.pInputAssemblyState)),
+      topology_at_rasterizer(GetTopologyAtRasterizer(*this)),
       uses_shader_module_id(UsesShaderModuleId(stage_state)),
+      descriptor_buffer_mode((create_info.graphics.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
       uses_pipeline_robustness(UsesPipelineRobustness(PNext(), stage_state)),
-      csm_states(csm_states){
+      csm_states(csm_states) {
     const auto link_info = LvlFindInChain<VkPipelineLibraryCreateInfoKHR>(PNext());
     if (link_info) {
         // accumulate dynamic state
@@ -605,8 +608,8 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       stage_state(GetStageStates(*state_data, *this, csm_states)),
       active_slots(GetActiveSlots(stage_state)),
       active_shaders(GetActiveShaders(stage_state)),
-      topology_at_rasterizer{},
       uses_shader_module_id(UsesShaderModuleId(stage_state)),
+      descriptor_buffer_mode((create_info.compute.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
       uses_pipeline_robustness(UsesPipelineRobustness(PNext(), stage_state)),
       csm_states(csm_states),
       merged_graphics_layout(layout) {
@@ -620,8 +623,8 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       stage_state(GetStageStates(*state_data, *this, csm_states)),
       active_slots(GetActiveSlots(stage_state)),
       active_shaders(GetActiveShaders(stage_state)),
-      topology_at_rasterizer{},
       uses_shader_module_id(UsesShaderModuleId(stage_state)),
+      descriptor_buffer_mode((create_info.raytracing.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
       uses_pipeline_robustness(UsesPipelineRobustness(PNext(), stage_state)),
       csm_states(csm_states),
       merged_graphics_layout(std::move(layout)) {
@@ -637,8 +640,8 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       stage_state(GetStageStates(*state_data, *this, csm_states)),
       active_slots(GetActiveSlots(stage_state)),
       active_shaders(GetActiveShaders(stage_state)),
-      topology_at_rasterizer{},
       uses_shader_module_id(UsesShaderModuleId(stage_state)),
+      descriptor_buffer_mode((create_info.graphics.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
       uses_pipeline_robustness(UsesPipelineRobustness(PNext(), stage_state)),
       csm_states(csm_states),
       merged_graphics_layout(std::move(layout)) {

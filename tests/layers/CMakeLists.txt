@@ -23,8 +23,6 @@ add_library(VkLayer_device_profile_api MODULE
 target_link_libraries(VkLayer_device_profile_api PRIVATE VkLayer_utils)
 
 if (WIN32)
-    target_compile_definitions(VkLayer_device_profile_api PRIVATE _CRT_SECURE_NO_WARNINGS)
-
     # Need to use this instead of target_link_options() for older versions of CMake.
     set_target_properties(VkLayer_device_profile_api PROPERTIES
         LINK_FLAGS "/DEF:${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_device_profile_api.def"
@@ -36,12 +34,6 @@ elseif (LINUX)
         LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/libVkLayer_device_profile_api.map,-Bsymbolic"
     )
 endif()
-
-set_target_properties(VkLayer_device_profile_api PROPERTIES 
-    CXX_STANDARD ${VVL_CPP_STANDARD}
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-)
 
 target_include_directories(VkLayer_device_profile_api PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

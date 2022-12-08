@@ -1228,8 +1228,6 @@ TEST_F(VkLayerTest, DrawTimeImageViewTypeMismatchWithPipeline) {
     TEST_DESCRIPTION(
         "Test that an error is produced when an image view type does not match the dimensionality declared in the shader");
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "requires an image view of type VK_IMAGE_VIEW_TYPE_3D");
-
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -1270,9 +1268,8 @@ TEST_F(VkLayerTest, DrawTimeImageViewTypeMismatchWithPipeline) {
     VkRect2D scissor = {{0, 0}, {16, 16}};
     vk::CmdSetScissor(m_commandBuffer->handle(), 0, 1, &scissor);
 
-    // error produced here.
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-viewType-07752");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
-
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->EndRenderPass();
@@ -1339,8 +1336,6 @@ TEST_F(VkLayerTest, DrawTimeImageComponentTypeMismatchWithPipeline) {
     TEST_DESCRIPTION(
         "Test that an error is produced when the component type of an imageview disagrees with the type in the shader.");
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "SINT component type, but bound descriptor");
-
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -1381,9 +1376,8 @@ TEST_F(VkLayerTest, DrawTimeImageComponentTypeMismatchWithPipeline) {
     VkRect2D scissor = {{0, 0}, {16, 16}};
     vk::CmdSetScissor(m_commandBuffer->handle(), 0, 1, &scissor);
 
-    // error produced here.
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-format-07753");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
-
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->EndRenderPass();
@@ -1453,7 +1447,7 @@ TEST_F(VkLayerTest, CopyImageLayerCountMismatch) {
     copyRegion.extent.height = 1;
     copyRegion.extent.depth = 1;
 
-    const char *vuid = (maintenance1 == true) ? "VUID-VkImageCopy-extent-00140" : "VUID-VkImageCopy-layerCount-00138";
+    const char *vuid = (maintenance1 == true) ? "UNASSIGNED-VkImageCopy-extent" : "VUID-VkImageCopy-layerCount-00138";
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, vuid);
     m_commandBuffer->CopyImage(src_image_obj.image(), VK_IMAGE_LAYOUT_GENERAL, dst_image_obj.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copyRegion);
@@ -1611,14 +1605,14 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     // width not a multiple of compressed block width
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-imageExtent-00207");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-01794");  // image transfer granularity
+                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-07747");  // image transfer granularity
     vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, buffer_16.handle(), 1, &region);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "VUID-vkCmdCopyBufferToImage-imageExtent-00207");  // width not a multiple of compressed block width
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyBufferToImage-imageOffset-01793");  // image transfer granularity
+                                         "VUID-vkCmdCopyBufferToImage-imageOffset-07738");  // image transfer granularity
     vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region);
     m_errorMonitor->VerifyFound();
 
@@ -1627,14 +1621,14 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "VUID-vkCmdCopyImageToBuffer-imageExtent-00208");  // height not a multiple of compressed block width
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-01794");  // image transfer granularity
+                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-07747");  // image transfer granularity
     vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, buffer_16.handle(), 1, &region);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "VUID-vkCmdCopyBufferToImage-imageExtent-00208");  // height not a multiple of compressed block width
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyBufferToImage-imageOffset-01793");  // image transfer granularity
+                                         "VUID-vkCmdCopyBufferToImage-imageOffset-07738");  // image transfer granularity
     vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region);
     m_errorMonitor->VerifyFound();
 
@@ -1645,7 +1639,7 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-pRegions-07274");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImageToBuffer-pRegions-07275");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-01794");  // image transfer granularity
+                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-07747");  // image transfer granularity
     vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, buffer_16.handle(), 1, &region);
     m_errorMonitor->VerifyFound();
 
@@ -1653,7 +1647,7 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07274");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07275");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyBufferToImage-imageOffset-01793");  // image transfer granularity
+                                         "VUID-vkCmdCopyBufferToImage-imageOffset-07738");  // image transfer granularity
     vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region);
     m_errorMonitor->VerifyFound();
 
@@ -1678,7 +1672,7 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCopyBufferToImageInfo2-pRegions-07274");
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCopyBufferToImageInfo2-pRegions-07275");
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                             "VUID-VkCopyBufferToImageInfo2-imageOffset-01793");  // image transfer granularity
+                                             "VUID-vkCmdCopyBufferToImage2-imageOffset-07738");  // image transfer granularity
         vkCmdCopyBufferToImage2Function(m_commandBuffer->handle(), &copy_buffer_to_image_info2);
         m_errorMonitor->VerifyFound();
     }
@@ -1703,14 +1697,14 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "VUID-vkCmdCopyImageToBuffer-imageExtent-00208");  // offset+extent not a multiple of block width
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-01794");  // image transfer granularity
+                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-07747");  // image transfer granularity
     vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), odd_image.handle(), VK_IMAGE_LAYOUT_GENERAL, buffer_16.handle(), 1,
                              &region);
     m_errorMonitor->VerifyFound();
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "VUID-vkCmdCopyBufferToImage-imageExtent-00208");  // offset+extent not a multiple of block width
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyBufferToImage-imageOffset-01793");  // image transfer granularity
+                                         "VUID-vkCmdCopyBufferToImage-imageOffset-07738");  // image transfer granularity
     vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16.handle(), odd_image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1,
                              &region);
     m_errorMonitor->VerifyFound();
@@ -2224,7 +2218,7 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
             m_errorMonitor->SetDesiredFailureMsg(
                 kErrorBit, "VUID-vkCmdCopyImageToBuffer-imageExtent-00207");  // extent width not a multiple of block size
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                                 "VUID-vkCmdCopyImageToBuffer-imageOffset-01794");  // image transfer granularity
+                                                 "VUID-vkCmdCopyImageToBuffer-imageOffset-07747");  // image transfer granularity
             region.imageExtent.width = 66;
             vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image_NPOT_4x4comp.handle(), VK_IMAGE_LAYOUT_GENERAL,
                                      buffer_16k.handle(), 1, &region);
@@ -2234,7 +2228,7 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
             m_errorMonitor->SetDesiredFailureMsg(
                 kErrorBit, "VUID-vkCmdCopyImageToBuffer-imageExtent-00208");  // extent height not a multiple of block size
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                                 "VUID-vkCmdCopyImageToBuffer-imageOffset-01794");  // image transfer granularity
+                                                 "VUID-vkCmdCopyImageToBuffer-imageOffset-07747");  // image transfer granularity
             region.imageExtent.height = 2;
             vk::CmdCopyImageToBuffer(m_commandBuffer->handle(), image_NPOT_4x4comp.handle(), VK_IMAGE_LAYOUT_GENERAL,
                                      buffer_16k.handle(), 1, &region);
@@ -2329,14 +2323,14 @@ TEST_F(VkLayerTest, ImageBufferCopyTests) {
                                      VK_IMAGE_LAYOUT_GENERAL, 1, &mp_region);
 
             // uses plane_2 without being 3 planar format
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-aspectMask-01560");
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07740");
             mp_region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_2_BIT;
             vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16k.handle(), image_multi_planar.handle(),
                                      VK_IMAGE_LAYOUT_GENERAL, 1, &mp_region);
             m_errorMonitor->VerifyFound();
 
             // uses single-plane aspect mask
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-aspectMask-01560");
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07741");
             mp_region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             vk::CmdCopyBufferToImage(m_commandBuffer->handle(), buffer_16k.handle(), image_multi_planar.handle(),
                                      VK_IMAGE_LAYOUT_GENERAL, 1, &mp_region);
@@ -2359,10 +2353,6 @@ TEST_F(VkLayerTest, MiscImageLayerTests) {
     TEST_DESCRIPTION("Image-related tests that don't belong elsewhere");
 
     ASSERT_NO_FATAL_FAILURE(Init());
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
-
     PFN_vkSetPhysicalDeviceFormatPropertiesEXT fpvkSetPhysicalDeviceFormatPropertiesEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceFormatPropertiesEXT fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT = nullptr;
     if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFormatPropertiesEXT, fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT)) {
@@ -2766,14 +2756,6 @@ TEST_F(VkLayerTest, CopyImageTypeExtentMismatchMaintenance1) {
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
-    VkFormatProperties format_props;
-    // TODO: Remove this check if or when devsim handles extensions.
-    // The chosen format has mandatory support the transfer src and dst format features when Maitenance1 is enabled. However, our
-    // use of devsim and the mock ICD violate this guarantee.
-    vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), image_format, &format_props);
-    if (!(format_props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT)) {
-        GTEST_SKIP() << "VK_FORMAT_FEATURE_TRANSFER_SRC_BIT not supported";
-    }
 
     VkImageCreateInfo ci = LvlInitStruct<VkImageCreateInfo>();
     ci.flags = 0;
@@ -2872,7 +2854,7 @@ TEST_F(VkLayerTest, CopyImageTypeExtentMismatchMaintenance1) {
     // 2D src / 3D dst and depth not equal to src layerCount
     copy_region.extent = {4, 1, 2};
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-srcImage-01791");
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkImageCopy-extent-00140");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-VkImageCopy-extent");
     m_commandBuffer->CopyImage(image_2D_array.image(), VK_IMAGE_LAYOUT_GENERAL, image_3D.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
     m_errorMonitor->VerifyFound();
@@ -2881,7 +2863,7 @@ TEST_F(VkLayerTest, CopyImageTypeExtentMismatchMaintenance1) {
     // 3D src / 2D dst and depth not equal to dst layerCount
     copy_region.extent = {4, 1, 2};
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyImage-dstImage-01792");
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkImageCopy-extent-00140");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-VkImageCopy-extent");
     m_commandBuffer->CopyImage(image_3D.image(), VK_IMAGE_LAYOUT_GENERAL, image_2D_array.image(), VK_IMAGE_LAYOUT_GENERAL, 1,
                                &copy_region);
     m_errorMonitor->VerifyFound();
@@ -3624,10 +3606,6 @@ TEST_F(VkLayerTest, CopyImageMultiPlaneSizeExceeded) {
 }
 
 TEST_F(VkLayerTest, CopyImageFormatSizeMismatch) {
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
-
     // Enable KHR multiplane req'd extensions
     AddRequiredExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
@@ -3939,10 +3917,6 @@ TEST_F(VkLayerTest, CopyImageSampleCountMismatch) {
 
 TEST_F(VkLayerTest, CopyImageAspectMismatch) {
     TEST_DESCRIPTION("Image copies with aspect mask errors");
-
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
 
     bool mp_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, 1);
     if (mp_extensions) {
@@ -4885,7 +4859,7 @@ TEST_F(VkLayerTest, DepthStencilImageCopyNoGraphicsQueueFlags) {
         VkCommandBufferObj command_buffer(m_device, &command_pool);
         command_buffer.begin();
 
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-commandBuffer-04477");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-commandBuffer-07739");
         vk::CmdCopyBufferToImage(command_buffer.handle(), buffer.handle(), ds_image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                  1, &region);
         m_errorMonitor->VerifyFound();
@@ -4934,7 +4908,7 @@ TEST_F(VkLayerTest, ImageCopyTransferQueueFlags) {
     // 00193 and 07273 are the same
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-bufferOffset-00193");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-pRegions-07273");
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-commandBuffer-04052");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdCopyBufferToImage-commandBuffer-07737");
     vk::CmdCopyBufferToImage(command_buffer.handle(), buffer.handle(), image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                              &region);
     m_errorMonitor->VerifyFound();
@@ -5690,7 +5664,7 @@ TEST_F(VkLayerTest, MultiDrawFeatures) {
     auto pd_props2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&multi_draw_props);
     GetPhysicalDeviceProperties2(pd_props2);
     if (multi_draw_props.maxMultiDrawCount == 0) {
-        // If using MockICD and devsim the value might be zero'ed and cause false errors
+        // If using MockICD and profiles the value might be zero'ed and cause false errors
         return;
     }
 
@@ -5730,7 +5704,7 @@ TEST_F(VkLayerTest, IndirectDrawTests) {
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
     if (!AreRequiredExtensionsEnabled()) {
@@ -6316,7 +6290,7 @@ TEST_F(VkLayerTest, MeshShaderNV) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -10125,10 +10099,6 @@ TEST_F(VkLayerTest, ValidateMultiviewUnboundResourcesAfterBeginRenderPassAndNext
 
 TEST_F(VkLayerTest, ResolveInvalidUsage) {
     TEST_DESCRIPTION("Resolve image with missing usage flags.");
-
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
 
     ASSERT_NO_FATAL_FAILURE(Init());
 

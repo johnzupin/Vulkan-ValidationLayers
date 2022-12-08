@@ -2023,7 +2023,7 @@ TEST_F(VkPositiveLayerTest, MeshShaderPointSize) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -2510,7 +2510,7 @@ TEST_F(VkPositiveLayerTest, SpecializationWordBoundryOffset) {
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     // need real device to produce output to check
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -2953,7 +2953,7 @@ TEST_F(VkPositiveLayerTest, StorageImageWriteMoreComponent) {
 
     const VkFormat format = VK_FORMAT_R32G32_UINT;  // Rg32ui
     if (!ImageFormatAndFeaturesSupported(gpu(), format, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)) {
-        GTEST_SKIP() << "Format doesn't support stroage image";
+        GTEST_SKIP() << "Format doesn't support storage image";
     }
 
     VkImageObj image(m_device);
@@ -3049,7 +3049,7 @@ TEST_F(VkPositiveLayerTest, StorageImageUnknownWriteMoreComponent) {
 
     const VkFormat format = VK_FORMAT_R32G32_UINT;
     if (!ImageFormatAndFeaturesSupported(gpu(), format, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)) {
-        GTEST_SKIP() << "Format doesn't support stroage image";
+        GTEST_SKIP() << "Format doesn't support storage image";
     }
 
     VkImageObj image(m_device);
@@ -3144,7 +3144,7 @@ TEST_F(VkPositiveLayerTest, StorageImageWriteSpecConstantMoreComponent) {
 
     const VkFormat format = VK_FORMAT_R32G32_UINT;  // Rg32ui
     if (!ImageFormatAndFeaturesSupported(gpu(), format, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)) {
-        GTEST_SKIP() << "Format doesn't support stroage image";
+        GTEST_SKIP() << "Format doesn't support storage image";
     }
 
     VkImageObj image(m_device);
@@ -3247,7 +3247,7 @@ TEST_F(VkPositiveLayerTest, StorageTexelBufferWriteMoreComponent) {
 
     const VkFormat format = VK_FORMAT_R32G32_UINT;  // Rg32ui
     if (!BufferFormatAndFeaturesSupported(gpu(), format, VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT)) {
-        GTEST_SKIP() << "Format doesn't support stroage texel buffer";
+        GTEST_SKIP() << "Format doesn't support storage texel buffer";
     }
 
     VkBufferCreateInfo buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();

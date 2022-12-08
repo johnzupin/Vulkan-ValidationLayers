@@ -1627,8 +1627,7 @@ TEST_F(VkLayerTest, BindInvalidMemoryYcbcr) {
 
         // Bind disjoint with BindImageMemory instead of BindImageMemory2
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkBindImageMemory-image-01608");
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                             "UNASSIGNED-VkBindImageMemoryInfo-pNext-missing-VkBindImagePlaneMemoryInfo");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindImageMemoryInfo-image-07736");
         vk::BindImageMemory(device(), image, image_memory, 0);
         m_errorMonitor->VerifyFound();
 
@@ -2446,8 +2445,7 @@ TEST_F(VkLayerTest, BindInvalidMemory2BindInfos) {
 
         // Try binding image_a with no plane specified
         bind_image_info[0].pNext = nullptr;
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                             "UNASSIGNED-VkBindImageMemoryInfo-pNext-missing-VkBindImagePlaneMemoryInfo");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindImageMemoryInfo-image-07736");
         vkBindImageMemory2Function(device(), 1, bind_image_info);
         m_errorMonitor->VerifyFound();
         bind_image_info[0].pNext = (void *)&plane_memory_info[0];
@@ -2533,10 +2531,6 @@ TEST_F(VkLayerTest, ExceedMemoryAllocationCount) {
     const int max_mems = 32;
     VkDeviceMemory mems[max_mems + 1];
 
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
-
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
     PFN_vkSetPhysicalDeviceLimitsEXT fpvkSetPhysicalDeviceLimitsEXT = nullptr;
@@ -2576,10 +2570,6 @@ TEST_F(VkLayerTest, ExceedSamplerAllocationCount) {
     VkResult err = VK_SUCCESS;
     const int max_samplers = 32;
     VkSampler samplers[max_samplers + 1];
-
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
@@ -3554,10 +3544,6 @@ TEST_F(VkLayerTest, MiscBlitImageTests) {
 }
 
 TEST_F(VkLayerTest, BlitToDepthImageTests) {
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
-
     ASSERT_NO_FATAL_FAILURE(Init());
 
     PFN_vkSetPhysicalDeviceFormatPropertiesEXT fpvkSetPhysicalDeviceFormatPropertiesEXT = nullptr;
@@ -3732,7 +3718,7 @@ TEST_F(VkLayerTest, MinImageTransferGranularity) {
     // Introduce failure by setting imageExtent to a bad granularity value
     region.imageExtent.width = 3;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-01794");  // image transfer granularity
+                                         "VUID-vkCmdCopyImageToBuffer-imageOffset-07747");  // image transfer granularity
     vk::CmdCopyImageToBuffer(command_buffer.handle(), srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer.handle(), 1, &region);
     m_errorMonitor->VerifyFound();
     region.imageExtent.width = granularity.width;
@@ -3740,7 +3726,7 @@ TEST_F(VkLayerTest, MinImageTransferGranularity) {
     // Introduce failure by setting imageOffset to a bad granularity value
     region.imageOffset.z = 3;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-vkCmdCopyBufferToImage-imageOffset-01793");  // image transfer granularity
+                                         "VUID-vkCmdCopyBufferToImage-imageOffset-07738");  // image transfer granularity
     vk::CmdCopyBufferToImage(command_buffer.handle(), buffer.handle(), dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     m_errorMonitor->VerifyFound();
 
@@ -4892,7 +4878,7 @@ TEST_F(VkLayerTest, InvalidTexelBufferAlignment) {
         GTEST_SKIP() << "Error initializing extensions or retrieving features";
     }
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
     texel_buffer_alignment_features.texelBufferAlignment = VK_TRUE;
@@ -7674,11 +7660,6 @@ TEST_F(VkLayerTest, CreateImageViewBreaksParameterCompatibilityRequirements) {
 TEST_F(VkLayerTest, CreateImageViewFormatFeatureMismatch) {
     TEST_DESCRIPTION("Create view with a format that does not have the same features as the image format.");
 
-    // Used to force format to have feature bits to enable test can run on any device
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
-
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -7827,10 +7808,6 @@ TEST_F(VkLayerTest, CreateImageViewFormatFeatureMismatch) {
 
 TEST_F(VkLayerTest, InvalidImageViewUsageCreateInfo) {
     TEST_DESCRIPTION("Usage modification via a chained VkImageViewUsageCreateInfo struct");
-
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
 
     AddRequiredExtensions(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -8280,10 +8257,6 @@ TEST_F(VkLayerTest, ImageLayerUnsupportedFormat) {
 TEST_F(VkLayerTest, CreateImageViewFormatMismatchUnrelated) {
     TEST_DESCRIPTION("Create an image with a color format, then try to create a depth view of it");
 
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
-
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -8321,10 +8294,6 @@ TEST_F(VkLayerTest, CreateImageViewFormatMismatchUnrelated) {
 
 TEST_F(VkLayerTest, CreateImageViewNoMutableFormatBit) {
     TEST_DESCRIPTION("Create an image view with a different format, when the image does not have MUTABLE_FORMAT bit");
-
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -10455,10 +10424,6 @@ TEST_F(VkLayerTest, CreateYCbCrSampler) {
     TEST_DESCRIPTION("Verify YCbCr sampler creation.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
-
     m_device_extension_names.push_back(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
     m_device_extension_names.push_back(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
     m_device_extension_names.push_back(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
@@ -10780,7 +10745,7 @@ TEST_F(VkLayerTest, BufferDeviceAddressEXT) {
         GTEST_SKIP() << "Error initializing extensions or retrieving features";
     }
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -10841,7 +10806,7 @@ TEST_F(VkLayerTest, BufferDeviceAddressEXTDisabled) {
         GTEST_SKIP() << "Error initializing extensions or retrieving features";
     }
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -10884,7 +10849,7 @@ TEST_F(VkLayerTest, BufferDeviceAddressKHR) {
         GTEST_SKIP() << "Error initializing extensions or retrieving features";
     }
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -10994,7 +10959,7 @@ TEST_F(VkLayerTest, BufferDeviceAddressKHRDisabled) {
         GTEST_SKIP() << "Error initializing extensions or retrieving features";
     }
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
@@ -11075,10 +11040,6 @@ TEST_F(VkLayerTest, BufferDeviceAddressKHRDisabled) {
 
 TEST_F(VkLayerTest, CreateImageYcbcrFormats) {
     TEST_DESCRIPTION("Creating images with Ycbcr Formats.");
-
-    if (!OverrideDevsimForDeviceProfileLayer()) {
-        GTEST_SKIP() << "Failed to override devsim for device profile layer.";
-    }
 
     // Enable KHR multiplane req'd extensions
     AddRequiredExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
@@ -11309,7 +11270,7 @@ TEST_F(VkLayerTest, DeviceCoherentMemoryDisabledAMD) {
 
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    if (IsPlatform(kMockICD) || DeviceSimulation()) {
+    if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD, does not support the necessary memory type";
     }
 
@@ -12815,8 +12776,8 @@ TEST_F(VkLayerTest, InvalidShadingRateUsage) {
     GetPhysicalDeviceProperties2(properties);
 
     if (!fsrProperties.layeredShadingRateAttachments) {
-        if (IsPlatform(kMockICD) || DeviceSimulation()) {
-            GTEST_SKIP() << "Test not supported by MockICD, DevSim doesn't correctly advertise format support for fragment shading "
+        if (IsPlatform(kMockICD)) {
+            GTEST_SKIP() << "Test not supported by MockICD, doesn't correctly advertise format support for fragment shading "
                             "rate attachments";
         } else {
             VkImageObj image2(m_device);
@@ -15715,58 +15676,6 @@ TEST_F(VkLayerTest, TestBarrierAccessSync2) {
 
     mem_barrier.dstAccessMask = VK_ACCESS_2_HOST_WRITE_BIT;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-03917");
-    m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
-
-    m_commandBuffer->end();
-
-    m_errorMonitor->VerifyFound();
-}
-
-TEST_F(VkLayerTest, TestBarrierAccessAccelerationStructure) {
-    TEST_DESCRIPTION("Test barrier with access ACCELERATION_STRUCTURE bit.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "Test requires at least Vulkan 1.1.";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-    if (!CheckSynchronization2SupportAndInitState(this)) {
-        GTEST_SKIP() << "Synchronization2 not supported";
-    }
-
-    VkMemoryBarrier2 mem_barrier = LvlInitStruct<VkMemoryBarrier2>();
-    mem_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
-    mem_barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-
-    VkDependencyInfo dependency_info = LvlInitStruct<VkDependencyInfo>();
-    dependency_info.memoryBarrierCount = 1;
-    dependency_info.pMemoryBarriers = &mem_barrier;
-
-    m_commandBuffer->begin();
-
-    mem_barrier.srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-    mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-srcAccessMask-03927");
-    m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
-
-    mem_barrier.srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-srcAccessMask-03928");
-    m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
-
-    mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
-
-    mem_barrier.dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-    mem_barrier.dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-03927");
-    m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
-
-    mem_barrier.dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-03928");
     m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
 
     m_commandBuffer->end();
