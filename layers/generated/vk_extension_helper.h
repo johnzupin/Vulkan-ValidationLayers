@@ -43,24 +43,17 @@
 #include "vk_layer_data.h"
 #define VK_VERSION_1_1_NAME "VK_VERSION_1_1"
 
-// Suppress unused warning on Linux
-#if defined(__GNUC__)
-#define DECORATE_UNUSED __attribute__((unused))
-#else
-#define DECORATE_UNUSED
-#endif
-
 enum ExtEnabled : unsigned char {
     kNotEnabled,
     kEnabledByCreateinfo,
     kEnabledByApiLevel,
 };
 
-static bool DECORATE_UNUSED IsExtEnabled(ExtEnabled extension) {
+[[maybe_unused]] static bool IsExtEnabled(ExtEnabled extension) {
     return (extension != kNotEnabled);
 };
 
-static bool DECORATE_UNUSED IsExtEnabledByCreateinfo(ExtEnabled extension) {
+[[maybe_unused]] static bool IsExtEnabledByCreateinfo(ExtEnabled extension) {
     return (extension == kEnabledByCreateinfo);
 };
 #define VK_VERSION_1_2_NAME "VK_VERSION_1_2"
@@ -101,11 +94,13 @@ struct InstanceExtensions {
     ExtEnabled vk_khr_win32_surface{kNotEnabled};
     ExtEnabled vk_khr_xcb_surface{kNotEnabled};
     ExtEnabled vk_khr_xlib_surface{kNotEnabled};
+    ExtEnabled vk_lunarg_direct_driver_loading{kNotEnabled};
     ExtEnabled vk_mvk_ios_surface{kNotEnabled};
     ExtEnabled vk_mvk_macos_surface{kNotEnabled};
     ExtEnabled vk_nn_vi_surface{kNotEnabled};
     ExtEnabled vk_nv_external_memory_capabilities{kNotEnabled};
     ExtEnabled vk_qnx_screen_surface{kNotEnabled};
+    ExtEnabled vk_ext_descriptor_buffer_density{kNotEnabled};
 
     struct InstanceReq {
         const ExtEnabled InstanceExtensions::* enabled;
@@ -199,6 +194,7 @@ struct InstanceExtensions {
             {VK_KHR_XLIB_SURFACE_EXTENSION_NAME, InstanceInfo(&InstanceExtensions::vk_khr_xlib_surface, {{
                            {&InstanceExtensions::vk_khr_surface, VK_KHR_SURFACE_EXTENSION_NAME}}})},
 #endif
+            {VK_LUNARG_DIRECT_DRIVER_LOADING_EXTENSION_NAME, InstanceInfo(&InstanceExtensions::vk_lunarg_direct_driver_loading, {})},
 #ifdef VK_USE_PLATFORM_IOS_MVK
             {VK_MVK_IOS_SURFACE_EXTENSION_NAME, InstanceInfo(&InstanceExtensions::vk_mvk_ios_surface, {{
                            {&InstanceExtensions::vk_khr_surface, VK_KHR_SURFACE_EXTENSION_NAME}}})},
@@ -349,6 +345,7 @@ static const std::set<std::string> kInstanceExtensionNames = {
 #ifdef VK_USE_PLATFORM_XLIB_KHR
     VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
 #endif
+    VK_LUNARG_DIRECT_DRIVER_LOADING_EXTENSION_NAME,
 #ifdef VK_USE_PLATFORM_IOS_MVK
     VK_MVK_IOS_SURFACE_EXTENSION_NAME,
 #endif
@@ -409,6 +406,7 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_ext_depth_clip_control{kNotEnabled};
     ExtEnabled vk_ext_depth_clip_enable{kNotEnabled};
     ExtEnabled vk_ext_depth_range_unrestricted{kNotEnabled};
+    ExtEnabled vk_ext_descriptor_buffer{kNotEnabled};
     ExtEnabled vk_ext_descriptor_indexing{kNotEnabled};
     ExtEnabled vk_ext_device_address_binding_report{kNotEnabled};
     ExtEnabled vk_ext_device_fault{kNotEnabled};
@@ -633,6 +631,7 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_nv_win32_keyed_mutex{kNotEnabled};
     ExtEnabled vk_qcom_fragment_density_map_offset{kNotEnabled};
     ExtEnabled vk_qcom_image_processing{kNotEnabled};
+    ExtEnabled vk_qcom_multiview_per_view_viewports{kNotEnabled};
     ExtEnabled vk_qcom_render_pass_shader_resolve{kNotEnabled};
     ExtEnabled vk_qcom_render_pass_store_ops{kNotEnabled};
     ExtEnabled vk_qcom_render_pass_transform{kNotEnabled};
@@ -641,6 +640,7 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_sec_amigo_profiling{kNotEnabled};
     ExtEnabled vk_valve_descriptor_set_host_mapping{kNotEnabled};
     ExtEnabled vk_valve_mutable_descriptor_type{kNotEnabled};
+    ExtEnabled vk_ext_descriptor_buffer_density{kNotEnabled};
 
     struct DeviceReq {
         const ExtEnabled DeviceExtensions::* enabled;
@@ -724,6 +724,11 @@ struct DeviceExtensions : public InstanceExtensions {
                            {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
             {VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_depth_clip_enable, {})},
             {VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_depth_range_unrestricted, {})},
+            {VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_descriptor_buffer, {{
+                           {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME},
+                           {&DeviceExtensions::vk_khr_buffer_device_address, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME},
+                           {&DeviceExtensions::vk_khr_synchronization2, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME},
+                           {&DeviceExtensions::vk_ext_descriptor_indexing, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME}}})},
             {VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_descriptor_indexing, {{
                            {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME},
                            {&DeviceExtensions::vk_khr_maintenance3, VK_KHR_MAINTENANCE_3_EXTENSION_NAME}}})},
@@ -1218,6 +1223,7 @@ struct DeviceExtensions : public InstanceExtensions {
                            {&DeviceExtensions::vk_ext_fragment_density_map, VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME}}})},
             {VK_QCOM_IMAGE_PROCESSING_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_qcom_image_processing, {{
                            {&DeviceExtensions::vk_khr_format_feature_flags2, VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME}}})},
+            {VK_QCOM_MULTIVIEW_PER_VIEW_VIEWPORTS_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_qcom_multiview_per_view_viewports, {})},
             {VK_QCOM_RENDER_PASS_SHADER_RESOLVE_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_qcom_render_pass_shader_resolve, {})},
             {VK_QCOM_RENDER_PASS_STORE_OPS_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_qcom_render_pass_store_ops, {})},
             {VK_QCOM_RENDER_PASS_TRANSFORM_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_qcom_render_pass_transform, {{
@@ -1413,6 +1419,7 @@ static const std::set<std::string> kDeviceExtensionNames = {
     VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME,
     VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME,
     VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME,
+    VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
     VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
     VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME,
     VK_EXT_DEVICE_FAULT_EXTENSION_NAME,
@@ -1679,6 +1686,7 @@ static const std::set<std::string> kDeviceExtensionNames = {
 #endif
     VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME,
     VK_QCOM_IMAGE_PROCESSING_EXTENSION_NAME,
+    VK_QCOM_MULTIVIEW_PER_VIEW_VIEWPORTS_EXTENSION_NAME,
     VK_QCOM_RENDER_PASS_SHADER_RESOLVE_EXTENSION_NAME,
     VK_QCOM_RENDER_PASS_STORE_OPS_EXTENSION_NAME,
     VK_QCOM_RENDER_PASS_TRANSFORM_EXTENSION_NAME,

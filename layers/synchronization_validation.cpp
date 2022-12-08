@@ -189,7 +189,7 @@ static const SyncStageAccessInfoType *SyncStageAccessInfoFromMask(SyncStageAcces
     const SyncStageAccessInfoType *info = nullptr;
     for (size_t i = 0; i < flags.size(); i++) {
         if (flags.test(i)) {
-            info = &syncStageAccessInfoByStageAccessIndex[i];
+            info = &syncStageAccessInfoByStageAccessIndex()[i];
             break;
         }
     }
@@ -201,8 +201,8 @@ static std::string string_SyncStageAccessFlags(const SyncStageAccessFlags &flags
     if (flags.none()) {
         out_str = "0";
     } else {
-        for (size_t i = 0; i < syncStageAccessInfoByStageAccessIndex.size(); i++) {
-            const auto &info = syncStageAccessInfoByStageAccessIndex[i];
+        for (size_t i = 0; i < syncStageAccessInfoByStageAccessIndex().size(); i++) {
+            const auto &info = syncStageAccessInfoByStageAccessIndex()[i];
             if ((flags & info.stage_access_bit).any()) {
                 if (!out_str.empty()) {
                     out_str.append(sep);
@@ -219,8 +219,8 @@ static std::string string_SyncStageAccessFlags(const SyncStageAccessFlags &flags
 
 static std::string string_UsageIndex(SyncStageAccessIndex usage_index) {
     const char *stage_access_name = "INVALID_STAGE_ACCESS";
-    if (usage_index < static_cast<SyncStageAccessIndex>(syncStageAccessInfoByStageAccessIndex.size())) {
-        stage_access_name = syncStageAccessInfoByStageAccessIndex[usage_index].name;
+    if (usage_index < static_cast<SyncStageAccessIndex>(syncStageAccessInfoByStageAccessIndex().size())) {
+        stage_access_name = syncStageAccessInfoByStageAccessIndex()[usage_index].name;
     }
     return std::string(stage_access_name);
 }
@@ -296,8 +296,8 @@ std::ostream &operator<<(std::ostream &out, const ResourceUsageRecord::Formatter
 }
 
 std::ostream &operator<<(std::ostream &out, const HazardResult &hazard) {
-    assert(hazard.usage_index < static_cast<SyncStageAccessIndex>(syncStageAccessInfoByStageAccessIndex.size()));
-    const auto &usage_info = syncStageAccessInfoByStageAccessIndex[hazard.usage_index];
+    assert(hazard.usage_index < static_cast<SyncStageAccessIndex>(syncStageAccessInfoByStageAccessIndex().size()));
+    const auto &usage_info = syncStageAccessInfoByStageAccessIndex()[hazard.usage_index];
     const auto *info = SyncStageAccessInfoFromMask(hazard.prior_access);
     const char *stage_access_name = info ? info->name : "INVALID_STAGE_ACCESS";
     out << "(";
@@ -673,8 +673,8 @@ SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType de
         assert(stage_flag == VK_SHADER_STAGE_FRAGMENT_BIT);
         return SYNC_FRAGMENT_SHADER_INPUT_ATTACHMENT_READ;
     }
-    auto stage_access = syncStageAccessMaskByShaderStage.find(stage_flag);
-    if (stage_access == syncStageAccessMaskByShaderStage.end()) {
+    auto stage_access = syncStageAccessMaskByShaderStage().find(stage_flag);
+    if (stage_access == syncStageAccessMaskByShaderStage().end()) {
         assert(0);
     }
     if (descriptor_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || descriptor_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) {
@@ -1258,7 +1258,7 @@ template <typename BarrierAction>
 void AccessContext::ResolveAccessRange(const AttachmentViewGen &view_gen, AttachmentViewGen::Gen gen_type,
                                        BarrierAction &barrier_action, ResourceAccessRangeMap *descent_map,
                                        const ResourceAccessState *infill_state) const {
-    const auto *attachment_gen = view_gen.GetRangeGen(gen_type);
+    const std::optional<ImageRangeGen> &attachment_gen = view_gen.GetRangeGen(gen_type);
     if (!attachment_gen) return;
 
     subresource_adapter::ImageRangeGenerator range_gen(*attachment_gen);
@@ -1520,7 +1520,7 @@ HazardResult AccessContext::DetectHazard(const BUFFER_STATE &buffer, SyncStageAc
 template <typename Detector>
 HazardResult AccessContext::DetectHazard(Detector &detector, const AttachmentViewGen &view_gen, AttachmentViewGen::Gen gen_type,
                                          DetectOptions options) const {
-    const auto *attachment_gen = view_gen.GetRangeGen(gen_type);
+    const std::optional<ImageRangeGen> &attachment_gen = view_gen.GetRangeGen(gen_type);
     if (!attachment_gen) return HazardResult();
 
     subresource_adapter::ImageRangeGenerator range_gen(*attachment_gen);
@@ -1733,11 +1733,11 @@ SyncStageAccessFlags AccessScopeImpl(Flags flag_mask, const Map &map) {
 }
 
 SyncStageAccessFlags SyncStageAccess::AccessScopeByStage(VkPipelineStageFlags2KHR stages) {
-    return AccessScopeImpl(stages, syncStageAccessMaskByStageBit);
+    return AccessScopeImpl(stages, syncStageAccessMaskByStageBit());
 }
 
 SyncStageAccessFlags SyncStageAccess::AccessScopeByAccess(VkAccessFlags2KHR accesses) {
-    return AccessScopeImpl(sync_utils::ExpandAccessFlags(accesses), syncStageAccessMaskByAccessBit);
+    return AccessScopeImpl(sync_utils::ExpandAccessFlags(accesses), syncStageAccessMaskByAccessBit());
 }
 
 // Getting from stage mask and access mask to stage/access masks is something we need to be good at...
@@ -1979,7 +1979,7 @@ void AccessContext::UpdateAccessState(const IMAGE_STATE &image, SyncStageAccessI
 
 void AccessContext::UpdateAccessState(const AttachmentViewGen &view_gen, AttachmentViewGen::Gen gen_type,
                                       SyncStageAccessIndex current_usage, SyncOrdering ordering_rule, const ResourceUsageTag tag) {
-    const ImageRangeGen *gen = view_gen.GetRangeGen(gen_type);
+    const std::optional<ImageRangeGen> &gen = view_gen.GetRangeGen(gen_type);
     if (!gen) return;
     subresource_adapter::ImageRangeGenerator range_gen(*gen);
     const auto address_type = view_gen.GetAddressType();
@@ -2003,7 +2003,7 @@ void AccessContext::ApplyUpdateAction(AccessAddressType address_type, const Acti
 
 template <typename Action>
 void AccessContext::ApplyUpdateAction(const AttachmentViewGen &view_gen, AttachmentViewGen::Gen gen_type, const Action &action) {
-    const ImageRangeGen *gen = view_gen.GetRangeGen(gen_type);
+    const std::optional<ImageRangeGen> &gen = view_gen.GetRangeGen(gen_type);
     if (!gen) return;
     UpdateMemoryAccessState(&GetAccessStateMap(view_gen.GetAddressType()), action, *gen);
 }
@@ -7927,27 +7927,17 @@ AttachmentViewGen::AttachmentViewGen(const IMAGE_VIEW_STATE *view, const VkOffse
     }
 }
 
-const ImageRangeGen *AttachmentViewGen::GetRangeGen(AttachmentViewGen::Gen gen_type) const {
-    const ImageRangeGen *got = nullptr;
-    switch (gen_type) {
-        case kViewSubresource:
-            got = &(*gen_store_[kViewSubresource]);
-            break;
-        case kRenderArea:
-            got = &(*gen_store_[kRenderArea]);
-            break;
-        case kDepthOnlyRenderArea:
-            got = (view_mask_ == VK_IMAGE_ASPECT_DEPTH_BIT) ? &(*gen_store_[Gen::kRenderArea])
-                                                            : &(*gen_store_[Gen::kDepthOnlyRenderArea]);
-            break;
-        case kStencilOnlyRenderArea:
-            got = (view_mask_ == VK_IMAGE_ASPECT_STENCIL_BIT) ? &(*gen_store_[Gen::kRenderArea])
-                                                              : &(*gen_store_[Gen::kStencilOnlyRenderArea]);
-            break;
-        default:
-            assert(got);
+const std::optional<ImageRangeGen> &AttachmentViewGen::GetRangeGen(AttachmentViewGen::Gen type) const {
+    static_assert(Gen::kGenSize == 4, "Function written with this assumption");
+    // If the view is a depth only view, then the depth only portion of the render area is simply the render area.
+    // If the view is a depth stencil view, then the depth only portion of the render area will be a subset,
+    // and thus needs the generator function that will produce the address ranges of that subset
+    const bool depth_only = (type == kDepthOnlyRenderArea) && (view_mask_ == VK_IMAGE_ASPECT_DEPTH_BIT);
+    const bool stencil_only = (type == kStencilOnlyRenderArea) && (view_mask_ == VK_IMAGE_ASPECT_STENCIL_BIT);
+    if (depth_only || stencil_only) {
+        type = Gen::kRenderArea;
     }
-    return got;
+    return gen_store_[type];
 }
 
 AttachmentViewGen::Gen AttachmentViewGen::GetDepthStencilRenderAreaGenType(bool depth_op, bool stencil_op) const {

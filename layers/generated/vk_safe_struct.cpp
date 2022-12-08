@@ -3263,13 +3263,13 @@ safe_VkPipelineViewportStateCreateInfo::safe_VkPipelineViewportStateCreateInfo(c
         memcpy ((void *)pViewports, (void *)in_struct->pViewports, sizeof(VkViewport)*in_struct->viewportCount);
     }
     else
-        pViewports = NULL;
+        pViewports = nullptr;
     if (in_struct->pScissors && !is_dynamic_scissors) {
         pScissors = new VkRect2D[in_struct->scissorCount];
         memcpy ((void *)pScissors, (void *)in_struct->pScissors, sizeof(VkRect2D)*in_struct->scissorCount);
     }
     else
-        pScissors = NULL;
+        pScissors = nullptr;
 }
 
 safe_VkPipelineViewportStateCreateInfo::safe_VkPipelineViewportStateCreateInfo() :
@@ -3296,13 +3296,13 @@ safe_VkPipelineViewportStateCreateInfo::safe_VkPipelineViewportStateCreateInfo(c
         memcpy ((void *)pViewports, (void *)copy_src.pViewports, sizeof(VkViewport)*copy_src.viewportCount);
     }
     else
-        pViewports = NULL;
+        pViewports = nullptr;
     if (copy_src.pScissors) {
         pScissors = new VkRect2D[copy_src.scissorCount];
         memcpy ((void *)pScissors, (void *)copy_src.pScissors, sizeof(VkRect2D)*copy_src.scissorCount);
     }
     else
-        pScissors = NULL;
+        pScissors = nullptr;
 }
 
 safe_VkPipelineViewportStateCreateInfo& safe_VkPipelineViewportStateCreateInfo::operator=(const safe_VkPipelineViewportStateCreateInfo& copy_src)
@@ -3328,13 +3328,13 @@ safe_VkPipelineViewportStateCreateInfo& safe_VkPipelineViewportStateCreateInfo::
         memcpy ((void *)pViewports, (void *)copy_src.pViewports, sizeof(VkViewport)*copy_src.viewportCount);
     }
     else
-        pViewports = NULL;
+        pViewports = nullptr;
     if (copy_src.pScissors) {
         pScissors = new VkRect2D[copy_src.scissorCount];
         memcpy ((void *)pScissors, (void *)copy_src.pScissors, sizeof(VkRect2D)*copy_src.scissorCount);
     }
     else
-        pScissors = NULL;
+        pScissors = nullptr;
 
     return *this;
 }
@@ -3369,13 +3369,13 @@ void safe_VkPipelineViewportStateCreateInfo::initialize(const VkPipelineViewport
         memcpy ((void *)pViewports, (void *)in_struct->pViewports, sizeof(VkViewport)*in_struct->viewportCount);
     }
     else
-        pViewports = NULL;
+        pViewports = nullptr;
     if (in_struct->pScissors && !is_dynamic_scissors) {
         pScissors = new VkRect2D[in_struct->scissorCount];
         memcpy ((void *)pScissors, (void *)in_struct->pScissors, sizeof(VkRect2D)*in_struct->scissorCount);
     }
     else
-        pScissors = NULL;
+        pScissors = nullptr;
 }
 
 void safe_VkPipelineViewportStateCreateInfo::initialize(const safe_VkPipelineViewportStateCreateInfo* copy_src)
@@ -3392,13 +3392,13 @@ void safe_VkPipelineViewportStateCreateInfo::initialize(const safe_VkPipelineVie
         memcpy ((void *)pViewports, (void *)copy_src->pViewports, sizeof(VkViewport)*copy_src->viewportCount);
     }
     else
-        pViewports = NULL;
+        pViewports = nullptr;
     if (copy_src->pScissors) {
         pScissors = new VkRect2D[copy_src->scissorCount];
         memcpy ((void *)pScissors, (void *)copy_src->pScissors, sizeof(VkRect2D)*copy_src->scissorCount);
     }
     else
-        pScissors = NULL;
+        pScissors = nullptr;
 }
 
 safe_VkPipelineRasterizationStateCreateInfo::safe_VkPipelineRasterizationStateCreateInfo(const VkPipelineRasterizationStateCreateInfo* in_struct) :
@@ -3986,11 +3986,11 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const VkGra
     if (in_struct->pVertexInputState)
         pVertexInputState = new safe_VkPipelineVertexInputStateCreateInfo(in_struct->pVertexInputState);
     else
-        pVertexInputState = NULL;
+        pVertexInputState = nullptr;
     if (in_struct->pInputAssemblyState)
         pInputAssemblyState = new safe_VkPipelineInputAssemblyStateCreateInfo(in_struct->pInputAssemblyState);
     else
-        pInputAssemblyState = NULL;
+        pInputAssemblyState = nullptr;
     bool has_tessellation_stage = false;
     if (stageCount && pStages)
         for (uint32_t i = 0; i < stageCount && !has_tessellation_stage; ++i)
@@ -3999,7 +3999,7 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const VkGra
     if (in_struct->pTessellationState && has_tessellation_stage)
         pTessellationState = new safe_VkPipelineTessellationStateCreateInfo(in_struct->pTessellationState);
     else
-        pTessellationState = NULL; // original pTessellationState pointer ignored
+        pTessellationState = nullptr; // original pTessellationState pointer ignored
     bool is_dynamic_has_rasterization = false;
     if (in_struct->pDynamicState && in_struct->pDynamicState->pDynamicStates) {
         for (uint32_t i = 0; i < in_struct->pDynamicState->dynamicStateCount && !is_dynamic_has_rasterization; ++i)
@@ -4020,29 +4020,29 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const VkGra
         }
         pViewportState = new safe_VkPipelineViewportStateCreateInfo(in_struct->pViewportState, is_dynamic_viewports, is_dynamic_scissors);
     } else
-        pViewportState = NULL; // original pViewportState pointer ignored
+        pViewportState = nullptr; // original pViewportState pointer ignored
     if (in_struct->pRasterizationState)
         pRasterizationState = new safe_VkPipelineRasterizationStateCreateInfo(in_struct->pRasterizationState);
     else
-        pRasterizationState = NULL;
+        pRasterizationState = nullptr;
     if (in_struct->pMultisampleState && (renderPass != VK_NULL_HANDLE || has_rasterization || is_graphics_library))
         pMultisampleState = new safe_VkPipelineMultisampleStateCreateInfo(in_struct->pMultisampleState);
     else
-        pMultisampleState = NULL; // original pMultisampleState pointer ignored
+        pMultisampleState = nullptr; // original pMultisampleState pointer ignored
     // needs a tracked subpass state uses_depthstencil_attachment
     if (in_struct->pDepthStencilState && ((has_rasterization && uses_depthstencil_attachment) || is_graphics_library))
         pDepthStencilState = new safe_VkPipelineDepthStencilStateCreateInfo(in_struct->pDepthStencilState);
     else
-        pDepthStencilState = NULL; // original pDepthStencilState pointer ignored
+        pDepthStencilState = nullptr; // original pDepthStencilState pointer ignored
     // needs a tracked subpass state usesColorAttachment
     if (in_struct->pColorBlendState && ((has_rasterization && uses_color_attachment) || is_graphics_library))
         pColorBlendState = new safe_VkPipelineColorBlendStateCreateInfo(in_struct->pColorBlendState);
     else
-        pColorBlendState = NULL; // original pColorBlendState pointer ignored
+        pColorBlendState = nullptr; // original pColorBlendState pointer ignored
     if (in_struct->pDynamicState)
         pDynamicState = new safe_VkPipelineDynamicStateCreateInfo(in_struct->pDynamicState);
     else
-        pDynamicState = NULL;
+        pDynamicState = nullptr;
 }
 
 safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo() :
@@ -4098,11 +4098,11 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const safe_
     if (copy_src.pVertexInputState)
         pVertexInputState = new safe_VkPipelineVertexInputStateCreateInfo(*copy_src.pVertexInputState);
     else
-        pVertexInputState = NULL;
+        pVertexInputState = nullptr;
     if (copy_src.pInputAssemblyState)
         pInputAssemblyState = new safe_VkPipelineInputAssemblyStateCreateInfo(*copy_src.pInputAssemblyState);
     else
-        pInputAssemblyState = NULL;
+        pInputAssemblyState = nullptr;
     bool has_tessellation_stage = false;
     if (stageCount && pStages)
         for (uint32_t i = 0; i < stageCount && !has_tessellation_stage; ++i)
@@ -4111,7 +4111,7 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const safe_
     if (copy_src.pTessellationState && has_tessellation_stage)
         pTessellationState = new safe_VkPipelineTessellationStateCreateInfo(*copy_src.pTessellationState);
     else
-        pTessellationState = NULL; // original pTessellationState pointer ignored
+        pTessellationState = nullptr; // original pTessellationState pointer ignored
     bool is_dynamic_has_rasterization = false;
     if (copy_src.pDynamicState && copy_src.pDynamicState->pDynamicStates) {
         for (uint32_t i = 0; i < copy_src.pDynamicState->dynamicStateCount && !is_dynamic_has_rasterization; ++i)
@@ -4122,27 +4122,27 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const safe_
     if (copy_src.pViewportState && (has_rasterization || is_graphics_library)) {
         pViewportState = new safe_VkPipelineViewportStateCreateInfo(*copy_src.pViewportState);
     } else
-        pViewportState = NULL; // original pViewportState pointer ignored
+        pViewportState = nullptr; // original pViewportState pointer ignored
     if (copy_src.pRasterizationState)
         pRasterizationState = new safe_VkPipelineRasterizationStateCreateInfo(*copy_src.pRasterizationState);
     else
-        pRasterizationState = NULL;
+        pRasterizationState = nullptr;
     if (copy_src.pMultisampleState && (has_rasterization || is_graphics_library))
         pMultisampleState = new safe_VkPipelineMultisampleStateCreateInfo(*copy_src.pMultisampleState);
     else
-        pMultisampleState = NULL; // original pMultisampleState pointer ignored
+        pMultisampleState = nullptr; // original pMultisampleState pointer ignored
     if (copy_src.pDepthStencilState && (has_rasterization || is_graphics_library))
         pDepthStencilState = new safe_VkPipelineDepthStencilStateCreateInfo(*copy_src.pDepthStencilState);
     else
-        pDepthStencilState = NULL; // original pDepthStencilState pointer ignored
+        pDepthStencilState = nullptr; // original pDepthStencilState pointer ignored
     if (copy_src.pColorBlendState && (has_rasterization || is_graphics_library))
         pColorBlendState = new safe_VkPipelineColorBlendStateCreateInfo(*copy_src.pColorBlendState);
     else
-        pColorBlendState = NULL; // original pColorBlendState pointer ignored
+        pColorBlendState = nullptr; // original pColorBlendState pointer ignored
     if (copy_src.pDynamicState)
         pDynamicState = new safe_VkPipelineDynamicStateCreateInfo(*copy_src.pDynamicState);
     else
-        pDynamicState = NULL;
+        pDynamicState = nullptr;
 }
 
 safe_VkGraphicsPipelineCreateInfo& safe_VkGraphicsPipelineCreateInfo::operator=(const safe_VkGraphicsPipelineCreateInfo& copy_src)
@@ -4201,11 +4201,11 @@ safe_VkGraphicsPipelineCreateInfo& safe_VkGraphicsPipelineCreateInfo::operator=(
     if (copy_src.pVertexInputState)
         pVertexInputState = new safe_VkPipelineVertexInputStateCreateInfo(*copy_src.pVertexInputState);
     else
-        pVertexInputState = NULL;
+        pVertexInputState = nullptr;
     if (copy_src.pInputAssemblyState)
         pInputAssemblyState = new safe_VkPipelineInputAssemblyStateCreateInfo(*copy_src.pInputAssemblyState);
     else
-        pInputAssemblyState = NULL;
+        pInputAssemblyState = nullptr;
     bool has_tessellation_stage = false;
     if (stageCount && pStages)
         for (uint32_t i = 0; i < stageCount && !has_tessellation_stage; ++i)
@@ -4214,7 +4214,7 @@ safe_VkGraphicsPipelineCreateInfo& safe_VkGraphicsPipelineCreateInfo::operator=(
     if (copy_src.pTessellationState && has_tessellation_stage)
         pTessellationState = new safe_VkPipelineTessellationStateCreateInfo(*copy_src.pTessellationState);
     else
-        pTessellationState = NULL; // original pTessellationState pointer ignored
+        pTessellationState = nullptr; // original pTessellationState pointer ignored
     bool is_dynamic_has_rasterization = false;
     if (copy_src.pDynamicState && copy_src.pDynamicState->pDynamicStates) {
         for (uint32_t i = 0; i < copy_src.pDynamicState->dynamicStateCount && !is_dynamic_has_rasterization; ++i)
@@ -4225,27 +4225,27 @@ safe_VkGraphicsPipelineCreateInfo& safe_VkGraphicsPipelineCreateInfo::operator=(
     if (copy_src.pViewportState && (has_rasterization || is_graphics_library)) {
         pViewportState = new safe_VkPipelineViewportStateCreateInfo(*copy_src.pViewportState);
     } else
-        pViewportState = NULL; // original pViewportState pointer ignored
+        pViewportState = nullptr; // original pViewportState pointer ignored
     if (copy_src.pRasterizationState)
         pRasterizationState = new safe_VkPipelineRasterizationStateCreateInfo(*copy_src.pRasterizationState);
     else
-        pRasterizationState = NULL;
+        pRasterizationState = nullptr;
     if (copy_src.pMultisampleState && (has_rasterization || is_graphics_library))
         pMultisampleState = new safe_VkPipelineMultisampleStateCreateInfo(*copy_src.pMultisampleState);
     else
-        pMultisampleState = NULL; // original pMultisampleState pointer ignored
+        pMultisampleState = nullptr; // original pMultisampleState pointer ignored
     if (copy_src.pDepthStencilState && (has_rasterization || is_graphics_library))
         pDepthStencilState = new safe_VkPipelineDepthStencilStateCreateInfo(*copy_src.pDepthStencilState);
     else
-        pDepthStencilState = NULL; // original pDepthStencilState pointer ignored
+        pDepthStencilState = nullptr; // original pDepthStencilState pointer ignored
     if (copy_src.pColorBlendState && (has_rasterization || is_graphics_library))
         pColorBlendState = new safe_VkPipelineColorBlendStateCreateInfo(*copy_src.pColorBlendState);
     else
-        pColorBlendState = NULL; // original pColorBlendState pointer ignored
+        pColorBlendState = nullptr; // original pColorBlendState pointer ignored
     if (copy_src.pDynamicState)
         pDynamicState = new safe_VkPipelineDynamicStateCreateInfo(*copy_src.pDynamicState);
     else
-        pDynamicState = NULL;
+        pDynamicState = nullptr;
 
     return *this;
 }
@@ -4329,11 +4329,11 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const VkGraphicsPipelineCreat
     if (in_struct->pVertexInputState)
         pVertexInputState = new safe_VkPipelineVertexInputStateCreateInfo(in_struct->pVertexInputState);
     else
-        pVertexInputState = NULL;
+        pVertexInputState = nullptr;
     if (in_struct->pInputAssemblyState)
         pInputAssemblyState = new safe_VkPipelineInputAssemblyStateCreateInfo(in_struct->pInputAssemblyState);
     else
-        pInputAssemblyState = NULL;
+        pInputAssemblyState = nullptr;
     bool has_tessellation_stage = false;
     if (stageCount && pStages)
         for (uint32_t i = 0; i < stageCount && !has_tessellation_stage; ++i)
@@ -4342,7 +4342,7 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const VkGraphicsPipelineCreat
     if (in_struct->pTessellationState && has_tessellation_stage)
         pTessellationState = new safe_VkPipelineTessellationStateCreateInfo(in_struct->pTessellationState);
     else
-        pTessellationState = NULL; // original pTessellationState pointer ignored
+        pTessellationState = nullptr; // original pTessellationState pointer ignored
     bool is_dynamic_has_rasterization = false;
     if (in_struct->pDynamicState && in_struct->pDynamicState->pDynamicStates) {
         for (uint32_t i = 0; i < in_struct->pDynamicState->dynamicStateCount && !is_dynamic_has_rasterization; ++i)
@@ -4363,29 +4363,29 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const VkGraphicsPipelineCreat
         }
         pViewportState = new safe_VkPipelineViewportStateCreateInfo(in_struct->pViewportState, is_dynamic_viewports, is_dynamic_scissors);
     } else
-        pViewportState = NULL; // original pViewportState pointer ignored
+        pViewportState = nullptr; // original pViewportState pointer ignored
     if (in_struct->pRasterizationState)
         pRasterizationState = new safe_VkPipelineRasterizationStateCreateInfo(in_struct->pRasterizationState);
     else
-        pRasterizationState = NULL;
+        pRasterizationState = nullptr;
     if (in_struct->pMultisampleState && (renderPass != VK_NULL_HANDLE || has_rasterization || is_graphics_library))
         pMultisampleState = new safe_VkPipelineMultisampleStateCreateInfo(in_struct->pMultisampleState);
     else
-        pMultisampleState = NULL; // original pMultisampleState pointer ignored
+        pMultisampleState = nullptr; // original pMultisampleState pointer ignored
     // needs a tracked subpass state uses_depthstencil_attachment
     if (in_struct->pDepthStencilState && ((has_rasterization && uses_depthstencil_attachment) || is_graphics_library))
         pDepthStencilState = new safe_VkPipelineDepthStencilStateCreateInfo(in_struct->pDepthStencilState);
     else
-        pDepthStencilState = NULL; // original pDepthStencilState pointer ignored
+        pDepthStencilState = nullptr; // original pDepthStencilState pointer ignored
     // needs a tracked subpass state usesColorAttachment
     if (in_struct->pColorBlendState && ((has_rasterization && uses_color_attachment) || is_graphics_library))
         pColorBlendState = new safe_VkPipelineColorBlendStateCreateInfo(in_struct->pColorBlendState);
     else
-        pColorBlendState = NULL; // original pColorBlendState pointer ignored
+        pColorBlendState = nullptr; // original pColorBlendState pointer ignored
     if (in_struct->pDynamicState)
         pDynamicState = new safe_VkPipelineDynamicStateCreateInfo(in_struct->pDynamicState);
     else
-        pDynamicState = NULL;
+        pDynamicState = nullptr;
 }
 
 void safe_VkGraphicsPipelineCreateInfo::initialize(const safe_VkGraphicsPipelineCreateInfo* copy_src)
@@ -4419,11 +4419,11 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const safe_VkGraphicsPipeline
     if (copy_src->pVertexInputState)
         pVertexInputState = new safe_VkPipelineVertexInputStateCreateInfo(*copy_src->pVertexInputState);
     else
-        pVertexInputState = NULL;
+        pVertexInputState = nullptr;
     if (copy_src->pInputAssemblyState)
         pInputAssemblyState = new safe_VkPipelineInputAssemblyStateCreateInfo(*copy_src->pInputAssemblyState);
     else
-        pInputAssemblyState = NULL;
+        pInputAssemblyState = nullptr;
     bool has_tessellation_stage = false;
     if (stageCount && pStages)
         for (uint32_t i = 0; i < stageCount && !has_tessellation_stage; ++i)
@@ -4432,7 +4432,7 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const safe_VkGraphicsPipeline
     if (copy_src->pTessellationState && has_tessellation_stage)
         pTessellationState = new safe_VkPipelineTessellationStateCreateInfo(*copy_src->pTessellationState);
     else
-        pTessellationState = NULL; // original pTessellationState pointer ignored
+        pTessellationState = nullptr; // original pTessellationState pointer ignored
     bool is_dynamic_has_rasterization = false;
     if (copy_src->pDynamicState && copy_src->pDynamicState->pDynamicStates) {
         for (uint32_t i = 0; i < copy_src->pDynamicState->dynamicStateCount && !is_dynamic_has_rasterization; ++i)
@@ -4443,27 +4443,27 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const safe_VkGraphicsPipeline
     if (copy_src->pViewportState && (has_rasterization || is_graphics_library)) {
         pViewportState = new safe_VkPipelineViewportStateCreateInfo(*copy_src->pViewportState);
     } else
-        pViewportState = NULL; // original pViewportState pointer ignored
+        pViewportState = nullptr; // original pViewportState pointer ignored
     if (copy_src->pRasterizationState)
         pRasterizationState = new safe_VkPipelineRasterizationStateCreateInfo(*copy_src->pRasterizationState);
     else
-        pRasterizationState = NULL;
+        pRasterizationState = nullptr;
     if (copy_src->pMultisampleState && (has_rasterization || is_graphics_library))
         pMultisampleState = new safe_VkPipelineMultisampleStateCreateInfo(*copy_src->pMultisampleState);
     else
-        pMultisampleState = NULL; // original pMultisampleState pointer ignored
+        pMultisampleState = nullptr; // original pMultisampleState pointer ignored
     if (copy_src->pDepthStencilState && (has_rasterization || is_graphics_library))
         pDepthStencilState = new safe_VkPipelineDepthStencilStateCreateInfo(*copy_src->pDepthStencilState);
     else
-        pDepthStencilState = NULL; // original pDepthStencilState pointer ignored
+        pDepthStencilState = nullptr; // original pDepthStencilState pointer ignored
     if (copy_src->pColorBlendState && (has_rasterization || is_graphics_library))
         pColorBlendState = new safe_VkPipelineColorBlendStateCreateInfo(*copy_src->pColorBlendState);
     else
-        pColorBlendState = NULL; // original pColorBlendState pointer ignored
+        pColorBlendState = nullptr; // original pColorBlendState pointer ignored
     if (copy_src->pDynamicState)
         pDynamicState = new safe_VkPipelineDynamicStateCreateInfo(*copy_src->pDynamicState);
     else
-        pDynamicState = NULL;
+        pDynamicState = nullptr;
 }
 
 safe_VkPipelineLayoutCreateInfo::safe_VkPipelineLayoutCreateInfo(const VkPipelineLayoutCreateInfo* in_struct) :
@@ -41306,16 +41306,16 @@ void safe_VkVideoDecodeH265SessionParametersCreateInfoEXT::initialize(const safe
 safe_VkVideoDecodeH265PictureInfoEXT::safe_VkVideoDecodeH265PictureInfoEXT(const VkVideoDecodeH265PictureInfoEXT* in_struct) :
     sType(in_struct->sType),
     pStdPictureInfo(nullptr),
-    sliceCount(in_struct->sliceCount),
-    pSliceOffsets(nullptr)
+    sliceSegmentCount(in_struct->sliceSegmentCount),
+    pSliceSegmentOffsets(nullptr)
 {
     pNext = SafePnextCopy(in_struct->pNext);
     if (in_struct->pStdPictureInfo) {
         pStdPictureInfo = new StdVideoDecodeH265PictureInfo(*in_struct->pStdPictureInfo);
     }
-    if (in_struct->pSliceOffsets) {
-        pSliceOffsets = new uint32_t[in_struct->sliceCount];
-        memcpy ((void *)pSliceOffsets, (void *)in_struct->pSliceOffsets, sizeof(uint32_t)*in_struct->sliceCount);
+    if (in_struct->pSliceSegmentOffsets) {
+        pSliceSegmentOffsets = new uint32_t[in_struct->sliceSegmentCount];
+        memcpy ((void *)pSliceSegmentOffsets, (void *)in_struct->pSliceSegmentOffsets, sizeof(uint32_t)*in_struct->sliceSegmentCount);
     }
 }
 
@@ -41323,23 +41323,23 @@ safe_VkVideoDecodeH265PictureInfoEXT::safe_VkVideoDecodeH265PictureInfoEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PICTURE_INFO_EXT),
     pNext(nullptr),
     pStdPictureInfo(nullptr),
-    sliceCount(),
-    pSliceOffsets(nullptr)
+    sliceSegmentCount(),
+    pSliceSegmentOffsets(nullptr)
 {}
 
 safe_VkVideoDecodeH265PictureInfoEXT::safe_VkVideoDecodeH265PictureInfoEXT(const safe_VkVideoDecodeH265PictureInfoEXT& copy_src)
 {
     sType = copy_src.sType;
     pStdPictureInfo = nullptr;
-    sliceCount = copy_src.sliceCount;
-    pSliceOffsets = nullptr;
+    sliceSegmentCount = copy_src.sliceSegmentCount;
+    pSliceSegmentOffsets = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
     if (copy_src.pStdPictureInfo) {
         pStdPictureInfo = new StdVideoDecodeH265PictureInfo(*copy_src.pStdPictureInfo);
     }
-    if (copy_src.pSliceOffsets) {
-        pSliceOffsets = new uint32_t[copy_src.sliceCount];
-        memcpy ((void *)pSliceOffsets, (void *)copy_src.pSliceOffsets, sizeof(uint32_t)*copy_src.sliceCount);
+    if (copy_src.pSliceSegmentOffsets) {
+        pSliceSegmentOffsets = new uint32_t[copy_src.sliceSegmentCount];
+        memcpy ((void *)pSliceSegmentOffsets, (void *)copy_src.pSliceSegmentOffsets, sizeof(uint32_t)*copy_src.sliceSegmentCount);
     }
 }
 
@@ -41349,22 +41349,22 @@ safe_VkVideoDecodeH265PictureInfoEXT& safe_VkVideoDecodeH265PictureInfoEXT::oper
 
     if (pStdPictureInfo)
         delete pStdPictureInfo;
-    if (pSliceOffsets)
-        delete[] pSliceOffsets;
+    if (pSliceSegmentOffsets)
+        delete[] pSliceSegmentOffsets;
     if (pNext)
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
     pStdPictureInfo = nullptr;
-    sliceCount = copy_src.sliceCount;
-    pSliceOffsets = nullptr;
+    sliceSegmentCount = copy_src.sliceSegmentCount;
+    pSliceSegmentOffsets = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
     if (copy_src.pStdPictureInfo) {
         pStdPictureInfo = new StdVideoDecodeH265PictureInfo(*copy_src.pStdPictureInfo);
     }
-    if (copy_src.pSliceOffsets) {
-        pSliceOffsets = new uint32_t[copy_src.sliceCount];
-        memcpy ((void *)pSliceOffsets, (void *)copy_src.pSliceOffsets, sizeof(uint32_t)*copy_src.sliceCount);
+    if (copy_src.pSliceSegmentOffsets) {
+        pSliceSegmentOffsets = new uint32_t[copy_src.sliceSegmentCount];
+        memcpy ((void *)pSliceSegmentOffsets, (void *)copy_src.pSliceSegmentOffsets, sizeof(uint32_t)*copy_src.sliceSegmentCount);
     }
 
     return *this;
@@ -41374,8 +41374,8 @@ safe_VkVideoDecodeH265PictureInfoEXT::~safe_VkVideoDecodeH265PictureInfoEXT()
 {
     if (pStdPictureInfo)
         delete pStdPictureInfo;
-    if (pSliceOffsets)
-        delete[] pSliceOffsets;
+    if (pSliceSegmentOffsets)
+        delete[] pSliceSegmentOffsets;
     if (pNext)
         FreePnextChain(pNext);
 }
@@ -41384,21 +41384,21 @@ void safe_VkVideoDecodeH265PictureInfoEXT::initialize(const VkVideoDecodeH265Pic
 {
     if (pStdPictureInfo)
         delete pStdPictureInfo;
-    if (pSliceOffsets)
-        delete[] pSliceOffsets;
+    if (pSliceSegmentOffsets)
+        delete[] pSliceSegmentOffsets;
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
     pStdPictureInfo = nullptr;
-    sliceCount = in_struct->sliceCount;
-    pSliceOffsets = nullptr;
+    sliceSegmentCount = in_struct->sliceSegmentCount;
+    pSliceSegmentOffsets = nullptr;
     pNext = SafePnextCopy(in_struct->pNext);
     if (in_struct->pStdPictureInfo) {
         pStdPictureInfo = new StdVideoDecodeH265PictureInfo(*in_struct->pStdPictureInfo);
     }
-    if (in_struct->pSliceOffsets) {
-        pSliceOffsets = new uint32_t[in_struct->sliceCount];
-        memcpy ((void *)pSliceOffsets, (void *)in_struct->pSliceOffsets, sizeof(uint32_t)*in_struct->sliceCount);
+    if (in_struct->pSliceSegmentOffsets) {
+        pSliceSegmentOffsets = new uint32_t[in_struct->sliceSegmentCount];
+        memcpy ((void *)pSliceSegmentOffsets, (void *)in_struct->pSliceSegmentOffsets, sizeof(uint32_t)*in_struct->sliceSegmentCount);
     }
 }
 
@@ -41406,15 +41406,15 @@ void safe_VkVideoDecodeH265PictureInfoEXT::initialize(const safe_VkVideoDecodeH2
 {
     sType = copy_src->sType;
     pStdPictureInfo = nullptr;
-    sliceCount = copy_src->sliceCount;
-    pSliceOffsets = nullptr;
+    sliceSegmentCount = copy_src->sliceSegmentCount;
+    pSliceSegmentOffsets = nullptr;
     pNext = SafePnextCopy(copy_src->pNext);
     if (copy_src->pStdPictureInfo) {
         pStdPictureInfo = new StdVideoDecodeH265PictureInfo(*copy_src->pStdPictureInfo);
     }
-    if (copy_src->pSliceOffsets) {
-        pSliceOffsets = new uint32_t[copy_src->sliceCount];
-        memcpy ((void *)pSliceOffsets, (void *)copy_src->pSliceOffsets, sizeof(uint32_t)*copy_src->sliceCount);
+    if (copy_src->pSliceSegmentOffsets) {
+        pSliceSegmentOffsets = new uint32_t[copy_src->sliceSegmentCount];
+        memcpy ((void *)pSliceSegmentOffsets, (void *)copy_src->pSliceSegmentOffsets, sizeof(uint32_t)*copy_src->sliceSegmentCount);
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
@@ -42469,7 +42469,7 @@ void safe_VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL::initialize(const
 
 safe_VkPerformanceValueDataINTEL::safe_VkPerformanceValueDataINTEL(const VkPerformanceValueDataINTEL* in_struct)
 {
-    initialize(in_struct);
+    valueString = SafeStringCopy(in_struct->valueString);
 }
 
 safe_VkPerformanceValueDataINTEL::safe_VkPerformanceValueDataINTEL() :
@@ -48427,6 +48427,1230 @@ void safe_VkImportMetalSharedEventInfoEXT::initialize(const safe_VkImportMetalSh
 #endif // VK_USE_PLATFORM_METAL_EXT
 
 
+safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT::safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT(const VkPhysicalDeviceDescriptorBufferPropertiesEXT* in_struct) :
+    sType(in_struct->sType),
+    combinedImageSamplerDescriptorSingleArray(in_struct->combinedImageSamplerDescriptorSingleArray),
+    bufferlessPushDescriptors(in_struct->bufferlessPushDescriptors),
+    allowSamplerImageViewPostSubmitCreation(in_struct->allowSamplerImageViewPostSubmitCreation),
+    descriptorBufferOffsetAlignment(in_struct->descriptorBufferOffsetAlignment),
+    maxDescriptorBufferBindings(in_struct->maxDescriptorBufferBindings),
+    maxResourceDescriptorBufferBindings(in_struct->maxResourceDescriptorBufferBindings),
+    maxSamplerDescriptorBufferBindings(in_struct->maxSamplerDescriptorBufferBindings),
+    maxEmbeddedImmutableSamplerBindings(in_struct->maxEmbeddedImmutableSamplerBindings),
+    maxEmbeddedImmutableSamplers(in_struct->maxEmbeddedImmutableSamplers),
+    bufferCaptureReplayDescriptorDataSize(in_struct->bufferCaptureReplayDescriptorDataSize),
+    imageCaptureReplayDescriptorDataSize(in_struct->imageCaptureReplayDescriptorDataSize),
+    imageViewCaptureReplayDescriptorDataSize(in_struct->imageViewCaptureReplayDescriptorDataSize),
+    samplerCaptureReplayDescriptorDataSize(in_struct->samplerCaptureReplayDescriptorDataSize),
+    accelerationStructureCaptureReplayDescriptorDataSize(in_struct->accelerationStructureCaptureReplayDescriptorDataSize),
+    samplerDescriptorSize(in_struct->samplerDescriptorSize),
+    combinedImageSamplerDescriptorSize(in_struct->combinedImageSamplerDescriptorSize),
+    sampledImageDescriptorSize(in_struct->sampledImageDescriptorSize),
+    storageImageDescriptorSize(in_struct->storageImageDescriptorSize),
+    uniformTexelBufferDescriptorSize(in_struct->uniformTexelBufferDescriptorSize),
+    robustUniformTexelBufferDescriptorSize(in_struct->robustUniformTexelBufferDescriptorSize),
+    storageTexelBufferDescriptorSize(in_struct->storageTexelBufferDescriptorSize),
+    robustStorageTexelBufferDescriptorSize(in_struct->robustStorageTexelBufferDescriptorSize),
+    uniformBufferDescriptorSize(in_struct->uniformBufferDescriptorSize),
+    robustUniformBufferDescriptorSize(in_struct->robustUniformBufferDescriptorSize),
+    storageBufferDescriptorSize(in_struct->storageBufferDescriptorSize),
+    robustStorageBufferDescriptorSize(in_struct->robustStorageBufferDescriptorSize),
+    inputAttachmentDescriptorSize(in_struct->inputAttachmentDescriptorSize),
+    accelerationStructureDescriptorSize(in_struct->accelerationStructureDescriptorSize),
+    maxSamplerDescriptorBufferRange(in_struct->maxSamplerDescriptorBufferRange),
+    maxResourceDescriptorBufferRange(in_struct->maxResourceDescriptorBufferRange),
+    samplerDescriptorBufferAddressSpaceSize(in_struct->samplerDescriptorBufferAddressSpaceSize),
+    resourceDescriptorBufferAddressSpaceSize(in_struct->resourceDescriptorBufferAddressSpaceSize),
+    descriptorBufferAddressSpaceSize(in_struct->descriptorBufferAddressSpaceSize)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT::safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT() :
+    sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT),
+    pNext(nullptr),
+    combinedImageSamplerDescriptorSingleArray(),
+    bufferlessPushDescriptors(),
+    allowSamplerImageViewPostSubmitCreation(),
+    descriptorBufferOffsetAlignment(),
+    maxDescriptorBufferBindings(),
+    maxResourceDescriptorBufferBindings(),
+    maxSamplerDescriptorBufferBindings(),
+    maxEmbeddedImmutableSamplerBindings(),
+    maxEmbeddedImmutableSamplers(),
+    bufferCaptureReplayDescriptorDataSize(),
+    imageCaptureReplayDescriptorDataSize(),
+    imageViewCaptureReplayDescriptorDataSize(),
+    samplerCaptureReplayDescriptorDataSize(),
+    accelerationStructureCaptureReplayDescriptorDataSize(),
+    samplerDescriptorSize(),
+    combinedImageSamplerDescriptorSize(),
+    sampledImageDescriptorSize(),
+    storageImageDescriptorSize(),
+    uniformTexelBufferDescriptorSize(),
+    robustUniformTexelBufferDescriptorSize(),
+    storageTexelBufferDescriptorSize(),
+    robustStorageTexelBufferDescriptorSize(),
+    uniformBufferDescriptorSize(),
+    robustUniformBufferDescriptorSize(),
+    storageBufferDescriptorSize(),
+    robustStorageBufferDescriptorSize(),
+    inputAttachmentDescriptorSize(),
+    accelerationStructureDescriptorSize(),
+    maxSamplerDescriptorBufferRange(),
+    maxResourceDescriptorBufferRange(),
+    samplerDescriptorBufferAddressSpaceSize(),
+    resourceDescriptorBufferAddressSpaceSize(),
+    descriptorBufferAddressSpaceSize()
+{}
+
+safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT::safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT(const safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    combinedImageSamplerDescriptorSingleArray = copy_src.combinedImageSamplerDescriptorSingleArray;
+    bufferlessPushDescriptors = copy_src.bufferlessPushDescriptors;
+    allowSamplerImageViewPostSubmitCreation = copy_src.allowSamplerImageViewPostSubmitCreation;
+    descriptorBufferOffsetAlignment = copy_src.descriptorBufferOffsetAlignment;
+    maxDescriptorBufferBindings = copy_src.maxDescriptorBufferBindings;
+    maxResourceDescriptorBufferBindings = copy_src.maxResourceDescriptorBufferBindings;
+    maxSamplerDescriptorBufferBindings = copy_src.maxSamplerDescriptorBufferBindings;
+    maxEmbeddedImmutableSamplerBindings = copy_src.maxEmbeddedImmutableSamplerBindings;
+    maxEmbeddedImmutableSamplers = copy_src.maxEmbeddedImmutableSamplers;
+    bufferCaptureReplayDescriptorDataSize = copy_src.bufferCaptureReplayDescriptorDataSize;
+    imageCaptureReplayDescriptorDataSize = copy_src.imageCaptureReplayDescriptorDataSize;
+    imageViewCaptureReplayDescriptorDataSize = copy_src.imageViewCaptureReplayDescriptorDataSize;
+    samplerCaptureReplayDescriptorDataSize = copy_src.samplerCaptureReplayDescriptorDataSize;
+    accelerationStructureCaptureReplayDescriptorDataSize = copy_src.accelerationStructureCaptureReplayDescriptorDataSize;
+    samplerDescriptorSize = copy_src.samplerDescriptorSize;
+    combinedImageSamplerDescriptorSize = copy_src.combinedImageSamplerDescriptorSize;
+    sampledImageDescriptorSize = copy_src.sampledImageDescriptorSize;
+    storageImageDescriptorSize = copy_src.storageImageDescriptorSize;
+    uniformTexelBufferDescriptorSize = copy_src.uniformTexelBufferDescriptorSize;
+    robustUniformTexelBufferDescriptorSize = copy_src.robustUniformTexelBufferDescriptorSize;
+    storageTexelBufferDescriptorSize = copy_src.storageTexelBufferDescriptorSize;
+    robustStorageTexelBufferDescriptorSize = copy_src.robustStorageTexelBufferDescriptorSize;
+    uniformBufferDescriptorSize = copy_src.uniformBufferDescriptorSize;
+    robustUniformBufferDescriptorSize = copy_src.robustUniformBufferDescriptorSize;
+    storageBufferDescriptorSize = copy_src.storageBufferDescriptorSize;
+    robustStorageBufferDescriptorSize = copy_src.robustStorageBufferDescriptorSize;
+    inputAttachmentDescriptorSize = copy_src.inputAttachmentDescriptorSize;
+    accelerationStructureDescriptorSize = copy_src.accelerationStructureDescriptorSize;
+    maxSamplerDescriptorBufferRange = copy_src.maxSamplerDescriptorBufferRange;
+    maxResourceDescriptorBufferRange = copy_src.maxResourceDescriptorBufferRange;
+    samplerDescriptorBufferAddressSpaceSize = copy_src.samplerDescriptorBufferAddressSpaceSize;
+    resourceDescriptorBufferAddressSpaceSize = copy_src.resourceDescriptorBufferAddressSpaceSize;
+    descriptorBufferAddressSpaceSize = copy_src.descriptorBufferAddressSpaceSize;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT& safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT::operator=(const safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    combinedImageSamplerDescriptorSingleArray = copy_src.combinedImageSamplerDescriptorSingleArray;
+    bufferlessPushDescriptors = copy_src.bufferlessPushDescriptors;
+    allowSamplerImageViewPostSubmitCreation = copy_src.allowSamplerImageViewPostSubmitCreation;
+    descriptorBufferOffsetAlignment = copy_src.descriptorBufferOffsetAlignment;
+    maxDescriptorBufferBindings = copy_src.maxDescriptorBufferBindings;
+    maxResourceDescriptorBufferBindings = copy_src.maxResourceDescriptorBufferBindings;
+    maxSamplerDescriptorBufferBindings = copy_src.maxSamplerDescriptorBufferBindings;
+    maxEmbeddedImmutableSamplerBindings = copy_src.maxEmbeddedImmutableSamplerBindings;
+    maxEmbeddedImmutableSamplers = copy_src.maxEmbeddedImmutableSamplers;
+    bufferCaptureReplayDescriptorDataSize = copy_src.bufferCaptureReplayDescriptorDataSize;
+    imageCaptureReplayDescriptorDataSize = copy_src.imageCaptureReplayDescriptorDataSize;
+    imageViewCaptureReplayDescriptorDataSize = copy_src.imageViewCaptureReplayDescriptorDataSize;
+    samplerCaptureReplayDescriptorDataSize = copy_src.samplerCaptureReplayDescriptorDataSize;
+    accelerationStructureCaptureReplayDescriptorDataSize = copy_src.accelerationStructureCaptureReplayDescriptorDataSize;
+    samplerDescriptorSize = copy_src.samplerDescriptorSize;
+    combinedImageSamplerDescriptorSize = copy_src.combinedImageSamplerDescriptorSize;
+    sampledImageDescriptorSize = copy_src.sampledImageDescriptorSize;
+    storageImageDescriptorSize = copy_src.storageImageDescriptorSize;
+    uniformTexelBufferDescriptorSize = copy_src.uniformTexelBufferDescriptorSize;
+    robustUniformTexelBufferDescriptorSize = copy_src.robustUniformTexelBufferDescriptorSize;
+    storageTexelBufferDescriptorSize = copy_src.storageTexelBufferDescriptorSize;
+    robustStorageTexelBufferDescriptorSize = copy_src.robustStorageTexelBufferDescriptorSize;
+    uniformBufferDescriptorSize = copy_src.uniformBufferDescriptorSize;
+    robustUniformBufferDescriptorSize = copy_src.robustUniformBufferDescriptorSize;
+    storageBufferDescriptorSize = copy_src.storageBufferDescriptorSize;
+    robustStorageBufferDescriptorSize = copy_src.robustStorageBufferDescriptorSize;
+    inputAttachmentDescriptorSize = copy_src.inputAttachmentDescriptorSize;
+    accelerationStructureDescriptorSize = copy_src.accelerationStructureDescriptorSize;
+    maxSamplerDescriptorBufferRange = copy_src.maxSamplerDescriptorBufferRange;
+    maxResourceDescriptorBufferRange = copy_src.maxResourceDescriptorBufferRange;
+    samplerDescriptorBufferAddressSpaceSize = copy_src.samplerDescriptorBufferAddressSpaceSize;
+    resourceDescriptorBufferAddressSpaceSize = copy_src.resourceDescriptorBufferAddressSpaceSize;
+    descriptorBufferAddressSpaceSize = copy_src.descriptorBufferAddressSpaceSize;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT::~safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT::initialize(const VkPhysicalDeviceDescriptorBufferPropertiesEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    combinedImageSamplerDescriptorSingleArray = in_struct->combinedImageSamplerDescriptorSingleArray;
+    bufferlessPushDescriptors = in_struct->bufferlessPushDescriptors;
+    allowSamplerImageViewPostSubmitCreation = in_struct->allowSamplerImageViewPostSubmitCreation;
+    descriptorBufferOffsetAlignment = in_struct->descriptorBufferOffsetAlignment;
+    maxDescriptorBufferBindings = in_struct->maxDescriptorBufferBindings;
+    maxResourceDescriptorBufferBindings = in_struct->maxResourceDescriptorBufferBindings;
+    maxSamplerDescriptorBufferBindings = in_struct->maxSamplerDescriptorBufferBindings;
+    maxEmbeddedImmutableSamplerBindings = in_struct->maxEmbeddedImmutableSamplerBindings;
+    maxEmbeddedImmutableSamplers = in_struct->maxEmbeddedImmutableSamplers;
+    bufferCaptureReplayDescriptorDataSize = in_struct->bufferCaptureReplayDescriptorDataSize;
+    imageCaptureReplayDescriptorDataSize = in_struct->imageCaptureReplayDescriptorDataSize;
+    imageViewCaptureReplayDescriptorDataSize = in_struct->imageViewCaptureReplayDescriptorDataSize;
+    samplerCaptureReplayDescriptorDataSize = in_struct->samplerCaptureReplayDescriptorDataSize;
+    accelerationStructureCaptureReplayDescriptorDataSize = in_struct->accelerationStructureCaptureReplayDescriptorDataSize;
+    samplerDescriptorSize = in_struct->samplerDescriptorSize;
+    combinedImageSamplerDescriptorSize = in_struct->combinedImageSamplerDescriptorSize;
+    sampledImageDescriptorSize = in_struct->sampledImageDescriptorSize;
+    storageImageDescriptorSize = in_struct->storageImageDescriptorSize;
+    uniformTexelBufferDescriptorSize = in_struct->uniformTexelBufferDescriptorSize;
+    robustUniformTexelBufferDescriptorSize = in_struct->robustUniformTexelBufferDescriptorSize;
+    storageTexelBufferDescriptorSize = in_struct->storageTexelBufferDescriptorSize;
+    robustStorageTexelBufferDescriptorSize = in_struct->robustStorageTexelBufferDescriptorSize;
+    uniformBufferDescriptorSize = in_struct->uniformBufferDescriptorSize;
+    robustUniformBufferDescriptorSize = in_struct->robustUniformBufferDescriptorSize;
+    storageBufferDescriptorSize = in_struct->storageBufferDescriptorSize;
+    robustStorageBufferDescriptorSize = in_struct->robustStorageBufferDescriptorSize;
+    inputAttachmentDescriptorSize = in_struct->inputAttachmentDescriptorSize;
+    accelerationStructureDescriptorSize = in_struct->accelerationStructureDescriptorSize;
+    maxSamplerDescriptorBufferRange = in_struct->maxSamplerDescriptorBufferRange;
+    maxResourceDescriptorBufferRange = in_struct->maxResourceDescriptorBufferRange;
+    samplerDescriptorBufferAddressSpaceSize = in_struct->samplerDescriptorBufferAddressSpaceSize;
+    resourceDescriptorBufferAddressSpaceSize = in_struct->resourceDescriptorBufferAddressSpaceSize;
+    descriptorBufferAddressSpaceSize = in_struct->descriptorBufferAddressSpaceSize;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT::initialize(const safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT* copy_src)
+{
+    sType = copy_src->sType;
+    combinedImageSamplerDescriptorSingleArray = copy_src->combinedImageSamplerDescriptorSingleArray;
+    bufferlessPushDescriptors = copy_src->bufferlessPushDescriptors;
+    allowSamplerImageViewPostSubmitCreation = copy_src->allowSamplerImageViewPostSubmitCreation;
+    descriptorBufferOffsetAlignment = copy_src->descriptorBufferOffsetAlignment;
+    maxDescriptorBufferBindings = copy_src->maxDescriptorBufferBindings;
+    maxResourceDescriptorBufferBindings = copy_src->maxResourceDescriptorBufferBindings;
+    maxSamplerDescriptorBufferBindings = copy_src->maxSamplerDescriptorBufferBindings;
+    maxEmbeddedImmutableSamplerBindings = copy_src->maxEmbeddedImmutableSamplerBindings;
+    maxEmbeddedImmutableSamplers = copy_src->maxEmbeddedImmutableSamplers;
+    bufferCaptureReplayDescriptorDataSize = copy_src->bufferCaptureReplayDescriptorDataSize;
+    imageCaptureReplayDescriptorDataSize = copy_src->imageCaptureReplayDescriptorDataSize;
+    imageViewCaptureReplayDescriptorDataSize = copy_src->imageViewCaptureReplayDescriptorDataSize;
+    samplerCaptureReplayDescriptorDataSize = copy_src->samplerCaptureReplayDescriptorDataSize;
+    accelerationStructureCaptureReplayDescriptorDataSize = copy_src->accelerationStructureCaptureReplayDescriptorDataSize;
+    samplerDescriptorSize = copy_src->samplerDescriptorSize;
+    combinedImageSamplerDescriptorSize = copy_src->combinedImageSamplerDescriptorSize;
+    sampledImageDescriptorSize = copy_src->sampledImageDescriptorSize;
+    storageImageDescriptorSize = copy_src->storageImageDescriptorSize;
+    uniformTexelBufferDescriptorSize = copy_src->uniformTexelBufferDescriptorSize;
+    robustUniformTexelBufferDescriptorSize = copy_src->robustUniformTexelBufferDescriptorSize;
+    storageTexelBufferDescriptorSize = copy_src->storageTexelBufferDescriptorSize;
+    robustStorageTexelBufferDescriptorSize = copy_src->robustStorageTexelBufferDescriptorSize;
+    uniformBufferDescriptorSize = copy_src->uniformBufferDescriptorSize;
+    robustUniformBufferDescriptorSize = copy_src->robustUniformBufferDescriptorSize;
+    storageBufferDescriptorSize = copy_src->storageBufferDescriptorSize;
+    robustStorageBufferDescriptorSize = copy_src->robustStorageBufferDescriptorSize;
+    inputAttachmentDescriptorSize = copy_src->inputAttachmentDescriptorSize;
+    accelerationStructureDescriptorSize = copy_src->accelerationStructureDescriptorSize;
+    maxSamplerDescriptorBufferRange = copy_src->maxSamplerDescriptorBufferRange;
+    maxResourceDescriptorBufferRange = copy_src->maxResourceDescriptorBufferRange;
+    samplerDescriptorBufferAddressSpaceSize = copy_src->samplerDescriptorBufferAddressSpaceSize;
+    resourceDescriptorBufferAddressSpaceSize = copy_src->resourceDescriptorBufferAddressSpaceSize;
+    descriptorBufferAddressSpaceSize = copy_src->descriptorBufferAddressSpaceSize;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT::safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT(const VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT* in_struct) :
+    sType(in_struct->sType),
+    combinedImageSamplerDensityMapDescriptorSize(in_struct->combinedImageSamplerDensityMapDescriptorSize)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT::safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT() :
+    sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_DENSITY_MAP_PROPERTIES_EXT),
+    pNext(nullptr),
+    combinedImageSamplerDensityMapDescriptorSize()
+{}
+
+safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT::safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT(const safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    combinedImageSamplerDensityMapDescriptorSize = copy_src.combinedImageSamplerDensityMapDescriptorSize;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT& safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT::operator=(const safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    combinedImageSamplerDensityMapDescriptorSize = copy_src.combinedImageSamplerDensityMapDescriptorSize;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT::~safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT::initialize(const VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    combinedImageSamplerDensityMapDescriptorSize = in_struct->combinedImageSamplerDensityMapDescriptorSize;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT::initialize(const safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT* copy_src)
+{
+    sType = copy_src->sType;
+    combinedImageSamplerDensityMapDescriptorSize = copy_src->combinedImageSamplerDensityMapDescriptorSize;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT::safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT(const VkPhysicalDeviceDescriptorBufferFeaturesEXT* in_struct) :
+    sType(in_struct->sType),
+    descriptorBuffer(in_struct->descriptorBuffer),
+    descriptorBufferCaptureReplay(in_struct->descriptorBufferCaptureReplay),
+    descriptorBufferImageLayoutIgnored(in_struct->descriptorBufferImageLayoutIgnored),
+    descriptorBufferPushDescriptors(in_struct->descriptorBufferPushDescriptors)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT::safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT() :
+    sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT),
+    pNext(nullptr),
+    descriptorBuffer(),
+    descriptorBufferCaptureReplay(),
+    descriptorBufferImageLayoutIgnored(),
+    descriptorBufferPushDescriptors()
+{}
+
+safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT::safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT(const safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    descriptorBuffer = copy_src.descriptorBuffer;
+    descriptorBufferCaptureReplay = copy_src.descriptorBufferCaptureReplay;
+    descriptorBufferImageLayoutIgnored = copy_src.descriptorBufferImageLayoutIgnored;
+    descriptorBufferPushDescriptors = copy_src.descriptorBufferPushDescriptors;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT& safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT::operator=(const safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    descriptorBuffer = copy_src.descriptorBuffer;
+    descriptorBufferCaptureReplay = copy_src.descriptorBufferCaptureReplay;
+    descriptorBufferImageLayoutIgnored = copy_src.descriptorBufferImageLayoutIgnored;
+    descriptorBufferPushDescriptors = copy_src.descriptorBufferPushDescriptors;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT::~safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT::initialize(const VkPhysicalDeviceDescriptorBufferFeaturesEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    descriptorBuffer = in_struct->descriptorBuffer;
+    descriptorBufferCaptureReplay = in_struct->descriptorBufferCaptureReplay;
+    descriptorBufferImageLayoutIgnored = in_struct->descriptorBufferImageLayoutIgnored;
+    descriptorBufferPushDescriptors = in_struct->descriptorBufferPushDescriptors;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT::initialize(const safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT* copy_src)
+{
+    sType = copy_src->sType;
+    descriptorBuffer = copy_src->descriptorBuffer;
+    descriptorBufferCaptureReplay = copy_src->descriptorBufferCaptureReplay;
+    descriptorBufferImageLayoutIgnored = copy_src->descriptorBufferImageLayoutIgnored;
+    descriptorBufferPushDescriptors = copy_src->descriptorBufferPushDescriptors;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkDescriptorAddressInfoEXT::safe_VkDescriptorAddressInfoEXT(const VkDescriptorAddressInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    address(in_struct->address),
+    range(in_struct->range),
+    format(in_struct->format)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkDescriptorAddressInfoEXT::safe_VkDescriptorAddressInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT),
+    pNext(nullptr),
+    address(),
+    range(),
+    format()
+{}
+
+safe_VkDescriptorAddressInfoEXT::safe_VkDescriptorAddressInfoEXT(const safe_VkDescriptorAddressInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    address = copy_src.address;
+    range = copy_src.range;
+    format = copy_src.format;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkDescriptorAddressInfoEXT& safe_VkDescriptorAddressInfoEXT::operator=(const safe_VkDescriptorAddressInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    address = copy_src.address;
+    range = copy_src.range;
+    format = copy_src.format;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkDescriptorAddressInfoEXT::~safe_VkDescriptorAddressInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkDescriptorAddressInfoEXT::initialize(const VkDescriptorAddressInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    address = in_struct->address;
+    range = in_struct->range;
+    format = in_struct->format;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkDescriptorAddressInfoEXT::initialize(const safe_VkDescriptorAddressInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    address = copy_src->address;
+    range = copy_src->range;
+    format = copy_src->format;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkDescriptorBufferBindingInfoEXT::safe_VkDescriptorBufferBindingInfoEXT(const VkDescriptorBufferBindingInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    address(in_struct->address),
+    usage(in_struct->usage)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkDescriptorBufferBindingInfoEXT::safe_VkDescriptorBufferBindingInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT),
+    pNext(nullptr),
+    address(),
+    usage()
+{}
+
+safe_VkDescriptorBufferBindingInfoEXT::safe_VkDescriptorBufferBindingInfoEXT(const safe_VkDescriptorBufferBindingInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    address = copy_src.address;
+    usage = copy_src.usage;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkDescriptorBufferBindingInfoEXT& safe_VkDescriptorBufferBindingInfoEXT::operator=(const safe_VkDescriptorBufferBindingInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    address = copy_src.address;
+    usage = copy_src.usage;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkDescriptorBufferBindingInfoEXT::~safe_VkDescriptorBufferBindingInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkDescriptorBufferBindingInfoEXT::initialize(const VkDescriptorBufferBindingInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    address = in_struct->address;
+    usage = in_struct->usage;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkDescriptorBufferBindingInfoEXT::initialize(const safe_VkDescriptorBufferBindingInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    address = copy_src->address;
+    usage = copy_src->usage;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT::safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(const VkDescriptorBufferBindingPushDescriptorBufferHandleEXT* in_struct) :
+    sType(in_struct->sType),
+    buffer(in_struct->buffer)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT::safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT() :
+    sType(VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT),
+    pNext(nullptr),
+    buffer()
+{}
+
+safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT::safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(const safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT& copy_src)
+{
+    sType = copy_src.sType;
+    buffer = copy_src.buffer;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT& safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT::operator=(const safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    buffer = copy_src.buffer;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT::~safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT::initialize(const VkDescriptorBufferBindingPushDescriptorBufferHandleEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    buffer = in_struct->buffer;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT::initialize(const safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT* copy_src)
+{
+    sType = copy_src->sType;
+    buffer = copy_src->buffer;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkDescriptorDataEXT::safe_VkDescriptorDataEXT(const VkDescriptorDataEXT* in_struct, const VkDescriptorType type)
+{
+    VkDescriptorType* pType = (VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+
+    switch (type)
+    {
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:                   break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER:                    pSampler              = new VkSampler(*in_struct->pSampler); break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     pCombinedImageSampler = new VkDescriptorImageInfo(*in_struct->pCombinedImageSampler); break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              pSampledImage         = in_struct->pSampledImage ? new VkDescriptorImageInfo(*in_struct->pSampledImage) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:              pStorageImage         = in_struct->pStorageImage ? new VkDescriptorImageInfo(*in_struct->pStorageImage) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           pInputAttachmentImage = new VkDescriptorImageInfo(*in_struct->pInputAttachmentImage); break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       pUniformTexelBuffer   = in_struct->pUniformTexelBuffer ? new safe_VkDescriptorAddressInfoEXT(in_struct->pUniformTexelBuffer) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       pStorageTexelBuffer   = in_struct->pStorageTexelBuffer ? new safe_VkDescriptorAddressInfoEXT(in_struct->pStorageTexelBuffer) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             pUniformBuffer        = in_struct->pUniformBuffer ? new safe_VkDescriptorAddressInfoEXT(in_struct->pUniformBuffer) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:             pStorageBuffer        = in_struct->pStorageBuffer ? new safe_VkDescriptorAddressInfoEXT(in_struct->pStorageBuffer) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: accelerationStructure = in_struct->accelerationStructure; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:  accelerationStructure = in_struct->accelerationStructure; break;
+        default:                                            break;
+    }
+
+    *pType = type;
+}
+
+safe_VkDescriptorDataEXT::safe_VkDescriptorDataEXT() : type_at_end {0}
+{
+    VkDescriptorType* pType = (VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+    *pType = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+}
+
+safe_VkDescriptorDataEXT::safe_VkDescriptorDataEXT(const safe_VkDescriptorDataEXT& copy_src)
+{
+    pSampler = nullptr;
+    pCombinedImageSampler = nullptr;
+    pInputAttachmentImage = nullptr;
+    pSampledImage = nullptr;
+    pStorageImage = nullptr;
+    pUniformTexelBuffer = nullptr;
+    pStorageTexelBuffer = nullptr;
+    pUniformBuffer = nullptr;
+    pStorageBuffer = nullptr;
+    accelerationStructure = copy_src.accelerationStructure;
+    VkDescriptorType* pType = (VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+    VkDescriptorType type = *(VkDescriptorType*)&copy_src.type_at_end[sizeof(VkDescriptorDataEXT)];
+
+    switch (type)
+    {
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:                   break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER:                    pSampler              = new VkSampler(*copy_src.pSampler); break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     pCombinedImageSampler = new VkDescriptorImageInfo(*copy_src.pCombinedImageSampler); break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              pSampledImage         = new VkDescriptorImageInfo(*copy_src.pSampledImage); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:              pStorageImage         = new VkDescriptorImageInfo(*copy_src.pStorageImage); break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           pInputAttachmentImage = new VkDescriptorImageInfo(*copy_src.pInputAttachmentImage); break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       pUniformTexelBuffer   = new safe_VkDescriptorAddressInfoEXT(*copy_src.pUniformTexelBuffer); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       pStorageTexelBuffer   = new safe_VkDescriptorAddressInfoEXT(*copy_src.pStorageTexelBuffer); break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             pUniformBuffer        = new safe_VkDescriptorAddressInfoEXT(*copy_src.pUniformBuffer); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:             pStorageBuffer        = new safe_VkDescriptorAddressInfoEXT(*copy_src.pStorageBuffer); break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: accelerationStructure = copy_src.accelerationStructure; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:  accelerationStructure = copy_src.accelerationStructure; break;
+        default:                                            break;
+    }
+
+    *pType = type;
+}
+
+safe_VkDescriptorDataEXT& safe_VkDescriptorDataEXT::operator=(const safe_VkDescriptorDataEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+
+    VkDescriptorType& thisType = *(VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+
+    switch (thisType)
+    {
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:                   break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER:                    delete pSampler;              pSampler              = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     delete pCombinedImageSampler; pCombinedImageSampler = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              delete pSampledImage;         pSampledImage         = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:              delete pStorageImage;         pStorageImage         = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           delete pInputAttachmentImage; pInputAttachmentImage = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       delete pUniformTexelBuffer;   pUniformTexelBuffer   = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       delete pStorageTexelBuffer;   pStorageTexelBuffer   = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             delete pUniformBuffer;        pUniformBuffer        = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:             delete pStorageBuffer;        pStorageBuffer        = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: accelerationStructure = 0ull; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:  accelerationStructure = 0ull; break;
+        default:                                            break;
+    }
+
+    thisType = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+
+    pSampler = nullptr;
+    pCombinedImageSampler = nullptr;
+    pInputAttachmentImage = nullptr;
+    pSampledImage = nullptr;
+    pStorageImage = nullptr;
+    pUniformTexelBuffer = nullptr;
+    pStorageTexelBuffer = nullptr;
+    pUniformBuffer = nullptr;
+    pStorageBuffer = nullptr;
+    accelerationStructure = copy_src.accelerationStructure;
+    VkDescriptorType* pType = (VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+    VkDescriptorType type = *(VkDescriptorType*)&copy_src.type_at_end[sizeof(VkDescriptorDataEXT)];
+
+    switch (type)
+    {
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:                   break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER:                    pSampler              = new VkSampler(*copy_src.pSampler); break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     pCombinedImageSampler = new VkDescriptorImageInfo(*copy_src.pCombinedImageSampler); break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              pSampledImage         = new VkDescriptorImageInfo(*copy_src.pSampledImage); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:              pStorageImage         = new VkDescriptorImageInfo(*copy_src.pStorageImage); break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           pInputAttachmentImage = new VkDescriptorImageInfo(*copy_src.pInputAttachmentImage); break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       pUniformTexelBuffer   = new safe_VkDescriptorAddressInfoEXT(*copy_src.pUniformTexelBuffer); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       pStorageTexelBuffer   = new safe_VkDescriptorAddressInfoEXT(*copy_src.pStorageTexelBuffer); break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             pUniformBuffer        = new safe_VkDescriptorAddressInfoEXT(*copy_src.pUniformBuffer); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:             pStorageBuffer        = new safe_VkDescriptorAddressInfoEXT(*copy_src.pStorageBuffer); break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: accelerationStructure = copy_src.accelerationStructure; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:  accelerationStructure = copy_src.accelerationStructure; break;
+        default:                                            break;
+    }
+
+    *pType = type;
+
+    return *this;
+}
+
+safe_VkDescriptorDataEXT::~safe_VkDescriptorDataEXT()
+{
+
+    VkDescriptorType& thisType = *(VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+
+    switch (thisType)
+    {
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:                   break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER:                    delete pSampler;              pSampler              = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     delete pCombinedImageSampler; pCombinedImageSampler = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              delete pSampledImage;         pSampledImage         = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:              delete pStorageImage;         pStorageImage         = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           delete pInputAttachmentImage; pInputAttachmentImage = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       delete pUniformTexelBuffer;   pUniformTexelBuffer   = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       delete pStorageTexelBuffer;   pStorageTexelBuffer   = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             delete pUniformBuffer;        pUniformBuffer        = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:             delete pStorageBuffer;        pStorageBuffer        = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: accelerationStructure = 0ull; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:  accelerationStructure = 0ull; break;
+        default:                                            break;
+    }
+
+    thisType = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+}
+
+void safe_VkDescriptorDataEXT::initialize(const VkDescriptorDataEXT* in_struct, const VkDescriptorType type)
+{
+
+    VkDescriptorType& thisType = *(VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+
+    switch (thisType)
+    {
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:                   break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER:                    delete pSampler;              pSampler              = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     delete pCombinedImageSampler; pCombinedImageSampler = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              delete pSampledImage;         pSampledImage         = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:              delete pStorageImage;         pStorageImage         = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           delete pInputAttachmentImage; pInputAttachmentImage = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       delete pUniformTexelBuffer;   pUniformTexelBuffer   = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       delete pStorageTexelBuffer;   pStorageTexelBuffer   = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             delete pUniformBuffer;        pUniformBuffer        = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:             delete pStorageBuffer;        pStorageBuffer        = nullptr; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: accelerationStructure = 0ull; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:  accelerationStructure = 0ull; break;
+        default:                                            break;
+    }
+
+    thisType = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    pSampler = nullptr;
+    pCombinedImageSampler = nullptr;
+    pInputAttachmentImage = nullptr;
+    pSampledImage = nullptr;
+    pStorageImage = nullptr;
+    pUniformTexelBuffer = nullptr;
+    pStorageTexelBuffer = nullptr;
+    pUniformBuffer = nullptr;
+    pStorageBuffer = nullptr;
+    accelerationStructure = in_struct->accelerationStructure;
+    VkDescriptorType* pType = (VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+
+    switch (type)
+    {
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:                   break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER:                    pSampler              = new VkSampler(*in_struct->pSampler); break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     pCombinedImageSampler = new VkDescriptorImageInfo(*in_struct->pCombinedImageSampler); break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              pSampledImage         = in_struct->pSampledImage ? new VkDescriptorImageInfo(*in_struct->pSampledImage) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:              pStorageImage         = in_struct->pStorageImage ? new VkDescriptorImageInfo(*in_struct->pStorageImage) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           pInputAttachmentImage = new VkDescriptorImageInfo(*in_struct->pInputAttachmentImage); break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       pUniformTexelBuffer   = in_struct->pUniformTexelBuffer ? new safe_VkDescriptorAddressInfoEXT(in_struct->pUniformTexelBuffer) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       pStorageTexelBuffer   = in_struct->pStorageTexelBuffer ? new safe_VkDescriptorAddressInfoEXT(in_struct->pStorageTexelBuffer) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             pUniformBuffer        = in_struct->pUniformBuffer ? new safe_VkDescriptorAddressInfoEXT(in_struct->pUniformBuffer) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:             pStorageBuffer        = in_struct->pStorageBuffer ? new safe_VkDescriptorAddressInfoEXT(in_struct->pStorageBuffer) : nullptr; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: accelerationStructure = in_struct->accelerationStructure; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:  accelerationStructure = in_struct->accelerationStructure; break;
+        default:                                            break;
+    }
+
+    *pType = type;
+}
+
+void safe_VkDescriptorDataEXT::initialize(const safe_VkDescriptorDataEXT* copy_src)
+{
+    pSampler = nullptr;
+    pCombinedImageSampler = nullptr;
+    pInputAttachmentImage = nullptr;
+    pSampledImage = nullptr;
+    pStorageImage = nullptr;
+    pUniformTexelBuffer = nullptr;
+    pStorageTexelBuffer = nullptr;
+    pUniformBuffer = nullptr;
+    pStorageBuffer = nullptr;
+    accelerationStructure = copy_src->accelerationStructure;
+    VkDescriptorType* pType = (VkDescriptorType*)&type_at_end[sizeof(VkDescriptorDataEXT)];
+    VkDescriptorType type = *(VkDescriptorType*)&copy_src->type_at_end[sizeof(VkDescriptorDataEXT)];
+
+    switch (type)
+    {
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:                   break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER:                    pSampler              = new VkSampler(*copy_src->pSampler); break;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     pCombinedImageSampler = new VkDescriptorImageInfo(*copy_src->pCombinedImageSampler); break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              pSampledImage         = new VkDescriptorImageInfo(*copy_src->pSampledImage); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:              pStorageImage         = new VkDescriptorImageInfo(*copy_src->pStorageImage); break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           pInputAttachmentImage = new VkDescriptorImageInfo(*copy_src->pInputAttachmentImage); break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       pUniformTexelBuffer   = new safe_VkDescriptorAddressInfoEXT(*copy_src->pUniformTexelBuffer); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       pStorageTexelBuffer   = new safe_VkDescriptorAddressInfoEXT(*copy_src->pStorageTexelBuffer); break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             pUniformBuffer        = new safe_VkDescriptorAddressInfoEXT(*copy_src->pUniformBuffer); break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:             pStorageBuffer        = new safe_VkDescriptorAddressInfoEXT(*copy_src->pStorageBuffer); break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: accelerationStructure = copy_src->accelerationStructure; break;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:  accelerationStructure = copy_src->accelerationStructure; break;
+        default:                                            break;
+    }
+
+    *pType = type;
+}
+
+safe_VkDescriptorGetInfoEXT::safe_VkDescriptorGetInfoEXT(const VkDescriptorGetInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    type(in_struct->type),
+    data(&in_struct->data, in_struct->type)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkDescriptorGetInfoEXT::safe_VkDescriptorGetInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT),
+    pNext(nullptr),
+    type()
+{}
+
+safe_VkDescriptorGetInfoEXT::safe_VkDescriptorGetInfoEXT(const safe_VkDescriptorGetInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    type = copy_src.type;
+    data.initialize(&copy_src.data);
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkDescriptorGetInfoEXT& safe_VkDescriptorGetInfoEXT::operator=(const safe_VkDescriptorGetInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    type = copy_src.type;
+    data.initialize(&copy_src.data);
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkDescriptorGetInfoEXT::~safe_VkDescriptorGetInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkDescriptorGetInfoEXT::initialize(const VkDescriptorGetInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    type = in_struct->type;
+    data.initialize(&in_struct->data, in_struct->type);
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkDescriptorGetInfoEXT::initialize(const safe_VkDescriptorGetInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    type = copy_src->type;
+    data.initialize(&copy_src->data);
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkBufferCaptureDescriptorDataInfoEXT::safe_VkBufferCaptureDescriptorDataInfoEXT(const VkBufferCaptureDescriptorDataInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    buffer(in_struct->buffer)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkBufferCaptureDescriptorDataInfoEXT::safe_VkBufferCaptureDescriptorDataInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_BUFFER_CAPTURE_DESCRIPTOR_DATA_INFO_EXT),
+    pNext(nullptr),
+    buffer()
+{}
+
+safe_VkBufferCaptureDescriptorDataInfoEXT::safe_VkBufferCaptureDescriptorDataInfoEXT(const safe_VkBufferCaptureDescriptorDataInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    buffer = copy_src.buffer;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkBufferCaptureDescriptorDataInfoEXT& safe_VkBufferCaptureDescriptorDataInfoEXT::operator=(const safe_VkBufferCaptureDescriptorDataInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    buffer = copy_src.buffer;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkBufferCaptureDescriptorDataInfoEXT::~safe_VkBufferCaptureDescriptorDataInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkBufferCaptureDescriptorDataInfoEXT::initialize(const VkBufferCaptureDescriptorDataInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    buffer = in_struct->buffer;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkBufferCaptureDescriptorDataInfoEXT::initialize(const safe_VkBufferCaptureDescriptorDataInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    buffer = copy_src->buffer;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkImageCaptureDescriptorDataInfoEXT::safe_VkImageCaptureDescriptorDataInfoEXT(const VkImageCaptureDescriptorDataInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    image(in_struct->image)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkImageCaptureDescriptorDataInfoEXT::safe_VkImageCaptureDescriptorDataInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_IMAGE_CAPTURE_DESCRIPTOR_DATA_INFO_EXT),
+    pNext(nullptr),
+    image()
+{}
+
+safe_VkImageCaptureDescriptorDataInfoEXT::safe_VkImageCaptureDescriptorDataInfoEXT(const safe_VkImageCaptureDescriptorDataInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    image = copy_src.image;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkImageCaptureDescriptorDataInfoEXT& safe_VkImageCaptureDescriptorDataInfoEXT::operator=(const safe_VkImageCaptureDescriptorDataInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    image = copy_src.image;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkImageCaptureDescriptorDataInfoEXT::~safe_VkImageCaptureDescriptorDataInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkImageCaptureDescriptorDataInfoEXT::initialize(const VkImageCaptureDescriptorDataInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    image = in_struct->image;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkImageCaptureDescriptorDataInfoEXT::initialize(const safe_VkImageCaptureDescriptorDataInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    image = copy_src->image;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkImageViewCaptureDescriptorDataInfoEXT::safe_VkImageViewCaptureDescriptorDataInfoEXT(const VkImageViewCaptureDescriptorDataInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    imageView(in_struct->imageView)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkImageViewCaptureDescriptorDataInfoEXT::safe_VkImageViewCaptureDescriptorDataInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_IMAGE_VIEW_CAPTURE_DESCRIPTOR_DATA_INFO_EXT),
+    pNext(nullptr),
+    imageView()
+{}
+
+safe_VkImageViewCaptureDescriptorDataInfoEXT::safe_VkImageViewCaptureDescriptorDataInfoEXT(const safe_VkImageViewCaptureDescriptorDataInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    imageView = copy_src.imageView;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkImageViewCaptureDescriptorDataInfoEXT& safe_VkImageViewCaptureDescriptorDataInfoEXT::operator=(const safe_VkImageViewCaptureDescriptorDataInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    imageView = copy_src.imageView;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkImageViewCaptureDescriptorDataInfoEXT::~safe_VkImageViewCaptureDescriptorDataInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkImageViewCaptureDescriptorDataInfoEXT::initialize(const VkImageViewCaptureDescriptorDataInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    imageView = in_struct->imageView;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkImageViewCaptureDescriptorDataInfoEXT::initialize(const safe_VkImageViewCaptureDescriptorDataInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    imageView = copy_src->imageView;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkSamplerCaptureDescriptorDataInfoEXT::safe_VkSamplerCaptureDescriptorDataInfoEXT(const VkSamplerCaptureDescriptorDataInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    sampler(in_struct->sampler)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkSamplerCaptureDescriptorDataInfoEXT::safe_VkSamplerCaptureDescriptorDataInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_SAMPLER_CAPTURE_DESCRIPTOR_DATA_INFO_EXT),
+    pNext(nullptr),
+    sampler()
+{}
+
+safe_VkSamplerCaptureDescriptorDataInfoEXT::safe_VkSamplerCaptureDescriptorDataInfoEXT(const safe_VkSamplerCaptureDescriptorDataInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    sampler = copy_src.sampler;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkSamplerCaptureDescriptorDataInfoEXT& safe_VkSamplerCaptureDescriptorDataInfoEXT::operator=(const safe_VkSamplerCaptureDescriptorDataInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    sampler = copy_src.sampler;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkSamplerCaptureDescriptorDataInfoEXT::~safe_VkSamplerCaptureDescriptorDataInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkSamplerCaptureDescriptorDataInfoEXT::initialize(const VkSamplerCaptureDescriptorDataInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    sampler = in_struct->sampler;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkSamplerCaptureDescriptorDataInfoEXT::initialize(const safe_VkSamplerCaptureDescriptorDataInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    sampler = copy_src->sampler;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT::safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT(const VkOpaqueCaptureDescriptorDataCreateInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    opaqueCaptureDescriptorData(in_struct->opaqueCaptureDescriptorData)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT::safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT),
+    pNext(nullptr),
+    opaqueCaptureDescriptorData(nullptr)
+{}
+
+safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT::safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT(const safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    opaqueCaptureDescriptorData = copy_src.opaqueCaptureDescriptorData;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT& safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT::operator=(const safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    opaqueCaptureDescriptorData = copy_src.opaqueCaptureDescriptorData;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT::~safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT::initialize(const VkOpaqueCaptureDescriptorDataCreateInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    opaqueCaptureDescriptorData = in_struct->opaqueCaptureDescriptorData;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT::initialize(const safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    opaqueCaptureDescriptorData = copy_src->opaqueCaptureDescriptorData;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT::safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT(const VkAccelerationStructureCaptureDescriptorDataInfoEXT* in_struct) :
+    sType(in_struct->sType),
+    accelerationStructure(in_struct->accelerationStructure),
+    accelerationStructureNV(in_struct->accelerationStructureNV)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT::safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CAPTURE_DESCRIPTOR_DATA_INFO_EXT),
+    pNext(nullptr),
+    accelerationStructure(),
+    accelerationStructureNV()
+{}
+
+safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT::safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT(const safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    accelerationStructure = copy_src.accelerationStructure;
+    accelerationStructureNV = copy_src.accelerationStructureNV;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT& safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT::operator=(const safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    accelerationStructure = copy_src.accelerationStructure;
+    accelerationStructureNV = copy_src.accelerationStructureNV;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT::~safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT::initialize(const VkAccelerationStructureCaptureDescriptorDataInfoEXT* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    accelerationStructure = in_struct->accelerationStructure;
+    accelerationStructureNV = in_struct->accelerationStructureNV;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT::initialize(const safe_VkAccelerationStructureCaptureDescriptorDataInfoEXT* copy_src)
+{
+    sType = copy_src->sType;
+    accelerationStructure = copy_src->accelerationStructure;
+    accelerationStructureNV = copy_src->accelerationStructureNV;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
 safe_VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT::safe_VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT(const VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT* in_struct) :
     sType(in_struct->sType),
     graphicsPipelineLibrary(in_struct->graphicsPipelineLibrary)
@@ -48860,7 +50084,6 @@ void safe_VkPipelineFragmentShadingRateEnumStateCreateInfoNV::initialize(const s
 
 safe_VkDeviceOrHostAddressConstKHR::safe_VkDeviceOrHostAddressConstKHR(const VkDeviceOrHostAddressConstKHR* in_struct)
 {
-    initialize(in_struct);
 }
 
 safe_VkDeviceOrHostAddressConstKHR::safe_VkDeviceOrHostAddressConstKHR() :
@@ -53564,7 +54787,6 @@ void safe_VkPhysicalDeviceImage2DViewOf3DFeaturesEXT::initialize(const safe_VkPh
 
 safe_VkDeviceOrHostAddressKHR::safe_VkDeviceOrHostAddressKHR(const VkDeviceOrHostAddressKHR* in_struct)
 {
-    initialize(in_struct);
 }
 
 safe_VkDeviceOrHostAddressKHR::safe_VkDeviceOrHostAddressKHR() :
@@ -56344,6 +57566,172 @@ void safe_VkRenderPassSubpassFeedbackCreateInfoEXT::initialize(const safe_VkRend
     }
 }
 
+safe_VkDirectDriverLoadingInfoLUNARG::safe_VkDirectDriverLoadingInfoLUNARG(const VkDirectDriverLoadingInfoLUNARG* in_struct) :
+    sType(in_struct->sType),
+    flags(in_struct->flags),
+    pfnGetInstanceProcAddr(in_struct->pfnGetInstanceProcAddr)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkDirectDriverLoadingInfoLUNARG::safe_VkDirectDriverLoadingInfoLUNARG() :
+    sType(VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_INFO_LUNARG),
+    pNext(nullptr),
+    flags(),
+    pfnGetInstanceProcAddr()
+{}
+
+safe_VkDirectDriverLoadingInfoLUNARG::safe_VkDirectDriverLoadingInfoLUNARG(const safe_VkDirectDriverLoadingInfoLUNARG& copy_src)
+{
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    pfnGetInstanceProcAddr = copy_src.pfnGetInstanceProcAddr;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkDirectDriverLoadingInfoLUNARG& safe_VkDirectDriverLoadingInfoLUNARG::operator=(const safe_VkDirectDriverLoadingInfoLUNARG& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    pfnGetInstanceProcAddr = copy_src.pfnGetInstanceProcAddr;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkDirectDriverLoadingInfoLUNARG::~safe_VkDirectDriverLoadingInfoLUNARG()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkDirectDriverLoadingInfoLUNARG::initialize(const VkDirectDriverLoadingInfoLUNARG* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    flags = in_struct->flags;
+    pfnGetInstanceProcAddr = in_struct->pfnGetInstanceProcAddr;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkDirectDriverLoadingInfoLUNARG::initialize(const safe_VkDirectDriverLoadingInfoLUNARG* copy_src)
+{
+    sType = copy_src->sType;
+    flags = copy_src->flags;
+    pfnGetInstanceProcAddr = copy_src->pfnGetInstanceProcAddr;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkDirectDriverLoadingListLUNARG::safe_VkDirectDriverLoadingListLUNARG(const VkDirectDriverLoadingListLUNARG* in_struct) :
+    sType(in_struct->sType),
+    mode(in_struct->mode),
+    driverCount(in_struct->driverCount),
+    pDrivers(nullptr)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+    if (driverCount && in_struct->pDrivers) {
+        pDrivers = new safe_VkDirectDriverLoadingInfoLUNARG[driverCount];
+        for (uint32_t i = 0; i < driverCount; ++i) {
+            pDrivers[i].initialize(&in_struct->pDrivers[i]);
+        }
+    }
+}
+
+safe_VkDirectDriverLoadingListLUNARG::safe_VkDirectDriverLoadingListLUNARG() :
+    sType(VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG),
+    pNext(nullptr),
+    mode(),
+    driverCount(),
+    pDrivers(nullptr)
+{}
+
+safe_VkDirectDriverLoadingListLUNARG::safe_VkDirectDriverLoadingListLUNARG(const safe_VkDirectDriverLoadingListLUNARG& copy_src)
+{
+    sType = copy_src.sType;
+    mode = copy_src.mode;
+    driverCount = copy_src.driverCount;
+    pDrivers = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (driverCount && copy_src.pDrivers) {
+        pDrivers = new safe_VkDirectDriverLoadingInfoLUNARG[driverCount];
+        for (uint32_t i = 0; i < driverCount; ++i) {
+            pDrivers[i].initialize(&copy_src.pDrivers[i]);
+        }
+    }
+}
+
+safe_VkDirectDriverLoadingListLUNARG& safe_VkDirectDriverLoadingListLUNARG::operator=(const safe_VkDirectDriverLoadingListLUNARG& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pDrivers)
+        delete[] pDrivers;
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    mode = copy_src.mode;
+    driverCount = copy_src.driverCount;
+    pDrivers = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (driverCount && copy_src.pDrivers) {
+        pDrivers = new safe_VkDirectDriverLoadingInfoLUNARG[driverCount];
+        for (uint32_t i = 0; i < driverCount; ++i) {
+            pDrivers[i].initialize(&copy_src.pDrivers[i]);
+        }
+    }
+
+    return *this;
+}
+
+safe_VkDirectDriverLoadingListLUNARG::~safe_VkDirectDriverLoadingListLUNARG()
+{
+    if (pDrivers)
+        delete[] pDrivers;
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkDirectDriverLoadingListLUNARG::initialize(const VkDirectDriverLoadingListLUNARG* in_struct)
+{
+    if (pDrivers)
+        delete[] pDrivers;
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    mode = in_struct->mode;
+    driverCount = in_struct->driverCount;
+    pDrivers = nullptr;
+    pNext = SafePnextCopy(in_struct->pNext);
+    if (driverCount && in_struct->pDrivers) {
+        pDrivers = new safe_VkDirectDriverLoadingInfoLUNARG[driverCount];
+        for (uint32_t i = 0; i < driverCount; ++i) {
+            pDrivers[i].initialize(&in_struct->pDrivers[i]);
+        }
+    }
+}
+
+void safe_VkDirectDriverLoadingListLUNARG::initialize(const safe_VkDirectDriverLoadingListLUNARG* copy_src)
+{
+    sType = copy_src->sType;
+    mode = copy_src->mode;
+    driverCount = copy_src->driverCount;
+    pDrivers = nullptr;
+    pNext = SafePnextCopy(copy_src->pNext);
+    if (driverCount && copy_src->pDrivers) {
+        pDrivers = new safe_VkDirectDriverLoadingInfoLUNARG[driverCount];
+        for (uint32_t i = 0; i < driverCount; ++i) {
+            pDrivers[i].initialize(&copy_src->pDrivers[i]);
+        }
+    }
+}
+
 safe_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT::safe_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT(const VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT* in_struct) :
     sType(in_struct->sType),
     shaderModuleIdentifier(in_struct->shaderModuleIdentifier)
@@ -57525,6 +58913,62 @@ void safe_VkAmigoProfilingSubmitInfoSEC::initialize(const safe_VkAmigoProfilingS
     sType = copy_src->sType;
     firstDrawTimestamp = copy_src->firstDrawTimestamp;
     swapBufferTimestamp = copy_src->swapBufferTimestamp;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM::safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM(const VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM* in_struct) :
+    sType(in_struct->sType),
+    multiviewPerViewViewports(in_struct->multiviewPerViewViewports)
+{
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM::safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM() :
+    sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM),
+    pNext(nullptr),
+    multiviewPerViewViewports()
+{}
+
+safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM::safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM(const safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM& copy_src)
+{
+    sType = copy_src.sType;
+    multiviewPerViewViewports = copy_src.multiviewPerViewViewports;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM& safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM::operator=(const safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    multiviewPerViewViewports = copy_src.multiviewPerViewViewports;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM::~safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM::initialize(const VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM* in_struct)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    multiviewPerViewViewports = in_struct->multiviewPerViewViewports;
+    pNext = SafePnextCopy(in_struct->pNext);
+}
+
+void safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM::initialize(const safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM* copy_src)
+{
+    sType = copy_src->sType;
+    multiviewPerViewViewports = copy_src->multiviewPerViewViewports;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
@@ -60940,6 +62384,21 @@ void *SafePnextCopy(const void *pNext) {
         case VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV:
             safe_pNext = new safe_VkDeviceDiagnosticsConfigCreateInfoNV(reinterpret_cast<const VkDeviceDiagnosticsConfigCreateInfoNV *>(pNext));
             break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT:
+            safe_pNext = new safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT(reinterpret_cast<const VkPhysicalDeviceDescriptorBufferPropertiesEXT *>(pNext));
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_DENSITY_MAP_PROPERTIES_EXT:
+            safe_pNext = new safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT(reinterpret_cast<const VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT *>(pNext));
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT:
+            safe_pNext = new safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT(reinterpret_cast<const VkPhysicalDeviceDescriptorBufferFeaturesEXT *>(pNext));
+            break;
+        case VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT:
+            safe_pNext = new safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(reinterpret_cast<const VkDescriptorBufferBindingPushDescriptorBufferHandleEXT *>(pNext));
+            break;
+        case VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT:
+            safe_pNext = new safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT(reinterpret_cast<const VkOpaqueCaptureDescriptorDataCreateInfoEXT *>(pNext));
+            break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT:
             safe_pNext = new safe_VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT(reinterpret_cast<const VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT *>(pNext));
             break;
@@ -61168,6 +62627,9 @@ void *SafePnextCopy(const void *pNext) {
         case VK_STRUCTURE_TYPE_RENDER_PASS_SUBPASS_FEEDBACK_CREATE_INFO_EXT:
             safe_pNext = new safe_VkRenderPassSubpassFeedbackCreateInfoEXT(reinterpret_cast<const VkRenderPassSubpassFeedbackCreateInfoEXT *>(pNext));
             break;
+        case VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG:
+            safe_pNext = new safe_VkDirectDriverLoadingListLUNARG(reinterpret_cast<const VkDirectDriverLoadingListLUNARG *>(pNext));
+            break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT:
             safe_pNext = new safe_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT(reinterpret_cast<const VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT *>(pNext));
             break;
@@ -61203,6 +62665,9 @@ void *SafePnextCopy(const void *pNext) {
             break;
         case VK_STRUCTURE_TYPE_AMIGO_PROFILING_SUBMIT_INFO_SEC:
             safe_pNext = new safe_VkAmigoProfilingSubmitInfoSEC(reinterpret_cast<const VkAmigoProfilingSubmitInfoSEC *>(pNext));
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM:
+            safe_pNext = new safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM(reinterpret_cast<const VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM *>(pNext));
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV:
             safe_pNext = new safe_VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV(reinterpret_cast<const VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV *>(pNext));
@@ -62328,6 +63793,21 @@ void FreePnextChain(const void *pNext) {
         case VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV:
             delete reinterpret_cast<const safe_VkDeviceDiagnosticsConfigCreateInfoNV *>(header);
             break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT:
+            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_DENSITY_MAP_PROPERTIES_EXT:
+            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT:
+            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT:
+            delete reinterpret_cast<const safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT:
+            delete reinterpret_cast<const safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT *>(header);
+            break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT:
             delete reinterpret_cast<const safe_VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT *>(header);
             break;
@@ -62556,6 +64036,9 @@ void FreePnextChain(const void *pNext) {
         case VK_STRUCTURE_TYPE_RENDER_PASS_SUBPASS_FEEDBACK_CREATE_INFO_EXT:
             delete reinterpret_cast<const safe_VkRenderPassSubpassFeedbackCreateInfoEXT *>(header);
             break;
+        case VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG:
+            delete reinterpret_cast<const safe_VkDirectDriverLoadingListLUNARG *>(header);
+            break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT:
             delete reinterpret_cast<const safe_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT *>(header);
             break;
@@ -62591,6 +64074,9 @@ void FreePnextChain(const void *pNext) {
             break;
         case VK_STRUCTURE_TYPE_AMIGO_PROFILING_SUBMIT_INFO_SEC:
             delete reinterpret_cast<const safe_VkAmigoProfilingSubmitInfoSEC *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM:
+            delete reinterpret_cast<const safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV:
             delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV *>(header);

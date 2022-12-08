@@ -37,9 +37,6 @@
 #include <string.h>
 
 #ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
 #include <windows.h>
 #endif
 
@@ -63,7 +60,6 @@ class VkTestFramework : public ::testing::Test {
     static bool m_canonicalize_spv;
     static bool m_strip_spv;
     static bool m_do_everything_spv;
-    static bool m_devsim_layer;
     static int m_phys_device_index;
 
     char **ReadFileData(const char *fileName);

@@ -190,9 +190,10 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     std::shared_ptr<const CMD_BUFFER_STATE> shared_from_this() const { return SharedFromThisImpl(this); }
     std::shared_ptr<CMD_BUFFER_STATE> shared_from_this() { return SharedFromThisImpl(this); }
 
+    using DescriptorBindingInfo = std::pair<const uint32_t, DescriptorRequirement>;
     struct CmdDrawDispatchInfo {
         CMD_TYPE cmd_type;
-        std::vector<std::pair<const uint32_t, DescriptorRequirement>> binding_infos;
+        std::vector<DescriptorBindingInfo> binding_infos;
         VkFramebuffer framebuffer;
         std::shared_ptr<std::vector<SUBPASS_INFO>> subpasses;
         std::shared_ptr<std::vector<IMAGE_VIEW_STATE *>> attachments;
@@ -283,9 +284,10 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     // Validation functions run when secondary CB is executed in primary
     std::vector<std::function<bool(const CMD_BUFFER_STATE &secondary, const CMD_BUFFER_STATE *primary, const FRAMEBUFFER_STATE *)>>
         cmd_execute_commands_functions;
-    std::vector<std::function<bool(CMD_BUFFER_STATE &cb, bool do_validate, EventToStageMap *localEventToStageMap)>> eventUpdates;
-    std::vector<std::function<bool(CMD_BUFFER_STATE &cb, bool do_validate, VkQueryPool &firstPerfQueryPool, uint32_t perfQueryPass,
-                                   QueryMap *localQueryToStateMap)>>
+    std::vector<std::function<bool(CMD_BUFFER_STATE &cb_state, bool do_validate, EventToStageMap *localEventToStageMap)>>
+        eventUpdates;
+    std::vector<std::function<bool(CMD_BUFFER_STATE &cb_state, bool do_validate, VkQueryPool &firstPerfQueryPool,
+                                   uint32_t perfQueryPass, QueryMap *localQueryToStateMap)>>
         queryUpdates;
     layer_data::unordered_map<const cvdescriptorset::DescriptorSet *, cvdescriptorset::DescriptorSet::CachedValidation>
         descriptorset_cache;
@@ -311,6 +313,13 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     bool conditional_rendering_inside_render_pass{false};
     uint32_t conditional_rendering_subpass{0};
     uint32_t dynamicColorWriteEnableAttachmentCount{0};
+    std::vector<VkDescriptorBufferBindingInfoEXT> descriptor_buffer_binding_info;
+    struct DescriptorBufferBinding {
+        uint32_t index;
+        VkDeviceSize offset;
+    };
+    std::vector<DescriptorBufferBinding> descriptor_buffer_bindings;
+
     mutable std::shared_mutex lock;
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock); }
     WriteLockGuard WriteLock() { return WriteLockGuard(lock); }

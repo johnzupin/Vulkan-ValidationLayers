@@ -19,8 +19,6 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 project(VVL LANGUAGES CXX C)
 
-set(VVL_CPP_STANDARD 17 CACHE STRING "Set the C++ standard to build against. The value will be passed to cmake's CXX_STANDARD property.")
-
 option(VVL_ENABLE_ASAN "Use address sanitization (specifically -fsanitize=address)" OFF)
 
 option(BUILD_TESTS "Build the tests" OFF)
@@ -117,6 +115,11 @@ endif()
 
 find_package(VulkanHeaders REQUIRED CONFIG QUIET)
 
+set(VVL_CPP_STANDARD 17 CACHE STRING "Set the C++ standard to build against.")
+set(CMAKE_CXX_STANDARD ${VVL_CPP_STANDARD})
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
 set(CMAKE_C_VISIBILITY_PRESET "hidden")
@@ -204,6 +207,16 @@ elseif(MSVC)
     add_compile_options("/w34057")
     # Warn about signed/unsigned mismatch.
     add_compile_options("/w34245")
+
+    # Allow usage of unsafe CRT functions and minimize what Windows.h leaks
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOMINMAX -DWIN32_LEAN_AND_MEAN)
+
+    add_compile_options($<$<BOOL:${MSVC_IDE}>:/MP>) # Speed up Visual Studio builds
+endif()
+
+if(MINGW)
+    add_definitions(-D_WIN32_WINNT=0x0600) # Must be declared before including Windows.h
+    add_compile_options("-Wa,-mbig-obj")
 endif()
 
 option(INSTALL_TESTS "Install tests" OFF)
@@ -248,17 +261,10 @@ add_library(VkLayer_utils
             layers/vk_layer_utils.cpp
             layers/generated/vk_format_utils.cpp)
 target_link_libraries(VkLayer_utils PUBLIC Vulkan::Headers)
-set_target_properties(VkLayer_utils PROPERTIES CXX_STANDARD ${VVL_CPP_STANDARD})
 if (VVL_ENABLE_ASAN)
     target_compile_options(VkLayer_utils PRIVATE -fsanitize=address)
     # NOTE: Use target_link_options when cmake 3.13 is available on CI
     target_link_libraries(VkLayer_utils PRIVATE "-fsanitize=address")
-endif()
-if(WIN32)
-    target_compile_definitions(VkLayer_utils PUBLIC _CRT_SECURE_NO_WARNINGS NOMINMAX)
-    if(MINGW)
-        target_compile_definitions(VkLayer_utils PUBLIC "_WIN32_WINNT=0x0600")
-    endif()
 endif()
 set_target_properties(VkLayer_utils PROPERTIES LINKER_LANGUAGE CXX)
 target_include_directories(VkLayer_utils

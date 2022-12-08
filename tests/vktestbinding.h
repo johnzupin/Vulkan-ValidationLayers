@@ -428,6 +428,9 @@ class Buffer : public internal::NonDispHandle<VkBuffer> {
     explicit Buffer(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props) {
         init(dev, info, mem_props);
     }
+    explicit Buffer(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props, void *alloc_info_pnext) {
+        init(dev, info, mem_props, alloc_info_pnext);
+    }
     explicit Buffer(const Device &dev, const VkBufferCreateInfo &info, NoMemT) { init_no_mem(dev, info); }
     explicit Buffer(const Device &dev, VkDeviceSize size) { init(dev, size); }
 
@@ -679,8 +682,8 @@ class AccelerationStructure : public internal::NonDispHandle<VkAccelerationStruc
 
     const VkDevice &dev() const { return device(); }
 
-    void create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo = NULL,
-                               bool buffer_device_address = false);
+    [[nodiscard]] vk_testing::Buffer create_scratch_buffer(const Device &device, VkBufferCreateInfo *pCreateInfo = nullptr,
+                                                           bool buffer_device_address = false) const;
 
   private:
     VkAccelerationStructureInfoNV info_;
@@ -703,8 +706,8 @@ class AccelerationStructureKHR : public internal::NonDispHandle<VkAccelerationSt
 
     const VkDevice &dev() const { return device(); }
 
-    void create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo = NULL,
-                               bool buffer_device_address = false);
+    [[nodiscard]] vk_testing::Buffer create_scratch_buffer(const Device &device, const VkBufferCreateInfo *pCreateInfo = nullptr,
+                                                           bool buffer_device_address = false) const;
 
   private:
     VkAccelerationStructureCreateInfoKHR info_;
@@ -1228,10 +1231,11 @@ struct GraphicsPipelineFromLibraries {
             auto exe_pipe_ci = LvlInitStruct<VkGraphicsPipelineCreateInfo>(&link_info);
             pipe.init(dev, exe_pipe_ci);
         }
-        assert(pipe.initialized());
+        pipe.initialized();
     }
 
     operator VkPipeline() const { return pipe.handle(); }
+    operator bool() const { return pipe.initialized(); }
 };
 
 }  // namespace vk_testing

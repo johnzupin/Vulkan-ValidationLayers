@@ -78,7 +78,7 @@ enum class SyncOrdering : uint8_t {
 // Useful Utilites for manipulating StageAccess parameters, suitable as base class to save typing
 struct SyncStageAccess {
     static inline SyncStageAccessFlags FlagBit(SyncStageAccessIndex stage_access) {
-        return syncStageAccessInfoByStageAccessIndex[stage_access].stage_access_bit;
+        return syncStageAccessInfoByStageAccessIndex()[stage_access].stage_access_bit;
     }
     static inline SyncStageAccessFlags Flags(SyncStageAccessIndex stage_access) {
         return static_cast<SyncStageAccessFlags>(FlagBit(stage_access));
@@ -95,7 +95,7 @@ struct SyncStageAccess {
     }
     static bool IsWrite(SyncStageAccessIndex stage_access_index) { return IsWrite(FlagBit(stage_access_index)); }
     static VkPipelineStageFlags2KHR PipelineStageBit(SyncStageAccessIndex stage_access_index) {
-        return syncStageAccessInfoByStageAccessIndex[stage_access_index].stage_mask;
+        return syncStageAccessInfoByStageAccessIndex()[stage_access_index].stage_mask;
     }
     static SyncStageAccessFlags AccessScopeByStage(VkPipelineStageFlags2KHR stages);
     static SyncStageAccessFlags AccessScopeByAccess(VkAccessFlags2KHR access);
@@ -730,15 +730,14 @@ class AttachmentViewGen {
     AttachmentViewGen(AttachmentViewGen &&other) = default;
     AccessAddressType GetAddressType() const;
     const IMAGE_VIEW_STATE *GetViewState() const { return view_; }
-    const ImageRangeGen *GetRangeGen(Gen type) const;
+    const std::optional<ImageRangeGen> &GetRangeGen(Gen type) const;
     bool IsValid() const { return gen_store_[Gen::kViewSubresource].has_value(); }
     Gen GetDepthStencilRenderAreaGenType(bool depth_op, bool stencil_op) const;
 
   private:
-    using RangeGenStore = layer_data::optional<ImageRangeGen>;
     const IMAGE_VIEW_STATE *view_ = nullptr;
     VkImageAspectFlags view_mask_ = 0U;
-    std::array<RangeGenStore, Gen::kGenSize> gen_store_;
+    std::array<std::optional<ImageRangeGen>, Gen::kGenSize> gen_store_;
 };
 
 using AttachmentViewGenVector = std::vector<AttachmentViewGen>;

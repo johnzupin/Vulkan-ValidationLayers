@@ -89,6 +89,8 @@ struct DescriptorRequirement {
     bool is_writable;
     // Copy from StageState.InterfaceVariable. It combines from plural shader stages. The index of array is index of image.
     std::vector<layer_data::unordered_set<SamplerUsedByImage>> samplers_used_by_image;
+    // For storage images - list of < OpImageWrite : Texel component length >
+    std::vector<std::pair<Instruction, uint32_t>> write_without_formats_component_count_list;
     DescriptorRequirement() : reqs(0), is_writable(false) {}
 };
 
@@ -96,6 +98,7 @@ inline bool operator==(const DescriptorRequirement &a, const DescriptorRequireme
 
 inline bool operator<(const DescriptorRequirement &a, const DescriptorRequirement &b) noexcept { return a.reqs < b.reqs; }
 
+// < binding index (of descriptor set) : meta data >
 typedef std::map<uint32_t, DescriptorRequirement> BindingReqMap;
 
 struct PipelineStageState {
@@ -210,8 +213,9 @@ class PIPELINE_STATE : public BASE_NODE {
 
     // Flag of which shader stages are active for this pipeline
     const uint32_t active_shaders = 0;
-    const VkPrimitiveTopology topology_at_rasterizer;
+    const VkPrimitiveTopology topology_at_rasterizer = VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
     const bool uses_shader_module_id;
+    const bool descriptor_buffer_mode = false;
     const bool uses_pipeline_robustness;
 
     CreateShaderModuleStates *csm_states = nullptr;
@@ -270,7 +274,7 @@ class PIPELINE_STATE : public BASE_NODE {
         }
     }
 
-    bool IsGraphicsLibrary() const { return graphics_lib_type != static_cast<VkGraphicsPipelineLibraryFlagsEXT>(0); }
+    bool IsGraphicsLibrary() const { return !HasFullState(); }
     bool HasFullState() const { return vertex_input_state && pre_raster_state && fragment_shader_state && fragment_output_state; }
 
     template <VkGraphicsPipelineLibraryFlagBitsEXT type_flag>

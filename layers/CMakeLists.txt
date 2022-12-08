@@ -16,7 +16,7 @@
 # ~~~
 
 if(WIN32)
-    add_definitions(-DVK_USE_PLATFORM_WIN32_KHR -DVK_USE_PLATFORM_WIN32_KHX -DWIN32_LEAN_AND_MEAN)
+    add_definitions(-DVK_USE_PLATFORM_WIN32_KHR -DVK_USE_PLATFORM_WIN32_KHX)
 elseif(ANDROID)
     add_definitions(-DVK_USE_PLATFORM_ANDROID_KHR -DVK_USE_PLATFORM_ANDROID_KHX)
 elseif(APPLE)
@@ -63,25 +63,16 @@ if(BUILD_LAYER_SUPPORT_FILES)
 endif()
 
 if(MSVC)
-    # Applies to all configurations
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)
     # Avoid: fatal error C1128: number of sections exceeded object file format limit: compile with /bigobj
     add_compile_options("/bigobj")
     add_compile_options("/we4189")
     add_compile_options("/we5038")
-    # Allow Windows to use multiprocessor compilation
-    add_compile_options(/MP)
     # Turn off transitional "changed behavior" warning message for Visual Studio versions prior to 2015. The changed behavior is
     # that constructor initializers are now fixed to clear the struct members.
     add_compile_options("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,19>>:/wd4351>")
 else()
-    if(MINGW)
-        add_compile_options("-Wa,-mbig-obj")
-    endif()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpointer-arith -Wno-unused-function -Wno-sign-compare")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Wno-unused-function -Wno-sign-compare")
+    add_compile_options(-Wpointer-arith -Wno-unused-function -Wno-sign-compare)
 endif()
-
 
 if(ANNOTATED_SPEC_LINK)
     message("-- ANNOTATED_SPEC_LINK is ${ANNOTATED_SPEC_LINK}")
@@ -251,12 +242,6 @@ target_sources(VkLayer_khronos_validation PRIVATE
     ${OPTICK_SOURCE_FILES}
 )
 
-set_target_properties(VkLayer_khronos_validation PROPERTIES
-    CXX_STANDARD ${VVL_CPP_STANDARD}
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-)
-
 target_compile_definitions(VkLayer_khronos_validation PUBLIC ${KHRONOS_LAYER_COMPILE_DEFINITIONS})
 target_link_libraries(VkLayer_khronos_validation PRIVATE VkLayer_utils)
 
@@ -267,8 +252,7 @@ if (VVL_ENABLE_ASAN)
 endif()
 
 if(WIN32)
-    target_sources(VkLayer_khronos_validation PRIVATE VkLayer_khronos_validation.def)
-    target_compile_definitions(VkLayer_khronos_validation PUBLIC NOMINMAX)
+    set_target_properties(VkLayer_khronos_validation PROPERTIES LINK_FLAGS "/DEF:${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_khronos_validation.def")
 elseif(APPLE)
     set_target_properties(VkLayer_khronos_validation PROPERTIES SUFFIX ".dylib")
 else()
@@ -284,7 +268,6 @@ if(MSVC)
 endif()
 
 # Khronos validation additional dependencies
-target_include_directories(VkLayer_khronos_validation PRIVATE ${GLSLANG_INCLUDE_DIR})
 if(INSTRUMENT_OPTICK)
     target_include_directories(VkLayer_khronos_validation PRIVATE ${OPTICK_SOURCE_DIR})
 endif()
@@ -293,8 +276,11 @@ if (USE_ROBIN_HOOD_HASHING)
     # This warning produces what look like false positives in robin_hood.h with Visual Studio 2015
     target_compile_options(VkLayer_khronos_validation PRIVATE "$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,19.1>>:/wd4996>")
 endif()
-target_include_directories(VkLayer_khronos_validation PRIVATE ${SPIRV_HEADERS_INCLUDE_DIR})
-target_link_libraries(VkLayer_khronos_validation PRIVATE ${SPIRV_TOOLS_TARGET} SPIRV-Tools-opt)
+target_link_libraries(VkLayer_khronos_validation PRIVATE
+    ${SPIRV_TOOLS_TARGET}
+    SPIRV-Tools-opt
+    SPIRV-Headers::SPIRV-Headers
+)
 
 # There are 2 primary deliverables for the validation layers.
 # - The actual library VkLayer_khronos_validation.(dll|so|dylib)
