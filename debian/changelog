@@ -1,3 +1,119 @@
+vulkan-validationlayers (1.3.236.0~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ Juan Ramos ]
+  * layers: Fix std::optional crash
+  * doc: Document GetRangeGen
+  * cmake: Set CXX standard uniformly
+
+  [ arno-lunarg ]
+  * build: Add new test files for ray tracing
+  * tests: Use InitFrameworkForRayTracingTest
+  * tests: Make RTX tests consistent
+  * tests: Group NV ray tracing tests
+  * tests: Add VkLayerTest::Get***ProcAddr
+  * tests: Fix off by one error
+
+  [ Juan Ramos ]
+  * cmake: Cleanup CMake code
+
+  [ David Neto ]
+  * scripts: Python raise requires an Exception class
+  * scripts: Use pythonic idiom "foo not in blah"
+
+  [ Charles Giessen ]
+  * layers: Fix GetDeviceProcAddr querying instance functions
+
+  [ spencer-lunarg ]
+  * tests: Replace devsim with Profile layer
+  * layers: Use new C++ 17 [[maybe_unused]]
+
+  [ Boris Zanin ]
+  * layers: Add VK_EXT_descriptor_buffer validation
+
+  [ stusmith ]
+  * tests: Add VK_EXT_descriptor_buffer tests
+
+  [ Jeremy Gebben ]
+  * tests: Disable DescriptorBuffer tests that fail on MockICD
+  * corechecks: Correct VUID strings for 08903 and 08125
+  * corechecks: Remove references to VUID 08116
+
+  [ Juan Ramos ]
+  * macos: Remove sprintf
+
+  [ Tony-LunarG ]
+  * gpu: Add GPU-AV and debug printf allocations for EXT mesh_shader
+
+  [ spencer-lunarg ]
+  * layers: Add draw time Unknown format texel count
+  * tests: Add draw time Unknown format texel count
+
+  [ arno-lunarg ]
+  * layers: Fix nullptr handling, add VUID
+  * tests: Cleanups
+  * tests: RayTracingUpdateAccelerationStructureKHR
+
+  [ Juan Ramos ]
+  * ci: Build against latest MacOS SDK
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.236
+
+  [ spencer-lunarg ]
+  * layers: Split dynamic color blend enable VUID
+  * layers: Remove VUID-vkCmdDraw-None-02686
+  * layers: Turn PIPELINE_STATE into const ref
+  * layers: Turn CMD_BUFFER_STATE into const ref
+  * layers: Remove redundant .get() with dereference
+
+  [ Nathan Gauër ]
+  * layers: Force thread-safe global initialization
+
+  [ Juan Ramos ]
+  * layers: Fix vkExportMetalObjects
+
+  [ spencer-lunarg ]
+  * layers: Label BindImage2 VU 07736
+
+  [ Hans-Kristian Arntzen ]
+  * layers: Fix setLayoutSize check for VARIABLE_COUNT
+  * layers: Fix nullptr crash with dynamic rendering
+
+  [ Juan Ramos ]
+  * docs: Remove 'CMake Generators' section
+  * ci: Test Xcode/Ninja/CMakePresets.json on MacOS CI
+  * layers: Ensure ExportMetalObjects is valid
+  * layers: Use std::array for best practice codes
+
+  [ spencer-lunarg ]
+  * layers: Add Dynamic state Discard Rectangle VU
+  * tests: Add Dynamic state Discard Rectangle VU
+  * layers: Relabel copy cmd VUID from 1.3.236
+
+  [ Juan Ramos ]
+  * cmake: Fix MINGW build
+
+  [ spencer-lunarg ]
+  * layers: Label 1.3.236 descriptor VUs
+
+  [ Juan Ramos ]
+  * layers: Modernize generated code
+
+  [ Nathaniel Cesario ]
+  * tests: No assert for GPL helper
+  * layers: Ensure shader stage validation for GPL
+  * tests: Check 00756 when using GPL
+  * git: Ignore vim temporary files
+
+  [ Mike Schuchardt ]
+  * build: Update shader toolchain ahead of SDK
+
+  [ Juan Ramos ]
+  * layers: Fix VK_STRUCTURE_TYPE_INSTANCE_LAYER_SETTINGS_EXT
+  * docs: Document VK_STRUCTURE_TYPE_INSTANCE_LAYER_SETTINGS_EXT
+
+ -- john <john@odin>  Thu, 08 Dec 2022 12:50:39 -0700
+
 vulkan-validationlayers (1.3.235.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ ziga-lunarg ]
