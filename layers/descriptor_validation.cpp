@@ -3709,12 +3709,13 @@ bool CoreChecks::PreCallValidateCmdBindDescriptorBuffersEXT(
                          num_sampler_buffers, phys_dev_ext_props.descriptor_buffer_props.maxSamplerDescriptorBufferBindings);
     }
 
-    if (num_sampler_buffers > phys_dev_ext_props.descriptor_buffer_props.maxResourceDescriptorBufferBindings) {
+    if (num_resource_buffers > phys_dev_ext_props.descriptor_buffer_props.maxResourceDescriptorBufferBindings) {
         skip |= LogError(device, "VUID-vkCmdBindDescriptorBuffersEXT-maxResourceDescriptorBufferBindings-08049",
-                         "vkCmdBindDescriptorBuffersEXT(): Number of sampler buffers is %" PRIu32 ". There must be no more than "
+                         "vkCmdBindDescriptorBuffersEXT(): Number of resource buffers is %" PRIu32
+                         ". There must be no more than "
                          "VkPhysicalDeviceDescriptorBufferPropertiesEXT::maxResourceDescriptorBufferBindings (%" PRIu32
                          ") descriptor buffers containing resource descriptor data bound.",
-                         num_sampler_buffers, phys_dev_ext_props.descriptor_buffer_props.maxResourceDescriptorBufferBindings);
+                         num_resource_buffers, phys_dev_ext_props.descriptor_buffer_props.maxResourceDescriptorBufferBindings);
     }
 
     if (num_push_descriptor_buffers > 1) {
@@ -3733,39 +3734,6 @@ bool CoreChecks::PreCallValidateCmdBindDescriptorBuffersEXT(
     }
 
     return skip;
-}
-
-void ValidationStateTracker::PostCallRecordGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout,
-    VkDeviceSize* pLayoutSizeInBytes) {
-    auto descriptor_set_layout = Get<cvdescriptorset::DescriptorSetLayout>(layout);
-
-    descriptor_set_layout->SetLayoutSizeInBytes(pLayoutSizeInBytes);
-}
-
-void ValidationStateTracker::PreCallRecordCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount,
-                                                          const VkDescriptorBufferBindingInfoEXT *pBindingInfos) {
-    auto cb_state = Get<CMD_BUFFER_STATE>(commandBuffer);
-
-    cb_state->descriptor_buffer_binding_info.clear();
-    cb_state->descriptor_buffer_binding_info.reserve(bufferCount);
-
-    for (uint32_t i = 0; i < bufferCount; i++) {
-        cb_state->descriptor_buffer_binding_info.push_back(pBindingInfos[i]);
-    }
-}
-
-void ValidationStateTracker::PreCallRecordCmdSetDescriptorBufferOffsetsEXT(VkCommandBuffer commandBuffer,
-                                                                           VkPipelineBindPoint pipelineBindPoint,
-                                                               VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount,
-                                                               const uint32_t *pBufferIndices, const VkDeviceSize *pOffsets) {
-    auto cb_state = Get<CMD_BUFFER_STATE>(commandBuffer);
-
-    cb_state->descriptor_buffer_bindings.resize(setCount);
-
-    for (uint32_t i = 0; i < setCount; i++) {
-        cb_state->descriptor_buffer_bindings[i].index = pBufferIndices[i];
-        cb_state->descriptor_buffer_bindings[i].offset = pOffsets[i];
-    }
 }
 
 bool CoreChecks::PreCallValidateGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout,

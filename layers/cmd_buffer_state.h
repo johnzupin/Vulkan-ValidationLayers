@@ -235,6 +235,9 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     bool usedDynamicViewportCount;
     bool usedDynamicScissorCount;
 
+    uint32_t write_mask_front;
+    uint32_t write_mask_back;
+
     uint32_t initial_device_mask;
     VkPrimitiveTopology primitiveTopology;
 
@@ -250,7 +253,6 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     uint32_t active_render_pass_device_mask;
     uint32_t activeSubpass;
     std::shared_ptr<FRAMEBUFFER_STATE> activeFramebuffer;
-    layer_data::unordered_set<std::shared_ptr<FRAMEBUFFER_STATE>> framebuffers;
     // Unified data structs to track objects bound to this command buffer as well as object
     //  dependencies that have been broken : either destroyed objects, or updated descriptor sets
     layer_data::unordered_set<std::shared_ptr<BASE_NODE>> object_bindings;
@@ -314,11 +316,6 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     uint32_t conditional_rendering_subpass{0};
     uint32_t dynamicColorWriteEnableAttachmentCount{0};
     std::vector<VkDescriptorBufferBindingInfoEXT> descriptor_buffer_binding_info;
-    struct DescriptorBufferBinding {
-        uint32_t index;
-        VkDeviceSize offset;
-    };
-    std::vector<DescriptorBufferBinding> descriptor_buffer_bindings;
 
     mutable std::shared_mutex lock;
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock); }
@@ -422,12 +419,16 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
 
     void ExecuteCommands(uint32_t commandBuffersCount, const VkCommandBuffer *pCommandBuffers);
 
-    void UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_bind_point, const PIPELINE_LAYOUT_STATE *pipeline_layout,
+    void UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_bind_point, const PIPELINE_LAYOUT_STATE &pipeline_layout,
                                        uint32_t first_set, uint32_t set_count, const VkDescriptorSet *pDescriptorSets,
                                        std::shared_ptr<cvdescriptorset::DescriptorSet> &push_descriptor_set,
                                        uint32_t dynamic_offset_count, const uint32_t *p_dynamic_offsets);
 
-    void PushDescriptorSetState(VkPipelineBindPoint pipelineBindPoint, PIPELINE_LAYOUT_STATE *pipeline_layout, uint32_t set,
+    void UpdateLastBoundDescriptorBuffers(VkPipelineBindPoint pipeline_bind_point, const PIPELINE_LAYOUT_STATE &pipeline_layout,
+                                          uint32_t first_set, uint32_t set_count, const uint32_t *buffer_indicies,
+                                          const VkDeviceSize *buffer_offsets);
+
+    void PushDescriptorSetState(VkPipelineBindPoint pipelineBindPoint, const PIPELINE_LAYOUT_STATE &pipeline_layout, uint32_t set,
                                 uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites);
 
     void UpdateDrawCmd(CMD_TYPE cmd_type);
