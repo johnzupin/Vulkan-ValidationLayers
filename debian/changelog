@@ -1,3 +1,34 @@
+vulkan-validationlayers (1.3.236.0~rc2-1lunarg22.04-1) jammy; urgency=medium
+
+  [ Mark Young ]
+  * docs: Update layer config
+
+  [ Jeremy Gebben ]
+  * state: Simplify CMD_BUFFER_STATE object tracking
+  * layers: Fix descriptor buffer VUIDs 08115 and 08117
+  * tests: Make vk_testing::PipelineLayout::init more intuitive
+
+  [ Boris Zanin ]
+  * tests: Add tests for descriptor buffer VUIDs 08115 and 08117
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix VUID 08049
+
+  [ spencer-lunarg ]
+  * layers: Fix 06887 to check stencil write mask
+  * layers: Label NV RTX 02787 VUID
+
+  [ Juan Ramos ]
+  * layers: Fix mem leak
+  * layers: Fix potentiall nullptr issue
+
+  [ Tony-LunarG ]
+  * gpu: Restructure pipeline layout selection
+  * tests: Add test for GPU-AV with destroyed pipeline layout
+  * gpu: Fix VMA memory leak
+
+ -- john <john@odin>  Tue, 13 Dec 2022 09:56:54 -0700
+
 vulkan-validationlayers (1.3.236.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ Juan Ramos ]
