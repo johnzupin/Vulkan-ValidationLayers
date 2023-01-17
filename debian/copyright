@@ -3,66 +3,13 @@ Upstream-Name: vulkan-validationlayers
 Source: https://github.com/KhronosGroup/Vulkan-ValidationLayers
 
 Files: *
-Copyright: 2020-2021, Advanced Micro Devices, Inc
-           2015-2021, Google Inc
-           2015-2021, Google, Inc
-           2019-2020, Intel Corporation
-           2014-2022, LunarG, Inc
-           2016-2021, The ANGLE Project Authors
-           2015-2017, The Android Open Source Project
-           2017, The Glslang Authors
-           2013-2021, The Khronos Group Inc
-           2014-2021, Valve Corporation
-           2014-2020, Valve Software
-           comment block for file
-           dates for modified files
-           text
-License: Apache-2.0
-
-Files: .appveyor.yml
-       .clang-format
-       .clang-tidy
-       .gitattributes
-       .github/ISSUE_TEMPLATE/*
-       BUILD.md
-       CODE_OF_CONDUCT.md
-       CONTRIBUTING.md
-       GOVERNANCE.md
-       LAYER_CONFIGURATION.md
-       README.md
-       build-android/AndroidManifest.xml
-       build-android/cmake/*
-       build-android/jni/shaderc/*
-       build-android/known_good.json
-       build-gn/DEPS
-       cmake/*
-       docs/*
-       layers/generated/.clang-format
-       layers/json/*
-       layers/libVkLayer_khronos_validation.map
-       layers/vk_layer_settings.txt
-       scripts/clang-format-diff.py
-       scripts/cmake-format.py
-       scripts/known_good.json
-       tests/device_profiles/*
-       tests/layers/libVkLayer_device_profile_api.map
-       tests/layers/linux/*
-       tests/layers/macos/*
-       tests/layers/windows/*
-       tests/vk_layer_validation_tests.vcxproj.user
-Copyright: 2022,  LunarG, Inc
-           2015-2022, LunarG, Inc
-           2015, Valve Corporation
-License: Apache-2.0
-
-Files: debian/*
 Copyright: 2015-2022, LunarG, Inc
-           2016, Timo Aaltonen <tjaalton@debian.org>
-License: BSD-3-clause or GPL-3 or MIT
+           2015, Valve Corporation
+           after any existing copyrights
+           included
+License: Apache-2 or Apache-2.0
 
 Files: cmake/Copyright_cmake.txt
-       cmake/FindWayland.cmake
-       cmake/FindX11_XCB.cmake
 Copyright: 2011, Fredrik Höglund <fredrik@kde.org>
            2008, Helio Chissini de Castro <helio@kde.org>
            2000-2018, Kitware, Inc
@@ -72,13 +19,266 @@ License: BSD-3-clause
 
 Files: layers/xxhash.c
        layers/xxhash.h
-Copyright: 2012-2016, Yann Collet
+Copyright: 2012-2020, Yann Collet
 License: BSD-2-clause
 
+Files: .github/workflows/*
+       .gn
+       BUILD.gn
+       CMakeLists.txt
+       LICENSE.txt
+       build-android/build_all.sh
+       build-android/install_all.sh
+       build-android/jni/Android.mk
+       build-android/jni/Application.mk
+       build-android/res/*
+       build-android/test_APK.sh
+       build-android/update_external_sources_android.bat
+       build-android/update_external_sources_android.sh
+       build-gn/commit_id.py
+       build-gn/generate_vulkan_layers_json.py
+       build-gn/layers-fuchsia.gni
+       build-gn/remove_files.py
+       build-gn/secondary/*
+       build-gn/update_deps.sh
+       cmake/VVLGenerateSourceCode.cmake
+       layers/CMakeLists.txt
+       layers/VkLayer_khronos_validation.def
+       layers/android_ndk_types.h
+       layers/base_node.cpp
+       layers/base_node.h
+       layers/best_practices_error_enums.h
+       layers/best_practices_utils.cpp
+       layers/best_practices_validation.h
+       layers/buffer_state.cpp
+       layers/buffer_state.h
+       layers/buffer_validation.cpp
+       layers/buffer_validation.h
+       layers/cast_utils.h
+       layers/cmd_buffer_state.cpp
+       layers/cmd_buffer_state.h
+       layers/convert_to_renderpass2.cpp
+       layers/convert_to_renderpass2.h
+       layers/core_error_location.cpp
+       layers/core_error_location.h
+       layers/core_validation.cpp
+       layers/core_validation.h
+       layers/core_validation_error_enums.h
+       layers/debug_printf.cpp
+       layers/debug_printf.h
+       layers/descriptor_sets.cpp
+       layers/descriptor_sets.h
+       layers/descriptor_validation.cpp
+       layers/device_memory_state.cpp
+       layers/device_memory_state.h
+       layers/device_state.h
+       layers/drawdispatch.cpp
+       layers/generated/best_practices.cpp
+       layers/generated/best_practices.h
+       layers/generated/chassis.cpp
+       layers/generated/chassis.h
+       layers/generated/chassis_dispatch_helper.h
+       layers/generated/command_validation.cpp
+       layers/generated/command_validation.h
+       layers/generated/corechecks_optick_instrumentation.cpp
+       layers/generated/corechecks_optick_instrumentation.h
+       layers/generated/enum_flag_bits.h
+       layers/generated/gpu_as_inspection_comp.h
+       layers/generated/gpu_pre_dispatch_comp.h
+       layers/generated/gpu_pre_draw_vert.h
+       layers/generated/layer_chassis_dispatch.cpp
+       layers/generated/layer_chassis_dispatch.h
+       layers/generated/lvt_function_pointers.cpp
+       layers/generated/lvt_function_pointers.h
+       layers/generated/object_tracker.cpp
+       layers/generated/object_tracker.h
+       layers/generated/parameter_validation.cpp
+       layers/generated/parameter_validation.h
+       layers/generated/spirv_grammar_helper.cpp
+       layers/generated/spirv_grammar_helper.h
+       layers/generated/spirv_tools_commit_id.h
+       layers/generated/spirv_validation_helper.cpp
+       layers/generated/synchronization_validation_types.cpp
+       layers/generated/synchronization_validation_types.h
+       layers/generated/thread_safety.cpp
+       layers/generated/thread_safety.h
+       layers/generated/vk_dispatch_table_helper.h
+       layers/generated/vk_enum_string_helper.h
+       layers/generated/vk_extension_helper.h
+       layers/generated/vk_format_utils.cpp
+       layers/generated/vk_format_utils.h
+       layers/generated/vk_layer_dispatch_table.h
+       layers/generated/vk_object_types.h
+       layers/generated/vk_safe_struct.cpp
+       layers/generated/vk_safe_struct.h
+       layers/generated/vk_typemap_helper.h
+       layers/generated/vk_validation_error_messages.h
+       layers/gpu_shaders/gpu_pre_dispatch.comp
+       layers/gpu_shaders/gpu_pre_draw.vert
+       layers/gpu_shaders/gpu_shaders_constants.h
+       layers/gpu_utils.cpp
+       layers/gpu_utils.h
+       layers/gpu_validation.cpp
+       layers/gpu_validation.h
+       layers/gpu_vuids.h
+       layers/hash_util.h
+       layers/hash_vk_types.h
+       layers/image_layout_map.cpp
+       layers/image_layout_map.h
+       layers/image_state.cpp
+       layers/image_state.h
+       layers/layer_options.cpp
+       layers/layer_options.h
+       layers/object_lifetime_validation.h
+       layers/object_tracker_utils.cpp
+       layers/parameter_name.h
+       layers/parameter_validation_utils.cpp
+       layers/pipeline_layout_state.cpp
+       layers/pipeline_layout_state.h
+       layers/pipeline_state.cpp
+       layers/pipeline_state.h
+       layers/pipeline_sub_state.cpp
+       layers/pipeline_sub_state.h
+       layers/qfo_transfer.h
+       layers/query_state.h
+       layers/queue_state.cpp
+       layers/queue_state.h
+       layers/range_vector.h
+       layers/ray_tracing_state.h
+       layers/render_pass_state.cpp
+       layers/render_pass_state.h
+       layers/sampler_state.h
+       layers/shader_instruction.cpp
+       layers/shader_instruction.h
+       layers/shader_module.cpp
+       layers/shader_module.h
+       layers/shader_validation.cpp
+       layers/shader_validation.h
+       layers/sparse_containers.h
+       layers/state_tracker.cpp
+       layers/state_tracker.h
+       layers/stateless_validation.h
+       layers/subresource_adapter.cpp
+       layers/subresource_adapter.h
+       layers/sync_utils.cpp
+       layers/sync_utils.h
+       layers/sync_vuid_maps.cpp
+       layers/sync_vuid_maps.h
+       layers/synchronization_validation.cpp
+       layers/synchronization_validation.h
+       layers/vk_layer_config.cpp
+       layers/vk_layer_config.h
+       layers/vk_layer_data.h
+       layers/vk_layer_extension_utils.cpp
+       layers/vk_layer_extension_utils.h
+       layers/vk_layer_logging.h
+       layers/vk_layer_settings_ext.h
+       layers/vk_layer_utils.cpp
+       layers/vk_layer_utils.h
+       scripts/antialias_source.py
+       scripts/best_practices_generator.py
+       scripts/check_code_format.py
+       scripts/cmake_test_min.py
+       scripts/command_validation_generator.py
+       scripts/common_ci.py
+       scripts/common_codegen.py
+       scripts/dispatch_table_helper_generator.py
+       scripts/external_revision_generator.py
+       scripts/format_utils_generator.py
+       scripts/generate_source.py
+       scripts/generate_spirv.py
+       scripts/github_ci_android.py
+       scripts/github_ci_build_desktop.py
+       scripts/github_ci_gn.py
+       scripts/github_ci_win_linux.py
+       scripts/helper_file_generator.py
+       scripts/layer_chassis_dispatch_generator.py
+       scripts/layer_chassis_generator.py
+       scripts/layer_dispatch_table_generator.py
+       scripts/lvl_genvk.py
+       scripts/lvt_file_generator.py
+       scripts/object_tracker_generator.py
+       scripts/parameter_validation_generator.py
+       scripts/spirv_grammar_generator.py
+       scripts/spirv_validation_generator.py
+       scripts/sync_val_gen.py
+       scripts/thread_safety_generator.py
+       scripts/update_deps.py
+       scripts/utils/*
+       scripts/vk_validation_stats.py
+       tests/CMakeLists.txt
+       tests/icd-spv.h
+       tests/layer_validation_tests.cpp
+       tests/layer_validation_tests.h
+       tests/layers/CMakeLists.txt
+       tests/layers/VkLayer_device_profile_api.def
+       tests/layers/device_profile_api.cpp
+       tests/layers/vk_lunarg_device_profile_api_layer.h
+       tests/positive/*
+       tests/test_common.h
+       tests/vkerrormonitor.cpp
+       tests/vkerrormonitor.h
+       tests/vklayertests_amd_best_practices.cpp
+       tests/vklayertests_android_hardware_buffer.cpp
+       tests/vklayertests_arm_best_practices.cpp
+       tests/vklayertests_best_practices.cpp
+       tests/vklayertests_buffer_image_memory_sampler.cpp
+       tests/vklayertests_command.cpp
+       tests/vklayertests_debug_printf.cpp
+       tests/vklayertests_descriptor_renderpass_framebuffer.cpp
+       tests/vklayertests_dynamic_rendering.cpp
+       tests/vklayertests_gpu.cpp
+       tests/vklayertests_graphics_library.cpp
+       tests/vklayertests_imageless_framebuffer.cpp
+       tests/vklayertests_instanceless.cpp
+       tests/vklayertests_nvidia_best_practices.cpp
+       tests/vklayertests_others.cpp
+       tests/vklayertests_pipeline_shader.cpp
+       tests/vklayertests_portability_subset.cpp
+       tests/vklayertests_ray_tracing.cpp
+       tests/vklayertests_ray_tracing_gpu.cpp
+       tests/vklayertests_ray_tracing_pipeline.cpp
+       tests/vklayertests_viewport_inheritance.cpp
+       tests/vklayertests_wsi.cpp
+       tests/vkrenderframework.cpp
+       tests/vkrenderframework.h
+       tests/vksyncvaltests.cpp
+       tests/vktestbinding.cpp
+       tests/vktestbinding.h
+       tests/vktestframework.cpp
+       tests/vktestframework.h
+       tests/vktestframeworkandroid.cpp
+       tests/vktestframeworkandroid.h
+Copyright: 2021-2022, ARM, Inc
+           2020-2022, Advanced Micro Devices, Inc
+           2015-2022, Google Inc
+           2015-2022, Google, Inc
+           2014-2022, LunarG, Inc
+           2022, NVIDIA CORPORATION
+           2021, NVIDIA Corporation
+           2016-2021, The ANGLE Project Authors
+           2015-2017, The Android Open Source Project
+           2022, The Fuchsia Authors
+           2017, The Glslang Authors
+           2013-2022, The Khronos Group Inc
+           2014-2022, Valve Corporation
+           2014-2022, Valve Software
+           comment block for file
+           dates for modified files
+           text
+License: Apache-2
+
 Files: layers/vk_mem_alloc.h
-Copyright: 2017-2018, Advanced Micro Devices, Inc
-           2017-2018, Advanced Micro Devices, Inc. 
+Copyright: 2017-2022, Advanced Micro Devices, Inc
 License: Expat
+
+Files: debian/*
+Copyright: 2023, LunarG Inc <johnz@lunarg.com>
+           2016, Timo Aaltonen <tjaalton@debian.org>
+License: BSD-3-clause or GPL-3 or MIT
+
+License: Apache-2
+Comment: Add the corresponding license text here
 
 License: Apache-2.0
  Apache License
@@ -306,6 +506,13 @@ License: BSD-3-clause
  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
  .
  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: Expat
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
 
 License: GPL-3
  GNU GENERAL PUBLIC LICENSE
@@ -982,13 +1189,6 @@ License: GPL-3
  the library.  If this is what you want to do, use the GNU Lesser General
  Public License instead of this License.  But first, please read
  <https://www.gnu.org/licenses/why-not-lgpl.html>.
-
-License: Expat
- Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- .
- The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- .
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
 
 License: MIT
  Copyright <YEAR> <COPYRIGHT HOLDER>
