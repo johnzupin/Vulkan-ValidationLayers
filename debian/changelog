@@ -1,3 +1,475 @@
+vulkan-validationlayers (1.3.239.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ Jeremy Gebben ]
+  * state: Simplify CMD_BUFFER_STATE object tracking
+
+  [ spencer-lunarg ]
+  * layers: Label NV RTX 02787 VUID
+
+  [ Tony-LunarG ]
+  * gpu: Restructure pipeline layout selection
+  * tests: Add test for GPU-AV with destroyed pipeline layout
+  * gpu: Fix VMA memory leak
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.237
+
+  [ spencer-lunarg ]
+  * layers: Combine and cleanup ValidateCBDynamicStatus calls
+  * layers: Create Pipeline ColorBlendState helper
+  * layers: Consistent name for pipeline const ref
+  * layers: Create Pipeline PreRasterState helper
+  * layers: Create Pipeline RasterizationState helper
+  * layers: Create Pipeline MultisampleState helper
+  * layers: Create Pipeline DynamicState helper
+  * layers: Remove legacy lvl_* vk_typemap_helper
+
+  [ Jeremy Gebben ]
+  * layers: Fix descriptor buffer VUIDs 08115 and 08117
+  * tests: Make vk_testing::PipelineLayout::init more intuitive
+
+  [ Boris Zanin ]
+  * tests: Add tests for descriptor buffer VUIDs 08115 and 08117
+
+  [ Juan Ramos ]
+  * layers: Fix mem leak
+  * layers: Fix potentiall nullptr issue
+
+  [ Mark Young ]
+  * docs: Update layer config
+
+  [ Juan Ramos ]
+  * cmake: Remove Copyright_cmake.txt
+
+  [ Ian Hickson ]
+  * layers: Move Valve copyright into more appropriate place
+
+  [ Juan Ramos ]
+  * cmake: Fixup usage of BINARY_DIR
+
+  [ spencer-lunarg ]
+  * layers: Add helper function for counting bits set
+  * layers: Fix 06887 to check stencil write mask
+  * layers: Fix 06897 check for mesh shaders
+  * layers: Collapse 2d view compatible logic
+  * layers: Add 2d view compatible VU
+  * tests: Add 2d view compatible VU
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix VUID 08049
+  * tests: Use auto with LvlInit<>() in descriptor tests
+  * scripts: Make LvlInitStruct<>() be variadic
+  * tests: Use variadic LvlInitStruct in descriptor tests
+  * tests: Add size32() helper functions
+  * tests: Use size32() in descriptor tests
+
+  [ spencer-lunarg ]
+  * layers: Move CreateRenderPassGeneric to source file
+  * layers: Improve RenderPass Param Util message
+  * layers: Add matching VkAttachmentDescription2 VUs
+  * layers: Label VkAttachmentDescription2 06247 06248
+  * layers: Add Depth layout check for DS formats
+  * layers: Add Sync2 attachment layout VUs
+  * layers: Use common stencil layout variable
+  * tests: Fix TestRenderPassCreate checking for KHR
+  * layers: Make bool const where possible
+
+  [ Nathaniel Cesario ]
+  * layers: Fix 00736 trigger
+  * tests: Test tess-related VUIDs with GPL
+
+  [ Christophe ]
+  * layers: Expose Imagination Tech best practice in manifest
+
+  [ spencer-lunarg ]
+  * tests: Remove CheckCreateRenderPass2Support
+
+  [ Juan Ramos ]
+  * cmake: Fix code duplication
+  * cmake: Remove unused win32/android pre-preproccessor defines
+
+  [ Tony-LunarG ]
+  * tests: Fix GPU-AV test getting 06481
+
+  [ Juan Ramos ]
+  * layers: Remove layer_data::optional typedef
+
+  [ spencer-lunarg ]
+  * layers: Combine Maintenance1 VU checks
+  * layers: Create VkImageType a variable
+  * layers: Add Copy Image Type VU
+  * layers: Add helper bool in ValidateCmdCopyImage
+  * layers: Move dynamic state tracking to PostCall
+  * layers: Combine promoted dynamic state calls
+  * layers: Use DS dynamic state for draw time checks
+
+  [ Jeremy Gebben ]
+  * tests: Add destroy() methods to vk_testing:: objects
+  * tests: Add vk_testing::Buffer::address()
+  * tests: Use vk_testing:: objects in descriptor tests
+  * tests: Remove VkPositiveLayerTest.GetTimelineSemThreadRace
+
+  [ Juan Ramos ]
+  * tests: Use /LARGEADDRESSAWARE
+  * ci: Fix CI deprecation warnings
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.238
+
+  [ arno-lunarg ]
+  * layers: Fix layer_data::span
+  * layers: Fix erroneous 1:1 mapping address<->buffer
+  * tests: Add BuffersAndBufferDeviceAddressesMapping
+  * docs: Update GPU-AV doc
+  * tests: Add ray tracing test cases
+  * layers: Add TODOs for GetBuffersByAddress
+
+  [ Daniel Rakos ]
+  * layers: Add best practices VU for secondary command buffers
+
+  [ sourav parmar ]
+  * layers: Use stage from pipleline library
+
+  [ spencer-lunarg ]
+  * layers: Label new NV RTX VUID
+  * layers: Update CmdDrawIndexedBufferSize to check robustness
+  * tests: Use LvlInitStruct<VkRenderPassBeginInfo>
+  * layers: Remove GetImageSubresourceLayout2 tiling VU
+
+  [ Nathaniel Cesario ]
+  * layers: Do not allow binding empty DS
+  * tests: Check binding empty descriptor set
+
+  [ Juan Ramos ]
+  * tests: Check developer environment variables
+  * docs: Use VK_DRIVER_FILES
+  * ci: Use VK_DRIVER_FILES
+
+  [ Jeremy Gebben ]
+  * layers: Fix intermittent VUID 03047 false positives
+
+  [ spencer-lunarg ]
+  * tests: Fix VK_LAYER_PATH check
+  * layers: Label VUID vkCmdCopyImage 07744
+
+  [ Hans-Kristian Arntzen ]
+  * layers: Handle SAMPLED_READ in sync2 validation
+
+  [ spencer-lunarg ]
+  * layers: Use IsExtEnabled everywhere
+  * layers: Fix VK_EXT_image_2d_view_of_3d check
+  * layers: Use new LogObjectList multi arg constructor
+
+  [ Juan Ramos ]
+  * layers: Fix UpdateDescriptorSets race conditions
+  * layers: Use ValidationObject pointer instead of auto
+  * doc: Clarify why to avoid using auto in generated code
+
+  [ Jeremy Gebben ]
+  * corechecks: Improve vkQueuePresentKHR semaphore validation
+  * tests: Clean up WSI tests
+  * tests: Add vkQueuePresentKHR semaphore tests
+  * build: Fix windows build when the source path includes spaces
+
+  [ ziga-lunarg ]
+  * layers: Add video usage bits to valid image usage
+
+  [ arno-lunarg ]
+  * layers: Add VU family 07272
+  * tests: Add VU family 07272
+
+  [ spencer-lunarg ]
+  * tests: Update extension enabling
+
+  [ Juan Ramos ]
+  * layers: Fix CMD_BUFFER_STATE potential deadlock
+  * docs: Remove "Coding Conventions for CMake" section
+  * docs: Remove CCACHE section
+  * docs: Update Requirements section
+  * layers: Mark ValidationObject::ReadLock method as const
+  * layers: Cleanup CMD_BUFFER_STATE::ExecuteCommands
+
+  [ spencer-lunarg ]
+  * layers: Add GetBitWidth SPIR-V helper
+  * layers: Remove old spirv_inst_iter system
+  * layers: Add Shader input attachment VU
+
+  [ Jeremy Gebben ]
+  * scripts: Improve copyright checking in check_code_format.py
+
+  [ Daniel Rakos ]
+  * layers: Add support for video core and decode extensions
+
+  [ spencer-lunarg ]
+  * deps: Update SPIR-V Tools and Headers version
+
+  [ Jeremy Gebben ]
+  * layers: Clean up vk_layer_logging.h
+
+  [ Juan Ramos ]
+  * cmake: Raise minimum to 3.17.2
+
+  [ Jeremy Gebben ]
+  * scripts: Run code format checks commit-by-commit
+
+  [ Juan Ramos ]
+  * cmake: Use target_link_options/add_link_options
+
+  [ spencer-lunarg ]
+  * layers: Fix discard rectangle draw VU
+  * layers: Make separate FragmentShadingRateState helper
+  * layers: Make sparate DynamicRendering pipeline helper
+  * layers: Combine LibraryFlags checks together
+
+  [ Artem Kharytoniuk ]
+  * docs: Update python executable name on Windows
+
+  [ arno-lunarg ]
+  * layers: Fix shader binding device address
+
+  [ spencer-lunarg ]
+  * layers: Make RENDER_PASS_STATE const ref
+  * layers: Collapse ValidateShaderModuleId logic
+
+  [ Juan Ramos ]
+  * cmake: Cleanup VkLayer_utils
+  * build: Remove unused AMD_EXTENSIONS / NV_EXTENSIONS
+  * github: Add CODEOWNERS
+
+  [ Nathaniel Cesario ]
+  * docs: Update repo contacts
+
+  [ Tony-LunarG ]
+  * gpu: Add debug option to validate instrumented shaders
+
+  [ spencer-lunarg ]
+  * layers: New pipeline_validation for CoreCheck
+  * layers: Fix mislabled Video VUID
+  * layers: Remove unused DecorationSet fields
+  * layers: Cleanup DecorationSet
+  * layers: Move InputAttachmentIndex tracking to entrypoint
+  * layers: Move Descriptor InterfaceVariable to Entrypoint
+  * layers: Cleanup of shader interface
+  * layers: New wsi_validation for CoreChecks
+  * layers: Use BINDABLE state sparse field
+
+  [ Martin Freebody ]
+  * layers: Update validation layer checks for dynamic rendering
+  * tests: Expand Dynamic rendering suspend & resume
+
+  [ Juan Ramos ]
+  * cmake: Delete VVLGenerateSourceCode.cmake
+
+  [ arno-lunarg ]
+  * layers: Only validate non sparse buffers
+
+  [ Artem Kharytoniuk ]
+  * cmake: Replace Visual Studio user file with cmake properties
+
+  [ Nathaniel Cesario ]
+  * layers: Allow binding empty DS with empty layout
+  * tests: Bind empty DS with empty layout
+
+  [ spencer-lunarg ]
+  * layers: Move Video CoreCheck to own file
+  * layers: Use GetBitSetCount in VideoProfileInfo
+  * layers: Move CoreChecks to Ray Tracing file
+  * layers: Fix check for VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT
+  * layers: Move Android CoreChecks to own file
+  * layers: Remove buffer_validation.h
+  * layers: Move Query CoreChecks to own file
+  * layers: Move device memory CoreCheck to own file
+
+  [ Jeremy Gebben ]
+  * layers: Fix includes in shader_instruction.h
+  * build: Make USE_ROBIN_HOOD_HASHING more sensible
+
+  [ Artem Kharytoniuk ]
+  * tests: Add note about implicit validation layers
+
+  [ Juan Ramos ]
+  * cmake: Optimize MSVC build
+  * cmake: Fix usage of Vulkan::Registry
+
+  [ Karl Schultz ]
+  * tests: Fix jump to null function pointer
+
+  [ Juan Ramos ]
+  * cmake: Fix LunarG/VulkanTools build
+
+  [ spencer-lunarg ]
+  * layers: Move RenderPass CoreCheck to own file
+
+  [ Artem Kharytoniuk ]
+  * layers: Ensure object handle is not null
+
+  [ Juan Ramos ]
+  * layers: Remove optick instrumentation
+
+  [ Jeremy Gebben ]
+  * build: Use mimalloc to improve win64 performance
+
+  [ spencer-lunarg ]
+  * layers: Move RenderPass function to RP file
+  * layers: Move subpass CoreChecks to RP file
+  * layers: Move ValidateImageSampleCount to buffer val
+  * layers: Move descriptor CoreChecks to descriptor file
+  * layers: Move DynamicState CoreCheck to own file
+  * layers: Use reference for color blend state
+  * layers: Add VkPipelineColorBlendStateCreateInfo count VU
+  * tests: Add VkPipelineColorBlendStateCreateInfo count VU
+  * layers: Add VkPipelineColorWriteCreateInfoEXT count VU
+  * layers: Label VUID 07609
+  * layers: Label dynamicState3 Sampler Location VUIDs
+  * tests: Removed unneeded features2 struct
+
+  [ Juan Ramos ]
+  * cmake: Add VVL_ENABLE_TSAN
+
+  [ spencer-lunarg ]
+  * tests: Cleanup tests to be more robust
+  * tests: Update Device Profiles
+
+  [ Juan Ramos ]
+  * cmake: Use target_sources consistently
+
+  [ Jan Beich ]
+  * cmake: Restore X11/Wayland support on non-Linux after 33935a1619
+
+  [ Artem Kharytoniuk ]
+  * layers: Use fallthrough attribute and enable warning
+
+  [ Mike Schuchardt ]
+  * scripts: Add extension VU coverage report
+  * scripts: Refactor stats script argument parsing
+
+  [ Mark Lobodzinski ]
+  * layers: Fix handle wrapping for new extension structure
+  * layers: Add support for VK_EXT_swapchain/surface_maintenance1
+  * tests: Add coverage for new surface/swapchain_maintenance1 VUs
+  * layers: Combine swapchain_maint1 present_mode data structures
+  * layers: Use spans where appropriate, use auto with LvlInitStruct
+
+  [ Juan Ramos ]
+  * cmake: Use target_compile_definitions & add_compile_definitions
+
+  [ Nathaniel Cesario ]
+  * layers: Fix GCC release build with -Werror
+
+  [ David Neto ]
+  * build: Remove unused functions
+
+  [ Juan Ramos ]
+  * docs: Remove mention of travis
+
+  [ spencer-lunarg ]
+  * scripts: Remove false positive for sType
+
+  [ Jeremy Gebben ]
+  * corechecks: Include relevant objects in transfer command errors
+
+  [ Juan Ramos ]
+  * ci: Test CMake min with GitHub action
+
+  [ Mark Lobodzinski ]
+  * tests: Fix bad geometry shader test
+  * tests: Skip FenceSemThreadRace test when using SwiftShader
+  * tests: Fix ExerciseGetImageSubresourceLayout errors
+  * tests: Fix invalid format usage in CreateImageYcbcrFormats
+  * tests: Fix bad sample count usage in ResolveInvalidUsage
+  * tests: Fix DynamicRenderingGraphicsPipelineCreateInfo test
+  * tests: Fix depth-stencil inheritanceInfo test
+  * tests: Fix missing feature check in DynState test
+  * tests: Check feature in PrimitiveTopologyListRestart
+  * tests: Fix ValidateGeometryShaderEnabled test
+  * tests: Add feature check to scissor-viewport test
+
+  [ spencer-lunarg ]
+  * layers: Label VkStridedDeviceAddressRegionKHR 04631 VU
+  * layers: Move Device CoreCheck into own file
+  * layers: Move ReleaseProfilingLock in query_validation.cpp
+  * layers: Move External object CoreCheck into own file
+  * layers: Fix build for non-Linux builds
+
+  [ Juan Ramos ]
+  * build: Remove VS2015 support
+
+  [ spencer-lunarg ]
+  * tests: More tests fixes for profiles
+  * tests: Remove skipping tests because of MockICD
+  * scripts: Run CI with Profiles Layer
+  * tests: Remove magic number for maxTransformFeedbackStreams
+
+  [ Artem Kharytoniuk ]
+  * tests: Move best practices positive tests to best_practices.cpp
+  * tests: Add regression test for null set crash in best practices
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Tools to fix GpuBufferDeviceAddressOOB test
+  * tests: Clean up GpuBufferDeviceAddressOOB
+
+  [ John Zupin ]
+  * packaging: debian: update copyright
+
+  [ Rua ]
+  * layers: Apply render pass final transitions always
+
+  [ Juan Ramos ]
+  * macos: Target 10.15
+
+  [ spencer-lunarg ]
+  * layers: Use SPIR-V enum instead of int
+  * layers: Make separate Interface Variables
+
+  [ arno-lunarg ]
+  * layers: Add new VUIDs
+  * tests: Add test cases for new VUIDs
+  * layers: Fix function name formating
+
+  [ Nathaniel Cesario ]
+  * build: Set external dir based on build type
+
+  [ Juan Ramos ]
+  * docs: Notify users about upcoming change
+
+  [ Nathaniel Cesario ]
+  * tests: Fix descriptor buffer tests
+
+  [ Artem Kharytoniuk ]
+  * layers: Do not wrap/unwrap VK_NULL_HANDLE
+
+  [ Juan Ramos ]
+  * cmake: Create scripts/CMakeLists.txt
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix new CI warnings on macos-min-sdk
+
+  [ Juan Ramos ]
+  * cmake: Fix Apple build failures
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.239
+  * build: Update shader toolchain ahead of SDK
+
+  [ Artem Kharytoniuk ]
+  * tests: Add regression test for null set crash in core validation
+
+  [ spencer-lunarg ]
+  * layers: Label new VK_EXT_image_2d_view_of_3d VUID
+
+  [ Juan Ramos ]
+  * macos: Require VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
+  * scripts: Check that LunarG / Valve Copyright is updated
+
+  [ spencer-lunarg ]
+  * tests: Fix outdated copyrights
+  * git: Add git-blame-ignore-revs file
+  * layers: Use CMD_TYPE in stateless
+  * layers: Make promotion variable names consistent
+  * layers: Use consistent function names in stateless
+
+ -- john <john@odin>  Mon, 23 Jan 2023 12:27:55 -0700
+
 vulkan-validationlayers (1.3.236.0~rc2-1lunarg20.04-1) focal; urgency=medium
 
   [ Mark Young ]
