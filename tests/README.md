@@ -20,6 +20,15 @@ The tests are grouped into different categories. Some of the main test categorie
 - `VkGpuAssistedLayerTest` - Test [GPU-Assisted Validation](../docs/gpu_validation.md)
 - `VkPortabilitySubsetTest` - Test [VK_KHR_portability_subset validation](../docs/portability_validation.md)
 
+## Implicit Layers note
+
+In general, the implicit validation layers may change the expected message output, which may cause some tests to fail. One solution is to disable the implicit layer during the test session using the `VK_LOADER_LAYERS_DISABLE` environment variable introduced in Vulkan Loader v.1.3.234.
+
+Here is an example with OBS implicit layer:
+```bash
+export VK_LOADER_LAYERS_DISABLE=VK_LAYER_OBS_HOOK
+```
+
 ## Running Test on Linux
 
 **IMPORTANT** Make sure you have the correct `VK_LAYER_PATH` set on Linux
@@ -91,7 +100,7 @@ Clone and build the [MoltenVK](https://github.com/KhronosGroup/MoltenVK) reposit
 You will have to direct the loader from Vulkan-Loader to the MoltenVK ICD:
 
 ```bash
-export VK_ICD_FILENAMES=<path to MoltenVK repository>/Package/Latest/MoltenVK/macOS/MoltenVK_icd.json
+export VK_DRIVER_FILES=<path to MoltenVK repository>/Package/Latest/MoltenVK/macOS/MoltenVK_icd.json
 ```
 
 ## Running Tests on MockICD and Profiles layer
@@ -118,7 +127,7 @@ export VK_LAYER_PATH=$VK_LAYER_PATH:$VULKAN_SDK/etc/vulkan/explicit_layer.d/
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$VULKAN_SDK/lib/
 
 # Set MockICD to be driver
-export VK_ICD_FILENAMES=/path/to/Vulkan-Tools/build/icd/VkICD_mock_icd.json
+export VK_DRIVER_FILES=/path/to/Vulkan-Tools/build/icd/VkICD_mock_icd.json
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/Vulkan-Tools/build/icd/
 
 # Set Layers, the order here is VERY IMPORTANT otherwise the test will see the
@@ -132,7 +141,7 @@ export VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation:VK_LAYER_KHRONOS_profiles
 export VK_KHRONOS_PROFILES_PROFILE_FILE=$VVL/tests/device_profiles/profile.json
 
 # Expose all the parts of the profile layer
-export VK_KHRONOS_PROFILES_SIMULATE_CAPABILITIES=SIMULATE_API_VERSION_BIT,SIMULATE_FEATURES_BIT,SIMULATE_PROPERTIES_BIT,SIMULATE_EXTENSIONS_BIT,SIMULATE_FORMATS_BIT
+export VK_KHRONOS_PROFILES_SIMULATE_CAPABILITIES=SIMULATE_API_VERSION_BIT,SIMULATE_FEATURES_BIT,SIMULATE_PROPERTIES_BIT,SIMULATE_EXTENSIONS_BIT,SIMULATE_FORMATS_BIT,SIMULATE_QUEUE_FAMILY_PROPERTIES_BIT
 
 # MockICD exposes VK_KHR_portability_subset but most tests are not testing for it
 export VK_KHRONOS_PROFILES_EMULATE_PORTABILITY=false

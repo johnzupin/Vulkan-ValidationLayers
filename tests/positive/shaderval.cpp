@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -488,10 +488,6 @@ TEST_F(VkPositiveLayerTest, ComputeWorkGroupSizeLocalSizeId) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
         GTEST_SKIP() << "At least Vulkan version 1.3 is required";
     }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
 
     auto features13 = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
     features13.maintenance4 = VK_TRUE;  // required to be supported in 1.3
@@ -530,10 +526,6 @@ TEST_F(VkPositiveLayerTest, ComputeWorkGroupSizeLocalSizeIdSpecConstant) {
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
         GTEST_SKIP() << "At least Vulkan version 1.3 is required";
-    }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
     }
 
     auto features13 = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
@@ -595,10 +587,6 @@ TEST_F(VkPositiveLayerTest, ComputeWorkGroupSizePrecedenceOverLocalSizeId) {
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
         GTEST_SKIP() << "At least Vulkan version 1.3 is required";
-    }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
     }
 
     auto features13 = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
@@ -1140,11 +1128,6 @@ TEST_F(VkPositiveLayerTest, ShaderDrawParametersWithFeature) {
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
-
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
@@ -1191,7 +1174,7 @@ TEST_F(VkPositiveLayerTest, ShaderImageAtomicInt64) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    auto image_atomic_int64_features = lvl_init_struct<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT>();
+    auto image_atomic_int64_features = LvlInitStruct<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT>();
     auto features2 = GetPhysicalDeviceFeatures2(image_atomic_int64_features);
     if (features2.features.shaderInt64 == VK_FALSE) {
         GTEST_SKIP() << "shaderInt64 feature not supported";
@@ -1269,7 +1252,7 @@ TEST_F(VkPositiveLayerTest, ShaderAtomicFloat) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    auto atomic_float_features = lvl_init_struct<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>();
+    auto atomic_float_features = LvlInitStruct<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>();
     auto features2 = GetPhysicalDeviceFeatures2(atomic_float_features);
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
@@ -1526,8 +1509,8 @@ TEST_F(VkPositiveLayerTest, ShaderAtomicFloat2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
 
-    auto atomic_float_features = lvl_init_struct<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>();
-    auto atomic_float2_features = lvl_init_struct<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT>(&atomic_float_features);
+    auto atomic_float_features = LvlInitStruct<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>();
+    auto atomic_float2_features = LvlInitStruct<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT>(&atomic_float_features);
     auto float16int8_features = LvlInitStruct<VkPhysicalDeviceShaderFloat16Int8Features>(&atomic_float2_features);
     auto storage_16_bit_features = LvlInitStruct<VkPhysicalDevice16BitStorageFeatures>(&float16int8_features);
     auto features2 = GetPhysicalDeviceFeatures2(storage_16_bit_features);
@@ -2730,10 +2713,7 @@ TEST_F(VkPositiveLayerTest, PositiveShaderModuleIdentifier) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
+
     auto shader_cache_control_features = LvlInitStruct<VkPhysicalDevicePipelineCreationCacheControlFeatures>();
     auto shader_module_id_features =
         LvlInitStruct<VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT>(&shader_cache_control_features);
@@ -2902,10 +2882,7 @@ TEST_F(VkPositiveLayerTest, StorageImageWriteMoreComponent) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
+
     VkPhysicalDeviceFeatures available_features = {};
     ASSERT_NO_FATAL_FAILURE(GetPhysicalDeviceFeatures(&available_features));
     if (!available_features.shaderStorageImageExtendedFormats) {
@@ -2994,10 +2971,7 @@ TEST_F(VkPositiveLayerTest, StorageImageUnknownWriteMoreComponent) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
+
     VkPhysicalDeviceFeatures available_features = {};
     ASSERT_NO_FATAL_FAILURE(GetPhysicalDeviceFeatures(&available_features));
     if (!available_features.shaderStorageImageExtendedFormats) {
@@ -3090,10 +3064,7 @@ TEST_F(VkPositiveLayerTest, StorageImageWriteSpecConstantMoreComponent) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
+
     VkPhysicalDeviceFeatures available_features = {};
     ASSERT_NO_FATAL_FAILURE(GetPhysicalDeviceFeatures(&available_features));
     if (!available_features.shaderStorageImageExtendedFormats) {
@@ -3197,10 +3168,7 @@ TEST_F(VkPositiveLayerTest, StorageTexelBufferWriteMoreComponent) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
+
     VkPhysicalDeviceFeatures available_features = {};
     ASSERT_NO_FATAL_FAILURE(GetPhysicalDeviceFeatures(&available_features));
     if (!available_features.shaderStorageImageExtendedFormats) {

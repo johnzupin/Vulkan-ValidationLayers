@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (C) 2015-2022 Google Inc.
+/* Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (C) 2015-2023 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,16 +58,16 @@ class StatelessValidation : public ValidationObject {
 
     // Override chassis read/write locks for this validation object
     // This override takes a deferred lock. i.e. it is not acquired.
-    ReadLockGuard ReadLock() override;
+    ReadLockGuard ReadLock() const override;
     WriteLockGuard WriteLock() override;
 
     // Device extension properties -- storing properties gathered from VkPhysicalDeviceProperties2::pNext chain
     struct DeviceExtensionProperties {
         VkPhysicalDeviceShadingRateImagePropertiesNV shading_rate_image_props;
-        VkPhysicalDeviceMeshShaderPropertiesNV mesh_shader_props;
-        VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_propsEXT;
-        VkPhysicalDeviceRayTracingPropertiesNV ray_tracing_propsNV;
-        VkPhysicalDeviceRayTracingPipelinePropertiesKHR ray_tracing_propsKHR;
+        VkPhysicalDeviceMeshShaderPropertiesNV mesh_shader_props_nv;
+        VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_props_ext;
+        VkPhysicalDeviceRayTracingPropertiesNV ray_tracing_props_nv;
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR ray_tracing_props_khr;
         VkPhysicalDeviceAccelerationStructurePropertiesKHR acc_structure_props;
         VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback_props;
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT vertex_attribute_divisor_props;
@@ -138,8 +138,8 @@ class StatelessValidation : public ValidationObject {
      * @param value Pointer to validate.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_required_pointer(const char *apiName, const ParameterName &parameterName, const void *value,
-                                   const std::string &vuid) const {
+    bool ValidateRequiredPointer(const char *apiName, const ParameterName &parameterName, const void *value,
+                                 const std::string &vuid) const {
         bool skip_call = false;
 
         if (value == nullptr) {
@@ -167,9 +167,9 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T1, typename T2>
-    bool validate_array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName, T1 count,
-                        const T2 *array, bool countRequired, bool arrayRequired, const char *count_required_vuid,
-                        const char *array_required_vuid) const {
+    bool ValidateArray(const char *apiName, const ParameterName &countName, const ParameterName &arrayName, T1 count,
+                       const T2 *array, bool countRequired, bool arrayRequired, const char *count_required_vuid,
+                       const char *array_required_vuid) const {
         bool skip_call = false;
 
         // Count parameters not tagged as optional cannot be 0
@@ -209,9 +209,9 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T1, typename T2>
-    bool validate_array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName, const T1 *count,
-                        const T2 *array, bool countPtrRequired, bool countValueRequired, bool arrayRequired,
-                        const char *count_required_vuid, const char *array_required_vuid) const {
+    bool ValidateArray(const char *apiName, const ParameterName &countName, const ParameterName &arrayName, const T1 *count,
+                       const T2 *array, bool countPtrRequired, bool countValueRequired, bool arrayRequired,
+                       const char *count_required_vuid, const char *array_required_vuid) const {
         bool skip_call = false;
 
         if (count == nullptr) {
@@ -220,8 +220,8 @@ class StatelessValidation : public ValidationObject {
                                       apiName, countName.get_name().c_str());
             }
         } else {
-            skip_call |= validate_array(apiName, countName, arrayName, *array ? (*count) : 0, &array, countValueRequired,
-                                        arrayRequired, count_required_vuid, array_required_vuid);
+            skip_call |= ValidateArray(apiName, countName, arrayName, *array ? (*count) : 0, &array, countValueRequired,
+                                       arrayRequired, count_required_vuid, array_required_vuid);
         }
 
         return skip_call;
@@ -243,8 +243,8 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T>
-    bool validate_struct_type(const char *apiName, const ParameterName &parameterName, const char *sTypeName, const T *value,
-                              VkStructureType sType, bool required, const char *struct_vuid, const char *stype_vuid) const {
+    bool ValidateStructType(const char *apiName, const ParameterName &parameterName, const char *sTypeName, const T *value,
+                            VkStructureType sType, bool required, const char *struct_vuid, const char *stype_vuid) const {
         bool skip_call = false;
 
         if (value == nullptr) {
@@ -279,15 +279,15 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T>
-    bool validate_struct_type_array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName,
-                                    const char *sTypeName, uint32_t count, const T *array, VkStructureType sType,
-                                    bool countRequired, bool arrayRequired, const char *stype_vuid, const char *param_vuid,
-                                    const char *count_required_vuid) const {
+    bool ValidateStructTypeArray(const char *apiName, const ParameterName &countName, const ParameterName &arrayName,
+                                 const char *sTypeName, uint32_t count, const T *array, VkStructureType sType, bool countRequired,
+                                 bool arrayRequired, const char *stype_vuid, const char *param_vuid,
+                                 const char *count_required_vuid) const {
         bool skip_call = false;
 
         if ((count == 0) || (array == nullptr)) {
-            skip_call |= validate_array(apiName, countName, arrayName, count, &array, countRequired, arrayRequired,
-                                        count_required_vuid, param_vuid);
+            skip_call |= ValidateArray(apiName, countName, arrayName, count, &array, countRequired, arrayRequired,
+                                       count_required_vuid, param_vuid);
         } else {
             // Verify that all structs in the array have the correct type
             for (uint32_t i = 0; i < count; ++i) {
@@ -320,15 +320,15 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T>
-    bool validate_struct_pointer_type_array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName,
-                                            const char *sTypeName, uint32_t count, const T *array, VkStructureType sType,
-                                            bool countRequired, bool arrayRequired, const char *stype_vuid, const char *param_vuid,
-                                            const char *count_required_vuid) const {
+    bool ValidateStructPointerTypeArray(const char *apiName, const ParameterName &countName, const ParameterName &arrayName,
+                                        const char *sTypeName, uint32_t count, const T *array, VkStructureType sType,
+                                        bool countRequired, bool arrayRequired, const char *stype_vuid, const char *param_vuid,
+                                        const char *count_required_vuid) const {
         bool skip_call = false;
 
         if ((count == 0) || (array == nullptr)) {
-            skip_call |= validate_array(apiName, countName, arrayName, count, &array, countRequired, arrayRequired,
-                                        count_required_vuid, param_vuid);
+            skip_call |= ValidateArray(apiName, countName, arrayName, count, &array, countRequired, arrayRequired,
+                                       count_required_vuid, param_vuid);
         } else {
             // Verify that all structs in the array have the correct type
             for (uint32_t i = 0; i < count; ++i) {
@@ -363,10 +363,10 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T>
-    bool validate_struct_type_array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName,
-                                    const char *sTypeName, uint32_t *count, const T *array, VkStructureType sType,
-                                    bool countPtrRequired, bool countValueRequired, bool arrayRequired, const char *stype_vuid,
-                                    const char *param_vuid, const char *count_required_vuid) const {
+    bool ValidateStructTypeArray(const char *apiName, const ParameterName &countName, const ParameterName &arrayName,
+                                 const char *sTypeName, uint32_t *count, const T *array, VkStructureType sType,
+                                 bool countPtrRequired, bool countValueRequired, bool arrayRequired, const char *stype_vuid,
+                                 const char *param_vuid, const char *count_required_vuid) const {
         bool skip_call = false;
 
         if (count == nullptr) {
@@ -375,9 +375,9 @@ class StatelessValidation : public ValidationObject {
                                       apiName, countName.get_name().c_str());
             }
         } else {
-            skip_call |= validate_struct_type_array(apiName, countName, arrayName, sTypeName, (*count), array, sType,
-                                                    countValueRequired && (array != nullptr), arrayRequired, stype_vuid, param_vuid,
-                                                    count_required_vuid);
+            skip_call |= ValidateStructTypeArray(apiName, countName, arrayName, sTypeName, (*count), array, sType,
+                                                 countValueRequired && (array != nullptr), arrayRequired, stype_vuid, param_vuid,
+                                                 count_required_vuid);
         }
 
         return skip_call;
@@ -394,7 +394,7 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T>
-    bool validate_required_handle(const char *api_name, const ParameterName &parameter_name, T value) const {
+    bool ValidateRequiredHandle(const char *api_name, const ParameterName &parameter_name, T value) const {
         bool skip_call = false;
 
         if (value == VK_NULL_HANDLE) {
@@ -415,7 +415,7 @@ class StatelessValidation : public ValidationObject {
      *
      * @note This function is only intended to validate arrays of handles when none
      *       of the handles are allowed to be VK_NULL_HANDLE.  For arrays of handles
-     *       that are allowed to contain VK_NULL_HANDLE, use validate_array() instead.
+     *       that are allowed to contain VK_NULL_HANDLE, use ValidateArray() instead.
      *
      * @param api_name Name of API call being validated.
      * @param count_name Name of count parameter.
@@ -428,14 +428,13 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T>
-    bool validate_handle_array(const char *api_name, const ParameterName &count_name, const ParameterName &array_name,
-                               uint32_t count, const T *array, bool count_required, bool array_required,
-                               const char *count_required_vuid) const {
+    bool ValidateHandleArray(const char *api_name, const ParameterName &count_name, const ParameterName &array_name, uint32_t count,
+                             const T *array, bool count_required, bool array_required, const char *count_required_vuid) const {
         bool skip_call = false;
 
         if ((count == 0) || (array == nullptr)) {
-            skip_call |= validate_array(api_name, count_name, array_name, count, &array, count_required, array_required,
-                                        count_required_vuid, kVUIDUndefined);
+            skip_call |= ValidateArray(api_name, count_name, array_name, count, &array, count_required, array_required,
+                                       count_required_vuid, kVUIDUndefined);
         } else {
             // Verify that no handles in the array are VK_NULL_HANDLE
             for (uint32_t i = 0; i < count; ++i) {
@@ -467,14 +466,14 @@ class StatelessValidation : public ValidationObject {
      * @param arrayRequired The 'array' parameter may not be NULL when true.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_string_array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName, uint32_t count,
-                               const char *const *array, bool countRequired, bool arrayRequired, const char *count_required_vuid,
-                               const char *array_required_vuid) const {
+    bool ValidateStringArray(const char *apiName, const ParameterName &countName, const ParameterName &arrayName, uint32_t count,
+                             const char *const *array, bool countRequired, bool arrayRequired, const char *count_required_vuid,
+                             const char *array_required_vuid) const {
         bool skip_call = false;
 
         if ((count == 0) || (array == nullptr)) {
-            skip_call |= validate_array(apiName, countName, arrayName, count, &array, countRequired, arrayRequired,
-                                        count_required_vuid, array_required_vuid);
+            skip_call |= ValidateArray(apiName, countName, arrayName, count, &array, countRequired, arrayRequired,
+                                       count_required_vuid, array_required_vuid);
         } else {
             // Verify that strings in the array are not NULL
             for (uint32_t i = 0; i < count; ++i) {
@@ -512,10 +511,10 @@ class StatelessValidation : public ValidationObject {
      * @param header_version Version of header defining the pNext validation rules.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_struct_pnext(const char *api_name, const ParameterName &parameter_name, const char *allowed_struct_names,
-                               const void *next, size_t allowed_type_count, const VkStructureType *allowed_types,
-                               uint32_t header_version, const char *pnext_vuid, const char *stype_vuid,
-                               const bool is_physdev_api = false, const bool is_const_param = true) const {
+    bool ValidateStructPnext(const char *api_name, const ParameterName &parameter_name, const char *allowed_struct_names,
+                             const void *next, size_t allowed_type_count, const VkStructureType *allowed_types,
+                             uint32_t header_version, const char *pnext_vuid, const char *stype_vuid,
+                             const bool is_physdev_api = false, const bool is_const_param = true) const {
         bool skip_call = false;
 
         if (next != nullptr) {
@@ -603,7 +602,7 @@ class StatelessValidation : public ValidationObject {
      * @param value Boolean value to validate.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_bool32(const char *apiName, const ParameterName &parameterName, VkBool32 value) const {
+    bool ValidateBool32(const char *apiName, const ParameterName &parameterName, VkBool32 value) const {
         bool skip_call = false;
         if ((value != VK_TRUE) && (value != VK_FALSE)) {
             skip_call |= LogError(device, kVUID_PVError_UnrecognizedValue,
@@ -628,13 +627,13 @@ class StatelessValidation : public ValidationObject {
      * @param arrayRequired The 'array' parameter may not be NULL when true.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_bool32_array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName, uint32_t count,
-                               const VkBool32 *array, bool countRequired, bool arrayRequired) const {
+    bool ValidateBool32Array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName, uint32_t count,
+                             const VkBool32 *array, bool countRequired, bool arrayRequired) const {
         bool skip_call = false;
 
         if ((count == 0) || (array == nullptr)) {
-            skip_call |= validate_array(apiName, countName, arrayName, count, &array, countRequired, arrayRequired, kVUIDUndefined,
-                                        kVUIDUndefined);
+            skip_call |= ValidateArray(apiName, countName, arrayName, count, &array, countRequired, arrayRequired, kVUIDUndefined,
+                                       kVUIDUndefined);
         } else {
             for (uint32_t i = 0; i < count; ++i) {
                 if ((array[i] != VK_TRUE) && (array[i] != VK_FALSE)) {
@@ -668,8 +667,8 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T>
-    bool validate_ranged_enum(const char *apiName, const ParameterName &parameterName, const char *enumName, const T &valid_values,
-                              typename T::value_type value, const char *vuid) const {
+    bool ValidateRangedEnum(const char *apiName, const ParameterName &parameterName, const char *enumName, const T &valid_values,
+                            typename T::value_type value, const char *vuid) const {
         bool skip = false;
 
         if (std::find(valid_values.begin(), valid_values.end(), value) == valid_values.end()) {
@@ -705,14 +704,14 @@ class StatelessValidation : public ValidationObject {
      * @return Boolean value indicating that the call should be skipped.
      */
     template <typename T>
-    bool validate_ranged_enum_array(const char *apiName, const ParameterName &countName, const ParameterName &arrayName,
-                                    const char *enumName, const T &valid_values, uint32_t count,
-                                    const typename T::value_type *array, bool countRequired, bool arrayRequired) const {
+    bool ValidateRangedEnumArray(const char *apiName, const ParameterName &countName, const ParameterName &arrayName,
+                                 const char *enumName, const T &valid_values, uint32_t count, const typename T::value_type *array,
+                                 bool countRequired, bool arrayRequired) const {
         bool skip_call = false;
 
         if ((count == 0) || (array == nullptr)) {
-            skip_call |= validate_array(apiName, countName, arrayName, count, &array, countRequired, arrayRequired, kVUIDUndefined,
-                                        kVUIDUndefined);
+            skip_call |= ValidateArray(apiName, countName, arrayName, count, &array, countRequired, arrayRequired, kVUIDUndefined,
+                                       kVUIDUndefined);
         } else {
             for (uint32_t i = 0; i < count; ++i) {
                 if (std::find(valid_values.begin(), valid_values.end(), array[i]) == valid_values.end()) {
@@ -728,13 +727,13 @@ class StatelessValidation : public ValidationObject {
     }
 
     template <typename T>
-    bool validate_ranged_enum_array(const char *apiName, const char *vuid, const ParameterName &countName,
-                                    const ParameterName &arrayName, const char *enumName, const T &valid_values, uint32_t count,
-                                    const typename T::value_type *array, bool countRequired, bool arrayRequired) const {
+    bool ValidateRangedEnumArray(const char *apiName, const char *vuid, const ParameterName &countName,
+                                 const ParameterName &arrayName, const char *enumName, const T &valid_values, uint32_t count,
+                                 const typename T::value_type *array, bool countRequired, bool arrayRequired) const {
         bool skip_call = false;
 
         if ((count == 0) || (array == nullptr)) {
-            skip_call |= validate_array(apiName, countName, arrayName, count, &array, countRequired, arrayRequired, vuid, vuid);
+            skip_call |= ValidateArray(apiName, countName, arrayName, count, &array, countRequired, arrayRequired, vuid, vuid);
         } else {
             for (uint32_t i = 0; i < count; ++i) {
                 if (std::find(valid_values.begin(), valid_values.end(), array[i]) == valid_values.end()) {
@@ -760,7 +759,7 @@ class StatelessValidation : public ValidationObject {
      * @param value Value to validate.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_reserved_flags(const char *api_name, const ParameterName &parameter_name, VkFlags value, const char *vuid) const {
+    bool ValidateReservedFlags(const char *api_name, const ParameterName &parameter_name, VkFlags value, const char *vuid) const {
         bool skip_call = false;
 
         if (value != 0) {
@@ -774,9 +773,9 @@ class StatelessValidation : public ValidationObject {
 
     // helper to implement validation of both 32 bit and 64 bit flags.
     template <typename FlagTypedef>
-    bool validate_flags_impl(const char *api_name, const ParameterName &parameter_name, const char *flag_bits_name,
-                             FlagTypedef all_flags, FlagTypedef value, const FlagType flag_type, const char *vuid,
-                             const char *flags_zero_vuid = nullptr) const {
+    bool ValidateFlagsImplementation(const char *api_name, const ParameterName &parameter_name, const char *flag_bits_name,
+                                     FlagTypedef all_flags, FlagTypedef value, const FlagType flag_type, const char *vuid,
+                                     const char *flags_zero_vuid = nullptr) const {
         bool skip_call = false;
 
         if ((value & ~all_flags) != 0) {
@@ -822,10 +821,10 @@ class StatelessValidation : public ValidationObject {
      * @param flags_zero_vuid VUID used for non-optional Flags that are zero.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_flags(const char *api_name, const ParameterName &parameter_name, const char *flag_bits_name, VkFlags all_flags,
-                        VkFlags value, const FlagType flag_type, const char *vuid, const char *flags_zero_vuid = nullptr) const {
-        return validate_flags_impl<VkFlags>(api_name, parameter_name, flag_bits_name, all_flags, value, flag_type, vuid,
-                                            flags_zero_vuid);
+    bool ValidateFlags(const char *api_name, const ParameterName &parameter_name, const char *flag_bits_name, VkFlags all_flags,
+                       VkFlags value, const FlagType flag_type, const char *vuid, const char *flags_zero_vuid = nullptr) const {
+        return ValidateFlagsImplementation<VkFlags>(api_name, parameter_name, flag_bits_name, all_flags, value, flag_type, vuid,
+                                                    flags_zero_vuid);
     }
 
     /**
@@ -844,10 +843,10 @@ class StatelessValidation : public ValidationObject {
      * @param flags_zero_vuid VUID used for non-optional Flags that are zero.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_flags(const char *api_name, const ParameterName &parameter_name, const char *flag_bits_name, VkFlags64 all_flags,
-                        VkFlags64 value, const FlagType flag_type, const char *vuid, const char *flags_zero_vuid = nullptr) const {
-        return validate_flags_impl<VkFlags64>(api_name, parameter_name, flag_bits_name, all_flags, value, flag_type, vuid,
-                                              flags_zero_vuid);
+    bool ValidateFlags(const char *api_name, const ParameterName &parameter_name, const char *flag_bits_name, VkFlags64 all_flags,
+                       VkFlags64 value, const FlagType flag_type, const char *vuid, const char *flags_zero_vuid = nullptr) const {
+        return ValidateFlagsImplementation<VkFlags64>(api_name, parameter_name, flag_bits_name, all_flags, value, flag_type, vuid,
+                                                      flags_zero_vuid);
     }
 
     /**
@@ -867,14 +866,14 @@ class StatelessValidation : public ValidationObject {
      * @param array_required The 'array' parameter may not be NULL when true.
      * @return Boolean value indicating that the call should be skipped.
      */
-    bool validate_flags_array(const char *api_name, const ParameterName &count_name, const ParameterName &array_name,
-                              const char *flag_bits_name, VkFlags all_flags, uint32_t count, const VkFlags *array,
-                              bool count_required, bool array_required) const {
+    bool ValidateFlagsArray(const char *api_name, const ParameterName &count_name, const ParameterName &array_name,
+                            const char *flag_bits_name, VkFlags all_flags, uint32_t count, const VkFlags *array,
+                            bool count_required, bool array_required) const {
         bool skip_call = false;
 
         if ((count == 0) || (array == nullptr)) {
-            skip_call |= validate_array(api_name, count_name, array_name, count, &array, count_required, array_required,
-                                        kVUIDUndefined, kVUIDUndefined);
+            skip_call |= ValidateArray(api_name, count_name, array_name, count, &array, count_required, array_required,
+                                       kVUIDUndefined, kVUIDUndefined);
         } else {
             // Verify that all VkFlags values in the array
             for (uint32_t i = 0; i < count; ++i) {
@@ -897,8 +896,8 @@ class StatelessValidation : public ValidationObject {
     }
 
     template <typename ExtensionState>
-    bool validate_extension_reqs(const ExtensionState &extensions, const char *vuid, const char *extension_type,
-                                 const char *extension_name) const {
+    bool ValidateExtensionReqs(const ExtensionState &extensions, const char *vuid, const char *extension_type,
+                               const char *extension_name) const {
         bool skip = false;
         if (!extension_name) {
             return skip;  // Robust to invalid char *
@@ -966,353 +965,7 @@ class StatelessValidation : public ValidationObject {
     template <typename RenderPassCreateInfoGeneric>
     bool CreateRenderPassGeneric(VkDevice device, const RenderPassCreateInfoGeneric *pCreateInfo,
                                  const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass,
-                                 RenderPassCreateVersion rp_version) const {
-        bool skip = false;
-        uint32_t max_color_attachments = device_limits.maxColorAttachments;
-        bool use_rp2 = (rp_version == RENDER_PASS_VERSION_2);
-        const char *func_name = (use_rp2) ? "vkCreateRenderPass2" : "vkCreateRenderPass";
-        const char *vuid;
-        VkBool32 separate_depth_stencil_layouts = false;
-        const auto *vulkan_12_features = LvlFindInChain<VkPhysicalDeviceVulkan12Features>(device_createinfo_pnext);
-        if (vulkan_12_features) {
-            separate_depth_stencil_layouts = vulkan_12_features->separateDepthStencilLayouts;
-        } else {
-            const auto *separate_depth_stencil_layouts_features =
-                LvlFindInChain<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures>(device_createinfo_pnext);
-            if (separate_depth_stencil_layouts_features)
-                separate_depth_stencil_layouts = separate_depth_stencil_layouts_features->separateDepthStencilLayouts;
-        }
-
-        VkBool32 attachment_feedback_loop_layout = false;
-        const auto *attachment_feedback_loop_layout_features =
-            LvlFindInChain<VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT>(device_createinfo_pnext);
-        if (attachment_feedback_loop_layout_features)
-            attachment_feedback_loop_layout = attachment_feedback_loop_layout_features->attachmentFeedbackLoopLayout;
-
-        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; ++i) {
-            // if not null, also confirms rp2 is being used
-            const auto *attachment_description_stencil_layout =
-                (use_rp2) ? LvlFindInChain<VkAttachmentDescriptionStencilLayout>(
-                                reinterpret_cast<VkAttachmentDescription2 const *>(&pCreateInfo->pAttachments[i])->pNext)
-                          : nullptr;
-
-            const VkFormat attachment_format = pCreateInfo->pAttachments[i].format;
-            const VkImageLayout initial_layout = pCreateInfo->pAttachments[i].initialLayout;
-            const VkImageLayout final_layout = pCreateInfo->pAttachments[i].finalLayout;
-            if (attachment_format == VK_FORMAT_UNDEFINED) {
-                skip |= LogError(device, "VUID-VkAttachmentDescription-format-06698",
-                                 "%s: pCreateInfo->pAttachments[%" PRIu32 "].format is VK_FORMAT_UNDEFINED.", func_name, i);
-            }
-            if (final_layout == VK_IMAGE_LAYOUT_UNDEFINED || final_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
-                skip |= LogError(device, "VUID-VkAttachmentDescription-finalLayout-00843",
-                                 "%s: pCreateInfo->pAttachments[%d].finalLayout must not be VK_IMAGE_LAYOUT_UNDEFINED or "
-                                 "VK_IMAGE_LAYOUT_PREINITIALIZED.",
-                                 func_name, i);
-            }
-            if (!separate_depth_stencil_layouts) {
-                if (initial_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(
-                        device, "VUID-VkAttachmentDescription-separateDepthStencilLayouts-03284",
-                        "%s: pCreateInfo->pAttachments[%d].initialLayout must not be VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, "
-                        "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL, or "
-                        "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
-                        func_name, i);
-                }
-                if (final_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(
-                        device, "VUID-VkAttachmentDescription-separateDepthStencilLayouts-03285",
-                        "%s: pCreateInfo->pAttachments[%d].finalLayout must not be VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, "
-                        "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL, or "
-                        "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
-                        func_name, i);
-                }
-            }
-            if (!attachment_feedback_loop_layout) {
-                if (initial_layout == VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT) {
-                    vuid = use_rp2 ? "VUID-VkAttachmentDescription2-attachmentFeedbackLoopLayout-07309"
-                                   : "VUID-VkAttachmentDescription-attachmentFeedbackLoopLayout-07309";
-                    skip |= LogError(device, vuid,
-                                     "%s: pCreateInfo->pAttachments[%" PRIu32
-                                     "] initialLayout is VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT but the "
-                                     "attachmentFeedbackLoopLayout feature is not enabled",
-                                     func_name, i);
-                }
-                if (final_layout == VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT) {
-                    vuid = use_rp2 ? "VUID-VkAttachmentDescription2-attachmentFeedbackLoopLayout-07310"
-                                   : "VUID-VkAttachmentDescription-attachmentFeedbackLoopLayout-07310";
-                    skip |= LogError(device, vuid,
-                                     "%s: pCreateInfo->pAttachments[%" PRIu32
-                                     "] finalLayout is VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT but the "
-                                     "attachmentFeedbackLoopLayout feature is not enabled",
-                                     func_name, i);
-                }
-            }
-            if (!FormatIsDepthOrStencil(attachment_format)) {
-                if (initial_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(
-                        device, "VUID-VkAttachmentDescription-format-03286",
-                        "%s: pCreateInfo->pAttachments[%d].initialLayout must not be VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, "
-                        "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL, or "
-                        "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMA_KHRL",
-                        func_name, i);
-                }
-                if (final_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(
-                        device, "VUID-VkAttachmentDescription-format-03287",
-                        "%s: pCreateInfo->pAttachments[%d].finalLayout must not be VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, "
-                        "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL, or "
-                        "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
-                        func_name, i);
-                }
-            } else if (FormatIsDepthAndStencil(attachment_format)) {
-                if (initial_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-06906",
-                                     "%s: pCreateInfo->pAttachments[%d].initialLayout must not be "
-                                     "VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL or "
-                                     "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
-                                     func_name, i);
-                }
-                if (final_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-06907",
-                                     "%s: pCreateInfo->pAttachments[%d].finalLayout must not be "
-                                     "VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL or "
-                                     "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
-                                     func_name, i);
-                }
-            } else if (FormatIsDepthOnly(attachment_format)) {
-                if (initial_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-03290",
-                                     "%s: pCreateInfo->pAttachments[%d].initialLayout must not be "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL or"
-                                     "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
-                                     func_name, i);
-                }
-                if (final_layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-03291",
-                                     "%s: pCreateInfo->pAttachments[%d].finalLayout must not be "
-                                     "VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL or "
-                                     "VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL",
-                                     func_name, i);
-                }
-            } else if (FormatIsStencilOnly(attachment_format)) {
-                if (initial_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-03292",
-                                     "%s: pCreateInfo->pAttachments[%d].initialLayout must not be "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL or"
-                                     "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL",
-                                     func_name, i);
-                }
-                if (final_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-03293",
-                                     "%s: pCreateInfo->pAttachments[%d].finalLayout must not be "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL or "
-                                     "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMA_KHRL",
-                                     func_name, i);
-                }
-            }
-            if (attachment_description_stencil_layout) {
-                if (attachment_description_stencil_layout->stencilInitialLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilInitialLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilInitialLayout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilInitialLayout ==
-                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilInitialLayout ==
-                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilInitialLayout ==
-                        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilInitialLayout ==
-                        VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescriptionStencilLayout-stencilInitialLayout-03308",
-                                     "%s: VkAttachmentDescriptionStencilLayout.stencilInitialLayout must not be "
-                                     "VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL, "
-                                     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, "
-                                     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, or "
-                                     "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL.",
-                                     func_name);
-                }
-                if (attachment_description_stencil_layout->stencilFinalLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilFinalLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilFinalLayout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilFinalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilFinalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilFinalLayout ==
-                        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL ||
-                    attachment_description_stencil_layout->stencilFinalLayout ==
-                        VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescriptionStencilLayout-stencilFinalLayout-03309",
-                                     "%s: VkAttachmentDescriptionStencilLayout.stencilFinalLayout must not be "
-                                     "VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL, "
-                                     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, "
-                                     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, or "
-                                     "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL.",
-                                     func_name);
-                }
-                if (attachment_description_stencil_layout->stencilFinalLayout == VK_IMAGE_LAYOUT_UNDEFINED ||
-                    attachment_description_stencil_layout->stencilFinalLayout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
-                    skip |= LogError(
-                        device, "VUID-VkAttachmentDescriptionStencilLayout-stencilFinalLayout-03310",
-                        "%s: VkAttachmentDescriptionStencilLayout.stencilFinalLayout must not be VK_IMAGE_LAYOUT_UNDEFINED, or "
-                        "VK_IMAGE_LAYOUT_PREINITIALIZED.",
-                        func_name);
-                }
-            }
-
-            if (FormatIsDepthOrStencil(attachment_format)) {
-                if (initial_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-03281",
-                                     "%s: pCreateInfo->pAttachments[%d].initialLayout must not be "
-                                     "VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL when using a Depth or Stencil format",
-                                     func_name, i);
-                }
-                if (final_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-03283",
-                                     "%s: pCreateInfo->pAttachments[%d].finalLayout must not be "
-                                     "VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL when using a Depth or Stencil format",
-                                     func_name, i);
-                }
-            }
-            if (FormatIsColor(attachment_format)) {
-                if (initial_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-                    initial_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-03280",
-                                     "%s: pCreateInfo->pAttachments[%d].initialLayout must not be "
-                                     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL or "
-                                     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL when using a Color format",
-                                     func_name, i);
-
-                } else if (initial_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL ||
-                           initial_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-06487",
-                                     "%s: pCreateInfo->pAttachments[%d].initialLayout must not be "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL or "
-                                     "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL when using a Color format",
-                                     func_name, i);
-                }
-                if (final_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-                    final_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-03282",
-                                     "%s: pCreateInfo->pAttachments[%d].finalLayout must not be "
-                                     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL or "
-                                     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL when using a Color format",
-                                     func_name, i);
-                } else if (final_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL ||
-                           final_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL) {
-                    skip |= LogError(device, "VUID-VkAttachmentDescription-format-06488",
-                                     "%s: pCreateInfo->pAttachments[%d].finalLayout must not be "
-                                     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL or "
-                                     "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL when using a Color format",
-                                     func_name, i);
-                }
-            }
-            if (FormatIsColor(attachment_format) || FormatHasDepth(attachment_format)) {
-                if (pCreateInfo->pAttachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&
-                    initial_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
-                    skip |= LogError(
-                        device, "VUID-VkAttachmentDescription-format-06699",
-                        "%s: pCreateInfo->pAttachments[%" PRIu32
-                        "] format is %s and loadOp is VK_ATTACHMENT_LOAD_OP_LOAD, but initialLayout is VK_IMAGE_LAYOUT_UNDEFINED.",
-                        func_name, i, string_VkFormat(attachment_format));
-                }
-            }
-            if (FormatHasStencil(attachment_format) && pCreateInfo->pAttachments[i].stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
-                if (initial_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
-                    if (use_rp2) {
-                        skip |= LogError(device, "VUID-VkAttachmentDescription2-pNext-06704",
-                                         "%s: pCreateInfo->pAttachments[%" PRIu32
-                                         "] format includes stencil aspect and stencilLoadOp is VK_ATTACHMENT_LOAD_OP_LOAD, but "
-                                         "the initialLayout is VK_IMAGE_LAYOUT_UNDEFINED.",
-                                         func_name, i);
-                    } else if (!IsExtEnabled(device_extensions.vk_khr_separate_depth_stencil_layouts)) {
-                        vuid = use_rp2 ? "VUID-VkAttachmentDescription2-format-06703" : "VUID-VkAttachmentDescription-format-06700";
-                        skip |= LogError(device, vuid,
-                                         "%s: pCreateInfo->pAttachments[%" PRIu32
-                                         "] format is %s and stencilLoadOp is VK_ATTACHMENT_LOAD_OP_LOAD, but initialLayout is "
-                                         "VK_IMAGE_LAYOUT_UNDEFINED.",
-                                         func_name, i, string_VkFormat(attachment_format));
-                    }
-                }
-
-                // rp2 can have seperate depth/stencil layout and need to look in pNext
-                if (attachment_description_stencil_layout) {
-                    if (attachment_description_stencil_layout->stencilInitialLayout == VK_IMAGE_LAYOUT_UNDEFINED) {
-                        skip |=
-                            LogError(device, "VUID-VkAttachmentDescription2-pNext-06705",
-                                     "%s: pCreateInfo->pAttachments[%" PRIu32
-                                     "] format includes stencil aspect and stencilLoadOp is VK_ATTACHMENT_LOAD_OP_LOAD, but "
-                                     "the VkAttachmentDescriptionStencilLayout::stencilInitialLayout is VK_IMAGE_LAYOUT_UNDEFINED.",
-                                     func_name, i);
-                    }
-                }
-            }
-        }
-
-        for (uint32_t i = 0; i < pCreateInfo->subpassCount; ++i) {
-            if (pCreateInfo->pSubpasses[i].colorAttachmentCount > max_color_attachments) {
-                vuid = use_rp2 ? "VUID-VkSubpassDescription2-colorAttachmentCount-03063"
-                               : "VUID-VkSubpassDescription-colorAttachmentCount-00845";
-                skip |=
-                    LogError(device, vuid,
-                             "%s: Cannot create a render pass with %d color attachments in pCreateInfo->pSubpasses[%u]. Max is %d.",
-                             func_name, pCreateInfo->pSubpasses[i].colorAttachmentCount, i, max_color_attachments);
-            }
-        }
-
-        for (uint32_t i = 0; i < pCreateInfo->dependencyCount; ++i) {
-            const auto &dependency = pCreateInfo->pDependencies[i];
-
-            // Need to check first so layer doesn't segfault from out of bound array access
-            // src subpass bound check
-            if ((dependency.srcSubpass != VK_SUBPASS_EXTERNAL) && (dependency.srcSubpass >= pCreateInfo->subpassCount)) {
-                vuid =
-                    use_rp2 ? "VUID-VkRenderPassCreateInfo2-srcSubpass-02526" : "VUID-VkRenderPassCreateInfo-pDependencies-06866";
-                skip |= LogError(device, vuid,
-                                 "%s: pCreateInfo->pDependencies[%u].srcSubpass index (%u) has to be less than subpassCount (%u)",
-                                 func_name, i, dependency.srcSubpass, pCreateInfo->subpassCount);
-            }
-
-            // dst subpass bound check
-            if ((dependency.dstSubpass != VK_SUBPASS_EXTERNAL) && (dependency.dstSubpass >= pCreateInfo->subpassCount)) {
-                vuid =
-                    use_rp2 ? "VUID-VkRenderPassCreateInfo2-dstSubpass-02527" : "VUID-VkRenderPassCreateInfo-pDependencies-06867";
-                skip |= LogError(device, vuid,
-                                 "%s: pCreateInfo->pDependencies[%u].dstSubpass index (%u) has to be less than subpassCount (%u)",
-                                 func_name, i, dependency.dstSubpass, pCreateInfo->subpassCount);
-            }
-
-            // Spec currently only supports Graphics pipeline in render pass -- so only that pipeline is currently checked
-            vuid = use_rp2 ? "VUID-VkRenderPassCreateInfo2-pDependencies-03054" : "VUID-VkRenderPassCreateInfo-pDependencies-00837";
-            skip |= ValidateSubpassGraphicsFlags(report_data, pCreateInfo, i, dependency.srcSubpass, dependency.srcStageMask, vuid,
-                                                 "src", func_name);
-
-            vuid = use_rp2 ? "VUID-VkRenderPassCreateInfo2-pDependencies-03055" : "VUID-VkRenderPassCreateInfo-pDependencies-00838";
-            skip |= ValidateSubpassGraphicsFlags(report_data, pCreateInfo, i, dependency.dstSubpass, dependency.dstStageMask, vuid,
-                                                 "dst", func_name);
-        }
-
-        return skip;
-    }
+                                 RenderPassCreateVersion rp_version) const;
 
     template <typename T>
     void RecordRenderPass(VkRenderPass renderPass, const T *pCreateInfo) {
@@ -1368,17 +1021,17 @@ class StatelessValidation : public ValidationObject {
                                                      VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties,
                                                      VkResult result) override;
 
-    bool require_device_extension(bool flag, char const *function_name, char const *extension_name) const;
+    bool RequireDeviceExtension(bool flag, char const *function_name, char const *extension_name) const;
 
-    bool validate_instance_extensions(const VkInstanceCreateInfo *pCreateInfo) const;
+    bool ValidateInstanceExtensions(const VkInstanceCreateInfo *pCreateInfo) const;
 
-    bool validate_validation_features(const VkInstanceCreateInfo *pCreateInfo,
-                                      const VkValidationFeaturesEXT *validation_features) const;
+    bool ValidateValidationFeatures(const VkInstanceCreateInfo *pCreateInfo,
+                                    const VkValidationFeaturesEXT *validation_features) const;
 
-    bool validate_api_version(uint32_t api_version, uint32_t effective_api_version) const;
+    bool ValidateApiVersion(uint32_t api_version, uint32_t effective_api_version) const;
 
-    bool validate_string(const char *apiName, const ParameterName &stringName, const std::string &vuid,
-                         const char *validateString) const;
+    bool ValidateString(const char *apiName, const ParameterName &stringName, const std::string &vuid,
+                        const char *validateString) const;
 
     bool ValidateCoarseSampleOrderCustomNV(const VkCoarseSampleOrderCustomNV *order) const;
 
@@ -1476,8 +1129,8 @@ class StatelessValidation : public ValidationObject {
                                      const char *sType, const void *pNext) const;
 #endif  // VK_USE_PLATFORM_METAL_EXT
 
-    bool validate_WriteDescriptorSet(const char *vkCallingFunction, const uint32_t descriptorWriteCount,
-                                     const VkWriteDescriptorSet *pDescriptorWrites, const bool isPushDescriptor) const;
+    bool ValidateWriteDescriptorSet(const char *vkCallingFunction, const uint32_t descriptorWriteCount,
+                                    const VkWriteDescriptorSet *pDescriptorWrites, const bool isPushDescriptor) const;
     bool manual_PreCallValidateUpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount,
                                                     const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount,
                                                     const VkCopyDescriptorSet *pDescriptorCopies) const;
@@ -1812,21 +1465,21 @@ class StatelessValidation : public ValidationObject {
         VkDevice device, const VkAccelerationStructureVersionInfoKHR *pVersionInfo,
         VkAccelerationStructureCompatibilityKHR *pCompatibility) const;
     bool ValidateCmdSetViewportWithCount(VkCommandBuffer commandBuffer, uint32_t viewportCount, const VkViewport *pViewports,
-                                         bool is_ext) const;
+                                         CMD_TYPE cmd_type) const;
     bool manual_PreCallValidateCmdSetViewportWithCountEXT(VkCommandBuffer commandBuffer, uint32_t viewportCount,
                                                           const VkViewport *pViewports) const;
     bool manual_PreCallValidateCmdSetViewportWithCount(VkCommandBuffer commandBuffer, uint32_t viewportCount,
                                                        const VkViewport *pViewports) const;
 
     bool ValidateCmdSetScissorWithCount(VkCommandBuffer commandBuffer, uint32_t scissorCount, const VkRect2D *pScissors,
-                                        bool is_ext) const;
+                                        CMD_TYPE cmd_type) const;
     bool manual_PreCallValidateCmdSetScissorWithCountEXT(VkCommandBuffer commandBuffer, uint32_t scissorCount,
                                                          const VkRect2D *pScissors) const;
     bool manual_PreCallValidateCmdSetScissorWithCount(VkCommandBuffer commandBuffer, uint32_t scissorCount,
                                                       const VkRect2D *pScissors) const;
     bool ValidateCmdBindVertexBuffers2(VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount,
                                        const VkBuffer *pBuffers, const VkDeviceSize *pOffsets, const VkDeviceSize *pSizes,
-                                       const VkDeviceSize *pStrides, bool is_2ext) const;
+                                       const VkDeviceSize *pStrides, CMD_TYPE cmd_type) const;
     bool manual_PreCallValidateCmdBindVertexBuffers2EXT(VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount,
                                                         const VkBuffer *pBuffers, const VkDeviceSize *pOffsets,
                                                         const VkDeviceSize *pSizes, const VkDeviceSize *pStrides) const;
@@ -1834,7 +1487,8 @@ class StatelessValidation : public ValidationObject {
                                                      const VkBuffer *pBuffers, const VkDeviceSize *pOffsets,
                                                      const VkDeviceSize *pSizes, const VkDeviceSize *pStrides) const;
     bool ValidateAccelerationStructureBuildGeometryInfoKHR(const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
-                                                           uint32_t infoCount, const char *api_name) const;
+                                                           uint32_t infoCount, uint64_t total_primitive_count,
+                                                           const char *api_name) const;
     bool manual_PreCallValidateCmdBuildAccelerationStructuresKHR(
         VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
         const VkAccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos) const;
@@ -1865,7 +1519,7 @@ class StatelessValidation : public ValidationObject {
                                                   const VkClearColorValue *pColor, uint32_t rangeCount,
                                                   const VkImageSubresourceRange *pRanges) const;
 
-    bool ValidateCmdBeginRenderPass(const char *const func_name, const VkRenderPassBeginInfo *const rp_begin) const;
+    bool ValidateCmdBeginRenderPass(const VkRenderPassBeginInfo *const rp_begin, CMD_TYPE cmd_type) const;
     bool manual_PreCallValidateCmdBeginRenderPass(VkCommandBuffer, const VkRenderPassBeginInfo *pRenderPassBegin,
                                                   VkSubpassContents) const;
     bool manual_PreCallValidateCmdBeginRenderPass2KHR(VkCommandBuffer, const VkRenderPassBeginInfo *pRenderPassBegin,

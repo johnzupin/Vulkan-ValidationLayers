@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -3777,17 +3777,8 @@ TEST_F(VkLayerTest, ImageBarrierSubpassConflicts) {
     ASSERT_TRUE(fb_noselfdep.initialized());
 
     m_commandBuffer->begin();
-    VkRenderPassBeginInfo rpbi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-                                  nullptr,
-                                  rp_noselfdep.handle(),
-                                  fb_noselfdep.handle(),
-                                  {{
-                                       0,
-                                       0,
-                                   },
-                                   {32, 32}},
-                                  0,
-                                  nullptr};
+    VkRenderPassBeginInfo rpbi = LvlInitStruct<VkRenderPassBeginInfo>(nullptr, rp_noselfdep.handle(), fb_noselfdep.handle(),
+                                                                      VkRect2D{{0, 0}, {32u, 32u}}, 0u, nullptr);
 
     vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
     VkMemoryBarrier mem_barrier = LvlInitStruct<VkMemoryBarrier>();
@@ -3986,7 +3977,7 @@ TEST_F(VkLayerTest, InvalidCmdBufferBufferDestroyed) {
 TEST_F(VkLayerTest, InvalidCmdBarrierBufferDestroyed) {
     ASSERT_NO_FATAL_FAILURE(Init());
 
-    auto buf_info = lvl_init_struct<VkBufferCreateInfo>();
+    auto buf_info = LvlInitStruct<VkBufferCreateInfo>();
     buf_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     buf_info.size = 256;
     buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -3997,7 +3988,7 @@ TEST_F(VkLayerTest, InvalidCmdBarrierBufferDestroyed) {
     VkMemoryRequirements mem_reqs;
     vk::GetBufferMemoryRequirements(m_device->device(), buffer.handle(), &mem_reqs);
 
-    auto alloc_info = lvl_init_struct<VkMemoryAllocateInfo>();
+    auto alloc_info = LvlInitStruct<VkMemoryAllocateInfo>();
     alloc_info.allocationSize = mem_reqs.size;
 
     bool pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info, 0);
@@ -4009,7 +4000,7 @@ TEST_F(VkLayerTest, InvalidCmdBarrierBufferDestroyed) {
     ASSERT_VK_SUCCESS(vk::BindBufferMemory(m_device->device(), buffer.handle(), buffer_mem.handle(), 0));
 
     m_commandBuffer->begin();
-    auto buf_barrier = lvl_init_struct<VkBufferMemoryBarrier>();
+    auto buf_barrier = LvlInitStruct<VkBufferMemoryBarrier>();
     buf_barrier.buffer = buffer.handle();
     buf_barrier.offset = 0;
     buf_barrier.size = VK_WHOLE_SIZE;
@@ -4018,7 +4009,7 @@ TEST_F(VkLayerTest, InvalidCmdBarrierBufferDestroyed) {
                            0, 0, NULL, 1, &buf_barrier, 0, NULL);
     m_commandBuffer->end();
 
-    auto submit_info = lvl_init_struct<VkSubmitInfo>();
+    auto submit_info = LvlInitStruct<VkSubmitInfo>();
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
@@ -4044,7 +4035,7 @@ TEST_F(VkLayerTest, InvalidCmdBarrierImageDestroyed) {
 
     vk::GetImageMemoryRequirements(device(), image.handle(), &mem_reqs);
 
-    auto alloc_info = lvl_init_struct<VkMemoryAllocateInfo>();
+    auto alloc_info = LvlInitStruct<VkMemoryAllocateInfo>();
     alloc_info.allocationSize = mem_reqs.size;
     bool pass = false;
     pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info, 0);
@@ -4056,7 +4047,7 @@ TEST_F(VkLayerTest, InvalidCmdBarrierImageDestroyed) {
     ASSERT_VK_SUCCESS(err);
 
     m_commandBuffer->begin();
-    auto img_barrier = lvl_init_struct<VkImageMemoryBarrier>();
+    auto img_barrier = LvlInitStruct<VkImageMemoryBarrier>();
     img_barrier.image = image.handle();
     img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     img_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -4066,7 +4057,7 @@ TEST_F(VkLayerTest, InvalidCmdBarrierImageDestroyed) {
                            NULL, 0, NULL, 1, &img_barrier);
     m_commandBuffer->end();
 
-    auto submit_info = lvl_init_struct<VkSubmitInfo>();
+    auto submit_info = LvlInitStruct<VkSubmitInfo>();
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
@@ -4118,14 +4109,14 @@ TEST_F(VkLayerTest, Sync2InvalidCmdBarrierBufferDestroyed) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidCommandBuffer-VkDeviceMemory");
     m_commandBuffer->begin();
-    auto buf_barrier = lvl_init_struct<VkBufferMemoryBarrier2KHR>();
+    auto buf_barrier = LvlInitStruct<VkBufferMemoryBarrier2KHR>();
     buf_barrier.buffer = buffer;
     buf_barrier.offset = 0;
     buf_barrier.size = VK_WHOLE_SIZE;
     buf_barrier.srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     buf_barrier.dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
-    auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &buf_barrier;
 
@@ -4137,7 +4128,7 @@ TEST_F(VkLayerTest, Sync2InvalidCmdBarrierBufferDestroyed) {
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidCommandBuffer-VkDeviceMemory");
-    auto submit_info = lvl_init_struct<VkSubmitInfo>();
+    auto submit_info = LvlInitStruct<VkSubmitInfo>();
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
@@ -4171,7 +4162,7 @@ TEST_F(VkLayerTest, Sync2InvalidCmdBarrierImageDestroyed) {
 
     vk::GetImageMemoryRequirements(device(), image, &mem_reqs);
 
-    auto alloc_info = lvl_init_struct<VkMemoryAllocateInfo>();
+    auto alloc_info = LvlInitStruct<VkMemoryAllocateInfo>();
     alloc_info.allocationSize = mem_reqs.size;
     bool pass = false;
     pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info, 0);
@@ -4185,13 +4176,13 @@ TEST_F(VkLayerTest, Sync2InvalidCmdBarrierImageDestroyed) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidCommandBuffer-VkDeviceMemory");
     m_commandBuffer->begin();
-    auto img_barrier = lvl_init_struct<VkImageMemoryBarrier2KHR>();
+    auto img_barrier = LvlInitStruct<VkImageMemoryBarrier2KHR>();
     img_barrier.image = image;
     img_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     img_barrier.srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     img_barrier.dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
-    auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &img_barrier;
 
@@ -4203,7 +4194,7 @@ TEST_F(VkLayerTest, Sync2InvalidCmdBarrierImageDestroyed) {
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidCommandBuffer-VkDeviceMemory");
-    auto submit_info = lvl_init_struct<VkSubmitInfo>();
+    auto submit_info = LvlInitStruct<VkSubmitInfo>();
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
@@ -5878,6 +5869,48 @@ TEST_F(VkLayerTest, InvalidBarriers) {
             {img_xfer_src, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, "VUID-VkImageMemoryBarrier-oldLayout-01659"},
             {img_sampled,  VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, "VUID-VkImageMemoryBarrier-oldLayout-01659"},
             {img_input,    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, "VUID-VkImageMemoryBarrier-oldLayout-01659"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_DECODE_SRC_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07120"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07120"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07120"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07120"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07120"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07120"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07121"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07121"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07121"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07121"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07121"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07121"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07122"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07122"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07122"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07122"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07122"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07122"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07123"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07123"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07123"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07123"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07123"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07123"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_ENCODE_DST_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07124"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07124"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07124"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07124"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07124"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07124"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07125"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07125"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07125"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07125"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07125"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07125"},
             // clang-format on
         };
         const uint32_t layout_count = sizeof(bad_buffer_layouts) / sizeof(bad_buffer_layouts[0]);
@@ -5990,7 +6023,9 @@ TEST_F(VkLayerTest, Sync2InvalidBarriers) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
     if (!CheckSynchronization2SupportAndInitState(this)) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
@@ -6043,7 +6078,7 @@ TEST_F(VkLayerTest, Sync2InvalidBarriers) {
     vk::CmdEndRenderPass(m_commandBuffer->handle());
 
     // Duplicate barriers that change layout
-    auto img_barrier = lvl_init_struct<VkImageMemoryBarrier2KHR>();
+    auto img_barrier = LvlInitStruct<VkImageMemoryBarrier2KHR>();
     img_barrier.image = image.handle();
     img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     img_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -6060,7 +6095,7 @@ TEST_F(VkLayerTest, Sync2InvalidBarriers) {
     img_barrier.subresourceRange.levelCount = 1;
     VkImageMemoryBarrier2KHR img_barriers[2] = {img_barrier, img_barrier};
 
-    auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
     dep_info.imageMemoryBarrierCount = 2;
     dep_info.pImageMemoryBarriers = img_barriers;
     dep_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
@@ -6277,6 +6312,48 @@ TEST_F(VkLayerTest, Sync2InvalidBarriers) {
             {img_xfer_src, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, "VUID-VkImageMemoryBarrier2-oldLayout-01659"},
             {img_sampled,  VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, "VUID-VkImageMemoryBarrier2-oldLayout-01659"},
             {img_input,    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, "VUID-VkImageMemoryBarrier2-oldLayout-01659"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_DECODE_SRC_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07120"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07120"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07120"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07120"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07120"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07120"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07121"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07121"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07121"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07121"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07121"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07121"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07122"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07122"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07122"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07122"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07122"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07122"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07123"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07123"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07123"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07123"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07123"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07123"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_ENCODE_DST_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07124"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07124"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07124"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07124"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07124"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07124"},
+            // images _without_ VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT
+            {img_color,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07125"},
+            {img_ds,       VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07125"},
+            {img_xfer_src, VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07125"},
+            {img_xfer_dst, VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07125"},
+            {img_sampled,  VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07125"},
+            {img_input,    VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,             "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07125"},
             // clang-format on
         };
         const uint32_t layout_count = sizeof(bad_buffer_layouts) / sizeof(bad_buffer_layouts[0]);
@@ -6337,7 +6414,7 @@ TEST_F(VkLayerTest, Sync2InvalidBarriers) {
         GTEST_SKIP() << "No non-graphics queue supporting compute found";
     }
 
-    auto buf_barrier = lvl_init_struct<VkBufferMemoryBarrier2KHR>();
+    auto buf_barrier = LvlInitStruct<VkBufferMemoryBarrier2KHR>();
     buf_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     buf_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     buf_barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
@@ -6348,7 +6425,7 @@ TEST_F(VkLayerTest, Sync2InvalidBarriers) {
     buf_barrier.offset = 0;
     buf_barrier.size = VK_WHOLE_SIZE;
 
-    dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    dep_info = LvlInitStruct<VkDependencyInfoKHR>();
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &buf_barrier;
 
@@ -6736,7 +6813,9 @@ TEST_F(VkLayerTest, Sync2InvalidBarrierQueueFamily) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
     if (!CheckSynchronization2SupportAndInitState(this)) {
         GTEST_SKIP() << "Synchronization2 not supported, skipping test";
     }
@@ -6846,6 +6925,36 @@ TEST_F(VkLayerTest, Bad2DArrayImageType) {
                              nullptr,
                              VK_IMAGE_LAYOUT_UNDEFINED};
     CreateImageTest(*this, &ici, "VUID-VkImageCreateInfo-flags-00950");
+}
+
+TEST_F(VkLayerTest, Bad2DViewImageType) {
+    TEST_DESCRIPTION("Create an image with a flag specifying 2D_VIEW_COMPATIBLE but not of imageType 3D.");
+
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_IMAGE_2D_VIEW_OF_3D_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    // Trigger check by setting imagecreateflags to 2d_array_compat and imageType to 2D
+    VkImageCreateInfo ici = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                             nullptr,
+                             VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT,
+                             VK_IMAGE_TYPE_2D,
+                             VK_FORMAT_R8G8B8A8_UNORM,
+                             {32, 32, 1},
+                             1,
+                             1,
+                             VK_SAMPLE_COUNT_1_BIT,
+                             VK_IMAGE_TILING_OPTIMAL,
+                             VK_IMAGE_USAGE_SAMPLED_BIT,
+                             VK_SHARING_MODE_EXCLUSIVE,
+                             0,
+                             nullptr,
+                             VK_IMAGE_LAYOUT_UNDEFINED};
+    CreateImageTest(*this, &ici, "VUID-VkImageCreateInfo-flags-07755");
 }
 
 TEST_F(VkLayerTest, VertexBufferInvalid) {
@@ -8112,7 +8221,7 @@ TEST_F(VkLayerTest, ExerciseGetImageSubresourceLayout) {
         subres.mipLevel = 0;
         subres.arrayLayer = 0;
 
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetImageSubresourceLayout-image-00996");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetImageSubresourceLayout-image-07789");
         vk::GetImageSubresourceLayout(m_device->device(), img.image(), &subres, &subres_layout);
         m_errorMonitor->VerifyFound();
     }
@@ -8171,7 +8280,12 @@ TEST_F(VkLayerTest, ExerciseGetImageSubresourceLayout) {
         VkFormat format = VK_FORMAT_D32_SFLOAT;
         VkFormatProperties image_format_properties;
         vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), format, &image_format_properties);
-        if ((image_format_properties.linearTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) > 0) {
+        VkImageFormatProperties format_limits{};
+        VkResult result =
+            vk::GetPhysicalDeviceImageFormatProperties(m_device->phy().handle(), format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_LINEAR,
+                                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0, &format_limits);
+        if ((result == VK_SUCCESS) &&
+            ImageFormatAndFeaturesSupported(gpu(), format, VK_IMAGE_TILING_LINEAR, VK_FORMAT_FEATURE_TRANSFER_SRC_BIT)) {
             VkImageObj img(m_device);
             img.InitNoLayout(32, 32, 1, format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
@@ -8189,7 +8303,12 @@ TEST_F(VkLayerTest, ExerciseGetImageSubresourceLayout) {
         VkFormat format = VK_FORMAT_S8_UINT;
         VkFormatProperties image_format_properties;
         vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), format, &image_format_properties);
-        if ((image_format_properties.linearTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) > 0) {
+        VkImageFormatProperties format_limits{};
+        VkResult result =
+            vk::GetPhysicalDeviceImageFormatProperties(m_device->phy().handle(), format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_LINEAR,
+                                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0, &format_limits);
+        if ((result == VK_SUCCESS) &&
+            ImageFormatAndFeaturesSupported(gpu(), format, VK_IMAGE_TILING_LINEAR, VK_FORMAT_FEATURE_TRANSFER_SRC_BIT)) {
             VkImageObj img(m_device);
             img.InitNoLayout(32, 32, 1, format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
@@ -8425,6 +8544,11 @@ TEST_F(VkLayerTest, MultiplaneIncompatibleViewFormat) {
         return;
     }
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    if (!ImageFormatAndFeaturesSupported(gpu(), VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM, VK_IMAGE_TILING_OPTIMAL,
+                                         VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT)) {
+        GTEST_SKIP() << "Required formats/features not supported";
+    }
 
     VkSamplerYcbcrConversionCreateInfo ycbcr_create_info = LvlInitStruct<VkSamplerYcbcrConversionCreateInfo>();
     ycbcr_create_info.format = VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM;
@@ -8974,7 +9098,7 @@ TEST_F(VkLayerTest, InvalidImageViewLayerCount) {
     image_ci.imageType = VK_IMAGE_TYPE_3D;
     VkImageFormatProperties img_limits;
     ASSERT_VK_SUCCESS(GPDIFPHelper(gpu(), &image_ci, &img_limits));
-    layer_data::optional<VkImageObj> image_3d_array;
+    std::optional<VkImageObj> image_3d_array;
     image_ci.arrayLayers = 1;  // arrayLayers must be 1 for 3D images
     if (img_limits.maxArrayLayers >= image_ci.arrayLayers) {
         image_3d_array.emplace(m_device);
@@ -9485,7 +9609,8 @@ TEST_F(VkLayerTest, SamplerImageViewFormatUnsupportedFilter) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddOptionalExtensions(VK_IMG_FILTER_CUBIC_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     const bool cubic_support = IsExtensionsEnabled(VK_IMG_FILTER_CUBIC_EXTENSION_NAME);
 
     enum FormatTypes { FLOAT, SINT, UINT };
@@ -9815,6 +9940,11 @@ TEST_F(VkLayerTest, MultiplaneImageSamplerConversionMismatch) {
         GTEST_SKIP() << "Multiplane image format not supported";
     }
 
+    if (!ImageFormatAndFeaturesSupported(gpu(), VK_FORMAT_G8_B8R8_2PLANE_420_UNORM_KHR, VK_IMAGE_TILING_OPTIMAL,
+                                         VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT)) {
+        GTEST_SKIP() << "Required formats/features not supported";
+    }
+
     // Create Ycbcr conversion
     VkSamplerYcbcrConversionCreateInfo ycbcr_create_info = LvlInitStruct<VkSamplerYcbcrConversionCreateInfo>();
     ycbcr_create_info.format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM_KHR;
@@ -9998,8 +10128,8 @@ TEST_F(VkLayerTest, ExtensionNotEnabled) {
         if (DeviceExtensionSupported(dev_ext)) {
             m_device_extension_names.push_back(dev_ext);
         } else {
-            printf("Did not find required device extension %s; skipped.\n", dev_ext);
-            break;
+            // Need to get out of the test now so that the subsequent code doesn't try to use an extension that isn't enabled.
+            GTEST_SKIP() << "Did not find required device extension: " << dev_ext;
         }
     }
 
@@ -11123,10 +11253,15 @@ TEST_F(VkLayerTest, CreateImageYcbcrFormats) {
 
     // invalid imageType
     image_create_info.imageType = VK_IMAGE_TYPE_1D;
-    // Can't just set height to 1 as stateless valdiation will hit 04713 first
-    m_errorMonitor->SetUnexpectedError("VUID-VkImageCreateInfo-imageType-00956");
-    m_errorMonitor->SetUnexpectedError("VUID-VkImageCreateInfo-extent-02253");
-    CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-format-06412");
+    // Check that image format is valid
+    if (vk::GetPhysicalDeviceImageFormatProperties(gpu(), mp_format, image_create_info.imageType, image_create_info.tiling,
+                                                   image_create_info.usage, image_create_info.flags,
+                                                   &image_format_props) == VK_SUCCESS) {
+        // Can't just set height to 1 as stateless validation will hit 04713 first
+        m_errorMonitor->SetUnexpectedError("VUID-VkImageCreateInfo-imageType-00956");
+        m_errorMonitor->SetUnexpectedError("VUID-VkImageCreateInfo-extent-02253");
+        CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-format-06412");
+    }
     image_create_info = reset_create_info;
 
     // Test using a format that doesn't support disjoint
@@ -11166,6 +11301,11 @@ TEST_F(VkLayerTest, InvalidSamplerFilterMinmax) {
 
     if (!vkCreateSamplerYcbcrConversionFunction || !vkDestroySamplerYcbcrConversionFunction) {
         GTEST_SKIP() << "Did not find required device support for YcbcrSamplerConversion";
+    }
+
+    if (!ImageFormatAndFeaturesSupported(gpu(), VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, VK_IMAGE_TILING_OPTIMAL,
+                                         VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT)) {
+        GTEST_SKIP() << "Required formats/features not supported";
     }
 
     VkSampler sampler;
@@ -13691,6 +13831,10 @@ TEST_F(VkLayerTest, InvalidImageSubresourceRangeAspectMask) {
 
     VkFormat mp_format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
 
+    if (!ImageFormatAndFeaturesSupported(gpu(), mp_format, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT)) {
+        GTEST_SKIP() << "Required formats/features not supported";
+    }
+
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = mp_format;
@@ -14239,7 +14383,7 @@ TEST_F(VkLayerTest, InvalidMultiSampleImageView) {
     image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
 
     VkImageFormatProperties image_format_properties;
-    vk::GetPhysicalDeviceImageFormatProperties(m_device->phy().handle(), image_create_info.format, image_create_info.imageType,
+    vk::GetPhysicalDeviceImageFormatProperties(gpu(), image_create_info.format, image_create_info.imageType,
                                                image_create_info.tiling, image_create_info.usage, image_create_info.flags,
                                                &image_format_properties);
 
@@ -14329,6 +14473,10 @@ TEST_F(VkLayerTest, CopyMutableDescriptors) {
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    // TODO - Currently not working on MockICD with Profiles
+    if (IsPlatform(kMockICD)) {
+        GTEST_SKIP() << "Test not supported by MockICD";
     }
     auto mutable_descriptor_type_features = LvlInitStruct<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT>();
     auto features2 = GetPhysicalDeviceFeatures2(mutable_descriptor_type_features);
@@ -14796,7 +14944,7 @@ TEST_F(VkLayerTest, Image2DViewOf3D) {
     view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
     view_2d.init(*m_device, view_ci);
     descriptor_set.WriteDescriptorImageInfo(0, view_2d.handle(), VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkWriteDescriptorSet-descriptorType-06710");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDescriptorImageInfo-imageView-07796");
     descriptor_set.UpdateDescriptorSets();
     m_errorMonitor->VerifyFound();
     descriptor_set.descriptor_writes.clear();
@@ -15418,57 +15566,6 @@ TEST_F(VkLayerTest, TestImageCopyMissingUsage) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, VideoBufferUsage) {
-    TEST_DESCRIPTION("Create buffer with USAGE_VIDEO_DECODE.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "Test requires at least Vulkan 1.1.";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
-    }
-    ASSERT_NO_FATAL_FAILURE(InitState());
-
-    VkBufferCreateInfo buffer_ci = LvlInitStruct<VkBufferCreateInfo>();
-    buffer_ci.usage = VK_BUFFER_USAGE_VIDEO_DECODE_SRC_BIT_KHR | VK_BUFFER_USAGE_VIDEO_ENCODE_DST_BIT_KHR;
-    buffer_ci.size = 2048;
-
-    VkBuffer buffer;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-usage-04813");
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-usage-04814");
-    vk::CreateBuffer(device(), &buffer_ci, nullptr, &buffer);
-    m_errorMonitor->VerifyFound();
-
-    VkVideoProfileInfoKHR video_profile[2];
-    video_profile[0] = LvlInitStruct<VkVideoProfileInfoKHR>();
-    video_profile[0].videoCodecOperation = VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_EXT;
-    video_profile[0].chromaSubsampling = VK_VIDEO_CHROMA_SUBSAMPLING_MONOCHROME_BIT_KHR;
-    video_profile[0].chromaBitDepth = VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR;
-    video_profile[0].lumaBitDepth = VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR;
-    video_profile[1] = LvlInitStruct<VkVideoProfileInfoKHR>();
-    video_profile[1].videoCodecOperation = VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_EXT;
-    video_profile[1].chromaSubsampling = VK_VIDEO_CHROMA_SUBSAMPLING_MONOCHROME_BIT_KHR;
-    video_profile[1].chromaBitDepth = VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR;
-    video_profile[1].lumaBitDepth = VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR;
-    VkVideoProfileListInfoKHR video_profiles = LvlInitStruct<VkVideoProfileListInfoKHR>();
-    video_profiles.profileCount = 1;
-    video_profiles.pProfiles = video_profile;
-    buffer_ci.pNext = &video_profiles;
-
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-usage-04814");
-    vk::CreateBuffer(device(), &buffer_ci, nullptr, &buffer);
-    m_errorMonitor->VerifyFound();
-
-    video_profiles.profileCount = 2;
-
-    vk::CreateBuffer(device(), &buffer_ci, nullptr, &buffer);
-
-    vk::DestroyBuffer(device(), buffer, nullptr);
-}
-
 TEST_F(VkLayerTest, TestInvalidBarrierQueues) {
     TEST_DESCRIPTION("Test buffer memory with both src and dst queue VK_QUEUE_FAMILY_EXTERNAL.");
 
@@ -15549,6 +15646,11 @@ TEST_F(VkLayerTest, TestBarrierAccessSync2) {
     mem_barrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
     mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-srcAccessMask-03906");
+    m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
+
+    mem_barrier.srcAccessMask = VK_ACCESS_2_SHADER_BINDING_TABLE_READ_BIT_KHR;
+    mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-srcAccessMask-07272");
     m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
 
     mem_barrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
@@ -15632,6 +15734,10 @@ TEST_F(VkLayerTest, TestBarrierAccessSync2) {
 
     mem_barrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-03906");
+    m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
+
+    mem_barrier.dstAccessMask = VK_ACCESS_2_SHADER_BINDING_TABLE_READ_BIT_KHR;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-07272");
     m_commandBuffer->PipelineBarrier2KHR(&dependency_info);
 
     mem_barrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
@@ -16018,22 +16124,6 @@ TEST_F(VkLayerTest, InvalidImageCompressionControl) {
         return supported;
     };
 
-    // Image Tiling Mode
-    {
-        VkImageObj image(m_device);
-        if (create_compressed_image(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, image)) {
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetImageSubresourceLayout2EXT-image-00996");
-            VkImageSubresource2EXT subresource = LvlInitStruct<VkImageSubresource2EXT>();
-            subresource.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
-
-            VkImageCompressionPropertiesEXT compressionProperties = LvlInitStruct<VkImageCompressionPropertiesEXT>();
-            VkSubresourceLayout2EXT layout = LvlInitStruct<VkSubresourceLayout2EXT>(&compressionProperties);
-
-            vkGetImageSubresourceLayout2EXT(m_device->handle(), image.handle(), &subresource, &layout);
-            m_errorMonitor->VerifyFound();
-        }
-    }
-
     // Exceed MipmapLevel
     {
         VkImageObj image(m_device);
@@ -16335,14 +16425,14 @@ TEST_F(VkLayerTest, AttachmentFeedbackLoopLayoutFeature) {
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->begin();
-    auto img_barrier = lvl_init_struct<VkImageMemoryBarrier2KHR>();
+    auto img_barrier = LvlInitStruct<VkImageMemoryBarrier2KHR>();
     img_barrier.image = image.handle();
     img_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     img_barrier.srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     img_barrier.dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     img_barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
 
-    auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &img_barrier;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkImageMemoryBarrier2-attachmentFeedbackLoopLayout-07313");
@@ -16410,76 +16500,5 @@ TEST_F(VkLayerTest, AttachmentFeedbackLoopLayoutFeature) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkAttachmentReference2-attachmentFeedbackLoopLayout-07311");
     attach_desc2.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
     vk::CreateRenderPass2(m_device->device(), &rpci2, NULL, &rp);
-    m_errorMonitor->VerifyFound();
-}
-
-TEST_F(VkLayerTest, InvalidImageViewWithVideoImageUsage) {
-    TEST_DESCRIPTION("Test creating invalid image view using image with video usage bits.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        GTEST_SKIP() << "At least Vulkan version 1.2 is required.";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-    ASSERT_NO_FATAL_FAILURE(InitState());
-
-    VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
-    image_create_info.flags = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
-    image_create_info.imageType = VK_IMAGE_TYPE_3D;
-    image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image_create_info.extent.width = 32;
-    image_create_info.extent.height = 32;
-    image_create_info.extent.depth = 1;
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 1;
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR;
-
-    VkImageObj decode_image(m_device);
-    decode_image.init(&image_create_info);
-
-    image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_VIDEO_ENCODE_DST_BIT_KHR;
-    VkImageObj encode_image(m_device);
-    encode_image.init(&image_create_info);
-
-    VkImageViewCreateInfo ivci = LvlInitStruct<VkImageViewCreateInfo>();
-    ivci.image = decode_image.handle();
-    ivci.viewType = VK_IMAGE_VIEW_TYPE_3D;
-    ivci.format = VK_FORMAT_R8G8B8A8_UNORM;
-    ivci.subresourceRange.layerCount = 1;
-    ivci.subresourceRange.baseMipLevel = 0;
-    ivci.subresourceRange.levelCount = 1;
-    ivci.subresourceRange.baseArrayLayer = 0;
-    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-    VkImageView imageView;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkImageViewCreateInfo-image-04817");
-    vk::CreateImageView(m_device->device(), &ivci, nullptr, &imageView);
-    m_errorMonitor->VerifyFound();
-
-    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    ivci.components.r = VK_COMPONENT_SWIZZLE_B;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkImageViewCreateInfo-image-04817");
-    vk::CreateImageView(m_device->device(), &ivci, nullptr, &imageView);
-    m_errorMonitor->VerifyFound();
-
-    ivci.image = encode_image.handle();
-    ivci.viewType = VK_IMAGE_VIEW_TYPE_3D;
-    ivci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkImageViewCreateInfo-image-04818");
-    vk::CreateImageView(m_device->device(), &ivci, nullptr, &imageView);
-    m_errorMonitor->VerifyFound();
-
-    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    ivci.components.r = VK_COMPONENT_SWIZZLE_B;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkImageViewCreateInfo-image-04818");
-    vk::CreateImageView(m_device->device(), &ivci, nullptr, &imageView);
     m_errorMonitor->VerifyFound();
 }

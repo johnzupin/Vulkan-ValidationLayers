@@ -50,6 +50,7 @@ include_directories(${SRC_DIR}/include
 add_library(layer_utils STATIC
         ${SRC_DIR}/layers/vk_layer_config.cpp
         ${SRC_DIR}/layers/vk_layer_extension_utils.cpp
+        ${SRC_DIR}/layers/vk_layer_logging.cpp
         ${SRC_DIR}/layers/vk_layer_utils.cpp
         ${SRC_DIR}/layers/generated/vk_format_utils.cpp)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_clone}")
@@ -62,15 +63,24 @@ set_target_properties(SPIRV-Tools-prebuilt PROPERTIES IMPORTED_LOCATION
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVK_USE_PLATFORM_ANDROID_KHR \
                      -fvisibility=hidden -DXXH_NO_LONG_LONG")
 add_library(VkLayer_khronos_validation SHARED
+        ${SRC_DIR}/layers/android_validation.cpp
         ${SRC_DIR}/layers/state_tracker.cpp
         ${SRC_DIR}/layers/base_node.cpp
         ${SRC_DIR}/layers/buffer_state.cpp
         ${SRC_DIR}/layers/cmd_buffer_state.cpp
+        ${SRC_DIR}/layers/cmd_buffer_dynamic_validation.cpp
+        ${SRC_DIR}/layers/device_validation.cpp
         ${SRC_DIR}/layers/device_memory_state.cpp
+        ${SRC_DIR}/layers/device_memory_validation.cpp
+        ${SRC_DIR}/layers/external_object_validation.cpp
         ${SRC_DIR}/layers/image_state.cpp
         ${SRC_DIR}/layers/pipeline_state.cpp
+        ${SRC_DIR}/layers/pipeline_validation.cpp
         ${SRC_DIR}/layers/queue_state.cpp
         ${SRC_DIR}/layers/render_pass_state.cpp
+        ${SRC_DIR}/layers/render_pass_validation.cpp
+        ${SRC_DIR}/layers/video_session_state.cpp
+        ${SRC_DIR}/layers/video_validation.cpp
         ${SRC_DIR}/layers/core_validation.cpp
         ${SRC_DIR}/layers/drawdispatch.cpp
         ${SRC_DIR}/layers/convert_to_renderpass2.cpp
@@ -101,6 +111,9 @@ add_library(VkLayer_khronos_validation SHARED
         ${COMMON_DIR}/include/thread_safety.cpp
         ${SRC_DIR}/layers/image_layout_map.cpp
         ${SRC_DIR}/layers/subresource_adapter.cpp
+        ${SRC_DIR}/layers/query_validation.cpp
+        ${SRC_DIR}/layers/ray_tracing_validation.cpp
+        ${SRC_DIR}/layers/wsi_validation.cpp
         ${SRC_DIR}/layers/xxhash.c)
 target_include_directories(VkLayer_khronos_validation PRIVATE
         ${SRC_DIR}/include

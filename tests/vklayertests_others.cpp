@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  * Modifications Copyright (C) 2020-2021 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -108,11 +108,16 @@ TEST_F(VkLayerTest, VersionCheckPromotedAPIs) {
 
     ASSERT_NO_FATAL_FAILURE(Init());
 
+    // TODO - Currently not working on MockICD with Profiles using 1.0
+    // Seems API version is not being passed through correctly
+    if (IsPlatform(kMockICD)) {
+        GTEST_SKIP() << "Test not supported by MockICD";
+    }
+
     PFN_vkGetPhysicalDeviceProperties2 vkGetPhysicalDeviceProperties2 =
         (PFN_vkGetPhysicalDeviceProperties2)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2");
-    assert(vkGetPhysicalDeviceProperties2);
 
-    VkPhysicalDeviceProperties2 phys_dev_props_2{};
+    VkPhysicalDeviceProperties2 phys_dev_props_2 = LvlInitStruct<VkPhysicalDeviceProperties2>();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-API-Version-Violation");
     vkGetPhysicalDeviceProperties2(gpu(), &phys_dev_props_2);
@@ -375,7 +380,10 @@ TEST_F(VkLayerTest, DuplicateMessageLimit) {
     m_errorMonitor->SetDesiredFailureMsg((kErrorBit | kWarningBit), "VUID-VkPhysicalDeviceProperties2-pNext-pNext");
     vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
     m_errorMonitor->VerifyFound();
-    m_errorMonitor->SetDesiredFailureMsg((kErrorBit | kWarningBit), "VUID-VkPhysicalDeviceProperties2-pNext-pNext");
+    // VUID-VkPhysicalDeviceProperties2-pNext-pNext produces a massive ~3600 character log message, which hits a
+    // complex string buffer reallocation path inside of the logging code. Make sure it successfully prints out
+    // the very end of the message.
+    m_errorMonitor->SetDesiredFailureMsg((kErrorBit | kWarningBit), "is undefined and may not work correctly with validation enabled");
     vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
     m_errorMonitor->VerifyFound();
 
@@ -534,19 +542,19 @@ TEST_F(VkLayerTest, RequiredParameter) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "required parameter pFeatures specified as NULL");
     // Specify NULL for a pointer to a handle
     // Expected to trigger an error with
-    // parameter_validation::validate_required_pointer
+    // StatelessValidation::ValidateRequiredPointer
     vk::GetPhysicalDeviceFeatures(gpu(), NULL);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "required parameter pQueueFamilyPropertyCount specified as NULL");
     // Specify NULL for pointer to array count
-    // Expected to trigger an error with parameter_validation::validate_array
+    // Expected to trigger an error with StatelessValidation::ValidateArray
     vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), NULL, NULL);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetViewport-viewportCount-arraylength");
     // Specify 0 for a required array count
-    // Expected to trigger an error with parameter_validation::validate_array
+    // Expected to trigger an error with StatelessValidation::ValidateArray
     VkViewport viewport = {0.0f, 0.0f, 64.0f, 64.0f, 0.0f, 1.0f};
     m_commandBuffer->SetViewport(0, 0, &viewport);
     m_errorMonitor->VerifyFound();
@@ -559,21 +567,21 @@ TEST_F(VkLayerTest, RequiredParameter) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetViewport-pViewports-parameter");
     // Specify NULL for a required array
-    // Expected to trigger an error with parameter_validation::validate_array
+    // Expected to trigger an error with StatelessValidation::ValidateArray
     m_commandBuffer->SetViewport(0, 1, NULL);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "required parameter memory specified as VK_NULL_HANDLE");
     // Specify VK_NULL_HANDLE for a required handle
     // Expected to trigger an error with
-    // parameter_validation::validate_required_handle
+    // StatelessValidation::ValidateRequiredHandle
     vk::UnmapMemory(device(), VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "required parameter pFences[0] specified as VK_NULL_HANDLE");
     // Specify VK_NULL_HANDLE for a required handle array entry
     // Expected to trigger an error with
-    // parameter_validation::validate_required_handle_array
+    // StatelessValidation::ValidateRequiredHandleArray
     VkFence fence = VK_NULL_HANDLE;
     vk::ResetFences(device(), 1, &fence);
     m_errorMonitor->VerifyFound();
@@ -581,14 +589,14 @@ TEST_F(VkLayerTest, RequiredParameter) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "required parameter pAllocateInfo specified as NULL");
     // Specify NULL for a required struct pointer
     // Expected to trigger an error with
-    // parameter_validation::validate_struct_type
+    // StatelessValidation::ValidateStructType
     VkDeviceMemory memory = VK_NULL_HANDLE;
     vk::AllocateMemory(device(), NULL, NULL, &memory);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "value of faceMask must not be 0");
     // Specify 0 for a required VkFlags parameter
-    // Expected to trigger an error with parameter_validation::validate_flags
+    // Expected to trigger an error with StatelessValidation::ValidateFlags
     m_commandBuffer->SetStencilReference(0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -622,12 +630,9 @@ TEST_F(VkLayerTest, RequiredParameter) {
 
 TEST_F(VkLayerTest, SpecLinks) {
     TEST_DESCRIPTION("Test that spec links in a typical error message are well-formed");
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
-    }
-    ASSERT_NO_FATAL_FAILURE(InitState());
+    AddOptionalExtensions(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
+    AddOptionalExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(Init());
 
 #ifdef ANNOTATED_SPEC_LINK
     bool test_annotated_spec_link = true;
@@ -650,10 +655,10 @@ TEST_F(VkLayerTest, SpecLinks) {
     m_errorMonitor->VerifyFound();
 
     // Now generate a 'default' message and check the link
-    bool ycbcr_support = (DeviceExtensionEnabled(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME) ||
-                          (DeviceValidationVersion() >= VK_API_VERSION_1_1));
+    bool ycbcr_support =
+        (IsExtensionsEnabled(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME) || (DeviceValidationVersion() >= VK_API_VERSION_1_1));
     bool maintenance2_support =
-        (DeviceExtensionEnabled(VK_KHR_MAINTENANCE_2_EXTENSION_NAME) || (DeviceValidationVersion() >= VK_API_VERSION_1_1));
+        (IsExtensionsEnabled(VK_KHR_MAINTENANCE_2_EXTENSION_NAME) || (DeviceValidationVersion() >= VK_API_VERSION_1_1));
 
     if (!((m_device->format_properties(VK_FORMAT_R8_UINT).optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) &&
           (ycbcr_support ^ maintenance2_support))) {
@@ -775,7 +780,7 @@ TEST_F(VkLayerTest, ReservedParameter) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, " must be 0");
     // Specify 0 for a reserved VkFlags parameter
     // Expected to trigger an error with
-    // parameter_validation::validate_reserved_flags
+    // StatelessValidation::ValidateReservedFlags
     VkSemaphore sem_handle = VK_NULL_HANDLE;
     VkSemaphoreCreateInfo sem_info = LvlInitStruct<VkSemaphoreCreateInfo>();
     sem_info.flags = 1;
@@ -1065,7 +1070,7 @@ TEST_F(VkLayerTest, InvalidStructSType) {
     // Zero struct memory, effectively setting sType to
     // VK_STRUCTURE_TYPE_APPLICATION_INFO
     // Expected to trigger an error with
-    // parameter_validation::validate_struct_type
+    // StatelessValidation::ValidateStructType
     VkMemoryAllocateInfo alloc_info = {};
     VkDeviceMemory memory = VK_NULL_HANDLE;
     vk::AllocateMemory(device(), &alloc_info, NULL, &memory);
@@ -1075,7 +1080,7 @@ TEST_F(VkLayerTest, InvalidStructSType) {
     // Zero struct memory, effectively setting sType to
     // VK_STRUCTURE_TYPE_APPLICATION_INFO
     // Expected to trigger an error with
-    // parameter_validation::validate_struct_type_array
+    // StatelessValidation::ValidateStructTypeArray
     VkSubmitInfo submit_info = {};
     vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
@@ -1096,7 +1101,7 @@ TEST_F(VkLayerTest, InvalidStructPNext) {
     m_errorMonitor->SetDesiredFailureMsg((kErrorBit | kWarningBit), "VUID-VkCommandPoolCreateInfo-pNext-pNext");
     // Set VkCommandPoolCreateInfo::pNext to a non-NULL value, when pNext must be NULL.
     // Need to pick a function that has no allowed pNext structure types.
-    // Expected to trigger an error with parameter_validation::validate_struct_pnext
+    // Expected to trigger an error with StatelessValidation::ValidateStructPnext
     VkCommandPool pool = VK_NULL_HANDLE;
     auto pool_ci = LvlInitStruct<VkCommandPoolCreateInfo>();
     auto app_info = LvlInitStruct<VkApplicationInfo>();
@@ -1108,7 +1113,7 @@ TEST_F(VkLayerTest, InvalidStructPNext) {
     // Set VkMemoryAllocateInfo::pNext to a non-NULL value, but use
     // a function that has allowed pNext structure types and specify
     // a structure type that is not allowed.
-    // Expected to trigger an error with parameter_validation::validate_struct_pnext
+    // Expected to trigger an error with StatelessValidation::ValidateStructPnext
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkMemoryAllocateInfo memory_alloc_info = LvlInitStruct<VkMemoryAllocateInfo>(&app_info);
     vk::AllocateMemory(device(), &memory_alloc_info, NULL, &memory);
@@ -1130,7 +1135,7 @@ TEST_F(VkLayerTest, UnrecognizedValueOutOfRange) {
                                          "does not fall within the begin..end range of the core VkFormat enumeration tokens");
     // Specify an invalid VkFormat value
     // Expected to trigger an error with
-    // parameter_validation::validate_ranged_enum
+    // StatelessValidation::ValidateRangedEnum
     VkFormatProperties format_properties;
     vk::GetPhysicalDeviceFormatProperties(gpu(), static_cast<VkFormat>(8000), &format_properties);
     m_errorMonitor->VerifyFound();
@@ -1141,7 +1146,7 @@ TEST_F(VkLayerTest, UnrecognizedValueBadMask) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "contains flag bits that are not recognized members of");
     // Specify an invalid VkFlags bitmask value
-    // Expected to trigger an error with parameter_validation::validate_flags
+    // Expected to trigger an error with StatelessValidation::ValidateFlags
     VkImageFormatProperties image_format_properties;
     vk::GetPhysicalDeviceImageFormatProperties(gpu(), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
                                                static_cast<VkImageUsageFlags>(1 << 25), 0, &image_format_properties);
@@ -1153,7 +1158,7 @@ TEST_F(VkLayerTest, UnrecognizedValueBadFlag) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "contains flag bits that are not recognized members of");
     // Specify an invalid VkFlags array entry
-    // Expected to trigger an error with parameter_validation::validate_flags_array
+    // Expected to trigger an error with StatelessValidation::ValidateFlagsArray
     VkSemaphore semaphore;
     VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
     vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
@@ -1180,7 +1185,7 @@ TEST_F(VkLayerTest, UnrecognizedValueBadBool) {
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    // Specify an invalid VkBool32 value, expecting a warning with parameter_validation::validate_bool32
+    // Specify an invalid VkBool32 value, expecting a warning with StatelessValidation::ValidateBool32
     VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
     sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
     sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
@@ -6577,14 +6582,14 @@ TEST_F(VkLayerTest, Sync2InvalidSignalSemaphoreValue) {
     semaphore_signal_info.value = 10;
     ASSERT_VK_SUCCESS(vk::SignalSemaphore(m_device->device(), &semaphore_signal_info));
 
-    auto signal_info = lvl_init_struct<VkSemaphoreSubmitInfoKHR>();
+    auto signal_info = LvlInitStruct<VkSemaphoreSubmitInfoKHR>();
     signal_info.semaphore = semaphore[0].handle();
 
-    auto wait_info = lvl_init_struct<VkSemaphoreSubmitInfoKHR>();
+    auto wait_info = LvlInitStruct<VkSemaphoreSubmitInfoKHR>();
     wait_info.semaphore = semaphore[0].handle();
     wait_info.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
-    auto submit_info = lvl_init_struct<VkSubmitInfo2KHR>();
+    auto submit_info = LvlInitStruct<VkSubmitInfo2KHR>();
     submit_info.signalSemaphoreInfoCount = 1;
     submit_info.pSignalSemaphoreInfos = &signal_info;
     submit_info.waitSemaphoreInfoCount = 1;
@@ -7428,6 +7433,9 @@ TEST_F(VkLayerTest, ValidateImportMemoryHandleType) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
+    if (IsPlatform(kMockICD)) {
+        GTEST_SKIP() << "External tests are not supported by MockICD, skipping tests";
+    }
 
     auto vkGetPhysicalDeviceExternalBufferPropertiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceExternalBufferPropertiesKHR>(
         vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceExternalBufferPropertiesKHR"));
@@ -7642,15 +7650,13 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicStateDisabled) {
     TEST_DESCRIPTION("Validate VK_EXT_extended_dynamic_state VUs");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
-
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "%s At least Vulkan version 1.1 is required, skipping test.";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto extended_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
@@ -7755,17 +7761,16 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicStateEnabled) {
     TEST_DESCRIPTION("Validate VK_EXT_extended_dynamic_state VUs");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
-
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required, skipping test.";
     }
-    bool vulkan_13 = (DeviceValidationVersion() >= VK_API_VERSION_1_3);
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
+
+    bool vulkan_13 = (DeviceValidationVersion() >= VK_API_VERSION_1_3);
 
     auto extended_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
     auto features2 = GetPhysicalDeviceFeatures2(extended_dynamic_state_features);
@@ -8041,20 +8046,21 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicStateEnabled) {
 
     vk::CmdEndRenderPass(commandBuffer.handle());
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetViewportWithCount-viewportCount-03394");
-    m_errorMonitor->SetUnexpectedError("VUID-vkCmdSetViewportWithCount-viewportCount-arraylength");
-    VkViewport viewport2 = {
-        0, 0, 1, 1, 0.0f, 0.0f,
-    };
-    vkCmdSetViewportWithCountEXT(commandBuffer.handle(), 0, &viewport2);
-    m_errorMonitor->VerifyFound();
-    if (vulkan_13) {
+    if (features2.features.multiViewport) {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetViewportWithCount-viewportCount-03394");
         m_errorMonitor->SetUnexpectedError("VUID-vkCmdSetViewportWithCount-viewportCount-arraylength");
-        vkCmdSetViewportWithCount(commandBuffer.handle(), 0, &viewport2);
+        VkViewport viewport2 = {
+            0, 0, 1, 1, 0.0f, 0.0f,
+        };
+        vkCmdSetViewportWithCountEXT(commandBuffer.handle(), 0, &viewport2);
         m_errorMonitor->VerifyFound();
+        if (vulkan_13) {
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetViewportWithCount-viewportCount-03394");
+            m_errorMonitor->SetUnexpectedError("VUID-vkCmdSetViewportWithCount-viewportCount-arraylength");
+            vkCmdSetViewportWithCount(commandBuffer.handle(), 0, &viewport2);
+            m_errorMonitor->VerifyFound();
+        }
     }
-
     {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetScissorWithCount-offset-03400");
         VkRect2D scissor2 = {{1, 0}, {INT32_MAX, 16}};
@@ -8079,15 +8085,17 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicStateEnabled) {
         }
     }
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetScissorWithCount-scissorCount-03397");
-    m_errorMonitor->SetUnexpectedError("VUID-vkCmdSetScissorWithCount-scissorCount-arraylength");
-    vkCmdSetScissorWithCountEXT(commandBuffer.handle(), 0, 0);
-    m_errorMonitor->VerifyFound();
-    if (vulkan_13) {
+    if (features2.features.multiViewport) {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetScissorWithCount-scissorCount-03397");
         m_errorMonitor->SetUnexpectedError("VUID-vkCmdSetScissorWithCount-scissorCount-arraylength");
-        vkCmdSetScissorWithCount(commandBuffer.handle(), 0, 0);
+        vkCmdSetScissorWithCountEXT(commandBuffer.handle(), 0, 0);
         m_errorMonitor->VerifyFound();
+        if (vulkan_13) {
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetScissorWithCount-scissorCount-03397");
+            m_errorMonitor->SetUnexpectedError("VUID-vkCmdSetScissorWithCount-scissorCount-arraylength");
+            vkCmdSetScissorWithCount(commandBuffer.handle(), 0, 0);
+            m_errorMonitor->VerifyFound();
+        }
     }
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetScissorWithCount-x-03399");
@@ -8114,15 +8122,13 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicStateEnabledNoMultiview) {
     TEST_DESCRIPTION("Validate VK_EXT_extended_dynamic_state VUs");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required, skipping test.";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto extended_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
@@ -8651,15 +8657,13 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicState2PatchControlPointsDisabled) {
     TEST_DESCRIPTION("Validate VK_EXT_extended_dynamic_state2 PatchControlPoints VUs");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto extended_dynamic_state2_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT>();
@@ -8703,15 +8707,13 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicState2LogicOpDisabled) {
     TEST_DESCRIPTION("Validate VK_EXT_extended_dynamic_state2LogicOp VUs");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto extended_dynamic_state2_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT>();
@@ -8754,17 +8756,14 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicState2Enabled) {
     TEST_DESCRIPTION("Validate VK_EXT_extended_dynamic_state2 LogicOp VUs");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
     auto extended_dynamic_state2_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT>();
     auto features2 = GetPhysicalDeviceFeatures2(extended_dynamic_state2_features);
     if (!extended_dynamic_state2_features.extendedDynamicState2) {
@@ -8828,15 +8827,13 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicState2PatchControlPointsEnabled) {
     TEST_DESCRIPTION("Validate VK_EXT_extended_dynamic_state2 PatchControlPoints VUs");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto extended_dynamic_state2_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT>();
@@ -8902,15 +8899,13 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicState2LogicOpEnabled) {
     TEST_DESCRIPTION("Validate VK_EXT_extended_dynamic_state2 LogicOp VUs");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto extended_dynamic_state2_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT>();
@@ -8977,16 +8972,6 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicState3Disabled) {
     }
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
         GTEST_SKIP() << "At least Vulkan version 1.3 is required";
-    }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME " is not supported.";
-        return;
     }
 
     auto extended_dynamic_state3_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicState3FeaturesEXT>();
@@ -9460,16 +9445,6 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicState3Enabled) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
         GTEST_SKIP() << "At least Vulkan version 1.3 is required";
     }
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME " is not supported.";
-        return;
-    }
 
     auto line_rasterization_feature = LvlInitStruct<VkPhysicalDeviceLineRasterizationFeaturesEXT>();
     auto provoking_vertex_features = LvlInitStruct<VkPhysicalDeviceProvokingVertexFeaturesEXT>(&line_rasterization_feature);
@@ -9762,7 +9737,7 @@ TEST_F(VkLayerTest, ValidateExtendedDynamicState3Enabled) {
         if (!transform_feedback_props.transformFeedbackRasterizationStreamSelect) {
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetRasterizationStreamEXT-rasterizationStream-07413");
         }
-        vkCmdSetRasterizationStreamEXT(commandBuffer.handle(), 300U);
+        vkCmdSetRasterizationStreamEXT(commandBuffer.handle(), transform_feedback_props.maxTransformFeedbackStreams + 1);
         m_errorMonitor->VerifyFound();
         vk::CmdEndRenderPass(commandBuffer.handle());
 
@@ -10860,15 +10835,13 @@ TEST_F(VkLayerTest, ValidateVertexInputDynamicStateDisabled) {
     TEST_DESCRIPTION("Validate VK_EXT_vertex_input_dynamic_state VUs when disabled");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -10904,15 +10877,13 @@ TEST_F(VkLayerTest, ValidateVertexInputDynamicStateEnabled) {
     TEST_DESCRIPTION("Validate VK_EXT_vertex_input_dynamic_state VUs when enabled");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto vertex_input_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT>();
@@ -11113,20 +11084,14 @@ TEST_F(VkLayerTest, ValidateVertexInputDynamicStateDivisor) {
     TEST_DESCRIPTION("Validate VK_EXT_vertex_input_dynamic_state VUs when VK_EXT_vertex_attribute_divisor is enabled");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-
+    AddRequiredExtensions(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME " is not supported.";
-    }
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Extension " VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME " is not supported.";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto vertex_attribute_divisor_features = LvlInitStruct<VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT>();
@@ -11235,18 +11200,17 @@ TEST_F(VkLayerTest, WriteTimeStampInvalidQuery) {
     TEST_DESCRIPTION("Test for invalid query slot in query pool.");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddOptionalExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    bool sync2 = false;
+    bool sync2 = IsExtensionsEnabled(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2 = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
     synchronization2.synchronization2 = VK_TRUE;
     auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>();
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    if (sync2) {
         features2.pNext = &synchronization2;
-        sync2 = true;
     }
     InitState(nullptr, &features2);
     sync2 &= (synchronization2.synchronization2 == VK_TRUE);
@@ -12036,8 +12000,7 @@ TEST_F(VkLayerTest, CmdSetDiscardRectangleEXTRectangleCountOverflow) {
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
-    auto vkCmdSetDiscardRectangleEXT =
-        (PFN_vkCmdSetDiscardRectangleEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdSetDiscardRectangleEXT");
+    auto vkCmdSetDiscardRectangleEXT = GetDeviceProcAddr<PFN_vkCmdSetDiscardRectangleEXT>("vkCmdSetDiscardRectangleEXT");
 
     VkRect2D discard_rectangles = {};
     discard_rectangles.offset.x = 1;
@@ -12612,16 +12575,12 @@ TEST_F(VkLayerTest, ValidateDiscardRectanglesDynamicStateNotSet) {
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
+    auto vkCmdSetDiscardRectangleEXT =
+        (PFN_vkCmdSetDiscardRectangleEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdSetDiscardRectangleEXT");
 
-    const VkRect2D rect = {{0, 0}, {16, 16}};
     auto discard_rect_ci = LvlInitStruct<VkPipelineDiscardRectangleStateCreateInfoEXT>();
     discard_rect_ci.discardRectangleMode = VK_DISCARD_RECTANGLE_MODE_INCLUSIVE_EXT;
-    discard_rect_ci.discardRectangleCount = 1;
-    discard_rect_ci.pDiscardRectangles = &rect;
+    discard_rect_ci.discardRectangleCount = 4;
 
     CreatePipelineHelper pipe(*this);
     pipe.InitInfo();
@@ -12638,6 +12597,14 @@ TEST_F(VkLayerTest, ValidateDiscardRectanglesDynamicStateNotSet) {
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
 
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-07751");
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    // only fill in [0, 1, 3] index
+    VkRect2D discard_rectangles[2] = {{{0, 0}, {16, 16}}, {{0, 0}, {16, 16}}};
+    vkCmdSetDiscardRectangleEXT(m_commandBuffer->handle(), 0, 2, discard_rectangles);
+    vkCmdSetDiscardRectangleEXT(m_commandBuffer->handle(), 3, 1, discard_rectangles);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-07751");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_errorMonitor->VerifyFound();
@@ -13051,12 +13018,8 @@ TEST_F(VkLayerTest, ExportMetalObjects) {
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_METAL_OBJECTS_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
-    if (!InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
-        GTEST_SKIP() << VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME << " not supported";
-    }
+
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";

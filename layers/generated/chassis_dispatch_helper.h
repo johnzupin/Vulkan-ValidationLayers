@@ -2,10 +2,10 @@
 // This file is ***GENERATED***.  Do Not Edit.
 // See layer_chassis_generator.py for modifications.
 
-/* Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google Inc.
+/* Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1142,6 +1142,9 @@ typedef enum InterceptId{
     InterceptIdPreCallValidateCmdSetStencilOpEXT,
     InterceptIdPreCallRecordCmdSetStencilOpEXT,
     InterceptIdPostCallRecordCmdSetStencilOpEXT,
+    InterceptIdPreCallValidateReleaseSwapchainImagesEXT,
+    InterceptIdPreCallRecordReleaseSwapchainImagesEXT,
+    InterceptIdPostCallRecordReleaseSwapchainImagesEXT,
     InterceptIdPreCallValidateGetGeneratedCommandsMemoryRequirementsNV,
     InterceptIdPreCallRecordGetGeneratedCommandsMemoryRequirementsNV,
     InterceptIdPostCallRecordGetGeneratedCommandsMemoryRequirementsNV,
@@ -1328,6 +1331,12 @@ typedef enum InterceptId{
     InterceptIdPreCallValidateGetMicromapBuildSizesEXT,
     InterceptIdPreCallRecordGetMicromapBuildSizesEXT,
     InterceptIdPostCallRecordGetMicromapBuildSizesEXT,
+    InterceptIdPreCallValidateCmdDrawClusterHUAWEI,
+    InterceptIdPreCallRecordCmdDrawClusterHUAWEI,
+    InterceptIdPostCallRecordCmdDrawClusterHUAWEI,
+    InterceptIdPreCallValidateCmdDrawClusterIndirectHUAWEI,
+    InterceptIdPreCallRecordCmdDrawClusterIndirectHUAWEI,
+    InterceptIdPostCallRecordCmdDrawClusterIndirectHUAWEI,
     InterceptIdPreCallValidateSetDeviceMemoryPriorityEXT,
     InterceptIdPreCallRecordSetDeviceMemoryPriorityEXT,
     InterceptIdPostCallRecordSetDeviceMemoryPriorityEXT,
@@ -2183,65 +2192,39 @@ void ValidationObject::InitObjectDispatchVectors() {
 #endif
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 #endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateCreateVideoSessionKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCreateVideoSessionKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCreateVideoSessionKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateDestroyVideoSessionKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordDestroyVideoSessionKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordDestroyVideoSessionKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateGetVideoSessionMemoryRequirementsKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordGetVideoSessionMemoryRequirementsKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetVideoSessionMemoryRequirementsKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateBindVideoSessionMemoryKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordBindVideoSessionMemoryKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordBindVideoSessionMemoryKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateCreateVideoSessionParametersKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCreateVideoSessionParametersKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCreateVideoSessionParametersKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateUpdateVideoSessionParametersKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordUpdateVideoSessionParametersKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordUpdateVideoSessionParametersKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateDestroyVideoSessionParametersKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordDestroyVideoSessionParametersKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordDestroyVideoSessionParametersKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdBeginVideoCodingKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdBeginVideoCodingKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdBeginVideoCodingKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdEndVideoCodingKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdEndVideoCodingKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdEndVideoCodingKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdControlVideoCodingKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdControlVideoCodingKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdControlVideoCodingKHR);
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdDecodeVideoKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdDecodeVideoKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdDecodeVideoKHR);
-#endif
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdBeginRenderingKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdBeginRenderingKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdBeginRenderingKHR);
@@ -2802,6 +2785,9 @@ void ValidationObject::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdSetStencilOpEXT);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdSetStencilOpEXT);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdSetStencilOpEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateReleaseSwapchainImagesEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordReleaseSwapchainImagesEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordReleaseSwapchainImagesEXT);
     BUILD_DISPATCH_VECTOR(PreCallValidateGetGeneratedCommandsMemoryRequirementsNV);
     BUILD_DISPATCH_VECTOR(PreCallRecordGetGeneratedCommandsMemoryRequirementsNV);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetGeneratedCommandsMemoryRequirementsNV);
@@ -3020,6 +3006,12 @@ void ValidationObject::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallValidateGetMicromapBuildSizesEXT);
     BUILD_DISPATCH_VECTOR(PreCallRecordGetMicromapBuildSizesEXT);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetMicromapBuildSizesEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdDrawClusterHUAWEI);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdDrawClusterHUAWEI);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdDrawClusterHUAWEI);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdDrawClusterIndirectHUAWEI);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdDrawClusterIndirectHUAWEI);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdDrawClusterIndirectHUAWEI);
     BUILD_DISPATCH_VECTOR(PreCallValidateSetDeviceMemoryPriorityEXT);
     BUILD_DISPATCH_VECTOR(PreCallRecordSetDeviceMemoryPriorityEXT);
     BUILD_DISPATCH_VECTOR(PostCallRecordSetDeviceMemoryPriorityEXT);

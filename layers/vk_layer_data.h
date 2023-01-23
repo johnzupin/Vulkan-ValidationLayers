@@ -757,16 +757,14 @@ namespace layer_data {
 
 inline constexpr std::in_place_t in_place{};
 
-template <typename T>
-using optional = std::optional<T>;
-
 // Partial implementation of std::span for C++11
 template <typename T>
 class span {
   public:
     using pointer = T *;
+    using const_pointer = T const *;
     using iterator = pointer;
-    using const_iterator = T const *;
+    using const_iterator = const_pointer;
 
     span() = default;
     span(pointer start, size_t n) : data_(start), count_(n) {}
@@ -791,8 +789,10 @@ class span {
     const T &back() const { return *(data_ + (count_ - 1)); }
 
     size_t size() const { return count_; }
+    bool empty() const { return count_ == 0; }
 
     pointer data() { return data_; }
+    const_pointer data() const { return data_; }
 
   private:
     pointer data_ = {};
@@ -873,13 +873,10 @@ class TlsGuard {
     T *operator->() { return &(*payload_); }
 
   private:
-    thread_local static optional<T> payload_;
+    inline thread_local static std::optional<T> payload_{};
     bool *skip_;
     bool persist_;
 };
-
-template <typename T>
-thread_local optional<T> TlsGuard<T>::payload_;
 
 // Only use this if you aren't planning to use what you would have gotten from a find.
 template <typename Container, typename Key = typename Container::key_type>

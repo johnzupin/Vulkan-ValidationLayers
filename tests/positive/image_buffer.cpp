@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -954,12 +954,16 @@ TEST_F(VkPositiveLayerTest, ExternalMemory) {
 #endif
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
+    AddOptionalExtensions(ext_mem_extension_name);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
+    if (IsPlatform(kMockICD)) {
+        GTEST_SKIP() << "External tests are not supported by MockICD, skipping tests";
+    }
     // Check for import/export capability
     VkPhysicalDeviceExternalBufferInfoKHR ebi = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR, nullptr, 0,
                                                  VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, handle_type};
@@ -978,22 +982,10 @@ TEST_F(VkPositiveLayerTest, ExternalMemory) {
     // Check if dedicated allocation is required
     bool dedicated_allocation =
         ebp.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR;
-    if (dedicated_allocation) {
-        if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME)) {
-            m_device_extension_names.push_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-            m_device_extension_names.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        } else {
-            GTEST_SKIP() << "Dedicated allocation extension not supported";
-        }
+    if (dedicated_allocation && !IsExtensionsEnabled(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME)) {
+        GTEST_SKIP() << "Dedicated allocation extension not supported";
     }
 
-    // Check for external memory device extensions
-    if (DeviceExtensionSupported(gpu(), nullptr, ext_mem_extension_name)) {
-        m_device_extension_names.push_back(ext_mem_extension_name);
-        m_device_extension_names.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "External memory extension not supported";
-    }
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     VkMemoryPropertyFlags mem_flags = 0;
@@ -1311,6 +1303,11 @@ TEST_F(VkPositiveLayerTest, MultiplaneImageTests) {
     }
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &mp_features, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    if (!ImageFormatAndFeaturesSupported(gpu(), VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM_KHR, VK_IMAGE_TILING_OPTIMAL,
+                                         VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT)) {
+        GTEST_SKIP() << "Required formats/features not supported";
+    }
 
     // Create aliased function pointers for 1.0 and 1.1 contexts
 
@@ -1999,8 +1996,8 @@ TEST_F(VkPositiveLayerTest, SwapchainImageLayout) {
     fci.renderPass = rp2.handle();
     vk_testing::Framebuffer fb2(*m_device, fci);
     ASSERT_TRUE(fb2.initialized());
-    VkRenderPassBeginInfo rpbi = {
-        VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, nullptr, rp1.handle(), fb1.handle(), {{0, 0}, {1, 1}}, 0, nullptr};
+    VkRenderPassBeginInfo rpbi =
+        LvlInitStruct<VkRenderPassBeginInfo>(nullptr, rp1.handle(), fb1.handle(), VkRect2D{{0, 0}, {1u, 1u}}, 0u, nullptr);
     m_commandBuffer->begin();
     vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdEndRenderPass(m_commandBuffer->handle());
@@ -2218,13 +2215,9 @@ TEST_F(VkPositiveLayerTest, ImagelessLayoutTracking) {
 
     VkRenderPassAttachmentBeginInfoKHR renderPassAttachmentBeginInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR,
                                                                         nullptr, 1, &imageView};
-    VkRenderPassBeginInfo renderPassBeginInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-                                                 &renderPassAttachmentBeginInfo,
-                                                 renderPass,
-                                                 framebuffer,
-                                                 {{0, 0}, {attachmentWidth, attachmentHeight}},
-                                                 0,
-                                                 nullptr};
+    VkRenderPassBeginInfo renderPassBeginInfo =
+        LvlInitStruct<VkRenderPassBeginInfo>(&renderPassAttachmentBeginInfo, renderPass, framebuffer,
+                                             VkRect2D{{0, 0}, {attachmentWidth, attachmentHeight}}, 0u, nullptr);
 
     // RenderPass should change the image layout of both the swapchain image and the aliased image to PRESENT_SRC_KHR
     m_commandBuffer->begin();

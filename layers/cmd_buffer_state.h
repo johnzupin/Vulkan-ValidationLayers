@@ -3,6 +3,7 @@
  * Copyright (c) 2015-2022 LunarG, Inc.
  * Copyright (C) 2015-2022 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
+ * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,10 +24,12 @@
  * Author: Dave Houlton <daveh@lunarg.com>
  * Author: John Zulauf <jzulauf@lunarg.com>
  * Author: Tobias Hector <tobias.hector@amd.com>
+ * Author: Daniel Rakos <daniel.rakos@rastergrid.com>
  */
 #pragma once
 #include "base_node.h"
 #include "query_state.h"
+#include "video_session_state.h"
 #include "command_validation.h"
 #include "hash_vk_types.h"
 #include "subresource_adapter.h"
@@ -35,10 +38,13 @@
 #include "device_state.h"
 #include "descriptor_sets.h"
 #include "qfo_transfer.h"
+#include "vk_layer_data.h"
 
 struct SUBPASS_INFO;
 class FRAMEBUFFER_STATE;
 class RENDER_PASS_STATE;
+class VIDEO_SESSION_STATE;
+class VIDEO_SESSION_PARAMETERS_STATE;
 class CoreChecks;
 class ValidationStateTracker;
 
@@ -175,10 +181,34 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     bool pipeline_bound = false;  // True if CmdBindPipeline has been called on this command buffer, false otherwise
     typedef uint64_t ImageLayoutUpdateCount;
     ImageLayoutUpdateCount image_layout_change_count;  // The sequence number for changes to image layout (for cached validation)
+
+    // Dynamic State
     CBDynamicFlags status;                             // Track status of various bindings on cmd buffer
     CBDynamicFlags static_status;                      // All state bits provided by current graphics pipeline
                                                        // rather than dynamic state
     CBDynamicFlags dynamic_status;                     // dynamic state set up in pipeline
+    struct DynamicStateValue {
+        // VK_DYNAMIC_STATE_STENCIL_WRITE_MASK
+        uint32_t write_mask_front;
+        uint32_t write_mask_back;
+        // VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE
+        bool depth_write_enable;
+        // VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE
+        bool depth_test_enable;
+        // VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE
+        bool stencil_test_enable;
+        // VK_DYNAMIC_STATE_STENCIL_OP
+        VkStencilOp fail_op_front;
+        VkStencilOp pass_op_front;
+        VkStencilOp depth_fail_op_front;
+        VkStencilOp fail_op_back;
+        VkStencilOp pass_op_back;
+        VkStencilOp depth_fail_op_back;
+        // VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT
+        // maxDiscardRectangles is at max 8 on all known implementations currently
+        std::bitset<32> discard_rectangles;
+    } dynamic_state_value;
+
     std::string begin_rendering_func_name;
     // Currently storing "lastBound" objects on per-CB basis
     //  long-term may want to create caches of "lastBound" states and could have
@@ -310,6 +340,12 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     // Used for Best Practices tracking
     uint32_t small_indexed_draw_call_count;
 
+    // Video coding related state tracking
+    std::shared_ptr<VIDEO_SESSION_STATE> bound_video_session;
+    std::shared_ptr<VIDEO_SESSION_PARAMETERS_STATE> bound_video_session_parameters;
+    BoundVideoPictureResources bound_video_picture_resources;
+    VideoSessionUpdateMap video_session_updates;
+
     bool transform_feedback_active{false};
     bool conditional_rendering_active{false};
     bool conditional_rendering_inside_render_pass{false};
@@ -338,6 +374,12 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     void AddChild(std::shared_ptr<StateObject> &child_node) {
         auto base = std::static_pointer_cast<BASE_NODE>(child_node);
         AddChild(base);
+    }
+    template <typename StateObject>
+    void AddChildren(layer_data::span<std::shared_ptr<StateObject>> &child_nodes) {
+        for (auto &child_node : child_nodes) {
+            AddChild(child_node);
+        }
     }
 
     void RemoveChild(std::shared_ptr<BASE_NODE> &base_node);
@@ -417,7 +459,12 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
 
     void BeginRendering(CMD_TYPE cmd_type, const VkRenderingInfo *pRenderingInfo);
 
-    void ExecuteCommands(uint32_t commandBuffersCount, const VkCommandBuffer *pCommandBuffers);
+    void BeginVideoCoding(const VkVideoBeginCodingInfoKHR *pBeginInfo);
+    void EndVideoCoding(const VkVideoEndCodingInfoKHR *pEndCodingInfo);
+    void ControlVideoCoding(const VkVideoCodingControlInfoKHR *pControlInfo);
+    void DecodeVideo(const VkVideoDecodeInfoKHR *pDecodeInfo);
+
+    void ExecuteCommands(layer_data::span<const VkCommandBuffer> secondary_command_buffers);
 
     void UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_bind_point, const PIPELINE_LAYOUT_STATE &pipeline_layout,
                                        uint32_t first_set, uint32_t set_count, const VkDescriptorSet *pDescriptorSets,
@@ -512,6 +559,9 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
         lastBound[bind_point].pipeline_state = pipe_state;
         pipeline_bound = true;
     }
+
+  private:
+    void ResetCBState();
 
   protected:
     void NotifyInvalidate(const BASE_NODE::NodeList &invalid_nodes, bool unlink) override;

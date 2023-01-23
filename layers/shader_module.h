@@ -1,4 +1,4 @@
-/* Copyright (c) 2021-2022 The Khronos Group Inc.
+/* Copyright (c) 2021-2023 The Khronos Group Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,62 +33,73 @@
 
 class PIPELINE_STATE;
 
-// A forward iterator over spirv instructions. Provides easy access to len, opcode, and content words
-// without the caller needing to care too much about the physical SPIRV module layout.
-//
-// For more information of the physical module layout to help understand this struct:
-// https://github.com/KhronosGroup/SPIRV-Guide/blob/master/chapters/parsing_instructions.md
-struct spirv_inst_iter {
-    std::vector<uint32_t>::const_iterator zero;
-    std::vector<uint32_t>::const_iterator it;
+// Used to keep track of all decorations applied to any instruction
+struct DecorationSet {
+    enum FlagBit {
+        patch_bit = 1 << 0,
+        block_bit = 1 << 1,
+        buffer_block_bit = 1 << 2,
+        nonwritable_bit = 1 << 3,
+        builtin_bit = 1 << 4,
+        nonreadable_bit = 1 << 5,
+        per_vertex_bit = 1 << 6,
+        passthrough_bit = 1 << 7,
+        aliased_bit = 1 << 8,
+    };
+    static constexpr uint32_t kInvalidValue = std::numeric_limits<uint32_t>::max();
 
-    uint32_t len() const {
-        auto result = *it >> 16;
-        assert(result > 0);
-        return result;
-    }
+    // bits to know if things have been set or not by a Decoration
+    uint32_t flags = 0;
 
-    uint32_t opcode() const { return *it & 0x0ffffu; }
+    // When being used as an User-defined Variable (input, output, rtx)
+    uint32_t location = kInvalidValue;
+    uint32_t component = 0;
 
-    uint32_t const &word(uint32_t n) const {
-        assert(n < len());
-        return it[n];
-    }
+    // For input attachments
+    uint32_t input_attachment_index = 0;
 
-    uint32_t offset() const { return (uint32_t)(it - zero); }
+    // For descriptors
+    uint32_t set = 0;
+    uint32_t binding = 0;
 
-    spirv_inst_iter() {}
+    uint32_t builtin = kInvalidValue;
 
-    spirv_inst_iter(std::vector<uint32_t>::const_iterator zero, std::vector<uint32_t>::const_iterator it) : zero(zero), it(it) {}
-
-    bool operator==(spirv_inst_iter const &other) const { return it == other.it; }
-
-    bool operator!=(spirv_inst_iter const &other) const { return it != other.it; }
-
-    bool operator!=(std::vector<uint32_t>::const_iterator other) const { return it != other; }
-
-    spirv_inst_iter operator++(int) {  // x++
-        spirv_inst_iter ii = *this;
-        it += len();
-        return ii;
-    }
-
-    spirv_inst_iter operator++() {  // ++x;
-        it += len();
-        return *this;
-    }
-
-    // The iterator and the value are the same thing.
-    spirv_inst_iter &operator*() { return *this; }
-    spirv_inst_iter const &operator*() const { return *this; }
+    void Add(uint32_t decoration, uint32_t value);
+    bool Has(FlagBit flag_bit) const { return (flags & flag_bit) != 0; }
 };
 
-// Information about a OpVariable used as an interface in the shader
-struct InterfaceVariable {
+// vkspec.html#interfaces-iointerfaces-user describes 'User-defined Variable Interface'
+// These are Input/Output OpVariable that go in-between stages
+// (also for example the input to a Vertex and output of the Fragment).
+// These are always ints/floats (not images or samplers).
+// Besides the input vertex binding, all of these are fully known at pipeline creation time
+struct UserDefinedInterfaceVariable {
     uint32_t id;
     uint32_t type_id;
 
+    // if a block with multiple location, track which offset to only check the first
     uint32_t offset;
+
+    bool is_patch{false};
+
+    UserDefinedInterfaceVariable() : id(0), type_id(0), offset(0) {}
+
+    UserDefinedInterfaceVariable(const Instruction *insn) : id(insn->Word(2)), type_id(insn->Word(1)), offset(0) {}
+};
+
+// vkspec.html#interfaces-resources describes 'Shader Resource Interface'
+// These are the OpVariable attached to descriptors.
+// The slots are known at Pipeline creation time, but the type images/sampler/etc is
+// not known until the descriptors are bound.
+// The main purpose of this struct is to track what operations are statically done so
+// at draw/submit time we can cross reference with the last bound descriptor.
+struct ResourceInterfaceVariable {
+    uint32_t id;
+    uint32_t type_id;
+    spv::StorageClass storage_class;
+
+    VkShaderStageFlagBits stage;
+    DecorationSet decorations;
 
     // List of samplers that sample a given image. The index of array is index of image.
     std::vector<layer_data::unordered_set<SamplerUsedByImage>> samplers_used_by_image;
@@ -96,9 +107,6 @@ struct InterfaceVariable {
     // For storage images - list of < OpImageWrite : Texel component length >
     std::vector<std::pair<Instruction, uint32_t>> write_without_formats_component_count_list;
 
-    bool is_patch{false};
-    bool is_block_member{false};
-    bool is_relaxed_precision{false};
     bool is_readable{false};
     bool is_writable{false};
     bool is_atomic_operation{false};
@@ -109,9 +117,7 @@ struct InterfaceVariable {
     bool is_write_without_format{false};  // For storage images
     bool is_dref_operation{false};
 
-    InterfaceVariable() : id(0), type_id(0), offset(0) {}
-
-    InterfaceVariable(const Instruction *insn) : id(insn->Word(2)), type_id(insn->Word(1)), offset(0) {}
+    ResourceInterfaceVariable(const SHADER_MODULE_STATE &module_state, const Instruction *insn, VkShaderStageFlagBits stage);
 };
 
 std::vector<uint32_t> FindEntrypointInterfaces(const Instruction &entrypoint);
@@ -124,38 +130,6 @@ enum FORMAT_TYPE {
 
 // <Location, Component>
 typedef std::pair<uint32_t, uint32_t> location_t;
-
-struct DecorationSet {
-    enum {
-        location_bit = 1 << 0,
-        patch_bit = 1 << 1,
-        relaxed_precision_bit = 1 << 2,
-        block_bit = 1 << 3,
-        buffer_block_bit = 1 << 4,
-        component_bit = 1 << 5,
-        input_attachment_index_bit = 1 << 6,
-        descriptor_set_bit = 1 << 7,
-        binding_bit = 1 << 8,
-        nonwritable_bit = 1 << 9,
-        builtin_bit = 1 << 10,
-        nonreadable_bit = 1 << 11,
-        per_vertex_bit = 1 << 12,
-        passthrough_bit = 1 << 13,
-        aliased_bit = 1 << 14,
-    };
-    static constexpr uint32_t kInvalidValue = std::numeric_limits<uint32_t>::max();
-
-    uint32_t flags = 0;
-    uint32_t location = kInvalidValue;
-    uint32_t component = 0;
-    uint32_t input_attachment_index = 0;
-    uint32_t descriptor_set = 0;
-    uint32_t binding = 0;
-    uint32_t builtin = kInvalidValue;
-    uint32_t spec_const_id = kInvalidValue;
-
-    void Add(uint32_t decoration, uint32_t value);
-};
 
 struct SHADER_MODULE_STATE : public BASE_NODE {
     // Contains all the details for a OpTypeStruct
@@ -224,6 +198,10 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
         const std::string name;
         // All ids that can be accessed from the entry point
         layer_data::unordered_set<uint32_t> accessible_ids;
+
+        std::vector<UserDefinedInterfaceVariable> user_defined_interface_variables;
+        std::vector<ResourceInterfaceVariable> resource_interface_variables;
+        layer_data::unordered_set<uint32_t> attachment_indexes;
 
         StructInfo push_constant_used_in_shader;
 
@@ -336,6 +314,22 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
         }
         return nullptr;
     }
+    const layer_data::unordered_set<uint32_t> *GetAttachmentIndexes(const Instruction &entrypoint) const {
+        for (const auto &entry_point : static_data_.entry_points) {
+            if (entry_point.entrypoint_insn == entrypoint) {
+                return &entry_point.attachment_indexes;
+            }
+        }
+        return nullptr;
+    }
+    const std::vector<ResourceInterfaceVariable> *GetResourceInterfaceVariable(const Instruction &entrypoint) const {
+        for (const auto &entry_point : static_data_.entry_points) {
+            if (entry_point.entrypoint_insn == entrypoint) {
+                return &entry_point.resource_interface_variables;
+            }
+        }
+        return nullptr;
+    }
 
     const layer_data::unordered_map<uint32_t, std::vector<const Instruction *>> &GetExecutionModeInstructions() const {
         return static_data_.execution_mode_inst;
@@ -359,27 +353,23 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
         return DecorationSet();
     }
 
-    // Expose begin() / end() to enable range-based for
-    spirv_inst_iter begin() const { return spirv_inst_iter(words_.begin(), words_.begin() + 5); }  // First insn
-    spirv_inst_iter end() const { return spirv_inst_iter(words_.begin(), words_.end()); }          // Just past last insn
-
     // Used to get human readable strings for error messages
     void DescribeTypeInner(std::ostringstream &ss, uint32_t type) const;
     std::string DescribeType(uint32_t type) const;
 
-    layer_data::optional<VkPrimitiveTopology> GetTopology(const Instruction &entrypoint) const;
+    std::optional<VkPrimitiveTopology> GetTopology(const Instruction &entrypoint) const;
     // TODO (https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/2450)
     // Since we currently don't support multiple entry points, this is a helper to return the topology
     // for the "first" (and for our purposes _only_) entrypoint.
-    layer_data::optional<VkPrimitiveTopology> GetTopology() const;
+    std::optional<VkPrimitiveTopology> GetTopology() const;
 
     const StructInfo *FindEntrypointPushConstant(char const *name, VkShaderStageFlagBits stageBits) const;
-    layer_data::optional<Instruction> FindEntrypoint(char const *name, VkShaderStageFlagBits stageBits) const;
+    std::optional<Instruction> FindEntrypoint(char const *name, VkShaderStageFlagBits stageBits) const;
     bool FindLocalSize(const Instruction &entrypoint, uint32_t &local_size_x, uint32_t &local_size_y, uint32_t &local_size_z) const;
 
     const Instruction *GetConstantDef(uint32_t id) const;
     uint32_t GetConstantValueById(uint32_t id) const;
-    int32_t GetShaderResourceDimensionality(const InterfaceVariable &resource) const;
+    spv::Dim GetShaderResourceDimensionality(const ResourceInterfaceVariable &resource) const;
     uint32_t GetLocationsConsumedByType(uint32_t type, bool strip_array_level) const;
     uint32_t GetComponentsConsumedByType(uint32_t type, bool strip_array_level) const;
     uint32_t GetFundamentalType(uint32_t type) const;
@@ -390,16 +380,13 @@ struct SHADER_MODULE_STATE : public BASE_NODE {
     bool IsBuiltInWritten(const Instruction *builtin_insn, const Instruction &entrypoint) const;
 
     // State tracking helpers for collecting interface information
-    void FindVariableDescriptorType(bool is_storage_buffer, InterfaceVariable &interface_var) const;
-    std::vector<std::pair<DescriptorSlot, InterfaceVariable>> CollectInterfaceByDescriptorSlot(
-        layer_data::optional<Instruction> entrypoint) const;
     layer_data::unordered_set<uint32_t> CollectWritableOutputLocationinFS(const Instruction &entrypoint) const;
-    bool CollectInterfaceBlockMembers(std::map<location_t, InterfaceVariable> *out, bool is_array_of_verts, bool is_patch,
-                                      const Instruction *variable_insn) const;
-    std::map<location_t, InterfaceVariable> CollectInterfaceByLocation(const Instruction &entrypoint, spv::StorageClass sinterface,
-                                                                       bool is_array_of_verts) const;
+    bool CollectInterfaceBlockMembers(std::map<location_t, UserDefinedInterfaceVariable> *out, bool is_array_of_verts,
+                                      bool is_patch, const Instruction *variable_insn) const;
+    std::map<location_t, UserDefinedInterfaceVariable> CollectInterfaceByLocation(const Instruction &entrypoint,
+                                                                                  spv::StorageClass sinterface,
+                                                                                  bool is_array_of_verts) const;
     std::vector<uint32_t> CollectBuiltinBlockMembers(const Instruction &entrypoint, uint32_t storageClass) const;
-    std::vector<std::pair<uint32_t, InterfaceVariable>> CollectInterfaceByInputAttachmentIndex(const Instruction &entrypoint) const;
 
     uint32_t GetNumComponentsInBaseType(const Instruction *insn) const;
     uint32_t GetTypeBitsSize(const Instruction *insn) const;

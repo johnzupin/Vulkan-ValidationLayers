@@ -2,10 +2,10 @@
 // This file is ***GENERATED***.  Do Not Edit.
 // See layer_chassis_dispatch_generator.py for modifications.
 
-/* Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google Inc.
+/* Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -218,6 +218,15 @@ void WrapPnextChainHandles(ValidationObject *layer_data, const void *pNext) {
                     safe_VkRenderingFragmentShadingRateAttachmentInfoKHR *safe_struct = reinterpret_cast<safe_VkRenderingFragmentShadingRateAttachmentInfoKHR *>(cur_pnext);
                     if (safe_struct->imageView) {
                         safe_struct->imageView = layer_data->Unwrap(safe_struct->imageView);
+                    }
+                } break;
+
+            case VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT: {
+                    safe_VkSwapchainPresentFenceInfoEXT *safe_struct = reinterpret_cast<safe_VkSwapchainPresentFenceInfoEXT *>(cur_pnext);
+                    if (safe_struct->pFences) {
+                        for (uint32_t index0 = 0; index0 < safe_struct->swapchainCount; ++index0) {
+                            safe_struct->pFences[index0] = layer_data->Unwrap(safe_struct->pFences[index0]);
+                        }
                     }
                 } break;
 
@@ -655,6 +664,7 @@ VkResult DispatchQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresent
                     local_pPresentInfo->pSwapchains[index1] = layer_data->Unwrap(pPresentInfo->pSwapchains[index1]);
                 }
             }
+            WrapPnextChainHandles(layer_data, local_pPresentInfo->pNext);
         }
     }
     VkResult result = layer_data->device_dispatch_table.QueuePresentKHR(queue, local_pPresentInfo->ptr());
@@ -5548,8 +5558,6 @@ VkBool32 DispatchGetPhysicalDeviceWin32PresentationSupportKHR(
 }
 #endif // VK_USE_PLATFORM_WIN32_KHR
 
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
 VkResult DispatchGetPhysicalDeviceVideoCapabilitiesKHR(
     VkPhysicalDevice                            physicalDevice,
     const VkVideoProfileInfoKHR*                pVideoProfile,
@@ -5560,9 +5568,6 @@ VkResult DispatchGetPhysicalDeviceVideoCapabilitiesKHR(
 
     return result;
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 VkResult DispatchGetPhysicalDeviceVideoFormatPropertiesKHR(
     VkPhysicalDevice                            physicalDevice,
@@ -5575,9 +5580,6 @@ VkResult DispatchGetPhysicalDeviceVideoFormatPropertiesKHR(
 
     return result;
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 VkResult DispatchCreateVideoSessionKHR(
     VkDevice                                    device,
@@ -5593,9 +5595,6 @@ VkResult DispatchCreateVideoSessionKHR(
     }
     return result;
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 void DispatchDestroyVideoSessionKHR(
     VkDevice                                    device,
@@ -5614,9 +5613,6 @@ void DispatchDestroyVideoSessionKHR(
     layer_data->device_dispatch_table.DestroyVideoSessionKHR(device, videoSession, pAllocator);
 
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 VkResult DispatchGetVideoSessionMemoryRequirementsKHR(
     VkDevice                                    device,
@@ -5633,9 +5629,6 @@ VkResult DispatchGetVideoSessionMemoryRequirementsKHR(
 
     return result;
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 VkResult DispatchBindVideoSessionMemoryKHR(
     VkDevice                                    device,
@@ -5664,9 +5657,6 @@ VkResult DispatchBindVideoSessionMemoryKHR(
     }
     return result;
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 VkResult DispatchCreateVideoSessionParametersKHR(
     VkDevice                                    device,
@@ -5696,9 +5686,6 @@ VkResult DispatchCreateVideoSessionParametersKHR(
     }
     return result;
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 VkResult DispatchUpdateVideoSessionParametersKHR(
     VkDevice                                    device,
@@ -5714,9 +5701,6 @@ VkResult DispatchUpdateVideoSessionParametersKHR(
 
     return result;
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 void DispatchDestroyVideoSessionParametersKHR(
     VkDevice                                    device,
@@ -5735,9 +5719,6 @@ void DispatchDestroyVideoSessionParametersKHR(
     layer_data->device_dispatch_table.DestroyVideoSessionParametersKHR(device, videoSessionParameters, pAllocator);
 
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 void DispatchCmdBeginVideoCodingKHR(
     VkCommandBuffer                             commandBuffer,
@@ -5771,9 +5752,6 @@ void DispatchCmdBeginVideoCodingKHR(
     layer_data->device_dispatch_table.CmdBeginVideoCodingKHR(commandBuffer, (const VkVideoBeginCodingInfoKHR*)local_pBeginInfo);
 
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 void DispatchCmdEndVideoCodingKHR(
     VkCommandBuffer                             commandBuffer,
@@ -5783,9 +5761,6 @@ void DispatchCmdEndVideoCodingKHR(
     layer_data->device_dispatch_table.CmdEndVideoCodingKHR(commandBuffer, pEndCodingInfo);
 
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 void DispatchCmdControlVideoCodingKHR(
     VkCommandBuffer                             commandBuffer,
@@ -5795,9 +5770,6 @@ void DispatchCmdControlVideoCodingKHR(
     layer_data->device_dispatch_table.CmdControlVideoCodingKHR(commandBuffer, pCodingControlInfo);
 
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 void DispatchCmdDecodeVideoKHR(
     VkCommandBuffer                             commandBuffer,
@@ -5838,7 +5810,6 @@ void DispatchCmdDecodeVideoKHR(
     layer_data->device_dispatch_table.CmdDecodeVideoKHR(commandBuffer, (const VkVideoDecodeInfoKHR*)local_pDecodeInfo);
 
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
 
 void DispatchCmdBeginRenderingKHR(
     VkCommandBuffer                             commandBuffer,
@@ -9451,6 +9422,28 @@ void DispatchCmdSetStencilOpEXT(
 
 }
 
+VkResult DispatchReleaseSwapchainImagesEXT(
+    VkDevice                                    device,
+    const VkReleaseSwapchainImagesInfoEXT*      pReleaseInfo)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
+    if (!wrap_handles) return layer_data->device_dispatch_table.ReleaseSwapchainImagesEXT(device, pReleaseInfo);
+    safe_VkReleaseSwapchainImagesInfoEXT var_local_pReleaseInfo;
+    safe_VkReleaseSwapchainImagesInfoEXT *local_pReleaseInfo = nullptr;
+    {
+        if (pReleaseInfo) {
+            local_pReleaseInfo = &var_local_pReleaseInfo;
+            local_pReleaseInfo->initialize(pReleaseInfo);
+            if (pReleaseInfo->swapchain) {
+                local_pReleaseInfo->swapchain = layer_data->Unwrap(pReleaseInfo->swapchain);
+            }
+        }
+    }
+    VkResult result = layer_data->device_dispatch_table.ReleaseSwapchainImagesEXT(device, (const VkReleaseSwapchainImagesInfoEXT*)local_pReleaseInfo);
+
+    return result;
+}
+
 void DispatchGetGeneratedCommandsMemoryRequirementsNV(
     VkDevice                                    device,
     const VkGeneratedCommandsMemoryRequirementsInfoNV* pInfo,
@@ -10744,6 +10737,31 @@ void DispatchGetMicromapBuildSizesEXT(
         }
     }
     layer_data->device_dispatch_table.GetMicromapBuildSizesEXT(device, buildType, (const VkMicromapBuildInfoEXT*)local_pBuildInfo, pSizeInfo);
+
+}
+
+void DispatchCmdDrawClusterHUAWEI(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    groupCountX,
+    uint32_t                                    groupCountY,
+    uint32_t                                    groupCountZ)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    layer_data->device_dispatch_table.CmdDrawClusterHUAWEI(commandBuffer, groupCountX, groupCountY, groupCountZ);
+
+}
+
+void DispatchCmdDrawClusterIndirectHUAWEI(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset)
+{
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    if (!wrap_handles) return layer_data->device_dispatch_table.CmdDrawClusterIndirectHUAWEI(commandBuffer, buffer, offset);
+    {
+        buffer = layer_data->Unwrap(buffer);
+    }
+    layer_data->device_dispatch_table.CmdDrawClusterIndirectHUAWEI(commandBuffer, buffer, offset);
 
 }
 

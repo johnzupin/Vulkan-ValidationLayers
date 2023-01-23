@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -218,15 +218,18 @@ void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, co
     }
 
     if (rp2_supported && nullptr != rp2_vuid) {
-        PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
-            (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2KHR");
         safe_VkRenderPassCreateInfo2 create_info2;
         ConvertVkRenderPassCreateInfoToV2KHR(*create_info, &create_info2);
 
-        error_monitor->SetDesiredFailureMsg(kErrorBit, rp2_vuid);
-        err = vkCreateRenderPass2KHR(device, create_info2.ptr(), nullptr, &render_pass);
-        if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
-        error_monitor->VerifyFound();
+        PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
+            (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2KHR");
+        // For API version >= 1.2 where the extension was not enabled
+        if (vkCreateRenderPass2KHR) {
+            error_monitor->SetDesiredFailureMsg(kErrorBit, rp2_vuid);
+            err = vkCreateRenderPass2KHR(device, create_info2.ptr(), nullptr, &render_pass);
+            if (err == VK_SUCCESS) vk::DestroyRenderPass(device, render_pass, nullptr);
+            error_monitor->VerifyFound();
+        }
 
         // For api version >= 1.2, try core entrypoint
         PFN_vkCreateRenderPass2 vkCreateRenderPass2 = (PFN_vkCreateRenderPass2)vk::GetDeviceProcAddr(device, "vkCreateRenderPass2");
@@ -338,7 +341,7 @@ void ValidOwnershipTransfer(ErrorMonitor *monitor, VkCommandBufferObj *cb_from, 
 void ValidOwnershipTransferOp(ErrorMonitor *monitor, VkCommandBufferObj *cb, const VkBufferMemoryBarrier2KHR *buf_barrier,
                               const VkImageMemoryBarrier2KHR *img_barrier) {
     cb->begin();
-    auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
     dep_info.bufferMemoryBarrierCount = (buf_barrier) ? 1 : 0;
     dep_info.pBufferMemoryBarriers = buf_barrier;
     dep_info.imageMemoryBarrierCount = (img_barrier) ? 1 : 0;
@@ -644,16 +647,6 @@ VkImageViewCreateInfo SafeSaneImageViewCreateInfo(const VkImageObj &image, VkFor
     return SafeSaneImageViewCreateInfo(image.handle(), format, aspect_mask);
 }
 
-bool CheckCreateRenderPass2Support(VkRenderFramework *renderFramework, std::vector<const char *> &device_extension_names) {
-    if (renderFramework->DeviceExtensionSupported(renderFramework->gpu(), nullptr, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME)) {
-        device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
-        device_extension_names.push_back(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
-        device_extension_names.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-        return true;
-    }
-    return false;
-}
-
 bool CheckTimelineSemaphoreSupportAndInitState(VkRenderFramework *renderFramework) {
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
         (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(renderFramework->instance(),
@@ -686,17 +679,17 @@ bool CheckSynchronization2SupportAndInitState(VkRenderFramework *framework) {
         (PFN_vkGetPhysicalDeviceFeatures2)vk::GetInstanceProcAddr(framework->instance(), "vkGetPhysicalDeviceFeatures2");
 
     {
-        auto sync2_features = lvl_init_struct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
-        auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&sync2_features);
+        auto sync2_features = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
+        auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&sync2_features);
         vkGetPhysicalDeviceFeatures2(framework->gpu(), &features2);
         if (!sync2_features.synchronization2) {
             return false;
         }
     }
 
-    auto sync2_features = lvl_init_struct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
+    auto sync2_features = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
     sync2_features.synchronization2 = VK_TRUE;
-    auto features2 = lvl_init_struct<VkPhysicalDeviceFeatures2>(&sync2_features);
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&sync2_features);
     framework->InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     return true;
 }
@@ -2397,7 +2390,7 @@ void Barrier2QueueFamilyTestHelper::operator()(const std::string &img_err, const
     buffer_barrier_.srcQueueFamilyIndex = src;
     buffer_barrier_.dstQueueFamilyIndex = dst;
 
-    auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+    auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &buffer_barrier_;
     dep_info.imageMemoryBarrierCount = 1;
@@ -2479,7 +2472,6 @@ void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, V
         alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
         alloc_pnext = &alloc_flags;
     }
-    alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
     vbo->init(device, 1024, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, usage, alloc_pnext);
     ibo->init(device, 1024, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, usage, alloc_pnext);
 
@@ -2511,6 +2503,36 @@ void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, V
     geometry->geometry.triangles.transformOffset = 0;
     geometry->geometry.aabbs = {};
     geometry->geometry.aabbs.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
+}
+
+std::pair<VkBufferObj &&, VkAccelerationStructureGeometryKHR> GetSimpleAABB(const VkDeviceObj &device,
+                                                                            uint32_t vk_api_version /*= VK_API_VERSION_1_2*/) {
+    const std::array<VkAabbPositionsKHR, 1> aabbs = {{{-1.0f, -1.0f, -1.0f, +1.0f, +1.0f, +1.0f}}};
+
+    const VkDeviceSize aabb_buffer_size = sizeof(aabbs[0]) * aabbs.size();
+    VkBufferObj aabb_buffer;
+    auto alloc_flags = LvlInitStruct<VkMemoryAllocateFlagsInfo>();
+    alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+
+    aabb_buffer.init(
+        device, aabb_buffer_size, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        &alloc_flags);
+
+    uint8_t *mapped_aabb_buffer_data = (uint8_t *)aabb_buffer.memory().map();
+    std::memcpy(mapped_aabb_buffer_data, (uint8_t *)aabbs.data(), static_cast<std::size_t>(aabb_buffer_size));
+    aabb_buffer.memory().unmap();
+
+    VkDeviceOrHostAddressConstKHR address;
+    address.deviceAddress = aabb_buffer.address(vk_api_version);
+
+    auto as_geom = LvlInitStruct<VkAccelerationStructureGeometryKHR>();
+    as_geom.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR;
+    as_geom.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+    as_geom.geometry.aabbs.data = address;
+    as_geom.geometry.aabbs.stride = static_cast<VkDeviceSize>(sizeof(aabbs[0]));
+
+    return {std::move(aabb_buffer), as_geom};
 }
 
 void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
@@ -2580,16 +2602,7 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
                                               VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     VkCommandBufferObj ray_tracing_command_buffer(m_device, &ray_tracing_command_pool);
 
-    struct AABB {
-        float min_x;
-        float min_y;
-        float min_z;
-        float max_x;
-        float max_y;
-        float max_z;
-    };
-
-    const std::vector<AABB> aabbs = {{-1.0f, -1.0f, -1.0f, +1.0f, +1.0f, +1.0f}};
+    constexpr std::array<VkAabbPositionsKHR, 1> aabbs = {{{-1.0f, -1.0f, -1.0f, +1.0f, +1.0f, +1.0f}}};
 
     struct VkGeometryInstanceNV {
         float transform[12];
@@ -2600,7 +2613,7 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
         uint64_t accelerationStructureHandle;
     };
 
-    VkDeviceSize aabb_buffer_size = sizeof(AABB) * aabbs.size();
+    const VkDeviceSize aabb_buffer_size = sizeof(VkAabbPositionsKHR) * aabbs.size();
     VkBufferObj aabb_buffer;
     aabb_buffer.init(*m_device, aabb_buffer_size, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                      VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, {ray_tracing_queue_family_index});
@@ -2619,7 +2632,7 @@ void VkLayerTest::OOBRayTracingShadersTestBody(bool gpu_assisted) {
     geometry.geometry.aabbs.aabbData = aabb_buffer.handle();
     geometry.geometry.aabbs.numAABBs = static_cast<uint32_t>(aabbs.size());
     geometry.geometry.aabbs.offset = 0;
-    geometry.geometry.aabbs.stride = static_cast<VkDeviceSize>(sizeof(AABB));
+    geometry.geometry.aabbs.stride = static_cast<VkDeviceSize>(sizeof(VkAabbPositionsKHR));
     geometry.flags = 0;
 
     VkAccelerationStructureInfoNV bot_level_as_info = LvlInitStruct<VkAccelerationStructureInfoNV>();

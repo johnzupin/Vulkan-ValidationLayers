@@ -12,9 +12,12 @@
 
 ## Requirements
 
-1. Python >= 3.7 (3.6 may work, 3.5 and earlier is not supported)
-1. CMake >= 3.10.2
-1. C++ >= c++17 compiler. See platform-specific sections below for supported compiler versions.
+1. CMake >= 3.17.2
+2. C++ >= c++17 compiler. See platform-specific sections below for supported compiler versions.
+3. Python >= 3.7 (3.6 may work, 3.5 and earlier is not supported)
+
+NOTE: Python is needed for working on generated code, and helping grab dependencies.
+While it's not technically required, it's practically required for most users.
 
 ## Building Overview
 
@@ -32,23 +35,10 @@ python3 ../scripts/update_deps.py --dir ../external --arch x64 --config debug
 cmake -G Ninja -C ../external/helper.cmake -DCMAKE_BUILD_TYPE=Debug ..
 
 # Windows
-python3 ..\scripts\update_deps.py --dir ..\external --arch x64 --config debug
+python ..\scripts\update_deps.py --dir ..\external --arch x64 --config debug
 cmake -A x64 -C ..\external\helper.cmake -DCMAKE_BUILD_TYPE=Debug ..
 
 cmake --build . --config Debug
-```
-### CCACHE
-
-There are 2 methods to enable CCACHE:
-
-```bash
-# 1) Set environment variables
-# Requires CMake 3.17 (https://cmake.org/cmake/help/latest/envvar/CMAKE_LANG_COMPILER_LAUNCHER.html)
-export CMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/ccache
-export CMAKE_C_COMPILER_LAUNCHER=/usr/bin/ccache
-
-# 2) Pass in cache variables`
-cmake ... -D CMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/ccache -D CMAKE_C_COMPILER_LAUNCHER=/usr/bin/ccache
 ```
 
 ## Generated source code
@@ -111,6 +101,10 @@ version of that dependency.
 - [robin-hood-hashing repository](https://github.com/martinus/robin-hood-hashing)
     - This is a header-only reimplementation of `std::unordered_map` and `std::unordered_set` which provides substantial performance improvements on all platforms.
     - You must clone this repository and build its `install` target
+- [mimalloc repository](https://github.com/microsoft/mimalloc)
+    - This is a reimplementation of malloc()/free() and their c++ equivalents.
+    - It is currently only used for windows 64 bit builds, where it is statically linked into the layer.
+    - For window 64 bit builds, you must clone this repository and build its `install` target
 
 For running the tests:
 
@@ -201,10 +195,10 @@ cmake -S . -B build/ --preset dev
 - Microsoft [Visual Studio](https://www.visualstudio.com/)
   - Versions
     - [2022](https://www.visualstudio.com/vs/downloads/)
-    - [2015-2019](https://www.visualstudio.com/vs/older-downloads/)
+    - [2017-2019](https://www.visualstudio.com/vs/older-downloads/)
   - The Community Edition of each of the above versions is sufficient, as
     well as any more capable edition.
-- [CMake 3.10.2](https://cmake.org/files/v3.10/cmake-3.10.2-win64-x64.zip) is the minimum CMake version supported.  [CMake 3.19.3](https://cmake.org/files/v3.19/cmake-3.19.3-win64-x64.zip) is recommended.
+- [CMake 3.17.2](https://cmake.org/files/v3.17/cmake-3.17.2-win64-x64.zip) is the minimum CMake version supported.  [CMake 3.19.3](https://cmake.org/files/v3.19/cmake-3.19.3-win64-x64.zip) is recommended.
   - Use the installer option to add CMake to the system PATH
 - Git Client Support
   - [Git for Windows](http://git-scm.com/download/win) is a popular solution
@@ -257,7 +251,7 @@ that the minimum officially supported C++17 compiler version is GCC 7.3.0,
 although earlier versions may work. It should be straightforward to adapt this
 repository to other Linux distributions.
 
-[CMake 3.10.2](https://cmake.org/files/v3.10/cmake-3.10.2-Linux-x86_64.tar.gz) is recommended.
+[CMake 3.17.2](https://cmake.org/files/v3.17/cmake-3.17.2-Linux-x86_64.tar.gz) is recommended.
 
 ```bash
 sudo apt-get install git build-essential libx11-xcb-dev \
@@ -419,8 +413,7 @@ Follow the setup steps for Linux or OSX above, then from your terminal:
 
 #### Windows
 
-Follow the setup steps for Windows above, then from Developer Command Prompt
-for VS2015:
+Follow the setup steps for Windows above, then from the Developer Command Prompt:
 
     cd build-android
     update_external_sources_android.bat
@@ -430,11 +423,11 @@ for VS2015:
 
 ### MacOS Build Requirements
 
-Tested on OSX version 10.12
+Tested on OSX version 10.15
 
 NOTE: To force the OSX version set the environment variable [MACOSX_DEPLOYMENT_TARGET](https://cmake.org/cmake/help/latest/envvar/MACOSX_DEPLOYMENT_TARGET.html) when building VVL and it's dependencies.
 
-[CMake 3.10.2](https://cmake.org/files/v3.10/cmake-3.10.2-Darwin-x86_64.tar.gz) is recommended.
+[CMake 3.17.2](https://cmake.org/files/v3.17/cmake-3.17.2-Darwin-x86_64.tar.gz) is recommended.
 
 Setup Homebrew and components
 

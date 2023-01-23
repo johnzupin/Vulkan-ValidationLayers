@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -315,7 +315,9 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
     }
 
 #ifdef VK_USE_PLATFORM_METAL_EXT
-    instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    // Beginning with the 1.3.216 Vulkan SDK, the VK_KHR_PORTABILITY_subset extension is mandatory.
+    AddRequiredExtensions(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 #endif
 
     RemoveIf(instance_layers_, LayerNotSupportedWithReporting);
@@ -1079,7 +1081,6 @@ VkDeviceObj::VkDeviceObj(uint32_t id, VkPhysicalDevice obj, vector<const char *>
 }
 
 uint32_t VkDeviceObj::QueueFamilyMatching(VkQueueFlags with, VkQueueFlags without, bool all_bits) {
-    // Find a queue family with and without desired capabilities
     for (uint32_t i = 0; i < queue_props.size(); i++) {
         auto flags = queue_props[i].queueFlags;
         bool matches = all_bits ? (flags & with) == with : (flags & with) != 0;
@@ -2334,6 +2335,38 @@ void VkCommandBufferObj::EndRendering() {
     assert(vkCmdEndRenderingKHR != nullptr);
 
     vkCmdEndRenderingKHR(handle());
+}
+
+void VkCommandBufferObj::BeginVideoCoding(const VkVideoBeginCodingInfoKHR &beginInfo) {
+    static PFN_vkCmdBeginVideoCodingKHR vkCmdBeginVideoCodingKHR =
+        (PFN_vkCmdBeginVideoCodingKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdBeginVideoCodingKHR");
+    ASSERT_NE(vkCmdBeginVideoCodingKHR, nullptr);
+
+    vkCmdBeginVideoCodingKHR(handle(), &beginInfo);
+}
+
+void VkCommandBufferObj::ControlVideoCoding(const VkVideoCodingControlInfoKHR &controlInfo) {
+    static PFN_vkCmdControlVideoCodingKHR vkCmdControlVideoCodingKHR =
+        (PFN_vkCmdControlVideoCodingKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdControlVideoCodingKHR");
+    ASSERT_NE(vkCmdControlVideoCodingKHR, nullptr);
+
+    vkCmdControlVideoCodingKHR(handle(), &controlInfo);
+}
+
+void VkCommandBufferObj::DecodeVideo(const VkVideoDecodeInfoKHR &decodeInfo) {
+    static PFN_vkCmdDecodeVideoKHR vkCmdDecodeVideoKHR =
+        (PFN_vkCmdDecodeVideoKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDecodeVideoKHR");
+    ASSERT_NE(vkCmdDecodeVideoKHR, nullptr);
+
+    vkCmdDecodeVideoKHR(handle(), &decodeInfo);
+}
+
+void VkCommandBufferObj::EndVideoCoding(const VkVideoEndCodingInfoKHR &endInfo) {
+    static PFN_vkCmdEndVideoCodingKHR vkCmdEndVideoCodingKHR =
+        (PFN_vkCmdEndVideoCodingKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdEndVideoCodingKHR");
+    ASSERT_NE(vkCmdEndVideoCodingKHR, nullptr);
+
+    vkCmdEndVideoCodingKHR(handle(), &endInfo);
 }
 
 void VkCommandBufferObj::SetViewport(uint32_t firstViewport, uint32_t viewportCount, const VkViewport *pViewports) {

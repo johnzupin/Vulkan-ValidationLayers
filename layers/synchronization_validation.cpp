@@ -1,6 +1,6 @@
-/* Copyright (c) 2019-2022 The Khronos Group Inc.
- * Copyright (c) 2019-2022 Valve Corporation
- * Copyright (c) 2019-2022 LunarG, Inc.
+/* Copyright (c) 2019-2023 The Khronos Group Inc.
+ * Copyright (c) 2019-2023 Valve Corporation
+ * Copyright (c) 2019-2023 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@
  */
 
 #include <algorithm>
-#include <bitset>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -29,7 +28,7 @@
 #include "sync_utils.h"
 
 // Utilities to DRY up Get... calls
-template <typename Map, typename Key = typename Map::key_type, typename RetVal = layer_data::optional<typename Map::mapped_type>>
+template <typename Map, typename Key = typename Map::key_type, typename RetVal = std::optional<typename Map::mapped_type>>
 RetVal GetMappedOptional(const Map &map, const Key &key) {
     RetVal ret_val;
     auto it = map.find(key);
@@ -386,7 +385,7 @@ std::string CommandExecutionContext::FormatHazard(const HazardResult &hazard) co
 
 
 bool CommandExecutionContext::ValidForSyncOps() const {
-    bool valid = GetCurrentEventsContext() && GetCurrentAccessContext();
+    const bool valid = GetCurrentEventsContext() && GetCurrentAccessContext();
     assert(valid);
     return valid;
 }
@@ -667,7 +666,7 @@ ResourceAccessRange GetBufferRange(VkDeviceSize offset, VkDeviceSize buf_whole_s
 }
 
 SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType descriptor_type,
-                                                             const InterfaceVariable &interface_var,
+                                                             const ResourceInterfaceVariable &variable,
                                                              VkShaderStageFlagBits stage_flag) {
     if (descriptor_type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) {
         assert(stage_flag == VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -684,11 +683,15 @@ SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType de
     // If the desriptorSet is writable, we don't need to care SHADER_READ. SHADER_WRITE is enough.
     // Because if write hazard happens, read hazard might or might not happen.
     // But if write hazard doesn't happen, read hazard is impossible to happen.
-    if (interface_var.is_writable) {
+    if (variable.is_writable) {
         return stage_access->second.storage_write;
+    } else if (descriptor_type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+               descriptor_type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+               descriptor_type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
+        return stage_access->second.sampled_read;
+    } else {
+        return stage_access->second.storage_read;
     }
-    // TODO: sampled_read
-    return stage_access->second.storage_read;
 }
 
 bool IsImageLayoutDepthWritable(VkImageLayout image_layout) {
@@ -882,7 +885,7 @@ AccessContext::AccessContext(uint32_t subpass, VkQueueFlags queue_flags,
                              const std::vector<AccessContext> &contexts, const AccessContext *external_context) {
     Reset();
     const auto &subpass_dep = dependencies[subpass];
-    bool has_barrier_from_external = subpass_dep.barrier_from_external.size() > 0U;
+    const bool has_barrier_from_external = subpass_dep.barrier_from_external.size() > 0U;
     prev_.reserve(subpass_dep.prev.size() + (has_barrier_from_external ? 1U : 0U));
     prev_by_subpass_.resize(subpass, nullptr);  // Can't be more prevs than the subpass we're on
     for (const auto &prev_dep : subpass_dep.prev) {
@@ -2136,14 +2139,16 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
         const auto raster_state = pipe->RasterizationState();
         if (stage_state.stage_flag == VK_SHADER_STAGE_FRAGMENT_BIT && raster_state && raster_state->rasterizerDiscardEnable) {
             continue;
+        } else if (!stage_state.descriptor_variables) {
+            continue;
         }
-        for (const auto &set_binding : stage_state.descriptor_uses) {
-            const auto *descriptor_set = (*per_sets)[set_binding.first.set].bound_descriptor_set.get();
+        for (const auto &variable : *stage_state.descriptor_variables) {
+            const auto *descriptor_set = (*per_sets)[variable.decorations.set].bound_descriptor_set.get();
             if (!descriptor_set) continue;
-            auto binding = descriptor_set->GetBinding(set_binding.first.binding);
+            auto binding = descriptor_set->GetBinding(variable.decorations.binding);
             const auto descriptor_type = binding->type;
             SyncStageAccessIndex sync_index =
-                GetSyncStageAccessIndexsByDescriptorSet(descriptor_type, set_binding.second, stage_state.stage_flag);
+                GetSyncStageAccessIndexsByDescriptorSet(descriptor_type, variable, stage_state.stage_flag);
 
             for (uint32_t index = 0; index < binding->count; index++) {
                 const auto *descriptor = binding->GetDescriptor(index);
@@ -2190,7 +2195,7 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
                                 sync_state_->report_data->FormatHandle(pipe->pipeline()).c_str(),
                                 sync_state_->report_data->FormatHandle(descriptor_set->GetSet()).c_str(),
                                 string_VkDescriptorType(descriptor_type), string_VkImageLayout(image_layout),
-                                set_binding.first.binding, index, FormatHazard(hazard).c_str());
+                                variable.decorations.binding, index, FormatHazard(hazard).c_str());
                         }
                         break;
                     }
@@ -2212,7 +2217,7 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
                                 sync_state_->report_data->FormatHandle(cb_state_->commandBuffer()).c_str(),
                                 sync_state_->report_data->FormatHandle(pipe->pipeline()).c_str(),
                                 sync_state_->report_data->FormatHandle(descriptor_set->GetSet()).c_str(),
-                                string_VkDescriptorType(descriptor_type), set_binding.first.binding, index,
+                                string_VkDescriptorType(descriptor_type), variable.decorations.binding, index,
                                 FormatHazard(hazard).c_str());
                         }
                         break;
@@ -2235,7 +2240,7 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
                                 sync_state_->report_data->FormatHandle(cb_state_->commandBuffer()).c_str(),
                                 sync_state_->report_data->FormatHandle(pipe->pipeline()).c_str(),
                                 sync_state_->report_data->FormatHandle(descriptor_set->GetSet()).c_str(),
-                                string_VkDescriptorType(descriptor_type), set_binding.first.binding, index,
+                                string_VkDescriptorType(descriptor_type), variable.decorations.binding, index,
                                 FormatHazard(hazard).c_str());
                         }
                         break;
@@ -2268,14 +2273,16 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
         const auto raster_state = pipe->RasterizationState();
         if (stage_state.stage_flag == VK_SHADER_STAGE_FRAGMENT_BIT && raster_state && raster_state->rasterizerDiscardEnable) {
             continue;
+        } else if (!stage_state.descriptor_variables) {
+            continue;
         }
-        for (const auto &set_binding : stage_state.descriptor_uses) {
-            const auto *descriptor_set = (*per_sets)[set_binding.first.set].bound_descriptor_set.get();
+        for (const auto &variable : *stage_state.descriptor_variables) {
+            const auto *descriptor_set = (*per_sets)[variable.decorations.set].bound_descriptor_set.get();
             if (!descriptor_set) continue;
-            auto binding = descriptor_set->GetBinding(set_binding.first.binding);
+            auto binding = descriptor_set->GetBinding(variable.decorations.binding);
             const auto descriptor_type = binding->type;
             SyncStageAccessIndex sync_index =
-                GetSyncStageAccessIndexsByDescriptorSet(descriptor_type, set_binding.second, stage_state.stage_flag);
+                GetSyncStageAccessIndexsByDescriptorSet(descriptor_type, variable, stage_state.stage_flag);
 
             for (uint32_t i = 0; i < binding->count; i++) {
                 const auto *descriptor = binding->GetDescriptor(i);
@@ -2721,8 +2728,18 @@ bool RenderPassAccessContext::ValidateDrawSubpassAttachment(const CommandExecuti
         const IMAGE_VIEW_STATE &view_state = *view_gen.GetViewState();
         bool depth_write = false, stencil_write = false;
 
+        const bool depth_write_enable = pipe->IsDynamic(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE)
+                                            ? cmd_buffer.dynamic_state_value.depth_write_enable
+                                            : ds_state->depthWriteEnable;
+        const bool depth_test_enable = pipe->IsDynamic(VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE)
+                                           ? cmd_buffer.dynamic_state_value.depth_test_enable
+                                           : ds_state->depthTestEnable;
+        const bool stencil_test_enable = pipe->IsDynamic(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE)
+                                             ? cmd_buffer.dynamic_state_value.stencil_test_enable
+                                             : ds_state->stencilTestEnable;
+
         // PHASE1 TODO: These validation should be in core_checks.
-        if (!FormatIsStencilOnly(view_state.create_info.format) && ds_state->depthTestEnable && ds_state->depthWriteEnable &&
+        if (!FormatIsStencilOnly(view_state.create_info.format) && depth_test_enable && depth_write_enable &&
             IsImageLayoutDepthWritable(subpass.pDepthStencilAttachment->layout)) {
             depth_write = true;
         }
@@ -2730,7 +2747,7 @@ bool RenderPassAccessContext::ValidateDrawSubpassAttachment(const CommandExecuti
         //              If failOp, passOp, or depthFailOp are not KEEP, and writeMask isn't 0, it's writable.
         //              If depth test is disable, it's considered depth test passes, and then depthFailOp doesn't run.
         // PHASE1 TODO: These validation should be in core_checks.
-        if (!FormatIsDepthOnly(view_state.create_info.format) && ds_state->stencilTestEnable &&
+        if (!FormatIsDepthOnly(view_state.create_info.format) && stencil_test_enable &&
             IsImageLayoutStencilWritable(subpass.pDepthStencilAttachment->layout)) {
             stencil_write = true;
         }
@@ -2807,16 +2824,26 @@ void RenderPassAccessContext::RecordDrawSubpassAttachment(const CMD_BUFFER_STATE
         const bool has_depth = 0 != (view_state.normalized_subresource_range.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT);
         const bool has_stencil = 0 != (view_state.normalized_subresource_range.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT);
 
+        const bool depth_write_enable = pipe->IsDynamic(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE)
+                                            ? cmd_buffer.dynamic_state_value.depth_write_enable
+                                            : ds_state->depthWriteEnable;
+        const bool depth_test_enable = pipe->IsDynamic(VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE)
+                                           ? cmd_buffer.dynamic_state_value.depth_test_enable
+                                           : ds_state->depthTestEnable;
+        const bool stencil_test_enable = pipe->IsDynamic(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE)
+                                             ? cmd_buffer.dynamic_state_value.stencil_test_enable
+                                             : ds_state->stencilTestEnable;
+
         // PHASE1 TODO: These validation should be in core_checks.
-        if (has_depth && !FormatIsStencilOnly(view_state.create_info.format) && ds_state->depthTestEnable &&
-            ds_state->depthWriteEnable && IsImageLayoutDepthWritable(subpass.pDepthStencilAttachment->layout)) {
+        if (has_depth && !FormatIsStencilOnly(view_state.create_info.format) && depth_test_enable && depth_write_enable &&
+            IsImageLayoutDepthWritable(subpass.pDepthStencilAttachment->layout)) {
             depth_write = true;
         }
         // PHASE1 TODO: It needs to check if stencil is writable.
         //              If failOp, passOp, or depthFailOp are not KEEP, and writeMask isn't 0, it's writable.
         //              If depth test is disable, it's considered depth test passes, and then depthFailOp doesn't run.
         // PHASE1 TODO: These validation should be in core_checks.
-        if (has_stencil && !FormatIsDepthOnly(view_state.create_info.format) && ds_state->stencilTestEnable &&
+        if (has_stencil && !FormatIsDepthOnly(view_state.create_info.format) && stencil_test_enable &&
             IsImageLayoutStencilWritable(subpass.pDepthStencilAttachment->layout)) {
             stencil_write = true;
         }
@@ -3079,7 +3106,7 @@ SyncBarrier::SyncBarrier(const Barrier &barrier, const SyncExecScope &src, const
       dst_access_scope(SyncStageAccess::AccessScope(dst.valid_accesses, barrier.dstAccessMask)) {}
 
 SyncBarrier::SyncBarrier(VkQueueFlags queue_flags, const VkSubpassDependency2 &subpass) {
-    const auto barrier = lvl_find_in_chain<VkMemoryBarrier2KHR>(subpass.pNext);
+    const auto barrier = LvlFindInChain<VkMemoryBarrier2KHR>(subpass.pNext);
     if (barrier) {
         auto src = SyncExecScope::MakeSrc(queue_flags, barrier->srcStageMask);
         src_exec_scope = src;
@@ -3203,7 +3230,7 @@ HazardResult ResourceAccessState::DetectHazard(SyncStageAccessIndex usage_index,
         return DetectBarrierHazard(usage_index, queue_id, ordering.exec_scope, ordering.access_scope);
     } else {
         // Only check for WAW if there are no reads since last_write
-        bool usage_write_is_ordered = (usage_bit & ordering.access_scope).any();
+        const bool usage_write_is_ordered = (usage_bit & ordering.access_scope).any();
         if (last_reads.size()) {
             // Look for any WAR hazards outside the ordered set of stages
             VkPipelineStageFlags2KHR ordered_stages = 0;
@@ -4262,15 +4289,19 @@ syncval_state::CommandBuffer::CommandBuffer(SyncValidator *dev, VkCommandBuffer 
                                             const COMMAND_POOL_STATE *pool)
     : CMD_BUFFER_STATE(dev, cb, pCreateInfo, pool), access_context(*dev, this) {}
 
+syncval_state::CommandBuffer::~CommandBuffer() { Destroy(); }
+
 void syncval_state::CommandBuffer::Destroy() {
-    access_context.Destroy();  // must be first to clean up self references correctly.
+    ResetCBState();  // must be first to clean up self references correctly.
     CMD_BUFFER_STATE::Destroy();
 }
 
 void syncval_state::CommandBuffer::Reset() {
     CMD_BUFFER_STATE::Reset();
-    access_context.Reset();
+    ResetCBState();
 }
+
+void syncval_state::CommandBuffer::ResetCBState() { access_context.Reset(); }
 
 void syncval_state::CommandBuffer::NotifyInvalidate(const BASE_NODE::NodeList &invalid_nodes, bool unlink) {
     for (auto &obj : invalid_nodes) {
@@ -6492,9 +6523,8 @@ SyncEventState::IgnoreReason SyncEventState::IsIgnoredByWait(CMD_TYPE cmd_type, 
 }
 
 bool SyncEventState::HasBarrier(VkPipelineStageFlags2KHR stageMask, VkPipelineStageFlags2KHR exec_scope_arg) const {
-    bool has_barrier = (last_command == CMD_NONE) || (stageMask & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) ||
-                       (barriers & exec_scope_arg) || (barriers & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
-    return has_barrier;
+    return (last_command == CMD_NONE) || (stageMask & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) || (barriers & exec_scope_arg) ||
+           (barriers & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
 }
 
 void SyncEventState::AddReferencedTags(ResourceUsageTagSet &referenced) const {
@@ -7624,9 +7654,6 @@ struct QueuePresentCmdState {
     QueuePresentCmdState(const SignaledSemaphores &parent_semaphores) : signaled(parent_semaphores) {}
 };
 
-template <>
-thread_local layer_data::optional<QueuePresentCmdState> layer_data::TlsGuard<QueuePresentCmdState>::payload_{};
-
 bool SyncValidator::PreCallValidateQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo) const {
     bool skip = false;
 
@@ -7763,9 +7790,6 @@ void SyncValidator::RecordAcquireNextImageState(VkDevice device, VkSwapchainKHR 
         UpdateFenceWaitInfo(fence, presented, acquire_tag);
     }
 }
-
-template <>
-thread_local layer_data::optional<QueueSubmitCmdState> layer_data::TlsGuard<QueueSubmitCmdState>::payload_{};
 
 bool SyncValidator::PreCallValidateQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
                                                VkFence fence) const {
@@ -8536,20 +8560,20 @@ SignaledSemaphores::Signal::Signal(const std::shared_ptr<const SEMAPHORE_STATE> 
 FenceSyncState::FenceSyncState() : fence(), tag(kInvalidTag), queue_id(QueueSyncState::kQueueIdInvalid) {}
 
 VkSemaphoreSubmitInfo SubmitInfoConverter::BatchStore::WaitSemaphore(const VkSubmitInfo &info, uint32_t index) {
-    auto semaphore_info = lvl_init_struct<VkSemaphoreSubmitInfo>();
+    auto semaphore_info = LvlInitStruct<VkSemaphoreSubmitInfo>();
     semaphore_info.semaphore = info.pWaitSemaphores[index];
     semaphore_info.stageMask = info.pWaitDstStageMask[index];
     return semaphore_info;
 }
 VkCommandBufferSubmitInfo SubmitInfoConverter::BatchStore::CommandBuffer(const VkSubmitInfo &info, uint32_t index) {
-    auto cb_info = lvl_init_struct<VkCommandBufferSubmitInfo>();
+    auto cb_info = LvlInitStruct<VkCommandBufferSubmitInfo>();
     cb_info.commandBuffer = info.pCommandBuffers[index];
     return cb_info;
 }
 
 VkSemaphoreSubmitInfo SubmitInfoConverter::BatchStore::SignalSemaphore(const VkSubmitInfo &info, uint32_t index,
                                                                        VkQueueFlags queue_flags) {
-    auto semaphore_info = lvl_init_struct<VkSemaphoreSubmitInfo>();
+    auto semaphore_info = LvlInitStruct<VkSemaphoreSubmitInfo>();
     semaphore_info.semaphore = info.pSignalSemaphores[index];
     // Can't just use BOTTOM, because of how access expansion is done
     semaphore_info.stageMask =
@@ -8558,7 +8582,7 @@ VkSemaphoreSubmitInfo SubmitInfoConverter::BatchStore::SignalSemaphore(const VkS
 }
 
 SubmitInfoConverter::BatchStore::BatchStore(const VkSubmitInfo &info, VkQueueFlags queue_flags) {
-    info2 = lvl_init_struct<VkSubmitInfo2>();
+    info2 = LvlInitStruct<VkSubmitInfo2>();
 
     info2.waitSemaphoreInfoCount = info.waitSemaphoreCount;
     waits.reserve(info2.waitSemaphoreInfoCount);

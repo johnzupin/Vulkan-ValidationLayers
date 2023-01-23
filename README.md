@@ -2,6 +2,10 @@
 
 This project provides the Khronos official Vulkan validation layers for Windows, Linux, Android, and MacOS.
 
+## master to main upcoming change (January 23, 2023)
+
+See https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5084 for details.
+
 ## CI Build Status
 | Build Status |
 |:------------|
@@ -22,9 +26,8 @@ to assist development by enabling developers to verify their applications correc
 This repository contains both the [*Validation Layers*](layers/) source as well as [*Tests*](tests/) for them.
 
 ## Contact Information
-* [Mark Lobodzinski](mailto:mark@lunarg.com)
-* [Nate Cesario](mailto:nathaniel@lunarg.com)
-* Can also be found on the [Khronos Slack](https://khr.io/slack)
+* @KhronosGroup/VVL-CODEOWNERS
+* VVL-CODEOWNERS members can also be found on the [Khronos Slack](https://khr.io/slack)
 
 ## Info
 * [BUILD.md](BUILD.md) - Instructions for building the Validation Layers

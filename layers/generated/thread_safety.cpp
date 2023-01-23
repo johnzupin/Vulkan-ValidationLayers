@@ -2,10 +2,10 @@
 // This file is ***GENERATED***.  Do Not Edit.
 // See thread_safety_generator.py for modifications.
 
-/* Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google Inc.
+/* Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@
 #include "thread_safety.h"
 
 
-ReadLockGuard ThreadSafety::ReadLock() {
+ReadLockGuard ThreadSafety::ReadLock() const {
     return ReadLockGuard(validation_object_mutex, std::defer_lock);
 }
 
@@ -328,7 +328,7 @@ void ThreadSafety::PreCallRecordUpdateDescriptorSetWithTemplate(
     StartReadObjectParentInstance(device, "vkUpdateDescriptorSetWithTemplate");
     StartReadObject(descriptorUpdateTemplate, "vkUpdateDescriptorSetWithTemplate");
 
-    bool read_only = DsReadOnly(descriptorSet);
+    const bool read_only = DsReadOnly(descriptorSet);
     if (read_only) {
         StartReadObject(descriptorSet, "vkUpdateDescriptorSetWithTemplate");
     } else {
@@ -345,7 +345,7 @@ void ThreadSafety::PostCallRecordUpdateDescriptorSetWithTemplate(
     FinishReadObjectParentInstance(device, "vkUpdateDescriptorSetWithTemplate");
     FinishReadObject(descriptorUpdateTemplate, "vkUpdateDescriptorSetWithTemplate");
 
-    bool read_only = DsReadOnly(descriptorSet);
+    const bool read_only = DsReadOnly(descriptorSet);
     if (read_only) {
         FinishReadObject(descriptorSet, "vkUpdateDescriptorSetWithTemplate");
     } else {
@@ -362,7 +362,7 @@ void ThreadSafety::PreCallRecordUpdateDescriptorSetWithTemplateKHR(
     StartReadObjectParentInstance(device, "vkUpdateDescriptorSetWithTemplateKHR");
     StartReadObject(descriptorUpdateTemplate, "vkUpdateDescriptorSetWithTemplateKHR");
 
-    bool read_only = DsReadOnly(descriptorSet);
+    const bool read_only = DsReadOnly(descriptorSet);
     if (read_only) {
         StartReadObject(descriptorSet, "vkUpdateDescriptorSetWithTemplateKHR");
     } else {
@@ -379,7 +379,7 @@ void ThreadSafety::PostCallRecordUpdateDescriptorSetWithTemplateKHR(
     FinishReadObjectParentInstance(device, "vkUpdateDescriptorSetWithTemplateKHR");
     FinishReadObject(descriptorUpdateTemplate, "vkUpdateDescriptorSetWithTemplateKHR");
 
-    bool read_only = DsReadOnly(descriptorSet);
+    const bool read_only = DsReadOnly(descriptorSet);
     if (read_only) {
         FinishReadObject(descriptorSet, "vkUpdateDescriptorSetWithTemplateKHR");
     } else {
@@ -824,9 +824,8 @@ void ThreadSafety::PostCallRecordCreateRayTracingPipelinesKHR(
         }
     };
 
-    bool is_operation_deferred = (deferredOperation != VK_NULL_HANDLE && result == VK_OPERATION_DEFERRED_KHR);
-
-    if(is_operation_deferred) {
+    const bool is_operation_deferred = (deferredOperation != VK_NULL_HANDLE && result == VK_OPERATION_DEFERRED_KHR);
+    if (is_operation_deferred) {
         auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
         if (wrap_handles) {
             deferredOperation = layer_data->Unwrap(deferredOperation);
@@ -4639,8 +4638,6 @@ void ThreadSafety::PostCallRecordCreateWin32SurfaceKHR(
 }
 #endif // VK_USE_PLATFORM_WIN32_KHR
 
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
 void ThreadSafety::PreCallRecordCreateVideoSessionKHR(
     VkDevice                                    device,
     const VkVideoSessionCreateInfoKHR*          pCreateInfo,
@@ -4817,9 +4814,6 @@ void ThreadSafety::PostCallRecordCmdControlVideoCodingKHR(
     FinishWriteObject(commandBuffer, "vkCmdControlVideoCodingKHR");
     // Host access to commandBuffer must be externally synchronized
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 void ThreadSafety::PreCallRecordCmdDecodeVideoKHR(
     VkCommandBuffer                             commandBuffer,
@@ -4834,7 +4828,6 @@ void ThreadSafety::PostCallRecordCmdDecodeVideoKHR(
     FinishWriteObject(commandBuffer, "vkCmdDecodeVideoKHR");
     // Host access to commandBuffer must be externally synchronized
 }
-#endif // VK_ENABLE_BETA_EXTENSIONS
 
 void ThreadSafety::PreCallRecordCmdBeginRenderingKHR(
     VkCommandBuffer                             commandBuffer,
@@ -6488,9 +6481,6 @@ void ThreadSafety::PostCallRecordCmdDrawIndexedIndirectCountAMD(
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 #endif // VK_ENABLE_BETA_EXTENSIONS
 
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
 void ThreadSafety::PreCallRecordGetShaderInfoAMD(
     VkDevice                                    device,
     VkPipeline                                  pipeline,
@@ -7573,9 +7563,6 @@ void ThreadSafety::PostCallRecordGetCalibratedTimestampsEXT(
     FinishReadObjectParentInstance(device, "vkGetCalibratedTimestampsEXT");
 }
 
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_USE_PLATFORM_GGP
 #endif // VK_USE_PLATFORM_GGP
 
@@ -8200,6 +8187,19 @@ void ThreadSafety::PostCallRecordCmdSetStencilOpEXT(
     VkCompareOp                                 compareOp) {
     FinishWriteObject(commandBuffer, "vkCmdSetStencilOpEXT");
     // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordReleaseSwapchainImagesEXT(
+    VkDevice                                    device,
+    const VkReleaseSwapchainImagesInfoEXT*      pReleaseInfo) {
+    StartReadObjectParentInstance(device, "vkReleaseSwapchainImagesEXT");
+}
+
+void ThreadSafety::PostCallRecordReleaseSwapchainImagesEXT(
+    VkDevice                                    device,
+    const VkReleaseSwapchainImagesInfoEXT*      pReleaseInfo,
+    VkResult                                    result) {
+    FinishReadObjectParentInstance(device, "vkReleaseSwapchainImagesEXT");
 }
 
 void ThreadSafety::PreCallRecordGetGeneratedCommandsMemoryRequirementsNV(
@@ -9360,6 +9360,42 @@ void ThreadSafety::PostCallRecordGetMicromapBuildSizesEXT(
     const VkMicromapBuildInfoEXT*               pBuildInfo,
     VkMicromapBuildSizesInfoEXT*                pSizeInfo) {
     FinishReadObjectParentInstance(device, "vkGetMicromapBuildSizesEXT");
+}
+
+void ThreadSafety::PreCallRecordCmdDrawClusterHUAWEI(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    groupCountX,
+    uint32_t                                    groupCountY,
+    uint32_t                                    groupCountZ) {
+    StartWriteObject(commandBuffer, "vkCmdDrawClusterHUAWEI");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdDrawClusterHUAWEI(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    groupCountX,
+    uint32_t                                    groupCountY,
+    uint32_t                                    groupCountZ) {
+    FinishWriteObject(commandBuffer, "vkCmdDrawClusterHUAWEI");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdDrawClusterIndirectHUAWEI(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset) {
+    StartWriteObject(commandBuffer, "vkCmdDrawClusterIndirectHUAWEI");
+    StartReadObject(buffer, "vkCmdDrawClusterIndirectHUAWEI");
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdDrawClusterIndirectHUAWEI(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset) {
+    FinishWriteObject(commandBuffer, "vkCmdDrawClusterIndirectHUAWEI");
+    FinishReadObject(buffer, "vkCmdDrawClusterIndirectHUAWEI");
+    // Host access to commandBuffer must be externally synchronized
 }
 
 void ThreadSafety::PreCallRecordSetDeviceMemoryPriorityEXT(

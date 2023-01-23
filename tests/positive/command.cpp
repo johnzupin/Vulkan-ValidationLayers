@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,19 +78,7 @@ TEST_F(VkPositiveLayerTest, SecondaryCommandBufferBarrier) {
     ASSERT_VK_SUCCESS(err);
 
     m_commandBuffer->begin();
-
-    VkRenderPassBeginInfo rpbi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-                                  nullptr,
-                                  rp,
-                                  fb,
-                                  {{
-                                       0,
-                                       0,
-                                   },
-                                   {32, 32}},
-                                  0,
-                                  nullptr};
-
+    VkRenderPassBeginInfo rpbi = LvlInitStruct<VkRenderPassBeginInfo>(nullptr, rp, fb, VkRect2D{{0, 0}, {32u, 32u}}, 0u, nullptr);
     vk::CmdBeginRenderPass(m_commandBuffer->handle(), &rpbi, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
     VkCommandPoolObj pool(m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -603,11 +591,6 @@ TEST_F(VkPositiveLayerTest, DrawIndirectCountWithoutFeature12) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
-
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
@@ -653,11 +636,6 @@ TEST_F(VkPositiveLayerTest, DrawIndirectCountWithFeature) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
-    // TODO Issue 4867 - MockICD doesn't return proper values
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
@@ -809,7 +787,7 @@ TEST_F(VkPositiveLayerTest, FramebufferBindingDestroyCommandPool) {
     vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, &command_buffer);
 
     // Begin our cmd buffer with renderpass using our framebuffer
-    VkRenderPassBeginInfo rpbi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, nullptr, rp, fb, {{0, 0}, {32, 32}}, 0, nullptr};
+    VkRenderPassBeginInfo rpbi = LvlInitStruct<VkRenderPassBeginInfo>(nullptr, rp, fb, VkRect2D{{0, 0}, {32u, 32u}}, 0u, nullptr);
     VkCommandBufferBeginInfo begin_info = LvlInitStruct<VkCommandBufferBeginInfo>();
     vk::BeginCommandBuffer(command_buffer, &begin_info);
 

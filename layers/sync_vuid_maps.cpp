@@ -366,12 +366,12 @@ static const std::map<VkAccessFlags2KHR, std::array<Entry, 6>> kAccessMask2Commo
      }}},
     {VK_ACCESS_2_SHADER_BINDING_TABLE_READ_BIT_KHR,
      {{
-         {Key(Struct::VkMemoryBarrier2, Field::srcAccessMask), "UNASSIGNED-VkMemoryBarrier2-srcAccessMask-SHADER_BINDING_TABLE_READ"},
-         {Key(Struct::VkMemoryBarrier2, Field::dstAccessMask), "UNASSIGNED-VkMemoryBarrier2-dstAccessMask-SHADER_BINDING_TABLE_READ"},
-         {Key(Struct::VkBufferMemoryBarrier2, Field::srcAccessMask), "UNASSIGNED-VkBufferMemoryBarrier2-srcAccessMask-SHADER_BINDING_TABLE_READ"},
-         {Key(Struct::VkBufferMemoryBarrier2, Field::dstAccessMask), "UNASSIGNED-VkBufferMemoryBarrier2-dstAccessMask-SHADER_BINDING_TABLE_READ"},
-         {Key(Struct::VkImageMemoryBarrier2, Field::srcAccessMask), "UNASSIGNED-VkImageMemoryBarrier2-srcAccessMask-SHADER_BINDING_TABLE_READ"},
-         {Key(Struct::VkImageMemoryBarrier2, Field::dstAccessMask), "UNASSIGNED-VkImageMemoryBarrier2-dstAccessMask-SHADER_BINDING_TABLE_READ"},
+         {Key(Struct::VkMemoryBarrier2, Field::srcAccessMask), "VUID-VkMemoryBarrier2-srcAccessMask-07272"},
+         {Key(Struct::VkMemoryBarrier2, Field::dstAccessMask), "VUID-VkMemoryBarrier2-dstAccessMask-07272"},
+         {Key(Struct::VkBufferMemoryBarrier2, Field::srcAccessMask), "VUID-VkBufferMemoryBarrier2-srcAccessMask-07272"},
+         {Key(Struct::VkBufferMemoryBarrier2, Field::dstAccessMask), "VUID-VkBufferMemoryBarrier2-dstAccessMask-07272"},
+         {Key(Struct::VkImageMemoryBarrier2, Field::srcAccessMask), "VUID-VkImageMemoryBarrier2-srcAccessMask-07272"},
+         {Key(Struct::VkImageMemoryBarrier2, Field::dstAccessMask), "VUID-VkImageMemoryBarrier2-dstAccessMask-07272"},
      }}},
     {VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR,
      {{
@@ -811,6 +811,36 @@ static const std::map<VkImageLayout, std::array<Entry, 2>> kImageLayoutErrors{
          {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07006"},
          {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07006"},
      }}},
+    {VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR,
+     {{
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07120"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07120"},
+     }}},
+    {VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR,
+     {{
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07121"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07121"},
+     }}},
+    {VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,
+     {{
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07122"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07122"},
+     }}},
+    {VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR,
+     {{
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07123"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07123"},
+     }}},
+    {VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR,
+     {{
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07124"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07124"},
+     }}},
+    {VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,
+     {{
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-srcQueueFamilyIndex-07125"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcQueueFamilyIndex-07125"},
+     }}},
 };
 
 const std::string &GetBadImageLayoutVUID(const Location &loc, VkImageLayout layout) {
@@ -974,12 +1004,14 @@ static const std::map<SubmitError, std::vector<Entry>> kSubmitErrors{
          {Key(Func::vkQueueSubmit), "VUID-vkQueueSubmit-pWaitSemaphores-00069"},
          {Key(Func::vkQueueSubmit2), "VUID-vkQueueSubmit2-semaphore-03872"},
          {Key(Func::vkQueueBindSparse), "VUID-vkQueueBindSparse-pWaitSemaphores-01117"},
+         {Key(Func::vkQueuePresentKHR), "VUID-vkQueuePresentKHR-pWaitSemaphores-01295"},
      }},
     {SubmitError::kBinaryCannotBeSignalled,
      {
          {Key(Func::vkQueueSubmit), "VUID-vkQueueSubmit-pWaitSemaphores-03238"},
          {Key(Func::vkQueueSubmit2), "VUID-vkQueueSubmit2-semaphore-03873"},
          {Key(Func::vkQueueBindSparse), "VUID-vkQueueBindSparse-pWaitSemaphores-03245"},
+         {Key(Func::vkQueuePresentKHR), "VUID-vkQueuePresentKHR-pWaitSemaphores-03268"},
      }},
     {SubmitError::kTimelineSemMaxDiff,
      {
@@ -1043,6 +1075,7 @@ static const std::map<SubmitError, std::vector<Entry>> kSubmitErrors{
          {Key(Func::vkQueueSubmit), "VUID-vkQueueSubmit-pWaitSemaphores-00068"},
          {Key(Func::vkQueueBindSparse), "VUID-vkQueueBindSparse-pWaitSemaphores-01116"},
          {Key(Func::vkQueueSubmit2), "VUID-vkQueueSubmit2-semaphore-03871"},
+         {Key(Func::vkQueuePresentKHR), "VUID-vkQueuePresentKHR-pWaitSemaphores-01294"},
      }},
 };
 
