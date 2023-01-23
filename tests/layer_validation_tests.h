@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -178,10 +178,26 @@ static char const bindStateFragSubpassLoadInputText[] = R"glsl(
         }
     )glsl";
 
+[[maybe_unused]] static const char *bindStateRTShaderText = R"glsl(
+        #version 460
+        #extension GL_EXT_ray_tracing : require
+        void main() {}
+    )glsl";
+
 // Static arrays helper
 template <class ElementT, size_t array_size>
 size_t size(ElementT (&)[array_size]) {
     return array_size;
+}
+
+template <class ElementT, size_t array_size>
+uint32_t size32(ElementT (&)[array_size]) {
+    return static_cast<uint32_t>(array_size);
+}
+
+template <class Container>
+uint32_t size32(const Container &c) {
+    return static_cast<uint32_t>(c.size());
 }
 
 // Format search helper
@@ -211,9 +227,6 @@ VkSamplerCreateInfo SafeSaneSamplerCreateInfo();
 VkImageViewCreateInfo SafeSaneImageViewCreateInfo(VkImage image, VkFormat format, VkImageAspectFlags aspect_mask);
 
 VkImageViewCreateInfo SafeSaneImageViewCreateInfo(const VkImageObj &image, VkFormat format, VkImageAspectFlags aspect_mask);
-
-// Helper for checking createRenderPass2 support and adding related extensions.
-bool CheckCreateRenderPass2Support(VkRenderFramework *renderFramework, std::vector<const char *> &device_extension_names);
 
 // Helper for checking timeline semaphore support and initializing
 bool CheckTimelineSemaphoreSupportAndInitState(VkRenderFramework *renderFramework);
@@ -510,7 +523,7 @@ struct CreatePipelineHelper {
     std::unique_ptr<VkShaderObj> vs_;
     std::unique_ptr<VkShaderObj> fs_;
     VkLayerTest &layer_test_;
-    layer_data::optional<VkGraphicsPipelineLibraryCreateInfoEXT> gpl_info;
+    std::optional<VkGraphicsPipelineLibraryCreateInfoEXT> gpl_info;
     CreatePipelineHelper(VkLayerTest &test, uint32_t color_attachments_count = 1u);
     ~CreatePipelineHelper();
 
@@ -922,6 +935,9 @@ bool InitFrameworkForRayTracingTest(VkRenderFramework *framework, bool is_khr, V
 
 void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, VkBufferObj *vbo, VkBufferObj *ibo,
                                                     VkGeometryNV *geometry, VkDeviceSize offset = 0, bool buffer_device_address = false);
+
+std::pair<VkBufferObj &&, VkAccelerationStructureGeometryKHR> GetSimpleAABB(const VkDeviceObj &device,
+                                                                            uint32_t vk_api_version = VK_API_VERSION_1_2);
 
 void print_android(const char *c);
 #endif  // VKLAYERTEST_H

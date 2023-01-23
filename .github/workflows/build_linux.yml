@@ -1,5 +1,5 @@
-# Copyright (c) 2021-2022 Valve Corporation
-# Copyright (c) 2021-2022 LunarG, Inc.
+# Copyright (c) 2021-2023 Valve Corporation
+# Copyright (c) 2021-2023 LunarG, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,10 +31,10 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: '0'
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.7'
       - name: Execute Source Code Format Checking Script
@@ -56,16 +56,20 @@ jobs:
           - cc: clang
             config: debug
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: 3.17.2
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.7'
       - name: Install build dependencies
         run: |
+          python3 -m pip install jsonschema
           sudo apt-get -qq update
           sudo apt-get install -y libxkbcommon-dev libwayland-dev libmirclient-dev libxrandr-dev \
                                 libx11-xcb-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev \
-                                libxcb-randr0-dev cmake
+                                libxcb-randr0-dev
       - name: Cache dependent components
         # Speed up builds by caching the build/install artifacts so they can be retrieved without rebuilding.
         # Note: Normally the build/install artifacts are enough to satisfy the dependencies.
@@ -77,35 +81,45 @@ jobs:
           cache-name: cache-linux
         with:
           path: |
-            external/glslang/build/install
-            external/Vulkan-Headers/build/install
-            external/SPIRV-Headers/build/install
-            external/SPIRV-Tools/build/install
-            external/robin-hood-hashing/build/install
-            external/googletest/build/install
-            external/Vulkan-Headers/registry
-            external/SPIRV-Headers/include
+            external/${{ matrix.config }}/glslang/build/install
+            external/${{ matrix.config }}/Vulkan-Headers/build/install
+            external/${{ matrix.config }}/SPIRV-Headers/build/install
+            external/${{ matrix.config }}/SPIRV-Tools/build/install
+            external/${{ matrix.config }}/robin-hood-hashing/build/install
+            external/${{ matrix.config }}/googletest/build/install
+            external/${{ matrix.config }}/Vulkan-Headers/registry
+            external/${{ matrix.config }}/SPIRV-Headers/include
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ matrix.cc }}-${{ matrix.cxx }}-${{ matrix.config }}-${{ hashfiles('scripts/known_good.json') }}
-      - name: Build and Test Vulkan-ValidationLayers
-        run: python3 scripts/github_ci_win_linux.py --config ${{ matrix.config }}
+      - name: Build Vulkan-ValidationLayers
+        run: python3 scripts/github_ci_win_linux.py --build --config ${{ matrix.config }}
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-      - name: Test CMake minimum version requirements
-        run: python3 scripts/cmake_test_min.py
-        if: matrix.cc == 'gcc' && matrix.config == 'release'
+      - name: Test Vulkan-ValidationLayers - Pixel 6 Adreno profile
+        run: python3 scripts/github_ci_win_linux.py --test --config release
+        env:
+          VK_KHRONOS_PROFILES_PROFILE_FILE: tests/device_profiles/pixel_6_adreno.json
+      - name: Test Vulkan-ValidationLayers - Pixel 6 Mali profile
+        run: python3 scripts/github_ci_win_linux.py --test --config release
+        env:
+          VK_KHRONOS_PROFILES_PROFILE_FILE: tests/device_profiles/pixel_6_mali.json
+      - name: Test Vulkan-ValidationLayers - NVIDIA Tegra X1 profile
+        run: python3 scripts/github_ci_win_linux.py --test --config release
+        env:
+          VK_KHRONOS_PROFILES_PROFILE_FILE: tests/device_profiles/nvidia_tegra_x1.json
 
   linux-cpp20:
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.7'
       - name: Install build dependencies
         run: |
+          python3 -m pip install jsonschema
           sudo apt-get -qq update
           sudo apt-get install -y libxkbcommon-dev libwayland-dev libmirclient-dev libxrandr-dev \
                                 libx11-xcb-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev \
@@ -121,17 +135,29 @@ jobs:
           cache-name: cache-linux-cpp20
         with:
           path: |
-            external/glslang/build/install
-            external/Vulkan-Headers/build/install
-            external/SPIRV-Headers/build/install
-            external/SPIRV-Tools/build/install
-            external/robin-hood-hashing/build/install
-            external/googletest/build/install
-            external/Vulkan-Headers/registry
-            external/SPIRV-Headers/include
+            external/${{ matrix.config }}/glslang/build/install
+            external/${{ matrix.config }}/Vulkan-Headers/build/install
+            external/${{ matrix.config }}/SPIRV-Headers/build/install
+            external/${{ matrix.config }}/SPIRV-Tools/build/install
+            external/${{ matrix.config }}/robin-hood-hashing/build/install
+            external/${{ matrix.config }}/googletest/build/install
+            external/${{ matrix.config }}/Vulkan-Headers/registry
+            external/${{ matrix.config }}/SPIRV-Headers/include
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashfiles('scripts/known_good.json') }}
-      - name: Build and Test Vulkan-ValidationLayers
-        run: python3 scripts/github_ci_win_linux.py --config release --cmake='-DVVL_CPP_STANDARD=20'
+      - name: Build Vulkan-ValidationLayers
+        run: python3 scripts/github_ci_win_linux.py --build --config release --cmake='-DVVL_CPP_STANDARD=20'
         env:
           CC: clang
           CXX: clang++
+      - name: Test Vulkan-ValidationLayers - Pixel 6 Adreno profile
+        run: python3 scripts/github_ci_win_linux.py --test --config release --cmake='-DVVL_CPP_STANDARD=20'
+        env:
+          VK_KHRONOS_PROFILES_PROFILE_FILE: tests/device_profiles/pixel_6_adreno.json
+      - name: Test Vulkan-ValidationLayers - Pixel 6 Mali profile
+        run: python3 scripts/github_ci_win_linux.py --test --config release --cmake='-DVVL_CPP_STANDARD=20'
+        env:
+          VK_KHRONOS_PROFILES_PROFILE_FILE: tests/device_profiles/pixel_6_mali.json
+      - name: Test Vulkan-ValidationLayers - NVIDIA Tegra X1 profile
+        run: python3 scripts/github_ci_win_linux.py --test --config release --cmake='-DVVL_CPP_STANDARD=20'
+        env:
+          VK_KHRONOS_PROFILES_PROFILE_FILE: tests/device_profiles/nvidia_tegra_x1.json

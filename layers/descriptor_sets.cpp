@@ -56,7 +56,8 @@ void DESCRIPTOR_POOL_STATE::Allocate(const VkDescriptorSetAllocateInfo *alloc_in
     }
 
     const auto *variable_count_info = LvlFindInChain<VkDescriptorSetVariableDescriptorCountAllocateInfo>(alloc_info->pNext);
-    bool variable_count_valid = variable_count_info && variable_count_info->descriptorSetCount == alloc_info->descriptorSetCount;
+    const bool variable_count_valid =
+        variable_count_info && variable_count_info->descriptorSetCount == alloc_info->descriptorSetCount;
 
     // Create tracking object for each descriptor set; insert into global map and the pool's set.
     for (uint32_t i = 0; i < alloc_info->descriptorSetCount; i++) {
@@ -394,8 +395,7 @@ const VkDeviceSize* cvdescriptorset::DescriptorSetLayout::GetLayoutSizeInBytes()
 
 // If our layout is compatible with rh_ds_layout, return true.
 bool cvdescriptorset::DescriptorSetLayout::IsCompatible(DescriptorSetLayout const *rh_ds_layout) const {
-    bool compatible = (this == rh_ds_layout) || (GetLayoutDef() == rh_ds_layout->GetLayoutDef());
-    return compatible;
+    return (this == rh_ds_layout) || (GetLayoutDef() == rh_ds_layout->GetLayoutDef());
 }
 
 // The DescriptorSetLayout stores the per handle data for a descriptor set layout, and references the common defintion for the
@@ -551,7 +551,7 @@ void cvdescriptorset::DescriptorSet::PerformWriteUpdate(ValidationStateTracker *
     }
     if (update->descriptorCount) {
         some_update_ = true;
-        change_count_++;
+        ++change_count_;
     }
 
     if (!IsPushDescriptor() && !(orig_binding.binding_flags & (VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
@@ -571,7 +571,7 @@ void cvdescriptorset::DescriptorSet::PerformCopyUpdate(ValidationStateTracker *d
         if (src_iter.updated()) {
             dst.CopyUpdate(this, state_data_, &src, src_iter.CurrentBinding().IsBindless());
             some_update_ = true;
-            change_count_++;
+            ++change_count_;
             dst_iter.updated(true);
         } else {
             dst_iter.updated(false);

@@ -116,7 +116,7 @@ bool DebugPrintf::InstrumentShader(const layer_data::span<const uint32_t> &input
     };
     optimizer.SetMessageConsumer(debug_printf_console_message_consumer);
     optimizer.RegisterPass(CreateInstDebugPrintfPass(desc_set_bind_index, unique_shader_module_id));
-    bool pass = optimizer.Run(new_pgm.data(), new_pgm.size(), &new_pgm, opt_options);
+    const bool pass = optimizer.Run(new_pgm.data(), new_pgm.size(), &new_pgm, opt_options);
     if (!pass) {
         ReportSetupProblem(device, "Failure to instrument shader.  Proceeding with non-instrumented shader.");
     }
@@ -128,8 +128,8 @@ void DebugPrintf::PreCallRecordCreateShaderModule(VkDevice device, const VkShade
                                                   const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule,
                                                   void *csm_state_data) {
     create_shader_module_api_state *csm_state = reinterpret_cast<create_shader_module_api_state *>(csm_state_data);
-    bool pass = InstrumentShader(layer_data::make_span(pCreateInfo->pCode, pCreateInfo->codeSize / sizeof(uint32_t)),
-                                 csm_state->instrumented_pgm, &csm_state->unique_shader_id);
+    const bool pass = InstrumentShader(layer_data::make_span(pCreateInfo->pCode, pCreateInfo->codeSize / sizeof(uint32_t)),
+                                       csm_state->instrumented_pgm, &csm_state->unique_shader_id);
     if (pass) {
         csm_state->instrumented_create_info.pCode = csm_state->instrumented_pgm.data();
         csm_state->instrumented_create_info.codeSize = csm_state->instrumented_pgm.size() * sizeof(uint32_t);
@@ -241,14 +241,17 @@ std::vector<DPFSubstring> DebugPrintf::ParseFormatString(const std::string &form
 std::string DebugPrintf::FindFormatString(std::vector<uint32_t> pgm, uint32_t string_id) {
     std::string format_string;
     SHADER_MODULE_STATE module_state(pgm);
-    if (module_state.words_.size() > 0) {
-        for (const auto &insn : module_state) {
-            if (insn.opcode() == spv::OpString) {
-                uint32_t offset = insn.offset();
-                if (pgm[offset + 1] == string_id) {
-                    format_string = reinterpret_cast<char *>(&pgm[offset + 2]);
-                    break;
-                }
+    if (module_state.words_.empty()) {
+        return {};
+    }
+    for (const Instruction &insn : module_state.GetInstructions()) {
+        if (insn.Opcode() == spv::OpFunction) {
+            break;  // Debug Info is always before first function
+        }
+        if (insn.Opcode() == spv::OpString) {
+            if (insn.Word(1) == string_id) {
+                format_string = insn.GetAsString(2);
+                break;
             }
         }
     }
@@ -719,8 +722,19 @@ debug_printf_state::CommandBuffer::CommandBuffer(DebugPrintf *dp, VkCommandBuffe
                                                  const VkCommandBufferAllocateInfo *pCreateInfo, const COMMAND_POOL_STATE *pool)
     : gpu_utils_state::CommandBuffer(dp, cb, pCreateInfo, pool) {}
 
+debug_printf_state::CommandBuffer::~CommandBuffer() { Destroy(); }
+
+void debug_printf_state::CommandBuffer::Destroy() {
+    ResetCBState();
+    CMD_BUFFER_STATE::Destroy();
+}
+
 void debug_printf_state::CommandBuffer::Reset() {
     CMD_BUFFER_STATE::Reset();
+    ResetCBState();
+}
+
+void debug_printf_state::CommandBuffer::ResetCBState() {
     auto debug_printf = static_cast<DebugPrintf *>(dev_data);
     // Free the device memory and descriptor set(s) associated with a command buffer.
     if (debug_printf->aborted) {

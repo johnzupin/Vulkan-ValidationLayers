@@ -1,6 +1,7 @@
-/* Copyright (c) 2015-2017, 2019-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2017, 2019-2022 Valve Corporation
- * Copyright (c) 2015-2017, 2019-2022 LunarG, Inc.
+/* Copyright (c) 2015-2017, 2019-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2017, 2019-2023 Valve Corporation
+ * Copyright (c) 2015-2017, 2019-2023 LunarG, Inc.
+ * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +18,18 @@
  * Author: Mark Lobodzinski <mark@lunarg.com>
  * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
  * Author: Dave Houlton <daveh@lunarg.com>
+ * Author: Daniel Rakos <daniel.rakos@rastergrid.com>
  */
 
 #pragma once
 
 #include <cassert>
 #include <cstddef>
+#include <cstring>
 #include <functional>
-#include <stdbool.h>
 #include <string>
 #include <vector>
+#include <bitset>
 #include <iomanip>
 #include "cast_utils.h"
 #include "vk_format_utils.h"
@@ -299,6 +302,28 @@ static inline bool IsSecondaryColorInputBlendFactor(VkBlendFactor blend_factor) 
             blend_factor == VK_BLEND_FACTOR_SRC1_ALPHA || blend_factor == VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA);
 }
 
+// Check if size is in range
+static inline bool IsBetweenInclusive(VkDeviceSize value, VkDeviceSize min, VkDeviceSize max) {
+    return (value >= min) && (value <= max);
+}
+
+static inline bool IsBetweenInclusive(const VkExtent2D &value, const VkExtent2D &min, const VkExtent2D &max) {
+    return IsBetweenInclusive(value.width, min.width, max.width) && IsBetweenInclusive(value.height, min.height, max.height);
+}
+
+// Check if value is integer multiple of granularity
+static inline bool IsIntegerMultipleOf(VkDeviceSize value, VkDeviceSize granularity) {
+    if (granularity == 0) {
+        return value == 0;
+    } else {
+        return (value % granularity) == 0;
+    }
+}
+
+static inline bool IsIntegerMultipleOf(const VkOffset2D &value, const VkOffset2D &granularity) {
+    return IsIntegerMultipleOf(value.x, granularity.x) && IsIntegerMultipleOf(value.y, granularity.y);
+}
+
 // Perform a zero-tolerant modulo operation
 static inline VkDeviceSize SafeModulo(VkDeviceSize dividend, VkDeviceSize divisor) {
     VkDeviceSize result = 0;
@@ -314,6 +339,17 @@ static inline VkDeviceSize SafeDivision(VkDeviceSize dividend, VkDeviceSize divi
         result = dividend / divisor;
     }
     return result;
+}
+
+// Only 32 bit fields should need a bit count
+static inline uint32_t GetBitSetCount(uint32_t field) {
+    std::bitset<32> view_bits(field);
+    return static_cast<uint32_t>(view_bits.count());
+}
+
+static inline uint32_t FullMipChainLevels(VkExtent3D extent) {
+    // uint cast applies floor()
+    return 1u + static_cast<uint32_t>(log2(std::max({extent.height, extent.width, extent.depth})));
 }
 
 extern "C" {
@@ -461,7 +497,7 @@ class vl_concurrent_unordered_map {
         ReadLockGuard lock(locks[h].lock);
 
         auto itr = maps[h].find(key);
-        bool found = itr != maps[h].end();
+        const bool found = itr != maps[h].end();
 
         if (found) {
             return FindResult(true, itr->second);
@@ -475,7 +511,7 @@ class vl_concurrent_unordered_map {
         WriteLockGuard lock(locks[h].lock);
 
         auto itr = maps[h].find(key);
-        bool found = itr != maps[h].end();
+        const bool found = itr != maps[h].end();
 
         if (found) {
             auto ret = FindResult(true, itr->second);

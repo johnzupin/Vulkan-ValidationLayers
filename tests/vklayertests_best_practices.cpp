@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -108,7 +108,10 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedInstanceExtensions) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
+    // TODO - Currently not working on MockICD with Profiles
+    if (IsPlatform(kMockICD)) {
+        GTEST_SKIP() << "Test not supported by MockICD";
+    }
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     // Create a 1.1 vulkan instance and request an extension promoted to core in 1.1
@@ -462,94 +465,6 @@ TEST_F(VkBestPracticesLayerTest, VtxBufferBadIndex) {
     m_commandBuffer->end();
 }
 
-// This is a positive test. No failures are expected.
-TEST_F(VkBestPracticesLayerTest, TestDestroyFreeNullHandles) {
-    VkResult err;
-
-    TEST_DESCRIPTION("Call all applicable destroy and free routines with NULL handles, expecting no validation errors");
-
-    InitBestPracticesFramework();
-    InitState();
-
-    ASSERT_NO_FATAL_FAILURE(InitViewport());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-
-    vk::DestroyBuffer(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyBufferView(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyCommandPool(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyDescriptorPool(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyDescriptorSetLayout(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyDevice(VK_NULL_HANDLE, NULL);
-    vk::DestroyEvent(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyFence(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyFramebuffer(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyImage(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyImageView(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyInstance(VK_NULL_HANDLE, NULL);
-    vk::DestroyPipeline(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyPipelineCache(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyPipelineLayout(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyQueryPool(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyRenderPass(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroySampler(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroySemaphore(m_device->device(), VK_NULL_HANDLE, NULL);
-    vk::DestroyShaderModule(m_device->device(), VK_NULL_HANDLE, NULL);
-
-    VkCommandPool command_pool;
-    VkCommandPoolCreateInfo pool_create_info{};
-    pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    pool_create_info.queueFamilyIndex = m_device->graphics_queue_node_index_;
-    pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    vk::CreateCommandPool(m_device->device(), &pool_create_info, nullptr, &command_pool);
-    VkCommandBuffer command_buffers[3] = {};
-    VkCommandBufferAllocateInfo command_buffer_allocate_info{};
-    command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    command_buffer_allocate_info.commandPool = command_pool;
-    command_buffer_allocate_info.commandBufferCount = 1;
-    command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, &command_buffers[1]);
-    vk::FreeCommandBuffers(m_device->device(), command_pool, 3, command_buffers);
-    vk::DestroyCommandPool(m_device->device(), command_pool, NULL);
-
-    VkDescriptorPoolSize ds_type_count = {};
-    ds_type_count.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    ds_type_count.descriptorCount = 1;
-
-    VkDescriptorPoolCreateInfo ds_pool_ci = {};
-    ds_pool_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    ds_pool_ci.pNext = NULL;
-    ds_pool_ci.maxSets = 1;
-    ds_pool_ci.poolSizeCount = 1;
-    ds_pool_ci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    ds_pool_ci.pPoolSizes = &ds_type_count;
-
-    VkDescriptorPool ds_pool;
-    err = vk::CreateDescriptorPool(m_device->device(), &ds_pool_ci, NULL, &ds_pool);
-    ASSERT_VK_SUCCESS(err);
-
-    VkDescriptorSetLayoutBinding dsl_binding = {};
-    dsl_binding.binding = 2;
-    dsl_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    dsl_binding.descriptorCount = 1;
-    dsl_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    dsl_binding.pImmutableSamplers = NULL;
-
-    const VkDescriptorSetLayoutObj ds_layout(m_device, {dsl_binding});
-
-    VkDescriptorSet descriptor_sets[3] = {};
-    VkDescriptorSetAllocateInfo alloc_info = {};
-    alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc_info.descriptorSetCount = 1;
-    alloc_info.descriptorPool = ds_pool;
-    alloc_info.pSetLayouts = &ds_layout.handle();
-    err = vk::AllocateDescriptorSets(m_device->device(), &alloc_info, &descriptor_sets[1]);
-    ASSERT_VK_SUCCESS(err);
-    vk::FreeDescriptorSets(m_device->device(), ds_pool, 3, descriptor_sets);
-    vk::DestroyDescriptorPool(m_device->device(), ds_pool, NULL);
-
-    vk::FreeMemory(m_device->device(), VK_NULL_HANDLE, NULL);
-}
-
 TEST_F(VkBestPracticesLayerTest, CommandBufferReset) {
     TEST_DESCRIPTION("Test for validating usage of vkCreateCommandPool with COMMAND_BUFFER_RESET_BIT");
 
@@ -567,6 +482,51 @@ TEST_F(VkBestPracticesLayerTest, CommandBufferReset) {
     vk::CreateCommandPool(m_device->device(), &pool_create_info, nullptr, &command_pool);
 
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkBestPracticesLayerTest, SecondaryCommandBuffer) {
+    TEST_DESCRIPTION("Test for validating usage of vkCreateCommandPool with VK_COMMAND_BUFFER_LEVEL_SECONDARY");
+
+    InitBestPracticesFramework();
+    InitState();
+
+    uint32_t queue_family_count;
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_family_count, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queue_family_props;
+    queue_family_props.resize(queue_family_count);
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_family_count, queue_family_props.data());
+
+    uint32_t queue_family_index = VK_QUEUE_FAMILY_IGNORED;
+    const VkQueueFlags sec_cmd_buf_queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+    for (uint32_t i = 0; i < queue_family_count; ++i) {
+        if ((queue_family_props[i].queueFlags & sec_cmd_buf_queue_flags) == 0) {
+            queue_family_index = i;
+            break;
+        }
+    }
+
+    if (queue_family_index == VK_QUEUE_FAMILY_IGNORED) {
+        GTEST_SKIP() << "No queue family found without support for secondary command buffers";
+    }
+
+    VkCommandPool command_pool = VK_NULL_HANDLE;
+    VkCommandPoolCreateInfo pool_create_info = LvlInitStruct<VkCommandPoolCreateInfo>();
+    pool_create_info.queueFamilyIndex = queue_family_index;
+    vk::CreateCommandPool(m_device->device(), &pool_create_info, nullptr, &command_pool);
+
+    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+    VkCommandBufferAllocateInfo alloc_info = LvlInitStruct<VkCommandBufferAllocateInfo>();
+    alloc_info.commandPool = command_pool;
+    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+    alloc_info.commandBufferCount = 1;
+
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkAllocateCommandBuffers-unusable-secondary");
+    vk::AllocateCommandBuffers(m_device->device(), &alloc_info, &command_buffer);
+    m_errorMonitor->VerifyFound();
+
+    vk::FreeCommandBuffers(m_device->device(), command_pool, 1, &command_buffer);
+    vk::DestroyCommandPool(m_device->device(), command_pool, nullptr);
 }
 
 TEST_F(VkBestPracticesLayerTest, SimultaneousUse) {

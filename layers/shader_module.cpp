@@ -1,4 +1,4 @@
-/* Copyright (c) 2021-2022 The Khronos Group Inc.
+/* Copyright (c) 2021-2023 The Khronos Group Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,14 +29,10 @@
 void DecorationSet::Add(uint32_t decoration, uint32_t value) {
     switch (decoration) {
         case spv::DecorationLocation:
-            flags |= location_bit;
             location = value;
             break;
         case spv::DecorationPatch:
             flags |= patch_bit;
-            break;
-        case spv::DecorationRelaxedPrecision:
-            flags |= relaxed_precision_bit;
             break;
         case spv::DecorationBlock:
             flags |= block_bit;
@@ -45,19 +41,15 @@ void DecorationSet::Add(uint32_t decoration, uint32_t value) {
             flags |= buffer_block_bit;
             break;
         case spv::DecorationComponent:
-            flags |= component_bit;
             component = value;
             break;
         case spv::DecorationInputAttachmentIndex:
-            flags |= input_attachment_index_bit;
             input_attachment_index = value;
             break;
         case spv::DecorationDescriptorSet:
-            flags |= descriptor_set_bit;
-            descriptor_set = value;
+            set = value;
             break;
         case spv::DecorationBinding:
-            flags |= binding_bit;
             binding = value;
             break;
         case spv::DecorationNonWritable:
@@ -233,11 +225,43 @@ SHADER_MODULE_STATE::EntryPoint::EntryPoint(const SHADER_MODULE_STATE& module_st
                     break;
             }
         }
+
+        // Now that the accessible_ids list is known, fill in any information that can be statically known per EntryPoint
+        for (const Instruction* insn : module_state.GetDecorationInstructions()) {
+            if (insn->Word(2) == spv::DecorationInputAttachmentIndex) {
+                const uint32_t attachment_index = insn->Word(3);
+                const uint32_t id = insn->Word(1);
+
+                if (accessible_ids.count(id)) {
+                    const Instruction* def = module_state.FindDef(id);
+                    if (def->Opcode() == spv::OpVariable && def->StorageClass() == spv::StorageClassUniformConstant) {
+                        const uint32_t num_locations = module_state.GetLocationsConsumedByType(def->Word(1), false);
+                        for (uint32_t offset = 0; offset < num_locations; offset++) {
+                            attachment_indexes.insert(attachment_index + offset);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (const auto& id : accessible_ids) {
+            const Instruction* insn = module_state.FindDef(id);
+            if (insn->Opcode() != spv::OpVariable) {
+                continue;
+            }
+            const uint32_t storage_class = insn->StorageClass();
+            // These are the only storage classes that interface with a descriptor
+            // see vkspec.html#interfaces-resources-descset
+            if (storage_class == spv::StorageClassUniform || storage_class == spv::StorageClassUniformConstant ||
+                storage_class == spv::StorageClassStorageBuffer) {
+                resource_interface_variables.emplace_back(module_state, insn, stage);
+            }
+        }
     }
 }
 
-layer_data::optional<VkPrimitiveTopology> SHADER_MODULE_STATE::GetTopology(const Instruction& entrypoint) const {
-    layer_data::optional<VkPrimitiveTopology> result;
+std::optional<VkPrimitiveTopology> SHADER_MODULE_STATE::GetTopology(const Instruction& entrypoint) const {
+    std::optional<VkPrimitiveTopology> result;
 
     auto entrypoint_id = entrypoint.Word(2);
     bool is_point_mode = false;
@@ -278,7 +302,7 @@ layer_data::optional<VkPrimitiveTopology> SHADER_MODULE_STATE::GetTopology(const
     return result;
 }
 
-layer_data::optional<VkPrimitiveTopology> SHADER_MODULE_STATE::GetTopology() const {
+std::optional<VkPrimitiveTopology> SHADER_MODULE_STATE::GetTopology() const {
     if (static_data_.entry_points.size() > 0) {
         return GetTopology(static_data_.entry_points[0].entrypoint_insn);
     }
@@ -605,8 +629,8 @@ const SHADER_MODULE_STATE::StructInfo* SHADER_MODULE_STATE::FindEntrypointPushCo
     return nullptr;
 }
 
-layer_data::optional<Instruction> SHADER_MODULE_STATE::FindEntrypoint(char const* name, VkShaderStageFlagBits stageBits) const {
-    layer_data::optional<Instruction> result;
+std::optional<Instruction> SHADER_MODULE_STATE::FindEntrypoint(char const* name, VkShaderStageFlagBits stageBits) const {
+    std::optional<Instruction> result;
     for (const auto& entry_point : static_data_.entry_points) {
         if (entry_point.name.compare(name) == 0 && entry_point.stage == stageBits) {
             result.emplace(entry_point.entrypoint_insn);
@@ -687,9 +711,8 @@ uint32_t SHADER_MODULE_STATE::GetConstantValueById(uint32_t id) const {
     return value->GetConstantValue();
 }
 
-// Returns an int32_t corresponding to the spv::Dim of the given resource, when positive, and corresponding to an unknown type, when
-// negative.
-int32_t SHADER_MODULE_STATE::GetShaderResourceDimensionality(const InterfaceVariable& resource) const {
+// Returns spv::Dim of the given OpVariable
+spv::Dim SHADER_MODULE_STATE::GetShaderResourceDimensionality(const ResourceInterfaceVariable& resource) const {
     const Instruction* type = FindDef(resource.type_id);
     while (true) {
         switch (type->Opcode()) {
@@ -700,13 +723,14 @@ int32_t SHADER_MODULE_STATE::GetShaderResourceDimensionality(const InterfaceVari
                 type = FindDef(type->Word(3));
                 break;
             case spv::OpTypeImage:
-                return type->Word(3);
+                return spv::Dim(type->Word(3));
             default:
-                return -1;
+                return spv::DimMax;
         }
     }
 }
 
+// Returns the number of Location slots used for a given ID reference to a OpType*
 uint32_t SHADER_MODULE_STATE::GetLocationsConsumedByType(uint32_t type, bool strip_array_level) const {
     const Instruction* insn = FindDef(type);
 
@@ -740,6 +764,7 @@ uint32_t SHADER_MODULE_STATE::GetLocationsConsumedByType(uint32_t type, bool str
     }
 }
 
+// Returns the number of Components slots used for a given ID reference to a OpType*
 uint32_t SHADER_MODULE_STATE::GetComponentsConsumedByType(uint32_t type, bool strip_array_level) const {
     const Instruction* insn = FindDef(type);
 
@@ -1194,22 +1219,29 @@ static uint32_t CheckObjectIDFromOpLoad(
     return 0;
 }
 
-// Takes a OpVariable and looks at the the descriptor type it uses. This will find things such as if the variable is writable, image
-// atomic operation, matching images to samplers, etc
-void SHADER_MODULE_STATE::FindVariableDescriptorType(bool is_storage_buffer, InterfaceVariable& interface_var) const {
-    const Instruction* type = FindDef(interface_var.type_id);
+ResourceInterfaceVariable::ResourceInterfaceVariable(const SHADER_MODULE_STATE& module_state, const Instruction* insn,
+                                                     VkShaderStageFlagBits stage)
+    : id(insn->Word(2)),
+      type_id(insn->Word(1)),
+      storage_class(static_cast<spv::StorageClass>(insn->Word(3))),
+      stage(stage),
+      decorations(module_state.GetDecorationSet(id)) {
+    // Takes a OpVariable and looks at the the descriptor type it uses. This will find things such as if the variable is writable,
+    // image atomic operation, matching images to samplers, etc
+    const Instruction* type = module_state.FindDef(type_id);
 
     // Strip off any array or ptrs. Where we remove array levels, adjust the  descriptor count for each dimension.
     while (type->Opcode() == spv::OpTypeArray || type->Opcode() == spv::OpTypePointer ||
            type->Opcode() == spv::OpTypeRuntimeArray || type->Opcode() == spv::OpTypeSampledImage) {
         if (type->Opcode() == spv::OpTypeArray || type->Opcode() == spv::OpTypeRuntimeArray ||
             type->Opcode() == spv::OpTypeSampledImage) {
-            type = FindDef(type->Word(2));  // Element type
+            type = module_state.FindDef(type->Word(2));  // Element type
         } else {
-            type = FindDef(type->Word(3));  // Pointer type
+            type = module_state.FindDef(type->Word(3));  // Pointer type
         }
     }
 
+    const auto& static_data_ = module_state.static_data_;
     switch (type->Opcode()) {
         case spv::OpTypeImage: {
             auto dim = type->Word(3);
@@ -1217,48 +1249,46 @@ void SHADER_MODULE_STATE::FindVariableDescriptorType(bool is_storage_buffer, Int
                 // Sampled == 2 indicates used without a sampler (a storage image)
                 const bool is_image_without_format = ((type->Word(7) == 2) && (type->Word(8) == spv::ImageFormatUnknown));
 
-                const uint32_t image_write_load_id =
-                    CheckObjectIDFromOpLoad(interface_var.id, static_data_.image_write_load_ids, static_data_.load_members,
-                                            static_data_.accesschain_members);
+                const uint32_t image_write_load_id = CheckObjectIDFromOpLoad(
+                    id, static_data_.image_write_load_ids, static_data_.load_members, static_data_.accesschain_members);
                 if (image_write_load_id != 0) {
-                    interface_var.is_writable = true;
+                    is_writable = true;
                     if (is_image_without_format) {
-                        interface_var.is_write_without_format = true;
+                        is_write_without_format = true;
                         for (const auto& entry : static_data_.image_write_load_id_map) {
                             if (image_write_load_id == entry.second) {
-                                const uint32_t texel_component_count = GetTexelComponentCount(*entry.first);
-                                interface_var.write_without_formats_component_count_list.emplace_back(*entry.first,
-                                                                                                      texel_component_count);
+                                const uint32_t texel_component_count = module_state.GetTexelComponentCount(*entry.first);
+                                write_without_formats_component_count_list.emplace_back(*entry.first, texel_component_count);
                             }
                         }
                     }
                 }
-                if (CheckObjectIDFromOpLoad(interface_var.id, static_data_.image_read_load_ids, static_data_.load_members,
+                if (CheckObjectIDFromOpLoad(id, static_data_.image_read_load_ids, static_data_.load_members,
                                             static_data_.accesschain_members) != 0) {
-                    interface_var.is_readable = true;
+                    is_readable = true;
                     if (is_image_without_format) {
-                        interface_var.is_read_without_format = true;
+                        is_read_without_format = true;
                     }
                 }
-                if (CheckObjectIDFromOpLoad(interface_var.id, static_data_.sampler_load_ids, static_data_.load_members,
+                if (CheckObjectIDFromOpLoad(id, static_data_.sampler_load_ids, static_data_.load_members,
                                             static_data_.accesschain_members) != 0) {
-                    interface_var.is_sampler_sampled = true;
+                    is_sampler_sampled = true;
                 }
-                if (CheckObjectIDFromOpLoad(interface_var.id, static_data_.sampler_implicitLod_dref_proj_load_ids,
-                                            static_data_.load_members, static_data_.accesschain_members) != 0) {
-                    interface_var.is_sampler_implicitLod_dref_proj = true;
-                }
-                if (CheckObjectIDFromOpLoad(interface_var.id, static_data_.sampler_bias_offset_load_ids, static_data_.load_members,
+                if (CheckObjectIDFromOpLoad(id, static_data_.sampler_implicitLod_dref_proj_load_ids, static_data_.load_members,
                                             static_data_.accesschain_members) != 0) {
-                    interface_var.is_sampler_bias_offset = true;
+                    is_sampler_implicitLod_dref_proj = true;
                 }
-                if (CheckObjectIDFromOpLoad(interface_var.id, static_data_.atomic_pointer_ids,
-                                            static_data_.image_texel_pointer_members, static_data_.accesschain_members) != 0) {
-                    interface_var.is_atomic_operation = true;
-                }
-                if (CheckObjectIDFromOpLoad(interface_var.id, static_data_.image_dref_load_ids, static_data_.load_members,
+                if (CheckObjectIDFromOpLoad(id, static_data_.sampler_bias_offset_load_ids, static_data_.load_members,
                                             static_data_.accesschain_members) != 0) {
-                    interface_var.is_dref_operation = true;
+                    is_sampler_bias_offset = true;
+                }
+                if (CheckObjectIDFromOpLoad(id, static_data_.atomic_pointer_ids, static_data_.image_texel_pointer_members,
+                                            static_data_.accesschain_members) != 0) {
+                    is_atomic_operation = true;
+                }
+                if (CheckObjectIDFromOpLoad(id, static_data_.image_dref_load_ids, static_data_.load_members,
+                                            static_data_.accesschain_members) != 0) {
+                    is_dref_operation = true;
                 }
 
                 for (auto& itp_id : static_data_.sampled_image_load_ids) {
@@ -1268,16 +1298,16 @@ void SHADER_MODULE_STATE::FindVariableDescriptorType(bool is_storage_buffer, Int
                     if (load_it == static_data_.load_members.end()) {
                         continue;
                     } else {
-                        if (load_it->second != interface_var.id) {
+                        if (load_it->second != id) {
                             auto accesschain_it = static_data_.accesschain_members.find(load_it->second);
                             if (accesschain_it == static_data_.accesschain_members.end()) {
                                 continue;
                             } else {
-                                if (accesschain_it->second.first != interface_var.id) {
+                                if (accesschain_it->second.first != id) {
                                     continue;
                                 }
 
-                                const Instruction* const_def = GetConstantDef(accesschain_it->second.second);
+                                const Instruction* const_def = module_state.GetConstantDef(accesschain_it->second.second);
                                 if (!const_def) {
                                     // access chain index not a constant, skip.
                                     break;
@@ -1296,7 +1326,7 @@ void SHADER_MODULE_STATE::FindVariableDescriptorType(bool is_storage_buffer, Int
                         auto accesschain_it = static_data_.accesschain_members.find(load_it->second);
 
                         if (accesschain_it != static_data_.accesschain_members.end()) {
-                            const Instruction* const_def = GetConstantDef(accesschain_it->second.second);
+                            const Instruction* const_def = module_state.GetConstantDef(accesschain_it->second.second);
                             if (!const_def) {
                                 // access chain index representing sampler index is not a constant, skip.
                                 break;
@@ -1304,27 +1334,27 @@ void SHADER_MODULE_STATE::FindVariableDescriptorType(bool is_storage_buffer, Int
                             sampler_id = const_def->Word(const_def->ResultId());
                             sampler_index = const_def->GetConstantValue();
                         }
-                        auto sampler_dec = GetDecorationSet(sampler_id);
-                        if (image_index >= interface_var.samplers_used_by_image.size()) {
-                            interface_var.samplers_used_by_image.resize(image_index + 1);
+                        auto sampler_dec = module_state.GetDecorationSet(sampler_id);
+                        if (image_index >= samplers_used_by_image.size()) {
+                            samplers_used_by_image.resize(image_index + 1);
                         }
 
                         // Need to check again for these properties in case not using a combined image sampler
                         if (CheckObjectIDFromOpLoad(sampler_id, static_data_.sampler_load_ids, static_data_.load_members,
                                                     static_data_.accesschain_members) != 0) {
-                            interface_var.is_sampler_sampled = true;
+                            is_sampler_sampled = true;
                         }
                         if (CheckObjectIDFromOpLoad(sampler_id, static_data_.sampler_implicitLod_dref_proj_load_ids,
                                                     static_data_.load_members, static_data_.accesschain_members) != 0) {
-                            interface_var.is_sampler_implicitLod_dref_proj = true;
+                            is_sampler_implicitLod_dref_proj = true;
                         }
                         if (CheckObjectIDFromOpLoad(sampler_id, static_data_.sampler_bias_offset_load_ids,
                                                     static_data_.load_members, static_data_.accesschain_members) != 0) {
-                            interface_var.is_sampler_bias_offset = true;
+                            is_sampler_bias_offset = true;
                         }
 
-                        interface_var.samplers_used_by_image[image_index].emplace(
-                            SamplerUsedByImage{DescriptorSlot{sampler_dec.descriptor_set, sampler_dec.binding}, sampler_index});
+                        samplers_used_by_image[image_index].emplace(
+                            SamplerUsedByImage{DescriptorSlot{sampler_dec.set, sampler_dec.binding}, sampler_index});
                     }
                 }
             }
@@ -1333,9 +1363,8 @@ void SHADER_MODULE_STATE::FindVariableDescriptorType(bool is_storage_buffer, Int
 
         case spv::OpTypeStruct: {
             layer_data::unordered_set<uint32_t> nonwritable_members;
-            if (GetDecorationSet(type->Word(1)).flags & DecorationSet::buffer_block_bit) {
-                is_storage_buffer = true;
-            }
+            const bool is_storage_buffer = (storage_class == spv::StorageClassStorageBuffer) ||
+                                           (module_state.GetDecorationSet(type->Word(1)).Has(DecorationSet::buffer_block_bit));
             for (const Instruction* insn : static_data_.member_decoration_inst) {
                 if (insn->Word(1) == type->Word(1) && insn->Word(3) == spv::DecorationNonWritable) {
                     nonwritable_members.insert(insn->Word(2));
@@ -1346,58 +1375,27 @@ void SHADER_MODULE_STATE::FindVariableDescriptorType(bool is_storage_buffer, Int
             // as nonwritable.
             if (is_storage_buffer && nonwritable_members.size() != type->Length() - 2) {
                 for (auto oid : static_data_.store_pointer_ids) {
-                    if (interface_var.id == oid) {
-                        interface_var.is_writable = true;
+                    if (id == oid) {
+                        is_writable = true;
                         return;
                     }
                     auto accesschain_it = static_data_.accesschain_members.find(oid);
                     if (accesschain_it == static_data_.accesschain_members.end()) {
                         continue;
                     }
-                    if (accesschain_it->second.first == interface_var.id) {
-                        interface_var.is_writable = true;
+                    if (accesschain_it->second.first == id) {
+                        is_writable = true;
                         return;
                     }
                 }
-                if (CheckObjectIDFromOpLoad(interface_var.id, static_data_.atomic_store_pointer_ids,
-                                            static_data_.image_texel_pointer_members, static_data_.accesschain_members) != 0) {
-                    interface_var.is_writable = true;
+                if (CheckObjectIDFromOpLoad(id, static_data_.atomic_store_pointer_ids, static_data_.image_texel_pointer_members,
+                                            static_data_.accesschain_members) != 0) {
+                    is_writable = true;
                     return;
                 }
             }
         }
     }
-}
-
-std::vector<std::pair<DescriptorSlot, InterfaceVariable>> SHADER_MODULE_STATE::CollectInterfaceByDescriptorSlot(
-    layer_data::optional<Instruction> entrypoint) const {
-    std::vector<std::pair<DescriptorSlot, InterfaceVariable>> out;
-    if (!entrypoint) {
-        return out;
-    }
-
-    const auto* accessible_ids = GetAccessibleIds(*entrypoint);
-    if (accessible_ids) {
-        for (const auto& id : *accessible_ids) {
-            const Instruction* insn = FindDef(id);
-            if (insn->Opcode() != spv::OpVariable) {
-                continue;
-            }
-            const uint32_t storage_class = insn->StorageClass();
-            // These are the only storage classes that interface with a descriptor
-            // see vkspec.html#interfaces-resources-descset
-            if (storage_class == spv::StorageClassUniform || storage_class == spv::StorageClassUniformConstant ||
-                storage_class == spv::StorageClassStorageBuffer) {
-                InterfaceVariable interface_var(insn);
-                FindVariableDescriptorType(storage_class == spv::StorageClassStorageBuffer, interface_var);
-
-                auto decoration_set = GetDecorationSet(insn->Word(2));
-                out.emplace_back(DescriptorSlot{decoration_set.descriptor_set, decoration_set.binding}, interface_var);
-            }
-        }
-    }
-
-    return out;
 }
 
 layer_data::unordered_set<uint32_t> SHADER_MODULE_STATE::CollectWritableOutputLocationinFS(const Instruction& entrypoint) const {
@@ -1452,32 +1450,27 @@ layer_data::unordered_set<uint32_t> SHADER_MODULE_STATE::CollectWritableOutputLo
     return location_list;
 }
 
-bool SHADER_MODULE_STATE::CollectInterfaceBlockMembers(std::map<location_t, InterfaceVariable>* out, bool is_array_of_verts,
-                                                       bool is_patch, const Instruction* variable_insn) const {
+bool SHADER_MODULE_STATE::CollectInterfaceBlockMembers(std::map<location_t, UserDefinedInterfaceVariable>* out,
+                                                       bool is_array_of_verts, bool is_patch,
+                                                       const Instruction* variable_insn) const {
     // Walk down the type_id presented, trying to determine whether it's actually an interface block.
-    const Instruction* type = GetStructType(FindDef(variable_insn->Word(1)), is_array_of_verts && !is_patch);
-    if (!type || !(GetDecorationSet(type->Word(1)).flags & DecorationSet::block_bit)) {
+    const Instruction* struct_type = GetStructType(FindDef(variable_insn->Word(1)), is_array_of_verts && !is_patch);
+    if (!struct_type || !(GetDecorationSet(struct_type->Word(1)).Has(DecorationSet::block_bit))) {
         // This isn't an interface block.
         return false;
     }
 
     layer_data::unordered_map<uint32_t, uint32_t> member_components;
-    layer_data::unordered_map<uint32_t, uint32_t> member_relaxed_precision;
     layer_data::unordered_map<uint32_t, uint32_t> member_patch;
 
     // Walk all the OpMemberDecorate for type's result id -- first pass, collect components.
     for (const Instruction* insn : static_data_.member_decoration_inst) {
-        if (insn->Word(1) == type->Word(1)) {
-            uint32_t member_index = insn->Word(2);
-            uint32_t decoration = insn->Word(3);
+        if (insn->Word(1) == struct_type->Word(1)) {
+            const uint32_t member_index = insn->Word(2);
+            const uint32_t decoration = insn->Word(3);
 
             if (decoration == spv::DecorationComponent) {
-                uint32_t component = insn->Word(4);
-                member_components[member_index] = component;
-            }
-
-            if (decoration == spv::DecorationRelaxedPrecision) {
-                member_relaxed_precision[member_index] = 1;
+                member_components[member_index] = insn->Word(4);
             }
 
             if (decoration == spv::DecorationPatch) {
@@ -1490,28 +1483,25 @@ bool SHADER_MODULE_STATE::CollectInterfaceBlockMembers(std::map<location_t, Inte
 
     // Second pass -- produce the output, from Location decorations
     for (const Instruction* insn : static_data_.member_decoration_inst) {
-        if (insn->Word(1) == type->Word(1)) {
-            uint32_t member_index = insn->Word(2);
-            uint32_t member_type_id = type->Word(2 + member_index);
+        if (insn->Word(1) == struct_type->Word(1)) {
+            const uint32_t member_index = insn->Word(2);
+            const uint32_t member_type_id = struct_type->Word(2 + member_index);
 
             if (insn->Word(3) == spv::DecorationLocation) {
-                uint32_t location = insn->Word(4);
-                uint32_t num_locations = GetLocationsConsumedByType(member_type_id, false);
-                auto component_it = member_components.find(member_index);
-                uint32_t component = component_it == member_components.end() ? 0 : component_it->second;
-                bool is_relaxed_precision = member_relaxed_precision.find(member_index) != member_relaxed_precision.end();
-                bool member_is_patch = is_patch || member_patch.count(member_index) > 0;
+                const uint32_t location = insn->Word(4);
+                const uint32_t num_locations = GetLocationsConsumedByType(member_type_id, false);
+                const auto component_it = member_components.find(member_index);
+                const uint32_t component = component_it == member_components.end() ? 0 : component_it->second;
+                const bool member_is_patch = is_patch || member_patch.count(member_index) > 0;
 
                 for (uint32_t offset = 0; offset < num_locations; offset++) {
-                    InterfaceVariable interface_var = {};
-                    interface_var.id = variable_insn->Word(2);
-                    // TODO: member index in InterfaceVariable too?
-                    interface_var.type_id = member_type_id;
-                    interface_var.offset = offset;
-                    interface_var.is_patch = member_is_patch;
-                    interface_var.is_block_member = true;
-                    interface_var.is_relaxed_precision = is_relaxed_precision;
-                    (*out)[std::make_pair(location + offset, component)] = interface_var;
+                    UserDefinedInterfaceVariable variable = {};
+                    variable.id = variable_insn->Word(2);
+                    // TODO: member index in UserDefinedInterfaceVariable too?
+                    variable.type_id = member_type_id;
+                    variable.offset = offset;
+                    variable.is_patch = member_is_patch;
+                    (*out)[std::make_pair(location + offset, component)] = variable;
                 }
             }
         }
@@ -1520,41 +1510,38 @@ bool SHADER_MODULE_STATE::CollectInterfaceBlockMembers(std::map<location_t, Inte
     return true;
 }
 
-std::map<location_t, InterfaceVariable> SHADER_MODULE_STATE::CollectInterfaceByLocation(const Instruction& entrypoint,
-                                                                                        spv::StorageClass sinterface,
-                                                                                        bool is_array_of_verts) const {
+std::map<location_t, UserDefinedInterfaceVariable> SHADER_MODULE_STATE::CollectInterfaceByLocation(const Instruction& entrypoint,
+                                                                                                   spv::StorageClass sinterface,
+                                                                                                   bool is_array_of_verts) const {
     // TODO: handle index=1 dual source outputs from FS -- two vars will have the same location, and we DON'T want to clobber.
 
-    std::map<location_t, InterfaceVariable> out;
+    std::map<location_t, UserDefinedInterfaceVariable> out;
 
     for (uint32_t iid : FindEntrypointInterfaces(entrypoint)) {
         const Instruction* insn = FindDef(iid);
         assert(insn->Opcode() == spv::OpVariable);
 
         const auto decoration_set = GetDecorationSet(iid);
-        uint32_t flags = decoration_set.flags;
-        bool passthrough = sinterface == spv::StorageClassOutput && insn->Word(3) == spv::StorageClassInput &&
-                           (flags & DecorationSet::passthrough_bit) != 0;
+        const bool passthrough = sinterface == spv::StorageClassOutput && insn->Word(3) == spv::StorageClassInput &&
+                                 (decoration_set.Has(DecorationSet::passthrough_bit));
         if (insn->Word(3) == static_cast<uint32_t>(sinterface) || passthrough) {
-            uint32_t builtin = decoration_set.builtin;
-            uint32_t component = decoration_set.component;
-            uint32_t location = decoration_set.location;
-            bool is_patch = (flags & DecorationSet::patch_bit) != 0;
-            bool is_relaxed_precision = (flags & DecorationSet::relaxed_precision_bit) != 0;
-            bool is_per_vertex = (flags & DecorationSet::per_vertex_bit) != 0;
+            const uint32_t builtin = decoration_set.builtin;
+            const uint32_t component = decoration_set.component;
+            const uint32_t location = decoration_set.location;
+            const bool is_patch = decoration_set.Has(DecorationSet::patch_bit);
+            const bool is_per_vertex = decoration_set.Has(DecorationSet::per_vertex_bit);
             if (builtin != DecorationSet::kInvalidValue) {
                 continue;
             } else if (!CollectInterfaceBlockMembers(&out, is_array_of_verts, is_patch, insn) ||
                        decoration_set.location != DecorationSet::kInvalidValue) {
                 // A user-defined interface variable, with a location. Where a variable occupied multiple locations, emit
                 // one result for each.
-                uint32_t num_locations = GetLocationsConsumedByType(insn->Word(1), is_array_of_verts || is_per_vertex);
+                const uint32_t num_locations = GetLocationsConsumedByType(insn->Word(1), is_array_of_verts || is_per_vertex);
                 for (uint32_t offset = 0; offset < num_locations; offset++) {
-                    InterfaceVariable interface_var(insn);
-                    interface_var.offset = offset;
-                    interface_var.is_patch = is_patch;
-                    interface_var.is_relaxed_precision = is_relaxed_precision;
-                    out[std::make_pair(location + offset, component)] = interface_var;
+                    UserDefinedInterfaceVariable variable(insn);
+                    variable.offset = offset;
+                    variable.is_patch = is_patch;
+                    out[std::make_pair(location + offset, component)] = variable;
                 }
             }
         }
@@ -1603,107 +1590,69 @@ std::vector<uint32_t> SHADER_MODULE_STATE::CollectBuiltinBlockMembers(const Inst
     return builtin_block_members;
 }
 
-std::vector<std::pair<uint32_t, InterfaceVariable>> SHADER_MODULE_STATE::CollectInterfaceByInputAttachmentIndex(
-    const Instruction& entrypoint) const {
-    std::vector<std::pair<uint32_t, InterfaceVariable>> out;
-
-    const auto* accessible_ids = GetAccessibleIds(entrypoint);
-    if (accessible_ids) {
-        for (const Instruction* insn : GetDecorationInstructions()) {
-            if (insn->Word(2) == spv::DecorationInputAttachmentIndex) {
-                auto attachment_index = insn->Word(3);
-                auto id = insn->Word(1);
-
-                if (accessible_ids->count(id)) {
-                    const Instruction* def = FindDef(id);
-                    if (def->Opcode() == spv::OpVariable && def->StorageClass() == spv::StorageClassUniformConstant) {
-                        auto num_locations = GetLocationsConsumedByType(def->Word(1), false);
-                        for (uint32_t offset = 0; offset < num_locations; offset++) {
-                            InterfaceVariable interface_var = {};
-                            interface_var.id = id;
-                            interface_var.type_id = def->Word(1);
-                            interface_var.offset = offset;
-                            out.emplace_back(attachment_index + offset, interface_var);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return out;
-}
-
 uint32_t SHADER_MODULE_STATE::GetNumComponentsInBaseType(const Instruction* insn) const {
     const uint32_t opcode = insn->Opcode();
+    uint32_t component_count = 0;
     if (opcode == spv::OpTypeFloat || opcode == spv::OpTypeInt) {
-        return 1;
+        component_count = 1;
     } else if (opcode == spv::OpTypeVector) {
-        const uint32_t component_count = insn->Word(3);
-        return component_count;
+        component_count = insn->Word(3);
     } else if (opcode == spv::OpTypeMatrix) {
         const Instruction* column_type = FindDef(insn->Word(2));
-        const uint32_t vector_length = GetNumComponentsInBaseType(column_type);
         // Because we are calculating components for a single location we do not care about column count
-        return vector_length;
+        component_count = GetNumComponentsInBaseType(column_type);  // vector length
     } else if (opcode == spv::OpTypeArray) {
         const Instruction* element_type = FindDef(insn->Word(2));
-        const uint32_t element_length = GetNumComponentsInBaseType(element_type);
-        return element_length;
+        component_count = GetNumComponentsInBaseType(element_type);  // element length
     } else if (opcode == spv::OpTypeStruct) {
-        uint32_t total_size = 0;
         for (uint32_t i = 2; i < insn->Length(); ++i) {
-            total_size += GetNumComponentsInBaseType(FindDef(insn->Word(i)));
+            component_count += GetNumComponentsInBaseType(FindDef(insn->Word(i)));
         }
-        return total_size;
     } else if (opcode == spv::OpTypePointer) {
         const Instruction* type = FindDef(insn->Word(3));
-        return GetNumComponentsInBaseType(type);
+        component_count = GetNumComponentsInBaseType(type);
     }
-    return 0;
+    return component_count;
 }
 
+// Returns the total size in 'bits' of any OpType*
 uint32_t SHADER_MODULE_STATE::GetTypeBitsSize(const Instruction* insn) const {
     const uint32_t opcode = insn->Opcode();
-    if (opcode == spv::OpTypeFloat || opcode == spv::OpTypeInt) {
-        return insn->Word(2);
-    } else if (opcode == spv::OpTypeVector) {
+    uint32_t bit_size = 0;
+    if (opcode == spv::OpTypeVector) {
         const Instruction* component_type = FindDef(insn->Word(2));
         uint32_t scalar_width = GetTypeBitsSize(component_type);
         uint32_t component_count = insn->Word(3);
-        return scalar_width * component_count;
+        bit_size = scalar_width * component_count;
     } else if (opcode == spv::OpTypeMatrix) {
         const Instruction* column_type = FindDef(insn->Word(2));
         uint32_t vector_width = GetTypeBitsSize(column_type);
         uint32_t column_count = insn->Word(3);
-        return vector_width * column_count;
+        bit_size = vector_width * column_count;
     } else if (opcode == spv::OpTypeArray) {
         const Instruction* element_type = FindDef(insn->Word(2));
         uint32_t element_width = GetTypeBitsSize(element_type);
         const Instruction* length_type = FindDef(insn->Word(3));
         uint32_t length = length_type->GetConstantValue();
-        return element_width * length;
+        bit_size = element_width * length;
     } else if (opcode == spv::OpTypeStruct) {
-        uint32_t total_size = 0;
         for (uint32_t i = 2; i < insn->Length(); ++i) {
-            total_size += GetTypeBitsSize(FindDef(insn->Word(i)));
+            bit_size += GetTypeBitsSize(FindDef(insn->Word(i)));
         }
-        return total_size;
     } else if (opcode == spv::OpTypePointer) {
         const Instruction* type = FindDef(insn->Word(3));
-        return GetTypeBitsSize(type);
+        bit_size = GetTypeBitsSize(type);
     } else if (opcode == spv::OpVariable) {
         const Instruction* type = FindDef(insn->Word(1));
-        return GetTypeBitsSize(type);
-    } else if (opcode == spv::OpTypeBool) {
-        // The Spec states:
-        // "Boolean values considered as 32-bit integer values for the purpose of this calculation"
-        // when getting the size for the limits
-        return 32;
+        bit_size = GetTypeBitsSize(type);
+    } else {
+        bit_size = insn->GetBitWidth();
     }
-    return 0;
+
+    return bit_size;
 }
 
+// Returns the total size in 'bytes' of any OpType*
 uint32_t SHADER_MODULE_STATE::GetTypeBytesSize(const Instruction* insn) const { return GetTypeBitsSize(insn) / 8; }
 
 // Returns the base type (float, int or unsigned int) or struct (can have multiple different base types inside)

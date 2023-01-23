@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ namespace {
 
 #define NON_DISPATCHABLE_HANDLE_INIT(create_func, dev, ...)                                                 \
     do {                                                                                                    \
+        assert(!initialized());                                                                             \
         handle_type handle;                                                                                 \
         auto result = create_func(dev.handle(), __VA_ARGS__, NULL, &handle);                                \
         if (EXPECT((result == VK_SUCCESS) || (result == VK_ERROR_VALIDATION_FAILED_EXT) ||                  \
@@ -46,12 +47,14 @@ namespace {
     } while (0)
 
 #define NON_DISPATCHABLE_HANDLE_DTOR(cls, destroy_func) \
-    cls::~cls() noexcept {                              \
-        if (initialized()) {                            \
-            destroy_func(device(), handle(), NULL);     \
-            handle_ = VK_NULL_HANDLE;                   \
+    void cls::destroy() noexcept {                      \
+        if (!initialized()) {                           \
+            return;                                     \
         }                                               \
-    }
+        destroy_func(device(), handle(), NULL);         \
+        handle_ = VK_NULL_HANDLE;                       \
+    }                                                   \
+    cls::~cls() noexcept { destroy(); }
 
 #define STRINGIFY(x) #x
 #define EXPECT(expr) ((expr) ? true : expect_failure(STRINGIFY(expr), __FILE__, __LINE__, __FUNCTION__))
@@ -236,11 +239,13 @@ QueueCreateInfoArray::QueueCreateInfoArray(const std::vector<VkQueueFamilyProper
     }
 }
 
-Device::~Device() noexcept {
+void Device::destroy() noexcept {
     if (!initialized()) return;
-
     vk::DestroyDevice(handle(), NULL);
+    handle_ = VK_NULL_HANDLE;
 }
+
+Device::~Device() noexcept { destroy(); }
 
 void Device::init(std::vector<const char *> &extensions, VkPhysicalDeviceFeatures *features, void *create_device_pnext) {
     // request all queues
@@ -264,11 +269,11 @@ void Device::init(std::vector<const char *> &extensions, VkPhysicalDeviceFeature
     enabled_extensions_ = extensions;
 
     VkDeviceCreateInfo dev_info = LvlInitStruct<VkDeviceCreateInfo>(create_device_pnext);
-    dev_info.queueCreateInfoCount = create_queue_infos.size();
+    dev_info.queueCreateInfoCount = static_cast<uint32_t>(create_queue_infos.size());
     dev_info.pQueueCreateInfos = create_queue_infos.data();
     dev_info.enabledLayerCount = 0;
     dev_info.ppEnabledLayerNames = NULL;
-    dev_info.enabledExtensionCount = extensions.size();
+    dev_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     dev_info.ppEnabledExtensionNames = extensions.data();
 
     VkPhysicalDeviceFeatures all_features;
@@ -380,7 +385,7 @@ void Device::wait() { EXPECT(vk::DeviceWaitIdle(handle()) == VK_SUCCESS); }
 
 VkResult Device::wait(const std::vector<const Fence *> &fences, bool wait_all, uint64_t timeout) {
     const std::vector<VkFence> fence_handles = MakeVkHandles<VkFence>(fences);
-    VkResult err = vk::WaitForFences(handle(), fence_handles.size(), fence_handles.data(), wait_all, timeout);
+    VkResult err = vk::WaitForFences(handle(), static_cast<uint32_t>(fence_handles.size()), fence_handles.data(), wait_all, timeout);
     EXPECT(err == VK_SUCCESS || err == VK_TIMEOUT);
 
     return err;
@@ -388,7 +393,8 @@ VkResult Device::wait(const std::vector<const Fence *> &fences, bool wait_all, u
 
 void Device::update_descriptor_sets(const std::vector<VkWriteDescriptorSet> &writes,
                                     const std::vector<VkCopyDescriptorSet> &copies) {
-    vk::UpdateDescriptorSets(handle(), writes.size(), writes.data(), copies.size(), copies.data());
+    vk::UpdateDescriptorSets(handle(), static_cast<uint32_t>(writes.size()), writes.data(), static_cast<uint32_t>(copies.size()),
+                             copies.data());
 }
 
 VkResult Queue::submit(const std::vector<const CommandBuffer *> &cmds, const Fence &fence, bool expect_success) {
@@ -413,7 +419,7 @@ VkResult Queue::submit(const CommandBuffer &cmd, const Fence &fence, bool expect
 
 VkResult Queue::submit(const CommandBuffer &cmd, bool expect_success) {
     Fence fence;
-    return submit(cmd, fence);
+    return submit(cmd, fence, expect_success);
 }
 
 VkResult Queue::submit2(const std::vector<const CommandBuffer *> &cmds, const Fence &fence, bool expect_success) {
@@ -450,9 +456,16 @@ VkResult Queue::wait() {
     return result;
 }
 
-DeviceMemory::~DeviceMemory() noexcept {
-    if (initialized()) vk::FreeMemory(device(), handle(), NULL);
+void DeviceMemory::destroy() noexcept {
+    if (!initialized()) {
+        return;
+    }
+
+    vk::FreeMemory(device(), handle(), NULL);
+    handle_ = VK_NULL_HANDLE;
 }
+
+DeviceMemory::~DeviceMemory() noexcept { destroy(); }
 
 void DeviceMemory::init(const Device &dev, const VkMemoryAllocateInfo &info) {
     NON_DISPATCHABLE_HANDLE_INIT(vk::AllocateMemory, dev, &info);
@@ -666,6 +679,18 @@ void Buffer::bind_memory(const Device &dev, VkMemoryPropertyFlags mem_props, VkD
     bind_memory(internal_mem_, mem_offset);
 }
 
+VkDeviceAddress Buffer::address(uint32_t vk_api_version /*= VK_API_VERSION_1_2*/) const {
+    auto bdai = LvlInitStruct<VkBufferDeviceAddressInfo>();
+    bdai.buffer = handle();
+    if (vk_api_version < VK_API_VERSION_1_2) {
+        const auto vkGetBufferDeviceAddressKHR =
+            reinterpret_cast<PFN_vkGetBufferDeviceAddress>(vk::GetDeviceProcAddr(device(), "vkGetBufferDeviceAddressKHR"));
+        assert(vkGetBufferDeviceAddressKHR);
+        return vkGetBufferDeviceAddressKHR(device(), &bdai);
+    }
+    return vk::GetBufferDeviceAddress(device(), &bdai);
+}
+
 NON_DISPATCHABLE_HANDLE_DTOR(BufferView, vk::DestroyBufferView)
 
 void BufferView::init(const Device &dev, const VkBufferViewCreateInfo &info) {
@@ -757,24 +782,31 @@ void ImageView::init(const Device &dev, const VkImageViewCreateInfo &info) {
     NON_DISPATCHABLE_HANDLE_INIT(vk::CreateImageView, dev, &info);
 }
 
-AccelerationStructure::~AccelerationStructure() {
-    if (initialized()) {
-        PFN_vkDestroyAccelerationStructureNV vkDestroyAccelerationStructureNV =
-            (PFN_vkDestroyAccelerationStructureNV)vk::GetDeviceProcAddr(device(), "vkDestroyAccelerationStructureNV");
-        assert(vkDestroyAccelerationStructureNV != nullptr);
-
-        vkDestroyAccelerationStructureNV(device(), handle(), nullptr);
+void AccelerationStructure::destroy() noexcept {
+    if (!initialized()) {
+        return;
     }
-}
+    PFN_vkDestroyAccelerationStructureNV vkDestroyAccelerationStructureNV =
+        (PFN_vkDestroyAccelerationStructureNV)vk::GetDeviceProcAddr(device(), "vkDestroyAccelerationStructureNV");
+    assert(vkDestroyAccelerationStructureNV != nullptr);
 
-AccelerationStructureKHR::~AccelerationStructureKHR() {
-    if (initialized()) {
-        PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR =
-            (PFN_vkDestroyAccelerationStructureKHR)vk::GetDeviceProcAddr(device(), "vkDestroyAccelerationStructureKHR");
-        assert(vkDestroyAccelerationStructureKHR != nullptr);
-        vkDestroyAccelerationStructureKHR(device(), handle(), nullptr);
-    }
+    vkDestroyAccelerationStructureNV(device(), handle(), nullptr);
+    handle_ = VK_NULL_HANDLE;
 }
+AccelerationStructure::~AccelerationStructure() noexcept { destroy(); }
+
+void AccelerationStructureKHR::destroy() noexcept {
+    if (!initialized()) {
+        return;
+    }
+    PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR =
+        (PFN_vkDestroyAccelerationStructureKHR)vk::GetDeviceProcAddr(device(), "vkDestroyAccelerationStructureKHR");
+    assert(vkDestroyAccelerationStructureKHR != nullptr);
+    vkDestroyAccelerationStructureKHR(device(), handle(), nullptr);
+    handle_ = VK_NULL_HANDLE;
+}
+AccelerationStructureKHR::~AccelerationStructureKHR() noexcept { destroy(); }
+
 VkMemoryRequirements2 AccelerationStructure::memory_requirements() const {
     PFN_vkGetAccelerationStructureMemoryRequirementsNV vkGetAccelerationStructureMemoryRequirementsNV =
         (PFN_vkGetAccelerationStructureMemoryRequirementsNV)vk::GetDeviceProcAddr(device(),
@@ -949,7 +981,7 @@ NON_DISPATCHABLE_HANDLE_DTOR(PipelineLayout, vk::DestroyPipelineLayout)
 void PipelineLayout::init(const Device &dev, VkPipelineLayoutCreateInfo &info,
                           const std::vector<const DescriptorSetLayout *> &layouts) {
     const std::vector<VkDescriptorSetLayout> layout_handles = MakeVkHandles<VkDescriptorSetLayout>(layouts);
-    info.setLayoutCount = layout_handles.size();
+    info.setLayoutCount = static_cast<uint32_t>(layout_handles.size());
     info.pSetLayouts = layout_handles.data();
 
     init(dev, info);
@@ -988,7 +1020,7 @@ std::vector<DescriptorSet *> DescriptorPool::alloc_sets(const Device &dev,
     set_handles.resize(layout_handles.size());
 
     VkDescriptorSetAllocateInfo alloc_info = LvlInitStruct<VkDescriptorSetAllocateInfo>();
-    alloc_info.descriptorSetCount = layout_handles.size();
+    alloc_info.descriptorSetCount = static_cast<uint32_t>(layout_handles.size());
     alloc_info.descriptorPool = handle();
     alloc_info.pSetLayouts = layout_handles.data();
     VkResult err = vk::AllocateDescriptorSets(device(), &alloc_info, set_handles.data());
@@ -1011,16 +1043,18 @@ DescriptorSet *DescriptorPool::alloc_sets(const Device &dev, const DescriptorSet
     std::vector<DescriptorSet *> set = alloc_sets(dev, layout, 1);
     return (set.empty()) ? NULL : set[0];
 }
-
-DescriptorSet::~DescriptorSet() noexcept {
-    if (initialized()) {
-        // Only call vk::Free* on sets allocated from pool with usage *_DYNAMIC
-        if (containing_pool_->getDynamicUsage()) {
-            VkDescriptorSet sets[1] = {handle()};
-            EXPECT(vk::FreeDescriptorSets(device(), containing_pool_->GetObj(), 1, sets) == VK_SUCCESS);
-        }
+void DescriptorSet::destroy() noexcept {
+    if (!initialized()) {
+        return;
     }
+    // Only call vk::Free* on sets allocated from pool with usage *_DYNAMIC
+    if (containing_pool_->getDynamicUsage()) {
+        VkDescriptorSet sets[1] = {handle()};
+        EXPECT(vk::FreeDescriptorSets(device(), containing_pool_->GetObj(), 1, sets) == VK_SUCCESS);
+    }
+    handle_ = VK_NULL_HANDLE;
 }
+DescriptorSet::~DescriptorSet() noexcept { destroy(); }
 
 NON_DISPATCHABLE_HANDLE_DTOR(CommandPool, vk::DestroyCommandPool)
 
@@ -1028,12 +1062,15 @@ void CommandPool::init(const Device &dev, const VkCommandPoolCreateInfo &info) {
     NON_DISPATCHABLE_HANDLE_INIT(vk::CreateCommandPool, dev, &info);
 }
 
-CommandBuffer::~CommandBuffer() noexcept {
-    if (initialized()) {
-        VkCommandBuffer cmds[] = {handle()};
-        vk::FreeCommandBuffers(dev_handle_, cmd_pool_, 1, cmds);
+void CommandBuffer::destroy() noexcept {
+    if (!initialized()) {
+        return;
     }
+    VkCommandBuffer cmds[] = {handle()};
+    vk::FreeCommandBuffers(dev_handle_, cmd_pool_, 1, cmds);
+    handle_ = VK_NULL_HANDLE;
 }
+CommandBuffer::~CommandBuffer() noexcept { destroy(); }
 
 void CommandBuffer::init(const Device &dev, const VkCommandBufferAllocateInfo &info) {
     VkCommandBuffer cmd;
@@ -1124,18 +1161,21 @@ VkSamplerYcbcrConversionCreateInfo SamplerYcbcrConversion::DefaultConversionInfo
     return ycbcr_create_info;
 }
 
-SamplerYcbcrConversion::~SamplerYcbcrConversion() noexcept {
-    if (initialized()) {
-        if (!khr_) {
-            vk::DestroySamplerYcbcrConversion(device(), handle(), nullptr);
-        } else {
-            auto vkDestroySamplerYcbcrConversionKHR = reinterpret_cast<PFN_vkDestroySamplerYcbcrConversionKHR>(
-                vk::GetDeviceProcAddr(device(), "vkDestroySamplerYcbcrConversionKHR"));
-            assert(vkDestroySamplerYcbcrConversionKHR != nullptr);
-            vkDestroySamplerYcbcrConversionKHR(device(), handle(), nullptr);
-        }
-        handle_ = VK_NULL_HANDLE;
+void SamplerYcbcrConversion::destroy() noexcept {
+    if (!initialized()) {
+        return;
     }
+    if (!khr_) {
+        vk::DestroySamplerYcbcrConversion(device(), handle(), nullptr);
+    } else {
+        auto vkDestroySamplerYcbcrConversionKHR = reinterpret_cast<PFN_vkDestroySamplerYcbcrConversionKHR>(
+            vk::GetDeviceProcAddr(device(), "vkDestroySamplerYcbcrConversionKHR"));
+        assert(vkDestroySamplerYcbcrConversionKHR != nullptr);
+        vkDestroySamplerYcbcrConversionKHR(device(), handle(), nullptr);
+    }
+    handle_ = VK_NULL_HANDLE;
 }
+
+SamplerYcbcrConversion::~SamplerYcbcrConversion() noexcept { destroy(); }
 
 }  // namespace vk_testing

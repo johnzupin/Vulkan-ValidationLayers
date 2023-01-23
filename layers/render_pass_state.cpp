@@ -26,8 +26,6 @@
  * Author: Jeremy Gebben <jeremyg@lunarg.com>
  */
 
-#include <bitset>
-
 #include "render_pass_state.h"
 #include "convert_to_renderpass2.h"
 #include "image_state.h"
@@ -215,8 +213,8 @@ struct AttachmentTracker {  // This is really only of local interest, but a bit 
 
         for (uint32_t attachment = 0; attachment < attachment_count; ++attachment) {
             const auto final_layout = rp->createInfo.pAttachments[attachment].finalLayout;
-            // Add final transitions for attachments that were used and change layout.
-            if ((last[attachment] != VK_SUBPASS_EXTERNAL) && final_layout != attachment_layout[attachment]) {
+            // Add final transitions for attachments at the end of the render pass.
+            if (final_layout != attachment_layout[attachment]) {
                 final_transitions.emplace_back(last[attachment], attachment, attachment_layout[attachment], final_layout);
             }
         }
@@ -334,19 +332,13 @@ uint32_t RENDER_PASS_STATE::GetDynamicRenderingViewMask() const {
 
 uint32_t RENDER_PASS_STATE::GetViewMaskBits(uint32_t subpass) const {
     if (use_dynamic_rendering_inherited) {
-        constexpr int num_bits = std::numeric_limits<decltype(inheritance_rendering_info.viewMask)>::digits;
-        std::bitset<num_bits> view_bits(inheritance_rendering_info.viewMask);
-        return static_cast<uint32_t>(view_bits.count());
+        return GetBitSetCount(inheritance_rendering_info.viewMask);
     } else if (use_dynamic_rendering) {
-        constexpr int num_bits = std::numeric_limits<decltype(dynamic_rendering_begin_rendering_info.viewMask)>::digits;
-        std::bitset<num_bits> view_bits(dynamic_rendering_begin_rendering_info.viewMask);
-        return static_cast<uint32_t>(view_bits.count());
+        return GetBitSetCount(dynamic_rendering_begin_rendering_info.viewMask);
     } else {
         const auto *subpass_desc = &createInfo.pSubpasses[subpass];
         if (subpass_desc) {
-            constexpr int num_bits = std::numeric_limits<decltype(subpass_desc->viewMask)>::digits;
-            std::bitset<num_bits> view_bits(subpass_desc->viewMask);
-            return static_cast<uint32_t>(view_bits.count());
+            return GetBitSetCount(subpass_desc->viewMask);
         }
     }
     return 0;

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,14 +27,13 @@
 
 #include "cast_utils.h"
 #include "layer_validation_tests.h"
+#include "vk_enum_string_helper.h"
 
 TEST_F(VkSyncValTest, SyncBufferCopyHazards) {
+    AddOptionalExtensions(VK_AMD_BUFFER_MARKER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_AMD_BUFFER_MARKER_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_AMD_BUFFER_MARKER_EXTENSION_NAME);
-    }
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
-    bool has_amd_buffer_maker = DeviceExtensionEnabled(VK_AMD_BUFFER_MARKER_EXTENSION_NAME);
+    bool has_amd_buffer_maker = IsExtensionsEnabled(VK_AMD_BUFFER_MARKER_EXTENSION_NAME);
 
     VkBufferObj buffer_a;
     VkBufferObj buffer_b;
@@ -225,13 +224,11 @@ TEST_F(VkSyncValTest, SyncBufferCopyHazards) {
 
 TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Synchronization2 not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
     if (!CheckSynchronization2SupportAndInitState(this)) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
@@ -261,7 +258,7 @@ TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
 
     // Use the barrier to clean up the WAW, and try again. (and show that validation is accounting for the barrier effect too.)
     {
-        auto buffer_barrier = lvl_init_struct<VkBufferMemoryBarrier2KHR>();
+        auto buffer_barrier = LvlInitStruct<VkBufferMemoryBarrier2KHR>();
         buffer_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR;
         buffer_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR;
         buffer_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT_KHR;
@@ -269,7 +266,7 @@ TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
         buffer_barrier.buffer = buffer_a.handle();
         buffer_barrier.offset = 0;
         buffer_barrier.size = 256;
-        auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+        auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
         dep_info.bufferMemoryBarrierCount = 1;
         dep_info.pBufferMemoryBarriers = &buffer_barrier;
         fpCmdPipelineBarrier2KHR(cb, &dep_info);
@@ -291,12 +288,12 @@ TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
 
     // Use the barrier to clean up the WAW, and try again. (and show that validation is accounting for the barrier effect too.)
     {
-        auto mem_barrier = lvl_init_struct<VkMemoryBarrier2KHR>();
+        auto mem_barrier = LvlInitStruct<VkMemoryBarrier2KHR>();
         mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR;
         mem_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR;
         mem_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR;
         mem_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR;
-        auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+        auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
         dep_info.memoryBarrierCount = 1;
         dep_info.pMemoryBarriers = &mem_barrier;
         fpCmdPipelineBarrier2KHR(cb, &dep_info);
@@ -509,13 +506,11 @@ TEST_F(VkSyncValTest, SyncCopyOptimalImageHazards) {
 
 TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Synchronization2 not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
     if (!CheckSynchronization2SupportAndInitState(this)) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
@@ -568,7 +563,7 @@ TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
 
     // Use the barrier to clean up the WAW, and try again. (and show that validation is accounting for the barrier effect too.)
     {
-        auto image_barrier = lvl_init_struct<VkImageMemoryBarrier2KHR>();
+        auto image_barrier = LvlInitStruct<VkImageMemoryBarrier2KHR>();
         image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR;
         image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR;
         image_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT_KHR;
@@ -577,7 +572,7 @@ TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
         image_barrier.subresourceRange = full_subresource_range;
         image_barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
         image_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+        auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
         dep_info.imageMemoryBarrierCount = 1;
         dep_info.pImageMemoryBarriers = &image_barrier;
         fpCmdPipelineBarrier2KHR(cb, &dep_info);
@@ -599,12 +594,12 @@ TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
 
     // Use the barrier to clean up the WAW, and try again. (and show that validation is accounting for the barrier effect too.)
     {
-        auto mem_barrier = lvl_init_struct<VkMemoryBarrier2KHR>();
+        auto mem_barrier = LvlInitStruct<VkMemoryBarrier2KHR>();
         mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR;
         mem_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR;
         mem_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         mem_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        auto dep_info = lvl_init_struct<VkDependencyInfoKHR>();
+        auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
         dep_info.memoryBarrierCount = 1;
         dep_info.pMemoryBarriers = &mem_barrier;
         fpCmdPipelineBarrier2KHR(cb, &dep_info);
@@ -1200,16 +1195,16 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
 
     // Enable VK_KHR_draw_indirect_count for KHR variants
+    AddOptionalExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
+    const bool has_khr_indirect = IsExtensionsEnabled(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
     VkPhysicalDeviceVulkan12Features features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
+    if (has_khr_indirect) {
         if (DeviceValidationVersion() >= VK_API_VERSION_1_2) {
             features12.drawIndirectCount = VK_TRUE;
         }
     }
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features12, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
-    bool has_khr_indirect = DeviceExtensionEnabled(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageUsageFlags image_usage_combine = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -1971,15 +1966,11 @@ TEST_F(VkSyncValTest, SyncCmdDrawDepthStencil) {
 
 
 TEST_F(VkSyncValTest, RenderPassLoadHazardVsInitialLayout) {
+    AddOptionalExtensions(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
-    bool do_none_load_op_test = false;
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME);
-        do_none_load_op_test = true;
-    }
-
     ASSERT_NO_FATAL_FAILURE(InitState());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    const bool load_store_op_none = IsExtensionsEnabled(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME);
 
     VkImageUsageFlags usage_color = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     VkImageUsageFlags usage_input = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
@@ -2056,7 +2047,7 @@ TEST_F(VkSyncValTest, RenderPassLoadHazardVsInitialLayout) {
     m_errorMonitor->VerifyFound();
 
     vk_testing::RenderPass rp_no_load_store;
-    if (do_none_load_op_test) {
+    if (load_store_op_none) {
         attachmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_NONE_EXT;
         attachmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_NONE_EXT;
         attachmentDescriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_NONE_EXT;
@@ -2422,7 +2413,7 @@ struct CreateRenderPassHelper {
     }
 
     void InitBeginInfo() {
-        render_pass_begin = lvl_init_struct<VkRenderPassBeginInfo>();
+        render_pass_begin = LvlInitStruct<VkRenderPassBeginInfo>();
         render_pass_begin.renderArea = {{0, 0}, {width, height}};
         render_pass_begin.renderPass = render_pass->handle();
         render_pass_begin.framebuffer = framebuffer->handle();
@@ -3900,13 +3891,10 @@ TEST_F(VkSyncValTest, TestInvalidExternalSubpassDependency) {
 TEST_F(VkSyncValTest, TestCopyingToCompressedImage) {
     TEST_DESCRIPTION("Copy from uncompressed to compressed image with and without overlap.");
 
+    AddOptionalExtensions(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
-    bool copy_commands_2 = false;
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
-        copy_commands_2 = true;
-    }
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    const bool copy_commands_2 = IsExtensionsEnabled(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
 
     VkFormatProperties format_properties;
     VkFormat mp_format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
@@ -4404,7 +4392,7 @@ void QSTestContext::TransferBarrierRAW(const VkBufferObj& buffer) { TransferBarr
 
 void QSTestContext::Submit(VkQueue q, VkCommandBufferObj& cb, VkSemaphore wait, VkPipelineStageFlags wait_mask, VkSemaphore signal,
                            VkFence fence) {
-    auto submit1 = lvl_init_struct<VkSubmitInfo>();
+    auto submit1 = LvlInitStruct<VkSubmitInfo>();
     submit1.commandBufferCount = 1;
     VkCommandBuffer h_cb = cb.handle();
     submit1.pCommandBuffers = &h_cb;
@@ -4422,10 +4410,10 @@ void QSTestContext::Submit(VkQueue q, VkCommandBufferObj& cb, VkSemaphore wait, 
 
 void QSTestContext::SubmitX(VkQueue q, VkCommandBufferObj& cb, VkSemaphore wait, VkPipelineStageFlags wait_mask, VkSemaphore signal,
                             VkPipelineStageFlags signal_mask, VkFence fence) {
-    auto submit1 = lvl_init_struct<VkSubmitInfo2>();
-    auto cb_info = lvl_init_struct<VkCommandBufferSubmitInfo>();
-    auto wait_info = lvl_init_struct<VkSemaphoreSubmitInfo>();
-    auto signal_info = lvl_init_struct<VkSemaphoreSubmitInfo>();
+    auto submit1 = LvlInitStruct<VkSubmitInfo2>();
+    auto cb_info = LvlInitStruct<VkCommandBufferSubmitInfo>();
+    auto wait_info = LvlInitStruct<VkSemaphoreSubmitInfo>();
+    auto signal_info = LvlInitStruct<VkSemaphoreSubmitInfo>();
 
     cb_info.commandBuffer = cb.handle();
     submit1.commandBufferInfoCount = 1;
@@ -4465,7 +4453,7 @@ TEST_F(VkSyncValTest, SyncQSBufferCopyHazards) {
     test.RecordCopy(test.cba, test.buffer_a, test.buffer_b);
     test.RecordCopy(test.cbb, test.buffer_c, test.buffer_a);
 
-    auto submit1 = lvl_init_struct<VkSubmitInfo>();
+    auto submit1 = LvlInitStruct<VkSubmitInfo>();
     submit1.commandBufferCount = 2;
     VkCommandBuffer two_cbs[2] = {test.h_cba, test.h_cbb};
     submit1.pCommandBuffers = two_cbs;
@@ -4476,7 +4464,7 @@ TEST_F(VkSyncValTest, SyncQSBufferCopyHazards) {
 
     test.DeviceWait();
 
-    VkSubmitInfo submit2[2] = {lvl_init_struct<VkSubmitInfo>(), lvl_init_struct<VkSubmitInfo>()};
+    VkSubmitInfo submit2[2] = {LvlInitStruct<VkSubmitInfo>(), LvlInitStruct<VkSubmitInfo>()};
     submit2[0].commandBufferCount = 1;
     submit2[0].pCommandBuffers = &test.h_cba;
     submit2[1].commandBufferCount = 1;
@@ -4911,7 +4899,7 @@ TEST_F(VkSyncValTest, SyncQSRenderPass) {
     cb1.EndRenderPass();
     cb1.end();
 
-    auto submit2 = lvl_init_struct<VkSubmitInfo>();
+    auto submit2 = LvlInitStruct<VkSubmitInfo>();
     VkCommandBuffer two_cbs[2] = {cb0.handle(), cb1.handle()};
     submit2.commandBufferCount = 2;
     submit2.pCommandBuffers = two_cbs;
@@ -4942,7 +4930,7 @@ TEST_F(VkSyncValTest, SyncQSPresentAcquire) {
     const VkQueue q = m_device->m_queue;
     const VkDevice dev = m_device->handle();
 
-    auto fence_ci = lvl_init_struct<VkFenceCreateInfo>();
+    auto fence_ci = LvlInitStruct<VkFenceCreateInfo>();
     VkFenceObj fence(*m_device, fence_ci);
     VkFence h_fence = fence.handle();
 
@@ -4961,7 +4949,7 @@ TEST_F(VkSyncValTest, SyncQSPresentAcquire) {
         }
 
         if (VK_SUCCESS == result) {
-            auto present_info = lvl_init_struct<VkPresentInfoKHR>();
+            auto present_info = LvlInitStruct<VkPresentInfoKHR>();
             present_info.swapchainCount = 1;
             present_info.pSwapchains = &m_swapchain;
             present_info.pImageIndices = &index;
@@ -4998,7 +4986,7 @@ TEST_F(VkSyncValTest, SyncQSPresentAcquire) {
 
     auto write_barrier_cb = [this](const VkImage h_image, VkImageLayout from, VkImageLayout to) {
         VkImageSubresourceRange full_image{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        auto image_barrier = lvl_init_struct<VkImageMemoryBarrier>();
+        auto image_barrier = LvlInitStruct<VkImageMemoryBarrier>();
         image_barrier.srcAccessMask = 0U;
         image_barrier.dstAccessMask = 0U;
         image_barrier.oldLayout = from;
@@ -5014,7 +5002,7 @@ TEST_F(VkSyncValTest, SyncQSPresentAcquire) {
     write_barrier_cb(images[acquired_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     // Look for errors between the acquire and first use...
-    auto submit1 = lvl_init_struct<VkSubmitInfo>();
+    auto submit1 = LvlInitStruct<VkSubmitInfo>();
     submit1.commandBufferCount = 1;
     submit1.pCommandBuffers = &cb;
     // No sync operations...

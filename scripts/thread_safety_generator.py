@@ -1,10 +1,10 @@
 #!/usr/bin/python3 -i
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2022 The Khronos Group Inc.
-# Copyright (c) 2015-2022 Valve Corporation
-# Copyright (c) 2015-2022 LunarG, Inc.
-# Copyright (c) 2015-2022 Google Inc.
+# Copyright (c) 2015-2023 The Khronos Group Inc.
+# Copyright (c) 2015-2023 Valve Corporation
+# Copyright (c) 2015-2023 LunarG, Inc.
+# Copyright (c) 2015-2023 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -132,10 +132,10 @@ class ThreadOutputGenerator(OutputGenerator):
 // This file is ***GENERATED***.  Do Not Edit.
 // See thread_safety_generator.py for modifications.
 
-/* Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google Inc.
+/* Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -416,7 +416,7 @@ public:
 
     // Override chassis read/write locks for this validation object
     // This override takes a deferred lock. i.e. it is not acquired.
-    ReadLockGuard ReadLock() override;
+    ReadLockGuard ReadLock() const override;
     WriteLockGuard WriteLock() override;
 
     vl_concurrent_unordered_map<VkCommandBuffer, VkCommandPool, 6> command_pool_map;
@@ -635,7 +635,7 @@ void PostCallRecordGetDrmDisplayEXT(
 
 
     inline_custom_source_preamble = """
-ReadLockGuard ThreadSafety::ReadLock() {
+ReadLockGuard ThreadSafety::ReadLock() const {
     return ReadLockGuard(validation_object_mutex, std::defer_lock);
 }
 
@@ -937,7 +937,7 @@ void ThreadSafety::PreCallRecordUpdateDescriptorSetWithTemplate(
     StartReadObjectParentInstance(device, "vkUpdateDescriptorSetWithTemplate");
     StartReadObject(descriptorUpdateTemplate, "vkUpdateDescriptorSetWithTemplate");
 
-    bool read_only = DsReadOnly(descriptorSet);
+    const bool read_only = DsReadOnly(descriptorSet);
     if (read_only) {
         StartReadObject(descriptorSet, "vkUpdateDescriptorSetWithTemplate");
     } else {
@@ -954,7 +954,7 @@ void ThreadSafety::PostCallRecordUpdateDescriptorSetWithTemplate(
     FinishReadObjectParentInstance(device, "vkUpdateDescriptorSetWithTemplate");
     FinishReadObject(descriptorUpdateTemplate, "vkUpdateDescriptorSetWithTemplate");
 
-    bool read_only = DsReadOnly(descriptorSet);
+    const bool read_only = DsReadOnly(descriptorSet);
     if (read_only) {
         FinishReadObject(descriptorSet, "vkUpdateDescriptorSetWithTemplate");
     } else {
@@ -971,7 +971,7 @@ void ThreadSafety::PreCallRecordUpdateDescriptorSetWithTemplateKHR(
     StartReadObjectParentInstance(device, "vkUpdateDescriptorSetWithTemplateKHR");
     StartReadObject(descriptorUpdateTemplate, "vkUpdateDescriptorSetWithTemplateKHR");
 
-    bool read_only = DsReadOnly(descriptorSet);
+    const bool read_only = DsReadOnly(descriptorSet);
     if (read_only) {
         StartReadObject(descriptorSet, "vkUpdateDescriptorSetWithTemplateKHR");
     } else {
@@ -988,7 +988,7 @@ void ThreadSafety::PostCallRecordUpdateDescriptorSetWithTemplateKHR(
     FinishReadObjectParentInstance(device, "vkUpdateDescriptorSetWithTemplateKHR");
     FinishReadObject(descriptorUpdateTemplate, "vkUpdateDescriptorSetWithTemplateKHR");
 
-    bool read_only = DsReadOnly(descriptorSet);
+    const bool read_only = DsReadOnly(descriptorSet);
     if (read_only) {
         FinishReadObject(descriptorSet, "vkUpdateDescriptorSetWithTemplateKHR");
     } else {
@@ -1433,9 +1433,8 @@ void ThreadSafety::PostCallRecordCreateRayTracingPipelinesKHR(
         }
     };
 
-    bool is_operation_deferred = (deferredOperation != VK_NULL_HANDLE && result == VK_OPERATION_DEFERRED_KHR);
-
-    if(is_operation_deferred) {
+    const bool is_operation_deferred = (deferredOperation != VK_NULL_HANDLE && result == VK_OPERATION_DEFERRED_KHR);
+    if (is_operation_deferred) {
         auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
         if (wrap_handles) {
             deferredOperation = layer_data->Unwrap(deferredOperation);

@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (C) 2015-2022 Google Inc.
+/* Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (C) 2015-2023 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,6 +28,7 @@
 #pragma once
 #include "base_node.h"
 #include "range_vector.h"
+#include "vk_safe_struct.h"
 
 struct MemRange {
     VkDeviceSize offset = 0;
@@ -58,7 +59,7 @@ class DEVICE_MEMORY_STATE : public BASE_NODE {
     const VkExternalMemoryHandleTypeFlags import_handle_type_flags;
     const bool unprotected;     // can't be used for protected memory
     const bool multi_instance;  // Allocated from MULTI_INSTANCE heap or having more than one deviceMask bit set
-    const layer_data::optional<DedicatedBinding> dedicated;
+    const std::optional<DedicatedBinding> dedicated;
 
     MemRange mapped_range;
 #ifdef VK_USE_PLATFORM_METAL_EXT
@@ -70,7 +71,7 @@ class DEVICE_MEMORY_STATE : public BASE_NODE {
 
     DEVICE_MEMORY_STATE(VkDeviceMemory mem, const VkMemoryAllocateInfo *p_alloc_info, uint64_t fake_address,
                         const VkMemoryType &memory_type, const VkMemoryHeap &memory_heap,
-                        layer_data::optional<DedicatedBinding> &&dedicated_binding, uint32_t physical_device_count);
+                        std::optional<DedicatedBinding> &&dedicated_binding, uint32_t physical_device_count);
 
     bool IsImport() const { return import_handle_type_flags != 0; }
     bool IsImportAHB() const {

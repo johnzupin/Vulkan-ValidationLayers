@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2022 The Khronos Group Inc.
-# Copyright (c) 2015-2022 Valve Corporation
-# Copyright (c) 2015-2022 LunarG, Inc.
-# Copyright (c) 2015-2022 Google Inc.
+# Copyright (c) 2015-2023 The Khronos Group Inc.
+# Copyright (c) 2015-2023 Valve Corporation
+# Copyright (c) 2015-2023 LunarG, Inc.
+# Copyright (c) 2015-2023 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -107,9 +107,6 @@ class HelperFileOutputGenerator(OutputGenerator):
         self.instance_extension_info = dict()             # Dict of instance extension name defines and ifdef values
         self.structextends_list = []                      # List of structs which extend another struct via pNext
         self.structOrUnion = dict()                       # Map of Vulkan typename to 'struct' or 'union'
-        self.inst_header_decls = ''                       # String of instrumentation function declarations
-        self.inst_source_funcs = ''                       # String of instrumentation function definitions
-
 
         # Named tuples to store struct and command data
         self.StructType = namedtuple('StructType', ['name', 'value'])
@@ -134,44 +131,10 @@ class HelperFileOutputGenerator(OutputGenerator):
                 ', const VkDescriptorType type',
         }
 
-        # Note that adding an API here requires that all three pre/post routines be added to inline_corechecks_instrumentation_source.
-        self.inst_manually_written_functions = [
-            'vkQueuePresentKHR',
-        ]
-
         # Some bits are helper that include multiple bits, but it is more useful to use the flag name instead
         self.custom_bit_flag_print = {
             'VkShaderStageFlags' : ['VK_SHADER_STAGE_ALL', 'VK_SHADER_STAGE_ALL_GRAPHICS']
         }
-
-    inline_corechecks_instrumentation_source = """
-
-#include "core_validation.h"
-#include "corechecks_optick_instrumentation.h"
-
-#ifdef INSTRUMENT_OPTICK
-
-// Manually written intercepts
-void CoreChecksOptickInstrumented::PostCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo, VkResult result) {
-    OPTICK_FRAME("CPU FRAME");
-    OPTICK_EVENT();
-    CoreChecks::PostCallRecordQueuePresentKHR(queue, pPresentInfo, result);
-};
-
-bool CoreChecksOptickInstrumented::PreCallValidateQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) const {
-    OPTICK_EVENT();
-    auto result = CoreChecks::PreCallValidateQueuePresentKHR(queue, pPresentInfo);
-    return result;
-};
-
-void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) {
-    OPTICK_EVENT();
-    CoreChecks::PreCallRecordQueuePresentKHR(queue, pPresentInfo);
-};
-
-// Code-generated intercepts
-"""
-
 
     #
     # Called once at the beginning of each run
@@ -191,10 +154,10 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
         copyright += '\n'
         copyright += '/***************************************************************************\n'
         copyright += ' *\n'
-        copyright += ' * Copyright (c) 2015-2022 The Khronos Group Inc.\n'
-        copyright += ' * Copyright (c) 2015-2022 Valve Corporation\n'
-        copyright += ' * Copyright (c) 2015-2022 LunarG, Inc.\n'
-        copyright += ' * Copyright (c) 2015-2022 Google Inc.\n'
+        copyright += ' * Copyright (c) 2015-2023 The Khronos Group Inc.\n'
+        copyright += ' * Copyright (c) 2015-2023 Valve Corporation\n'
+        copyright += ' * Copyright (c) 2015-2023 LunarG, Inc.\n'
+        copyright += ' * Copyright (c) 2015-2023 Google Inc.\n'
         copyright += ' *\n'
         copyright += ' * Licensed under the Apache License, Version 2.0 (the "License");\n'
         copyright += ' * you may not use this file except in compliance with the License.\n'
@@ -324,140 +287,6 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                 self.structOrUnion[name] = 'union'
             else:
                 self.structOrUnion[name] = 'struct'
-    #
-    # Command generation
-    def genCmd(self, cmdInfo, name, alias):
-        if 'optick_instrumentation' not in self.helper_file_type:
-            return
-        header_ignore_functions = [
-            'vkEnumerateInstanceVersion',
-            'vkGetDeviceProcAddr',
-            'vkGetInstanceProcAddr',
-        ]
-
-        if self.helper_file_type == 'optick_instrumentation_header':
-            if name in header_ignore_functions:
-                return
-            if self.featureExtraProtect != None:
-                self.inst_header_decls += '#ifdef %s\n' % self.featureExtraProtect
-            if 'ValidationCache' not in name:
-                self.inst_header_decls += self.InstBaseClassCdecl(cmdInfo, name)
-            if self.featureExtraProtect != None:
-                self.inst_header_decls += '#endif // %s\n' % self.featureExtraProtect
-            return
-        elif self.helper_file_type == 'optick_instrumentation_source':
-            if name in header_ignore_functions:
-                return
-            if self.featureExtraProtect != None:
-                self.inst_source_funcs += '#ifdef %s\n' % self.featureExtraProtect
-            if 'ValidationCache' not in name:
-                self.inst_source_funcs += self.InstBaseClassCdecl(cmdInfo, name)
-            if self.featureExtraProtect != None:
-                self.inst_source_funcs += '#endif // %s\n' % self.featureExtraProtect
-            return
-    #
-    # Get parameters from function definition
-    def GetParameterList(self, func_call):
-        parm_list = ''
-        parms = func_call.split("(")[1]
-        parms = parms.split(")")[0]
-        parm_defs = parms.split(",")
-        for parm_def in parm_defs:
-            parm_name = parm_def.split(" ")[-1]
-            parm_name = parm_name.split("[")[0]
-            parm_list += parm_name + ', '
-        parm_list = parm_list[:-2]
-        return parm_list
-    #
-    # Customize Cdecl for corechecks instrumentation header base class
-    def InstBaseClassCdecl(self, cmdinfo, name):
-
-        if name in self.inst_manually_written_functions and self.helper_file_type == "optick_instrumentation_source":
-            return ''
-
-        # These APIs are special-cased by the chassis and include an extra void* for a final parameter
-        inst_overloaded_apis = [
-            'PreCallValidateCreateGraphicsPipelines',
-            'PreCallRecordCreateGraphicsPipelines',
-            'PostCallRecordCreateGraphicsPipelines',
-            'PreCallValidateCreateComputePipelines',
-            'PreCallRecordCreateComputePipelines',
-            'PostCallRecordCreateComputePipelines',
-            'PreCallValidateCreateRayTracingPipelinesNV',
-            'PreCallRecordCreateRayTracingPipelinesNV',
-            'PostCallRecordCreateRayTracingPipelinesNV',
-            'PreCallValidateCreateRayTracingPipelinesKHR',
-            'PreCallRecordCreateRayTracingPipelinesKHR',
-            'PostCallRecordCreateRayTracingPipelinesKHR',
-            'PreCallRecordCreatePipelineLayout',
-            'PreCallRecordCreateShaderModule',
-            'PostCallRecordCreateShaderModule',
-            'PreCallValidateAllocateDescriptorSets',
-            'PostCallRecordAllocateDescriptorSets',
-            'PreCallRecordCreateBuffer',
-            'PreCallRecordCreateDevice',
-            ]
-
-        raw = self.makeCDecls(cmdinfo.elem)[1]
-        prototype = raw.split("VKAPI_PTR *PFN_vk")[1]
-        prototype = prototype.replace(")", "", 1)
-
-        decl_terminator = ';'
-        if self.helper_file_type == 'optick_instrumentation_header':
-            decl_terminator = ' override;'
-
-        # Build up pre/post call function declarations
-        pre_call_validate = 'bool PreCallValidate' + prototype
-        pre_call_validate = pre_call_validate.replace(");", ") const" + decl_terminator)
-        if 'PreCallValidate' + name[2:] in inst_overloaded_apis:
-            pre_call_validate = pre_call_validate.replace(")", ", void* extra_data)")
-
-        pre_call_record = 'void PreCallRecord' + prototype
-        pre_call_record = pre_call_record.replace(");", ")" + decl_terminator)
-        if 'PreCallRecord' + name[2:] in inst_overloaded_apis:
-            pre_call_record = pre_call_record.replace(")", ", void* extra_data)")
-
-        post_call_record = 'void PostCallRecord' + prototype
-        resulttype = cmdinfo.elem.find('proto/type')
-        if resulttype.text == 'VkResult':
-            post_call_record = post_call_record.replace(');', ', VkResult result);')
-        elif resulttype.text == 'VkDeviceAddress':
-            post_call_record = post_call_record.replace(');', ', VkDeviceAddress result);')
-        post_call_record = post_call_record.replace(');', ')' + decl_terminator)
-        if 'PostCallRecord' + name[2:] in inst_overloaded_apis:
-            post_call_record = post_call_record.replace(")", ", void* extra_data)")
-
-        # If creating header, done
-        if self.helper_file_type == 'optick_instrumentation_header':
-            return '    %s\n    %s\n    %s\n' % (pre_call_validate, pre_call_record, post_call_record)
-
-        optick_event = "    OPTICK_EVENT();\n"
-
-        # Create PreCallValidate Function
-        pre_call_validate_sig = pre_call_validate.replace("bool ", "bool CoreChecksOptickInstrumented::")
-        pre_call_validate_sig = pre_call_validate_sig.replace(";", " {\n")
-        pre_call_validate_func = pre_call_validate.replace("bool ", "    auto result = CoreChecks::")
-        pre_call_validate_func = pre_call_validate_func.split("(")[0] + "(" + self.GetParameterList(pre_call_validate) + ")" + pre_call_validate_func.split(")")[1]
-        pre_call_validate_func = pre_call_validate_func.replace(" const;", ";\n")
-        pre_call_validate = pre_call_validate_sig + optick_event + pre_call_validate_func + '    return result;\n}\n'
-
-        # Create PreCallRecord Function
-        pre_call_record_sig = pre_call_record.replace("void ", "void CoreChecksOptickInstrumented::")
-        pre_call_record_sig = pre_call_record_sig.replace(";", " {\n")
-        pre_call_record_func = pre_call_record.replace("void ", "    CoreChecks::")
-        pre_call_record_func = pre_call_record_func.split("(")[0] + "(" + self.GetParameterList(pre_call_record) + ")" + pre_call_record_func.split(")")[1]
-        pre_call_record_func = pre_call_record_func.replace(";", ";\n")
-        pre_call_record = pre_call_record_sig +  optick_event + pre_call_record_func + '}\n'
-
-        # Create PostCallRecord Function
-        post_call_record_sig = post_call_record.replace("void ", "void CoreChecksOptickInstrumented::")
-        post_call_record_sig = post_call_record_sig.replace(";", " {\n")
-        post_call_record_func = post_call_record.replace("void ", "    CoreChecks::")
-        post_call_record_func = post_call_record_func.split("(")[0] + "(" + self.GetParameterList(post_call_record) + ")" + post_call_record_func.split(")")[1]
-        post_call_record_func = post_call_record_func.replace(";", ";\n")
-        post_call_record = post_call_record_sig + optick_event + post_call_record_func + '}\n'
-
-        return '%s\n%s\n%s\n' %  (pre_call_validate, pre_call_record, post_call_record)
 
     #
     # Check if the parameter passed in is a pointer
@@ -759,31 +588,6 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                 if item.ifdef_protect is not None:
                     safe_struct_header += '#endif // %s\n' % item.ifdef_protect
         return safe_struct_header
-    #
-    # Combine helper preamble with instrumented function declarations
-    def GenerateCcOptickInstrumentationHelperHeader(self):
-        header = ''
-        header += '#pragma once\n'
-        header += '\n'
-        header += '#ifdef INSTRUMENT_OPTICK\n'
-        header += '#include "optick.h"\n'
-        header += '#endif // INSTRUMENT_OPTICK\n'
-        header += '\n'
-        header += 'class CoreChecksOptickInstrumented : public CoreChecks {\n'
-        header += '  public:\n'
-        header += '#ifdef INSTRUMENT_OPTICK\n'
-        header += self.inst_header_decls
-        header += '#endif // INSTRUMENT_OPTICK\n'
-        header += '\n'
-        header += '};\n'
-        return header
-    #
-    # Combine helper preamble with instrumented function definitions
-    def GenerateCcOptickInstrumentationHelperSource(self):
-        source = self.inline_corechecks_instrumentation_source
-        source += self.inst_source_funcs
-        source += '#endif // INSTRUMENT_OPTICK'
-        return source
     #
     # Generate extension helper header file
     def GenerateExtensionHelperHeader(self):
@@ -1586,7 +1390,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                     '    }\n',
                 # VkGraphicsPipelineCreateInfo is special case because its pointers may be non-null but ignored
                 'VkGraphicsPipelineCreateInfo' :
-                    '    bool is_graphics_library = LvlFindInChain<VkGraphicsPipelineLibraryCreateInfoEXT>(in_struct->pNext) != nullptr;\n'
+                    '    const bool is_graphics_library = LvlFindInChain<VkGraphicsPipelineLibraryCreateInfoEXT>(in_struct->pNext) != nullptr;\n'
                     '    if (stageCount && in_struct->pStages) {\n'
                     '        pStages = new safe_VkPipelineShaderStageCreateInfo[stageCount];\n'
                     '        for (uint32_t i = 0; i < stageCount; ++i) {\n'
@@ -1616,7 +1420,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                     '            if (in_struct->pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)\n'
                     '                is_dynamic_has_rasterization = true;\n'
                     '    }\n'
-                    '    bool has_rasterization = in_struct->pRasterizationState ? (is_dynamic_has_rasterization || !in_struct->pRasterizationState->rasterizerDiscardEnable) : false;\n'
+                    '    const bool has_rasterization = in_struct->pRasterizationState ? (is_dynamic_has_rasterization || !in_struct->pRasterizationState->rasterizerDiscardEnable) : false;\n'
                     '    if (in_struct->pViewportState && (has_rasterization || is_graphics_library)) {\n'
                     '        bool is_dynamic_viewports = false;\n'
                     '        bool is_dynamic_scissors = false;\n'
@@ -1801,7 +1605,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                 # VkGraphicsPipelineCreateInfo is special case because it has custom construct parameters
                 'VkGraphicsPipelineCreateInfo' :
                     '    pNext = SafePnextCopy(copy_src.pNext);\n'
-                    '    bool is_graphics_library = LvlFindInChain<VkGraphicsPipelineLibraryCreateInfoEXT>(copy_src.pNext);\n'
+                    '    const bool is_graphics_library = LvlFindInChain<VkGraphicsPipelineLibraryCreateInfoEXT>(copy_src.pNext);\n'
                     '    if (stageCount && copy_src.pStages) {\n'
                     '        pStages = new safe_VkPipelineShaderStageCreateInfo[stageCount];\n'
                     '        for (uint32_t i = 0; i < stageCount; ++i) {\n'
@@ -1831,7 +1635,7 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                     '            if (copy_src.pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)\n'
                     '                is_dynamic_has_rasterization = true;\n'
                     '    }\n'
-                    '    bool has_rasterization = copy_src.pRasterizationState ? (is_dynamic_has_rasterization || !copy_src.pRasterizationState->rasterizerDiscardEnable) : false;\n'
+                    '    const bool has_rasterization = copy_src.pRasterizationState ? (is_dynamic_has_rasterization || !copy_src.pRasterizationState->rasterizerDiscardEnable) : false;\n'
                     '    if (copy_src.pViewportState && (has_rasterization || is_graphics_library)) {\n'
                     '        pViewportState = new safe_VkPipelineViewportStateCreateInfo(*copy_src.pViewportState);\n'
                     '    } else\n'
@@ -2240,22 +2044,18 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             '    return found;',
             '}}',
             '',
-            '// Init the header of an sType struct with pNext',
-            'template <typename T> T {init_func}(void *p_next) {{',
-            '    T out = {{}};',
-            '    out.sType = {type_map}<T>::kSType;',
-            '    out.pNext = p_next;',
+            '// Init the header of an sType struct with pNext and optional fields',
+            'template <typename T, typename... StructFields>',
+            'T {init_func}(void *p_next, StructFields... fields) {{',
+            '    T out = {{{type_map}<T>::kSType, p_next, fields...}};',
             '    return out;',
             '}}',
-                        '',
             '// Init the header of an sType struct',
-            'template <typename T> T {init_func}() {{',
-            '    T out = {{}};',
-            '    out.sType = {type_map}<T>::kSType;',
-            '    out.pNext = nullptr;',
+            'template <typename T>',
+            'T {init_func}(void *p_next = nullptr) {{',
+            '    T out = {{{type_map}<T>::kSType, p_next}};',
             '    return out;',
             '}}',
-
             ''))
 
         code = []
@@ -2296,17 +2096,6 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
                 find_mod_func=find_mod_func, init_func=init_func), ''
             )))
 
-        # Generate utilities using legacy names for backwards compatibility
-        fprefix = 'lvl_'
-        find_func = fprefix + 'find_in_chain'
-        find_mod_func = fprefix + 'find_mod_in_chain'
-        init_func = fprefix + 'init_struct'
-        code.append('\n'.join((
-            utilities_format.format(id_member=id_member, type_map=typemap,
-                header=generic_header, find_func=find_func,
-                find_mod_func=find_mod_func, init_func=init_func), ''
-            )))
-
         return "\n".join(code)
 
     #
@@ -2336,10 +2125,6 @@ void CoreChecksOptickInstrumented::PreCallRecordQueuePresentKHR(VkQueue queue, c
             return self.GenerateSyncHelperHeader()
         elif self.helper_file_type == 'synchronization_helper_source':
             return self.GenerateSyncHelperSource()
-        elif self.helper_file_type == 'optick_instrumentation_header':
-            return self.GenerateCcOptickInstrumentationHelperHeader()
-        elif self.helper_file_type == 'optick_instrumentation_source':
-            return self.GenerateCcOptickInstrumentationHelperSource()
         else:
             return 'Bad Helper File Generator Option %s' % self.helper_file_type
 

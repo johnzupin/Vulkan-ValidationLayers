@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2022 Valve Corporation
  * Copyright (c) 2015-2022 LunarG, Inc.
  * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
+ * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +18,7 @@
  *
  * Author: Camden Stocker <camden@lunarg.com>
  * Author: Nadav Geva <nadav.geva@amd.com>
+ * Author: Daniel Rakos <daniel.rakos@rastergrid.com>
  */
 
 #pragma once
@@ -251,11 +253,11 @@ class DeviceMemory : public DEVICE_MEMORY_STATE {
   public:
     DeviceMemory(VkDeviceMemory mem, const VkMemoryAllocateInfo* p_alloc_info, uint64_t fake_address,
                  const VkMemoryType& memory_type, const VkMemoryHeap& memory_heap,
-                 layer_data::optional<DedicatedBinding>&& dedicated_binding, uint32_t physical_device_count)
+                 std::optional<DedicatedBinding>&& dedicated_binding, uint32_t physical_device_count)
         : DEVICE_MEMORY_STATE(mem, p_alloc_info, fake_address, memory_type, memory_heap, std::move(dedicated_binding),
                               physical_device_count) {}
 
-    layer_data::optional<float> dynamic_priority; // VK_EXT_pageable_device_local_memory priority
+    std::optional<float> dynamic_priority; // VK_EXT_pageable_device_local_memory priority
 };
 
 struct AttachmentInfo {
@@ -379,7 +381,7 @@ class BestPractices : public ValidationStateTracker {
 
     BestPractices() { container_type = LayerObjectTypeBestPractices; }
 
-    ReadLockGuard ReadLock() override;
+    ReadLockGuard ReadLock() const override;
     WriteLockGuard WriteLock() override;
 
     std::string GetAPIVersionName(uint32_t version) const;
@@ -439,8 +441,16 @@ class BestPractices : public ValidationStateTracker {
     bool PreCallValidateBindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount,
                                             const VkBindImageMemoryInfo* pBindInfos) const override;
     void PreCallRecordSetDeviceMemoryPriorityEXT(VkDevice device, VkDeviceMemory memory, float priority) override;
+    bool PreCallValidateGetVideoSessionMemoryRequirementsKHR(
+        VkDevice device, VkVideoSessionKHR videoSession, uint32_t* pMemoryRequirementsCount,
+        VkVideoSessionMemoryRequirementsKHR* pMemoryRequirements) const override;
+    bool PreCallValidateBindVideoSessionMemoryKHR(VkDevice device, VkVideoSessionKHR videoSession,
+                                                  uint32_t bindSessionMemoryInfoCount,
+                                                  const VkBindVideoSessionMemoryInfoKHR* pBindSessionMemoryInfos) const override;
     bool PreCallValidateCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo* pCreateInfo,
                                           const VkAllocationCallbacks* pAllocator, VkCommandPool* pCommandPool) const override;
+    bool PreCallValidateAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo,
+                                               VkCommandBuffer* pCommandBuffers) const override;
     void PreCallRecordFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* pAllocator) override;
     bool PreCallValidateFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* pAllocator) const override;
     bool ValidateMultisampledBlendingArm(uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo* pCreateInfos) const;
@@ -956,7 +966,7 @@ class BestPractices : public ValidationStateTracker {
     std::shared_ptr<DEVICE_MEMORY_STATE> CreateDeviceMemoryState(VkDeviceMemory mem, const VkMemoryAllocateInfo* p_alloc_info,
                                                                  uint64_t fake_address, const VkMemoryType& memory_type,
                                                                  const VkMemoryHeap& memory_heap,
-                                                                 layer_data::optional<DedicatedBinding>&& dedicated_binding,
+                                                                 std::optional<DedicatedBinding>&& dedicated_binding,
                                                                  uint32_t physical_device_count) final {
         return std::static_pointer_cast<DEVICE_MEMORY_STATE>(std::make_shared<bp_state::DeviceMemory>(
             mem, p_alloc_info, fake_address, memory_type, memory_heap, std::move(dedicated_binding), physical_device_count));

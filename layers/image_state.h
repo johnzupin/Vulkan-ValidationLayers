@@ -1,8 +1,9 @@
-/* Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
+/* Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
  * Copyright (C) 2015-2022 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
+ * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +25,7 @@
  * Author: John Zulauf <jzulauf@lunarg.com>
  * Author: Tobias Hector <tobias.hector@amd.com>
  * Author: Jeremy Gebben <jeremyg@lunarg.com>
+ * Author: Daniel Rakos <daniel.rakos@rastergrid.com>
  */
 #pragma once
 
@@ -33,12 +35,12 @@
 #include "vk_layer_utils.h"
 
 class ValidationStateTracker;
+class VideoProfileDesc;
 class SURFACE_STATE;
 class SWAPCHAIN_NODE;
 
 static inline bool operator==(const VkImageSubresource &lhs, const VkImageSubresource &rhs) {
-    bool is_equal = (lhs.aspectMask == rhs.aspectMask) && (lhs.mipLevel == rhs.mipLevel) && (lhs.arrayLayer == rhs.arrayLayer);
-    return is_equal;
+    return (lhs.aspectMask == rhs.aspectMask) && (lhs.mipLevel == rhs.mipLevel) && (lhs.arrayLayer == rhs.arrayLayer);
 }
 
 VkImageSubresourceRange NormalizeSubresourceRange(const VkImageCreateInfo &image_create_info, const VkImageSubresourceRange &range);
@@ -130,6 +132,8 @@ class IMAGE_STATE : public BINDABLE {
     const VkDevice store_device_as_workaround;                                       // TODO REMOVE WHEN encoder can be const
 
     std::shared_ptr<GlobalImageLayoutRangeMap> layout_range_map;
+
+    layer_data::unordered_set<std::shared_ptr<const VideoProfileDesc>> supported_video_profiles;
 
     IMAGE_STATE(const ValidationStateTracker *dev_data, VkImage img, const VkImageCreateInfo *pCreateInfo,
                 VkFormatFeatureFlags2KHR features);
@@ -284,6 +288,7 @@ struct SWAPCHAIN_IMAGE {
 class SWAPCHAIN_NODE : public BASE_NODE {
   public:
     const safe_VkSwapchainCreateInfoKHR createInfo;
+    std::vector<VkPresentModeKHR> present_modes;
     std::vector<SWAPCHAIN_IMAGE> images;
     bool retired = false;
     bool exclusive_full_screen_access;
@@ -339,6 +344,12 @@ struct hash<GpuQueue> {
 }  // namespace std
 
 // State for VkSurfaceKHR objects.
+struct PresentModeState {
+    VkSurfaceCapabilitiesKHR surface_capabilities_;
+    VkSurfacePresentScalingCapabilitiesEXT scaling_capabilities_;
+    std::vector<VkPresentModeKHR> compatible_present_modes_;
+};
+
 // Parent -> child relationships in the object usage tree:
 //    SURFACE_STATE -> nothing
 class SURFACE_STATE : public BASE_NODE {
@@ -362,7 +373,7 @@ class SURFACE_STATE : public BASE_NODE {
     void SetQueueSupport(VkPhysicalDevice phys_dev, uint32_t qfi, bool supported);
     bool GetQueueSupport(VkPhysicalDevice phys_dev, uint32_t qfi) const;
 
-    void SetPresentModes(VkPhysicalDevice phys_dev, std::vector<VkPresentModeKHR> &&modes);
+    void SetPresentModes(VkPhysicalDevice phys_dev, layer_data::span<const VkPresentModeKHR> modes);
     std::vector<VkPresentModeKHR> GetPresentModes(VkPhysicalDevice phys_dev) const;
 
     void SetFormats(VkPhysicalDevice phys_dev, std::vector<VkSurfaceFormatKHR> &&fmts);
@@ -371,13 +382,24 @@ class SURFACE_STATE : public BASE_NODE {
     void SetCapabilities(VkPhysicalDevice phys_dev, const VkSurfaceCapabilitiesKHR &caps);
     VkSurfaceCapabilitiesKHR GetCapabilities(VkPhysicalDevice phys_dev) const;
 
+    void SetCompatibleModes(VkPhysicalDevice phys_dev, const VkPresentModeKHR present_mode,
+                            layer_data::span<const VkPresentModeKHR> compatible_modes);
+    std::vector<VkPresentModeKHR> GetCompatibleModes(VkPhysicalDevice phys_dev, const VkPresentModeKHR present_mode) const;
+    void SetPresentModeCapabilities(VkPhysicalDevice phys_dev, const VkPresentModeKHR present_mode,
+                                    const VkSurfaceCapabilitiesKHR &caps, const VkSurfacePresentScalingCapabilitiesEXT &scaling_caps);
+    VkSurfaceCapabilitiesKHR GetPresentModeSurfaceCapabilities(VkPhysicalDevice phys_dev,
+                                                                const VkPresentModeKHR present_mode) const;
+    VkSurfacePresentScalingCapabilitiesEXT GetPresentModeScalingCapabilities(VkPhysicalDevice phys_dev,
+                                                                             const VkPresentModeKHR present_mode) const;
     SWAPCHAIN_NODE *swapchain{nullptr};
 
   private:
     std::unique_lock<std::mutex> Lock() const { return std::unique_lock<std::mutex>(lock_); }
     mutable std::mutex lock_;
     mutable layer_data::unordered_map<GpuQueue, bool> gpu_queue_support_;
-    mutable layer_data::unordered_map<VkPhysicalDevice, std::vector<VkPresentModeKHR>> present_modes_;
     mutable layer_data::unordered_map<VkPhysicalDevice, std::vector<VkSurfaceFormatKHR>> formats_;
     mutable layer_data::unordered_map<VkPhysicalDevice, VkSurfaceCapabilitiesKHR> capabilities_;
+    mutable layer_data::unordered_map<VkPhysicalDevice,
+                                      layer_data::unordered_map<VkPresentModeKHR, std::optional<std::shared_ptr<PresentModeState>>>>
+        present_modes_data_;
 };

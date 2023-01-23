@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,6 +65,7 @@ class VkDeviceObj : public vk_testing::Device {
     VkDeviceObj(uint32_t id, VkPhysicalDevice obj, std::vector<const char *> &extension_names,
                 VkPhysicalDeviceFeatures *features = nullptr, void *create_device_pnext = nullptr);
 
+    // Find a queue family with and without desired capabilities
     uint32_t QueueFamilyMatching(VkQueueFlags with, VkQueueFlags without, bool all_bits = true);
     uint32_t QueueFamilyWithoutCapabilities(VkQueueFlags capabilities) {
         // an all_bits match with 0 matches all
@@ -340,7 +341,7 @@ class VkRenderFramework : public VkTestFramework {
     bool AddRequestedDeviceExtensions(const char *dev_ext_name);
     // Returns true if the device extension is enabled. This call is only valid _after_ previous `AddRequired*Extensions` calls and
     // InitFramework has been called.
-    // `dev_ext_name` msut be an instance extension name; false is returned for all instance extension names.
+    // `dev_ext_name` must be an instance extension name; false is returned for all instance extension names.
     bool CanEnableDeviceExtension(const std::string &dev_ext_name) const;
 };
 
@@ -383,6 +384,10 @@ class VkCommandBufferObj : public vk_testing::CommandBuffer {
     void EndRenderPass();
     void BeginRendering(const VkRenderingInfoKHR &renderingInfo);
     void EndRendering();
+    void BeginVideoCoding(const VkVideoBeginCodingInfoKHR &beginInfo);
+    void ControlVideoCoding(const VkVideoCodingControlInfoKHR &controlInfo);
+    void DecodeVideo(const VkVideoDecodeInfoKHR &decodeInfo);
+    void EndVideoCoding(const VkVideoEndCodingInfoKHR &endInfo);
     void FillBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize fill_size, uint32_t data);
     void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset,

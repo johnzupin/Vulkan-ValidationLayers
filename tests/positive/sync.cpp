@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -108,13 +108,11 @@ TEST_F(VkPositiveLayerTest, ThreadSafetyDisplayPlaneObjects) {
 TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersImage) {
     TEST_DESCRIPTION("Valid image ownership transfers that shouldn't create errors");
     SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Synchronization2 not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
     if (!CheckSynchronization2SupportAndInitState(this)) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
@@ -160,13 +158,11 @@ TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersImage) {
 TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersBuffer) {
     TEST_DESCRIPTION("Valid buffer ownership transfers that shouldn't create errors");
     SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
-        m_device_extension_names.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    } else {
-        GTEST_SKIP() << "Synchronization2 not supported";
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
     if (!CheckSynchronization2SupportAndInitState(this)) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
@@ -1482,6 +1478,9 @@ TEST_F(VkPositiveLayerTest, ExternalTimelineSemaphore) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
+    if (IsPlatform(kMockICD)) {
+        GTEST_SKIP() << "Test not supported by MockICD";
+    }
 
     // Check for external semaphore import and export capability
     auto tci = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
@@ -2066,6 +2065,9 @@ TEST_F(VkPositiveLayerTest, FenceSemThreadRace) {
     AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (IsDriver(VK_DRIVER_ID_GOOGLE_SWIFTSHADER)) {
+        GTEST_SKIP() << "This test hangs on SwiftShader.";
+    }
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
@@ -2144,7 +2146,7 @@ TEST_F(VkPositiveLayerTest, SubmitFenceButWaitIdle) {
     auto pool_create_info = LvlInitStruct<VkCommandPoolCreateInfo>();
     pool_create_info.queueFamilyIndex = m_device->graphics_queue_node_index_;
     pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    layer_data::optional<vk_testing::CommandPool> command_pool(layer_data::in_place, *m_device, pool_create_info);
+    std::optional<vk_testing::CommandPool> command_pool(layer_data::in_place, *m_device, pool_create_info);
 
     // create a raw command buffer because we'll just the destroy the pool.
     VkCommandBuffer command_buffer = VK_NULL_HANDLE;
@@ -2304,49 +2306,6 @@ struct SemBufferRaceData {
         vk::QueueWaitIdle(dev.m_queue);
     }
 };
-
-struct SemBufferRaceGetCounterData : public SemBufferRaceData {
-    SemBufferRaceGetCounterData(VkDeviceObj &dev_)
-        : SemBufferRaceData(dev_),
-          GetSemaphoreCounterValue(reinterpret_cast<PFN_vkGetSemaphoreCounterValueKHR>(
-              vk::GetDeviceProcAddr(dev.handle(), "vkGetSemaphoreCounterValueKHR"))) {}
-
-    VkResult Wait(uint64_t sem_value) {
-        uint64_t read_value = 0;
-        auto end_time = std::chrono::steady_clock::now() + std::chrono::nanoseconds(timeout_ns);
-        do {
-            auto err = GetSemaphoreCounterValue(dev.handle(), sem.handle(), &read_value);
-            if (err != VK_SUCCESS) {
-                return err;
-            }
-            if (bailout) {
-                return VK_SUCCESS;
-            }
-            if (read_value >= sem_value) {
-                return VK_SUCCESS;
-            }
-        } while (std::chrono::steady_clock::now() < end_time);
-        return VK_TIMEOUT;
-    }
-
-    PFN_vkGetSemaphoreCounterValueKHR GetSemaphoreCounterValue;
-};
-
-TEST_F(VkPositiveLayerTest, GetTimelineSemThreadRace) {
-    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-    if (!CheckTimelineSemaphoreSupportAndInitState(this)) {
-        GTEST_SKIP() << "Timeline semaphore feature not supported.";
-    }
-
-    SemBufferRaceGetCounterData data(*m_device);
-
-    data.Run(*m_commandPool, *m_errorMonitor);
-}
 
 struct WaitTimelineSemThreadData : public SemBufferRaceData {
     WaitTimelineSemThreadData(VkDeviceObj &dev_)

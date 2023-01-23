@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (C) 2015-2022 Google Inc.
+/* Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (C) 2015-2023 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -87,7 +87,7 @@ extern DescriptorReqFlags DescriptorRequirementsBitsFromFormat(VkFormat fmt);
 struct DescriptorRequirement {
     DescriptorReqFlags reqs;
     bool is_writable;
-    // Copy from StageState.InterfaceVariable. It combines from plural shader stages. The index of array is index of image.
+    // Copy from StageState.ResourceInterfaceVariable. It combines from plural shader stages. The index of array is index of image.
     std::vector<layer_data::unordered_set<SamplerUsedByImage>> samplers_used_by_image;
     // For storage images - list of < OpImageWrite : Texel component length >
     std::vector<std::pair<Instruction, uint32_t>> write_without_formats_component_count_list;
@@ -105,11 +105,8 @@ struct PipelineStageState {
     std::shared_ptr<const SHADER_MODULE_STATE> module_state;
     const safe_VkPipelineShaderStageCreateInfo *create_info;
     VkShaderStageFlagBits stage_flag;
-    layer_data::optional<Instruction> entrypoint;
-    // Used to map each descriptor binding to the OpVariable decorated with it
-    // <(set, binding), OpVariable>
-    using DescriptorUse = std::pair<DescriptorSlot, InterfaceVariable>;
-    std::vector<DescriptorUse> descriptor_uses;
+    std::optional<Instruction> entrypoint;
+    const std::vector<ResourceInterfaceVariable> *descriptor_variables;
     bool has_writable_descriptor;
     bool has_atomic_descriptor;
     bool wrote_primitive_shading_rate;
@@ -311,6 +308,8 @@ class PIPELINE_STATE : public BASE_NODE {
         return rp_state;
     }
 
+    bool IsRenderPassStateRequired() const { return pre_raster_state || fragment_shader_state || fragment_output_state; }
+
     const std::shared_ptr<const PIPELINE_LAYOUT_STATE> PipelineLayoutState() const {
         // TODO A render pass object is required for all of these sub-states. Which one should be used for an "executable pipeline"?
         if (merged_graphics_layout) {
@@ -351,6 +350,15 @@ class PIPELINE_STATE : public BASE_NODE {
             return fragment_output_state->ms_state.get();
         }
         return nullptr;
+    }
+
+    // For given pipeline, return number of MSAA samples, or one if MSAA disabled
+    VkSampleCountFlagBits GetNumSamples() const {
+        const auto ms_state = MultisampleState();
+        if (ms_state) {
+            return ms_state->rasterizationSamples;
+        }
+        return VK_SAMPLE_COUNT_1_BIT;
     }
 
     const safe_VkPipelineRasterizationStateCreateInfo *RasterizationState() const {

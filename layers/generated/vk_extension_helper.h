@@ -4,10 +4,10 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
- * Copyright (c) 2015-2022 Google Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2023 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,6 +72,7 @@ struct InstanceExtensions {
     ExtEnabled vk_ext_display_surface_counter{kNotEnabled};
     ExtEnabled vk_ext_headless_surface{kNotEnabled};
     ExtEnabled vk_ext_metal_surface{kNotEnabled};
+    ExtEnabled vk_ext_surface_maintenance1{kNotEnabled};
     ExtEnabled vk_ext_swapchain_colorspace{kNotEnabled};
     ExtEnabled vk_ext_validation_features{kNotEnabled};
     ExtEnabled vk_ext_validation_flags{kNotEnabled};
@@ -141,6 +142,9 @@ struct InstanceExtensions {
             {VK_EXT_METAL_SURFACE_EXTENSION_NAME, InstanceInfo(&InstanceExtensions::vk_ext_metal_surface, {{
                            {&InstanceExtensions::vk_khr_surface, VK_KHR_SURFACE_EXTENSION_NAME}}})},
 #endif
+            {VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME, InstanceInfo(&InstanceExtensions::vk_ext_surface_maintenance1, {{
+                           {&InstanceExtensions::vk_khr_surface, VK_KHR_SURFACE_EXTENSION_NAME},
+                           {&InstanceExtensions::vk_khr_get_surface_capabilities2, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME}}})},
             {VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME, InstanceInfo(&InstanceExtensions::vk_ext_swapchain_colorspace, {{
                            {&InstanceExtensions::vk_khr_surface, VK_KHR_SURFACE_EXTENSION_NAME}}})},
             {VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME, InstanceInfo(&InstanceExtensions::vk_ext_validation_features, {})},
@@ -309,6 +313,7 @@ static const std::set<std::string> kInstanceExtensionNames = {
 #ifdef VK_USE_PLATFORM_METAL_EXT
     VK_EXT_METAL_SURFACE_EXTENSION_NAME,
 #endif
+    VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
     VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
     VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME,
     VK_EXT_VALIDATION_FLAGS_EXTENSION_NAME,
@@ -480,6 +485,7 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_ext_shader_viewport_index_layer{kNotEnabled};
     ExtEnabled vk_ext_subgroup_size_control{kNotEnabled};
     ExtEnabled vk_ext_subpass_merge_feedback{kNotEnabled};
+    ExtEnabled vk_ext_swapchain_maintenance1{kNotEnabled};
     ExtEnabled vk_ext_texel_buffer_alignment{kNotEnabled};
     ExtEnabled vk_ext_texture_compression_astc_hdr{kNotEnabled};
     ExtEnabled vk_ext_tooling_info{kNotEnabled};
@@ -487,8 +493,6 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_ext_validation_cache{kNotEnabled};
     ExtEnabled vk_ext_vertex_attribute_divisor{kNotEnabled};
     ExtEnabled vk_ext_vertex_input_dynamic_state{kNotEnabled};
-    ExtEnabled vk_ext_video_decode_h264{kNotEnabled};
-    ExtEnabled vk_ext_video_decode_h265{kNotEnabled};
     ExtEnabled vk_ext_video_encode_h264{kNotEnabled};
     ExtEnabled vk_ext_video_encode_h265{kNotEnabled};
     ExtEnabled vk_ext_ycbcr_2plane_444_formats{kNotEnabled};
@@ -501,6 +505,7 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_google_display_timing{kNotEnabled};
     ExtEnabled vk_google_hlsl_functionality1{kNotEnabled};
     ExtEnabled vk_google_user_type{kNotEnabled};
+    ExtEnabled vk_huawei_cluster_culling_shader{kNotEnabled};
     ExtEnabled vk_huawei_invocation_mask{kNotEnabled};
     ExtEnabled vk_huawei_subpass_shading{kNotEnabled};
     ExtEnabled vk_img_filter_cubic{kNotEnabled};
@@ -578,6 +583,8 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_khr_timeline_semaphore{kNotEnabled};
     ExtEnabled vk_khr_uniform_buffer_standard_layout{kNotEnabled};
     ExtEnabled vk_khr_variable_pointers{kNotEnabled};
+    ExtEnabled vk_khr_video_decode_h264{kNotEnabled};
+    ExtEnabled vk_khr_video_decode_h265{kNotEnabled};
     ExtEnabled vk_khr_video_decode_queue{kNotEnabled};
     ExtEnabled vk_khr_video_encode_queue{kNotEnabled};
     ExtEnabled vk_khr_video_queue{kNotEnabled};
@@ -877,6 +884,10 @@ struct DeviceExtensions : public InstanceExtensions {
             {VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_subgroup_size_control, {{
                            {&DeviceExtensions::vk_feature_version_1_1, VK_VERSION_1_1_NAME}}})},
             {VK_EXT_SUBPASS_MERGE_FEEDBACK_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_subpass_merge_feedback, {})},
+            {VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_swapchain_maintenance1, {{
+                           {&DeviceExtensions::vk_khr_swapchain, VK_KHR_SWAPCHAIN_EXTENSION_NAME},
+                           {&DeviceExtensions::vk_ext_surface_maintenance1, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME},
+                           {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
             {VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_texel_buffer_alignment, {{
                            {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
             {VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_texture_compression_astc_hdr, {{
@@ -889,14 +900,6 @@ struct DeviceExtensions : public InstanceExtensions {
                            {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
             {VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_vertex_input_dynamic_state, {{
                            {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-            {VK_EXT_VIDEO_DECODE_H264_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_video_decode_h264, {{
-                           {&DeviceExtensions::vk_khr_video_decode_queue, VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME}}})},
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-            {VK_EXT_VIDEO_DECODE_H265_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_video_decode_h265, {{
-                           {&DeviceExtensions::vk_khr_video_decode_queue, VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME}}})},
-#endif
 #ifdef VK_ENABLE_BETA_EXTENSIONS
             {VK_EXT_VIDEO_ENCODE_H264_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_ext_video_encode_h264, {{
                            {&DeviceExtensions::vk_khr_video_encode_queue, VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME}}})},
@@ -934,6 +937,8 @@ struct DeviceExtensions : public InstanceExtensions {
                            {&DeviceExtensions::vk_khr_swapchain, VK_KHR_SWAPCHAIN_EXTENSION_NAME}}})},
             {VK_GOOGLE_HLSL_FUNCTIONALITY_1_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_google_hlsl_functionality1, {})},
             {VK_GOOGLE_USER_TYPE_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_google_user_type, {})},
+            {VK_HUAWEI_CLUSTER_CULLING_SHADER_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_huawei_cluster_culling_shader, {{
+                           {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
             {VK_HUAWEI_INVOCATION_MASK_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_huawei_invocation_mask, {{
                            {&DeviceExtensions::vk_khr_ray_tracing_pipeline, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME},
                            {&DeviceExtensions::vk_khr_synchronization2, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME}}})},
@@ -1105,22 +1110,22 @@ struct DeviceExtensions : public InstanceExtensions {
             {VK_KHR_VARIABLE_POINTERS_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_khr_variable_pointers, {{
                            {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME},
                            {&DeviceExtensions::vk_khr_storage_buffer_storage_class, VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME}}})},
-#ifdef VK_ENABLE_BETA_EXTENSIONS
+            {VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_khr_video_decode_h264, {{
+                           {&DeviceExtensions::vk_khr_video_decode_queue, VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME}}})},
+            {VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_khr_video_decode_h265, {{
+                           {&DeviceExtensions::vk_khr_video_decode_queue, VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME}}})},
             {VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_khr_video_decode_queue, {{
                            {&DeviceExtensions::vk_khr_video_queue, VK_KHR_VIDEO_QUEUE_EXTENSION_NAME},
                            {&DeviceExtensions::vk_khr_synchronization2, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME}}})},
-#endif
 #ifdef VK_ENABLE_BETA_EXTENSIONS
             {VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_khr_video_encode_queue, {{
                            {&DeviceExtensions::vk_khr_video_queue, VK_KHR_VIDEO_QUEUE_EXTENSION_NAME},
                            {&DeviceExtensions::vk_khr_synchronization2, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME}}})},
 #endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
             {VK_KHR_VIDEO_QUEUE_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_khr_video_queue, {{
                            {&DeviceExtensions::vk_khr_get_physical_device_properties2, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME},
                            {&DeviceExtensions::vk_khr_synchronization2, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME},
                            {&DeviceExtensions::vk_feature_version_1_1, VK_VERSION_1_1_NAME}}})},
-#endif
             {VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_khr_vulkan_memory_model, {})},
 #ifdef VK_USE_PLATFORM_WIN32_KHR
             {VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME, DeviceInfo(&DeviceExtensions::vk_khr_win32_keyed_mutex, {{
@@ -1497,6 +1502,7 @@ static const std::set<std::string> kDeviceExtensionNames = {
     VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME,
     VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
     VK_EXT_SUBPASS_MERGE_FEEDBACK_EXTENSION_NAME,
+    VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
     VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME,
     VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME,
     VK_EXT_TOOLING_INFO_EXTENSION_NAME,
@@ -1504,12 +1510,6 @@ static const std::set<std::string> kDeviceExtensionNames = {
     VK_EXT_VALIDATION_CACHE_EXTENSION_NAME,
     VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME,
     VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME,
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    VK_EXT_VIDEO_DECODE_H264_EXTENSION_NAME,
-#endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    VK_EXT_VIDEO_DECODE_H265_EXTENSION_NAME,
-#endif
 #ifdef VK_ENABLE_BETA_EXTENSIONS
     VK_EXT_VIDEO_ENCODE_H264_EXTENSION_NAME,
 #endif
@@ -1534,6 +1534,7 @@ static const std::set<std::string> kDeviceExtensionNames = {
     VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
     VK_GOOGLE_HLSL_FUNCTIONALITY_1_EXTENSION_NAME,
     VK_GOOGLE_USER_TYPE_EXTENSION_NAME,
+    VK_HUAWEI_CLUSTER_CULLING_SHADER_EXTENSION_NAME,
     VK_HUAWEI_INVOCATION_MASK_EXTENSION_NAME,
     VK_HUAWEI_SUBPASS_SHADING_EXTENSION_NAME,
     VK_IMG_FILTER_CUBIC_EXTENSION_NAME,
@@ -1619,15 +1620,13 @@ static const std::set<std::string> kDeviceExtensionNames = {
     VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
     VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME,
     VK_KHR_VARIABLE_POINTERS_EXTENSION_NAME,
-#ifdef VK_ENABLE_BETA_EXTENSIONS
+    VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME,
+    VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME,
     VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME,
-#endif
 #ifdef VK_ENABLE_BETA_EXTENSIONS
     VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME,
 #endif
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     VK_KHR_VIDEO_QUEUE_EXTENSION_NAME,
-#endif
     VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME,
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME,
