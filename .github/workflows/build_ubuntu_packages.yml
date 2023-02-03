@@ -1,0 +1,40 @@
+name: build-focal-package
+run-name: ${{ github.actor }} is learning GitHub Actions
+on: [push]
+jobs:
+  set-dep-refs:
+    env:
+      test: testing
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - run: "env"
+      - run: "jq -r '.repos[] | .name + \"=\" + .url' scripts/known_good.json"
+        env:
+          Testing: "sometest"
+      - run: |
+          for x in `jq -r '.repos[] | .name + "=" + .url' scripts/known_good.json`
+          do
+              echo "$x"
+              echo "$x" >> $GITHUB_ENV
+          done
+  build-packages-without-input:
+    runs-on: ubuntu-20.04
+    steps:
+      - run: "ls -l"
+      - run: "env"
+      - uses: actions/checkout@v3
+      - run: "ls -l"
+      - run: "env"
+      - run: jq -r '.repos[].name' scripts/known_good.json
+      - uses: actions/checkout@v3
+        with:
+          repository: "johnzupin/Vulkan-Headers"
+          path: "Vulkan-Headers"
+      - run: "ls -l"
+      - run: "ls -l Vulkan-Headers"
+      - uses: actions/checkout@v3
+        with:
+          repository: "johnzupin/Vulkan-Headers"
+          path: "Vulkan-Loader"
+      - run: "ls -l"
