@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2021 Valve Corporation
+# Copyright (c) 2020-2023 Valve Corporation
 # Copyright (c) 2020-2023 LunarG, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# Author: Mark Lobodzinski <mark@lunarg.com>
-# Author: Nathaniel Cesario <nathaniel@lunarg.com>
 
 import os
 import argparse
@@ -32,9 +29,11 @@ def main():
     parser = common_ci.GetArgParser()
     args = parser.parse_args()
 
+    config = args.configuration
+
     try:
-        common_ci.BuildVVL(args)
-        common_ci.CheckVVLCodegenConsistency(args)
+        common_ci.BuildVVL(config = config, cmake_args = args.cmake, build_tests = "OFF")
+        common_ci.CheckVVLCodegenConsistency(config = config)
 
     except subprocess.CalledProcessError as proc_error:
         print('Command "%s" failed with return code %s' % (' '.join(proc_error.cmd), proc_error.returncode))

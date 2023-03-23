@@ -9,33 +9,15 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Chia-I Wu <olvaffe@gmail.com>
- * Author: Chris Forbes <chrisf@ijw.co.nz>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Mike Stroyan <mike@LunarG.com>
- * Author: Tobin Ehlis <tobine@google.com>
- * Author: Tony Barbour <tony@LunarG.com>
- * Author: Cody Northrop <cnorthrop@google.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Jeremy Kniager <jeremyk@lunarg.com>
- * Author: Shannon McPherson <shannon@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
  */
 
-#include "../layer_validation_tests.h"
+#include "../framework/layer_validation_tests.h"
 #include "vk_extension_helper.h"
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <deque>
-#include <memory>
-#include <mutex>
 #include <thread>
-
-#include "cast_utils.h"
 
 //
 // POSITIVE VALIDATION TESTS
@@ -62,14 +44,18 @@ TEST_F(VkPositiveLayerTest, ThreadSafetyDisplayObjects) {
 
     uint32_t prop_count = 0;
     vkGetPhysicalDeviceDisplayPropertiesKHR(gpu(), &prop_count, nullptr);
-    if (prop_count != 0) {
-        VkDisplayPropertiesKHR display_props = {};
-        // Create a VkDisplayKHR object
-        vkGetPhysicalDeviceDisplayPropertiesKHR(gpu(), &prop_count, &display_props);
-        // Now use this new object in an API call that thread safety will track
-        prop_count = 0;
-        vkGetDisplayModePropertiesKHR(gpu(), display_props.display, &prop_count, nullptr);
+    if (prop_count == 0) {
+        GTEST_SKIP() << "No VkDisplayKHR properties to query";
     }
+
+    std::vector<VkDisplayPropertiesKHR> display_props{prop_count};
+    // Create a VkDisplayKHR object
+    vkGetPhysicalDeviceDisplayPropertiesKHR(gpu(), &prop_count, display_props.data());
+    ASSERT_NE(prop_count, 0U);
+
+    // Now use this new object in an API call that thread safety will track
+    prop_count = 0;
+    vkGetDisplayModePropertiesKHR(gpu(), display_props[0].display, &prop_count, nullptr);
 }
 
 TEST_F(VkPositiveLayerTest, ThreadSafetyDisplayPlaneObjects) {
@@ -117,13 +103,13 @@ TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersImage) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
 
-    uint32_t no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
-    if (no_gfx == UINT32_MAX) {
+    const std::optional<uint32_t> no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
+    if (!no_gfx) {
         GTEST_SKIP() << "Required queue families not present (non-graphics capable required)";
     }
-    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx)[0].get();
+    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx.value())[0].get();
 
-    VkCommandPoolObj no_gfx_pool(m_device, no_gfx, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandPoolObj no_gfx_pool(m_device, no_gfx.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     VkCommandBufferObj no_gfx_cb(m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
 
     // Create an "exclusive" image owned by the graphics queue.
@@ -135,12 +121,12 @@ TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersImage) {
     auto image_barrier = image.image_memory_barrier(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                                                     image.Layout(), image.Layout(), image_subres);
     image_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
-    image_barrier.dstQueueFamilyIndex = no_gfx;
+    image_barrier.dstQueueFamilyIndex = no_gfx.value();
 
     ValidOwnershipTransfer(m_errorMonitor, m_commandBuffer, &no_gfx_cb, nullptr, &image_barrier);
 
     // Change layouts while changing ownership
-    image_barrier.srcQueueFamilyIndex = no_gfx;
+    image_barrier.srcQueueFamilyIndex = no_gfx.value();
     image_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
     image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR;
     image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR;
@@ -167,13 +153,13 @@ TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersBuffer) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
 
-    uint32_t no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
-    if (no_gfx == UINT32_MAX) {
+    const std::optional<uint32_t> no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
+    if (!no_gfx) {
         GTEST_SKIP() << "Required queue families not present (non-graphics capable required)";
     }
-    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx)[0].get();
+    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx.value())[0].get();
 
-    VkCommandPoolObj no_gfx_pool(m_device, no_gfx, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandPoolObj no_gfx_pool(m_device, no_gfx.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     VkCommandBufferObj no_gfx_cb(m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
 
     // Create a buffer
@@ -191,11 +177,11 @@ TEST_F(VkPositiveLayerTest, Sync2OwnershipTranfersBuffer) {
     ValidOwnershipTransferOp(m_errorMonitor, m_commandBuffer, &buffer_barrier, nullptr);
 
     // Transfer it to non-gfx
-    buffer_barrier.dstQueueFamilyIndex = no_gfx;
+    buffer_barrier.dstQueueFamilyIndex = no_gfx.value();
     ValidOwnershipTransfer(m_errorMonitor, m_commandBuffer, &no_gfx_cb, &buffer_barrier, nullptr);
 
     // Transfer it to gfx
-    buffer_barrier.srcQueueFamilyIndex = no_gfx;
+    buffer_barrier.srcQueueFamilyIndex = no_gfx.value();
     buffer_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
     buffer_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR;
     buffer_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR;
@@ -211,7 +197,11 @@ TEST_F(VkPositiveLayerTest, LayoutFromPresentWithoutAccessMemoryRead) {
     // spec, but there is no memory dependency required here, so this should
     // work without warnings.
 
+    AddRequiredExtensions(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(Init());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
     VkImageObj image(m_device);
     image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT),
                VK_IMAGE_TILING_OPTIMAL, 0);
@@ -883,9 +873,12 @@ TEST_F(VkPositiveLayerTest, TwoQueueSubmitsSeparateQueuesWithTimelineSemaphoreAn
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    if (!CheckTimelineSemaphoreSupportAndInitState(this)) {
-        GTEST_SKIP() << "Timeline semaphore not supported.";
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
     }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
     if ((m_device->queue_props.empty()) || (m_device->queue_props[0].queueCount < 2)) {
         GTEST_SKIP() << "Queue family needs to have multiple queues to run this test";
@@ -1470,17 +1463,19 @@ TEST_F(VkPositiveLayerTest, ExternalTimelineSemaphore) {
     AddRequiredExtensions(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!CheckTimelineSemaphoreSupportAndInitState(this)) {
-        GTEST_SKIP() << "Timeline semaphore not supported, skipping test";
-    }
-
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     if (IsPlatform(kMockICD)) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
 
     // Check for external semaphore import and export capability
     auto tci = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
@@ -1831,9 +1826,13 @@ TEST_F(VkPositiveLayerTest, QueueSubmitTimelineSemaphore2Queue) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    if (!CheckTimelineSemaphoreSupportAndInitState(this)) {
-        GTEST_SKIP() << "Timeline semaphore not supported";
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
     }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+
     auto fpWaitSemaphores =
         reinterpret_cast<PFN_vkWaitSemaphoresKHR>(vk::GetDeviceProcAddr(m_device->device(), "vkWaitSemaphoresKHR"));
     auto fpSignalSemaphore =
@@ -2071,9 +2070,12 @@ TEST_F(VkPositiveLayerTest, FenceSemThreadRace) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    if (!CheckTimelineSemaphoreSupportAndInitState(this)) {
-        GTEST_SKIP() << "Timeline semaphore feature not supported.";
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
     }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
 
     auto fence_ci = LvlInitStruct<VkFenceCreateInfo>();
     vk_testing::Fence fence(*m_device, fence_ci);
@@ -2146,7 +2148,7 @@ TEST_F(VkPositiveLayerTest, SubmitFenceButWaitIdle) {
     auto pool_create_info = LvlInitStruct<VkCommandPoolCreateInfo>();
     pool_create_info.queueFamilyIndex = m_device->graphics_queue_node_index_;
     pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    std::optional<vk_testing::CommandPool> command_pool(layer_data::in_place, *m_device, pool_create_info);
+    std::optional<vk_testing::CommandPool> command_pool(vvl::in_place, *m_device, pool_create_info);
 
     // create a raw command buffer because we'll just the destroy the pool.
     VkCommandBuffer command_buffer = VK_NULL_HANDLE;
@@ -2331,9 +2333,12 @@ TEST_F(VkPositiveLayerTest, WaitTimelineSemThreadRace) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    if (!CheckTimelineSemaphoreSupportAndInitState(this)) {
-        GTEST_SKIP() << "Timeline semaphore feature not supported.";
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
     }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     WaitTimelineSemThreadData data(*m_device);
 
     data.Run(*m_commandPool, *m_errorMonitor);

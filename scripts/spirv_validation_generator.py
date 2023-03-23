@@ -13,8 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# Author: Spencer Fricke <s.fricke@samsung.com>
 
 import os,re,sys,string,json
 import xml.etree.ElementTree as etree
@@ -213,8 +211,6 @@ class SpirvValidationHelperOutputGenerator(OutputGenerator):
         copyright += ' * See the License for the specific language governing permissions and\n'
         copyright += ' * limitations under the License.\n'
         copyright += ' *\n'
-        copyright += ' * Author: Spencer Fricke <s.fricke@samsung.com>\n'
-        copyright += ' *\n'
         copyright += ' * This file is related to anything that is found in the Vulkan XML related\n'
         copyright += ' * to SPIR-V. Anything related to the SPIR-V grammar belongs in spirv_grammar_helper\n'
         copyright += ' *\n'
@@ -224,9 +220,9 @@ class SpirvValidationHelperOutputGenerator(OutputGenerator):
         write('#include <functional>', file=self.outFile)
         write('#include <spirv/unified1/spirv.hpp>', file=self.outFile)
         write('#include "vk_extension_helper.h"', file=self.outFile)
-        write('#include "shader_module.h"', file=self.outFile)
-        write('#include "device_state.h"', file=self.outFile)
-        write('#include "core_validation.h"', file=self.outFile)
+        write('#include "state_tracker/shader_module.h"', file=self.outFile)
+        write('#include "state_tracker/device_state.h"', file=self.outFile)
+        write('#include "core_checks/core_validation.h"', file=self.outFile)
         write(self.featurePointer(), file=self.outFile)
         write(self.mapStructDeclarations(), file=self.outFile)
     #

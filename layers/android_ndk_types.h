@@ -1,6 +1,6 @@
 /* Copyright (c) 2018-2021 The Khronos Group Inc.
- * Copyright (c) 2018-2021 Valve Corporation
- * Copyright (c) 2018-2021 LunarG, Inc.
+ * Copyright (c) 2018-2023 Valve Corporation
+ * Copyright (c) 2018-2023 LunarG, Inc.
  * Copyright (C) 2018-2021 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +14,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Author: Dave Houlton <daveh@lunarg.com>
  */
 
 // Overview of Android NDK headers:
@@ -34,8 +32,7 @@
 //     - r20 YCbCr was added
 //     - r23 (current) no differences from r20 being used
 
-#ifndef ANDROID_NDK_TYPES_H_
-#define ANDROID_NDK_TYPES_H_
+#pragma once
 
 // Everyone should be able to include this file and ignore it if not building for Android
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
@@ -75,5 +72,3 @@ constexpr uint64_t AHARDWAREBUFFER_USAGE_CAMERA_READ = 0x40000;
 #endif  // __ANDROID__
 
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
-
-#endif  // ANDROID_NDK_TYPES_H_

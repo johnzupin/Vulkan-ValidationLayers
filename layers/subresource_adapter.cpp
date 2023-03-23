@@ -22,7 +22,7 @@
 #include "subresource_adapter.h"
 #include "vk_format_utils.h"
 #include <cmath>
-#include "image_state.h"
+#include "state_tracker/image_state.h"
 #include "layer_chassis_dispatch.h"
 
 namespace subresource_adapter {
@@ -304,7 +304,7 @@ ImageRangeEncoder::ImageRangeEncoder(const IMAGE_STATE& image, const AspectParam
         for (uint32_t mip_index = 0; mip_index < limits_.mipLevel; ++mip_index) {
             subres_layers.mipLevel = mip_index;
             subres.mipLevel = mip_index;
-            auto subres_extent = image.GetSubresourceExtent(subres_layers);
+            auto subres_extent = image.GetEffectiveSubresourceExtent(subres_layers);
 
             if (linear_image_) {
                 DispatchGetImageSubresourceLayout(image.store_device_as_workaround, image.image(), &subres, &layout);
@@ -378,13 +378,6 @@ inline VkImageSubresourceRange GetRemaining(const VkImageSubresourceRange& full_
 inline bool CoversAllLayers(const VkImageSubresourceRange& full_range, VkImageSubresourceRange subres_range) {
     return (subres_range.baseArrayLayer == 0) && (subres_range.layerCount == full_range.layerCount);
 }
-inline bool CoversAllLevels(const VkImageSubresourceRange& full_range, VkImageSubresourceRange subres_range) {
-    return (subres_range.baseMipLevel == 0) && (subres_range.layerCount == full_range.levelCount);
-}
-inline bool CoversAllAspects(const VkImageSubresourceRange& full_range, VkImageSubresourceRange subres_range) {
-    return full_range.aspectMask == subres_range.aspectMask;
-}
-
 static bool SubresourceRangeIsEmpty(const VkImageSubresourceRange& range) {
     return (0 == range.aspectMask) || (0 == range.levelCount) || (0 == range.layerCount);
 }
@@ -854,4 +847,4 @@ void ImageRangeGenerator::IncrementerState::Set(uint32_t y_count_, uint32_t laye
     incr_layer_z = z_step;
 }
 
-};  // namespace subresource_adapter
+}  // namespace subresource_adapter

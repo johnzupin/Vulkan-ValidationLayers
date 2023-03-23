@@ -16,9 +16,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# Author: John Zulauf <jzulauf@lunarg.com>
-# Author: Jeremy Gebben <jeremyg@lunarg.com>
 import os
 import json
 import re
@@ -692,7 +689,7 @@ def StageAccessEnums(stage_accesses, config):
 
     map_name = var_prefix + 'StageAccessIndexByStageAccessBit'
     output.append('// Map of the StageAccessIndices from the StageAccess Bit')
-    typename = 'layer_data::unordered_map<{}, {}>'.format(sync_mask_name, ordinal_name)
+    typename = 'vvl::unordered_map<{}, {}>'.format(sync_mask_name, ordinal_name)
     if config['is_source']:
         output.append('const {}& {}() {{'.format(typename, map_name))
         output.append('{}static const {} variable = {{'.format(indent, typename))
@@ -881,7 +878,7 @@ def AllCommandsByQueueCapability(stage_order, stage_queue_table, config):
     expanded = ('VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT', 'VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT',
                 'VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT', 'VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT')
     for stage in stage_order:
-        if (stage in expanded) or (vvl_fake_extension in stage) : 
+        if (stage in expanded) or (vvl_fake_extension in stage) :
             continue
 
         queue_flag_list = stage_queue_table[stage]
@@ -973,7 +970,7 @@ def GenSyncTypeHelper(gen, is_source) :
     enums_in_bit_order = EnumsInBitOrder(gen.sync_enum)
 
     if config['is_source']:
-        lines.extend(('#include "synchronization_validation_types.h"', ''))
+        lines.extend(('#include "sync_validation_types.h"', ''))
     else:
         lines.extend(('#pragma once', '', '#include <array>', '#include <bitset>', '#include <map>', '#include <stdint.h>', '#include <vulkan/vulkan.h>',
                  '#include "vk_layer_data.h"'))

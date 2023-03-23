@@ -14,15 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ~~~
-
-# XXH_NO_LONG_LONG: removes compilation of algorithms relying on 64-bit types (XXH3 and XXH64). Only XXH32 will be compiled.
-# We only need XXH32 due to restrictions requiring a 32 bit hash. This also reduces binary size.
-#
-# v0.8.1 also has compilation issues that are removed by setting this define.
-# https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/4639
-# https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/4640
-add_compile_definitions(XXH_NO_LONG_LONG)
-
 add_library(VkLayer_utils STATIC)
 target_sources(VkLayer_utils PRIVATE
     generated/vk_format_utils.h
@@ -51,13 +42,21 @@ target_sources(VkLayer_utils PRIVATE
     vk_layer_utils.h
     vk_layer_utils.cpp
     xxhash.h
-    xxhash.c
+    xxhash.cpp
 )
+
+# XXH_NO_LONG_LONG: removes compilation of algorithms relying on 64-bit types (XXH3 and XXH64). Only XXH32 will be compiled.
+# We only need XXH32 due to restrictions requiring a 32 bit hash. This also reduces binary size.
+#
+# v0.8.1 also has compilation issues that are removed by setting this define.
+# https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/4639
+# https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/4640
+target_compile_definitions(VkLayer_utils PUBLIC XXH_NO_LONG_LONG)
+
 target_link_libraries(VkLayer_utils PUBLIC Vulkan::Headers)
-set_target_properties(VkLayer_utils PROPERTIES LINKER_LANGUAGE CXX)
 target_include_directories(VkLayer_utils PUBLIC
     .
-    generated
+    generated # Needed otherwise VkLayer_utils won't install properly.
 )
 
 find_package(robin_hood CONFIG)
@@ -65,18 +64,6 @@ option(USE_ROBIN_HOOD_HASHING "robin_hood provides faster versions of std::unord
 if (USE_ROBIN_HOOD_HASHING)
     target_link_libraries(VkLayer_utils PRIVATE robin_hood::robin_hood)
     target_compile_definitions(robin_hood::robin_hood INTERFACE USE_ROBIN_HOOD_HASHING)
-endif()
-
-# Using mimalloc on non-Windows OSes currently results in unit test instability with some
-# OS version / driver combinations. On 32-bit systems, using mimalloc cause an increase in
-# the amount of virtual address space needed, which can also cause stability problems.
-if (MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8)
-   find_package(mimalloc CONFIG)
-   option(USE_MIMALLOC "Use mimalloc, a fast malloc/free replacement library" ${mimalloc_FOUND})
-   if (USE_MIMALLOC)
-      target_compile_definitions(mimalloc-static INTERFACE USE_MIMALLOC)
-      target_link_libraries(VkLayer_utils PRIVATE mimalloc-static)
-   endif()
 endif()
 
 # Currently repos like LunarG/VulkanTools require source code from VVL
@@ -89,18 +76,12 @@ if(BUILD_LAYER_SUPPORT_FILES)
     install(TARGETS VkLayer_utils)
 endif()
 
-if(MSVC)
-    # Avoid: fatal error C1128: number of sections exceeded object file format limit: compile with /bigobj
-    add_compile_options("/bigobj")
-    add_compile_options("/we4189")
-    add_compile_options("/we5038")
-else()
-    add_compile_options(-Wpointer-arith -Wno-unused-function -Wno-sign-compare)
-endif()
-
-# Clang warns about unused const variables. Generated files may purposely contain unused consts, so silence this warning in Clang
-if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-    set_source_files_properties(generated/parameter_validation.cpp PROPERTIES COMPILE_FLAGS "-Wno-unused-const-variable")
+if(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
+    target_compile_options(VkLayer_utils PRIVATE
+        -Wno-sign-conversion
+        -Wno-implicit-int-conversion
+        -Wno-enum-enum-conversion
+    )
 endif()
 
 # NOTE: LunarG/VulkanTools disables BUILD_LAYERS and BUILD_TESTS to minimize dependencies.
@@ -149,11 +130,10 @@ if (PYTHONINTERP_FOUND)
     endif()
 
     add_custom_target(VulkanVL_generated_source
-        COMMAND ${PYTHON_EXECUTABLE} ${generate_source_py} ${VULKAN_HEADERS_REGISTRY_DIRECTORY} ${spirv_unified_include_dir} --incremental
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${VULKAN_HEADERS_REGISTRY_DIRECTORY} ${PYTHON_EXECUTABLE} ${generate_source_py} ${VULKAN_HEADERS_REGISTRY_DIRECTORY} ${spirv_unified_include_dir}
+            --incremental --generated-version ${VulkanHeaders_VERSION}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/generated
     )
-
-    set_target_properties(VulkanVL_generated_source PROPERTIES FOLDER ${LAYERS_HELPER_FOLDER})
 else()
     message(NOTICE "VulkanVL_generated_source target requires python 3")
 endif()
@@ -161,9 +141,36 @@ endif()
 add_library(VkLayer_khronos_validation MODULE)
 
 target_sources(VkLayer_khronos_validation PRIVATE
+    best_practices/best_practices_error_enums.h
+    best_practices/best_practices_utils.cpp
+    best_practices/best_practices_validation.h
+    core_checks/android_validation.cpp
+    core_checks/buffer_validation.cpp
+    core_checks/cmd_buffer_dynamic_validation.cpp
+    core_checks/cmd_buffer_validation.cpp
+    core_checks/copy_blit_resolve_validation.cpp
+    core_checks/core_validation.h
+    core_checks/descriptor_validation.cpp
+    core_checks/device_validation.cpp
+    core_checks/device_memory_validation.cpp
+    core_checks/drawdispatch_validation.cpp
+    core_checks/external_object_validation.cpp
+    core_checks/image_validation.cpp
+    core_checks/image_layout_validation.cpp
+    core_checks/pipeline_validation.cpp
+    core_checks/query_validation.cpp
+    core_checks/queue_validation.cpp
+    core_checks/ray_tracing_validation.cpp
+    core_checks/render_pass_validation.cpp
+    core_checks/shader_validation.cpp
+    core_checks/shader_validation.h
+    core_checks/synchronization_validation.cpp
+    core_checks/video_validation.cpp
+    core_checks/wsi_validation.cpp
     generated/best_practices.cpp
     generated/best_practices.h
     generated/chassis.cpp
+    generated/valid_param_values.cpp
     generated/command_validation.cpp
     generated/enum_flag_bits.h
     generated/layer_chassis_dispatch.cpp
@@ -173,103 +180,103 @@ target_sources(VkLayer_khronos_validation PRIVATE
     generated/parameter_validation.h
     generated/spirv_grammar_helper.cpp
     generated/spirv_validation_helper.cpp
-    generated/synchronization_validation_types.cpp
+    generated/sync_validation_types.cpp
     generated/thread_safety.cpp
     generated/thread_safety.h
     generated/vk_safe_struct.cpp
     generated/vk_safe_struct.h
-    android_validation.cpp
-    base_node.cpp
-    base_node.h
-    best_practices_error_enums.h
-    best_practices_utils.cpp
-    best_practices_validation.h
-    buffer_state.cpp
-    buffer_state.h
-    buffer_validation.cpp
-    cmd_buffer_dynamic_validation.cpp
-    cmd_buffer_state.cpp
-    cmd_buffer_state.h
+    gpu_validation/debug_printf.cpp
+    gpu_validation/debug_printf.h
+    gpu_validation/gpu_utils.cpp
+    gpu_validation/gpu_utils.h
+    gpu_validation/gpu_validation.cpp
+    gpu_validation/gpu_validation.cpp
+    gpu_validation/gpu_validation.h
+    state_tracker/base_node.cpp
+    state_tracker/base_node.h
+    state_tracker/buffer_state.cpp
+    state_tracker/buffer_state.h
+    state_tracker/cmd_buffer_state.cpp
+    state_tracker/cmd_buffer_state.h
+    state_tracker/descriptor_sets.cpp
+    state_tracker/descriptor_sets.h
+    state_tracker/device_memory_state.cpp
+    state_tracker/device_memory_state.h
+    state_tracker/device_state.h
+    state_tracker/image_layout_map.cpp
+    state_tracker/image_layout_map.h
+    state_tracker/image_state.cpp
+    state_tracker/image_state.h
+    state_tracker/pipeline_layout_state.cpp
+    state_tracker/pipeline_layout_state.h
+    state_tracker/pipeline_state.cpp
+    state_tracker/pipeline_state.h
+    state_tracker/pipeline_sub_state.cpp
+    state_tracker/pipeline_sub_state.h
+    state_tracker/query_state.h
+    state_tracker/queue_state.cpp
+    state_tracker/queue_state.h
+    state_tracker/ray_tracing_state.h
+    state_tracker/render_pass_state.cpp
+    state_tracker/render_pass_state.h
+    state_tracker/sampler_state.h
+    state_tracker/shader_instruction.cpp
+    state_tracker/shader_instruction.h
+    state_tracker/shader_module.cpp
+    state_tracker/shader_module.h
+    state_tracker/state_tracker.cpp
+    state_tracker/state_tracker.h
+    state_tracker/video_session_state.cpp
+    state_tracker/video_session_state.h
+    stateless/parameter_validation_utils.cpp
+    stateless/stateless_validation.h
+    sync/sync_validation.cpp
+    sync/sync_validation.h
+    sync/sync_utils.cpp
+    sync/sync_utils.h
+    sync/sync_vuid_maps.cpp
+    sync/sync_vuid_maps.h
     convert_to_renderpass2.cpp
     core_error_location.cpp
     core_error_location.h
-    core_validation.cpp
     core_validation_error_enums.h
-    core_validation.h
-    debug_printf.cpp
-    debug_printf.h
-    descriptor_sets.cpp
-    descriptor_sets.h
-    descriptor_validation.cpp
-    device_validation.cpp
-    device_memory_state.cpp
-    device_memory_state.h
-    device_memory_validation.cpp
-    drawdispatch.cpp
-    external_object_validation.cpp
-    gpu_utils.cpp
-    gpu_utils.h
-    gpu_validation.cpp
-    gpu_validation.cpp
-    gpu_validation.h
-    image_layout_map.cpp
-    image_layout_map.h
-    image_state.cpp
-    image_state.h
     layer_options.cpp
     object_lifetime_validation.h
     object_tracker_utils.cpp
-    parameter_validation_utils.cpp
-    pipeline_layout_state.cpp
-    pipeline_state.cpp
-    pipeline_state.h
-    pipeline_sub_state.cpp
-    pipeline_validation.cpp
-    query_state.h
-    query_validation.cpp
-    queue_state.cpp
-    queue_state.h
     range_vector.h
-    ray_tracing_state.h
-    ray_tracing_validation.cpp
-    render_pass_state.cpp
-    render_pass_state.h
-    render_pass_validation.cpp
-    sampler_state.h
-    shader_instruction.cpp
-    shader_instruction.h
-    shader_module.cpp
-    shader_module.h
-    shader_validation.cpp
-    shader_validation.h
-    stateless_validation.h
-    state_tracker.cpp
-    state_tracker.h
+    sparse_containers.h
     subresource_adapter.cpp
     subresource_adapter.h
-    synchronization_validation.cpp
-    synchronization_validation.h
-    sync_utils.cpp
-    sync_utils.h
-    sync_vuid_maps.cpp
-    sync_vuid_maps.h
-    video_session_state.cpp
-    video_session_state.h
-    video_validation.cpp
     vk_layer_settings_ext.h
-    wsi_validation.cpp
-    xxhash.c
-    xxhash.h
 )
 
-target_compile_definitions(VkLayer_khronos_validation PUBLIC ${KHRONOS_LAYER_COMPILE_DEFINITIONS})
-
-if(WIN32)
+if(MSVC)
     target_link_options(VkLayer_khronos_validation PRIVATE /DEF:${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_khronos_validation.def)
+    target_compile_options(VkLayer_khronos_validation PRIVATE /bigobj)
+elseif(MINGW)
+    target_sources(VkLayer_khronos_validation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_khronos_validation.def)
+    target_compile_options(VkLayer_khronos_validation PRIVATE -Wa,-mbig-obj)
 elseif(APPLE)
+    message(DEBUG "Functions are exported via VVL_EXPORT")
     set_target_properties(VkLayer_khronos_validation PROPERTIES SUFFIX ".dylib")
+elseif(ANDROID)
+    message(DEBUG "Functions are exported via VVL_EXPORT")
 else()
     target_link_options(VkLayer_khronos_validation PRIVATE LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/libVkLayer_khronos_validation.map,-Bsymbolic,--exclude-libs,ALL)
+endif()
+
+if(${CMAKE_CXX_COMPILER_ID} MATCHES "(GNU|Clang)")
+    target_compile_options(VkLayer_khronos_validation PRIVATE
+        -Wno-unused-parameter
+        -Wno-missing-field-initializers
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(VkLayer_khronos_validation PRIVATE
+            -Wno-sign-conversion
+            -Wno-implicit-int-conversion
+            -Wno-enum-enum-conversion
+        )
+    endif()
 endif()
 
 # Khronos validation additional dependencies
@@ -280,12 +287,25 @@ endif()
 # Otherwise, libraries after VkLayer_utils will not benefit from this performance improvement.
 target_link_libraries(VkLayer_khronos_validation PRIVATE VVL-SPIRV-LIBS VkLayer_utils)
 
+# Using mimalloc on non-Windows OSes currently results in unit test instability with some
+# OS version / driver combinations. On 32-bit systems, using mimalloc cause an increase in
+# the amount of virtual address space needed, which can also cause stability problems.
+if (MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+   find_package(mimalloc CONFIG)
+   option(USE_MIMALLOC "Use mimalloc, a fast malloc/free replacement library" ${mimalloc_FOUND})
+   if (USE_MIMALLOC)
+      target_compile_definitions(mimalloc-static INTERFACE USE_MIMALLOC)
+      target_link_libraries(VkLayer_khronos_validation PRIVATE mimalloc-static)
+   endif()
+endif()
+
+
 # There are 2 primary deliverables for the validation layers.
 # - The actual library VkLayer_khronos_validation.(dll|so|dylib)
 # - The respective json file, VkLayer_khronos_validation.json
 # This code generates the appropriate json for both local testing and the installation.
 # NOTE: For WIN32 the JSON and dll MUST be placed in the same location, due to Win32 using a relative path for installation.
-set(INPUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/json/VkLayer_khronos_validation.json.in")
+set(INPUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_khronos_validation.json.in")
 set(INTERMEDIATE_FILE "${CMAKE_CURRENT_BINARY_DIR}/json/validation.json")
 set(OUTPUT_FILE_FINAL_NAME "VkLayer_khronos_validation.json")
 set(LAYER_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR})
@@ -300,8 +320,6 @@ elseif(APPLE)
 else()
     set(JSON_LIBRARY_PATH "./libVkLayer_khronos_validation.so")
 endif()
-
-set(JSON_API_VERSION ${VulkanHeaders_VERSION})
 
 configure_file(${INPUT_FILE} ${INTERMEDIATE_FILE} @ONLY)
 
@@ -328,6 +346,8 @@ endif()
 
 if (WIN32)
     install(FILES ${INTERMEDIATE_FILE} DESTINATION ${LAYER_INSTALL_DIR} RENAME ${OUTPUT_FILE_FINAL_NAME})
+endif()
+if (MSVC)
     install(FILES $<TARGET_PDB_FILE:VkLayer_khronos_validation> DESTINATION ${LAYER_INSTALL_DIR})
 endif()
 

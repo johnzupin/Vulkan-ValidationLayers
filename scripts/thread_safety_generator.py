@@ -17,9 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# Author: Mike Stroyan <stroyan@google.com>
-# Author: Mark Lobodzinski <mark@lunarg.com>
 
 import os,re,sys
 from generator import *
@@ -148,8 +145,6 @@ class ThreadOutputGenerator(OutputGenerator):
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Author: Mark Lobodzinski <mark@lunarg.com>
  */"""
 
  # Note that the inline_custom_header_preamble template below contains three embedded template expansion identifiers.
@@ -420,8 +415,8 @@ public:
     WriteLockGuard WriteLock() override;
 
     vl_concurrent_unordered_map<VkCommandBuffer, VkCommandPool, 6> command_pool_map;
-    layer_data::unordered_map<VkCommandPool, layer_data::unordered_set<VkCommandBuffer>> pool_command_buffers_map;
-    layer_data::unordered_map<VkDevice, layer_data::unordered_set<VkQueue>> device_queues_map;
+    vvl::unordered_map<VkCommandPool, vvl::unordered_set<VkCommandBuffer>> pool_command_buffers_map;
+    vvl::unordered_map<VkDevice, vvl::unordered_set<VkQueue>> device_queues_map;
 
     // Track per-descriptorsetlayout and per-descriptorset whether read_only is used.
     // This is used to (sloppily) implement the relaxed externsync rules for read_only

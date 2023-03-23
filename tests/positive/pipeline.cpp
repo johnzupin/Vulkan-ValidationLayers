@@ -9,22 +9,9 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Chia-I Wu <olvaffe@gmail.com>
- * Author: Chris Forbes <chrisf@ijw.co.nz>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Mike Stroyan <mike@LunarG.com>
- * Author: Tobin Ehlis <tobine@google.com>
- * Author: Tony Barbour <tony@LunarG.com>
- * Author: Cody Northrop <cnorthrop@google.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Jeremy Kniager <jeremyk@lunarg.com>
- * Author: Shannon McPherson <shannon@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
  */
 
-#include "../layer_validation_tests.h"
+#include "../framework/layer_validation_tests.h"
 #include "vk_extension_helper.h"
 
 #include <algorithm>
@@ -500,7 +487,7 @@ TEST_F(VkPositiveLayerTest, CreatePipeline64BitAttributesPositive) {
     pipe.CreateGraphicsPipeline();
 }
 
-TEST_F(VkPositiveLayerTest, CreatePipelineInputAttachmentPositive) {
+TEST_F(VkPositiveLayerTest, CreatePipelineInputAttachment) {
     TEST_DESCRIPTION("Positive test for a correctly matched input attachment");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -554,6 +541,283 @@ TEST_F(VkPositiveLayerTest, CreatePipelineInputAttachmentPositive) {
     pipe.CreateVKPipeline(pl.handle(), rp);
 
     vk::DestroyRenderPass(m_device->device(), rp, nullptr);
+}
+
+TEST_F(VkPositiveLayerTest, CreatePipelineInputAttachmentMissingNotRead) {
+    TEST_DESCRIPTION("Input Attachment would be missing, but it is not read from in shader");
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    // layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput xs[1];
+    // layout(location=0) out vec4 color;
+    // void main() {
+    //     // (not actually called) color = subpassLoad(xs[0]);
+    // }
+    const char *fsSource = R"(
+               OpCapability Shader
+               OpCapability InputAttachment
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %color
+               OpExecutionMode %main OriginUpperLeft
+               OpDecorate %color Location 0
+               OpDecorate %xs DescriptorSet 0
+               OpDecorate %xs Binding 0
+               OpDecorate %xs InputAttachmentIndex 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+      %color = OpVariable %_ptr_Output_v4float Output
+         %10 = OpTypeImage %float SubpassData 0 0 0 2 Unknown
+       %uint = OpTypeInt 32 0
+     %uint_1 = OpConstant %uint 1
+%_arr_10_uint_1 = OpTypeArray %10 %uint_1
+%_ptr_UniformConstant__arr_10_uint_1 = OpTypePointer UniformConstant %_arr_10_uint_1
+         %xs = OpVariable %_ptr_UniformConstant__arr_10_uint_1 UniformConstant
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+%_ptr_UniformConstant_10 = OpTypePointer UniformConstant %10
+      %v2int = OpTypeVector %int 2
+         %22 = OpConstantComposite %v2int %int_0 %int_0
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+               OpReturn
+               OpFunctionEnd)";
+
+    VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM);
+
+    const auto set_info = [&](CreatePipelineHelper &helper) {
+        helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+        helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    };
+    CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+}
+
+TEST_F(VkPositiveLayerTest, CreatePipelineInputAttachmentArray) {
+    TEST_DESCRIPTION("Input Attachment array where need to follow the index into the array");
+
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
+    auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
+    GetPhysicalDeviceFeatures2(features12);
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features12));
+
+    const VkAttachmentDescription inputAttachmentDescription = {0,
+                                                                m_render_target_fmt,
+                                                                VK_SAMPLE_COUNT_1_BIT,
+                                                                VK_ATTACHMENT_LOAD_OP_LOAD,
+                                                                VK_ATTACHMENT_STORE_OP_STORE,
+                                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                                                VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                                                VK_IMAGE_LAYOUT_GENERAL,
+                                                                VK_IMAGE_LAYOUT_GENERAL};
+
+    // index 0 is unused
+    // index 1 is is valid (for both color and input)
+    // index 2 and 3 point to same image as index 1
+    const VkAttachmentReference inputAttachmentReferences[4] = {{VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_GENERAL},
+                                                                {0, VK_IMAGE_LAYOUT_GENERAL},
+                                                                {0, VK_IMAGE_LAYOUT_GENERAL},
+                                                                {0, VK_IMAGE_LAYOUT_GENERAL}};
+
+    const VkSubpassDescription subpassDescription = {(VkSubpassDescriptionFlags)0,
+                                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                     4,
+                                                     inputAttachmentReferences,
+                                                     1,
+                                                     &inputAttachmentReferences[1],
+                                                     nullptr,
+                                                     nullptr,
+                                                     0,
+                                                     nullptr};
+
+    auto renderPassInfo = LvlInitStruct<VkRenderPassCreateInfo>();
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &inputAttachmentDescription;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpassDescription;
+
+    vk_testing::RenderPass renderPass(*m_device, renderPassInfo);
+
+    // use static array of 2 and index into element 1 to read
+    {
+        const char *fs_source = R"(
+            #version 460
+            layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput xs[2];
+            layout(location=0) out vec4 color;
+            void main() {
+                color = subpassLoad(xs[1]);
+            }
+        )";
+        VkShaderObj fs(this, fs_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL);
+
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.gp_ci_.renderPass = renderPass.handle();
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+    }
+
+    // use undefined size array and index into element 1 to read
+    {
+        const char *fs_source = R"(
+            #version 460
+            layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput xs[];
+            layout(location=0) out vec4 color;
+            void main() {
+                color = subpassLoad(xs[1]);
+            }
+        )";
+        VkShaderObj fs(this, fs_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL);
+
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.gp_ci_.renderPass = renderPass.handle();
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+    }
+
+    // use OpTypeRuntimeArray and index into it
+    // This is something that is needed to be validated at draw time, so should not be an error
+    if (features12.runtimeDescriptorArray && features12.shaderInputAttachmentArrayNonUniformIndexing) {
+        const char *fs_source = R"(
+            #version 460
+            #extension GL_EXT_nonuniform_qualifier : require
+            layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput xs[];
+            layout(set = 0, binding = 3) buffer ssbo { int rIndex; };
+            layout(location=0) out vec4 color;
+            void main() {
+                color = subpassLoad(xs[nonuniformEXT(rIndex)]);
+            }
+        )";
+        VkShaderObj fs(this, fs_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL);
+
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                    {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.gp_ci_.renderPass = renderPass.handle();
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+    }
+
+    // Array of size 1
+    // loads from index 0, but not the invalid index 0 since has offest of 3
+    {
+        const char *fs_source = R"(
+            #version 460
+            layout(input_attachment_index=3, set=0, binding=0) uniform subpassInput xs[1];
+            layout(location=0) out vec4 color;
+            void main() {
+                color = subpassLoad(xs[0]);
+            }
+        )";
+        VkShaderObj fs(this, fs_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL);
+
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.gp_ci_.renderPass = renderPass.handle();
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+    }
+
+    // Index from non-zero
+    {
+        const char *fs_source = R"(
+            #version 460
+            layout(input_attachment_index=2, set=0, binding=0) uniform subpassInput xs[2];
+            layout(location=0) out vec4 color;
+            void main() {
+                color = subpassLoad(xs[0]) + subpassLoad(xs[1]);
+            }
+        )";
+        VkShaderObj fs(this, fs_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL);
+
+        const auto set_info = [&](CreatePipelineHelper &helper) {
+            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.gp_ci_.renderPass = renderPass.handle();
+        };
+        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+    }
+}
+
+TEST_F(VkPositiveLayerTest, CreatePipelineInputAttachmentDepthStencil) {
+    TEST_DESCRIPTION("Input Attachment sharing same variable, but different aspect");
+
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
+    auto features12 = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
+    GetPhysicalDeviceFeatures2(features12);
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features12));
+
+    const VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
+
+    const VkAttachmentDescription inputAttachmentDescriptions[2] = {
+        {0, m_render_target_fmt, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL},
+        {0, ds_format, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+         VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL}};
+
+    // index 0 = color | index 1 = depth | index 2 = stencil
+    const VkAttachmentReference inputAttachmentReferences[3] = {
+        {0, VK_IMAGE_LAYOUT_GENERAL}, {1, VK_IMAGE_LAYOUT_GENERAL}, {1, VK_IMAGE_LAYOUT_GENERAL}};
+
+    const VkSubpassDescription subpassDescription = {(VkSubpassDescriptionFlags)0,
+                                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                     3,
+                                                     inputAttachmentReferences,
+                                                     1,
+                                                     &inputAttachmentReferences[0],
+                                                     nullptr,
+                                                     nullptr,
+                                                     0,
+                                                     nullptr};
+
+    auto renderPassInfo = LvlInitStruct<VkRenderPassCreateInfo>();
+    renderPassInfo.attachmentCount = 2;
+    renderPassInfo.pAttachments = inputAttachmentDescriptions;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpassDescription;
+
+    vk_testing::RenderPass renderPass(*m_device, renderPassInfo);
+
+    // Depth and Stencil use same index, but valid because differnet image aspect masks
+    const char *fs_source = R"(
+            #version 460
+            layout(input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput i_color;
+            layout(input_attachment_index = 1, set = 0, binding = 1) uniform subpassInput i_depth;
+            layout(input_attachment_index = 1, set = 0, binding = 2) uniform usubpassInput i_stencil;
+            layout(location=0) out vec4 color;
+
+            void main(void)
+            {
+                color = subpassLoad(i_color);
+                vec4 depth = subpassLoad(i_depth);
+                uvec4 stencil = subpassLoad(i_stencil);
+            }
+        )";
+    VkShaderObj fs(this, fs_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL);
+
+    const auto set_info = [&](CreatePipelineHelper &helper) {
+        helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+        helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                {1, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                {2, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+        helper.gp_ci_.renderPass = renderPass.handle();
+    };
+    CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 }
 
 TEST_F(VkPositiveLayerTest, CreateComputePipelineMissingDescriptorUnusedPositive) {
@@ -758,7 +1022,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
     }
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
-    m_depthStencil->Init(m_device, static_cast<int32_t>(m_width), static_cast<int32_t>(m_height), m_depth_stencil_fmt);
+    m_depthStencil->Init(m_device, m_width, m_height, m_depth_stencil_fmt);
 
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget(m_depthStencil->BindInfo()));
 
@@ -872,7 +1136,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
         pipeline_rasterization_state_create_info.rasterizerDiscardEnable = VK_FALSE;
 
         VkViewport viewport = {0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
-        VkRect2D scissor = {{0, 0}, {static_cast<uint32_t>(m_width), static_cast<uint32_t>(m_height)}};
+        VkRect2D scissor = {{0, 0}, {m_width, m_height}};
 
         const VkPipelineViewportStateCreateInfo pipeline_viewport_state_create_info{
             VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -1101,10 +1365,12 @@ TEST_F(VkPositiveLayerTest, ViewportArray2NV) {
     VkShaderObj tcs(this, tcs_src, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
     VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    std::vector<VkViewport> vps = {{0.0f, 0.0f, m_width / 2.0f, m_height}, {m_width / 2.0f, 0.0f, m_width / 2.0f, m_height}};
-    std::vector<VkRect2D> scs = {
-        {{0, 0}, {static_cast<uint32_t>(m_width) / 2, static_cast<uint32_t>(m_height)}},
-        {{static_cast<int32_t>(m_width) / 2, 0}, {static_cast<uint32_t>(m_width) / 2, static_cast<uint32_t>(m_height)}}};
+    const float fp_width = static_cast<float>(m_width);
+    const float fp_height = static_cast<float>(m_height);
+
+    std::vector<VkViewport> vps = {{0.0f, 0.0f, fp_width / 2.0f, fp_height}, {fp_width / 2.0f, 0.0f, fp_width / 2.0f, fp_height}};
+    std::vector<VkRect2D> scs = {{{0, 0}, {m_width / 2, m_height}},
+                                 {{static_cast<int32_t>(m_width) / 2, 0}, {m_width / 2, m_height}}};
 
     enum class TestStage { VERTEX = 0, TESSELLATION_EVAL = 1, GEOMETRY = 2 };
     std::array<TestStage, 3> vertex_stages = {{TestStage::VERTEX, TestStage::TESSELLATION_EVAL, TestStage::GEOMETRY}};
@@ -1464,16 +1730,6 @@ TEST_F(VkPositiveLayerTest, TestSamplerDataForCombinedImageSampler) {
     VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
     VkSampler sampler;
     vk::CreateSampler(m_device->device(), &sampler_ci, nullptr, &sampler);
-
-    uint32_t qfi = 0;
-    VkBufferCreateInfo buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
-    buffer_create_info.size = 1024;
-    buffer_create_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    buffer_create_info.queueFamilyIndexCount = 1;
-    buffer_create_info.pQueueFamilyIndices = &qfi;
-
-    VkBufferObj buffer;
-    buffer.init(*m_device, buffer_create_info);
 
     pipe.descriptor_set_->WriteDescriptorImageInfo(0, view, sampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     pipe.descriptor_set_->UpdateDescriptorSets();
@@ -2705,7 +2961,7 @@ TEST_F(VkPositiveLayerTest, SwapchainImageFormatProps) {
 
     uint32_t image_index;
     ASSERT_VK_SUCCESS(vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, fence.handle(), &image_index));
-    fence.wait(UINT32_MAX);
+    fence.wait(vvl::kU32Max);
 
     VkImageViewCreateInfo ivci = LvlInitStruct<VkImageViewCreateInfo>();
     ivci.image = swapchain_images[image_index];
@@ -3953,12 +4209,6 @@ TEST_F(VkPositiveLayerTest, ImageDrmFormatModifier) {
 TEST_F(VkPositiveLayerTest, AllowedDuplicateStype) {
     TEST_DESCRIPTION("Pass duplicate structs to whose vk.xml definition contains allowduplicate=true");
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
-
     VkInstance instance;
 
     VkInstanceCreateInfo ici = LvlInitStruct<VkInstanceCreateInfo>();
@@ -3983,10 +4233,6 @@ TEST_F(VkPositiveLayerTest, MeshShaderOnly) {
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
     }
 
     // Create a device that enables mesh_shader
@@ -4628,18 +4874,19 @@ TEST_F(VkPositiveLayerTest, FillBufferCmdPoolTransferQueue) {
         "Use a command buffer with vkCmdFillBuffer that was allocated from a command pool that does not support graphics or "
         "compute opeartions");
 
+    SetTargetApiVersion(VK_API_VERSION_1_1);
     ASSERT_NO_FATAL_FAILURE(Init());
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
-    uint32_t transfer = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
-    if (transfer == UINT32_MAX) {
+    const std::optional<uint32_t> transfer = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
+    if (!transfer) {
         GTEST_SKIP() << "Required queue families not present (non-graphics non-compute capable required)";
     }
-    VkQueueObj *queue = m_device->queue_family_queues(transfer)[0].get();
+    VkQueueObj *queue = m_device->queue_family_queues(transfer.value())[0].get();
 
-    VkCommandPoolObj pool(m_device, transfer, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandPoolObj pool(m_device, transfer.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     VkCommandBufferObj cb(m_device, &pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, queue);
 
     VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
@@ -5044,9 +5291,7 @@ TEST_F(VkPositiveLayerTest, LineTopologyClasses) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    auto extended_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&extended_dynamic_state_features);
-    ASSERT_NO_FATAL_FAILURE(InitFrameworkAndRetrieveFeatures(features2));
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
@@ -5056,11 +5301,14 @@ TEST_F(VkPositiveLayerTest, LineTopologyClasses) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
+    auto extended_dynamic_state_features = LvlInitStruct<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+    GetPhysicalDeviceFeatures2(extended_dynamic_state_features);
+
     if (!extended_dynamic_state_features.extendedDynamicState) {
         GTEST_SKIP() << "Test requires (unsupported) extendedDynamicState";
     }
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &extended_dynamic_state_features));
 
     auto vkCmdSetPrimitiveTopologyEXT = reinterpret_cast<PFN_vkCmdSetPrimitiveTopologyEXT>(
         vk::GetDeviceProcAddr(m_device->device(), "vkCmdSetPrimitiveTopologyEXT"));
@@ -5259,15 +5507,14 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineRasterizationOrderAttachmentAc
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME);
-
-    auto rasterization_order_features = LvlInitStruct<VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&rasterization_order_features);
-
-    ASSERT_NO_FATAL_FAILURE(InitFrameworkAndRetrieveFeatures(features2));
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
 
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
+
+    auto rasterization_order_features = LvlInitStruct<VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM>();
+    GetPhysicalDeviceFeatures2(rasterization_order_features);
 
     if (!rasterization_order_features.rasterizationOrderColorAttachmentAccess &&
         !rasterization_order_features.rasterizationOrderDepthAttachmentAccess &&
@@ -5275,7 +5522,7 @@ TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineRasterizationOrderAttachmentAc
         GTEST_SKIP() << "Test requires (unsupported) rasterizationOrder*AttachmentAccess";
     }
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &rasterization_order_features));
 
     auto ds_ci = LvlInitStruct<VkPipelineDepthStencilStateCreateInfo>();
     VkPipelineColorBlendAttachmentState cb_as = {};
@@ -5920,7 +6167,7 @@ TEST_F(VkPositiveLayerTest, DynamicColorWriteNoColorAttachments) {
     ASSERT_NE(vkCmdSetColorWriteEnableEXT, nullptr);
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
-    m_depthStencil->Init(m_device, static_cast<int32_t>(m_width), static_cast<int32_t>(m_height), m_depth_stencil_fmt);
+    m_depthStencil->Init(m_device, m_width, m_height, m_depth_stencil_fmt);
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget(m_depthStencil->BindInfo()));
 
     CreatePipelineHelper pipe(*this);

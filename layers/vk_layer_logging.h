@@ -13,22 +13,16 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Tobin Ehlis <tobin@lunarg.com>
- * Author: Mark Young <marky@lunarg.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- *
  */
 
-#ifndef LAYER_LOGGING_H
-#define LAYER_LOGGING_H
+#pragma once
 
 #include <array>
 #include <cstdarg>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "vk_layer_config.h"
@@ -164,18 +158,16 @@ typedef struct _debug_report_data {
     std::vector<VkLayerDbgFunctionState> debug_callback_list;
     VkDebugUtilsMessageSeverityFlagsEXT active_severities{0};
     VkDebugUtilsMessageTypeFlagsEXT active_types{0};
-    bool queueLabelHasInsert{false};
-    bool cmdBufLabelHasInsert{false};
-    layer_data::unordered_map<uint64_t, std::string> debugObjectNameMap;
-    layer_data::unordered_map<uint64_t, std::string> debugUtilsObjectNameMap;
-    layer_data::unordered_map<VkQueue, std::unique_ptr<LoggingLabelState>> debugUtilsQueueLabels;
-    layer_data::unordered_map<VkCommandBuffer, std::unique_ptr<LoggingLabelState>> debugUtilsCmdBufLabels;
+    vvl::unordered_map<uint64_t, std::string> debugObjectNameMap;
+    vvl::unordered_map<uint64_t, std::string> debugUtilsObjectNameMap;
+    vvl::unordered_map<VkQueue, std::unique_ptr<LoggingLabelState>> debugUtilsQueueLabels;
+    vvl::unordered_map<VkCommandBuffer, std::unique_ptr<LoggingLabelState>> debugUtilsCmdBufLabels;
     std::vector<uint32_t> filter_message_ids{};
     // This mutex is defined as mutable since the normal usage for a debug report object is as 'const'. The mutable keyword allows
     // the layers to continue this pattern, but also allows them to use/change this specific member for synchronization purposes.
     mutable std::mutex debug_output_mutex;
     int32_t duplicate_message_limit = 0;
-    mutable layer_data::unordered_map<uint32_t, int32_t> duplicate_message_count_map{};
+    mutable vvl::unordered_map<uint32_t, int32_t> duplicate_message_count_map{};
     const void *instance_pnext_chain{};
     bool forceDefaultLogCallback{false};
 
@@ -255,8 +247,7 @@ static inline VkDebugReportFlagsEXT DebugAnnotFlagsToReportFlags(VkDebugUtilsMes
     return 0;
 }
 
-static inline void DebugReportFlagsToAnnotFlags(VkDebugReportFlagsEXT dr_flags, bool default_flag_is_spec,
-                                                VkDebugUtilsMessageSeverityFlagsEXT *da_severity,
+static inline void DebugReportFlagsToAnnotFlags(VkDebugReportFlagsEXT dr_flags, VkDebugUtilsMessageSeverityFlagsEXT *da_severity,
                                                 VkDebugUtilsMessageTypeFlagsEXT *da_type) {
     *da_severity = 0;
     *da_type = 0;
@@ -308,14 +299,14 @@ VKAPI_ATTR bool LogMsg(const debug_report_data *debug_data, VkFlags msg_flags, c
 
 VKAPI_ATTR VkResult LayerCreateMessengerCallback(debug_report_data *debug_data, bool default_callback,
                                                  const VkDebugUtilsMessengerCreateInfoEXT *create_info,
-                                                 const VkAllocationCallbacks *allocator, VkDebugUtilsMessengerEXT *messenger);
+                                                 VkDebugUtilsMessengerEXT *messenger);
 
 VKAPI_ATTR VkResult LayerCreateReportCallback(debug_report_data *debug_data, bool default_callback,
                                               const VkDebugReportCallbackCreateInfoEXT *create_info,
-                                              const VkAllocationCallbacks *allocator, VkDebugReportCallbackEXT *callback);
+                                              VkDebugReportCallbackEXT *callback);
 
 template <typename T>
-static inline void LayerDestroyCallback(debug_report_data *debug_data, T callback, const VkAllocationCallbacks *allocator) {
+static inline void LayerDestroyCallback(debug_report_data *debug_data, T callback) {
     std::unique_lock<std::mutex> lock(debug_data->debug_output_mutex);
     RemoveDebugUtilsCallback(debug_data, debug_data->debug_callback_list, CastToUint64(callback));
 }
@@ -330,18 +321,6 @@ VKAPI_ATTR void RemoveDebugUtilsCallback(debug_report_data *debug_data, std::vec
                                          uint64_t callback);
 
 VKAPI_ATTR void LayerDebugUtilsDestroyInstance(debug_report_data *debug_data);
-
-VKAPI_ATTR VkBool32 VKAPI_CALL ReportLogCallback(VkFlags msg_flags, VkDebugReportObjectTypeEXT obj_type, uint64_t src_object,
-                                                 size_t location, int32_t msg_code, const char *layer_prefix, const char *message,
-                                                 void *user_data);
-
-VKAPI_ATTR VkBool32 VKAPI_CALL ReportWin32DebugOutputMsg(VkFlags msg_flags, VkDebugReportObjectTypeEXT obj_type,
-                                                         uint64_t src_object, size_t location, int32_t msg_code,
-                                                         const char *layer_prefix, const char *message, void *user_data);
-
-VKAPI_ATTR VkBool32 VKAPI_CALL DebugBreakCallback(VkFlags msgFlags, VkDebugReportObjectTypeEXT obj_type, uint64_t src_object,
-                                                  size_t location, int32_t msg_code, const char *layer_prefix, const char *message,
-                                                  void *user_data);
 
 VKAPI_ATTR VkBool32 VKAPI_CALL MessengerBreakCallback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
                                                       VkDebugUtilsMessageTypeFlagsEXT message_type,
@@ -458,7 +437,8 @@ static inline void ResetCmdDebugUtilsLabel(debug_report_data *report_data, VkCom
 }
 
 static inline void EraseCmdDebugUtilsLabel(debug_report_data *report_data, VkCommandBuffer command_buffer) {
+    std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
     report_data->debugUtilsCmdBufLabels.erase(command_buffer);
 }
 
-#endif  // LAYER_LOGGING_H
+uint32_t vvl_vuid_hash(std::string_view vuid);

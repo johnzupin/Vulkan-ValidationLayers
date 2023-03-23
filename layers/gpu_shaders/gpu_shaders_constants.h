@@ -1,6 +1,6 @@
 // Copyright (c) 2021-2022 The Khronos Group Inc.
-// Copyright (c) 2021-2022 Valve Corporation
-// Copyright (c) 2021-2022 LunarG, Inc.
+// Copyright (c) 2021-2023 Valve Corporation
+// Copyright (c) 2021-2023 LunarG, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,13 +13,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-// * Author: Tony Barbour <tony@lunarg.com>
-//
 // Values used between the GLSL shaders and the GPU-AV logic
 
-#ifndef GPU_SHADER_CONSTANTS
-#define GPU_SHADER_CONSTANTS
+#pragma once
 
 // values match those found in SPIRV-Tools instrument.hpp file.
 #define _kInstErrorMax 7
@@ -40,5 +36,3 @@
 #define pre_dispatch_count_exceeds_limit_x_error 1
 #define pre_dispatch_count_exceeds_limit_y_error 2
 #define pre_dispatch_count_exceeds_limit_z_error 3
-
-#endif

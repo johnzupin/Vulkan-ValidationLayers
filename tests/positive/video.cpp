@@ -1,27 +1,19 @@
 /*
- * Copyright (c) 2022 The Khronos Group Inc.
- * Copyright (c) 2022 RasterGrid Kft.
+ * Copyright (c) 2022-2023 The Khronos Group Inc.
+ * Copyright (c) 2022-2023 RasterGrid Kft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Daniel Rakos <daniel.rakos@rastergrid.com>
  */
 
-#include "../vklayertests_video.h"
+#include "../framework/video_objects.h"
 #include "vk_extension_helper.h"
 
 #include <algorithm>
-#include <array>
 #include <chrono>
-#include <memory>
-#include <mutex>
-#include <thread>
-
-#include "cast_utils.h"
 
 class VkPositiveVideoLayerTest : public VkVideoLayerTest {};
 

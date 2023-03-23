@@ -1,6 +1,6 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2021-2022 The Khronos Group Inc.
+# Copyright (c) 2021-2023 The Khronos Group Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# Author: Spencer Fricke <s.fricke@samsung.com>
 
 import os,re,sys,string,json
 import xml.etree.ElementTree as etree
@@ -143,7 +141,7 @@ class CommandValidationOutputGenerator(OutputGenerator):
         copyright += '\n'
         copyright += '/***************************************************************************\n'
         copyright += ' *\n'
-        copyright += ' * Copyright (c) 2021-2022 The Khronos Group Inc.\n'
+        copyright += ' * Copyright (c) 2021-2023 The Khronos Group Inc.\n'
         copyright += ' *\n'
         copyright += ' * Licensed under the Apache License, Version 2.0 (the "License");\n'
         copyright += ' * you may not use this file except in compliance with the License.\n'
@@ -156,15 +154,12 @@ class CommandValidationOutputGenerator(OutputGenerator):
         copyright += ' * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n'
         copyright += ' * See the License for the specific language governing permissions and\n'
         copyright += ' * limitations under the License.\n'
-        copyright += ' *\n'
-        copyright += ' * Author: Spencer Fricke <s.fricke@samsung.com>\n'
-        copyright += ' *\n'
         copyright += ' ****************************************************************************/\n'
         write(copyright, file=self.outFile)
 
         if self.source_file:
             write('#include "vk_layer_logging.h"', file=self.outFile)
-            write('#include "core_validation.h"', file=self.outFile)
+            write('#include "core_checks/core_validation.h"', file=self.outFile)
         elif self.header_file:
             write('#pragma once', file=self.outFile)
             write('#include <array>', file=self.outFile)
@@ -264,7 +259,8 @@ typedef enum CBDynamicStatus {\n'''
 } CBDynamicStatus;
 
 using CBDynamicFlags = std::bitset<CB_DYNAMIC_STATUS_NUM>;
-std::string DynamicStateString(CBDynamicFlags const &dynamic_state);
+const char* DynamicStateToString(CBDynamicStatus status);
+std::string DynamicStatesToString(CBDynamicFlags const &dynamic_state);
 struct VkPipelineDynamicStateCreateInfo;
 CBDynamicFlags MakeStaticStateMask(VkPipelineDynamicStateCreateInfo const *info);
 '''
@@ -527,7 +523,11 @@ static CBDynamicStatus ConvertToCBDynamicStatus(VkDynamicState state) {
 '''
 
         output += '''
-std::string DynamicStateString(CBDynamicFlags const &dynamic_state) {
+const char* DynamicStateToString(CBDynamicStatus status) {
+    return string_VkDynamicState(ConvertToDynamicState(status));
+}
+
+std::string DynamicStatesToString(CBDynamicFlags const &dynamic_state) {
     std::string ret;
     // enum is not zero based
     for (int index = 1; index < CB_DYNAMIC_STATUS_NUM; ++index) {

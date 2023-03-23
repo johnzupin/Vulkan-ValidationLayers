@@ -1,6 +1,6 @@
-/* Copyright (c) 2019-2022 The Khronos Group Inc.
- * Copyright (c) 2019-2022 Valve Corporation
- * Copyright (c) 2019-2022 LunarG, Inc.
+/* Copyright (c) 2019-2023 The Khronos Group Inc.
+ * Copyright (c) 2019-2023 Valve Corporation
+ * Copyright (c) 2019-2023 LunarG, Inc.
  * Copyright (C) 2019-2022 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +19,6 @@
  *
  */
 #pragma once
-
-#ifndef SUBRESOURCE_ADAPTER_H_
-#define SUBRESOURCE_ADAPTER_H_
 
 #include <algorithm>
 #include <array>
@@ -45,8 +42,6 @@ using Range = sparse_container::range<Element>;
 using IndexRange = Range<IndexType>;
 using WritePolicy = sparse_container::value_precedence;
 using split_op_keep_both = sparse_container::split_op_keep_both;
-using split_op_keep_lower = sparse_container::split_op_keep_lower;
-using split_op_keep_upper = sparse_container::split_op_keep_upper;
 
 // Interface for aspect specific traits objects (now isolated in the cpp file)
 class AspectParameters {
@@ -777,5 +772,3 @@ class BothRangeMap {
 };
 
 }  // namespace subresource_adapter
-
-#endif

@@ -19,11 +19,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Author: Chris Forbes <chrisforbes@google.com>
- * Author: Cort Stratton <cort@google.com>
- *
  ****************************************************************************/
 #pragma once
 
-#define SPIRV_TOOLS_COMMIT_ID "63de608daeb7e91fbea6d7477a50debe7cac57ce"
+#define SPIRV_TOOLS_COMMIT_ID "44d72a9b36702f093dd20815561a56778b2d181e"
