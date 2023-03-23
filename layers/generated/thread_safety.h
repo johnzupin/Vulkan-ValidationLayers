@@ -18,8 +18,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Author: Mark Lobodzinski <mark@lunarg.com>
  */
 
 #pragma once
@@ -283,8 +281,8 @@ public:
     WriteLockGuard WriteLock() override;
 
     vl_concurrent_unordered_map<VkCommandBuffer, VkCommandPool, 6> command_pool_map;
-    layer_data::unordered_map<VkCommandPool, layer_data::unordered_set<VkCommandBuffer>> pool_command_buffers_map;
-    layer_data::unordered_map<VkDevice, layer_data::unordered_set<VkQueue>> device_queues_map;
+    vvl::unordered_map<VkCommandPool, vvl::unordered_set<VkCommandBuffer>> pool_command_buffers_map;
+    vvl::unordered_map<VkDevice, vvl::unordered_set<VkQueue>> device_queues_map;
 
     // Track per-descriptorsetlayout and per-descriptorset whether read_only is used.
     // This is used to (sloppily) implement the relaxed externsync rules for read_only
@@ -4578,6 +4576,22 @@ void PostCallRecordCmdSetDiscardRectangleEXT(
     uint32_t                                    discardRectangleCount,
     const VkRect2D*                             pDiscardRectangles) override;
 
+void PreCallRecordCmdSetDiscardRectangleEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    discardRectangleEnable) override;
+
+void PostCallRecordCmdSetDiscardRectangleEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    discardRectangleEnable) override;
+
+void PreCallRecordCmdSetDiscardRectangleModeEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkDiscardRectangleModeEXT                   discardRectangleMode) override;
+
+void PostCallRecordCmdSetDiscardRectangleModeEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkDiscardRectangleModeEXT                   discardRectangleMode) override;
+
 void PreCallRecordSetHdrMetadataEXT(
     VkDevice                                    device,
     uint32_t                                    swapchainCount,
@@ -5119,6 +5133,18 @@ void PostCallRecordCmdDrawMeshTasksIndirectCountNV(
     VkDeviceSize                                countBufferOffset,
     uint32_t                                    maxDrawCount,
     uint32_t                                    stride) override;
+
+void PreCallRecordCmdSetExclusiveScissorEnableNV(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstExclusiveScissor,
+    uint32_t                                    exclusiveScissorCount,
+    const VkBool32*                             pExclusiveScissorEnables) override;
+
+void PostCallRecordCmdSetExclusiveScissorEnableNV(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstExclusiveScissor,
+    uint32_t                                    exclusiveScissorCount,
+    const VkBool32*                             pExclusiveScissorEnables) override;
 
 void PreCallRecordCmdSetExclusiveScissorNV(
     VkCommandBuffer                             commandBuffer,

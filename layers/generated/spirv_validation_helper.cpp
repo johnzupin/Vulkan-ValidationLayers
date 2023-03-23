@@ -18,8 +18,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Author: Spencer Fricke <s.fricke@samsung.com>
- *
  * This file is related to anything that is found in the Vulkan XML related
  * to SPIR-V. Anything related to the SPIR-V grammar belongs in spirv_grammar_helper
  *
@@ -29,9 +27,9 @@
 #include <functional>
 #include <spirv/unified1/spirv.hpp>
 #include "vk_extension_helper.h"
-#include "shader_module.h"
-#include "device_state.h"
-#include "core_validation.h"
+#include "state_tracker/shader_module.h"
+#include "state_tracker/device_state.h"
+#include "core_checks/core_validation.h"
 
 struct FeaturePointer {
     // Callable object to test if this feature is enabled in the given aggregate feature struct
@@ -318,6 +316,7 @@ static const std::unordered_multimap<std::string, RequiredSpirvInfo> spirvExtens
     {"SPV_EXT_demote_to_helper_invocation", {0, nullptr, &DeviceExtensions::vk_ext_shader_demote_to_helper_invocation, ""}},
     {"SPV_EXT_descriptor_indexing", {VK_API_VERSION_1_2, nullptr, nullptr, ""}},
     {"SPV_EXT_descriptor_indexing", {0, nullptr, &DeviceExtensions::vk_ext_descriptor_indexing, ""}},
+    {"SPV_EXT_fragment_fully_covered", {0, nullptr, &DeviceExtensions::vk_ext_conservative_rasterization, ""}},
     {"SPV_EXT_fragment_invocation_density", {0, nullptr, &DeviceExtensions::vk_ext_fragment_density_map, ""}},
     {"SPV_EXT_fragment_shader_interlock", {0, nullptr, &DeviceExtensions::vk_ext_fragment_shader_interlock, ""}},
     {"SPV_EXT_mesh_shader", {0, nullptr, &DeviceExtensions::vk_ext_mesh_shader, ""}},

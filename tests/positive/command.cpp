@@ -9,32 +9,16 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Chia-I Wu <olvaffe@gmail.com>
- * Author: Chris Forbes <chrisf@ijw.co.nz>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Mike Stroyan <mike@LunarG.com>
- * Author: Tobin Ehlis <tobine@google.com>
- * Author: Tony Barbour <tony@LunarG.com>
- * Author: Cody Northrop <cnorthrop@google.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Jeremy Kniager <jeremyk@lunarg.com>
- * Author: Shannon McPherson <shannon@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
  */
 
-#include "../layer_validation_tests.h"
+#include "../framework/layer_validation_tests.h"
 #include "vk_extension_helper.h"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <memory>
 #include <mutex>
 #include <thread>
-
-#include "cast_utils.h"
 
 //
 // POSITIVE VALIDATION TESTS
@@ -351,7 +335,7 @@ TEST_F(VkPositiveLayerTest, ConfirmNoVLErrorWhenVkCmdClearAttachmentsCalledInSec
     color_attachment.clearValue.color.float32[2] = 0.0;
     color_attachment.clearValue.color.float32[3] = 0.0;
     color_attachment.colorAttachment = 0;
-    VkClearRect clear_rect = {{{0, 0}, {(uint32_t)m_width, (uint32_t)m_height}}, 0, 1};
+    VkClearRect clear_rect = {{{0, 0}, {m_width, m_height}}, 0, 1};
     vk::CmdClearAttachments(secondary.handle(), 1, &color_attachment, 1, &clear_rect);
     secondary.end();
     // Modify clear rect here to verify that it doesn't cause validation error
@@ -1134,7 +1118,7 @@ TEST_F(VkPositiveLayerTest, ClearRectWith2DArray) {
         fbci.pAttachments = &image_view;
         fbci.width = image_ci.extent.width;
         fbci.height = image_ci.extent.height;
-        fbci.layers = 1;
+        fbci.layers = image_ci.extent.depth;
 
         vk_testing::Framebuffer framebuffer;
         framebuffer.init(*m_device, fbci);
@@ -1240,4 +1224,114 @@ TEST_F(VkPositiveLayerTest, EventStageMaskSecondaryCommandBuffer) {
     vk::QueueWaitIdle(m_device->m_queue);
 
     vk::DestroyEvent(m_device->device(), event, nullptr);
+}
+
+TEST_F(VkPositiveLayerTest, EventsInSecondaryCommandBuffers) {
+    TEST_DESCRIPTION("Test setting and waiting for an event in a secondary command buffer");
+    ASSERT_NO_FATAL_FAILURE(Init());
+
+    if (IsExtensionsEnabled(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
+        GTEST_SKIP() << "VK_KHR_portability_subset enabled, skipping.\n";
+    }
+
+    VkEventCreateInfo event_create_info = LvlInitStruct<VkEventCreateInfo>();
+    vk_testing::Event ev;
+    ev.init(*m_device, event_create_info);
+    VkEvent ev_handle = ev.handle();
+    VkCommandBufferObj secondary_cb(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    VkCommandBuffer scb = secondary_cb.handle();
+    secondary_cb.begin();
+    vk::CmdSetEvent(scb, ev_handle, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+    vk::CmdWaitEvents(scb, 1, &ev_handle, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0,
+                      nullptr, 0, nullptr);
+    secondary_cb.end();
+    m_commandBuffer->begin();
+    vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &scb);
+    m_commandBuffer->end();
+    VkCommandBuffer cmdBuffer = m_commandBuffer->handle();
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &cmdBuffer;
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(VkPositiveLayerTest, ThreadedCommandBuffersWithLabels) {
+    AddRequiredExtensions(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    auto vkCmdInsertDebugUtilsLabelEXT = GetInstanceProcAddr<PFN_vkCmdInsertDebugUtilsLabelEXT>("vkCmdInsertDebugUtilsLabelEXT");
+
+    constexpr int worker_count = 8;
+    ThreadTimeoutHelper timeout_helper(worker_count);
+
+    auto worker_thread = [&](int worker_index) {
+        auto timeout_guard = timeout_helper.ThreadGuard();
+        // Command pool per worker thread
+        VkCommandPoolObj pool(m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+
+        constexpr int command_buffers_per_pool = 4;
+        auto commands_allocate_info = LvlInitStruct<VkCommandBufferAllocateInfo>();
+        commands_allocate_info.commandPool = pool.handle();
+        commands_allocate_info.commandBufferCount = command_buffers_per_pool;
+        commands_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        const auto begin_info = LvlInitStruct<VkCommandBufferBeginInfo>();
+
+        auto label = LvlInitStruct<VkDebugUtilsLabelEXT>();
+        label.pLabelName = "Test label";
+
+        constexpr int iteration_count = 1000;
+        for (int frame = 0; frame < iteration_count; frame++) {
+            std::array<VkCommandBuffer, command_buffers_per_pool> command_buffers;
+            ASSERT_VK_SUCCESS(vk::AllocateCommandBuffers(m_device->device(), &commands_allocate_info, command_buffers.data()));
+            for (int i = 0; i < command_buffers_per_pool; i++) {
+                ASSERT_VK_SUCCESS(vk::BeginCommandBuffer(command_buffers[i], &begin_info));
+                // Record debug label. It's a required step to reproduce the original issue
+                vkCmdInsertDebugUtilsLabelEXT(command_buffers[i], &label);
+                ASSERT_VK_SUCCESS(vk::EndCommandBuffer(command_buffers[i]));
+            }
+            vk::FreeCommandBuffers(m_device->device(), pool.handle(), command_buffers_per_pool, command_buffers.data());
+        }
+    };
+    std::vector<std::thread> workers;
+    for (int i = 0; i < worker_count; i++) workers.emplace_back(worker_thread, i);
+    constexpr int wait_time = 60;
+    if (!timeout_helper.WaitForThreads(wait_time))
+        ADD_FAILURE() << "The waiting time for the worker threads exceeded the maximum limit: " << wait_time << " seconds.";
+    for (auto &worker : workers) worker.join();
+}
+
+TEST_F(VkPositiveLayerTest, ClearAttachmentsDepthStencil) {
+    TEST_DESCRIPTION("Call CmdClearAttachments with no depth/stencil attachment.");
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    if (IsPlatform(kShieldTV) || IsPlatform(kShieldTVb)) {
+        GTEST_SKIP() << "This test should not run on this device";
+    }
+
+    m_commandBuffer->begin();
+    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &renderPassBeginInfo(), VK_SUBPASS_CONTENTS_INLINE);
+
+    VkClearAttachment attachment;
+    attachment.colorAttachment = 0;
+    VkClearRect clear_rect = {};
+    clear_rect.rect.offset = {0, 0};
+    clear_rect.rect.extent = {1, 1};
+    clear_rect.baseArrayLayer = 0;
+    clear_rect.layerCount = 1;
+
+    attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &attachment, 1, &clear_rect);
+
+    attachment.clearValue.depthStencil.depth = 0.0f;
+    // Aspect Mask can be non-color because pDepthStencilAttachment is null
+    attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &attachment, 1, &clear_rect);
+    attachment.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &attachment, 1, &clear_rect);
 }

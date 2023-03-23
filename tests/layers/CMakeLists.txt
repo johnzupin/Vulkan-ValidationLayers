@@ -32,9 +32,23 @@ else()
     target_link_options(VkLayer_device_profile_api PRIVATE LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/libVkLayer_device_profile_api.map,-Bsymbolic)
 endif()
 
-target_include_directories(VkLayer_device_profile_api PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
+if(${CMAKE_CXX_COMPILER_ID} MATCHES "(GNU|Clang)")
+    target_compile_options(VkLayer_device_profile_api PRIVATE 
+        -Wno-sign-compare
+        -Wno-shorten-64-to-32
+        -Wno-unused-parameter
+        -Wno-missing-field-initializers
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(VkLayer_device_profile_api PRIVATE 
+            -Wno-sign-conversion
+            -Wno-implicit-int-conversion
+            -Wno-enum-enum-conversion
+        )
+    endif()
+endif()
+
+target_include_directories(VkLayer_device_profile_api PRIVATE .)
 
 set(INTERMEDIATE_FILE "${CMAKE_CURRENT_BINARY_DIR}/profiling.json")
 
@@ -45,8 +59,6 @@ elseif(APPLE)
 else()
     set(JSON_LIBRARY_PATH "./libVkLayer_device_profile_api.so")
 endif()
-
-set(JSON_API_VERSION ${VulkanHeaders_VERSION})
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_device_profile_api.json.in" ${INTERMEDIATE_FILE} @ONLY)
 

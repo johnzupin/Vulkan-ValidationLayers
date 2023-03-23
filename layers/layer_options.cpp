@@ -14,14 +14,16 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
- * Author: Nadav Geva <nadav.geva@amd.com>
  */
 
 #include "layer_options.h"
 #include "xxhash.h"
+
+// Include new / delete overrides if using mimalloc. This needs to be include exactly once in a file that is
+// part of the VVL but not the layer utils library.
+#if defined(USE_MIMALLOC) && defined(_WIN64)
+#include "mimalloc-new-delete.h"
+#endif
 
 // Set the local disable flag for the appropriate VALIDATION_CHECK_DISABLE enum
 void SetValidationDisable(CHECK_DISABLED &disable_data, const ValidationCheckDisables disable_id) {
@@ -249,7 +251,7 @@ void CreateFilterMessageIdList(std::string raw_id_list, const std::string &delim
         token = GetNextToken(&raw_id_list, delimiter, &pos);
         uint32_t int_id = TokenToUint(token);
         if (int_id == 0) {
-            const uint32_t id_hash = XXH32(token.data(), token.size(), 8);  // String
+            const uint32_t id_hash = vvl_vuid_hash(token);
             if (id_hash != 0) {
                 int_id = id_hash;
             }

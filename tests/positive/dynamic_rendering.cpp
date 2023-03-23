@@ -9,32 +9,14 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Chia-I Wu <olvaffe@gmail.com>
- * Author: Chris Forbes <chrisf@ijw.co.nz>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Mike Stroyan <mike@LunarG.com>
- * Author: Tobin Ehlis <tobine@google.com>
- * Author: Tony Barbour <tony@LunarG.com>
- * Author: Cody Northrop <cnorthrop@google.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Jeremy Kniager <jeremyk@lunarg.com>
- * Author: Shannon McPherson <shannon@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
  */
 
-#include "../layer_validation_tests.h"
+#include "../framework/layer_validation_tests.h"
 #include "vk_extension_helper.h"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <memory>
-#include <mutex>
-#include <thread>
-
-#include "cast_utils.h"
 
 TEST_F(VkPositiveLayerTest, DynamicRenderingDraw) {
     TEST_DESCRIPTION("Draw with Dynamic Rendering.");
@@ -290,10 +272,6 @@ TEST_F(VkPositiveLayerTest, DynamicRenderingPipeWithDiscard) {
     VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT);
     VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    VkPipelineRasterizationStateCreateInfo rs_ci = LvlInitStruct<VkPipelineRasterizationStateCreateInfo>();
-    rs_ci.rasterizerDiscardEnable = VK_TRUE;
-    rs_ci.lineWidth = 1.0f;
-
     VkPipelineDepthStencilStateCreateInfo ds_ci = LvlInitStruct<VkPipelineDepthStencilStateCreateInfo>();
     ds_ci.depthTestEnable = VK_TRUE;
     ds_ci.depthWriteEnable = VK_TRUE;
@@ -303,7 +281,6 @@ TEST_F(VkPositiveLayerTest, DynamicRenderingPipeWithDiscard) {
     pipe.AddShader(&fs);
     pipe.AddDefaultColorAttachment();
     pipe.SetDepthStencil(&ds_ci);
-    pipe.SetRasterization(&rs_ci);
 
     VkDescriptorSetLayoutBinding dslb = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     const VkDescriptorSetLayoutObj dsl(m_device, {dslb});
@@ -343,22 +320,22 @@ TEST_F(VkPositiveLayerTest, UseStencilAttachmentWithIntegerFormatAndDepthStencil
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
+    GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &dynamic_rendering_features));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    if (ImageFormatIsSupported(gpu(), VK_FORMAT_S8_UINT, VK_IMAGE_TILING_OPTIMAL)) {
+    if (!ImageFormatIsSupported(gpu(), VK_FORMAT_S8_UINT, VK_IMAGE_TILING_OPTIMAL)) {
         GTEST_SKIP() << "VK_FORMAT_S8_UINT format not supported";
     }
 
     auto depth_stencil_resolve_properties = LvlInitStruct<VkPhysicalDeviceDepthStencilResolveProperties>();
     auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&depth_stencil_resolve_properties);
     GetPhysicalDeviceProperties2(properties2);
-    if (depth_stencil_resolve_properties.supportedStencilResolveModes & VK_RESOLVE_MODE_AVERAGE_BIT) {
+    if ((depth_stencil_resolve_properties.supportedStencilResolveModes & VK_RESOLVE_MODE_AVERAGE_BIT) == 0) {
         GTEST_SKIP() << "VK_RESOLVE_MODE_AVERAGE_BIT not supported for VK_FORMAT_S8_UINT";
     }
 
@@ -368,18 +345,24 @@ TEST_F(VkPositiveLayerTest, UseStencilAttachmentWithIntegerFormatAndDepthStencil
     image_create_info.extent = {32, 32, 1};
     image_create_info.mipLevels = 1;
     image_create_info.arrayLayers = 1;
-    image_create_info.samples = VK_SAMPLE_COUNT_2_BIT;
+    image_create_info.samples = VK_SAMPLE_COUNT_4_BIT;
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     VkImageObj image(m_device);
     image.Init(image_create_info);
     VkImageView image_view = image.targetView(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_STENCIL_BIT);
 
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    VkImageObj resolve_image(m_device);
+    resolve_image.Init(image_create_info);
+    VkImageView resolve_image_view = resolve_image.targetView(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_STENCIL_BIT);
+
     VkRenderingAttachmentInfoKHR stencil_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     stencil_attachment.imageView = image_view;
     stencil_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     stencil_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
     stencil_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    stencil_attachment.resolveImageView = resolve_image_view;
 
     VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
     begin_rendering_info.pStencilAttachment = &stencil_attachment;

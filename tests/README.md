@@ -105,9 +105,9 @@ export VK_DRIVER_FILES=<path to MoltenVK repository>/Package/Latest/MoltenVK/mac
 
 ## Running Tests on MockICD and Profiles layer
 
-To allow a much higher coverage of testing the Validation Layers a test writer can use the Profile layer. [More details here](https://vulkan.lunarg.com/doc/view/1.3.204.1/windows/profiles_layer.html), but the main idea is the layer intercepts the Physical Device queries allowing testing of much more device properties. The Mock ICD is a "null driver" that is used to handle the Vulkan calls as the Validation Layers mostly only care about input "input" of the driver. If your tests relies on the "output" of the driver (such that a driver/implementation is correctly doing what it should do with valid input), then it might be worth looking into the [Vulkan CTS instead](https://github.com/KhronosGroup/Vulkan-Guide/blob/master/chapters/vulkan_cts.md).
+To allow a much higher coverage of testing the Validation Layers a test writer can use the Profile layer. [More details here](https://vulkan.lunarg.com/doc/view/1.3.204.1/windows/profiles_layer.html), but the main idea is the layer intercepts the Physical Device queries allowing testing of much more device properties. The Mock ICD is a "null driver" that is used to handle the Vulkan calls as the Validation Layers mostly only care about input "input" of the driver. If your tests relies on the "output" of the driver (such that a driver/implementation is correctly doing what it should do with valid input), then it might be worth looking into the [Vulkan CTS instead](https://github.com/KhronosGroup/Vulkan-Guide/blob/main/chapters/vulkan_cts.md).
 
-The Profile Layer can be found in the Vulkan SDK, otherwise, they will need to be cloned from [Vulkan Profiles](https://github.com/KhronosGroup/Vulkan-Profiles). The MockICD can be built from source in [Vulkan-Tools](https://github.com/KhronosGroup/Vulkan-Tools/tree/master/icd)
+The Profile Layer can be found in the Vulkan SDK, otherwise, they will need to be cloned from [Vulkan Profiles](https://github.com/KhronosGroup/Vulkan-Profiles). The MockICD can be built from source in [Vulkan-Tools](https://github.com/KhronosGroup/Vulkan-Tools/tree/main/icd)
 
 **NOTE**: While using the MockICD and Profiles layer the test will not be able to use Device Profiles API (`VK_LAYER_LUNARG_device_profile_api`) at the same time.
 - If a feature is needed, it can be adjusted in the profile JSON
@@ -138,7 +138,7 @@ export VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation:VK_LAYER_KHRONOS_profiles
 #    These are generated from https://github.com/KhronosGroup/Vulkan-Profiles
 #    Also can found on https://vulkan.gpuinfo.org/ and downloaded from any device
 # A set of profiles for CI are in the tests/device_profiles folder
-export VK_KHRONOS_PROFILES_PROFILE_FILE=$VVL/tests/device_profiles/profile.json
+export VK_KHRONOS_PROFILES_PROFILE_FILE=$VVL/tests/device_profiles/max_profile.json
 
 # Expose all the parts of the profile layer
 export VK_KHRONOS_PROFILES_SIMULATE_CAPABILITIES=SIMULATE_API_VERSION_BIT,SIMULATE_FEATURES_BIT,SIMULATE_PROPERTIES_BIT,SIMULATE_EXTENSIONS_BIT,SIMULATE_FORMATS_BIT,SIMULATE_QUEUE_FAMILY_PROPERTIES_BIT
@@ -153,3 +153,30 @@ export VK_KHRONOS_PROFILES_DEBUG_REPORTS=DEBUG_REPORT_ERROR_BIT
 # Running tests just as normal
 $VVL/build/tests/vk_layer_validation_tests --gtest_filter=TestName
 ```
+
+### Max Profile
+
+`tests/device_profiles/max_profile.json` is a custom file designed to allow as much testing as possible.
+
+It would be ideal to generate this similarly to the layer generated in [the Profile Layer repo](https://github.com/KhronosGroup/Vulkan-Profiles/blob/main/scripts/gen_profiles_layer.py), but the goal is to make sure as many tests are running in CI as possible.
+
+This file will **never** fully cover all tests because some require certain properties/extension to be **both** enabled and disabled. The goal is to get as close to 100% coverage as possible.
+
+### Address Sanitization (ASAN)
+
+As of [38341564f523cdc290a92217d9043c9a6bb428f8](https://github.com/KhronosGroup/Vulkan-ValidationLayers/commit/38341564f523cdc290a92217d9043c9a6bb428f8) ASAN (Address Sanitization) has become a part of our CI process
+to ensure high quality code.
+
+`-D VVL_ENABLE_ASAN=ON` will enable ASAN in the build which is `OFF` by default.
+
+- https://clang.llvm.org/docs/AddressSanitizer.html
+- https://github.com/google/sanitizers/wiki/AddressSanitizer
+
+### Thread Sanitization (TSAN)
+
+WIP (Not yet part of our CI process)
+
+`-D VVL_ENABLE_TSAN=ON` will enable TSAN in the build which is `OFF` by default.
+
+- https://clang.llvm.org/docs/ThreadSanitizer.html
+- https://github.com/google/sanitizers/wiki/ThreadSanitizerCppManual

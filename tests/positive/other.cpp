@@ -9,22 +9,9 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Chia-I Wu <olvaffe@gmail.com>
- * Author: Chris Forbes <chrisf@ijw.co.nz>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Mike Stroyan <mike@LunarG.com>
- * Author: Tobin Ehlis <tobine@google.com>
- * Author: Tony Barbour <tony@LunarG.com>
- * Author: Cody Northrop <cnorthrop@google.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Jeremy Kniager <jeremyk@lunarg.com>
- * Author: Shannon McPherson <shannon@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
  */
 
-#include "../layer_validation_tests.h"
+#include "../framework/layer_validation_tests.h"
 #include "vk_extension_helper.h"
 
 #include <algorithm>
@@ -219,7 +206,7 @@ TEST_F(VkPositiveLayerTest, SurfacelessQueryTest) {
     }
 
     if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
+        GTEST_SKIP() << "VK_GOOGLE_surfaceless_query not supported on desktop";
     }
 
     // Use the VK_GOOGLE_surfaceless_query extension to query the available formats and
@@ -904,3 +891,64 @@ TEST_F(VkPositiveLayerTest, ExportMetalObjects) {
     }
 }
 #endif  // VK_USE_PLATFORM_METAL_EXT
+
+TEST_F(VkPositiveLayerTest, DiscardRectanglesVersion) {
+    TEST_DESCRIPTION("check version of VK_EXT_discard_rectangles");
+
+    AddRequiredExtensions(VK_EXT_DISCARD_RECTANGLES_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    if (!InstanceExtensionSupported(VK_EXT_DISCARD_RECTANGLES_EXTENSION_NAME, 2)) {
+        GTEST_SKIP() << "need VK_EXT_discard_rectangles version 2";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    auto vkCmdSetDiscardRectangleEnableEXT =
+        GetDeviceProcAddr<PFN_vkCmdSetDiscardRectangleEnableEXT>("vkCmdSetDiscardRectangleEnableEXT");
+
+    const VkDynamicState dyn_states[] = {VK_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT};
+    VkPipelineDynamicStateCreateInfo dyn_state_ci = LvlInitStruct<VkPipelineDynamicStateCreateInfo>();
+    dyn_state_ci.dynamicStateCount = size(dyn_states);
+    dyn_state_ci.pDynamicStates = dyn_states;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.dyn_state_ci_ = dyn_state_ci;
+    pipe.InitState();
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vkCmdSetDiscardRectangleEnableEXT(m_commandBuffer->handle(), VK_TRUE);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+}
+
+TEST_F(VkPositiveLayerTest, ExtensionXmlDependsLogic) {
+    TEST_DESCRIPTION("Make sure the OR in 'depends' from XML is observed correctly");
+    // VK_KHR_buffer_device_address requires
+    // (VK_KHR_get_physical_device_properties2 AND VK_KHR_device_group) OR VK_VERSION_1_1
+    // If Vulkan 1.1 is not supported, should still be valid
+    SetTargetApiVersion(VK_API_VERSION_1_0);
+    if (!InstanceExtensionSupported(VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME) ||
+        !InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        GTEST_SKIP() << "Did not find the required instance extensions";
+    }
+    m_instance_extension_names.push_back(VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME);
+    m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (!DeviceExtensionSupported(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) ||
+        !DeviceExtensionSupported(VK_KHR_DEVICE_GROUP_EXTENSION_NAME)) {
+        GTEST_SKIP() << "Did not find the required device extensions";
+    }
+
+    m_device_extension_names.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    m_device_extension_names.push_back(VK_KHR_DEVICE_GROUP_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitState());
+}

@@ -9,32 +9,18 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Chia-I Wu <olvaffe@gmail.com>
- * Author: Chris Forbes <chrisf@ijw.co.nz>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Mike Stroyan <mike@LunarG.com>
- * Author: Tobin Ehlis <tobine@google.com>
- * Author: Tony Barbour <tony@LunarG.com>
- * Author: Cody Northrop <cnorthrop@google.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Jeremy Kniager <jeremyk@lunarg.com>
- * Author: Shannon McPherson <shannon@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
  */
 
-#include "../layer_validation_tests.h"
+#include "../framework/layer_validation_tests.h"
 #include "vk_extension_helper.h"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <memory>
 #include <mutex>
 #include <thread>
 
-#include "cast_utils.h"
+#include "vk_layer_utils.h"
 
 //
 // POSITIVE VALIDATION TESTS
@@ -91,13 +77,13 @@ TEST_F(VkPositiveLayerTest, OwnershipTranfersImage) {
     TEST_DESCRIPTION("Valid image ownership transfers that shouldn't create errors");
     ASSERT_NO_FATAL_FAILURE(Init(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
-    uint32_t no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
-    if (no_gfx == UINT32_MAX) {
+    const std::optional<uint32_t> no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
+    if (!no_gfx) {
         GTEST_SKIP() << "Required queue families not present (non-graphics non-compute capable required)";
     }
-    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx)[0].get();
+    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx.value())[0].get();
 
-    VkCommandPoolObj no_gfx_pool(m_device, no_gfx, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandPoolObj no_gfx_pool(m_device, no_gfx.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     VkCommandBufferObj no_gfx_cb(m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
 
     // Create an "exclusive" image owned by the graphics queue.
@@ -108,13 +94,13 @@ TEST_F(VkPositiveLayerTest, OwnershipTranfersImage) {
     auto image_subres = image.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
     auto image_barrier = image.image_memory_barrier(0, 0, image.Layout(), image.Layout(), image_subres);
     image_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
-    image_barrier.dstQueueFamilyIndex = no_gfx;
+    image_barrier.dstQueueFamilyIndex = no_gfx.value();
 
     ValidOwnershipTransfer(m_errorMonitor, m_commandBuffer, &no_gfx_cb, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
                            VK_PIPELINE_STAGE_TRANSFER_BIT, nullptr, &image_barrier);
 
     // Change layouts while changing ownership
-    image_barrier.srcQueueFamilyIndex = no_gfx;
+    image_barrier.srcQueueFamilyIndex = no_gfx.value();
     image_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
     image_barrier.oldLayout = image.Layout();
     // Make sure the new layout is different from the old
@@ -132,13 +118,13 @@ TEST_F(VkPositiveLayerTest, OwnershipTranfersBuffer) {
     TEST_DESCRIPTION("Valid buffer ownership transfers that shouldn't create errors");
     ASSERT_NO_FATAL_FAILURE(Init(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
-    uint32_t no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
-    if (no_gfx == UINT32_MAX) {
+    const std::optional<uint32_t> no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
+    if (!no_gfx) {
         GTEST_SKIP() << "Required queue families not present (non-graphics non-compute capable required)";
     }
-    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx)[0].get();
+    VkQueueObj *no_gfx_queue = m_device->queue_family_queues(no_gfx.value())[0].get();
 
-    VkCommandPoolObj no_gfx_pool(m_device, no_gfx, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandPoolObj no_gfx_pool(m_device, no_gfx.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     VkCommandBufferObj no_gfx_cb(m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
 
     // Create a buffer
@@ -155,12 +141,12 @@ TEST_F(VkPositiveLayerTest, OwnershipTranfersBuffer) {
                              &buffer_barrier, nullptr);
 
     // Transfer it to non-gfx
-    buffer_barrier.dstQueueFamilyIndex = no_gfx;
+    buffer_barrier.dstQueueFamilyIndex = no_gfx.value();
     ValidOwnershipTransfer(m_errorMonitor, m_commandBuffer, &no_gfx_cb, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
                            VK_PIPELINE_STAGE_TRANSFER_BIT, &buffer_barrier, nullptr);
 
     // Transfer it to gfx
-    buffer_barrier.srcQueueFamilyIndex = no_gfx;
+    buffer_barrier.srcQueueFamilyIndex = no_gfx.value();
     buffer_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
     ValidOwnershipTransfer(m_errorMonitor, &no_gfx_cb, m_commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, &buffer_barrier, nullptr);
@@ -739,7 +725,7 @@ TEST_F(VkPositiveLayerTest, BindSparseMetadata) {
     // Find requirements for metadata aspect
     const VkSparseImageMemoryRequirements *metadata_reqs = nullptr;
     for (auto const &aspect_sparse_reqs : sparse_reqs) {
-        if (aspect_sparse_reqs.formatProperties.aspectMask == VK_IMAGE_ASPECT_METADATA_BIT) {
+        if ((aspect_sparse_reqs.formatProperties.aspectMask & VK_IMAGE_ASPECT_METADATA_BIT) != 0) {
             metadata_reqs = &aspect_sparse_reqs;
         }
     }
@@ -1579,6 +1565,7 @@ TEST_F(VkPositiveLayerTest, TestFormatCompatibility) {
     TEST_DESCRIPTION("Test format compatibility");
 
     AddRequiredExtensions(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
@@ -1701,7 +1688,7 @@ TEST_F(VkPositiveLayerTest, TestMappingMemoryWithMultiInstanceHeapFlag) {
 
     uint32_t *pData;
     vk::MapMemory(device(), memory, 0, VK_WHOLE_SIZE, 0, (void **)&pData);
-
+    vk::UnmapMemory(device(), memory);
     vk::FreeMemory(m_device->device(), memory, nullptr);
 }
 
@@ -1842,6 +1829,12 @@ TEST_F(VkPositiveLayerTest, TransferImageToSwapchainDeviceGroup) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
     }
 
+    constexpr uint32_t test_extent_value = 10;
+    if (m_surface_capabilities.minImageExtent.width < test_extent_value ||
+        m_surface_capabilities.minImageExtent.height < test_extent_value) {
+        GTEST_SKIP() << "minImageExtent is not large enough";
+    }
+
     auto image_create_info = LvlInitStruct<VkImageCreateInfo>();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = m_surface_formats[0].format;
@@ -1926,7 +1919,7 @@ TEST_F(VkPositiveLayerTest, TransferImageToSwapchainDeviceGroup) {
     copy_region.dstSubresource.layerCount = 1;
     copy_region.srcOffset = {0, 0, 0};
     copy_region.dstOffset = {0, 0, 0};
-    copy_region.extent = {10, 10, 1};
+    copy_region.extent = {test_extent_value, test_extent_value, 1};
     vk::CmdCopyImage(m_commandBuffer->handle(), src_Image.handle(), VK_IMAGE_LAYOUT_GENERAL, peer_image.handle(),
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
@@ -2337,11 +2330,7 @@ TEST_F(VkPositiveLayerTest, ImageCompressionControl) {
 
     AddRequiredExtensions(VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-    auto image_compression_control = LvlInitStruct<VkPhysicalDeviceImageCompressionControlFeaturesEXT>();
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&image_compression_control);
-
-    ASSERT_NO_FATAL_FAILURE(InitFrameworkAndRetrieveFeatures(features2));
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
 
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required, skipping test.";
@@ -2351,11 +2340,13 @@ TEST_F(VkPositiveLayerTest, ImageCompressionControl) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
+    auto image_compression_control = LvlInitStruct<VkPhysicalDeviceImageCompressionControlFeaturesEXT>();
+    GetPhysicalDeviceFeatures2(image_compression_control);
     if (!image_compression_control.imageCompressionControl) {
         GTEST_SKIP() << "Test requires (unsupported) imageCompressionControl, skipping";
     }
 
-    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &image_compression_control));
 
     // Query possible image format with vkGetPhysicalDeviceImageFormatProperties2KHR
     auto image_format_info = LvlInitStruct<VkPhysicalDeviceImageFormatInfo2>();
@@ -2465,8 +2456,11 @@ TEST_F(VkPositiveLayerTest, CorrectSparseBufferOverlapCopy) {
     bind_info.signalSemaphoreCount = 1;
     bind_info.pSignalSemaphores = &semaphore;
 
-    uint32_t sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index]->handle();
+    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
+    if (!sparse_index) {
+        GTEST_SKIP() << "Required queue families not present";
+    }
+    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
 
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
     // Set up complete
@@ -2602,4 +2596,275 @@ TEST_F(VkPositiveLayerTest, FramebufferWithAttachmentsTo3DImageMultipleSubpasses
     }
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
+}
+
+TEST_F(VkPositiveLayerTest, TexelBufferAlignmentIn13) {
+    TEST_DESCRIPTION("texelBufferAlignment is enabled by default in 1.3.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    ASSERT_NO_FATAL_FAILURE(Init());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
+    }
+
+    const VkDeviceSize minTexelBufferOffsetAlignment = m_device->props.limits.minTexelBufferOffsetAlignment;
+    if (minTexelBufferOffsetAlignment == 1) {
+        GTEST_SKIP() << "Test requires minTexelOffsetAlignment to not be equal to 1";
+    }
+
+    VkFormatProperties format_properties;
+    vk::GetPhysicalDeviceFormatProperties(gpu(), VK_FORMAT_R8G8B8A8_UNORM, &format_properties);
+    if (!(format_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT)) {
+        GTEST_SKIP() << "Test requires support for VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT";
+    }
+
+    auto props_1_3 = LvlInitStruct<VkPhysicalDeviceVulkan13Properties>();
+    GetPhysicalDeviceProperties2(props_1_3);
+    if (props_1_3.uniformTexelBufferOffsetAlignmentBytes < 4 || !props_1_3.uniformTexelBufferOffsetSingleTexelAlignment) {
+        GTEST_SKIP() << "need uniformTexelBufferOffsetAlignmentBytes to be more than 4 with "
+                        "uniformTexelBufferOffsetSingleTexelAlignment support";
+    }
+
+    // to prevent VUID-VkBufferViewCreateInfo-buffer-02751
+    const uint32_t block_size = 4;  // VK_FORMAT_R8G8B8A8_UNORM
+
+    const VkBufferCreateInfo buffer_info = VkBufferObj::create_info(1024, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
+    VkBufferObj buffer;
+    buffer.init(*m_device, buffer_info, (VkMemoryPropertyFlags)VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    VkBufferViewCreateInfo buff_view_ci = LvlInitStruct<VkBufferViewCreateInfo>();
+    buff_view_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+    buff_view_ci.range = VK_WHOLE_SIZE;
+    buff_view_ci.buffer = buffer.handle();
+    buff_view_ci.offset = minTexelBufferOffsetAlignment + block_size;
+    CreateBufferViewTest(*this, &buff_view_ci, {});
+}
+
+TEST_F(VkPositiveLayerTest, Create3DImageView) {
+    TEST_DESCRIPTION("Create a 3D image view");
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+
+    VkImageObj image(m_device);
+    auto ci = LvlInitStruct<VkImageCreateInfo>();
+    ci.imageType = VK_IMAGE_TYPE_3D;
+    ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ci.extent = {32, 32, 8};
+    ci.mipLevels = 6;
+    ci.arrayLayers = 1;
+    ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image.init(&ci);
+    ASSERT_TRUE(image.initialized());
+
+    auto ivci = LvlInitStruct<VkImageViewCreateInfo>();
+    ivci.image = image.handle();
+    ivci.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    ivci.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ivci.subresourceRange.layerCount = 1;
+    ivci.subresourceRange.baseMipLevel = 0;
+    ivci.subresourceRange.levelCount = 1;
+    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vk_testing::ImageView image_view(*m_device, ivci);
+}
+
+TEST_F(VkPositiveLayerTest, SlicedCreateInfo) {
+    TEST_DESCRIPTION("Test VkImageViewSlicedCreateInfoEXT");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_EXT_IMAGE_SLICED_VIEW_OF_3D_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required, skipping test.";
+    }
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    {
+        auto slice_feature = LvlInitStruct<VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT>();
+        GetPhysicalDeviceFeatures2(slice_feature);
+        if (slice_feature.imageSlicedViewOf3D == VK_FALSE) {
+            GTEST_SKIP() << "Test requires (unsupported) imageSlicedViewOf3D";
+        }
+        InitState(nullptr, &slice_feature);
+    }
+
+    VkImageObj image(m_device);
+    auto ci = LvlInitStruct<VkImageCreateInfo>();
+    ci.imageType = VK_IMAGE_TYPE_3D;
+    ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ci.extent = {32, 32, 8};
+    ci.mipLevels = 6;
+    ci.arrayLayers = 1;
+    ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image.init(&ci);
+    ASSERT_TRUE(image.initialized());
+
+    auto sliced_info = LvlInitStruct<VkImageViewSlicedCreateInfoEXT>();
+
+    auto ivci = LvlInitStruct<VkImageViewCreateInfo>(&sliced_info);
+    ivci.image = image.handle();
+    ivci.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    ivci.format = ci.format;
+    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    ivci.subresourceRange.levelCount = 1;
+    ivci.subresourceRange.layerCount = 1;
+
+    auto get_effective_depth = [&]() -> uint32_t { return GetEffectiveExtent(ci, ivci.subresourceRange).depth; };
+
+    {
+        sliced_info.sliceCount = VK_REMAINING_3D_SLICES_EXT;
+        sliced_info.sliceOffset = 0;
+        ivci.subresourceRange.baseMipLevel = 0;
+        ASSERT_TRUE(get_effective_depth() == 8);
+
+        vk_testing::ImageView image_view(*m_device, ivci);
+    }
+
+    {
+        sliced_info.sliceCount = VK_REMAINING_3D_SLICES_EXT;
+        sliced_info.sliceOffset = 1;
+        ivci.subresourceRange.baseMipLevel = 0;
+        ASSERT_TRUE(get_effective_depth() == 8);
+
+        vk_testing::ImageView image_view(*m_device, ivci);
+    }
+
+    {
+        sliced_info.sliceCount = 8;
+        sliced_info.sliceOffset = 0;
+        ivci.subresourceRange.baseMipLevel = 0;
+        ASSERT_TRUE(get_effective_depth() == 8);
+
+        vk_testing::ImageView image_view(*m_device, ivci);
+    }
+
+    {
+        sliced_info.sliceCount = 4;
+        sliced_info.sliceOffset = 4;
+        ivci.subresourceRange.baseMipLevel = 0;
+        ASSERT_TRUE(get_effective_depth() == 8);
+
+        vk_testing::ImageView image_view(*m_device, ivci);
+    }
+
+    {
+        sliced_info.sliceCount = 4;
+        sliced_info.sliceOffset = 0;
+        ivci.subresourceRange.baseMipLevel = 1;
+        ASSERT_TRUE(get_effective_depth() == 4);
+
+        vk_testing::ImageView image_view(*m_device, ivci);
+    }
+
+    {
+        sliced_info.sliceCount = 2;
+        sliced_info.sliceOffset = 0;
+        ivci.subresourceRange.baseMipLevel = 2;
+        ASSERT_TRUE(get_effective_depth() == 2);
+
+        vk_testing::ImageView image_view(*m_device, ivci);
+    }
+
+    {
+        sliced_info.sliceCount = VK_REMAINING_3D_SLICES_EXT;
+        sliced_info.sliceOffset = 0;
+        ivci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+        ivci.subresourceRange.baseMipLevel = 5;
+        ASSERT_TRUE(get_effective_depth() == 1);
+
+        vk_testing::ImageView image_view(*m_device, ivci);
+    }
+
+    {
+        sliced_info.sliceCount = VK_REMAINING_3D_SLICES_EXT;
+        sliced_info.sliceOffset = 0;
+        ivci.subresourceRange.levelCount = 1;
+        ivci.subresourceRange.baseMipLevel = 5;
+        ASSERT_TRUE(get_effective_depth() == 1);
+
+        vk_testing::ImageView image_view(*m_device, ivci);
+    }
+}
+
+TEST_F(VkPositiveLayerTest, GetEffectiveExtent) {
+    TEST_DESCRIPTION("Test unlikely GetEffectiveExtent edge cases");
+
+    auto ci = LvlInitStruct<VkImageCreateInfo>();
+    VkExtent3D extent = {};
+
+    // Return zero extent if mip level doesn't exist
+    {
+        ci.mipLevels = 0;
+        ci.extent = {1, 1, 1};
+        extent = GetEffectiveExtent(ci, VK_IMAGE_ASPECT_NONE, 1);
+        ASSERT_TRUE(extent.width == 0);
+        ASSERT_TRUE(extent.height == 0);
+        ASSERT_TRUE(extent.depth == 0);
+
+        ci.mipLevels = 1;
+        extent = GetEffectiveExtent(ci, VK_IMAGE_ASPECT_NONE, 1);
+        ASSERT_TRUE(extent.width == 0);
+        ASSERT_TRUE(extent.height == 0);
+        ASSERT_TRUE(extent.depth == 0);
+    }
+
+    // Check that 0 based extent is respected
+    {
+        ci.flags = 0;
+        ci.imageType = VK_IMAGE_TYPE_3D;
+        ci.mipLevels = 2;
+        ci.extent = {0, 0, 0};
+        extent = GetEffectiveExtent(ci, VK_IMAGE_ASPECT_NONE, 1);
+        ASSERT_TRUE(extent.width == 0);
+        ASSERT_TRUE(extent.height == 0);
+        ASSERT_TRUE(extent.depth == 0);
+
+        ci.extent = {16, 32, 0};
+        extent = GetEffectiveExtent(ci, VK_IMAGE_ASPECT_NONE, 1);
+        ASSERT_TRUE(extent.width == 8);
+        ASSERT_TRUE(extent.height == 16);
+        ASSERT_TRUE(extent.depth == 0);
+    }
+
+    // Corner sampled images
+    {
+        ci.flags = VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV;
+        ci.imageType = VK_IMAGE_TYPE_3D;
+        ci.mipLevels = 2;
+        ci.extent = {1, 1, 1};
+        extent = GetEffectiveExtent(ci, VK_IMAGE_ASPECT_NONE, 1);
+        // The minimum level size is 2x2x2 for 3D corner sampled images.
+        ASSERT_TRUE(extent.width == 2);
+        ASSERT_TRUE(extent.height == 2);
+        ASSERT_TRUE(extent.depth == 2);
+
+        ci.flags = VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV;
+        ci.imageType = VK_IMAGE_TYPE_3D;
+        ci.mipLevels = 2;
+        ci.extent = {4, 8, 16};
+        extent = GetEffectiveExtent(ci, VK_IMAGE_ASPECT_NONE, 1);
+        ASSERT_TRUE(extent.width == 2);
+        ASSERT_TRUE(extent.height == 4);
+        ASSERT_TRUE(extent.depth == 8);
+
+        ci.flags = VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV;
+        ci.imageType = VK_IMAGE_TYPE_3D;
+        ci.mipLevels = 3;
+        ci.extent = {8, 16, 32};
+        extent = GetEffectiveExtent(ci, VK_IMAGE_ASPECT_NONE, 2);
+        ASSERT_TRUE(extent.width == 2);
+        ASSERT_TRUE(extent.height == 4);
+        ASSERT_TRUE(extent.depth == 8);
+    }
 }

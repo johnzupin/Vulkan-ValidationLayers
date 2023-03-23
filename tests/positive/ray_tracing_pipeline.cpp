@@ -9,22 +9,9 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Chia-I Wu <olvaffe@gmail.com>
- * Author: Chris Forbes <chrisf@ijw.co.nz>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Mike Stroyan <mike@LunarG.com>
- * Author: Tobin Ehlis <tobine@google.com>
- * Author: Tony Barbour <tony@LunarG.com>
- * Author: Cody Northrop <cnorthrop@google.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Jeremy Kniager <jeremyk@lunarg.com>
- * Author: Shannon McPherson <shannon@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
  */
 
-#include "../layer_validation_tests.h"
+#include "../framework/layer_validation_tests.h"
 
 TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
     TEST_DESCRIPTION("Test that no warning is produced when a library is referenced in the raytracing shader groups.");
@@ -43,15 +30,8 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     const VkPipelineLayoutObj empty_pipeline_layout(m_device, {});
-
-    const char *empty_shader = R"glsl(
-        #version 460
-        #extension GL_EXT_ray_tracing : require
-        void main() {}
-    )glsl";
-
-    VkShaderObj rgen_shader(this, empty_shader, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
-    VkShaderObj chit_shader(this, empty_shader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
+    VkShaderObj rgen_shader(this, bindStateRTShaderText, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
+    VkShaderObj chit_shader(this, bindStateRTShaderText, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
 
     const auto vkCreateRayTracingPipelinesKHR =
         GetInstanceProcAddr<PFN_vkCreateRayTracingPipelinesKHR>("vkCreateRayTracingPipelinesKHR");
@@ -161,15 +141,8 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineCacheControl) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     const VkPipelineLayoutObj empty_pipeline_layout(m_device, {});
-
-    const char *empty_shader = R"glsl(
-        #version 460
-        #extension GL_EXT_ray_tracing : require
-        void main() {}
-    )glsl";
-
-    VkShaderObj rgen_shader(this, empty_shader, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
-    VkShaderObj chit_shader(this, empty_shader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
+    VkShaderObj rgen_shader(this, bindStateRTShaderText, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
+    VkShaderObj chit_shader(this, bindStateRTShaderText, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
 
     const auto vkCreateRayTracingPipelinesKHR =
         GetInstanceProcAddr<PFN_vkCreateRayTracingPipelinesKHR>("vkCreateRayTracingPipelinesKHR");

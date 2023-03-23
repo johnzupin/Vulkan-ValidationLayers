@@ -9,22 +9,9 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Author: Chia-I Wu <olvaffe@gmail.com>
- * Author: Chris Forbes <chrisf@ijw.co.nz>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Mike Stroyan <mike@LunarG.com>
- * Author: Tobin Ehlis <tobine@google.com>
- * Author: Tony Barbour <tony@LunarG.com>
- * Author: Cody Northrop <cnorthrop@google.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Jeremy Kniager <jeremyk@lunarg.com>
- * Author: Shannon McPherson <shannon@lunarg.com>
- * Author: John Zulauf <jzulauf@lunarg.com>
  */
 
-#include "../layer_validation_tests.h"
+#include "../framework/layer_validation_tests.h"
 #include "vk_extension_helper.h"
 
 TEST_F(VkPositiveLayerTest, RayTracingValidateGetAccelerationStructureBuildSizes) {
@@ -35,6 +22,10 @@ TEST_F(VkPositiveLayerTest, RayTracingValidateGetAccelerationStructureBuildSizes
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
 
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
+
     // Crashes without any warnings
     if (IsDriver(VK_DRIVER_ID_AMD_PROPRIETARY)) {
         GTEST_SKIP() << "Test does not run on AMD proprietary driver";
@@ -42,9 +33,6 @@ TEST_F(VkPositiveLayerTest, RayTracingValidateGetAccelerationStructureBuildSizes
 
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
 
     auto ray_query_features = LvlInitStruct<VkPhysicalDeviceRayQueryFeaturesKHR>();
@@ -80,9 +68,6 @@ TEST_F(VkPositiveLayerTest, RayTracingAccelerationStructureReference) {
     if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
         GTEST_SKIP() << "At least Vulkan version 1.1 is required";
     }
-    if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
@@ -105,8 +90,8 @@ TEST_F(VkPositiveLayerTest, RayTracingAccelerationStructureReference) {
         GetInstanceProcAddr<PFN_vkBuildAccelerationStructuresKHR>("vkBuildAccelerationStructuresKHR");
 
     // Build Bottom Level Acceleration Structure
-    const std::vector<float> vertices = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f};
-    const std::vector<uint32_t> indices = {0, 1, 2};
+    constexpr std::array vertices = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f};
+    constexpr std::array<uint32_t, 3> indices = {{0, 1, 2}};
     VkAccelerationStructureGeometryKHR blas_geometry = LvlInitStruct<VkAccelerationStructureGeometryKHR>();
     blas_geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
     blas_geometry.flags = 0;

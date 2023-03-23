@@ -16,10 +16,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# Author: Mark Lobodzinski <mark@lunarg.com>
-# Author: Tobin Ehlis <tobine@google.com>
-# Author: John Zulauf <jzulauf@lunarg.com>
 
 import os,re,sys
 import xml.etree.ElementTree as etree
@@ -170,14 +166,6 @@ class HelperFileOutputGenerator(OutputGenerator):
         copyright += ' * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n'
         copyright += ' * See the License for the specific language governing permissions and\n'
         copyright += ' * limitations under the License.\n'
-        copyright += ' *\n'
-        copyright += ' * Author: Mark Lobodzinski <mark@lunarg.com>\n'
-        copyright += ' * Author: Courtney Goeltzenleuchter <courtneygo@google.com>\n'
-        copyright += ' * Author: Tobin Ehlis <tobine@google.com>\n'
-        copyright += ' * Author: Chris Forbes <chrisforbes@google.com>\n'
-        copyright += ' * Author: John Zulauf<jzulauf@lunarg.com>\n'
-        copyright += ' * Author: Tony Barbour <tony@lunarg.com>\n'
-        copyright += ' *\n'
         copyright += ' ****************************************************************************/\n'
         write(copyright, file=self.outFile)
     #
@@ -208,14 +196,13 @@ class HelperFileOutputGenerator(OutputGenerator):
         name_define = nameElem.get('name')
         if 'EXTENSION_NAME' not in name_define:
             print("Error in vk.xml file -- extension name is not available")
-        requires = interface.get('requires')
+        requires = interface.get('depends')
         if requires is not None:
-            required_extensions = requires.split(',')
+            # This is a work around for https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5372
+            requires = re.sub(r',VK_VERSION_1_\d+', '', requires)
+            required_extensions = exprValues(parseExpr(requires))
         else:
             required_extensions = list()
-        requiresCore = interface.get('requiresCore')
-        if requiresCore is not None:
-            required_extensions.append('VK_VERSION_%s' % ('_'.join(requiresCore.split('.'))))
         info = { 'define': GetNameDefine(interface), 'ifdef':self.featureExtraProtect, 'reqs':required_extensions }
         if interface.get('type') == 'instance':
             self.instance_extension_info[name] = info
@@ -258,7 +245,7 @@ class HelperFileOutputGenerator(OutputGenerator):
                         if elem.get('alias') is None: # TODO: Strangely the "alias" fn parameter does not work
                             item_name = elem.get('name')
                             self.core_object_types.append(item_name)
-        elif self.helper_file_type == 'synchronization_helper_header' or self.helper_file_type == 'synchronization_helper_source':
+        elif self.helper_file_type == 'sync_helper_header' or self.helper_file_type == 'sync_helper_source':
             if groupName in sync_val_gen.sync_enum_types:
                 self.sync_enum[groupName] = []
                 for elem in groupElem.findall('enum'):
@@ -445,7 +432,7 @@ class HelperFileOutputGenerator(OutputGenerator):
             outstring += '        ++index;\n'
             outstring += '        input_value >>= 1;\n'
             outstring += '    }\n'
-            outstring += '    if( ret.empty()) ret.append(string_%s(static_cast<%s>(0)));\n' % (groupName, groupType)
+            outstring += '    if (ret.empty()) ret.append("%s(0)");\n' % flagsName
             outstring += '    return ret;\n'
             outstring += '}\n'
 
@@ -576,9 +563,7 @@ class HelperFileOutputGenerator(OutputGenerator):
     // Primarily intended for use by GPUAV when replacing shader module code with instrumented code
     template<typename Container>
     void SetCode(const Container &code) {
-        if (pCode) {
-            delete[] pCode;
-        }
+        delete[] pCode;
         codeSize = static_cast<uint32_t>(code.size() * sizeof(uint32_t));
         pCode = new uint32_t[code.size()];
         std::copy(&code.front(), &code.back() + 1, const_cast<uint32_t*>(pCode));
@@ -592,99 +577,25 @@ class HelperFileOutputGenerator(OutputGenerator):
     # Generate extension helper header file
     def GenerateExtensionHelperHeader(self):
 
-        V_1_0_instance_extensions_promoted_to_V_1_1_core = [
-            'VK_KHR_device_group_creation',
-            'VK_KHR_external_fence_capabilities',
-            'VK_KHR_external_memory_capabilities',
-            'VK_KHR_external_semaphore_capabilities',
-            'VK_KHR_get_physical_device_properties2',
-            ]
+        promoted_1_1_exts = self.registry.tree.findall('*/extension[@promotedto="VK_VERSION_1_1"]')
+        V_1_0_instance_extensions_promoted_to_V_1_1_core = sorted([e.get('name') for e in promoted_1_1_exts if e.get('type') == 'instance'])
+        V_1_0_device_extensions_promoted_to_V_1_1_core = sorted([e.get('name') for e in promoted_1_1_exts if e.get('type') == 'device'])
 
-        V_1_0_device_extensions_promoted_to_V_1_1_core = [
-            'VK_KHR_16bit_storage',
-            'VK_KHR_bind_memory2',
-            'VK_KHR_dedicated_allocation',
-            'VK_KHR_descriptor_update_template',
-            'VK_KHR_device_group',
-            'VK_KHR_external_fence',
-            'VK_KHR_external_memory',
-            'VK_KHR_external_semaphore',
-            'VK_KHR_get_memory_requirements2',
-            'VK_KHR_maintenance1',
-            'VK_KHR_maintenance2',
-            'VK_KHR_maintenance3',
-            'VK_KHR_multiview',
-            'VK_KHR_relaxed_block_layout',
-            'VK_KHR_sampler_ycbcr_conversion',
-            'VK_KHR_shader_draw_parameters',
-            'VK_KHR_storage_buffer_storage_class',
-            'VK_KHR_variable_pointers',
-            ]
+        promoted_1_2_exts = self.registry.tree.findall('*/extension[@promotedto="VK_VERSION_1_2"]')
+        V_1_1_instance_extensions_promoted_to_V_1_2_core = sorted([e.get('name') for e in promoted_1_2_exts if e.get('type') == 'instance'])
+        V_1_1_device_extensions_promoted_to_V_1_2_core = sorted([e.get('name') for e in promoted_1_2_exts if e.get('type') == 'device'])
 
-        V_1_1_instance_extensions_promoted_to_V_1_2_core = [
-            ]
-
-        V_1_1_device_extensions_promoted_to_V_1_2_core = [
-            'VK_KHR_8bit_storage',
-            'VK_KHR_buffer_device_address',
-            'VK_KHR_create_renderpass2',
-            'VK_KHR_depth_stencil_resolve',
-            'VK_KHR_draw_indirect_count',
-            'VK_KHR_driver_properties',
-            'VK_KHR_image_format_list',
-            'VK_KHR_imageless_framebuffer',
-            'VK_KHR_sampler_mirror_clamp_to_edge',
-            'VK_KHR_separate_depth_stencil_layouts',
-            'VK_KHR_shader_atomic_int64',
-            'VK_KHR_shader_float16_int8',
-            'VK_KHR_shader_float_controls',
-            'VK_KHR_shader_subgroup_extended_types',
-            'VK_KHR_spirv_1_4',
-            'VK_KHR_timeline_semaphore',
-            'VK_KHR_uniform_buffer_standard_layout',
-            'VK_KHR_vulkan_memory_model',
-            'VK_EXT_descriptor_indexing',
-            'VK_EXT_host_query_reset',
-            'VK_EXT_sampler_filter_minmax',
-            'VK_EXT_scalar_block_layout',
-            'VK_EXT_separate_stencil_usage',
-            'VK_EXT_shader_viewport_index_layer',
-            ]
-
-        V_1_2_instance_extensions_promoted_to_V_1_3_core = [
-            ]
-
-        V_1_2_device_extensions_promoted_to_V_1_3_core = [
-            'VK_KHR_copy_commands2',
-            'VK_KHR_dynamic_rendering',
-            'VK_KHR_format_feature_flags2',
-            'VK_KHR_maintenance4',
-            'VK_KHR_shader_integer_dot_product',
-            'VK_KHR_shader_non_semantic_info',
-            'VK_KHR_shader_terminate_invocation',
-            'VK_KHR_synchronization2',
-            'VK_KHR_zero_initialize_workgroup_memory',
-            'VK_EXT_extended_dynamic_state',
-            'VK_EXT_extended_dynamic_state2',
-            'VK_EXT_image_robustness',
-            'VK_EXT_inline_uniform_block',
-            'VK_EXT_pipeline_creation_cache_control',
-            'VK_EXT_pipeline_creation_feedback',
-            'VK_EXT_private_data',
-            'VK_EXT_shader_demote_to_helper_invocation',
-            'VK_EXT_subgroup_size_control',
-            'VK_EXT_texel_buffer_alignment',
-            'VK_EXT_texture_compression_astc_hdr',
-            'VK_EXT_tooling_info',
-            ]
+        promoted_1_3_exts = self.registry.tree.findall('*/extension[@promotedto="VK_VERSION_1_3"]')
+        V_1_2_instance_extensions_promoted_to_V_1_3_core = sorted([e.get('name') for e in promoted_1_3_exts if e.get('type') == 'instance'])
+        V_1_2_device_extensions_promoted_to_V_1_3_core = sorted([e.get('name') for e in promoted_1_3_exts if e.get('type') == 'device'])
 
         output = [
+            '#pragma once',
             '',
-            '#ifndef VK_EXTENSION_HELPER_H_',
-            '#define VK_EXTENSION_HELPER_H_',
             '#include <string>',
             '#include <utility>',
             '#include <set>',
+            '#include <array>',
             '#include <vector>',
             '#include <cassert>',
             '',
@@ -775,7 +686,7 @@ class HelperFileOutputGenerator(OutputGenerator):
                 '       %s requirements;' % req_vec_type,
                 '    };',
                 '',
-                '    typedef layer_data::unordered_map<std::string,%s> %s;' % (info_type, info_map_type),
+                '    typedef vvl::unordered_map<std::string,%s> %s;' % (info_type, info_map_type),
                 '    static const %s &get_info_map() {' %info_map_type,
                 '        static const %s info_map = {' % info_map_type ])
             struct.extend([
@@ -832,22 +743,22 @@ class HelperFileOutputGenerator(OutputGenerator):
                     '    %s(const %s& instance_ext) : %s(instance_ext) {}' % (struct_type, instance_struct_type, instance_struct_type),
                     '',
                     '    uint32_t InitFromDeviceCreateInfo(const %s *instance_extensions, uint32_t requested_api_version,' % instance_struct_type,
-                    '                                      const VkDeviceCreateInfo *pCreateInfo) {',
+                    '                                      const VkDeviceCreateInfo *pCreateInfo = nullptr) {',
                     '        // Initialize: this to defaults,  base class fields to input.',
                     '        assert(instance_extensions);',
                     '        *this = %s(*instance_extensions);' % struct_type,
                     '']),
             struct.extend([
                 '',
-                '        static const std::vector<const char *> V_1_1_promoted_%s_apis = {' % type.lower() ])
+                f'        constexpr std::array<const char*, {len(promoted_1_1_ext_list)}> V_1_1_promoted_{type.lower()}_apis = {{' ])
             struct.extend(['            %s,' % extension_dict[ext_name]['define'] for ext_name in promoted_1_1_ext_list])
             struct.extend([
                 '        };',
-                '        static const std::vector<const char *> V_1_2_promoted_%s_apis = {' % type.lower() ])
+                f'        constexpr std::array<const char*, {len(promoted_1_2_ext_list)}> V_1_2_promoted_{type.lower()}_apis = {{' ])
             struct.extend(['            %s,' % extension_dict[ext_name]['define'] for ext_name in promoted_1_2_ext_list])
             struct.extend([
                 '        };',
-                '        static const std::vector<const char *> V_1_3_promoted_%s_apis = {' % type.lower() ])
+                f'        constexpr std::array<const char*, {len(promoted_1_3_ext_list)}> V_1_3_promoted_{type.lower()}_apis = {{' ])
             struct.extend(['            %s,' % extension_dict[ext_name]['define'] for ext_name in promoted_1_3_ext_list])
             struct.extend([
                 '        };',
@@ -882,7 +793,7 @@ class HelperFileOutputGenerator(OutputGenerator):
                 '            }',
                 '        }',
                 '        // CreateInfo takes precedence over promoted',
-                '        if (pCreateInfo->ppEnabledExtensionNames) {',
+                '        if (pCreateInfo && pCreateInfo->ppEnabledExtensionNames) {',
                 '            for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {',
                 '                if (!pCreateInfo->ppEnabledExtensionNames[i]) continue;',
                 '                auto info = get_info(pCreateInfo->ppEnabledExtensionNames[i]);',
@@ -899,7 +810,6 @@ class HelperFileOutputGenerator(OutputGenerator):
             struct.extend(['};', ''])
             output.extend(struct)
 
-        output.extend(['', '#endif // VK_EXTENSION_HELPER_H_'])
         return '\n'.join(output)
     #
     # Combine object types helper header file preamble with body text and return
@@ -1952,10 +1862,12 @@ class HelperFileOutputGenerator(OutputGenerator):
                 destruct_txt += '        FreePnextChain(pNext);\n'
 
             if (self.structOrUnion[item.name] == 'union'):
-                # Unions don't allow multiple members in the initialization list, so just call initialize
-                safe_struct_body.append("\n%s::%s(const %s* in_struct%s)\n{\n%s}" % (ss_name, ss_name, item.name, self.custom_construct_params.get(item.name, ''), construct_txt))
                 if (item.name == 'VkDescriptorDataEXT'):
                     default_init_list = ' type_at_end {0},'
+                    safe_struct_body.append("\n%s::%s(const %s* in_struct%s)\n{\n%s}" % (ss_name, ss_name, item.name, self.custom_construct_params.get(item.name, ''), construct_txt))
+                else:
+                    # Unions don't allow multiple members in the initialization list, so just call initialize
+                    safe_struct_body.append("\n%s::%s(const %s* in_struct%s)\n{\n    initialize(in_struct);\n}" % (ss_name, ss_name, item.name, self.custom_construct_params.get(item.name, '')))
             else:
                 safe_struct_body.append("\n%s::%s(const %s* in_struct%s) :%s\n{\n%s}" % (ss_name, ss_name, item.name, self.custom_construct_params.get(item.name, ''), init_list, construct_txt))
             if '' != default_init_list:
@@ -2050,13 +1962,16 @@ class HelperFileOutputGenerator(OutputGenerator):
             '    T out = {{{type_map}<T>::kSType, p_next, fields...}};',
             '    return out;',
             '}}',
+            '',
             '// Init the header of an sType struct',
             'template <typename T>',
             'T {init_func}(void *p_next = nullptr) {{',
-            '    T out = {{{type_map}<T>::kSType, p_next}};',
+            '    T out = {{}};',
+            '    out.sType = {type_map}<T>::kSType;',
+            '    out.pNext = p_next;',
             '    return out;',
-            '}}',
-            ''))
+            '}}'
+            ))
 
         code = []
 
@@ -2121,9 +2036,9 @@ class HelperFileOutputGenerator(OutputGenerator):
             return self.GenerateExtensionHelperHeader()
         elif self.helper_file_type == 'typemap_helper_header':
             return self.GenerateTypeMapHelperHeader()
-        elif self.helper_file_type == 'synchronization_helper_header':
+        elif self.helper_file_type == 'sync_helper_header':
             return self.GenerateSyncHelperHeader()
-        elif self.helper_file_type == 'synchronization_helper_source':
+        elif self.helper_file_type == 'sync_helper_source':
             return self.GenerateSyncHelperSource()
         else:
             return 'Bad Helper File Generator Option %s' % self.helper_file_type

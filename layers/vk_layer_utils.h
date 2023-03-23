@@ -14,11 +14,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Courtney Goeltzenleuchter <courtney@LunarG.com>
- * Author: Dave Houlton <daveh@lunarg.com>
- * Author: Daniel Rakos <daniel.rakos@rastergrid.com>
  */
 
 #pragma once
@@ -155,8 +150,8 @@ Stream &stream_join(Stream &stream, const String &sep, const Collection &values)
 typedef void *dispatch_key;
 static inline dispatch_key get_dispatch_key(const void *object) { return (dispatch_key) * (VkLayerDispatchTable **)object; }
 
-VK_LAYER_EXPORT VkLayerInstanceCreateInfo *get_chain_info(const VkInstanceCreateInfo *pCreateInfo, VkLayerFunction func);
-VK_LAYER_EXPORT VkLayerDeviceCreateInfo *get_chain_info(const VkDeviceCreateInfo *pCreateInfo, VkLayerFunction func);
+VkLayerInstanceCreateInfo *get_chain_info(const VkInstanceCreateInfo *pCreateInfo, VkLayerFunction func);
+VkLayerDeviceCreateInfo *get_chain_info(const VkDeviceCreateInfo *pCreateInfo, VkLayerFunction func);
 
 static inline bool IsPowerOfTwo(unsigned x) { return x && !(x & (x - 1)); }
 
@@ -176,6 +171,43 @@ static inline int MostSignificantBit(uint32_t mask) {
     }
     return -1;
 #endif
+}
+
+static inline int u_ffs(int val) {
+#ifdef WIN32
+    unsigned long bit_pos = 0;
+    if (_BitScanForward(&bit_pos, val) != 0) {
+        bit_pos += 1;
+    }
+    return bit_pos;
+#else
+    return ffs(val);
+#endif
+}
+
+// Returns the 0-based index of the LSB. An input mask of 0 yields -1
+static inline int LeastSignificantBit(uint32_t mask) { return u_ffs(static_cast<int>(mask)) - 1; }
+
+template <typename FlagBits, typename Flags>
+FlagBits LeastSignificantFlag(Flags flags) {
+    const int bit_shift = LeastSignificantBit(flags);
+    assert(bit_shift != -1);
+    return static_cast<FlagBits>(1ull << bit_shift);
+}
+
+// Iterates over all set bits and calls the callback with a bit mask corresponding to each flag.
+// FlagBits and Flags follow Vulkan naming convensions for flag types.
+// An example of a more efficient implementation: https://lemire.me/blog/2018/02/21/iterating-over-set-bits-quickly/
+template <typename FlagBits, typename Flags, typename Callback>
+void IterateFlags(Flags flags, Callback callback) {
+    uint32_t bit_shift = 0;
+    while (flags) {
+        if (flags & 1) {
+            callback(static_cast<FlagBits>(1ull << bit_shift));
+        }
+        flags >>= 1;
+        ++bit_shift;
+    }
 }
 
 static inline uint32_t SampleCountSize(VkSampleCountFlagBits sample_count) {
@@ -352,6 +384,62 @@ static inline uint32_t FullMipChainLevels(VkExtent3D extent) {
     return 1u + static_cast<uint32_t>(log2(std::max({extent.height, extent.width, extent.depth})));
 }
 
+// Returns the effective extent of an image subresource, adjusted for mip level and array depth.
+[[nodiscard]] constexpr VkExtent3D GetEffectiveExtent(const VkImageCreateInfo &ci, const VkImageAspectFlags aspect_mask,
+                                                      const uint32_t mip_level) {
+    // Return zero extent if mip level doesn't exist
+    if (mip_level >= ci.mipLevels) {
+        return VkExtent3D{0, 0, 0};
+    }
+
+    VkExtent3D extent = ci.extent;
+
+    // If multi-plane, adjust per-plane extent
+    const VkFormat format = ci.format;
+    if (FormatIsMultiplane(format)) {
+        VkExtent2D divisors = FindMultiplaneExtentDivisors(format, aspect_mask);
+        extent.width /= divisors.width;
+        extent.height /= divisors.height;
+    }
+
+    // Mip Maps
+    {
+        const uint32_t corner = (ci.flags & VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV) ? 1 : 0;
+        const uint32_t min_size = 1 + corner;
+        const std::array dimensions = {&extent.width, &extent.height, &extent.depth};
+        for (uint32_t *dim : dimensions) {
+            // Don't allow mip adjustment to create 0 dim, but pass along a 0 if that's what subresource specified
+            if (*dim == 0) {
+                continue;
+            }
+            *dim >>= mip_level;
+            *dim = std::max(min_size, *dim);
+        }
+    }
+
+    // Image arrays have an effective z extent that isn't diminished by mip level
+    if (VK_IMAGE_TYPE_3D != ci.imageType) {
+        extent.depth = ci.arrayLayers;
+    }
+
+    return extent;
+}
+
+// Returns the effective extent of an image subresource, adjusted for mip level and array depth.
+[[nodiscard]] constexpr VkExtent3D GetEffectiveExtent(const VkImageCreateInfo &ci, const VkImageSubresourceRange &range) {
+    return GetEffectiveExtent(ci, range.aspectMask, range.baseMipLevel);
+}
+
+// Calculates the number of mip levels a VkImageView references.
+constexpr uint32_t ResolveRemainingLevels(const VkImageCreateInfo &ci, VkImageSubresourceRange const &range) {
+    return (range.levelCount == VK_REMAINING_MIP_LEVELS) ? (ci.mipLevels - range.baseMipLevel) : range.levelCount;
+}
+
+// Calculates the number of mip layers a VkImageView references.
+constexpr uint32_t ResolveRemainingLayers(const VkImageCreateInfo &ci, VkImageSubresourceRange const &range) {
+    return (range.layerCount == VK_REMAINING_ARRAY_LAYERS) ? (ci.arrayLayers - range.baseArrayLayer) : range.layerCount;
+}
+
 extern "C" {
 #endif
 
@@ -364,26 +452,10 @@ typedef enum VkStringErrorFlagBits {
 } VkStringErrorFlagBits;
 typedef VkFlags VkStringErrorFlags;
 
-VK_LAYER_EXPORT void layer_debug_report_actions(debug_report_data *report_data, const VkAllocationCallbacks *pAllocator,
-                                                const char *layer_identifier);
+void layer_debug_messenger_actions(debug_report_data *report_data, const char *layer_identifier);
 
-VK_LAYER_EXPORT void layer_debug_messenger_actions(debug_report_data *report_data, const VkAllocationCallbacks *pAllocator,
-                                                   const char *layer_identifier);
-
-VK_LAYER_EXPORT VkStringErrorFlags vk_string_validate(const int max_length, const char *char_array);
-VK_LAYER_EXPORT bool white_list(const char *item, const std::set<std::string> &whitelist);
-
-static inline int u_ffs(int val) {
-#ifdef WIN32
-    unsigned long bit_pos = 0;
-    if (_BitScanForward(&bit_pos, val) != 0) {
-        bit_pos += 1;
-    }
-    return bit_pos;
-#else
-    return ffs(val);
-#endif
-}
+VkStringErrorFlags vk_string_validate(const int max_length, const char *char_array);
+bool white_list(const char *item, const std::set<std::string> &whitelist);
 
 #ifdef __cplusplus
 }
@@ -433,7 +505,7 @@ class LockedSharedPtr : public std::shared_ptr<T> {
 //
 // snapshot: Return an array of elements (key, value pairs) that satisfy an optional
 // predicate. This can be used as a substitute for iterators in exceptional cases.
-template <typename Key, typename T, int BUCKETSLOG2 = 2, typename Hash = layer_data::hash<Key>>
+template <typename Key, typename T, int BUCKETSLOG2 = 2, typename Hash = vvl::hash<Key>>
 class vl_concurrent_unordered_map {
   public:
     template <typename... Args>
@@ -563,7 +635,7 @@ class vl_concurrent_unordered_map {
   private:
     static const int BUCKETS = (1 << BUCKETSLOG2);
 
-    layer_data::unordered_map<Key, T, Hash> maps[BUCKETS];
+    vvl::unordered_map<Key, T, Hash> maps[BUCKETS];
     struct {
         mutable std::shared_mutex lock;
         // Put each lock on its own cache line to avoid false cache line sharing.

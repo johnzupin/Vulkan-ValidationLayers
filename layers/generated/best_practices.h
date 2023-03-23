@@ -4,9 +4,9 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2022 Valve Corporation
- * Copyright (c) 2015-2022 LunarG, Inc.
+ * Copyright (c) 2015-2023 The Khronos Group Inc.
+ * Copyright (c) 2015-2023 Valve Corporation
+ * Copyright (c) 2015-2023 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Author: Mark Lobodzinski <mark@lunarg.com>
- * Author: Nadav Geva <nadav.geva@amd.com>
- *
  ****************************************************************************/
 
 
@@ -1990,7 +1986,7 @@ void PostCallRecordGetRayTracingCaptureReplayShaderGroupHandlesKHR(
 
 
 
-const layer_data::unordered_map<std::string, DeprecationData>  deprecated_extensions = {
+const vvl::unordered_map<std::string, DeprecationData>  deprecated_extensions = {
     {"VK_AMD_draw_indirect_count", {kExtPromoted, "VK_KHR_draw_indirect_count"}},
     {"VK_AMD_gpu_shader_half_float", {kExtDeprecated, "VK_KHR_shader_float16_int8"}},
     {"VK_AMD_gpu_shader_int16", {kExtDeprecated, "VK_KHR_shader_float16_int8"}},
@@ -2087,7 +2083,7 @@ const layer_data::unordered_map<std::string, DeprecationData>  deprecated_extens
     {"VK_VALVE_mutable_descriptor_type", {kExtPromoted, "VK_EXT_mutable_descriptor_type"}},
 };
 
-const layer_data::unordered_map<std::string, std::string> special_use_extensions = {
+const vvl::unordered_map<std::string, std::string> special_use_extensions = {
     {"VK_AMD_buffer_marker", "devtools"},
     {"VK_AMD_shader_info", "devtools"},
     {"VK_EXT_border_color_swizzle", "glemulation, d3demulation"},
@@ -2100,6 +2096,7 @@ const layer_data::unordered_map<std::string, std::string> special_use_extensions
     {"VK_EXT_device_address_binding_report", "debugging, devtools"},
     {"VK_EXT_device_memory_report", "devtools"},
     {"VK_EXT_image_2d_view_of_3d", "glemulation"},
+    {"VK_EXT_image_sliced_view_of_3d", "d3demulation"},
     {"VK_EXT_legacy_dithering", "glemulation"},
     {"VK_EXT_line_rasterization", "cadsupport"},
     {"VK_EXT_mutable_descriptor_type", "d3demulation"},
