@@ -1,3 +1,11 @@
+vulkan-validationlayers (1.3.243.0~rc2-1lunarg22.04-1) jammy; urgency=medium
+
+  [ John Zupin ]
+  * Revert "android: Revert "build-android: Use c++_shared""
+  * packaging: debian: update control file
+
+ -- john <john@odin>  Fri, 24 Mar 2023 15:53:56 -0600
+
 vulkan-validationlayers (1.3.243.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ arno-lunarg ]
