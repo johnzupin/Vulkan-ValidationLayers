@@ -6,18 +6,19 @@
             "sub_dir": "glslang",
             "build_dir": "glslang/build",
             "install_dir": "glslang/build/install",
-            "commit": "14e5a04e70057972eef8a40df422e30a3b70e4b5",
+            "commit": "d1517d64cfca91f573af1bf7341dc3a5113349c0",
             "optional": [
                 "tests"
             ]
         },
         {
             "name": "Vulkan-Headers",
+            "api": "vulkan",
             "url": "https://github.com/KhronosGroup/Vulkan-Headers.git",
             "sub_dir": "Vulkan-Headers",
             "build_dir": "Vulkan-Headers/build",
             "install_dir": "Vulkan-Headers/build/install",
-            "commit": "v1.3.243"
+            "commit": "v1.3.250"
         },
         {
             "name": "SPIRV-Headers",
@@ -25,10 +26,7 @@
             "sub_dir": "SPIRV-Headers",
             "build_dir": "SPIRV-Headers/build",
             "install_dir": "SPIRV-Headers/build/install",
-            "commit": "1feaf4414eb2b353764d01d88f8aa4bcc67b60db",
-            "cmake_options": [
-                "-D SPIRV_HEADERS_SKIP_EXAMPLES=ON"
-            ]
+            "commit": "268a061764ee69f09a477a695bf6a11ffe311b8d"
         },
         {
             "name": "SPIRV-Tools",
@@ -37,9 +35,10 @@
             "build_dir": "SPIRV-Tools/build",
             "install_dir": "SPIRV-Tools/build/install",
             "cmake_options": [
-                "-DSPIRV-Headers_SOURCE_DIR={repo_dir}/../SPIRV-Headers"
+                "-DSPIRV-Headers_SOURCE_DIR={repo_dir}/../SPIRV-Headers",
+                "-DSPIRV_WERROR=OFF"
             ],
-            "commit": "44d72a9b36702f093dd20815561a56778b2d181e"
+            "commit": "e7c6084fd1d6d6f5ac393e842728d8be309688ca"
         },
         {
             "name": "robin-hood-hashing",
@@ -63,7 +62,7 @@
                 "-Dgtest_force_shared_crt=ON",
                 "-DBUILD_SHARED_LIBS=OFF"
             ],
-            "commit": "v1.12.0",
+            "commit": "v1.13.0",
             "optional": [
                 "tests"
             ]

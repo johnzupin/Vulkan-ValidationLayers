@@ -12,10 +12,12 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "cast_utils.h"
+#include "utils/cast_utils.h"
 #include "../framework/layer_validation_tests.h"
 
-TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageViewMismatchTests) {
+class NegativeImagelessFramebuffer : public VkLayerTest {};
+
+TEST_F(NegativeImagelessFramebuffer, RenderPassBeginImageViewMismatch) {
     TEST_DESCRIPTION(
         "Begin a renderPass where the image views specified do not match the parameters used to create the framebuffer and render "
         "pass.");
@@ -355,7 +357,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageViewMismatchTests) {
     }
 }
 
-TEST_F(VkLayerTest, ImagelessFramebufferFeatureEnableTest) {
+TEST_F(NegativeImagelessFramebuffer, FeatureEnable) {
     TEST_DESCRIPTION("Use imageless framebuffer functionality without enabling the feature");
 
     AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
@@ -388,8 +390,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferFeatureEnableTest) {
     renderPassCreateInfo.pSubpasses = &subpassDescription;
     renderPassCreateInfo.attachmentCount = 1;
     renderPassCreateInfo.pAttachments = &attachmentDescription;
-    VkRenderPass renderPass;
-    vk::CreateRenderPass(m_device->device(), &renderPassCreateInfo, NULL, &renderPass);
+    vk_testing::RenderPass render_pass(*m_device, renderPassCreateInfo);
 
     VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfo = LvlInitStruct<VkFramebufferAttachmentImageInfoKHR>();
     framebufferAttachmentImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -406,22 +407,16 @@ TEST_F(VkLayerTest, ImagelessFramebufferFeatureEnableTest) {
     framebufferCreateInfo.width = attachmentWidth;
     framebufferCreateInfo.height = attachmentHeight;
     framebufferCreateInfo.layers = 1;
-    framebufferCreateInfo.renderPass = renderPass;
+    framebufferCreateInfo.renderPass = render_pass.handle();
     framebufferCreateInfo.attachmentCount = 1;
-    VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
     // Imageless framebuffer creation bit not present
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03189");
-    vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
+    vk_testing::Framebuffer framebuffer(*m_device, framebufferCreateInfo);
     m_errorMonitor->VerifyFound();
-
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
-    vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
 }
 
-TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
+TEST_F(NegativeImagelessFramebuffer, BasicUsage) {
     TEST_DESCRIPTION("Create an imageless framebuffer in various invalid ways");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -468,8 +463,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     renderPassCreateInfo.pSubpasses = &subpassDescription;
     renderPassCreateInfo.attachmentCount = 1;
     renderPassCreateInfo.pAttachments = &attachmentDescription;
-    VkRenderPass renderPass;
-    vk::CreateRenderPass(m_device->device(), &renderPassCreateInfo, NULL, &renderPass);
+    vk_testing::RenderPass render_pass(*m_device, renderPassCreateInfo);
 
     VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfo = LvlInitStruct<VkFramebufferAttachmentImageInfoKHR>();
     framebufferAttachmentImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -486,7 +480,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     framebufferCreateInfo.width = attachmentWidth;
     framebufferCreateInfo.height = attachmentHeight;
     framebufferCreateInfo.layers = 1;
-    framebufferCreateInfo.renderPass = renderPass;
+    framebufferCreateInfo.renderPass = render_pass.handle();
     framebufferCreateInfo.attachmentCount = 1;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
@@ -495,9 +489,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03190");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferCreateInfo.pNext = &framebufferAttachmentsCreateInfo;
 
     // Mismatched attachment counts
@@ -508,9 +499,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03191");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentsCreateInfo.pAttachmentImageInfos = &framebufferAttachmentImageInfo;
     framebufferAttachmentsCreateInfo.attachmentImageInfoCount = 1;
 
@@ -519,9 +507,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03205");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     attachmentFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
     // Mismatched format list
@@ -529,9 +514,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03205");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     attachmentFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
     // Mismatched layer count, multiview disabled
@@ -541,9 +523,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, mismatchedLayersNoMultiviewVuid);
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferCreateInfo.layers = 1;
 
     // Mismatched width
@@ -551,9 +530,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04541");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferCreateInfo.width -= 1;
 
     // Mismatched height
@@ -561,15 +537,10 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04542");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferCreateInfo.height -= 1;
-
-    vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
 }
 
-TEST_F(VkLayerTest, ImagelessFramebufferAttachmentImageUsageMismatchTests) {
+TEST_F(NegativeImagelessFramebuffer, AttachmentImageUsageMismatch) {
     TEST_DESCRIPTION("Create an imageless framebuffer with mismatched attachment image usage");
 
     AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
@@ -641,8 +612,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentImageUsageMismatchTests) {
     renderPassCreateInfo.subpassCount = 1;
     renderPassCreateInfo.pSubpasses = &subpassDescription;
     renderPassCreateInfo.pAttachments = attachmentDescriptions;
-    VkRenderPass renderPass;
-    vk::CreateRenderPass(m_device->device(), &renderPassCreateInfo, nullptr, &renderPass);
+    vk_testing::RenderPass render_pass(*m_device, renderPassCreateInfo);
 
     VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfos[4] = {};
     // Color attachment
@@ -685,7 +655,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentImageUsageMismatchTests) {
     framebufferCreateInfo.width = attachmentWidth;
     framebufferCreateInfo.height = attachmentHeight;
     framebufferCreateInfo.layers = 1;
-    framebufferCreateInfo.renderPass = renderPass;
+    framebufferCreateInfo.renderPass = render_pass.handle();
     framebufferCreateInfo.attachmentCount = 4;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
@@ -694,9 +664,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentImageUsageMismatchTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03201");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[0].usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     // Color resolve attachment, mismatched usage
@@ -704,9 +671,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentImageUsageMismatchTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03201");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[1].usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     // Depth stencil attachment, mismatched usage
@@ -714,9 +678,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentImageUsageMismatchTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03202");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[2].usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
     // Color attachment, mismatched usage
@@ -724,15 +685,10 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentImageUsageMismatchTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03204");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[3].usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-
-    vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
 }
 
-TEST_F(VkLayerTest, ImagelessFramebufferAttachmentMultiviewImageLayerCountMismatchTests) {
+TEST_F(NegativeImagelessFramebuffer, AttachmentMultiviewImageLayerCountMismatch) {
     TEST_DESCRIPTION("Create an imageless framebuffer against a multiview-enabled render pass with mismatched layer counts");
 
     AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
@@ -812,8 +768,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentMultiviewImageLayerCountMismat
     renderPassCreateInfo.subpassCount = 1;
     renderPassCreateInfo.pSubpasses = &subpassDescription;
     renderPassCreateInfo.pAttachments = attachmentDescriptions;
-    VkRenderPass renderPass;
-    vk::CreateRenderPass(m_device->device(), &renderPassCreateInfo, nullptr, &renderPass);
+    vk_testing::RenderPass render_pass(*m_device, renderPassCreateInfo);
 
     VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfos[4] = {};
     // Color attachment
@@ -856,7 +811,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentMultiviewImageLayerCountMismat
     framebufferCreateInfo.width = attachmentWidth;
     framebufferCreateInfo.height = attachmentHeight;
     framebufferCreateInfo.layers = 1;
-    framebufferCreateInfo.renderPass = renderPass;
+    framebufferCreateInfo.renderPass = render_pass.handle();
     framebufferCreateInfo.attachmentCount = 4;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
@@ -865,9 +820,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentMultiviewImageLayerCountMismat
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-renderPass-03198");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[0].layerCount = 2;
 
     // Color resolve attachment, mismatched layer count
@@ -875,9 +827,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentMultiviewImageLayerCountMismat
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-renderPass-03198");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[1].layerCount = 2;
 
     // Depth stencil attachment, mismatched layer count
@@ -885,9 +834,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentMultiviewImageLayerCountMismat
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-renderPass-03198");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[2].layerCount = 2;
 
     // Input attachment, mismatched layer count
@@ -895,15 +841,9 @@ TEST_F(VkLayerTest, ImagelessFramebufferAttachmentMultiviewImageLayerCountMismat
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-renderPass-03198");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
-    framebufferAttachmentImageInfos[3].layerCount = 2;
-
-    vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
 }
 
-TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
+TEST_F(NegativeImagelessFramebuffer, DepthStencilResolveAttachment) {
     TEST_DESCRIPTION(
         "Create an imageless framebuffer against a render pass using depth stencil resolve, with mismatched information");
 
@@ -969,10 +909,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
     renderPassCreateInfo.subpassCount = 1;
     renderPassCreateInfo.pSubpasses = &subpassDescription;
     renderPassCreateInfo.pAttachments = attachmentDescriptions;
-    VkRenderPass renderPass;
-    PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
-        (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCreateRenderPass2KHR");
-    vkCreateRenderPass2KHR(m_device->device(), &renderPassCreateInfo, nullptr, &renderPass);
+    vk_testing::RenderPass render_pass(*m_device, renderPassCreateInfo, true);
 
     VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfos[2] = {};
     // Depth/stencil attachment
@@ -999,7 +936,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
     framebufferCreateInfo.width = attachmentWidth;
     framebufferCreateInfo.height = attachmentHeight;
     framebufferCreateInfo.layers = 1;
-    framebufferCreateInfo.renderPass = renderPass;
+    framebufferCreateInfo.renderPass = render_pass.handle();
     framebufferCreateInfo.attachmentCount = 2;
     framebufferCreateInfo.pAttachments = nullptr;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
@@ -1009,9 +946,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-renderPass-03198");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[0].layerCount = 2;
 
     // Depth resolve attachment, mismatched image usage
@@ -1019,9 +953,6 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03203");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
     framebufferAttachmentImageInfos[1].usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
     // Depth resolve attachment, mismatched layer count
@@ -1029,15 +960,9 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-renderPass-03198");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
-    if (framebuffer != VK_NULL_HANDLE) {
-        vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    }
-    framebufferAttachmentImageInfos[1].layerCount = 2;
-
-    vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
 }
 
-TEST_F(VkLayerTest, InvalidFragmentShadingRateImagelessFramebufferUsage) {
+TEST_F(NegativeImagelessFramebuffer, FragmentShadingRateUsage) {
     TEST_DESCRIPTION("Specify a fragment shading rate attachment without the correct usage");
 
     // Enable KHR_fragment_shading_rate and all of its required extensions
@@ -1114,7 +1039,7 @@ TEST_F(VkLayerTest, InvalidFragmentShadingRateImagelessFramebufferUsage) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, InvalidFragmentShadingRateImagelessFramebufferDimensions) {
+TEST_F(NegativeImagelessFramebuffer, FragmentShadingRateDimensions) {
     TEST_DESCRIPTION("Specify a fragment shading rate attachment without the correct usage");
 
     // Enable KHR_fragment_shading_rate and all of its required extensions
@@ -1230,7 +1155,7 @@ TEST_F(VkLayerTest, InvalidFragmentShadingRateImagelessFramebufferDimensions) {
     }
 }
 
-TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageView3D) {
+TEST_F(NegativeImagelessFramebuffer, RenderPassBeginImageView3D) {
     TEST_DESCRIPTION("Misuse of VK_IMAGE_VIEW_TYPE_3D.");
 
     AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
@@ -1348,7 +1273,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageView3D) {
                         "VUID-VkRenderPassAttachmentBeginInfo-pAttachments-04114");
 }
 
-TEST_F(VkLayerTest, FramebufferAttachmentImageInfoPNext) {
+TEST_F(NegativeImagelessFramebuffer, AttachmentImagePNext) {
     TEST_DESCRIPTION("Begin render pass with missing framebuffer attachment");
     AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
 
@@ -1411,7 +1336,7 @@ TEST_F(VkLayerTest, FramebufferAttachmentImageInfoPNext) {
     }
 }
 
-TEST_F(VkLayerTest, DescriptorUpdateTemplateEntryWithInlineUniformBlock) {
+TEST_F(NegativeImagelessFramebuffer, DescriptorUpdateTemplateEntryWithInlineUniformBlock) {
     TEST_DESCRIPTION("Test VkDescriptorUpdateTemplateEntry with descriptor type VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT");
 
     AddRequiredExtensions(VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME);
@@ -1420,13 +1345,6 @@ TEST_F(VkLayerTest, DescriptorUpdateTemplateEntryWithInlineUniformBlock) {
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
-    }
-
-    // Note: Includes workaround for some implementations which incorrectly return 0 maxPushDescriptors
-    auto push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
-    GetPhysicalDeviceProperties2(push_descriptor_prop);
-    if (push_descriptor_prop.maxPushDescriptors < 1) {
-        GTEST_SKIP() << "maxPushDescriptors < 1, push descriptor cases skipped.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -1442,18 +1360,6 @@ TEST_F(VkLayerTest, DescriptorUpdateTemplateEntryWithInlineUniformBlock) {
     buff_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkBufferObj buffer;
     buffer.init(*m_device, buff_ci);
-
-    // Relying on the "return nullptr for non-enabled extensions
-    auto vkCreateDescriptorUpdateTemplateKHR =
-        (PFN_vkCreateDescriptorUpdateTemplateKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCreateDescriptorUpdateTemplateKHR");
-    auto vkDestroyDescriptorUpdateTemplateKHR =
-        (PFN_vkDestroyDescriptorUpdateTemplateKHR)vk::GetDeviceProcAddr(m_device->device(), "vkDestroyDescriptorUpdateTemplateKHR");
-    auto vkUpdateDescriptorSetWithTemplateKHR =
-        (PFN_vkUpdateDescriptorSetWithTemplateKHR)vk::GetDeviceProcAddr(m_device->device(), "vkUpdateDescriptorSetWithTemplateKHR");
-
-    ASSERT_NE(vkCreateDescriptorUpdateTemplateKHR, nullptr);
-    ASSERT_NE(vkDestroyDescriptorUpdateTemplateKHR, nullptr);
-    ASSERT_NE(vkUpdateDescriptorSetWithTemplateKHR, nullptr);
 
     struct SimpleTemplateData {
         VkDescriptorBufferInfo buff_info;
@@ -1476,95 +1382,105 @@ TEST_F(VkLayerTest, DescriptorUpdateTemplateEntryWithInlineUniformBlock) {
     VkDescriptorUpdateTemplate update_template = VK_NULL_HANDLE;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDescriptorUpdateTemplateEntry-descriptor-02226");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDescriptorUpdateTemplateEntry-descriptor-02227");
-    vkCreateDescriptorUpdateTemplateKHR(m_device->device(), &update_template_ci, nullptr, &update_template);
+    vk::CreateDescriptorUpdateTemplateKHR(m_device->device(), &update_template_ci, nullptr, &update_template);
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, RenderPassCreateFragmentDensityMapReferenceToInvalidAttachment) {
-    TEST_DESCRIPTION(
-        "Test creating a framebuffer with fragment density map reference to an attachment with layer count different from 1");
+TEST_F(NegativeImagelessFramebuffer, Image3D) {
+    TEST_DESCRIPTION("Create imageless framebuffer with image view from 3D image.");
 
-    SetTargetApiVersion(VK_API_VERSION_1_0);
-
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-
+    SetTargetApiVersion(VK_API_VERSION_1_2);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
-
-    if (DeviceValidationVersion() >= VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "Test requires Vulkan version 1.0";
+    auto imageless_framebuffer = LvlInitStruct<VkPhysicalDeviceImagelessFramebufferFeatures>();
+    auto features2 = GetPhysicalDeviceFeatures2(imageless_framebuffer);
+    if (imageless_framebuffer.imagelessFramebuffer == VK_FALSE) {
+        GTEST_SKIP() << "multiview feature not supported";
     }
-
-    VkPhysicalDeviceFragmentDensityMapFeaturesEXT fdm_features = LvlInitStruct<VkPhysicalDeviceFragmentDensityMapFeaturesEXT>();
-    VkPhysicalDeviceFeatures2 features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>(&fdm_features);
-    fdm_features.fragmentDensityMap = true;
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, 0));
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-
-    VkAttachmentReference ref;
-    ref.attachment = 0;
-    ref.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
-    VkRenderPassFragmentDensityMapCreateInfoEXT rpfdmi = LvlInitStruct<VkRenderPassFragmentDensityMapCreateInfoEXT>();
-    rpfdmi.fragmentDensityMapAttachment = ref;
-
-    VkAttachmentDescription attach = {};
-    attach.format = VK_FORMAT_R8G8_UNORM;
-    attach.samples = VK_SAMPLE_COUNT_1_BIT;
-    attach.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attach.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attach.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attach.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attach.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attach.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.inputAttachmentCount = 1;
-    subpass.pInputAttachments = &ref;
 
-    VkRenderPassCreateInfo rpci = LvlInitStruct<VkRenderPassCreateInfo>(&rpfdmi);
-    rpci.attachmentCount = 1;
-    rpci.pAttachments = &attach;
-    rpci.subpassCount = 1;
-    rpci.pSubpasses = &subpass;
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
 
-    VkRenderPass renderPass;
-    vk::CreateRenderPass(device(), &rpci, nullptr, &renderPass);
+    VkAttachmentDescription attachment = {};
+    attachment.format = format;
+    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+    attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-    VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = VK_FORMAT_R8G8_UNORM;
-    image_create_info.extent.width = 32;
-    image_create_info.extent.height = 32;
-    image_create_info.extent.depth = 1;
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 4;
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-    image_create_info.flags = 0;
+    auto rp_ci = LvlInitStruct<VkRenderPassCreateInfo>();
+    rp_ci.subpassCount = 1;
+    rp_ci.pSubpasses = &subpass;
+    rp_ci.attachmentCount = 1;
+    rp_ci.pAttachments = &attachment;
+
+    vk_testing::RenderPass render_pass;
+    render_pass.init(*m_device, rp_ci);
+
+    auto image_ci = LvlInitStruct<VkImageCreateInfo>();
+    image_ci.flags = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
+    image_ci.imageType = VK_IMAGE_TYPE_3D;
+    image_ci.format = format;
+    image_ci.extent.width = 32;
+    image_ci.extent.height = 32;
+    image_ci.extent.depth = 4;
+    image_ci.mipLevels = 1;
+    image_ci.arrayLayers = 1;
+    image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     VkImageObj image(m_device);
-    image.Init(image_create_info);
-    VkImageView imageView =
-        image.targetView(VK_FORMAT_R8G8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 4, VK_IMAGE_VIEW_TYPE_2D_ARRAY);
+    image.Init(image_ci);
+    VkImageView imageView = image.targetView(format, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 4, VK_IMAGE_VIEW_TYPE_2D_ARRAY);
 
-    VkFramebufferCreateInfo fb_info = LvlInitStruct<VkFramebufferCreateInfo>();
-    fb_info.renderPass = renderPass;
-    fb_info.attachmentCount = 1;
-    fb_info.pAttachments = &imageView;
-    fb_info.width = 32;
-    fb_info.height = 32;
-    fb_info.layers = 1;
+    auto framebuffer_attachment_image_info = LvlInitStruct<VkFramebufferAttachmentImageInfo>();
+    framebuffer_attachment_image_info.flags = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
+    framebuffer_attachment_image_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    framebuffer_attachment_image_info.width = 32;
+    framebuffer_attachment_image_info.height = 32;
+    framebuffer_attachment_image_info.layerCount = 4;
+    framebuffer_attachment_image_info.viewFormatCount = 1;
+    framebuffer_attachment_image_info.pViewFormats = &format;
 
-    VkFramebuffer framebuffer;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-pAttachments-02744");
-    vk::CreateFramebuffer(device(), &fb_info, nullptr, &framebuffer);
-    m_errorMonitor->VerifyFound();
+    auto framebuffer_attachments = LvlInitStruct<VkFramebufferAttachmentsCreateInfo>();
+    framebuffer_attachments.attachmentImageInfoCount = 1;
+    framebuffer_attachments.pAttachmentImageInfos = &framebuffer_attachment_image_info;
 
-    vk::DestroyRenderPass(device(), renderPass, nullptr);
+    auto framebuffer_ci = LvlInitStruct<VkFramebufferCreateInfo>(&framebuffer_attachments);
+    framebuffer_ci.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT;
+    framebuffer_ci.renderPass = render_pass.handle();
+    framebuffer_ci.attachmentCount = 1;
+    framebuffer_ci.pAttachments = &imageView;
+    framebuffer_ci.width = 32;
+    framebuffer_ci.height = 32;
+    framebuffer_ci.layers = 1;
+
+    vk_testing::Framebuffer framebuffer;
+    framebuffer.init(*m_device, framebuffer_ci);
+
+    VkClearValue clear_value = {};
+    clear_value.color = {{0u, 0u, 0u, 0u}};
+
+    auto render_pass_attachment_bi = LvlInitStruct<VkRenderPassAttachmentBeginInfo>();
+    render_pass_attachment_bi.attachmentCount = 1;
+    render_pass_attachment_bi.pAttachments = &imageView;
+
+    auto render_pass_bi = LvlInitStruct<VkRenderPassBeginInfo>(&render_pass_attachment_bi);
+    render_pass_bi.renderPass = render_pass.handle();
+    render_pass_bi.framebuffer = framebuffer.handle();
+    render_pass_bi.clearValueCount = 1;
+    render_pass_bi.pClearValues = &clear_value;
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(render_pass_bi);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
 }

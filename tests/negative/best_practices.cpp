@@ -12,10 +12,10 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "cast_utils.h"
+#include "utils/cast_utils.h"
 #include "../framework/layer_validation_tests.h"
 #include "best_practices/best_practices_error_enums.h"
-#include "core_validation_error_enums.h"
+#include "error_message/validation_error_enums.h"
 
 void VkBestPracticesLayerTest::InitBestPracticesFramework() {
     // Enable all vendor-specific checks
@@ -35,7 +35,7 @@ void VkBestPracticesLayerTest::InitBestPracticesFramework(const char* vendor_che
     InitFramework(m_errorMonitor, &features_);
 }
 
-TEST_F(VkBestPracticesLayerTest, ValidateReturnCodes) {
+TEST_F(VkBestPracticesLayerTest, ReturnCodes) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
 
     AddSurfaceExtension();
@@ -73,7 +73,7 @@ TEST_F(VkBestPracticesLayerTest, ValidateReturnCodes) {
     }
 
     if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
+        GTEST_SKIP() << "Test not supported by MockICD because will always return VK_SUCCESS";
     }
 
     // Force a non-success success code by only asking for a subset of query results
@@ -86,8 +86,9 @@ TEST_F(VkBestPracticesLayerTest, ValidateReturnCodes) {
     format_count -= 1;
     formats.resize(format_count);
 
-    m_errorMonitor->SetDesiredFailureMsg(kInformationBit, "UNASSIGNED-BestPractices-NonSuccess-Result");
+    m_errorMonitor->SetDesiredFailureMsg(kVerboseBit, "UNASSIGNED-BestPractices-Verbose-Success-Logging");
     result = vk::GetPhysicalDeviceSurfaceFormatsKHR(gpu(), m_surface, &format_count, formats.data());
+    ASSERT_TRUE(result > VK_SUCCESS);
     m_errorMonitor->VerifyFound();
 }
 
@@ -105,10 +106,11 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedInstanceExtensions) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-    // TODO - Currently not working on MockICD with Profiles
+
     if (IsPlatform(kMockICD)) {
-        GTEST_SKIP() << "Test not supported by MockICD";
+        GTEST_SKIP() << "Test not supported by MockICD - currently can't create 2 concurrent instances";
     }
+
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     // Create a 1.1 vulkan instance and request an extension promoted to core in 1.1
@@ -510,14 +512,13 @@ TEST_F(VkBestPracticesLayerTest, SecondaryCommandBuffer) {
         GTEST_SKIP() << "No queue family found without support for secondary command buffers";
     }
 
-    VkCommandPool command_pool = VK_NULL_HANDLE;
     VkCommandPoolCreateInfo pool_create_info = LvlInitStruct<VkCommandPoolCreateInfo>();
     pool_create_info.queueFamilyIndex = queue_family_index;
-    vk::CreateCommandPool(m_device->device(), &pool_create_info, nullptr, &command_pool);
+    vk_testing::CommandPool command_pool(*m_device, pool_create_info);
 
     VkCommandBuffer command_buffer = VK_NULL_HANDLE;
     VkCommandBufferAllocateInfo alloc_info = LvlInitStruct<VkCommandBufferAllocateInfo>();
-    alloc_info.commandPool = command_pool;
+    alloc_info.commandPool = command_pool.handle();
     alloc_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
     alloc_info.commandBufferCount = 1;
 
@@ -525,8 +526,7 @@ TEST_F(VkBestPracticesLayerTest, SecondaryCommandBuffer) {
     vk::AllocateCommandBuffers(m_device->device(), &alloc_info, &command_buffer);
     m_errorMonitor->VerifyFound();
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool, 1, &command_buffer);
-    vk::DestroyCommandPool(m_device->device(), command_pool, nullptr);
+    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 1, &command_buffer);
 }
 
 TEST_F(VkBestPracticesLayerTest, SimultaneousUse) {
@@ -674,15 +674,12 @@ TEST_F(VkBestPracticesLayerTest, AttachmentShouldNotBeTransient) {
 
     VkSubpassDescription sd{};
 
-    VkRenderPassCreateInfo rp_info{};
-    rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    VkRenderPassCreateInfo rp_info = LvlInitStruct<VkRenderPassCreateInfo>();
     rp_info.attachmentCount = 1;
     rp_info.pAttachments = &attachment;
     rp_info.subpassCount = 1;
     rp_info.pSubpasses = &sd;
-
-    VkRenderPass rp = VK_NULL_HANDLE;
-    vk::CreateRenderPass(m_device->device(), &rp_info, nullptr, &rp);
+    vk_testing::RenderPass rp(*m_device, rp_info);
 
     VkImageCreateInfo image_info{};
     image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -706,25 +703,19 @@ TEST_F(VkBestPracticesLayerTest, AttachmentShouldNotBeTransient) {
     iv_info.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     iv_info.components = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A};
 
-    VkImageView image_view = VK_NULL_HANDLE;
-    vk::CreateImageView(m_device->device(), &iv_info, nullptr, &image_view);
+    vk_testing::ImageView image_view(*m_device, iv_info);
 
     VkFramebufferCreateInfo fb_info{};
     fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fb_info.renderPass = rp;
+    fb_info.renderPass = rp.handle();
     fb_info.layers = 1;
     fb_info.width = 1920;
     fb_info.height = 1080;
     fb_info.attachmentCount = 1;
-    fb_info.pAttachments = &image_view;
-
-    VkFramebuffer fb = VK_NULL_HANDLE;
-    vk::CreateFramebuffer(m_device->device(), &fb_info, nullptr, &fb);
+    fb_info.pAttachments = &image_view.handle();
+    vk_testing::Framebuffer fb(*m_device, fb_info);
 
     m_errorMonitor->VerifyFound();
-    vk::DestroyImageView(m_device->device(), image_view, nullptr);
-    vk::DestroyFramebuffer(m_device->device(), fb, nullptr);
-    vk::DestroyRenderPass(m_device->device(), rp, nullptr);
 }
 
 TEST_F(VkBestPracticesLayerTest, TooManyInstancedVertexBuffers) {
@@ -742,7 +733,7 @@ TEST_F(VkBestPracticesLayerTest, TooManyInstancedVertexBuffers) {
     m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-VkCommandBuffer-AvoidTinyCmdBuffers");
 
     // This test does not need for the shader to consume the vertex input
-    m_errorMonitor->SetAllowedFailureMsg(kVUID_Core_Shader_OutputNotConsumed);
+    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-Shader-OutputNotConsumed");
 
     ASSERT_NO_FATAL_FAILURE(InitViewport());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -780,6 +771,74 @@ TEST_F(VkBestPracticesLayerTest, TooManyInstancedVertexBuffers) {
     pipe.CreateGraphicsPipeline();
 
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkBestPracticesLayerTest, CreatePipelineFragmentOutputNotWritten) {
+    TEST_DESCRIPTION(
+        "Test that an error is produced for a fragment shader which does not provide an output for one of the pipeline's color "
+        "attachments");
+
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkShaderObj fs(this, bindStateMinimalShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    const auto set_info = [&](CreatePipelineHelper &helper) {
+        helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+        helper.cb_attachments_[0].colorWriteMask = 1;
+    };
+    CreatePipelineHelper::OneshotTest(*this, set_info, kWarningBit, "UNASSIGNED-BestPractices-Shader-InputNotProduced");
+}
+
+TEST_F(VkBestPracticesLayerTest, CreatePipelineFragmentOutputTypeMismatch) {
+    TEST_DESCRIPTION(
+        "Test that an error is produced for a mismatch between the fundamental type of an fragment shader output variable, and the "
+        "format of the corresponding attachment");
+
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    char const *fsSource = R"glsl(
+        #version 450
+        layout(location=0) out ivec4 x; /* not UNORM */
+        void main(){
+           x = ivec4(1);
+        }
+    )glsl";
+
+    VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    const auto set_info = [&](CreatePipelineHelper &helper) {
+        helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    };
+    CreatePipelineHelper::OneshotTest(*this, set_info, kWarningBit, "UNASSIGNED-BestPractices-Shader-FragmentOutputMismatch");
+}
+
+TEST_F(VkBestPracticesLayerTest, CreatePipelineFragmentOutputNotConsumed) {
+    TEST_DESCRIPTION(
+        "Test that a warning is produced for a fragment shader which provides a spurious output with no matching attachment");
+
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    char const *fsSource = R"glsl(
+        #version 450
+        layout(location=0) out vec4 x;
+        layout(location=1) out vec4 y; /* no matching attachment for this */
+        void main(){
+           x = vec4(1);
+           y = vec4(1);
+        }
+    )glsl";
+    VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    const auto set_info = [&](CreatePipelineHelper &helper) {
+        helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    };
+    CreatePipelineHelper::OneshotTest(*this, set_info, kWarningBit, "UNASSIGNED-BestPractices-Shader-OutputNotConsumed");
 }
 
 TEST_F(VkBestPracticesLayerTest, ClearAttachmentsAfterLoad) {
@@ -1103,15 +1162,10 @@ TEST_F(VkBestPracticesLayerTest, ExpectedQueryDetails) {
     vk::GetPhysicalDeviceQueueFamilyProperties2(phys_device_obj.handle(), &queue_count, queue_family_props2.data());
 
     // And for GetPhysicalDeviceQueueFamilyProperties2KHR
-    PFN_vkGetPhysicalDeviceQueueFamilyProperties2KHR vkGetPhysicalDeviceQueueFamilyProperties2KHR =
-        reinterpret_cast<PFN_vkGetPhysicalDeviceQueueFamilyProperties2KHR>(
-            vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceQueueFamilyProperties2KHR"));
-    if (vkGetPhysicalDeviceQueueFamilyProperties2KHR) {
-        vkGetPhysicalDeviceQueueFamilyProperties2KHR(phys_device_obj.handle(), &queue_count, nullptr);
+    vk::GetPhysicalDeviceQueueFamilyProperties2KHR(phys_device_obj.handle(), &queue_count, nullptr);
 
-        queue_family_props2.resize(queue_count);
-        vkGetPhysicalDeviceQueueFamilyProperties2KHR(phys_device_obj.handle(), &queue_count, queue_family_props2.data());
-    }
+    queue_family_props2.resize(queue_count);
+    vk::GetPhysicalDeviceQueueFamilyProperties2KHR(phys_device_obj.handle(), &queue_count, queue_family_props2.data());
 
     vk_testing::Device device(phys_device_obj.handle());
     device.init();
@@ -1511,7 +1565,7 @@ TEST_F(VkBestPracticesLayerTest, SemaphoreSetWhenCountIsZero) {
     signal_submit_info.signalSemaphoreCount = 0;
     signal_submit_info.pSignalSemaphores = &semaphore_handle;
 
-    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-SemaphoreCount");
+    m_errorMonitor->SetDesiredFailureMsg(kInformationBit, "UNASSIGNED-BestPractices-SemaphoreCount");
     vk::QueueSubmit(m_device->m_queue, 1, &signal_submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
@@ -1522,7 +1576,7 @@ TEST_F(VkBestPracticesLayerTest, SemaphoreSetWhenCountIsZero) {
     wait_submit_info.waitSemaphoreCount = 0;
     wait_submit_info.pWaitSemaphores = &semaphore_handle;
 
-    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-SemaphoreCount");
+    m_errorMonitor->SetDesiredFailureMsg(kInformationBit, "UNASSIGNED-BestPractices-SemaphoreCount");
     vk::QueueSubmit(m_device->m_queue, 1, &wait_submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
@@ -2215,9 +2269,6 @@ TEST_F(VkBestPracticesLayerTest, ImageMemoryBarrierAccessLayoutCombinations) {
                            nullptr, 0, nullptr, 1, &img_barrier);
 
     if (sync2) {
-        auto vkCmdPipelineBarrier2KHR =
-            reinterpret_cast<PFN_vkCmdPipelineBarrier2KHR>(vk::GetDeviceProcAddr(m_device->device(), "vkCmdPipelineBarrier2KHR"));
-
         auto img_barrier2 = LvlInitStruct<VkImageMemoryBarrier2KHR>();
         img_barrier2.srcAccessMask = 0;
         img_barrier2.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -2236,23 +2287,23 @@ TEST_F(VkBestPracticesLayerTest, ImageMemoryBarrierAccessLayoutCombinations) {
         img_barrier2.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
         m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-ImageBarrierAccessLayout");
-        vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+        vk::CmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
         m_errorMonitor->VerifyFound();
 
         img_barrier2.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         img_barrier2.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+        vk::CmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
 
         // make sure bits above UINT32_MAX are detected
         img_barrier2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         img_barrier2.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-ImageBarrierAccessLayout");
-        vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+        vk::CmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
         m_errorMonitor->VerifyFound();
 
         img_barrier2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         img_barrier2.dstAccessMask = 0;
-        vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+        vk::CmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
 
         m_commandBuffer->end();
     }

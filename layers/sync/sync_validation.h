@@ -22,7 +22,7 @@
 #include <set>
 #include <vulkan/vulkan.h>
 
-#include "sync_validation_types.h"
+#include "generated/sync_validation_types.h"
 #include "state_tracker/state_tracker.h"
 #include "state_tracker/cmd_buffer_state.h"
 #include "state_tracker/render_pass_state.h"
@@ -1309,6 +1309,12 @@ class RenderPassAccessContext {
     bool ValidateDrawSubpassAttachment(const CommandExecutionContext &ex_context, const CMD_BUFFER_STATE &cmd_buffer,
                                        CMD_TYPE cmd_type) const;
     void RecordDrawSubpassAttachment(const CMD_BUFFER_STATE &cmd_buffer, ResourceUsageTag tag);
+
+    bool ValidateClearAttachment(const CommandExecutionContext &ex_context, const CMD_BUFFER_STATE &cmd_buffer, CMD_TYPE cmd_type,
+                                 const VkClearAttachment &clear_attachment, const VkClearRect &rect, uint32_t rect_index) const;
+    void RecordClearAttachment(const CMD_BUFFER_STATE &cmd_buffer, ResourceUsageTag tag, const VkClearAttachment &clear_attachment,
+                               const VkClearRect &rect);
+
     bool ValidateNextSubpass(const CommandExecutionContext &ex_context, CMD_TYPE cmd_type) const;
     bool ValidateEndRenderPass(const CommandExecutionContext &ex_context, CMD_TYPE cmd_type) const;
     bool ValidateFinalSubpassLayoutTransitions(const CommandExecutionContext &ex_context, CMD_TYPE cmd_type) const;
@@ -1322,9 +1328,18 @@ class RenderPassAccessContext {
     AccessContext &CurrentContext() { return subpass_contexts_[current_subpass_]; }
     const AccessContext &CurrentContext() const { return subpass_contexts_[current_subpass_]; }
     const std::vector<AccessContext> &GetContexts() const { return subpass_contexts_; }
+    uint32_t GetCurrentSubpass() const { return current_subpass_; }
     const RENDER_PASS_STATE *GetRenderPassState() const { return rp_state_; }
     AccessContext *CreateStoreResolveProxy() const;
 
+  private:
+    struct ClearAttachmentInfo {
+        uint32_t attachment_index;
+        VkImageAspectFlags aspects_to_clear;
+        VkImageSubresourceRange subresource_range;
+    };
+    std::optional<ClearAttachmentInfo> GetClearAttachmentInfo(const VkClearAttachment &clear_attachment,
+                                                              const VkClearRect &rect) const;
   private:
     const RENDER_PASS_STATE *rp_state_;
     const VkRect2D render_area_;
@@ -1474,10 +1489,10 @@ class CommandBufferAccessContext : public CommandExecutionContext {
 
     bool ValidateDispatchDrawDescriptorSet(VkPipelineBindPoint pipelineBindPoint, CMD_TYPE cmd_type) const;
     void RecordDispatchDrawDescriptorSet(VkPipelineBindPoint pipelineBindPoint, ResourceUsageTag tag);
-    bool ValidateDrawVertex(uint32_t vertexCount, uint32_t firstVertex, CMD_TYPE cmd_type) const;
-    void RecordDrawVertex(uint32_t vertexCount, uint32_t firstVertex, ResourceUsageTag tag);
-    bool ValidateDrawVertexIndex(uint32_t indexCount, uint32_t firstIndex, CMD_TYPE cmd_type) const;
-    void RecordDrawVertexIndex(uint32_t indexCount, uint32_t firstIndex, ResourceUsageTag tag);
+    bool ValidateDrawVertex(const std::optional<uint32_t> &vertexCount, uint32_t firstVertex, CMD_TYPE cmd_type) const;
+    void RecordDrawVertex(const std::optional<uint32_t> &vertexCount, uint32_t firstVertex, ResourceUsageTag tag);
+    bool ValidateDrawVertexIndex(const std::optional<uint32_t> &indexCount, uint32_t firstIndex, CMD_TYPE cmd_type) const;
+    void RecordDrawVertexIndex(const std::optional<uint32_t> &indexCount, uint32_t firstIndex, ResourceUsageTag tag);
     bool ValidateDrawSubpassAttachment(CMD_TYPE cmd_type) const;
     void RecordDrawSubpassAttachment(ResourceUsageTag tag);
     ResourceUsageTag RecordNextSubpass(CMD_TYPE cmd_type);
@@ -1644,7 +1659,7 @@ struct PresentedImageRecord {
     ResourceUsageTag tag;  // the global tag at presentation
     uint32_t image_index;
     uint32_t present_index;
-    std::shared_ptr<const syncval_state::Swapchain> swapchain_state;
+    std::weak_ptr<const syncval_state::Swapchain> swapchain_state;
     std::shared_ptr<const IMAGE_STATE> image;
 };
 
@@ -1659,7 +1674,6 @@ struct PresentedImage : public PresentedImageRecord {
                    uint32_t image_index, uint32_t present_index, ResourceUsageTag present_tag_);
     // For non-previsously presented images..
     PresentedImage(std::shared_ptr<const syncval_state::Swapchain> swapchain, uint32_t at_index);
-
     bool Invalid() const { return BASE_NODE::Invalid(image); }
     void ExportToSwapchain(SyncValidator &);
     void SetImage(uint32_t at_index);
@@ -2205,6 +2219,13 @@ class SyncValidator : public ValidationStateTracker, public SyncStageAccess {
     void PreCallRecordCmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout,
                                                 const VkClearDepthStencilValue *pDepthStencil, uint32_t rangeCount,
                                                 const VkImageSubresourceRange *pRanges) override;
+
+    bool PreCallValidateCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
+                                            const VkClearAttachment *pAttachments, uint32_t rectCount,
+                                            const VkClearRect *pRects) const override;
+    void PreCallRecordCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
+                                          const VkClearAttachment *pAttachments, uint32_t rectCount,
+                                          const VkClearRect *pRects) override;
 
     bool PreCallValidateCmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery,
                                                 uint32_t queryCount, VkBuffer dstBuffer, VkDeviceSize dstOffset,

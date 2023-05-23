@@ -12,18 +12,15 @@
  */
 
 #include "../framework/layer_validation_tests.h"
-#include "vk_extension_helper.h"
+#include "generated/vk_extension_helper.h"
 
 #include <algorithm>
 #include <chrono>
 #include <thread>
 
-//
-// POSITIVE VALIDATION TESTS
-//
-// These tests do not expect to encounter ANY validation errors pass only if this is true
+class PositiveInstance : public VkPositiveLayerTest {};
 
-TEST_F(VkPositiveLayerTest, TwoInstances) {
+TEST_F(PositiveInstance, TwoInstances) {
     TEST_DESCRIPTION("Create two instances before destroy");
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -49,7 +46,7 @@ TEST_F(VkPositiveLayerTest, TwoInstances) {
     ASSERT_NO_FATAL_FAILURE(vk::DestroyInstance(i1, nullptr));
 }
 
-TEST_F(VkPositiveLayerTest, NullFunctionPointer) {
+TEST_F(PositiveInstance, NullFunctionPointer) {
     TEST_DESCRIPTION("On 1_0 instance , call GetDeviceProcAddr on promoted 1_1 device-level entrypoint");
     SetTargetApiVersion(VK_API_VERSION_1_0);
 
@@ -68,7 +65,7 @@ TEST_F(VkPositiveLayerTest, NullFunctionPointer) {
     }
 }
 
-TEST_F(VkPositiveLayerTest, ValidationInstanceExtensions) {
+TEST_F(PositiveInstance, ValidationInstanceExtensions) {
     ASSERT_NO_FATAL_FAILURE(Init());
 
     std::string layer_name = "VK_LAYER_KHRONOS_validation";
@@ -92,7 +89,7 @@ TEST_F(VkPositiveLayerTest, ValidationInstanceExtensions) {
     }
 }
 
-TEST_F(VkPositiveLayerTest, ValidEnumBeforeLogicalDevice) {
+TEST_F(PositiveInstance, ValidEnumBeforeLogicalDevice) {
     TEST_DESCRIPTION("Call a VkPhysicalDevice query API that uses an enum that is only valid with a promoted extension");
     SetTargetApiVersion(VK_API_VERSION_1_3);
     ASSERT_NO_FATAL_FAILURE(InitFramework());

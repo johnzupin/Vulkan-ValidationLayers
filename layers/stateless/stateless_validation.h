@@ -19,7 +19,7 @@
 #pragma once
 
 #include "parameter_name.h"
-#include "vk_typemap_helper.h"
+#include "generated/vk_typemap_helper.h"
 #include "sync/sync_utils.h"
 #include "state_tracker/cmd_buffer_state.h"
 
@@ -1009,14 +1009,12 @@ class StatelessValidation : public ValidationObject {
                                                      VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties,
                                                      VkResult result) override;
 
-    bool RequireDeviceExtension(bool flag, char const *function_name, char const *extension_name) const;
-
     bool ValidateInstanceExtensions(const VkInstanceCreateInfo *pCreateInfo) const;
 
     bool ValidateValidationFeatures(const VkInstanceCreateInfo *pCreateInfo,
                                     const VkValidationFeaturesEXT *validation_features) const;
 
-    bool ValidateApiVersion(uint32_t api_version, uint32_t effective_api_version) const;
+    bool ValidateApiVersion(uint32_t api_version, APIVersion effective_api_version) const;
 
     bool ValidateString(const char *apiName, const ParameterName &stringName, const std::string &vuid,
                         const char *validateString) const;
@@ -1369,6 +1367,7 @@ class StatelessValidation : public ValidationObject {
                                                                const VkAllocationCallbacks *pAllocator,
                                                                VkSamplerYcbcrConversion *pYcbcrConversion) const;
 
+    bool manual_PreCallValidateGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo, int *pFd) const;
     bool ValidateExternalSemaphoreHandleType(VkSemaphore semaphore, const char *vuid, const char *caller,
                                              VkExternalSemaphoreHandleTypeFlagBits handle_type,
                                              VkExternalSemaphoreHandleTypeFlags allowed_types) const;
@@ -1579,5 +1578,5 @@ class StatelessValidation : public ValidationObject {
     bool manual_PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportMetalObjectsInfoEXT *pMetalObjectsInfo) const;
 #endif  // VK_USE_PLATFORM_METAL_EXT
 
-#include "parameter_validation.h"
+#include "generated/parameter_validation.h"
 };  // Class StatelessValidation

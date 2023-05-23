@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 #pragma once
-#include "chassis.h"
-#include "core_checks/shader_validation.h"
+#include "generated/chassis.h"
+#include "core_checks/cc_shader.h"
 #include "state_tracker/cmd_buffer_state.h"
 #include "state_tracker/state_tracker.h"
-#define VMA_VULKAN_VERSION 1001000
-#include "vk_mem_alloc.h"
+#include "vma/vma.h"
 #include "state_tracker/queue_state.h"
 
 class GpuAssistedBase;
@@ -79,7 +78,8 @@ class CommandBuffer : public CMD_BUFFER_STATE {
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkQueue, gpu_utils_state::Queue, QUEUE_STATE)
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkCommandBuffer, gpu_utils_state::CommandBuffer, CMD_BUFFER_STATE)
 
-VkResult UtilInitializeVma(VkInstance instance, VkPhysicalDevice physical_device, VkDevice device, VmaAllocator *pAllocator);
+VkResult UtilInitializeVma(VkInstance instance, VkPhysicalDevice physical_device, VkDevice device, bool use_buffer_device_address,
+                           VmaAllocator *pAllocator);
 
 void UtilGenerateStageMessage(const uint32_t *debug_record, std::string &msg);
 void UtilGenerateCommonMessage(const debug_report_data *report_data, const VkCommandBuffer commandBuffer,
@@ -215,6 +215,7 @@ class GpuAssistedBase : public ValidationStateTracker {
 
   public:
     bool aborted = false;
+    bool force_buffer_device_address;
     PFN_vkSetDeviceLoaderData vkSetDeviceLoaderData;
     const char *setup_vuid;
     VkPhysicalDeviceFeatures supported_features{};

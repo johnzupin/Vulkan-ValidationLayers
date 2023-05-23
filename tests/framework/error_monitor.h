@@ -36,6 +36,14 @@ class ErrorMonitor {
     ErrorMonitor();
     ~ErrorMonitor() noexcept = default;
 
+    void CreateCallback(VkInstance instance) noexcept;
+    void DestroyCallback(VkInstance instance) noexcept;
+
+    ErrorMonitor(const ErrorMonitor &) = delete;
+    ErrorMonitor &operator=(const ErrorMonitor &) = delete;
+    ErrorMonitor(ErrorMonitor &&) noexcept = delete;
+    ErrorMonitor &operator=(ErrorMonitor &&) noexcept = delete;
+
     // Set monitor to pristine state
     void Reset();
 
@@ -60,6 +68,8 @@ class ErrorMonitor {
     void VerifyFound();
     void Finish();
 
+    const auto *GetDebugCreateInfo() const { return &debug_create_info_; }
+
   private:
     // ExpectSuccess now takes an optional argument allowing a custom combination of debug flags
     void ExpectSuccess(VkDebugReportFlagsEXT const message_flag_mask = kErrorBit);
@@ -72,6 +82,14 @@ class ErrorMonitor {
     bool AnyDesiredMsgFound() const;
     void MonitorReset();
     std::unique_lock<std::mutex> Lock() const { return std::unique_lock<std::mutex>(mutex_); }
+
+#if !defined(VK_USE_PLATFORM_ANDROID_KHR)
+    VkDebugUtilsMessengerEXT debug_obj_ = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerCreateInfoEXT debug_create_info_{};
+#else
+    VkDebugReportCallbackEXT debug_obj_ = VK_NULL_HANDLE;
+    VkDebugReportCallbackCreateInfoEXT debug_create_info_{};
+#endif
 
     VkFlags message_flags_{};
     std::unordered_multiset<std::string> desired_message_strings_;

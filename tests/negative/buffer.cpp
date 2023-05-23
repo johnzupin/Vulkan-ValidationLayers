@@ -12,22 +12,19 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "cast_utils.h"
-#include "enum_flag_bits.h"
+#include "utils/cast_utils.h"
+#include "generated/enum_flag_bits.h"
 #include "../framework/layer_validation_tests.h"
-#include "vk_layer_utils.h"
+#include "utils/vk_layer_utils.h"
 
-TEST_F(VkLayerTest, BufferExtents) {
+class NegativeBuffer : public VkLayerTest {};
+
+TEST_F(NegativeBuffer, Extents) {
     TEST_DESCRIPTION("Perform copies across a buffer, provoking out-of-range errors.");
 
     AddOptionalExtensions(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(Init());
     const bool copy_commands2 = IsExtensionsEnabled(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
-
-    PFN_vkCmdCopyBuffer2KHR vkCmdCopyBuffer2KHR = nullptr;
-    if (copy_commands2) {
-        vkCmdCopyBuffer2KHR = (PFN_vkCmdCopyBuffer2KHR)vk::GetDeviceProcAddr(m_device->handle(), "vkCmdCopyBuffer2KHR");
-    }
 
     const VkDeviceSize buffer_size = 2048;
 
@@ -52,7 +49,7 @@ TEST_F(VkLayerTest, BufferExtents) {
         const VkCopyBufferInfo2KHR copy_buffer_info2 = {
             VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2_KHR, NULL, buffer_one.handle(), buffer_two.handle(), 1, &copy_info2};
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCopyBufferInfo2-srcOffset-00113");
-        vkCmdCopyBuffer2KHR(m_commandBuffer->handle(), &copy_buffer_info2);
+        vk::CmdCopyBuffer2KHR(m_commandBuffer->handle(), &copy_buffer_info2);
         m_errorMonitor->VerifyFound();
     }
 
@@ -68,7 +65,7 @@ TEST_F(VkLayerTest, BufferExtents) {
         const VkCopyBufferInfo2KHR copy_buffer_info2 = {
             VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2_KHR, NULL, buffer_one.handle(), buffer_two.handle(), 1, &copy_info2};
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCopyBufferInfo2-dstOffset-00114");
-        vkCmdCopyBuffer2KHR(m_commandBuffer->handle(), &copy_buffer_info2);
+        vk::CmdCopyBuffer2KHR(m_commandBuffer->handle(), &copy_buffer_info2);
         m_errorMonitor->VerifyFound();
     }
 
@@ -84,7 +81,7 @@ TEST_F(VkLayerTest, BufferExtents) {
         const VkCopyBufferInfo2KHR copy_buffer_info2 = {
             VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2_KHR, NULL, buffer_one.handle(), buffer_two.handle(), 1, &copy_info2};
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCopyBufferInfo2-size-00115");
-        vkCmdCopyBuffer2KHR(m_commandBuffer->handle(), &copy_buffer_info2);
+        vk::CmdCopyBuffer2KHR(m_commandBuffer->handle(), &copy_buffer_info2);
         m_errorMonitor->VerifyFound();
     }
 
@@ -100,7 +97,7 @@ TEST_F(VkLayerTest, BufferExtents) {
         const VkCopyBufferInfo2KHR copy_buffer_info2 = {
             VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2_KHR, NULL, buffer_one.handle(), buffer_two.handle(), 1, &copy_info2};
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCopyBufferInfo2-size-00116");
-        vkCmdCopyBuffer2KHR(m_commandBuffer->handle(), &copy_buffer_info2);
+        vk::CmdCopyBuffer2KHR(m_commandBuffer->handle(), &copy_buffer_info2);
         m_errorMonitor->VerifyFound();
     }
 
@@ -117,7 +114,7 @@ TEST_F(VkLayerTest, BufferExtents) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, UpdateBufferAlignment) {
+TEST_F(NegativeBuffer, UpdateBufferAlignment) {
     TEST_DESCRIPTION("Check alignment parameters for vkCmdUpdateBuffer");
     uint32_t updateData[] = {1, 2, 3, 4, 5, 6, 7, 8};
 
@@ -151,7 +148,7 @@ TEST_F(VkLayerTest, UpdateBufferAlignment) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, FillBufferAlignmentAndSize) {
+TEST_F(NegativeBuffer, FillBufferAlignmentAndSize) {
     TEST_DESCRIPTION("Check alignment and size parameters for vkCmdFillBuffer");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -190,7 +187,7 @@ TEST_F(VkLayerTest, FillBufferAlignmentAndSize) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, InvalidBufferViewObject) {
+TEST_F(NegativeBuffer, BufferViewObject) {
     // Create a single TEXEL_BUFFER descriptor and send it an invalid bufferView
     // First, cause the bufferView to be invalid due to underlying buffer being destroyed
     // Then destroy view itself and verify that same error is hit
@@ -241,7 +238,7 @@ TEST_F(VkLayerTest, InvalidBufferViewObject) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, CreateBufferViewNoMemoryBoundToBuffer) {
+TEST_F(NegativeBuffer, CreateBufferViewNoMemoryBoundToBuffer) {
     TEST_DESCRIPTION("Attempt to create a buffer view with a buffer that has no memory bound to it.");
 
     VkResult err;
@@ -264,18 +261,12 @@ TEST_F(VkLayerTest, CreateBufferViewNoMemoryBoundToBuffer) {
     buff_view_ci.buffer = buffer;
     buff_view_ci.format = VK_FORMAT_R8_UNORM;
     buff_view_ci.range = VK_WHOLE_SIZE;
-    VkBufferView buff_view;
-    err = vk::CreateBufferView(m_device->device(), &buff_view_ci, NULL, &buff_view);
-
+    vk_testing::BufferView buffer_view(*m_device, buff_view_ci);
     m_errorMonitor->VerifyFound();
     vk::DestroyBuffer(m_device->device(), buffer, NULL);
-    // If last error is success, it still created the view, so delete it.
-    if (err == VK_SUCCESS) {
-        vk::DestroyBufferView(m_device->device(), buff_view, NULL);
-    }
 }
 
-TEST_F(VkLayerTest, InvalidBufferViewCreateInfoEntries) {
+TEST_F(NegativeBuffer, BufferViewCreateInfoEntries) {
     TEST_DESCRIPTION("Attempt to create a buffer view with invalid create info.");
 
     // Attempt to enable texel buffer alignmnet extension
@@ -390,7 +381,7 @@ TEST_F(VkLayerTest, InvalidBufferViewCreateInfoEntries) {
     CreateBufferViewTest(*this, &buff_view_ci, {"VUID-VkBufferViewCreateInfo-buffer-00934"});
 }
 
-TEST_F(VkLayerTest, TexelBufferAlignmentIn12) {
+TEST_F(NegativeBuffer, TexelBufferAlignmentIn12) {
     TEST_DESCRIPTION("texelBufferAlignment is not enabled by default in 1.2.");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -421,7 +412,7 @@ TEST_F(VkLayerTest, TexelBufferAlignmentIn12) {
     CreateBufferViewTest(*this, &buff_view_ci, {"VUID-VkBufferViewCreateInfo-offset-00926"});
 }
 
-TEST_F(VkLayerTest, InvalidTexelBufferAlignment) {
+TEST_F(NegativeBuffer, TexelBufferAlignment) {
     TEST_DESCRIPTION("Test VK_EXT_texel_buffer_alignment.");
     AddRequiredExtensions(VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
@@ -507,7 +498,7 @@ TEST_F(VkLayerTest, InvalidTexelBufferAlignment) {
     }
 }
 
-TEST_F(VkLayerTest, FillBufferWithinRenderPass) {
+TEST_F(NegativeBuffer, FillBufferWithinRenderPass) {
     // Call CmdFillBuffer within an active renderpass
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdFillBuffer-renderpass");
 
@@ -529,7 +520,7 @@ TEST_F(VkLayerTest, FillBufferWithinRenderPass) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, UpdateBufferWithinRenderPass) {
+TEST_F(NegativeBuffer, UpdateBufferWithinRenderPass) {
     // Call CmdUpdateBuffer within an active renderpass
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdUpdateBuffer-renderpass");
 
@@ -554,7 +545,7 @@ TEST_F(VkLayerTest, UpdateBufferWithinRenderPass) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, IdxBufferAlignmentError) {
+TEST_F(NegativeBuffer, IdxBufferAlignmentError) {
     // Bind a BeginRenderPass within an active RenderPass
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -579,7 +570,7 @@ TEST_F(VkLayerTest, IdxBufferAlignmentError) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, VertexBufferInvalid) {
+TEST_F(NegativeBuffer, VertexBuffer) {
     TEST_DESCRIPTION(
         "Submit a command buffer using deleted vertex buffer, delete a buffer twice, use an invalid offset for each buffer type, "
         "and attempt to bind a null buffer");
@@ -599,11 +590,11 @@ TEST_F(VkLayerTest, VertexBufferInvalid) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "CoreValidation-DrawState-InvalidCommandBuffer-VkBuffer");
 
     {
-        // Create and bind a vertex buffer in a reduced scope, which will cause it to be deleted upon leaving this scope
-        const float vbo_data[3] = {1.f, 0.f, 1.f};
-        VkVerticesObj draw_verticies(m_device, 1, 1, sizeof(vbo_data[0]), sizeof(vbo_data) / sizeof(vbo_data[0]), vbo_data);
-        draw_verticies.BindVertexBuffers(m_commandBuffer->handle());
-        draw_verticies.AddVertexInputToPipeHelpr(&pipe);
+        VkDeviceSize offset = 0;
+        VkBufferObj vertex_buffer;
+        auto info = vertex_buffer.create_info(64, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        vertex_buffer.init(*m_device, info);
+        vk::CmdBindVertexBuffers(m_commandBuffer->handle(), 0, 1, &vertex_buffer.handle(), &offset);
 
         m_commandBuffer->Draw(1, 0, 0, 0);
 
@@ -660,7 +651,7 @@ TEST_F(VkLayerTest, VertexBufferInvalid) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, BadVertexBufferOffset) {
+TEST_F(NegativeBuffer, VertexBufferOffset) {
     TEST_DESCRIPTION("Submit an offset past the end of a vertex buffer");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -689,7 +680,7 @@ TEST_F(VkLayerTest, BadVertexBufferOffset) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, BadIndexBufferOffset) {
+TEST_F(NegativeBuffer, IndexBufferOffset) {
     TEST_DESCRIPTION("Submit bad offsets binding the index buffer");
 
     AddRequiredExtensions(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
@@ -725,7 +716,7 @@ TEST_F(VkLayerTest, BadIndexBufferOffset) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, InvalidCreateBufferSize) {
+TEST_F(NegativeBuffer, CreateBufferSize) {
     TEST_DESCRIPTION("Attempt to create VkBuffer with size of zero");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -736,7 +727,7 @@ TEST_F(VkLayerTest, InvalidCreateBufferSize) {
     CreateBufferTest(*this, &info, "VUID-VkBufferCreateInfo-size-00912");
 }
 
-TEST_F(VkLayerTest, DedicatedAllocationBufferWithInvalidFlags) {
+TEST_F(NegativeBuffer, DedicatedAllocationBufferFlags) {
     TEST_DESCRIPTION("Verify that flags are valid with VkDedicatedAllocationBufferCreateInfoNV");
 
     // Positive test to check parameter_validation and unique_objects support for NV_dedicated_allocation
@@ -765,7 +756,7 @@ TEST_F(VkLayerTest, DedicatedAllocationBufferWithInvalidFlags) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, FillBufferCmdPoolUnsupported) {
+TEST_F(NegativeBuffer, FillBufferCmdPoolUnsupported) {
     TEST_DESCRIPTION(
         "Use a command buffer with vkCmdFillBuffer that was allocated from a command pool that does not support graphics or "
         "compute opeartions");
@@ -792,7 +783,7 @@ TEST_F(VkLayerTest, FillBufferCmdPoolUnsupported) {
     cb.end();
 }
 
-TEST_F(VkLayerTest, InvalidConditionalRenderingBufferUsage) {
+TEST_F(NegativeBuffer, ConditionalRenderingBufferUsage) {
     TEST_DESCRIPTION("Use a buffer without conditional rendering usage when needed.");
 
     AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
@@ -802,9 +793,6 @@ TEST_F(VkLayerTest, InvalidConditionalRenderingBufferUsage) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
-
-    PFN_vkCmdBeginConditionalRenderingEXT vkCmdBeginConditionalRenderingEXT =
-        (PFN_vkCmdBeginConditionalRenderingEXT)vk::GetDeviceProcAddr(m_device->handle(), "vkCmdBeginConditionalRenderingEXT");
 
     VkBufferCreateInfo buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
     buffer_create_info.size = 1024;
@@ -817,12 +805,12 @@ TEST_F(VkLayerTest, InvalidConditionalRenderingBufferUsage) {
 
     m_commandBuffer->begin();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkConditionalRenderingBeginInfoEXT-buffer-01982");
-    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
+    vk::CmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
     m_errorMonitor->VerifyFound();
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, InvalidConditionalRenderingOffset) {
+TEST_F(NegativeBuffer, ConditionalRenderingOffset) {
     TEST_DESCRIPTION("Begin conditional rendering with invalid offset.");
 
     AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
@@ -832,9 +820,6 @@ TEST_F(VkLayerTest, InvalidConditionalRenderingOffset) {
     }
     m_device_extension_names.push_back(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitState());
-
-    PFN_vkCmdBeginConditionalRenderingEXT vkCmdBeginConditionalRenderingEXT =
-        (PFN_vkCmdBeginConditionalRenderingEXT)vk::GetDeviceProcAddr(m_device->handle(), "vkCmdBeginConditionalRenderingEXT");
 
     VkBufferCreateInfo buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
     buffer_create_info.size = 128;
@@ -849,18 +834,18 @@ TEST_F(VkLayerTest, InvalidConditionalRenderingOffset) {
     m_commandBuffer->begin();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkConditionalRenderingBeginInfoEXT-offset-01984");
-    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
+    vk::CmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
     m_errorMonitor->VerifyFound();
 
     conditional_rendering_begin.offset = buffer_create_info.size;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkConditionalRenderingBeginInfoEXT-offset-01983");
-    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
+    vk::CmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, InvalidBeginConditionalRendering) {
+TEST_F(NegativeBuffer, BeginConditionalRendering) {
     TEST_DESCRIPTION("Begin conditional rendering when it is already active.");
 
     AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
@@ -869,11 +854,6 @@ TEST_F(VkLayerTest, InvalidBeginConditionalRendering) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
-
-    PFN_vkCmdBeginConditionalRenderingEXT vkCmdBeginConditionalRenderingEXT =
-        (PFN_vkCmdBeginConditionalRenderingEXT)vk::GetDeviceProcAddr(m_device->handle(), "vkCmdBeginConditionalRenderingEXT");
-    PFN_vkCmdEndConditionalRenderingEXT vkCmdEndConditionalRenderingEXT =
-        (PFN_vkCmdEndConditionalRenderingEXT)vk::GetDeviceProcAddr(m_device->handle(), "vkCmdEndConditionalRenderingEXT");
 
     VkBufferCreateInfo buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
     buffer_create_info.size = 32;
@@ -885,15 +865,15 @@ TEST_F(VkLayerTest, InvalidBeginConditionalRendering) {
     conditional_rendering_begin.buffer = buffer.handle();
 
     m_commandBuffer->begin();
-    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
+    vk::CmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBeginConditionalRenderingEXT-None-01980");
-    vkCmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
+    vk::CmdBeginConditionalRenderingEXT(m_commandBuffer->handle(), &conditional_rendering_begin);
     m_errorMonitor->VerifyFound();
-    vkCmdEndConditionalRenderingEXT(m_commandBuffer->handle());
+    vk::CmdEndConditionalRenderingEXT(m_commandBuffer->handle());
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, TestCompletelyOverlappingBufferCopy) {
+TEST_F(NegativeBuffer, CompletelyOverlappingBufferCopy) {
     TEST_DESCRIPTION("Test copying between buffers with completely overlapping source and destination regions.");
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -923,7 +903,7 @@ TEST_F(VkLayerTest, TestCompletelyOverlappingBufferCopy) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, TestCopyingInterleavedRegions) {
+TEST_F(NegativeBuffer, CopyingInterleavedRegions) {
     TEST_DESCRIPTION("Test copying between interleaved source and destination regions.");
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -963,4 +943,42 @@ TEST_F(VkLayerTest, TestCopyingInterleavedRegions) {
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->end();
+}
+
+TEST_F(NegativeBuffer, MaxBufferSize) {
+    TEST_DESCRIPTION("check limit of maxBufferSize");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan 1.1 is required";
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto maintenance4_features = LvlInitStruct<VkPhysicalDeviceMaintenance4FeaturesKHR>();
+    GetPhysicalDeviceFeatures2(maintenance4_features);
+    if (!maintenance4_features.maintenance4) {
+        GTEST_SKIP() << "VkPhysicalDeviceMaintenance4FeaturesKHR::maintenance4 is required but not enabled.";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &maintenance4_features));
+
+    auto maintenance4_properties = LvlInitStruct<VkPhysicalDeviceMaintenance4Properties>();
+    GetPhysicalDeviceProperties2(maintenance4_properties);
+
+    const VkDeviceSize max_test_size = (1ull << 32);
+    if (maintenance4_properties.maxBufferSize >= max_test_size) {
+        GTEST_SKIP() << "maxBufferSize too large to test";
+    }
+
+    auto buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
+    buffer_create_info.size = maintenance4_properties.maxBufferSize + 1;
+    buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+    VkBuffer buffer;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-size-06409");
+    vk::CreateBuffer(device(), &buffer_create_info, nullptr, &buffer);
+    m_errorMonitor->VerifyFound();
 }

@@ -12,12 +12,14 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "cast_utils.h"
-#include "enum_flag_bits.h"
+#include "utils/cast_utils.h"
+#include "generated/enum_flag_bits.h"
 #include "../framework/layer_validation_tests.h"
-#include "vk_layer_utils.h"
+#include "utils/vk_layer_utils.h"
 
-TEST_F(VkLayerTest, ImageBarrierSubpassConflicts) {
+class NegativeSyncObject : public VkLayerTest {};
+
+TEST_F(NegativeSyncObject, ImageBarrierSubpassConflicts) {
     TEST_DESCRIPTION("Add a pipeline barrier within a subpass that has conflicting state");
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -209,7 +211,7 @@ TEST_F(VkLayerTest, ImageBarrierSubpassConflicts) {
     vk::CmdEndRenderPass(m_commandBuffer->handle());
 }
 
-TEST_F(VkLayerTest, BufferMemoryBarrierNoBuffer) {
+TEST_F(NegativeSyncObject, BufferMemoryBarrierNoBuffer) {
     // Try to add a buffer memory barrier with no buffer.
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "required parameter pBufferMemoryBarriers[0].buffer specified as VK_NULL_HANDLE");
@@ -231,7 +233,7 @@ TEST_F(VkLayerTest, BufferMemoryBarrierNoBuffer) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, InvalidBarriers) {
+TEST_F(NegativeSyncObject, Barriers) {
     TEST_DESCRIPTION("A variety of ways to get VK_INVALID_BARRIER ");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -413,6 +415,18 @@ TEST_F(VkLayerTest, InvalidBarriers) {
         conc_test(vuid);
     }
 
+    if (separate_depth_stencil_layouts_features.separateDepthStencilLayouts) {
+        conc_test.image_barrier_.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+
+        conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+        conc_test("VUID-VkImageMemoryBarrier-aspectMask-08702");
+
+        conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+        conc_test("VUID-VkImageMemoryBarrier-aspectMask-08703");
+
+        conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    }
+
     // Having anything other than DEPTH and STENCIL is an error
     conc_test.image_barrier_.subresourceRange.aspectMask =
         VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_COLOR_BIT;
@@ -478,18 +492,6 @@ TEST_F(VkLayerTest, InvalidBarriers) {
 
     // Test multip-planar image
     if (mp_extensions) {
-        PFN_vkBindImageMemory2KHR vkBindImageMemory2Function = nullptr;
-        PFN_vkGetImageMemoryRequirements2KHR vkGetImageMemoryRequirements2Function = nullptr;
-        if (DeviceValidationVersion() >= VK_API_VERSION_1_1) {
-            vkBindImageMemory2Function = vk::BindImageMemory2;
-            vkGetImageMemoryRequirements2Function = vk::GetImageMemoryRequirements2;
-        } else {
-            vkBindImageMemory2Function =
-                (PFN_vkBindImageMemory2KHR)vk::GetDeviceProcAddr(m_device->handle(), "vkBindImageMemory2KHR");
-            vkGetImageMemoryRequirements2Function =
-                (PFN_vkGetImageMemoryRequirements2KHR)vk::GetDeviceProcAddr(m_device->handle(), "vkGetImageMemoryRequirements2KHR");
-        }
-
         VkFormatProperties format_properties;
         VkFormat mp_format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
         vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), mp_format, &format_properties);
@@ -519,7 +521,7 @@ TEST_F(VkLayerTest, InvalidBarriers) {
             VkImageMemoryRequirementsInfo2 mem_req_info2 = LvlInitStruct<VkImageMemoryRequirementsInfo2>(&image_plane_req);
             mem_req_info2.image = mp_image;
             VkMemoryRequirements2 mem_req2 = LvlInitStruct<VkMemoryRequirements2>();
-            vkGetImageMemoryRequirements2Function(device(), &mem_req_info2, &mem_req2);
+            vk::GetImageMemoryRequirements2KHR(device(), &mem_req_info2, &mem_req2);
 
             // Find a valid memory type index to memory to be allocated from
             VkMemoryAllocateInfo alloc_info = LvlInitStruct<VkMemoryAllocateInfo>();
@@ -528,7 +530,7 @@ TEST_F(VkLayerTest, InvalidBarriers) {
             ASSERT_VK_SUCCESS(vk::AllocateMemory(device(), &alloc_info, NULL, &plane_0_memory));
 
             image_plane_req.planeAspect = VK_IMAGE_ASPECT_PLANE_1_BIT;
-            vkGetImageMemoryRequirements2Function(device(), &mem_req_info2, &mem_req2);
+            vk::GetImageMemoryRequirements2KHR(device(), &mem_req_info2, &mem_req2);
             alloc_info.allocationSize = mem_req2.memoryRequirements.size;
             ASSERT_TRUE(m_device->phy().set_memory_type(mem_req2.memoryRequirements.memoryTypeBits, &alloc_info, 0));
             ASSERT_VK_SUCCESS(vk::AllocateMemory(device(), &alloc_info, NULL, &plane_1_memory));
@@ -546,7 +548,7 @@ TEST_F(VkLayerTest, InvalidBarriers) {
             bind_image_info[1] = bind_image_info[0];
             bind_image_info[1].pNext = &plane_1_memory_info;
             bind_image_info[1].memory = plane_1_memory;
-            vkBindImageMemory2Function(device(), 2, bind_image_info);
+            vk::BindImageMemory2KHR(device(), 2, bind_image_info);
 
             conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -562,7 +564,7 @@ TEST_F(VkLayerTest, InvalidBarriers) {
 
             conc_test.image_barrier_.subresourceRange.aspectMask = VK_IMAGE_ASPECT_PLANE_2_BIT;
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidImageAspect");
-            conc_test("VUID-VkImageMemoryBarrier-image-01673");
+            conc_test("VUID-VkImageMemoryBarrier-image-01672");
 
             vk::FreeMemory(device(), plane_0_memory, NULL);
             vk::FreeMemory(device(), plane_1_memory, NULL);
@@ -777,18 +779,15 @@ TEST_F(VkLayerTest, InvalidBarriers) {
     // Check for error for trying to wait on pipeline stage not supported by this queue. Specifically since our queue is not a
     // compute queue, vk::CmdWaitEvents cannot have it's source stage mask be VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWaitEvents-srcStageMask-06459");
-    VkEvent event;
     VkEventCreateInfo event_create_info = LvlInitStruct<VkEventCreateInfo>();
-    vk::CreateEvent(m_device->device(), &event_create_info, nullptr, &event);
-    vk::CmdWaitEvents(bad_command_buffer.handle(), 1, &event, /*source stage mask*/ VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    vk_testing::Event event(*m_device, event_create_info);
+    vk::CmdWaitEvents(bad_command_buffer.handle(), 1, &event.handle(), /*source stage mask*/ VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                       VK_PIPELINE_STAGE_TRANSFER_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
     m_errorMonitor->VerifyFound();
     bad_command_buffer.end();
-
-    vk::DestroyEvent(m_device->device(), event, nullptr);
 }
 
-TEST_F(VkLayerTest, Sync2InvalidBarriers) {
+TEST_F(NegativeSyncObject, Sync2Barriers) {
     TEST_DESCRIPTION("Synchronization2 test for invalid Memory Barriers");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
@@ -1240,7 +1239,7 @@ TEST_F(VkLayerTest, Sync2InvalidBarriers) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, InvalidBarrierQueueFamily) {
+TEST_F(NegativeSyncObject, BarrierQueueFamily) {
     TEST_DESCRIPTION("Create and submit barriers with invalid queue families");
     SetTargetApiVersion(VK_API_VERSION_1_0);
     ASSERT_NO_FATAL_FAILURE(Init(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -1324,7 +1323,6 @@ TEST_F(VkLayerTest, InvalidBarrierQueueFamily) {
         excl_test("UNASSIGNED-VkImageMemoryBarrier-image-00002", "UNASSIGNED-VkBufferMemoryBarrier-buffer-00002", submit_family,
                   other_family, other_family, BarrierQueueFamilyTestHelper::DOUBLE_COMMAND_BUFFER);
 
-        // core_validation::barrier_queue_families::kSubmitQueueMustMatchSrcOrDst
         // Need a third queue family to test this.
         uint32_t third_family = VK_QUEUE_FAMILY_IGNORED;
         for (uint32_t candidate = 0; candidate < queue_family_count; ++candidate) {
@@ -1335,16 +1333,15 @@ TEST_F(VkLayerTest, InvalidBarrierQueueFamily) {
         }
 
         if (third_family == VK_QUEUE_FAMILY_IGNORED) {
-            printf("No third queue family found -- kSubmitQueueMustMatchSrcOrDst test skipped.\n");
+            printf("No third queue family found -- test skipped.\n");
         } else {
-            excl_test("UNASSIGNED-CoreValidation-VkImageMemoryBarrier-sharing-mode-exclusive-same-family",
-                      "UNASSIGNED-CoreValidation-VkBufferMemoryBarrier-sharing-mode-exclusive-same-family", other_family,
-                      third_family, submit_family);
+            excl_test("VUID-vkQueueSubmit-pSubmits-04626", "VUID-vkQueueSubmit-pSubmits-04626", other_family, third_family,
+                      submit_family);
         }
     }
 }
 
-TEST_F(VkLayerTest, InvalidBarrierQueueFamilyWithMemExt) {
+TEST_F(NegativeSyncObject, BarrierQueueFamilyWithMemExt) {
     TEST_DESCRIPTION("Create and submit barriers with invalid queue families when memory extension is enabled ");
     AddRequiredExtensions(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -1403,7 +1400,7 @@ TEST_F(VkLayerTest, InvalidBarrierQueueFamilyWithMemExt) {
     excl_test(VK_QUEUE_FAMILY_EXTERNAL_KHR, submit_family);
 }
 
-TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
+TEST_F(NegativeSyncObject, ImageBarrierWithBadRange) {
     TEST_DESCRIPTION("VkImageMemoryBarrier with an invalid subresourceRange");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -1498,10 +1495,8 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
     m_commandBuffer->begin();
     // try for vk::CmdWaitEvents
     {
-        VkEvent event;
         VkEventCreateInfo eci = LvlInitStruct<VkEventCreateInfo>();
-        VkResult err = vk::CreateEvent(m_device->handle(), &eci, nullptr, &event);
-        ASSERT_VK_SUCCESS(err);
+        vk_testing::Event event(*m_device, eci);
 
         // Try baseMipLevel >= image.mipLevels with VK_REMAINING_MIP_LEVELS
         {
@@ -1509,7 +1504,7 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
             const VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 1, VK_REMAINING_MIP_LEVELS, 0, 1};
             VkImageMemoryBarrier img_barrier = img_barrier_template;
             img_barrier.subresourceRange = range;
-            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, nullptr, 0, nullptr, 1, &img_barrier);
             m_errorMonitor->VerifyFound();
         }
@@ -1521,7 +1516,7 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
             const VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 1, 1, 0, 1};
             VkImageMemoryBarrier img_barrier = img_barrier_template;
             img_barrier.subresourceRange = range;
-            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, nullptr, 0, nullptr, 1, &img_barrier);
             m_errorMonitor->VerifyFound();
         }
@@ -1532,7 +1527,7 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
             const VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 0, 1};
             VkImageMemoryBarrier img_barrier = img_barrier_template;
             img_barrier.subresourceRange = range;
-            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, nullptr, 0, nullptr, 1, &img_barrier);
             m_errorMonitor->VerifyFound();
         }
@@ -1543,7 +1538,7 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
             const VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 2, 0, 1};
             VkImageMemoryBarrier img_barrier = img_barrier_template;
             img_barrier.subresourceRange = range;
-            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, nullptr, 0, nullptr, 1, &img_barrier);
             m_errorMonitor->VerifyFound();
         }
@@ -1554,7 +1549,7 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
             const VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1, VK_REMAINING_ARRAY_LAYERS};
             VkImageMemoryBarrier img_barrier = img_barrier_template;
             img_barrier.subresourceRange = range;
-            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, nullptr, 0, nullptr, 1, &img_barrier);
             m_errorMonitor->VerifyFound();
         }
@@ -1566,7 +1561,7 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
             const VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1, 1};
             VkImageMemoryBarrier img_barrier = img_barrier_template;
             img_barrier.subresourceRange = range;
-            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, nullptr, 0, nullptr, 1, &img_barrier);
             m_errorMonitor->VerifyFound();
         }
@@ -1577,7 +1572,7 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
             const VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 0};
             VkImageMemoryBarrier img_barrier = img_barrier_template;
             img_barrier.subresourceRange = range;
-            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, nullptr, 0, nullptr, 1, &img_barrier);
             m_errorMonitor->VerifyFound();
         }
@@ -1588,17 +1583,15 @@ TEST_F(VkLayerTest, ImageBarrierWithBadRange) {
             const VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2};
             VkImageMemoryBarrier img_barrier = img_barrier_template;
             img_barrier.subresourceRange = range;
-            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, nullptr, 0, nullptr, 1, &img_barrier);
             m_errorMonitor->VerifyFound();
         }
-
-        vk::DestroyEvent(m_device->handle(), event, nullptr);
     }
     // clang-format on
 }
 
-TEST_F(VkLayerTest, Sync2InvalidBarrierQueueFamily) {
+TEST_F(NegativeSyncObject, Sync2BarrierQueueFamily) {
     TEST_DESCRIPTION("Create and submit barriers with invalid queue families with synchronization2");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
@@ -1666,7 +1659,7 @@ TEST_F(VkLayerTest, Sync2InvalidBarrierQueueFamily) {
     excl_test(VK_QUEUE_FAMILY_EXTERNAL_KHR, submit_family);
 }
 
-TEST_F(VkLayerTest, TestInvalidBarrierQueues) {
+TEST_F(NegativeSyncObject, BarrierQueues) {
     TEST_DESCRIPTION("Test buffer memory with both src and dst queue VK_QUEUE_FAMILY_EXTERNAL.");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -1692,7 +1685,7 @@ TEST_F(VkLayerTest, TestInvalidBarrierQueues) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, TestBarrierAccessSync2) {
+TEST_F(NegativeSyncObject, BarrierAccessSync2) {
     TEST_DESCRIPTION("Test barrier VkAccessFlagBits2.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -1889,7 +1882,7 @@ TEST_F(VkLayerTest, TestBarrierAccessSync2) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, TestBarrierAccessVideoDecode) {
+TEST_F(NegativeSyncObject, BarrierAccessVideoDecode) {
     TEST_DESCRIPTION("Test barrier with access decode read bit.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -1938,7 +1931,7 @@ TEST_F(VkLayerTest, TestBarrierAccessVideoDecode) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, Sync2LayoutFeature) {
+TEST_F(NegativeSyncObject, Sync2LayoutFeature) {
     SetTargetApiVersion(VK_API_VERSION_1_3);
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
@@ -1974,4 +1967,1603 @@ TEST_F(VkLayerTest, Sync2LayoutFeature) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkImageMemoryBarrier2-synchronization2-07794");  // newLayout
     vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dep_info);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSyncObject, SubmitSignaledFence) {
+    vk_testing::Fence testFence;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "submitted in SIGNALED state.  Fences must be reset before being submitted");
+
+    VkFenceCreateInfo fenceInfo = LvlInitStruct<VkFenceCreateInfo>();
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitViewport());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    m_commandBuffer->begin();
+    m_commandBuffer->ClearAllBuffers(m_renderTargets, m_clear_color, nullptr, m_depth_clear_color, m_stencil_clear_color);
+    m_commandBuffer->end();
+
+    testFence.init(*m_device, fenceInfo);
+
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.waitSemaphoreCount = 0;
+    submit_info.pWaitSemaphores = NULL;
+    submit_info.pWaitDstStageMask = NULL;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    submit_info.signalSemaphoreCount = 0;
+    submit_info.pSignalSemaphores = NULL;
+
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, testFence.handle());
+    vk::QueueWaitIdle(m_device->m_queue);
+
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSyncObject, QueueSubmitWaitingSameSemaphore) {
+    TEST_DESCRIPTION("Submit to queue with waitSemaphore that another queue is already waiting on.");
+
+    AddOptionalExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    auto sync2_features = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>();
+    auto features2 = GetPhysicalDeviceFeatures2(sync2_features);
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    if (m_device->graphics_queues().size() < 2) {
+        GTEST_SKIP() << "2 graphics queues are needed";
+    }
+
+    auto sem_info = LvlInitStruct<VkSemaphoreCreateInfo>();
+
+    vk_testing::Semaphore semaphore;
+    semaphore.init(*m_device, sem_info);
+
+    VkQueue other = m_device->graphics_queues()[1]->handle();
+
+    {
+        auto signal_submit = LvlInitStruct<VkSubmitInfo>();
+        signal_submit.signalSemaphoreCount = 1;
+        signal_submit.pSignalSemaphores = &semaphore.handle();
+
+        VkPipelineStageFlags stage_flags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        auto wait_submit = LvlInitStruct<VkSubmitInfo>();
+        wait_submit.waitSemaphoreCount = 1;
+        wait_submit.pWaitSemaphores = &semaphore.handle();
+        wait_submit.pWaitDstStageMask = &stage_flags;
+
+        vk::QueueSubmit(m_device->m_queue, 1, &signal_submit, VK_NULL_HANDLE);
+        vk::QueueSubmit(m_device->m_queue, 1, &wait_submit, VK_NULL_HANDLE);
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueSubmit-pWaitSemaphores-00068");
+        vk::QueueSubmit(other, 1, &wait_submit, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+        vk::QueueWaitIdle(m_device->m_queue);
+        vk::QueueWaitIdle(other);
+    }
+    if (m_device->queue_props[m_device->m_queue_obj->get_family_index()].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+        auto signal_bind = LvlInitStruct<VkBindSparseInfo>();
+        signal_bind.signalSemaphoreCount = 1;
+        signal_bind.pSignalSemaphores = &semaphore.handle();
+
+        auto wait_bind = LvlInitStruct<VkBindSparseInfo>();
+        wait_bind.waitSemaphoreCount = 1;
+        wait_bind.pWaitSemaphores = &semaphore.handle();
+
+        vk::QueueBindSparse(m_device->m_queue, 1, &signal_bind, VK_NULL_HANDLE);
+        vk::QueueBindSparse(m_device->m_queue, 1, &wait_bind, VK_NULL_HANDLE);
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueBindSparse-pWaitSemaphores-01116");
+        vk::QueueBindSparse(other, 1, &wait_bind, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        vk::QueueWaitIdle(m_device->m_queue);
+        vk::QueueWaitIdle(other);
+    }
+    if (sync2_features.synchronization2) {
+        auto signal_sem_info = LvlInitStruct<VkSemaphoreSubmitInfo>();
+        signal_sem_info.semaphore = semaphore.handle();
+        signal_sem_info.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+        auto signal_submit = LvlInitStruct<VkSubmitInfo2>();
+        signal_submit.signalSemaphoreInfoCount = 1;
+        signal_submit.pSignalSemaphoreInfos = &signal_sem_info;
+
+        auto wait_sem_info = LvlInitStruct<VkSemaphoreSubmitInfo>();
+        wait_sem_info.semaphore = semaphore.handle();
+        wait_sem_info.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+        auto wait_submit = LvlInitStruct<VkSubmitInfo2>();
+        wait_submit.waitSemaphoreInfoCount = 1;
+        wait_submit.pWaitSemaphoreInfos = &wait_sem_info;
+
+        vk::QueueSubmit2KHR(m_device->m_queue, 1, &signal_submit, VK_NULL_HANDLE);
+        vk::QueueSubmit2KHR(m_device->m_queue, 1, &wait_submit, VK_NULL_HANDLE);
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueSubmit2-semaphore-03871");
+        vk::QueueSubmit2KHR(other, 1, &wait_submit, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        vk::QueueWaitIdle(m_device->m_queue);
+        vk::QueueWaitIdle(other);
+    }
+}
+
+TEST_F(NegativeSyncObject, QueueSubmit2KHRUsedButSynchronizaion2Disabled) {
+    TEST_DESCRIPTION("Using QueueSubmit2KHR when synchronization2 is not enabled");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    bool vulkan_13 = (DeviceValidationVersion() >= VK_API_VERSION_1_3);
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    auto submit_info = LvlInitStruct<VkSubmitInfo2KHR>();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueSubmit2-synchronization2-03866");
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+    if (vulkan_13) {
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueSubmit2-synchronization2-03866");
+        vk::QueueSubmit2(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+    }
+}
+
+TEST_F(NegativeSyncObject, WaitEventsDifferentQueues) {
+    TEST_DESCRIPTION("Using CmdWaitEvents with invalid barrier queues");
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    const std::optional<uint32_t> no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
+    if (!no_gfx) {
+        GTEST_SKIP() << "Required queue families not present (non-graphics non-compute capable required)";
+    }
+
+    VkEventCreateInfo event_create_info = LvlInitStruct<VkEventCreateInfo>();
+    vk_testing::Event event(*m_device, event_create_info);
+
+    VkBufferObj buffer;
+    VkMemoryPropertyFlags mem_prop = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    buffer.init_as_src_and_dst(*m_device, 256, mem_prop);
+
+    VkBufferMemoryBarrier buffer_memory_barrier = LvlInitStruct<VkBufferMemoryBarrier>();
+    buffer_memory_barrier.srcAccessMask = 0;
+    buffer_memory_barrier.dstAccessMask = 0;
+    buffer_memory_barrier.buffer = buffer.handle();
+    buffer_memory_barrier.offset = 0;
+    buffer_memory_barrier.size = 256;
+    buffer_memory_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
+    buffer_memory_barrier.dstQueueFamilyIndex = no_gfx.value();
+
+    VkImageObj image(m_device);
+    image.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
+
+    VkImageMemoryBarrier image_memory_barrier = LvlInitStruct<VkImageMemoryBarrier>();
+    image_memory_barrier.srcAccessMask = 0;
+    image_memory_barrier.dstAccessMask = 0;
+    image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_memory_barrier.image = image.handle();
+    image_memory_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
+    image_memory_barrier.dstQueueFamilyIndex = no_gfx.value();
+    image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+    image_memory_barrier.subresourceRange.baseMipLevel = 0;
+    image_memory_barrier.subresourceRange.layerCount = 1;
+    image_memory_barrier.subresourceRange.levelCount = 1;
+
+    m_commandBuffer->begin();
+    vk::CmdSetEvent(m_commandBuffer->handle(), event.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWaitEvents-srcQueueFamilyIndex-02803");
+    vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, nullptr, 1, &buffer_memory_barrier, 0, nullptr);
+    m_errorMonitor->VerifyFound();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWaitEvents-srcQueueFamilyIndex-02803");
+    vk::CmdWaitEvents(m_commandBuffer->handle(), 1, &event.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeSyncObject, SemaphoreTypeCreateInfoCore) {
+    TEST_DESCRIPTION("Invalid usage of VkSemaphoreTypeCreateInfo with a 1.2 core version");
+
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
+    }
+
+    // Core 1.2 supports timelineSemaphore feature bit but not enabled
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    VkSemaphore semaphore;
+
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+    semaphore_type_create_info.initialValue = 1;
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+    semaphore_create_info.flags = 0;
+
+    // timelineSemaphore feature bit not set
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreTypeCreateInfo-timelineSemaphore-03252");
+    vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
+    m_errorMonitor->VerifyFound();
+
+    // Binary semaphore can't be initialValue 0
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_BINARY;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreTypeCreateInfo-semaphoreType-03279");
+    vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSyncObject, SemaphoreTypeCreateInfoExtension) {
+    TEST_DESCRIPTION("Invalid usage of VkSemaphoreTypeCreateInfo with extension");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);  // before timelineSemaphore was added to core
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    // Enabled extension but not the timelineSemaphore feature bit
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    VkSemaphore semaphore;
+
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+    semaphore_type_create_info.initialValue = 1;
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+    semaphore_create_info.flags = 0;
+
+    // timelineSemaphore feature bit not set
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreTypeCreateInfo-timelineSemaphore-03252");
+    vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
+    m_errorMonitor->VerifyFound();
+
+    // Binary semaphore can't be initialValue 0
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_BINARY;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreTypeCreateInfo-semaphoreType-03279");
+    vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSyncObject, MixedTimelineAndBinarySemaphores) {
+    TEST_DESCRIPTION("Submit mixtures of timeline and binary semaphores");
+
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
+
+    auto timelineproperties = LvlInitStruct<VkPhysicalDeviceTimelineSemaphorePropertiesKHR>();
+    GetPhysicalDeviceProperties2(timelineproperties);
+
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    semaphore_type_create_info.initialValue = 5;
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    VkSemaphore semaphore[2];
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore[0]));
+    // index 1 should be a binary semaphore
+    semaphore_create_info.pNext = nullptr;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore[1]));
+    VkSemaphore extra_binary;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &extra_binary));
+
+    VkSemaphoreSignalInfo semaphore_signal_info = LvlInitStruct<VkSemaphoreSignalInfo>();
+    semaphore_signal_info.semaphore = semaphore[0];
+    semaphore_signal_info.value = 3;
+    semaphore_signal_info.value = 10;
+    ASSERT_VK_SUCCESS(vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+
+    VkTimelineSemaphoreSubmitInfoKHR timeline_semaphore_submit_info = LvlInitStruct<VkTimelineSemaphoreSubmitInfoKHR>();
+    uint64_t signalValue = 20;
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 0;
+    timeline_semaphore_submit_info.pWaitSemaphoreValues = nullptr;
+    // this array needs a length of 2, even though the binary semaphore won't look at the values array
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = &signalValue;
+
+    VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>(&timeline_semaphore_submit_info);
+    submit_info.pWaitDstStageMask = &stageFlags;
+    submit_info.waitSemaphoreCount = 0;
+    submit_info.pWaitSemaphores = nullptr;
+    submit_info.signalSemaphoreCount = 2;
+    submit_info.pSignalSemaphores = semaphore;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pNext-03241");
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    uint64_t values[2] = {signalValue, 0 /*ignored*/};
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 2;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = values;
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+    // the indexes in pWaitSemaphores and pWaitSemaphoreValues should match
+    VkSemaphore reversed[2] = {semaphore[1], semaphore[0]};
+    uint64_t reversed_values[2] = {vvl::kU64Max /* ignored */, 20};
+    VkPipelineStageFlags wait_stages[2] = {VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT};
+    submit_info.signalSemaphoreCount = 0;
+    submit_info.pSignalSemaphores = nullptr;
+    submit_info.waitSemaphoreCount = 2;
+    submit_info.pWaitSemaphores = reversed;
+    submit_info.pWaitDstStageMask = wait_stages;
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 0;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = nullptr;
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 2;
+    timeline_semaphore_submit_info.pWaitSemaphoreValues = reversed_values;
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+    // if we only signal a binary semaphore we don't need a 'values' array
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 0;
+    timeline_semaphore_submit_info.pWaitSemaphoreValues = nullptr;
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 0;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = nullptr;
+    submit_info.waitSemaphoreCount = 0;
+    submit_info.pWaitSemaphores = nullptr;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &extra_binary;
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+    ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+    vk::DestroySemaphore(m_device->device(), semaphore[0], nullptr);
+    vk::DestroySemaphore(m_device->device(), semaphore[1], nullptr);
+    vk::DestroySemaphore(m_device->device(), extra_binary, nullptr);
+}
+
+TEST_F(NegativeSyncObject, QueueSubmitNoTimelineSemaphoreInfo) {
+    TEST_DESCRIPTION("Submit a queue with a timeline semaphore but not a VkTimelineSemaphoreSubmitInfoKHR.");
+
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
+
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    VkSemaphore semaphore;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore));
+
+    VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkSubmitInfo submit_info[2] = {};
+    submit_info[0] = LvlInitStruct<VkSubmitInfo>();
+    submit_info[0].commandBufferCount = 0;
+    submit_info[0].pWaitDstStageMask = &stageFlags;
+    submit_info[0].signalSemaphoreCount = 1;
+    submit_info[0].pSignalSemaphores = &semaphore;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pWaitSemaphores-03239");
+    vk::QueueSubmit(m_device->m_queue, 1, submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    VkTimelineSemaphoreSubmitInfoKHR timeline_semaphore_submit_info = LvlInitStruct<VkTimelineSemaphoreSubmitInfoKHR>();
+    uint64_t signalValue = 1;
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = &signalValue;
+    submit_info[0].pNext = &timeline_semaphore_submit_info;
+
+    submit_info[1] = LvlInitStruct<VkSubmitInfo>();
+    submit_info[1].commandBufferCount = 0;
+    submit_info[1].pWaitDstStageMask = &stageFlags;
+    submit_info[1].waitSemaphoreCount = 1;
+    submit_info[1].pWaitSemaphores = &semaphore;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pWaitSemaphores-03239");
+    vk::QueueSubmit(m_device->m_queue, 2, submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
+}
+
+TEST_F(NegativeSyncObject, QueueSubmitTimelineSemaphoreValue) {
+    TEST_DESCRIPTION("Submit a queue with a timeline semaphore using a wrong payload value.");
+
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
+
+    auto timelineproperties = LvlInitStruct<VkPhysicalDeviceTimelineSemaphorePropertiesKHR>();
+    GetPhysicalDeviceProperties2(timelineproperties);
+
+    auto semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+
+    auto semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    vk_testing::Semaphore semaphore(*m_device, semaphore_create_info);
+
+    auto timeline_semaphore_submit_info = LvlInitStruct<VkTimelineSemaphoreSubmitInfoKHR>();
+    uint64_t signalValue = 1;
+    uint64_t waitValue = 3;
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = &signalValue;
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pWaitSemaphoreValues = &waitValue;
+
+    VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    auto submit_info = LvlInitStruct<VkSubmitInfo>(&timeline_semaphore_submit_info);
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &semaphore.handle();
+    submit_info.pWaitDstStageMask = &stageFlags;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &semaphore.handle();
+
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 0;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pNext-03241");
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 0;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pNext-03240");
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    signalValue = 5;
+    {
+        auto semaphore_signal_info = LvlInitStruct<VkSemaphoreSignalInfo>();
+        semaphore_signal_info.semaphore = semaphore.handle();
+        semaphore_signal_info.value = signalValue;
+        ASSERT_VK_SUCCESS(vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+    }
+
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+
+    // Check for re-signalling an already completed value (5)
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pSignalSemaphores-03242");
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // Submit (6)
+    signalValue++;
+    auto err = vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    ASSERT_VK_SUCCESS(err);
+
+    // Check against a pending value (6)
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pSignalSemaphores-03242");
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    {
+        // Double signal with the same value (7)
+        signalValue++;
+        uint64_t signal_values[2] = {signalValue, signalValue};
+        VkSemaphore signal_sems[2] = {semaphore.handle(), semaphore.handle()};
+
+        auto tl_info_2 = LvlInitStruct<VkTimelineSemaphoreSubmitInfoKHR>();
+        tl_info_2.signalSemaphoreValueCount = 2;
+        tl_info_2.pSignalSemaphoreValues = signal_values;
+
+        auto submit_info2 = LvlInitStruct<VkSubmitInfo>(&tl_info_2);
+        submit_info2.signalSemaphoreCount = 2;
+        submit_info2.pSignalSemaphores = signal_sems;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pSignalSemaphores-03242");
+        vk::QueueSubmit(m_device->m_queue, 1, &submit_info2, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+    }
+
+    // Check if we can test violations of maxTimelineSemaphoreValueDifference
+    if (timelineproperties.maxTimelineSemaphoreValueDifference < vvl::kU64Max) {
+        uint64_t bigValue = signalValue + timelineproperties.maxTimelineSemaphoreValueDifference + 1;
+        timeline_semaphore_submit_info.pSignalSemaphoreValues = &bigValue;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pSignalSemaphores-03244");
+        vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        if (signalValue < vvl::kU64Max) {
+            signalValue++;
+            timeline_semaphore_submit_info.pSignalSemaphoreValues = &signalValue;
+            waitValue = signalValue + timelineproperties.maxTimelineSemaphoreValueDifference + 1;
+
+            submit_info.signalSemaphoreCount = 0;
+            timeline_semaphore_submit_info.signalSemaphoreValueCount = 0;
+            timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+            timeline_semaphore_submit_info.pWaitSemaphoreValues = &waitValue;
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pWaitSemaphores-03243");
+            vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+            m_errorMonitor->VerifyFound();
+        }
+    }
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(NegativeSyncObject, QueueBindSparseTimelineSemaphoreValue) {
+    TEST_DESCRIPTION("Submit a queue with a timeline semaphore using a wrong payload value.");
+
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
+
+    auto index = m_device->graphics_queue_node_index_;
+    if ((m_device->queue_props[index].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) == 0) {
+        GTEST_SKIP() << "Sparse binding not supported, skipping test";
+    }
+
+    auto timelineproperties = LvlInitStruct<VkPhysicalDeviceTimelineSemaphorePropertiesKHR>();
+    GetPhysicalDeviceProperties2(timelineproperties);
+
+    auto semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+
+    auto semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    vk_testing::Semaphore semaphore(*m_device, semaphore_create_info);
+
+    auto timeline_semaphore_submit_info = LvlInitStruct<VkTimelineSemaphoreSubmitInfoKHR>();
+    uint64_t signalValue = 1;
+    uint64_t waitValue = 3;
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = &signalValue;
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pWaitSemaphoreValues = &waitValue;
+
+    auto submit_info = LvlInitStruct<VkBindSparseInfo>();
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &semaphore.handle();
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &semaphore.handle();
+
+    // error for both signal and wait
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pWaitSemaphores-03246");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pWaitSemaphores-03246");
+    vk::QueueBindSparse(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    submit_info.pNext = &timeline_semaphore_submit_info;
+
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 0;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pNext-03248");
+    vk::QueueBindSparse(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+    submit_info.signalSemaphoreCount = 1;
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 0;
+    submit_info.waitSemaphoreCount = 1;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pNext-03247");
+    vk::QueueBindSparse(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    signalValue = 5;
+    {
+        auto semaphore_signal_info = LvlInitStruct<VkSemaphoreSignalInfo>();
+        semaphore_signal_info.semaphore = semaphore.handle();
+        semaphore_signal_info.value = signalValue;
+        ASSERT_VK_SUCCESS(vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+    }
+
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+    submit_info.waitSemaphoreCount = 1;
+
+    // Check for re-signalling an already completed value (5)
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pSignalSemaphores-03249");
+    vk::QueueBindSparse(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // Submit (6)
+    signalValue++;
+    auto err = vk::QueueBindSparse(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    ASSERT_VK_SUCCESS(err);
+
+    // Check against a pending value (6)
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pSignalSemaphores-03249");
+    vk::QueueBindSparse(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    {
+        // Double signal with the same value (7)
+        signalValue++;
+        uint64_t signal_values[2] = {signalValue, signalValue};
+        VkSemaphore signal_sems[2] = {semaphore.handle(), semaphore.handle()};
+
+        auto tl_info_2 = LvlInitStruct<VkTimelineSemaphoreSubmitInfoKHR>();
+        tl_info_2.signalSemaphoreValueCount = 2;
+        tl_info_2.pSignalSemaphoreValues = signal_values;
+
+        auto submit_info2 = LvlInitStruct<VkBindSparseInfo>(&tl_info_2);
+        submit_info2.signalSemaphoreCount = 2;
+        submit_info2.pSignalSemaphores = signal_sems;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pSignalSemaphores-03249");
+        vk::QueueBindSparse(m_device->m_queue, 1, &submit_info2, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+    }
+
+    // Check if we can test violations of maxTimelineSemaphoreValueDifference
+    if (timelineproperties.maxTimelineSemaphoreValueDifference < vvl::kU64Max) {
+        uint64_t bigValue = signalValue + timelineproperties.maxTimelineSemaphoreValueDifference + 1;
+        timeline_semaphore_submit_info.pSignalSemaphoreValues = &bigValue;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pSignalSemaphores-03251");
+        vk::QueueBindSparse(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        if (signalValue < vvl::kU64Max) {
+            waitValue = bigValue;
+
+            submit_info.signalSemaphoreCount = 0;
+            submit_info.waitSemaphoreCount = 1;
+            timeline_semaphore_submit_info.signalSemaphoreValueCount = 0;
+            timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+            timeline_semaphore_submit_info.pWaitSemaphoreValues = &waitValue;
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBindSparseInfo-pWaitSemaphores-03250");
+            vk::QueueBindSparse(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+            m_errorMonitor->VerifyFound();
+        }
+    }
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(NegativeSyncObject, Sync2QueueSubmitTimelineSemaphoreValue) {
+    TEST_DESCRIPTION("Submit a queue with a timeline semaphore using a wrong payload value.");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "Test requires at least Vulkan 1.2.";
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
+
+    auto vk12_features = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
+    auto sync2_features = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>(&vk12_features);
+    auto features2 = GetPhysicalDeviceFeatures2(sync2_features);
+    if (!sync2_features.synchronization2) {
+        GTEST_SKIP() << "VkPhysicalDeviceSynchronization2FeaturesKHR::synchronization2 required";
+    }
+    if (!vk12_features.timelineSemaphore) {
+        GTEST_SKIP() << "VkPhysicalDeviceVulkan12Features::timelineSemaphore required";
+    }
+    InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+
+    auto timelineproperties = LvlInitStruct<VkPhysicalDeviceTimelineSemaphorePropertiesKHR>();
+    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&timelineproperties);
+    GetPhysicalDeviceProperties2(prop2);
+
+    auto semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    semaphore_type_create_info.initialValue = 5;
+
+    auto semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    vk_testing::Semaphore semaphore(*m_device, semaphore_create_info);
+
+    auto signal_sem_info = LvlInitStruct<VkSemaphoreSubmitInfo>();
+    signal_sem_info.value = semaphore_type_create_info.initialValue;
+    signal_sem_info.semaphore = semaphore.handle();
+    signal_sem_info.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+    auto submit_info = LvlInitStruct<VkSubmitInfo2>();
+    submit_info.signalSemaphoreInfoCount = 1;
+    submit_info.pSignalSemaphoreInfos = &signal_sem_info;
+
+    // Check for re-signalling an already completed value (5)
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo2-semaphore-03882");
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // Submit (6)
+    signal_sem_info.value++;
+    auto err = vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    ASSERT_VK_SUCCESS(err);
+
+    // Check against a pending value (6)
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo2-semaphore-03882");
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    {
+        // Double signal with the same value (7)
+        signal_sem_info.value++;
+        VkSemaphoreSubmitInfo double_signal_info[2];
+        double_signal_info[0] = signal_sem_info;
+        double_signal_info[1] = signal_sem_info;
+
+        submit_info.signalSemaphoreInfoCount = 2;
+        submit_info.pSignalSemaphoreInfos = double_signal_info;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo2-semaphore-03882");
+        vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+    }
+
+    // Check if we can test violations of maxTimelineSemaphoreValueDifference
+    if (timelineproperties.maxTimelineSemaphoreValueDifference < vvl::kU64Max) {
+        signal_sem_info.value += timelineproperties.maxTimelineSemaphoreValueDifference + 1;
+
+        submit_info.waitSemaphoreInfoCount = 0;
+        submit_info.signalSemaphoreInfoCount = 1;
+        submit_info.pSignalSemaphoreInfos = &signal_sem_info;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo2-semaphore-03884");
+        vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        if (signal_sem_info.value < vvl::kU64Max) {
+            auto wait_sem_info = LvlInitStruct<VkSemaphoreSubmitInfo>();
+            wait_sem_info.semaphore = semaphore.handle();
+            wait_sem_info.value = signal_sem_info.value + 1;
+            wait_sem_info.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+            signal_sem_info.value = 1;
+
+            submit_info.signalSemaphoreInfoCount = 0;
+            submit_info.waitSemaphoreInfoCount = 1;
+            submit_info.pWaitSemaphoreInfos = &wait_sem_info;
+
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo2-semaphore-03883");
+            vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+            m_errorMonitor->VerifyFound();
+        }
+    }
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(NegativeSyncObject, QueueSubmitBinarySemaphoreNotSignaled) {
+    TEST_DESCRIPTION("Submit a queue with a waiting binary semaphore not previously signaled.");
+
+    AddOptionalExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    AddOptionalExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    auto timeline_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeaturesKHR>();
+    auto sync2_features = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>(&timeline_features);
+    auto features2 = GetPhysicalDeviceFeatures2(sync2_features);
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    auto semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
+    // VUIDs reported change if the extension is enabled, even if the timelineSemaphore feature isn't supported.
+    const bool has_timeline_sem_ext = IsExtensionsEnabled(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+
+    {
+        vk_testing::Semaphore semaphore[3];
+        semaphore[0].init(*m_device, semaphore_create_info);
+        semaphore[1].init(*m_device, semaphore_create_info);
+        semaphore[2].init(*m_device, semaphore_create_info);
+
+        const char *expected_vuid =
+            has_timeline_sem_ext ? "VUID-vkQueueSubmit-pWaitSemaphores-03238" : "VUID-vkQueueSubmit-pWaitSemaphores-00069";
+
+        VkPipelineStageFlags stage_flags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VkSubmitInfo submit_info[3] = {};
+        submit_info[0] = LvlInitStruct<VkSubmitInfo>();
+        submit_info[0].pWaitDstStageMask = &stage_flags;
+        submit_info[0].waitSemaphoreCount = 1;
+        submit_info[0].pWaitSemaphores = &semaphore[0].handle();
+        submit_info[0].signalSemaphoreCount = 1;
+        submit_info[0].pSignalSemaphores = &semaphore[1].handle();
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, expected_vuid);
+        vk::QueueSubmit(m_device->m_queue, 1, submit_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        submit_info[1] = LvlInitStruct<VkSubmitInfo>();
+        submit_info[1].pWaitDstStageMask = &stage_flags;
+        submit_info[1].waitSemaphoreCount = 1;
+        submit_info[1].pWaitSemaphores = &semaphore[1].handle();
+        submit_info[1].signalSemaphoreCount = 1;
+        submit_info[1].pSignalSemaphores = &semaphore[2].handle();
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, expected_vuid);
+        vk::QueueSubmit(m_device->m_queue, 2, &submit_info[0], VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        submit_info[2] = LvlInitStruct<VkSubmitInfo>();
+        submit_info[2].signalSemaphoreCount = 1;
+        submit_info[2].pSignalSemaphores = &semaphore[0].handle();
+
+        ASSERT_VK_SUCCESS(vk::QueueSubmit(m_device->m_queue, 1, &submit_info[2], VK_NULL_HANDLE));
+        ASSERT_VK_SUCCESS(vk::QueueSubmit(m_device->m_queue, 2, submit_info, VK_NULL_HANDLE));
+        ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+    }
+    if (m_device->queue_props[m_device->m_queue_obj->get_family_index()].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+        vk_testing::Semaphore semaphore[3];
+        semaphore[0].init(*m_device, semaphore_create_info);
+        semaphore[1].init(*m_device, semaphore_create_info);
+        semaphore[2].init(*m_device, semaphore_create_info);
+
+        const char *expected_vuid =
+            has_timeline_sem_ext ? "VUID-vkQueueBindSparse-pWaitSemaphores-03245" : "VUID-vkQueueBindSparse-pWaitSemaphores-01117";
+
+        VkBindSparseInfo bind_info[3] = {};
+
+        bind_info[0] = LvlInitStruct<VkBindSparseInfo>();
+        bind_info[0].waitSemaphoreCount = 1;
+        bind_info[0].pWaitSemaphores = &semaphore[0].handle();
+        bind_info[0].signalSemaphoreCount = 1;
+        bind_info[0].pSignalSemaphores = &semaphore[1].handle();
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, expected_vuid);
+        vk::QueueBindSparse(m_device->m_queue, 1, &bind_info[0], VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        bind_info[1] = LvlInitStruct<VkBindSparseInfo>();
+        bind_info[1].waitSemaphoreCount = 1;
+        bind_info[1].pWaitSemaphores = &semaphore[1].handle();
+        bind_info[1].signalSemaphoreCount = 1;
+        bind_info[1].pSignalSemaphores = &semaphore[2].handle();
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, expected_vuid);
+        vk::QueueBindSparse(m_device->m_queue, 2, bind_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        bind_info[2] = LvlInitStruct<VkBindSparseInfo>();
+        bind_info[2].signalSemaphoreCount = 1;
+        bind_info[2].pSignalSemaphores = &semaphore[0].handle();
+
+        ASSERT_VK_SUCCESS(vk::QueueBindSparse(m_device->m_queue, 1, &bind_info[2], VK_NULL_HANDLE));
+        ASSERT_VK_SUCCESS(vk::QueueBindSparse(m_device->m_queue, 2, bind_info, VK_NULL_HANDLE));
+        ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+    }
+    if (sync2_features.synchronization2) {
+        vk_testing::Semaphore semaphore[3];
+        semaphore[0].init(*m_device, semaphore_create_info);
+        semaphore[1].init(*m_device, semaphore_create_info);
+        semaphore[2].init(*m_device, semaphore_create_info);
+
+        // the odds of having sync2 but not timeline semaphores are low, but the 'old' vuid is defined...
+        const char *expected_vuid =
+            has_timeline_sem_ext ? "VUID-vkQueueSubmit2-semaphore-03873" : "VUID-vkQueueSubmit2-semaphore-03872";
+
+        VkSemaphoreSubmitInfo sem_info[3];
+        for (int i = 0; i < 3; i++) {
+            sem_info[i] = LvlInitStruct<VkSemaphoreSubmitInfo>();
+            sem_info[i].semaphore = semaphore[i].handle();
+            sem_info[i].stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        }
+
+        VkSubmitInfo2 submit_info[3] = {};
+        submit_info[0] = LvlInitStruct<VkSubmitInfo2>();
+        submit_info[0].waitSemaphoreInfoCount = 1;
+        submit_info[0].pWaitSemaphoreInfos = &sem_info[0];
+        submit_info[0].signalSemaphoreInfoCount = 1;
+        submit_info[0].pSignalSemaphoreInfos = &sem_info[1];
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, expected_vuid);
+        vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info[0], VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        submit_info[1] = LvlInitStruct<VkSubmitInfo2>();
+        submit_info[1].waitSemaphoreInfoCount = 1;
+        submit_info[1].pWaitSemaphoreInfos = &sem_info[1];
+        submit_info[1].signalSemaphoreInfoCount = 1;
+        submit_info[1].pSignalSemaphoreInfos = &sem_info[2];
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, expected_vuid);
+        vk::QueueSubmit2KHR(m_device->m_queue, 2, submit_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+
+        submit_info[2] = LvlInitStruct<VkSubmitInfo2>();
+        submit_info[2].signalSemaphoreInfoCount = 1;
+        submit_info[2].pSignalSemaphoreInfos = &sem_info[0];
+
+        ASSERT_VK_SUCCESS(vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info[2], VK_NULL_HANDLE));
+        ASSERT_VK_SUCCESS(vk::QueueSubmit2KHR(m_device->m_queue, 2, submit_info, VK_NULL_HANDLE));
+        ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+    }
+}
+
+TEST_F(NegativeSyncObject, QueueSubmitTimelineSemaphoreOutOfOrder) {
+    TEST_DESCRIPTION("Submit out-of-order timeline semaphores.");
+
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
+
+    // We need two queues for this
+    uint32_t queue_count;
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, NULL);
+    std::vector<VkQueueFamilyProperties> queue_props(queue_count);
+    vk::GetPhysicalDeviceQueueFamilyProperties(gpu(), &queue_count, queue_props.data());
+
+    uint32_t family_index[2] = {0};
+    uint32_t queue_index[2] = {0};
+
+    if (queue_count > 1) {
+        family_index[1]++;
+    } else {
+        // If there's only one family index, check if it supports more than 1 queue
+        if (queue_props[0].queueCount > 1) {
+            queue_index[1]++;
+        } else {
+            GTEST_SKIP() << "Multiple queues are required to run this test";
+        }
+    }
+
+    float priorities[] = {1.0f, 1.0f};
+    VkDeviceQueueCreateInfo queue_info[2] = {};
+    queue_info[0] = LvlInitStruct<VkDeviceQueueCreateInfo>();
+    queue_info[0].queueFamilyIndex = family_index[0];
+    queue_info[0].queueCount = queue_count > 1 ? 1 : 2;
+    queue_info[0].pQueuePriorities = &(priorities[0]);
+
+    queue_info[1] = LvlInitStruct<VkDeviceQueueCreateInfo>();
+    queue_info[1].queueFamilyIndex = family_index[1];
+    queue_info[1].queueCount = queue_count > 1 ? 1 : 2;
+    queue_info[1].pQueuePriorities = &(priorities[0]);
+
+    VkDeviceCreateInfo dev_info = LvlInitStruct<VkDeviceCreateInfo>();
+    dev_info.queueCreateInfoCount = queue_count > 1 ? 2 : 1;
+    dev_info.pQueueCreateInfos = &(queue_info[0]);
+    dev_info.enabledLayerCount = 0;
+    dev_info.enabledExtensionCount = m_device_extension_names.size();
+    dev_info.ppEnabledExtensionNames = m_device_extension_names.data();
+
+    timeline_semaphore_features.timelineSemaphore = true;
+    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&timeline_semaphore_features);
+    dev_info.pNext = &features2;
+
+    VkDevice dev;
+    ASSERT_VK_SUCCESS(vk::CreateDevice(gpu(), &dev_info, nullptr, &dev));
+
+    VkQueue queue[2];
+    vk::GetDeviceQueue(dev, family_index[0], queue_index[0], &(queue[0]));
+    vk::GetDeviceQueue(dev, family_index[1], queue_index[1], &(queue[1]));
+
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    semaphore_type_create_info.initialValue = 5;
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    VkSemaphore semaphore;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(dev, &semaphore_create_info, nullptr, &semaphore));
+
+    uint64_t semaphoreValues[] = {10, 100, 0, 10};
+    VkTimelineSemaphoreSubmitInfoKHR timeline_semaphore_submit_info = LvlInitStruct<VkTimelineSemaphoreSubmitInfoKHR>();
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pWaitSemaphoreValues = &(semaphoreValues[0]);
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = &(semaphoreValues[1]);
+
+    VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>(&timeline_semaphore_submit_info);
+    submit_info.pWaitDstStageMask = &stageFlags;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &semaphore;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &semaphore;
+
+    ASSERT_VK_SUCCESS(vk::QueueSubmit(queue[0], 1, &submit_info, VK_NULL_HANDLE));
+
+    timeline_semaphore_submit_info.pWaitSemaphoreValues = &(semaphoreValues[2]);
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = &(semaphoreValues[3]);
+
+    ASSERT_VK_SUCCESS(vk::QueueSubmit(queue[1], 1, &submit_info, VK_NULL_HANDLE));
+
+    vk::DeviceWaitIdle(dev);
+    vk::DestroySemaphore(dev, semaphore, nullptr);
+    vk::DestroyDevice(dev, nullptr);
+}
+
+TEST_F(NegativeSyncObject, WaitSemaphoresType) {
+    TEST_DESCRIPTION("Wait for a non Timeline Semaphore");
+
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
+
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    VkSemaphore semaphore[2];
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &(semaphore[0])));
+
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_BINARY;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &(semaphore[1])));
+
+    VkSemaphoreWaitInfo semaphore_wait_info = LvlInitStruct<VkSemaphoreWaitInfo>();
+    semaphore_wait_info.semaphoreCount = 2;
+    semaphore_wait_info.pSemaphores = &semaphore[0];
+    const uint64_t wait_values[] = {10, 40};
+    semaphore_wait_info.pValues = &wait_values[0];
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreWaitInfo-pSemaphores-03256");
+    vk::WaitSemaphoresKHR(m_device->device(), &semaphore_wait_info, 10000);
+    m_errorMonitor->VerifyFound();
+
+    vk::DestroySemaphore(m_device->device(), semaphore[0], nullptr);
+    vk::DestroySemaphore(m_device->device(), semaphore[1], nullptr);
+}
+
+TEST_F(NegativeSyncObject, SignalSemaphoreType) {
+    TEST_DESCRIPTION("Signal a non Timeline Semaphore");
+
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto timelinefeatures = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeaturesKHR>();
+    GetPhysicalDeviceFeatures2(timelinefeatures);
+    if (!timelinefeatures.timelineSemaphore) {
+        GTEST_SKIP() << "Timeline semaphores are not supported";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
+    VkSemaphore semaphore;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore));
+
+    VkSemaphoreSignalInfo semaphore_signal_info = LvlInitStruct<VkSemaphoreSignalInfo>();
+    semaphore_signal_info.semaphore = semaphore;
+    semaphore_signal_info.value = 10;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-semaphore-03257");
+    vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+    m_errorMonitor->VerifyFound();
+
+    vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
+}
+
+TEST_F(NegativeSyncObject, SignalSemaphoreValue) {
+    TEST_DESCRIPTION("Signal a Timeline Semaphore with invalid values");
+
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    auto timeline_semaphore_features = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeatures>();
+    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
+    if (!timeline_semaphore_features.timelineSemaphore) {
+        GTEST_SKIP() << "timelineSemaphore not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &timeline_semaphore_features));
+
+    auto timelineproperties = LvlInitStruct<VkPhysicalDeviceTimelineSemaphorePropertiesKHR>();
+    GetPhysicalDeviceProperties2(timelineproperties);
+
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    semaphore_type_create_info.initialValue = 5;
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    VkSemaphore semaphore[2];
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore[0]));
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore[1]));
+
+    VkSemaphoreSignalInfo semaphore_signal_info = LvlInitStruct<VkSemaphoreSignalInfo>();
+    semaphore_signal_info.semaphore = semaphore[0];
+    semaphore_signal_info.value = 3;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-value-03258");
+    vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+    m_errorMonitor->VerifyFound();
+
+    semaphore_signal_info.value = 10;
+    ASSERT_VK_SUCCESS(vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+
+    VkTimelineSemaphoreSubmitInfoKHR timeline_semaphore_submit_info = LvlInitStruct<VkTimelineSemaphoreSubmitInfoKHR>();
+    uint64_t waitValue = 10;
+    uint64_t signalValue = 20;
+    timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pWaitSemaphoreValues = &waitValue;
+    timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+    timeline_semaphore_submit_info.pSignalSemaphoreValues = &signalValue;
+
+    VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>(&timeline_semaphore_submit_info);
+    submit_info.pWaitDstStageMask = &stageFlags;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &(semaphore[1]);
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &(semaphore[0]);
+    ASSERT_VK_SUCCESS(vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE));
+
+    semaphore_signal_info.value = 25;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-value-03259");
+    vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+    m_errorMonitor->VerifyFound();
+
+    semaphore_signal_info.value = 15;
+    ASSERT_VK_SUCCESS(vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+    semaphore_signal_info.semaphore = semaphore[1];
+    ASSERT_VK_SUCCESS(vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+
+    // Check if we can test violations of maxTimelineSemaphoreValueDifference
+    if (timelineproperties.maxTimelineSemaphoreValueDifference < vvl::kU64Max) {
+        VkSemaphore sem;
+
+        semaphore_type_create_info.initialValue = 0;
+        ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &sem));
+
+        semaphore_signal_info.semaphore = sem;
+        semaphore_signal_info.value = timelineproperties.maxTimelineSemaphoreValueDifference + 1;
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-value-03260");
+        vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+        m_errorMonitor->VerifyFound();
+
+        semaphore_signal_info.value--;
+        ASSERT_VK_SUCCESS(vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+
+        ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+
+        vk::DestroySemaphore(m_device->device(), sem, nullptr);
+
+        // Regression test for value difference validations ran against binary semaphores
+        {
+            VkSemaphore timeline_sem;
+            VkSemaphore binary_sem;
+
+            semaphore_type_create_info.initialValue = 0;
+            ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &timeline_sem));
+
+            VkSemaphoreCreateInfo binary_semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
+
+            ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &binary_semaphore_create_info, nullptr, &binary_sem));
+
+            signalValue = 1;
+            uint64_t offendingValue = timelineproperties.maxTimelineSemaphoreValueDifference + 1;
+
+            submit_info.waitSemaphoreCount = 1;
+            submit_info.pWaitSemaphores = &timeline_sem;
+            submit_info.signalSemaphoreCount = 1;
+            submit_info.pSignalSemaphores = &binary_sem;
+
+            timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
+            timeline_semaphore_submit_info.pWaitSemaphoreValues = &signalValue;
+
+            // These two assignments are not required by the spec, but would segfault on older versions of validation layers
+            timeline_semaphore_submit_info.signalSemaphoreValueCount = 1;
+            timeline_semaphore_submit_info.pSignalSemaphoreValues = &offendingValue;
+
+            vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+            semaphore_signal_info.semaphore = timeline_sem;
+            semaphore_signal_info.value = 1;
+            vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+
+            ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+
+            vk::DestroySemaphore(m_device->device(), binary_sem, nullptr);
+            vk::DestroySemaphore(m_device->device(), timeline_sem, nullptr);
+        }
+    }
+
+    ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+    vk::DestroySemaphore(m_device->device(), semaphore[0], nullptr);
+    vk::DestroySemaphore(m_device->device(), semaphore[1], nullptr);
+}
+
+TEST_F(NegativeSyncObject, Sync2SignalSemaphoreValue) {
+    TEST_DESCRIPTION("Signal a Timeline Semaphore with invalid values");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
+        GTEST_SKIP() << "Test requires at least Vulkan 1.2.";
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported.";
+    }
+
+    auto vk12_features = LvlInitStruct<VkPhysicalDeviceVulkan12Features>();
+    auto sync2_features = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>(&vk12_features);
+    auto features2 = GetPhysicalDeviceFeatures2(sync2_features);
+    if (!sync2_features.synchronization2) {
+        GTEST_SKIP() << "VkPhysicalDeviceSynchronization2FeaturesKHR::synchronization2 required";
+    }
+    if (!vk12_features.timelineSemaphore) {
+        GTEST_SKIP() << "VkPhysicalDeviceVulkan12Features::timelineSemaphore required";
+    }
+    InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+
+    auto timelineproperties = LvlInitStruct<VkPhysicalDeviceTimelineSemaphorePropertiesKHR>();
+    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&timelineproperties);
+    GetPhysicalDeviceProperties2(prop2);
+
+    auto semaphore_type_create_info = LvlInitStruct<VkSemaphoreTypeCreateInfoKHR>();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    semaphore_type_create_info.initialValue = 5;
+
+    auto semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>(&semaphore_type_create_info);
+
+    vk_testing::Semaphore semaphore[2];
+    semaphore[0].init(*m_device, semaphore_create_info);
+    semaphore[1].init(*m_device, semaphore_create_info);
+
+    auto semaphore_signal_info = LvlInitStruct<VkSemaphoreSignalInfo>();
+    semaphore_signal_info.semaphore = semaphore[0].handle();
+    semaphore_signal_info.value = 10;
+    ASSERT_VK_SUCCESS(vk::SignalSemaphore(m_device->device(), &semaphore_signal_info));
+
+    auto signal_info = LvlInitStruct<VkSemaphoreSubmitInfoKHR>();
+    signal_info.semaphore = semaphore[0].handle();
+
+    auto wait_info = LvlInitStruct<VkSemaphoreSubmitInfoKHR>();
+    wait_info.semaphore = semaphore[0].handle();
+    wait_info.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+    auto submit_info = LvlInitStruct<VkSubmitInfo2KHR>();
+    submit_info.signalSemaphoreInfoCount = 1;
+    submit_info.pSignalSemaphoreInfos = &signal_info;
+    submit_info.waitSemaphoreInfoCount = 1;
+    submit_info.pWaitSemaphoreInfos = &wait_info;
+
+    // signal value > wait value
+    signal_info.value = 11;
+    wait_info.value = 11;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo2-semaphore-03881");
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // signal value == current value
+    signal_info.value = 10;
+    wait_info.value = 5;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo2-semaphore-03882");
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    signal_info.value = 20;
+    wait_info.semaphore = semaphore[1].handle();
+    ASSERT_VK_SUCCESS(vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE));
+
+    semaphore_signal_info.value = 25;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-value-03259");
+    vk::SignalSemaphore(m_device->device(), &semaphore_signal_info);
+    m_errorMonitor->VerifyFound();
+
+    semaphore_signal_info.value = 15;
+    ASSERT_VK_SUCCESS(vk::SignalSemaphore(m_device->device(), &semaphore_signal_info));
+    semaphore_signal_info.semaphore = semaphore[1].handle();
+    ASSERT_VK_SUCCESS(vk::SignalSemaphore(m_device->device(), &semaphore_signal_info));
+
+    // Check if we can test violations of maxTimelineSemaphoreValueDifference
+    if (timelineproperties.maxTimelineSemaphoreValueDifference < vvl::kU64Max) {
+        // Regression test for value difference validations ran against binary semaphores
+        semaphore_type_create_info.initialValue = 0;
+        vk_testing::Semaphore timeline_sem(*m_device, semaphore_create_info);
+
+        auto binary_semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
+        vk_testing::Semaphore binary_sem(*m_device, binary_semaphore_create_info);
+
+        wait_info.semaphore = timeline_sem.handle();
+        wait_info.value = 1;
+
+        signal_info.semaphore = binary_sem.handle();
+        signal_info.value = timelineproperties.maxTimelineSemaphoreValueDifference + 1;
+
+        vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+        semaphore_signal_info.semaphore = timeline_sem.handle();
+        semaphore_signal_info.value = 1;
+        vk::SignalSemaphore(m_device->device(), &semaphore_signal_info);
+
+        ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+    }
+
+    ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
+}
+
+TEST_F(NegativeSyncObject, SemaphoreCounterType) {
+    TEST_DESCRIPTION("Get payload from a non Timeline Semaphore");
+
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto timelinefeatures = LvlInitStruct<VkPhysicalDeviceTimelineSemaphoreFeaturesKHR>();
+    GetPhysicalDeviceFeatures2(timelinefeatures);
+    if (!timelinefeatures.timelineSemaphore) {
+        GTEST_SKIP() << "Timeline semaphores are not supported";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
+
+    VkSemaphore semaphore;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore));
+
+    uint64_t value = 0xdeadbeef;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetSemaphoreCounterValue-semaphore-03255");
+    vk::GetSemaphoreCounterValueKHR(m_device->device(), semaphore, &value);
+    m_errorMonitor->VerifyFound();
+
+    vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
+}
+
+TEST_F(NegativeSyncObject, EventStageMaskOneCommandBufferPass) {
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkCommandBufferObj commandBuffer1(m_device, m_commandPool);
+    VkCommandBufferObj commandBuffer2(m_device, m_commandPool);
+
+    VkEventCreateInfo event_create_info = LvlInitStruct<VkEventCreateInfo>();
+    vk_testing::Event event(*m_device, event_create_info);
+
+    commandBuffer1.begin();
+    vk::CmdSetEvent(commandBuffer1.handle(), event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    vk::CmdWaitEvents(commandBuffer1.handle(), 1, &event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
+    commandBuffer1.end();
+
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &commandBuffer1.handle();
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(NegativeSyncObject, EventStageMaskOneCommandBufferFail) {
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkCommandBufferObj commandBuffer1(m_device, m_commandPool);
+    VkCommandBufferObj commandBuffer2(m_device, m_commandPool);
+
+    VkEventCreateInfo event_create_info = LvlInitStruct<VkEventCreateInfo>();
+    vk_testing::Event event(*m_device, event_create_info);
+
+    commandBuffer1.begin();
+    vk::CmdSetEvent(commandBuffer1.handle(), event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    // wrong srcStageMask
+    vk::CmdWaitEvents(commandBuffer1.handle(), 1, &event.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
+    commandBuffer1.end();
+
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &commandBuffer1.handle();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWaitEvents-srcStageMask-parameter");
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(NegativeSyncObject, EventStageMaskTwoCommandBufferPass) {
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkCommandBufferObj commandBuffer1(m_device, m_commandPool);
+    VkCommandBufferObj commandBuffer2(m_device, m_commandPool);
+
+    VkEventCreateInfo event_create_info = LvlInitStruct<VkEventCreateInfo>();
+    vk_testing::Event event(*m_device, event_create_info);
+
+    commandBuffer1.begin();
+    vk::CmdSetEvent(commandBuffer1.handle(), event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    commandBuffer1.end();
+
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &commandBuffer1.handle();
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+    commandBuffer2.begin();
+    vk::CmdWaitEvents(commandBuffer2.handle(), 1, &event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
+    commandBuffer2.end();
+
+    submit_info.pCommandBuffers = &commandBuffer2.handle();
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(NegativeSyncObject, EventStageMaskTwoCommandBufferFail) {
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    VkCommandBufferObj commandBuffer1(m_device, m_commandPool);
+    VkCommandBufferObj commandBuffer2(m_device, m_commandPool);
+
+    VkEventCreateInfo event_create_info = LvlInitStruct<VkEventCreateInfo>();
+    vk_testing::Event event(*m_device, event_create_info);
+
+    commandBuffer1.begin();
+    vk::CmdSetEvent(commandBuffer1.handle(), event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    commandBuffer1.end();
+
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &commandBuffer1.handle();
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+    commandBuffer2.begin();
+    // wrong srcStageMask
+    vk::CmdWaitEvents(commandBuffer2.handle(), 1, &event.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
+    commandBuffer2.end();
+
+    submit_info.pCommandBuffers = &commandBuffer2.handle();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWaitEvents-srcStageMask-parameter");
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+    vk::QueueWaitIdle(m_device->m_queue);
+}
+
+TEST_F(NegativeSyncObject, QueueForwardProgressFenceWait) {
+    TEST_DESCRIPTION("Call VkQueueSubmit with a semaphore that is already signaled but not waited on by the queue.");
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    const char *queue_forward_progress_message = "UNASSIGNED-CoreValidation-DrawState-QueueForwardProgress";
+
+    VkCommandBufferObj cb1(m_device, m_commandPool);
+    cb1.begin();
+    cb1.end();
+
+    VkSemaphoreCreateInfo semaphore_create_info = LvlInitStruct<VkSemaphoreCreateInfo>();
+    VkSemaphore semaphore;
+    ASSERT_VK_SUCCESS(vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore));
+    VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &cb1.handle();
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &semaphore;
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+    m_commandBuffer->begin();
+    m_commandBuffer->end();
+    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, queue_forward_progress_message);
+    vk::QueueSubmit(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    vk::DeviceWaitIdle(m_device->device());
+    vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
+}
+
+TEST_F(NegativeSyncObject, PipelineStageConditionalRenderingWithWrongQueue) {
+    TEST_DESCRIPTION("Run CmdPipelineBarrier with VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT and wrong VkQueueFlagBits");
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto cond_rendering_feature = LvlInitStruct<VkPhysicalDeviceConditionalRenderingFeaturesEXT>();
+    GetPhysicalDeviceFeatures2(cond_rendering_feature);
+    if (cond_rendering_feature.conditionalRendering == VK_FALSE) {
+        GTEST_SKIP() << "conditionalRendering feature not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &cond_rendering_feature));
+
+    uint32_t only_transfer_queueFamilyIndex = vvl::kU32Max;
+
+    const auto q_props = vk_testing::PhysicalDevice(gpu()).queue_properties();
+    ASSERT_TRUE(q_props.size() > 0);
+    ASSERT_TRUE(q_props[0].queueCount > 0);
+
+    for (uint32_t i = 0; i < (uint32_t)q_props.size(); i++) {
+        if (q_props[i].queueFlags == VK_QUEUE_TRANSFER_BIT) {
+            only_transfer_queueFamilyIndex = i;
+            break;
+        }
+    }
+
+    if (only_transfer_queueFamilyIndex == vvl::kU32Max) {
+        GTEST_SKIP() << "Only VK_QUEUE_TRANSFER_BIT Queue is not supported";
+    }
+
+    VkImageObj image(m_device);
+    image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+
+    VkCommandPoolObj commandPool(m_device, only_transfer_queueFamilyIndex);
+    VkCommandBufferObj commandBuffer(m_device, &commandPool);
+
+    commandBuffer.begin();
+
+    VkImageMemoryBarrier imb = LvlInitStruct<VkImageMemoryBarrier>();
+    imb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    imb.dstAccessMask = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT;
+    imb.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    imb.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    imb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imb.image = image.handle();
+    imb.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imb.subresourceRange.baseMipLevel = 0;
+    imb.subresourceRange.levelCount = 1;
+    imb.subresourceRange.baseArrayLayer = 0;
+    imb.subresourceRange.layerCount = 1;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcStageMask-06461");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-dstStageMask-06462");
+    vk::CmdPipelineBarrier(commandBuffer.handle(), VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+                           VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0, 0, nullptr, 0, nullptr, 1, &imb);
+    m_errorMonitor->VerifyFound();
+
+    commandBuffer.end();
 }

@@ -12,11 +12,13 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "cast_utils.h"
-#include "enum_flag_bits.h"
+#include "utils/cast_utils.h"
+#include "generated/enum_flag_bits.h"
 #include "../framework/layer_validation_tests.h"
 
-TEST_F(VkLayerTest, SparseBindingImageBufferCreate) {
+class NegativeSparse : public VkLayerTest {};
+
+TEST_F(NegativeSparse, BindingImageBufferCreate) {
     TEST_DESCRIPTION("Create buffer/image with sparse attributes but without the sparse_binding bit set");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -73,7 +75,7 @@ TEST_F(VkLayerTest, SparseBindingImageBufferCreate) {
     }
 }
 
-TEST_F(VkLayerTest, SparseResidencyImageCreateUnsupportedTypes) {
+TEST_F(NegativeSparse, ResidencyImageCreateUnsupportedTypes) {
     TEST_DESCRIPTION("Create images with sparse residency with unsupported types");
 
     // Determine which device feature are available
@@ -105,7 +107,7 @@ TEST_F(VkLayerTest, SparseResidencyImageCreateUnsupportedTypes) {
     image_create_info.queueFamilyIndexCount = 0;
     image_create_info.pQueueFamilyIndices = NULL;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    image_create_info.flags = VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
+    image_create_info.flags = VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
 
     // 1D image w/ sparse residency is an error
     CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-imageType-00970");
@@ -121,7 +123,7 @@ TEST_F(VkLayerTest, SparseResidencyImageCreateUnsupportedTypes) {
     CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-imageType-00972");
 }
 
-TEST_F(VkLayerTest, SparseResidencyImageCreateUnsupportedSamples) {
+TEST_F(NegativeSparse, ResidencyImageCreateUnsupportedSamples) {
     TEST_DESCRIPTION("Create images with sparse residency with unsupported tiling or sample counts");
 
     // Determine which device feature are available
@@ -156,7 +158,7 @@ TEST_F(VkLayerTest, SparseResidencyImageCreateUnsupportedSamples) {
     image_create_info.queueFamilyIndexCount = 0;
     image_create_info.pQueueFamilyIndices = NULL;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    image_create_info.flags = VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
+    image_create_info.flags = VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
 
     // 2D image w/ sparse residency and linear tiling is an error
     CreateImageTest(*this, &image_create_info,
@@ -177,7 +179,7 @@ TEST_F(VkLayerTest, SparseResidencyImageCreateUnsupportedSamples) {
     CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-imageType-00976");
 }
 
-TEST_F(VkLayerTest, SparseResidencyFlagMissing) {
+TEST_F(NegativeSparse, ResidencyFlag) {
     TEST_DESCRIPTION("Try to use VkSparseImageMemoryBindInfo without sparse residency flag");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -223,7 +225,7 @@ TEST_F(VkLayerTest, SparseResidencyFlagMissing) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, InvalidSparseImageUsageBits) {
+TEST_F(NegativeSparse, ImageUsageBits) {
     TEST_DESCRIPTION("Try to use VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT with sparse image");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -260,7 +262,7 @@ TEST_F(VkLayerTest, InvalidSparseImageUsageBits) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, SparseMemoryBindOffset) {
+TEST_F(NegativeSparse, MemoryBindOffset) {
     TEST_DESCRIPTION("Try to use VkSparseImageMemoryBind with offset not less than memory size");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -353,7 +355,7 @@ TEST_F(VkLayerTest, SparseMemoryBindOffset) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, InvalidQueueBindSparseMemoryType) {
+TEST_F(NegativeSparse, QueueBindSparseMemoryType) {
     TEST_DESCRIPTION("Test QueueBindSparse with lazily allocated memory");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -439,18 +441,39 @@ TEST_F(VkLayerTest, InvalidQueueBindSparseMemoryType) {
     image_opaque_memory_bind_info.pBinds = &image_memory_bind;
 
     VkBindSparseInfo bind_info = LvlInitStruct<VkBindSparseInfo>();
-    bind_info.bufferBindCount = 1;
     bind_info.pBufferBinds = &buffer_memory_bind_info;
-    bind_info.imageOpaqueBindCount = 1;
     bind_info.pImageOpaqueBinds = &image_opaque_memory_bind_info;
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-memory-01097");
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-memory-01097");
-    vk::QueueBindSparse(m_device->m_queue, 1, &bind_info, VK_NULL_HANDLE);
-    m_errorMonitor->VerifyFound();
+    // Validate only buffer
+    {
+        bind_info.bufferBindCount = 1;
+        bind_info.imageOpaqueBindCount = 0;
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-memory-01097");
+        vk::QueueBindSparse(m_device->m_queue, 1, &bind_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+    }
+
+    // Validate only image
+    {
+        bind_info.bufferBindCount = 0;
+        bind_info.imageOpaqueBindCount = 1;
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-memory-01097");
+        vk::QueueBindSparse(m_device->m_queue, 1, &bind_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+    }
+
+    // Validate both a buffer and image error occur
+    {
+        bind_info.bufferBindCount = 1;
+        bind_info.imageOpaqueBindCount = 1;
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-memory-01097");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-memory-01097");
+        vk::QueueBindSparse(m_device->m_queue, 1, &bind_info, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+    }
 }
 
-TEST_F(VkLayerTest, QueueBindSparseInvalidSparseMemoryBindSize) {
+TEST_F(NegativeSparse, QueueBindSparseMemoryBindSize) {
     TEST_DESCRIPTION("Test QueueBindSparse with invalid sparse memory bind size");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -497,7 +520,7 @@ TEST_F(VkLayerTest, QueueBindSparseInvalidSparseMemoryBindSize) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, QueueBindSparseInvalidSparseMemoryBindResourceOffset) {
+TEST_F(NegativeSparse, QueueBindSparseMemoryBindResourceOffset) {
     TEST_DESCRIPTION("Test QueueBindSparse with invalid sparse memory bind resource offset");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -546,7 +569,7 @@ TEST_F(VkLayerTest, QueueBindSparseInvalidSparseMemoryBindResourceOffset) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, QueueBindSparseInvalidSparseMemoryBindSizeResourceOffset) {
+TEST_F(NegativeSparse, QueueBindSparseMemoryBindSizeResourceOffset) {
     TEST_DESCRIPTION("Test QueueBindSparse with invalid sparse memory bind size due to resource offset");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -595,7 +618,7 @@ TEST_F(VkLayerTest, QueueBindSparseInvalidSparseMemoryBindSizeResourceOffset) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, QueueBindSparseInvalidSparseMemoryBindSizeMemoryOffset) {
+TEST_F(NegativeSparse, QueueBindSparseMemoryBindSizeMemoryOffset) {
     TEST_DESCRIPTION("Test QueueBindSparse with invalid sparse memory bind size due to memory offset");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -644,7 +667,7 @@ TEST_F(VkLayerTest, QueueBindSparseInvalidSparseMemoryBindSizeMemoryOffset) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, InvalidVkSparseImageMemoryBind) {
+TEST_F(NegativeSparse, ImageMemoryBind) {
     TEST_DESCRIPTION("Try to bind sparse resident image with invalid VkSparseImageMemoryBind");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -768,7 +791,7 @@ TEST_F(VkLayerTest, InvalidVkSparseImageMemoryBind) {
     image_bind.subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
-TEST_F(VkLayerTest, OverlappingSparseBufferCopy) {
+TEST_F(NegativeSparse, OverlappingBufferCopy) {
     TEST_DESCRIPTION("Test overlapping sparse buffers' copy with overlapping device memory");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -778,8 +801,7 @@ TEST_F(VkLayerTest, OverlappingSparseBufferCopy) {
     }
 
     auto s_info = LvlInitStruct<VkSemaphoreCreateInfo>();
-    VkSemaphore semaphore = VK_NULL_HANDLE;
-    vk::CreateSemaphore(m_device->handle(), &s_info, nullptr, &semaphore);
+    vk_testing::Semaphore semaphore(*m_device, s_info);
 
     VkBufferCopy copy_info;
     copy_info.srcOffset = 0;
@@ -820,7 +842,7 @@ TEST_F(VkLayerTest, OverlappingSparseBufferCopy) {
     bind_info.bufferBindCount = 2;
     bind_info.pBufferBinds = buffer_memory_bind_infos;
     bind_info.signalSemaphoreCount = 1;
-    bind_info.pSignalSemaphores = &semaphore;
+    bind_info.pSignalSemaphores = &semaphore.handle();
 
     const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
     if (!sparse_index) {
@@ -841,7 +863,7 @@ TEST_F(VkLayerTest, OverlappingSparseBufferCopy) {
     VkPipelineStageFlags mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     auto submit_info = LvlInitStruct<VkSubmitInfo>();
     submit_info.waitSemaphoreCount = 1;
-    submit_info.pWaitSemaphores = &semaphore;
+    submit_info.pWaitSemaphores = &semaphore.handle();
     submit_info.pWaitDstStageMask = &mask;
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
@@ -852,6 +874,39 @@ TEST_F(VkLayerTest, OverlappingSparseBufferCopy) {
 
     // Wait for operations to finish before destroying anything
     vk::QueueWaitIdle(m_device->m_queue);
+}
 
-    vk::DestroySemaphore(m_device->handle(), semaphore, nullptr);
+TEST_F(NegativeSparse, BufferFlagsFeature) {
+    TEST_DESCRIPTION("Create buffers with Flags that require disabled sparse features");
+
+    VkPhysicalDeviceFeatures features = {};
+    features.sparseBinding = VK_FALSE;
+    features.sparseResidencyBuffer = VK_FALSE;
+    features.sparseResidencyAliased = VK_FALSE;
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    ASSERT_NO_FATAL_FAILURE(InitState(&features));
+
+    auto buffer_create_info = LvlInitStruct<VkBufferCreateInfo>();
+    buffer_create_info.size = 64;
+    buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+    VkBuffer buffer;
+
+    buffer_create_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-flags-00915");
+    vk::CreateBuffer(device(), &buffer_create_info, nullptr, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    buffer_create_info.flags = VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-flags-00916");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-flags-00918");
+    vk::CreateBuffer(device(), &buffer_create_info, nullptr, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    buffer_create_info.flags = VK_BUFFER_CREATE_SPARSE_ALIASED_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-flags-00917");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferCreateInfo-flags-00918");
+    vk::CreateBuffer(device(), &buffer_create_info, nullptr, &buffer);
+    m_errorMonitor->VerifyFound();
 }

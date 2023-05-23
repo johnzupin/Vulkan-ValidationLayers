@@ -12,12 +12,14 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "cast_utils.h"
-#include "enum_flag_bits.h"
+#include "utils/cast_utils.h"
+#include "generated/enum_flag_bits.h"
 #include "../framework/layer_validation_tests.h"
-#include "vk_layer_utils.h"
+#include "utils/vk_layer_utils.h"
 
-TEST_F(VkLayerTest, MirrorClampToEdgeNotEnabled) {
+class NegativeSampler : public VkLayerTest {};
+
+TEST_F(NegativeSampler, MirrorClampToEdgeNotEnabled) {
     TEST_DESCRIPTION("Validation should catch using CLAMP_TO_EDGE addressing mode if the extension is not enabled.");
 
     SetTargetApiVersion(VK_API_VERSION_1_0);
@@ -35,7 +37,7 @@ TEST_F(VkLayerTest, MirrorClampToEdgeNotEnabled) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, MirrorClampToEdgeNotEnabled12) {
+TEST_F(NegativeSampler, MirrorClampToEdgeNotEnabled12) {
     TEST_DESCRIPTION("Validation using CLAMP_TO_EDGE for Vulkan 1.2 without the samplerMirrorClampToEdge feature enabled.");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -53,7 +55,7 @@ TEST_F(VkLayerTest, MirrorClampToEdgeNotEnabled12) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, AnisotropyFeatureDisabled) {
+TEST_F(NegativeSampler, AnisotropyFeatureDisabled) {
     TEST_DESCRIPTION("Validation should check anisotropy parameters are correct with samplerAnisotropy disabled.");
 
     // Determine if required device features are available
@@ -67,18 +69,11 @@ TEST_F(VkLayerTest, AnisotropyFeatureDisabled) {
     VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
     // With the samplerAnisotropy disable, the sampler must not enable it.
     sampler_info.anisotropyEnable = VK_TRUE;
-    VkSampler sampler = VK_NULL_HANDLE;
-
-    VkResult err;
-    err = vk::CreateSampler(m_device->device(), &sampler_info, NULL, &sampler);
+    vk_testing::Sampler sampler(*m_device, sampler_info);
     m_errorMonitor->VerifyFound();
-    if (VK_SUCCESS == err) {
-        vk::DestroySampler(m_device->device(), sampler, NULL);
-    }
-    sampler = VK_NULL_HANDLE;
 }
 
-TEST_F(VkLayerTest, AnisotropyFeatureEnabled) {
+TEST_F(NegativeSampler, AnisotropyFeatureEnabled) {
     TEST_DESCRIPTION("Validation must check several conditions that apply only when Anisotropy is enabled.");
 
     AddOptionalExtensions(VK_IMG_FILTER_CUBIC_EXTENSION_NAME);
@@ -129,7 +124,7 @@ TEST_F(VkLayerTest, AnisotropyFeatureEnabled) {
     }
 }
 
-TEST_F(VkLayerTest, UnnormalizedCoordinatesEnabled) {
+TEST_F(NegativeSampler, UnnormalizedCoordinatesEnabled) {
     TEST_DESCRIPTION("Validate restrictions on sampler parameters when unnormalizedCoordinates is true.");
 
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -190,7 +185,7 @@ TEST_F(VkLayerTest, UnnormalizedCoordinatesEnabled) {
     sampler_info = sampler_info_ref;
 }
 
-TEST_F(VkLayerTest, InvalidSamplerCreateInfo) {
+TEST_F(NegativeSampler, BasicUsage) {
     TEST_DESCRIPTION("Checks various cases where VkSamplerCreateInfo is invalid");
     ASSERT_NO_FATAL_FAILURE(Init());
 
@@ -211,7 +206,7 @@ TEST_F(VkLayerTest, InvalidSamplerCreateInfo) {
     sampler_info.mipLodBias = sampler_info_ref.mipLodBias;
 }
 
-TEST_F(VkLayerTest, ExceedSamplerAllocationCount) {
+TEST_F(NegativeSampler, AllocationCount) {
     VkResult err = VK_SUCCESS;
     const int max_samplers = 32;
     VkSampler samplers[max_samplers + 1];
@@ -248,7 +243,7 @@ TEST_F(VkLayerTest, ExceedSamplerAllocationCount) {
     }
 }
 
-TEST_F(VkLayerTest, SamplerImageViewFormatUnsupportedFilter) {
+TEST_F(NegativeSampler, ImageViewFormatUnsupportedFilter) {
     TEST_DESCRIPTION(
         "Create sampler with a filter and use with image view using a format that does not support the sampler filter.");
 
@@ -411,9 +406,7 @@ TEST_F(VkLayerTest, SamplerImageViewFormatUnsupportedFilter) {
             }
         }
 
-        VkSampler sampler;
-        VkResult err = vk::CreateSampler(m_device->device(), &sci, nullptr, &sampler);
-        ASSERT_VK_SUCCESS(err);
+        vk_testing::Sampler sampler(*m_device, sci);
 
         VkImageObj mpimage(m_device);
         mpimage.Init(128, 128, 1, test_struct.format, VK_IMAGE_USAGE_SAMPLED_BIT, test_struct.tiling);
@@ -445,7 +438,7 @@ TEST_F(VkLayerTest, SamplerImageViewFormatUnsupportedFilter) {
         pipe.dyn_state_ci_.pDynamicStates = &dyn_state;
         ASSERT_VK_SUCCESS(pipe.CreateGraphicsPipeline());
 
-        pipe.descriptor_set_->WriteDescriptorImageInfo(0, view, sampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        pipe.descriptor_set_->WriteDescriptorImageInfo(0, view, sampler.handle(), VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         pipe.descriptor_set_->UpdateDescriptorSets();
 
         m_commandBuffer->begin();
@@ -467,11 +460,10 @@ TEST_F(VkLayerTest, SamplerImageViewFormatUnsupportedFilter) {
         m_commandBuffer->end();
 
         delete fs;
-        vk::DestroySampler(m_device->device(), sampler, nullptr);
     }
 }
 
-TEST_F(VkLayerTest, IllegalAddressModeWithCornerSampledNV) {
+TEST_F(NegativeSampler, AddressModeWithCornerSampledNV) {
     TEST_DESCRIPTION(
         "Create image with VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV flag and sample it with something other than "
         "VK_SAMPLER_ADDRESS_MODE_CLAMP_EDGE.");
@@ -544,7 +536,7 @@ TEST_F(VkLayerTest, IllegalAddressModeWithCornerSampledNV) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, MultiplaneImageSamplerConversionMismatch) {
+TEST_F(NegativeSampler, MultiplaneImageSamplerConversionMismatch) {
     TEST_DESCRIPTION(
         "Create sampler with ycbcr conversion and use with an image created without ycrcb conversion or immutable sampler");
 
@@ -702,7 +694,7 @@ TEST_F(VkLayerTest, MultiplaneImageSamplerConversionMismatch) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, InvalidSamplerFilterMinmax) {
+TEST_F(NegativeSampler, FilterMinmax) {
     TEST_DESCRIPTION("Invalid uses of VK_EXT_sampler_filter_minmax.");
 
     // Enable KHR multiplane req'd extensions
@@ -717,23 +709,6 @@ TEST_F(VkLayerTest, InvalidSamplerFilterMinmax) {
     VkPhysicalDeviceSamplerYcbcrConversionFeatures ycbcr_features = LvlInitStruct<VkPhysicalDeviceSamplerYcbcrConversionFeatures>();
     ycbcr_features.samplerYcbcrConversion = VK_TRUE;
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &ycbcr_features));
-
-    PFN_vkCreateSamplerYcbcrConversionKHR vkCreateSamplerYcbcrConversionFunction = nullptr;
-    PFN_vkDestroySamplerYcbcrConversionKHR vkDestroySamplerYcbcrConversionFunction = nullptr;
-
-    if (DeviceValidationVersion() >= VK_API_VERSION_1_1) {
-        vkCreateSamplerYcbcrConversionFunction = vk::CreateSamplerYcbcrConversion;
-        vkDestroySamplerYcbcrConversionFunction = vk::DestroySamplerYcbcrConversion;
-    } else {
-        vkCreateSamplerYcbcrConversionFunction =
-            (PFN_vkCreateSamplerYcbcrConversionKHR)vk::GetDeviceProcAddr(m_device->handle(), "vkCreateSamplerYcbcrConversionKHR");
-        vkDestroySamplerYcbcrConversionFunction =
-            (PFN_vkDestroySamplerYcbcrConversionKHR)vk::GetDeviceProcAddr(m_device->handle(), "vkDestroySamplerYcbcrConversionKHR");
-    }
-
-    if (!vkCreateSamplerYcbcrConversionFunction || !vkDestroySamplerYcbcrConversionFunction) {
-        GTEST_SKIP() << "Did not find required device support for YcbcrSamplerConversion";
-    }
 
     if (!ImageFormatAndFeaturesSupported(gpu(), VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, VK_IMAGE_TILING_OPTIMAL,
                                          VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT)) {
@@ -755,7 +730,7 @@ TEST_F(VkLayerTest, InvalidSamplerFilterMinmax) {
     ycbcr_create_info.forceExplicitReconstruction = false;
 
     VkSamplerYcbcrConversion conversion;
-    vkCreateSamplerYcbcrConversionFunction(m_device->handle(), &ycbcr_create_info, nullptr, &conversion);
+    vk::CreateSamplerYcbcrConversionKHR(m_device->handle(), &ycbcr_create_info, nullptr, &conversion);
 
     VkSamplerYcbcrConversionInfo ycbcr_info = LvlInitStruct<VkSamplerYcbcrConversionInfo>();
     ycbcr_info.conversion = conversion;
@@ -779,10 +754,10 @@ TEST_F(VkLayerTest, InvalidSamplerFilterMinmax) {
     vk::CreateSampler(m_device->device(), &sampler_info, NULL, &sampler);
     m_errorMonitor->VerifyFound();
 
-    vkDestroySamplerYcbcrConversionFunction(m_device->handle(), conversion, nullptr);
+    vk::DestroySamplerYcbcrConversionKHR(m_device->handle(), conversion, nullptr);
 }
 
-TEST_F(VkLayerTest, CustomBorderColor) {
+TEST_F(NegativeSampler, CustomBorderColor) {
     TEST_DESCRIPTION("Tests for VUs for VK_EXT_custom_border_color");
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
@@ -834,13 +809,10 @@ TEST_F(VkLayerTest, CustomBorderColor) {
     vk::CreateDescriptorSetLayout(m_device->device(), &ds_layout_ci, NULL, &ds_layout);
     m_errorMonitor->VerifyFound();
 
-    PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
-        (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
-    assert(vkGetPhysicalDeviceProperties2KHR != nullptr);
-    VkPhysicalDeviceCustomBorderColorPropertiesEXT custom_properties =
-        LvlInitStruct<VkPhysicalDeviceCustomBorderColorPropertiesEXT>();
-    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&custom_properties);
-    vkGetPhysicalDeviceProperties2KHR(gpu(), &prop2);
+    auto custom_properties = LvlInitStruct<VkPhysicalDeviceCustomBorderColorPropertiesEXT>();
+    auto prop2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&custom_properties);
+    GetPhysicalDeviceProperties2(prop2);
+
     if ((custom_properties.maxCustomBorderColorSamplers <= 0xFFFF) &&
         (prop2.properties.limits.maxSamplerAllocationCount >= custom_properties.maxCustomBorderColorSamplers)) {
         VkSampler samplers[0xFFFF];
@@ -860,7 +832,7 @@ TEST_F(VkLayerTest, CustomBorderColor) {
     vk::DestroySampler(m_device->device(), sampler, nullptr);
 }
 
-TEST_F(VkLayerTest, CustomBorderColorFormatUndefined) {
+TEST_F(NegativeSampler, CustomBorderColorFormatUndefined) {
     TEST_DESCRIPTION("Tests for VUID-VkSamplerCustomBorderColorCreateInfoEXT-format-04015");
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
@@ -878,13 +850,13 @@ TEST_F(VkLayerTest, CustomBorderColorFormatUndefined) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &border_color_features, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     ASSERT_NO_FATAL_FAILURE(InitViewport());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-    VkSampler sampler;
+
     VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
     sampler_info.borderColor = VK_BORDER_COLOR_INT_CUSTOM_EXT;
     VkSamplerCustomBorderColorCreateInfoEXT custom_color_cinfo = LvlInitStruct<VkSamplerCustomBorderColorCreateInfoEXT>();
     custom_color_cinfo.format = VK_FORMAT_UNDEFINED;
     sampler_info.pNext = &custom_color_cinfo;
-    vk::CreateSampler(m_device->device(), &sampler_info, NULL, &sampler);
+    vk_testing::Sampler sampler(*m_device, sampler_info);
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_B4G4R4A4_UNORM_PACK16, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
@@ -899,7 +871,7 @@ TEST_F(VkLayerTest, CustomBorderColorFormatUndefined) {
     view.init(*m_device, image_view_create_info);
 
     VkDescriptorImageInfo img_info = {};
-    img_info.sampler = sampler;
+    img_info.sampler = sampler.handle();
     img_info.imageView = view.handle();
     img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -941,11 +913,9 @@ TEST_F(VkLayerTest, CustomBorderColorFormatUndefined) {
     m_errorMonitor->VerifyFound();
     vk::CmdEndRenderPass(m_commandBuffer->handle());
     m_commandBuffer->end();
-
-    vk::DestroySampler(m_device->device(), sampler, nullptr);
 }
 
-TEST_F(VkLayerTest, UnnormalizedCoordinatesCombinedSampler) {
+TEST_F(NegativeSampler, UnnormalizedCoordinatesCombinedSampler) {
     TEST_DESCRIPTION(
         "If a samper is unnormalizedCoordinates, the imageview has to be some specific types. Uses COMBINED_IMAGE_SAMPLER");
 
@@ -1046,7 +1016,7 @@ TEST_F(VkLayerTest, UnnormalizedCoordinatesCombinedSampler) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, UnnormalizedCoordinatesSeparateSampler) {
+TEST_F(NegativeSampler, UnnormalizedCoordinatesSeparateSampler) {
     TEST_DESCRIPTION(
         "If a samper is unnormalizedCoordinates, the imageview has to be some specific types. Doesn't use COMBINED_IMAGE_SAMPLER");
 
@@ -1161,7 +1131,7 @@ TEST_F(VkLayerTest, UnnormalizedCoordinatesSeparateSampler) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, UnnormalizedCoordinatesSeparateSamplerSharedImage) {
+TEST_F(NegativeSampler, UnnormalizedCoordinatesSeparateSamplerSharedImage) {
     TEST_DESCRIPTION("Doesn't use COMBINED_IMAGE_SAMPLER, but multiple OpLoad share Image OpVariable");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -1231,7 +1201,7 @@ TEST_F(VkLayerTest, UnnormalizedCoordinatesSeparateSamplerSharedImage) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, UnnormalizedCoordinatesSeparateSamplerSharedSampler) {
+TEST_F(NegativeSampler, UnnormalizedCoordinatesSeparateSamplerSharedSampler) {
     TEST_DESCRIPTION("Doesn't use COMBINED_IMAGE_SAMPLER, but multiple OpLoad share Sampler OpVariable");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -1307,7 +1277,7 @@ TEST_F(VkLayerTest, UnnormalizedCoordinatesSeparateSamplerSharedSampler) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, UnnormalizedCoordinatesInBoundsAccess) {
+TEST_F(NegativeSampler, UnnormalizedCoordinatesInBoundsAccess) {
     TEST_DESCRIPTION("If a samper is unnormalizedCoordinates, but using OpInBoundsAccessChain");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -1405,7 +1375,7 @@ TEST_F(VkLayerTest, UnnormalizedCoordinatesInBoundsAccess) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, TestSamplerReductionMode) {
+TEST_F(NegativeSampler, ReductionModeFeature) {
     TEST_DESCRIPTION("Test using VkSamplerReductionModeCreateInfo without required feature.");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -1425,7 +1395,7 @@ TEST_F(VkLayerTest, TestSamplerReductionMode) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, TestInvalidSamplerReductionMode) {
+TEST_F(NegativeSampler, ReductionMode) {
     TEST_DESCRIPTION("Create sampler with invalid combination of filter and reduction mode.");
 
     GTEST_SKIP() << "Not possible to hit 01422 without first hitting an early return in parameter validation.";
@@ -1448,7 +1418,7 @@ TEST_F(VkLayerTest, TestInvalidSamplerReductionMode) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, NonSeamlessCubeMapNotEnabled) {
+TEST_F(NegativeSampler, NonSeamlessCubeMapNotEnabled) {
     TEST_DESCRIPTION("Validation should catch using NON_SEAMLESS_CUBE_MAP if the feature is not enabled.");
 
     AddRequiredExtensions(VK_EXT_NON_SEAMLESS_CUBE_MAP_EXTENSION_NAME);
@@ -1471,5 +1441,25 @@ TEST_F(VkLayerTest, NonSeamlessCubeMapNotEnabled) {
     sampler_info.flags = VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT;
 
     vk::CreateSampler(m_device->device(), &sampler_info, NULL, &sampler);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSampler, BorderColorSwizzle) {
+    TEST_DESCRIPTION("Validate vkCreateSampler with VkSamplerBorderColorComponentMappingCreateInfoEXT");
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    VkSamplerBorderColorComponentMappingCreateInfoEXT border_color_component_mapping =
+        LvlInitStruct<VkSamplerBorderColorComponentMappingCreateInfoEXT>();
+    border_color_component_mapping.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                 VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+
+    VkSamplerCreateInfo sampler_create_info = SafeSaneSamplerCreateInfo();
+    sampler_create_info.pNext = &border_color_component_mapping;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
+                                         "VUID-VkSamplerBorderColorComponentMappingCreateInfoEXT-borderColorSwizzle-06437");
+    vk_testing::Sampler sampler(*m_device, sampler_create_info);
     m_errorMonitor->VerifyFound();
 }

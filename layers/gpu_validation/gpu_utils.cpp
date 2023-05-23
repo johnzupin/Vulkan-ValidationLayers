@@ -20,23 +20,10 @@
 #include "spirv-tools/libspirv.h"
 #include "spirv-tools/optimizer.hpp"
 #include "spirv-tools/instrument.hpp"
+#include "vma/vma.h"
 #include <spirv/unified1/spirv.hpp>
 #include <algorithm>
 #include <regex>
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4189)
-#endif
-
-#define VMA_IMPLEMENTATION
-// This define indicates that we will supply Vulkan function pointers at initialization
-#define VMA_STATIC_VULKAN_FUNCTIONS 0
-#include "vk_mem_alloc.h"
-
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 
 // Implementation for Descriptor Set Manager class
 UtilDescriptorSetManager::UtilDescriptorSetManager(VkDevice device, uint32_t num_bindings_in_set)
@@ -205,12 +192,16 @@ static VKAPI_ATTR void VKAPI_CALL gpuVkCmdCopyBuffer(VkCommandBuffer commandBuff
     DispatchCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions);
 }
 
-VkResult UtilInitializeVma(VkInstance instance, VkPhysicalDevice physical_device, VkDevice device, VmaAllocator *pAllocator) {
+VkResult UtilInitializeVma(VkInstance instance, VkPhysicalDevice physical_device, VkDevice device, bool use_buffer_device_address, VmaAllocator *pAllocator) {
     VmaVulkanFunctions functions;
     VmaAllocatorCreateInfo allocator_info = {};
     allocator_info.instance = instance;
     allocator_info.device = device;
     allocator_info.physicalDevice = physical_device;
+
+    if (use_buffer_device_address) {
+        allocator_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+    }
 
     functions.vkGetInstanceProcAddr = static_cast<PFN_vkGetInstanceProcAddr>(gpuVkGetInstanceProcAddr);
     functions.vkGetDeviceProcAddr = static_cast<PFN_vkGetDeviceProcAddr>(gpuVkGetDeviceProcAddr);
@@ -267,13 +258,18 @@ void GpuAssistedBase::PreCallRecordCreateDevice(VkPhysicalDevice gpu, const VkDe
     // See CreateDevice() below.
     VkPhysicalDeviceFeatures gpu_supported_features;
     DispatchGetPhysicalDeviceFeatures(gpu, &gpu_supported_features);
-    auto modified_create_info = static_cast<VkDeviceCreateInfo *>(modified_ci);
+
+    // See CreateDevice() in chassis.cpp. modified_ci is a pointer to a safe struct stored on the stack.
+    // This code follows the safe struct memory memory management scheme. That is, we must delete any memory
+    // remove from the safe struct, and any additions must be allocated in a way that is compatible with
+    // the safe struct destructor.
+    auto *modified_create_info = static_cast<safe_VkDeviceCreateInfo *>(modified_ci);
     if (modified_create_info->pEnabledFeatures) {
         // If pEnabledFeatures, VkPhysicalDeviceFeatures2 in pNext chain is not allowed
         features = const_cast<VkPhysicalDeviceFeatures *>(modified_create_info->pEnabledFeatures);
     } else {
-        VkPhysicalDeviceFeatures2 *features2 = nullptr;
-        features2 = const_cast<VkPhysicalDeviceFeatures2 *>(LvlFindInChain<VkPhysicalDeviceFeatures2>(modified_create_info->pNext));
+        auto *features2 =
+            const_cast<VkPhysicalDeviceFeatures2 *>(LvlFindInChain<VkPhysicalDeviceFeatures2>(modified_create_info->pNext));
         if (features2) features = &features2->features;
     }
     VkPhysicalDeviceFeatures new_features = {};
@@ -296,6 +292,63 @@ void GpuAssistedBase::PreCallRecordCreateDevice(VkPhysicalDevice gpu, const VkDe
     if (!features) {
         delete modified_create_info->pEnabledFeatures;
         modified_create_info->pEnabledFeatures = new VkPhysicalDeviceFeatures(new_features);
+    }
+    if (force_buffer_device_address) {
+        // TODO How to handle multi-device
+        if (api_version > VK_API_VERSION_1_1) {
+            auto *features12 = const_cast<VkPhysicalDeviceVulkan12Features *>(
+                LvlFindInChain<VkPhysicalDeviceVulkan12Features>(modified_create_info->pNext));
+            if (features12) {
+                features12->bufferDeviceAddress = VK_TRUE;
+            } else {
+                auto *bda_features = const_cast<VkPhysicalDeviceBufferDeviceAddressFeatures *>(
+                    LvlFindInChain<VkPhysicalDeviceBufferDeviceAddressFeatures>(modified_create_info->pNext));
+                if (bda_features) {
+                    bda_features->bufferDeviceAddress = VK_TRUE;
+                } else {
+                    auto new_bda_features = LvlInitStruct<VkPhysicalDeviceBufferDeviceAddressFeatures>();
+                    new_bda_features.bufferDeviceAddress = VK_TRUE;
+                    new_bda_features.pNext = const_cast<void *>(modified_create_info->pNext);
+                    modified_create_info->pNext = new VkPhysicalDeviceBufferDeviceAddressFeatures(new_bda_features);
+                }
+            }
+        } else if (api_version == VK_API_VERSION_1_1) {
+            static const std::string bda_ext{"VK_KHR_buffer_device_address"};
+            bool found_ext = false;
+            for (uint32_t i = 0; i < modified_create_info->enabledExtensionCount; i++) {
+                if (bda_ext == modified_create_info->ppEnabledExtensionNames[i]) {
+                    found_ext = true;
+                    break;
+                }
+            }
+            if (!found_ext) {
+                const char ** ext_names = new const char*[modified_create_info->enabledExtensionCount + 1];
+                // Copy the existing pointer table
+                std::copy(modified_create_info->ppEnabledExtensionNames,
+                          modified_create_info->ppEnabledExtensionNames + modified_create_info->enabledExtensionCount, ext_names);
+                // Add our new extension
+                char *bda_ext_copy = new char[bda_ext.size() + 1]{};
+                bda_ext.copy(bda_ext_copy, bda_ext.size());
+                bda_ext_copy[bda_ext.size()] = '\0';
+                ext_names[modified_create_info->enabledExtensionCount] = bda_ext_copy;
+                // Patch up the safe struct
+                delete [] modified_create_info->ppEnabledExtensionNames;
+                modified_create_info->ppEnabledExtensionNames = ext_names;
+                modified_create_info->enabledExtensionCount++;
+            }
+            auto *bda_features = const_cast<VkPhysicalDeviceBufferDeviceAddressFeatures *>(
+                LvlFindInChain<VkPhysicalDeviceBufferDeviceAddressFeatures>(modified_create_info));
+            if (bda_features) {
+                bda_features->bufferDeviceAddress = VK_TRUE;
+            } else {
+                auto new_bda_features = LvlInitStruct<VkPhysicalDeviceBufferDeviceAddressFeatures>();
+                new_bda_features.bufferDeviceAddress = VK_TRUE;
+                new_bda_features.pNext = const_cast<void *>(modified_create_info->pNext);
+                modified_create_info->pNext = new VkPhysicalDeviceBufferDeviceAddressFeatures(new_bda_features);
+            }
+        } else {
+            force_buffer_device_address = false;
+        }
     }
 }
 
@@ -320,7 +373,7 @@ void GpuAssistedBase::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
     }
     desc_set_bind_index = adjusted_max_desc_sets - 1;
 
-    VkResult result1 = UtilInitializeVma(instance, physical_device, device, &vmaAllocator);
+    VkResult result1 = UtilInitializeVma(instance, physical_device, device, force_buffer_device_address, &vmaAllocator);
     assert(result1 == VK_SUCCESS);
     desc_set_manager = std::make_unique<UtilDescriptorSetManager>(device, static_cast<uint32_t>(bindings_.size()));
 
@@ -853,23 +906,24 @@ void GpuAssistedBase::PreCallRecordPipelineCreations(uint32_t count, const Creat
             // !replace_shaders implies that the instrumented shaders should be used. However, if this is a non-executable pipeline
             // library created with pre-raster or fragment shader state, it contains shaders that have not yet been instrumented
             if (!pipe->HasFullState() && (pipe->pre_raster_state || pipe->fragment_shader_state)) {
-                for (const auto &stage : pipe->stage_states) {
-                    auto module_state = std::const_pointer_cast<SHADER_MODULE_STATE>(stage.module_state);
+                for (const auto &stage_state : pipe->stage_states) {
+                    auto module_state = std::const_pointer_cast<SHADER_MODULE_STATE>(stage_state.module_state);
                     if (!module_state->Handle()) {
                         // If the shader module's handle is non-null, then it was defined with CreateShaderModule and covered by the
                         // case above. Otherwise, it is being defined during CGPL time
                         if (cgpl_state.shader_states.size() <= pipeline) {
                             cgpl_state.shader_states.resize(pipeline + 1);
                         }
-                        auto &csm_state = cgpl_state.shader_states[pipeline][stage.stage_flag];
+                        const VkShaderStageFlagBits stage = stage_state.create_info->stage;
+                        auto &csm_state = cgpl_state.shader_states[pipeline][stage];
                         const auto pass =
                             InstrumentShader(module_state->words_, csm_state.instrumented_pgm, &csm_state.unique_shader_id);
                         if (pass) {
                             module_state->gpu_validation_shader_id = csm_state.unique_shader_id;
 
                             // Now we need to find the corresponding VkShaderModuleCreateInfo and update its shader code
-                            auto &stage_ci = GetShaderStageCI<SafeCreateInfo, safe_VkPipelineShaderStageCreateInfo>(
-                                new_pipeline_ci, stage.stage_flag);
+                            auto &stage_ci =
+                                GetShaderStageCI<SafeCreateInfo, safe_VkPipelineShaderStageCreateInfo>(new_pipeline_ci, stage);
                             // We're modifying the copied, safe create info, which is ok to be non-const
                             auto sm_ci =
                                 const_cast<safe_VkShaderModuleCreateInfo *>(reinterpret_cast<const safe_VkShaderModuleCreateInfo *>(
@@ -907,14 +961,14 @@ void GpuAssistedBase::PostCallRecordPipelineCreations(const uint32_t count, cons
 
         if (!pipeline_state->stage_states.empty() && !(pipeline_state->create_flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)) {
             const auto pipeline_layout = pipeline_state->PipelineLayoutState();
-            for (auto &stage : pipeline_state->stage_states) {
-                auto &module_state = stage.module_state;
+            for (auto &stage_state : pipeline_state->stage_states) {
+                auto &module_state = stage_state.module_state;
                 const auto shader_module = module_state->Handle();
 
                 if (pipeline_state->active_slots.find(desc_set_bind_index) != pipeline_state->active_slots.end() ||
                     (pipeline_layout->set_layouts.size() >= adjusted_max_desc_sets)) {
                     auto *modified_ci = reinterpret_cast<const CreateInfo *>(modified_create_infos[pipeline].ptr());
-                    auto uninstrumented_module = GetShaderModule(*modified_ci, stage.stage_flag);
+                    auto uninstrumented_module = GetShaderModule(*modified_ci, stage_state.create_info->stage);
                     assert(uninstrumented_module != shader_module.Cast<VkShaderModule>());
                     DispatchDestroyShaderModule(device, uninstrumented_module, pAllocator);
                 }

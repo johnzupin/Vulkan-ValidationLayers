@@ -21,11 +21,12 @@ on:
         branches:
             - main
 
+permissions:
+  contents: read
+
 jobs:
   code-format:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
     steps:
       - uses: actions/checkout@v3
         with:

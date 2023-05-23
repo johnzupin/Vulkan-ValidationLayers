@@ -16,6 +16,8 @@
 
 #include "../framework/layer_validation_tests.h"
 
+class NegativeViewportInheritance : public VkLayerTest {};
+
 // Common data structures needed for tests.
 class ViewportInheritanceTestData {
     // Borrowed owner device.
@@ -400,7 +402,7 @@ class ViewportInheritanceTestData {
     }
 };
 
-TEST_F(VkLayerTest, ViewportInheritance) {
+TEST_F(NegativeViewportInheritance, BasicUsage) {
     TEST_DESCRIPTION("Simple correct and incorrect usage of VK_NV_inherited_viewport_scissor");
     m_instance_extension_names.push_back("VK_KHR_get_physical_device_properties2");
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -636,7 +638,7 @@ TEST_F(VkLayerTest, ViewportInheritance) {
     }
 }
 
-TEST_F(VkLayerTest, ViewportInheritanceMissingFeature) {
+TEST_F(NegativeViewportInheritance, MissingFeature) {
     TEST_DESCRIPTION("Error using VK_NV_inherited_viewport_scissor without enabling feature.");
     m_instance_extension_names.push_back("VK_KHR_get_physical_device_properties2");
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -663,7 +665,7 @@ TEST_F(VkLayerTest, ViewportInheritanceMissingFeature) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, ViewportInheritanceMultiViewport) {
+TEST_F(NegativeViewportInheritance, MultiViewport) {
     TEST_DESCRIPTION("VK_NV_inherited_viewport_scissor tests with multiple viewports/scissors");
     m_instance_extension_names.push_back("VK_KHR_get_physical_device_properties2");
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -733,16 +735,9 @@ TEST_F(VkLayerTest, ViewportInheritanceMultiViewport) {
     vk::CmdSetScissor(set_state_fixed_count_cmd, 0, 2, test_data.kScissorArray);
     vk::EndCommandBuffer(set_state_fixed_count_cmd);
 
-    auto vkCmdSetViewportWithCountEXT =
-        PFN_vkCmdSetViewportWithCountEXT(vk::GetDeviceProcAddr(m_device->handle(), "vkCmdSetViewportWithCountEXT"));
-    assert(vkCmdSetViewportWithCountEXT);
-    auto vkCmdSetScissorWithCountEXT =
-        PFN_vkCmdSetScissorWithCountEXT(vk::GetDeviceProcAddr(m_device->handle(), "vkCmdSetScissorWithCountEXT"));
-    assert(vkCmdSetScissorWithCountEXT);
-
     VkCommandBuffer set_state_with_count_cmd = test_data.MakeBeginSubpassCommandBuffer(pool, 0, nullptr);
-    vkCmdSetViewportWithCountEXT(set_state_with_count_cmd, 2, test_data.kViewportArray);
-    vkCmdSetScissorWithCountEXT(set_state_with_count_cmd, 2, test_data.kScissorArray);
+    vk::CmdSetViewportWithCountEXT(set_state_with_count_cmd, 2, test_data.kViewportArray);
+    vk::CmdSetScissorWithCountEXT(set_state_with_count_cmd, 2, test_data.kScissorArray);
     vk::EndCommandBuffer(set_state_with_count_cmd);
 
     VkCommandBuffer static_state_cmd = test_data.MakeBeginSubpassCommandBuffer(pool, 0, nullptr);
@@ -867,7 +862,7 @@ TEST_F(VkLayerTest, ViewportInheritanceMultiViewport) {
         test_data.BeginPrimaryCommandBuffer(primary_cmd);
 
         // Decoy command, should be overwritten later.
-        vkCmdSetViewportWithCountEXT(primary_cmd, 3, test_data.kViewportAlternateDepthArray);
+        vk::CmdSetViewportWithCountEXT(primary_cmd, 3, test_data.kViewportAlternateDepthArray);
 
         // Record state setting commands in either the primary, or auxilliary secondary, command buffer.
         VkCommandBuffer set_state_cmd;
@@ -879,8 +874,8 @@ TEST_F(VkLayerTest, ViewportInheritanceMultiViewport) {
             set_state_cmd = primary_cmd;
         }
         uint32_t count = should_fail ? 3 : 2;
-        vkCmdSetViewportWithCountEXT(set_state_cmd, count, viewports);
-        vkCmdSetScissorWithCountEXT(set_state_cmd, count, test_data.kScissorArray);
+        vk::CmdSetViewportWithCountEXT(set_state_cmd, count, viewports);
+        vk::CmdSetScissorWithCountEXT(set_state_cmd, count, test_data.kScissorArray);
         if (state_in_secondary) {
             vk::EndCommandBuffer(set_state_cmd);
         }
@@ -900,7 +895,7 @@ TEST_F(VkLayerTest, ViewportInheritanceMultiViewport) {
     }
 }
 
-TEST_F(VkLayerTest, ViewportInheritanceScissorMissingFeature) {
+TEST_F(NegativeViewportInheritance, ScissorMissingFeature) {
     TEST_DESCRIPTION("Error using VK_NV_inherited_viewport_scissor without enabling multiViewport feature.");
     m_instance_extension_names.push_back("VK_KHR_get_physical_device_properties2");
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
@@ -925,7 +920,7 @@ TEST_F(VkLayerTest, ViewportInheritanceScissorMissingFeature) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, PipelineMissingDynamicStateDiscardRectangle) {
+TEST_F(NegativeViewportInheritance, PipelineMissingDynamicStateDiscardRectangle) {
     TEST_DESCRIPTION("Bind pipeline with missing dynamic state discard rectangle.");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -999,7 +994,6 @@ TEST_F(VkLayerTest, PipelineMissingDynamicStateDiscardRectangle) {
     vk::CmdBindPipeline(secondary.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
     m_errorMonitor->VerifyFound();
 }
-
 
 // SPIR-V blobs for graphics pipeline.
 
@@ -1093,8 +1087,8 @@ const VkPipelineDynamicStateCreateInfo ViewportInheritanceTestData::kDynamicStat
     VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, nullptr, 0,
     static_cast<uint32_t>(kDynamicStateArray.size()), kDynamicStateArray.data()};
 
-static const std::array<VkDynamicState, 2> kDynamicStateWithCountArray = {VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT,
-                                                                          VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT};
+static const std::array<VkDynamicState, 2> kDynamicStateWithCountArray = {VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
+                                                                          VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT};
 const VkPipelineDynamicStateCreateInfo ViewportInheritanceTestData::kDynamicStateWithCount = {
     VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, nullptr, 0,
     static_cast<uint32_t>(kDynamicStateWithCountArray.size()), kDynamicStateWithCountArray.data()};

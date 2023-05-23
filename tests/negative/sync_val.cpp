@@ -12,11 +12,13 @@
  */
 #include <type_traits>
 
-#include "cast_utils.h"
+#include "utils/cast_utils.h"
 #include "../framework/layer_validation_tests.h"
-#include "vk_enum_string_helper.h"
+#include "generated/vk_enum_string_helper.h"
 
-TEST_F(VkSyncValTest, SyncBufferCopyHazards) {
+class NegativeSyncVal : public VkSyncValTest {};
+
+TEST_F(NegativeSyncVal, BufferCopyHazards) {
     AddOptionalExtensions(VK_AMD_BUFFER_MARKER_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -186,30 +188,24 @@ TEST_F(VkSyncValTest, SyncBufferCopyHazards) {
     m_commandBuffer->reset();
     // CmdWriteBufferMarkerAMD
     if (has_amd_buffer_maker) {
-        auto fpCmdWriteBufferMarkerAMD =
-            (PFN_vkCmdWriteBufferMarkerAMD)vk::GetDeviceProcAddr(m_device->device(), "vkCmdWriteBufferMarkerAMD");
-        if (!fpCmdWriteBufferMarkerAMD) {
-            printf("Test requires unsupported vkCmdWriteBufferMarkerAMD feature. Skipped.\n");
-        } else {
-            m_commandBuffer->reset();
-            m_commandBuffer->begin();
-            fpCmdWriteBufferMarkerAMD(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, buffer_a.handle(), 0, 1);
-            m_commandBuffer->end();
+        m_commandBuffer->reset();
+        m_commandBuffer->begin();
+        vk::CmdWriteBufferMarkerAMD(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, buffer_a.handle(), 0, 1);
+        m_commandBuffer->end();
 
-            m_commandBuffer->reset();
-            m_commandBuffer->begin();
-            vk::CmdCopyBuffer(cb, buffer_b.handle(), buffer_a.handle(), 1, &region);
-            m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-AFTER-WRITE");
-            fpCmdWriteBufferMarkerAMD(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, buffer_a.handle(), 0, 1);
-            m_errorMonitor->VerifyFound();
-            m_commandBuffer->end();
-        }
+        m_commandBuffer->reset();
+        m_commandBuffer->begin();
+        vk::CmdCopyBuffer(cb, buffer_b.handle(), buffer_a.handle(), 1, &region);
+        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-AFTER-WRITE");
+        vk::CmdWriteBufferMarkerAMD(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, buffer_a.handle(), 0, 1);
+        m_errorMonitor->VerifyFound();
+        m_commandBuffer->end();
     } else {
         printf("Test requires unsupported vkCmdWriteBufferMarkerAMD feature. Skipped.\n");
     }
 }
 
-TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
+TEST_F(NegativeSyncVal, BufferCopyHazardsSync2) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
@@ -219,7 +215,6 @@ TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
     if (!CheckSynchronization2SupportAndInitState(this)) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
-    auto fpCmdPipelineBarrier2KHR = (PFN_vkCmdPipelineBarrier2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdPipelineBarrier2KHR");
 
     VkBufferObj buffer_a;
     VkBufferObj buffer_b;
@@ -256,7 +251,7 @@ TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
         auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
         dep_info.bufferMemoryBarrierCount = 1;
         dep_info.pBufferMemoryBarriers = &buffer_barrier;
-        fpCmdPipelineBarrier2KHR(cb, &dep_info);
+        vk::CmdPipelineBarrier2KHR(cb, &dep_info);
     }
 
     vk::CmdCopyBuffer(cb, buffer_c.handle(), buffer_a.handle(), 1, &front2front);
@@ -283,14 +278,14 @@ TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
         auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
         dep_info.memoryBarrierCount = 1;
         dep_info.pMemoryBarriers = &mem_barrier;
-        fpCmdPipelineBarrier2KHR(cb, &dep_info);
+        vk::CmdPipelineBarrier2KHR(cb, &dep_info);
 
         vk::CmdCopyBuffer(m_commandBuffer->handle(), buffer_c.handle(), buffer_b.handle(), 1, &region);
 
         m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-READ-AFTER-WRITE");
         mem_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT_KHR;  // Protect C but not B
         mem_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR;
-        fpCmdPipelineBarrier2KHR(cb, &dep_info);
+        vk::CmdPipelineBarrier2KHR(cb, &dep_info);
         vk::CmdCopyBuffer(m_commandBuffer->handle(), buffer_b.handle(), buffer_c.handle(), 1, &region);
         m_errorMonitor->VerifyFound();
 
@@ -298,7 +293,243 @@ TEST_F(VkSyncValTest, Sync2BufferCopyHazards) {
     }
 }
 
-TEST_F(VkSyncValTest, SyncCopyOptimalImageHazards) {
+TEST_F(NegativeSyncVal, CmdClearAttachmentsHazards) {
+    TEST_DESCRIPTION("Test for hazards when attachment is cleared inside render pass.");
+
+    // VK_EXT_load_store_op_none is needed to disable render pass load/store accesses, so clearing
+    // attachment inside a render pass can create hazards with the copy operations outside render pass.
+    AddRequiredExtensions(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+
+    const uint32_t width = 256;
+    const uint32_t height = 128;
+    const VkFormat rt_format = VK_FORMAT_B8G8R8A8_UNORM;
+    const VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
+    const auto transfer_usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    const auto rt_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | transfer_usage;
+    const auto ds_usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | transfer_usage;
+
+    VkImageObj image(m_device);
+    image.InitNoLayout(width, height, 1, rt_format, transfer_usage, VK_IMAGE_TILING_OPTIMAL);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+
+    VkImageObj image_ds(m_device);
+    image_ds.InitNoLayout(width, height, 1, ds_format, transfer_usage, VK_IMAGE_TILING_OPTIMAL);
+    image_ds.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+
+    VkImageObj rt(m_device);
+    rt.InitNoLayout(width, height, 1, rt_format, rt_usage, VK_IMAGE_TILING_OPTIMAL);
+    rt.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+
+    VkImageObj ds(m_device);
+    ds.InitNoLayout(width, height, 1, ds_format, ds_usage, VK_IMAGE_TILING_OPTIMAL);
+    ds.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+
+    auto attachment_without_load_store = [](VkFormat format) {
+        VkAttachmentDescription attachment = {};
+        attachment.format = format;
+        attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_NONE_EXT;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_NONE_EXT;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_NONE_EXT;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_NONE_EXT;
+        attachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+        attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+        return attachment;
+    };
+    const VkAttachmentDescription attachments[] = {attachment_without_load_store(rt_format),
+                                                   attachment_without_load_store(ds_format)};
+
+    const VkImageView views[] = {rt.targetView(rt_format, VK_IMAGE_ASPECT_COLOR_BIT),
+                                 ds.targetView(ds_format, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)};
+
+    const VkAttachmentReference color_ref = {0, VK_IMAGE_LAYOUT_GENERAL};
+    const VkAttachmentReference depth_ref = {1, VK_IMAGE_LAYOUT_GENERAL};
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &color_ref;
+    subpass.pDepthStencilAttachment = &depth_ref;
+
+    auto rpci = LvlInitStruct<VkRenderPassCreateInfo>();
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+    rpci.attachmentCount = size32(attachments);
+    rpci.pAttachments = attachments;
+    vk_testing::RenderPass render_pass(*m_device, rpci);
+
+    auto fbci = LvlInitStruct<VkFramebufferCreateInfo>();
+    fbci.flags = 0;
+    fbci.renderPass = render_pass;
+    fbci.attachmentCount = size32(views);
+    fbci.pAttachments = views;
+    fbci.width = width;
+    fbci.height = height;
+    fbci.layers = 1;
+    vk_testing::Framebuffer framebuffer(*m_device, fbci);
+
+    auto rpbi = LvlInitStruct<VkRenderPassBeginInfo>();
+    rpbi.framebuffer = framebuffer;
+    rpbi.renderPass = render_pass;
+    rpbi.renderArea.extent.width = width;
+    rpbi.renderArea.extent.height = height;
+
+    const auto ds_ci = LvlInitStruct<VkPipelineDepthStencilStateCreateInfo>();
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.gp_ci_.renderPass = render_pass;
+    pipe.gp_ci_.pDepthStencilState = &ds_ci;
+    pipe.InitState();
+    ASSERT_VK_SUCCESS(pipe.CreateGraphicsPipeline());
+
+    struct AspectInfo {
+        VkImageAspectFlagBits aspect;
+        VkImage src_image;
+        VkImage dst_image;
+    };
+    const AspectInfo aspect_infos[] = {{VK_IMAGE_ASPECT_COLOR_BIT, image, rt},
+                                       {VK_IMAGE_ASPECT_DEPTH_BIT, image_ds, ds},
+                                       {VK_IMAGE_ASPECT_STENCIL_BIT, image_ds, ds}};
+
+    // WAW hazard: copy to render target then clear it. Test each aspect (color/depth/stencil).
+    for (const auto& info : aspect_infos) {
+        const VkClearAttachment clear_attachment = {VkImageAspectFlags(info.aspect)};
+
+        VkClearRect clear_rect = {};
+        clear_rect.rect.offset = {0, 0};
+        clear_rect.rect.extent = {width / 2, height / 2};
+        clear_rect.baseArrayLayer = 0;
+        clear_rect.layerCount = 1;
+
+        VkImageCopy copy_region = {};
+        copy_region.srcSubresource = {VkImageAspectFlags(info.aspect), 0, 0, 1};
+        copy_region.dstSubresource = {VkImageAspectFlags(info.aspect), 0, 0, 1};
+        copy_region.extent = {width, height, 1};
+
+        m_commandBuffer->begin();
+        // Write 1
+        vk::CmdCopyImage(*m_commandBuffer, info.src_image, VK_IMAGE_LAYOUT_GENERAL, info.dst_image, VK_IMAGE_LAYOUT_GENERAL, 1,
+                         &copy_region);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+        vk::CmdBeginRenderPass(*m_commandBuffer, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+
+        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-AFTER-WRITE");
+        // Write 2
+        vk::CmdClearAttachments(*m_commandBuffer, 1, &clear_attachment, 1, &clear_rect);
+        m_errorMonitor->VerifyFound();
+
+        vk::CmdEndRenderPass(*m_commandBuffer);
+        m_commandBuffer->end();
+        m_commandBuffer->QueueCommandBuffer();
+        vk::QueueWaitIdle(m_device->m_queue);
+    }
+
+    // RAW hazard: clear render target then copy from it.
+    // This tests that vkCmdClearAttachments correctly updates access state, so vkCmdCopyImage can detect hazard.
+    {
+        const VkClearAttachment clear_attachment = {VK_IMAGE_ASPECT_STENCIL_BIT};
+
+        VkClearRect clear_rect = {};
+        clear_rect.rect.offset = {0, 0};
+        clear_rect.rect.extent = {width, height};
+        clear_rect.baseArrayLayer = 0;
+        clear_rect.layerCount = 1;
+
+        VkImageCopy copy_region = {};
+        copy_region.srcSubresource = {VK_IMAGE_ASPECT_STENCIL_BIT, 0, 0, 1};
+        copy_region.dstSubresource = {VK_IMAGE_ASPECT_STENCIL_BIT, 0, 0, 1};
+        copy_region.extent = {width, height, 1};
+
+        m_commandBuffer->begin();
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+        vk::CmdBeginRenderPass(*m_commandBuffer, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+        // Write
+        vk::CmdClearAttachments(*m_commandBuffer, 1, &clear_attachment, 1, &clear_rect);
+        vk::CmdEndRenderPass(*m_commandBuffer);
+
+        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-READ-AFTER-WRITE");
+        // Read
+        vk::CmdCopyImage(*m_commandBuffer, ds, VK_IMAGE_LAYOUT_GENERAL, image_ds, VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
+        m_errorMonitor->VerifyFound();
+
+        m_commandBuffer->end();
+        m_commandBuffer->QueueCommandBuffer();
+        vk::QueueWaitIdle(m_device->m_queue);
+    }
+
+    // RAW hazard: two regions with a single pixel overlap, otherwise the same as the previous scenario.
+    {
+        const VkClearAttachment clear_attachment = {VK_IMAGE_ASPECT_COLOR_BIT};
+
+        VkClearRect clear_rect = {};
+        clear_rect.rect.offset = {0, 0};
+        clear_rect.rect.extent = {32, 32};
+        clear_rect.baseArrayLayer = 0;
+        clear_rect.layerCount = 1;
+
+        VkImageCopy copy_region = {};
+        copy_region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copy_region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copy_region.srcOffset = {31, 31, 0};
+        copy_region.dstOffset = {31, 31, 0};
+        copy_region.extent = {64, 64, 1};
+
+        m_commandBuffer->begin();
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+        vk::CmdBeginRenderPass(*m_commandBuffer, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+        // Write
+        vk::CmdClearAttachments(*m_commandBuffer, 1, &clear_attachment, 1, &clear_rect);
+        vk::CmdEndRenderPass(*m_commandBuffer);
+
+        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-READ-AFTER-WRITE");
+        // Read
+        vk::CmdCopyImage(*m_commandBuffer, rt, VK_IMAGE_LAYOUT_GENERAL, image, VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
+        m_errorMonitor->VerifyFound();
+
+        m_commandBuffer->end();
+        m_commandBuffer->QueueCommandBuffer();
+        vk::QueueWaitIdle(m_device->m_queue);
+    }
+
+    // Nudge regions by one pixel compared to the previous test, now they touch but do not overlap. There should be no errors.
+    // Copy to the first region, clear the second region.
+    {
+        const VkClearAttachment clear_attachment = {VK_IMAGE_ASPECT_DEPTH_BIT};
+
+        VkClearRect clear_rect = {};
+        clear_rect.rect.offset = {0, 0};
+        clear_rect.rect.extent = {32, 32};
+        clear_rect.baseArrayLayer = 0;
+        clear_rect.layerCount = 1;
+
+        VkImageCopy copy_region = {};
+        copy_region.srcSubresource = {VkImageAspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT), 0, 0, 1};
+        copy_region.dstSubresource = {VkImageAspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT), 0, 0, 1};
+        copy_region.srcOffset = {32, 32, 0};
+        copy_region.dstOffset = {32, 32, 0};
+        copy_region.extent = {64, 64, 1};
+
+        m_commandBuffer->begin();
+        // Write 1
+        vk::CmdCopyImage(*m_commandBuffer, image_ds, VK_IMAGE_LAYOUT_GENERAL, ds, VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+        vk::CmdBeginRenderPass(*m_commandBuffer, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+        // Write 2
+        vk::CmdClearAttachments(*m_commandBuffer, 1, &clear_attachment, 1, &clear_rect);
+        vk::CmdEndRenderPass(*m_commandBuffer);
+        m_commandBuffer->end();
+        m_commandBuffer->QueueCommandBuffer();
+        vk::QueueWaitIdle(m_device->m_queue);
+    }
+}
+
+TEST_F(NegativeSyncVal, CopyOptimalImageHazards) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -491,7 +722,7 @@ TEST_F(VkSyncValTest, SyncCopyOptimalImageHazards) {
     }
 }
 
-TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
+TEST_F(NegativeSyncVal, CopyOptimalImageHazardsSync2) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
@@ -501,7 +732,6 @@ TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
     if (!CheckSynchronization2SupportAndInitState(this)) {
         GTEST_SKIP() << "Synchronization2 not supported";
     }
-    auto fpCmdPipelineBarrier2KHR = (PFN_vkCmdPipelineBarrier2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdPipelineBarrier2KHR");
 
     VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -562,7 +792,7 @@ TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
         auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
         dep_info.imageMemoryBarrierCount = 1;
         dep_info.pImageMemoryBarriers = &image_barrier;
-        fpCmdPipelineBarrier2KHR(cb, &dep_info);
+        vk::CmdPipelineBarrier2KHR(cb, &dep_info);
     }
 
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region_0_to_0);
@@ -589,14 +819,14 @@ TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
         auto dep_info = LvlInitStruct<VkDependencyInfoKHR>();
         dep_info.memoryBarrierCount = 1;
         dep_info.pMemoryBarriers = &mem_barrier;
-        fpCmdPipelineBarrier2KHR(cb, &dep_info);
+        vk::CmdPipelineBarrier2KHR(cb, &dep_info);
         vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_b.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &full_region);
 
         // Use barrier to protect last reader, but not last writer...
         m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-READ-AFTER-WRITE");
         mem_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT_KHR;  // Protects C but not B
         mem_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR;
-        fpCmdPipelineBarrier2KHR(cb, &dep_info);
+        vk::CmdPipelineBarrier2KHR(cb, &dep_info);
         vk::CmdCopyImage(cb, image_b.handle(), VK_IMAGE_LAYOUT_GENERAL, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &full_region);
         m_errorMonitor->VerifyFound();
     }
@@ -611,7 +841,7 @@ TEST_F(VkSyncValTest, Sync2CopyOptimalImageHazards) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncCopyOptimalMultiPlanarHazards) {
+TEST_F(NegativeSyncVal, CopyOptimalMultiPlanarHazards) {
     AddRequiredExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     if (!AreRequiredExtensionsEnabled()) {
@@ -735,7 +965,7 @@ TEST_F(VkSyncValTest, SyncCopyOptimalMultiPlanarHazards) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncCopyLinearImageHazards) {
+TEST_F(NegativeSyncVal, CopyLinearImageHazards) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -804,7 +1034,7 @@ TEST_F(VkSyncValTest, SyncCopyLinearImageHazards) {
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region_back);
 }
 
-TEST_F(VkSyncValTest, SyncCopyLinearMultiPlanarHazards) {
+TEST_F(NegativeSyncVal, CopyLinearMultiPlanarHazards) {
     AddRequiredExtensions(VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     if (!AreRequiredExtensionsEnabled()) {
@@ -924,7 +1154,7 @@ TEST_F(VkSyncValTest, SyncCopyLinearMultiPlanarHazards) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncCopyBufferImageHazards) {
+TEST_F(NegativeSyncVal, CopyBufferImageHazards) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -1057,7 +1287,7 @@ TEST_F(VkSyncValTest, SyncCopyBufferImageHazards) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncBlitImageHazards) {
+TEST_F(NegativeSyncVal, BlitImageHazards) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -1104,7 +1334,7 @@ TEST_F(VkSyncValTest, SyncBlitImageHazards) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncRenderPassBeginTransitionHazard) {
+TEST_F(NegativeSyncVal, RenderPassBeginTransitionHazard) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
     const VkSubpassDependency external_subpass_dependency = {VK_SUBPASS_EXTERNAL,
@@ -1176,7 +1406,7 @@ TEST_F(VkSyncValTest, SyncRenderPassBeginTransitionHazard) {
     m_commandBuffer->EndRenderPass();
 }
 
-TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
+TEST_F(NegativeSyncVal, CmdDispatchDrawHazards) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
 
     // Enable VK_KHR_draw_indirect_count for KHR variants
@@ -1579,11 +1809,7 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
 
     if (has_khr_indirect) {
         // DrawIndirectCount
-        auto fpCmdDrawIndirectCountKHR =
-            (PFN_vkCmdDrawIndirectCount)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawIndirectCountKHR");
-        if (!fpCmdDrawIndirectCountKHR) {
-            printf("Test requires unsupported vkCmdDrawIndirectCountKHR feature. Skipped.\n");
-        } else {
+        {
             VkBufferObj buffer_count, buffer_count2;
             buffer_usage =
                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -1600,8 +1826,8 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
             vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_);
             vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(),
                                       0, 1, &descriptor_set.set_, 0, nullptr);
-            fpCmdDrawIndirectCountKHR(m_commandBuffer->handle(), buffer_drawIndirect.handle(), 0, buffer_count.handle(), 0, 1,
-                                      sizeof(VkDrawIndirectCommand));
+            vk::CmdDrawIndirectCountKHR(m_commandBuffer->handle(), buffer_drawIndirect.handle(), 0, buffer_count.handle(), 0, 1,
+                                        sizeof(VkDrawIndirectCommand));
             m_commandBuffer->EndRenderPass();
             m_commandBuffer->end();
 
@@ -1620,8 +1846,8 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
                                       0, 1, &descriptor_set.set_, 0, nullptr);
 
             m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-READ-AFTER-WRITE");
-            fpCmdDrawIndirectCountKHR(m_commandBuffer->handle(), buffer_drawIndirect.handle(), 0, buffer_count.handle(), 0, 1,
-                                      sizeof(VkDrawIndirectCommand));
+            vk::CmdDrawIndirectCountKHR(m_commandBuffer->handle(), buffer_drawIndirect.handle(), 0, buffer_count.handle(), 0, 1,
+                                        sizeof(VkDrawIndirectCommand));
             m_errorMonitor->VerifyFound();
 
             m_commandBuffer->EndRenderPass();
@@ -1629,11 +1855,7 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
         }
 
         // DrawIndexedIndirectCount
-        auto fpCmdDrawIndexIndirectCountKHR =
-            (PFN_vkCmdDrawIndirectCount)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawIndexedIndirectCountKHR");
-        if (!fpCmdDrawIndexIndirectCountKHR) {
-            printf("Test requires unsupported vkCmdDrawIndexedIndirectCountKHR feature. Skipped.\n");
-        } else {
+        {
             VkBufferObj buffer_count, buffer_count2;
             buffer_usage =
                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -1651,8 +1873,8 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
             vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_);
             vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(),
                                       0, 1, &descriptor_set.set_, 0, nullptr);
-            fpCmdDrawIndexIndirectCountKHR(m_commandBuffer->handle(), buffer_drawIndexedIndirect.handle(), 0, buffer_count.handle(),
-                                           0, 1, sizeof(VkDrawIndexedIndirectCommand));
+            vk::CmdDrawIndexedIndirectCountKHR(m_commandBuffer->handle(), buffer_drawIndexedIndirect.handle(), 0,
+                                               buffer_count.handle(), 0, 1, sizeof(VkDrawIndexedIndirectCommand));
             m_commandBuffer->EndRenderPass();
             m_commandBuffer->end();
 
@@ -1672,8 +1894,8 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
                                       0, 1, &descriptor_set.set_, 0, nullptr);
 
             m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-READ-AFTER-WRITE");
-            fpCmdDrawIndexIndirectCountKHR(m_commandBuffer->handle(), buffer_drawIndexedIndirect.handle(), 0, buffer_count.handle(),
-                                           0, 1, sizeof(VkDrawIndexedIndirectCommand));
+            vk::CmdDrawIndexedIndirectCountKHR(m_commandBuffer->handle(), buffer_drawIndexedIndirect.handle(), 0,
+                                               buffer_count.handle(), 0, 1, sizeof(VkDrawIndexedIndirectCommand));
             m_errorMonitor->VerifyFound();
 
             m_commandBuffer->EndRenderPass();
@@ -1684,7 +1906,7 @@ TEST_F(VkSyncValTest, SyncCmdDispatchDrawHazards) {
     }
 }
 
-TEST_F(VkSyncValTest, SyncCmdClear) {
+TEST_F(NegativeSyncVal, CmdClear) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     // CmdClearColorImage
@@ -1761,7 +1983,7 @@ TEST_F(VkSyncValTest, SyncCmdClear) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncCmdQuery) {
+TEST_F(NegativeSyncVal, CmdQuery) {
     // CmdCopyQueryPoolResults
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -1815,7 +2037,7 @@ TEST_F(VkSyncValTest, SyncCmdQuery) {
     // TODO:CmdWriteTimestamp
 }
 
-TEST_F(VkSyncValTest, SyncCmdDrawDepthStencil) {
+TEST_F(NegativeSyncVal, CmdDrawDepthStencil) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -1949,8 +2171,7 @@ TEST_F(VkSyncValTest, SyncCmdDrawDepthStencil) {
     m_errorMonitor->VerifyFound();
 }
 
-
-TEST_F(VkSyncValTest, RenderPassLoadHazardVsInitialLayout) {
+TEST_F(NegativeSyncVal, RenderPassLoadHazardVsInitialLayout) {
     AddOptionalExtensions(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
@@ -2046,7 +2267,7 @@ TEST_F(VkSyncValTest, RenderPassLoadHazardVsInitialLayout) {
     }
 }
 
-TEST_F(VkSyncValTest, SyncRenderPassWithWrongDepthStencilInitialLayout) {
+TEST_F(NegativeSyncVal, RenderPassWithWrongDepthStencilInitialLayout) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
     if (IsPlatform(kNexusPlayer)) {
@@ -2464,7 +2685,7 @@ struct SyncTestPipeline {
     }
 };
 
-TEST_F(VkSyncValTest, SyncLayoutTransition) {
+TEST_F(NegativeSyncVal, LayoutTransition) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
     if (IsPlatform(kNexusPlayer)) {
@@ -2553,7 +2774,7 @@ TEST_F(VkSyncValTest, SyncLayoutTransition) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncSubpassMultiDep) {
+TEST_F(NegativeSyncVal, SubpassMultiDep) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
     if (IsPlatform(kNexusPlayer)) {
@@ -2697,7 +2918,7 @@ TEST_F(VkSyncValTest, SyncSubpassMultiDep) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkSyncValTest, RenderPassAsyncHazard) {
+TEST_F(NegativeSyncVal, RenderPassAsyncHazard) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState());
 
@@ -3087,7 +3308,7 @@ TEST_F(VkSyncValTest, RenderPassAsyncHazard) {
     }
 }
 
-TEST_F(VkSyncValTest, SyncEventsBufferCopy) {
+TEST_F(NegativeSyncVal, EventsBufferCopy) {
     TEST_DESCRIPTION("Check Set/Wait protection for a variety of use cases using buffer copies");
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -3178,7 +3399,7 @@ TEST_F(VkSyncValTest, SyncEventsBufferCopy) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncEventsCopyImageHazards) {
+TEST_F(NegativeSyncVal, EventsCopyImageHazards) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -3302,7 +3523,7 @@ TEST_F(VkSyncValTest, SyncEventsCopyImageHazards) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, SyncEventsCommandHazards) {
+TEST_F(NegativeSyncVal, EventsCommandHazards) {
     TEST_DESCRIPTION("Check Set/Reset/Wait command hazard checking");
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -3404,7 +3625,7 @@ TEST_F(VkSyncValTest, SyncEventsCommandHazards) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, CmdWaitEvents2KHRUsedButSynchronizaion2Disabled) {
+TEST_F(NegativeSyncVal, CmdWaitEvents2KHRUsedButSynchronizaion2Disabled) {
     TEST_DESCRIPTION("Using CmdWaitEvents2KHR when synchronization2 is not enabled");
     SetTargetApiVersion(VK_API_VERSION_1_3);
 
@@ -3416,7 +3637,6 @@ TEST_F(VkLayerTest, CmdWaitEvents2KHRUsedButSynchronizaion2Disabled) {
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     bool vulkan_13 = (DeviceValidationVersion() >= VK_API_VERSION_1_3);
-    auto fpCmdWaitEvents2KHR = (PFN_vkCmdWaitEvents2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdWaitEvents2KHR");
 
     VkEventObj event;
     event.init(*m_device, VkEventObj::create_info(0));
@@ -3426,7 +3646,7 @@ TEST_F(VkLayerTest, CmdWaitEvents2KHRUsedButSynchronizaion2Disabled) {
 
     m_commandBuffer->begin();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWaitEvents2-synchronization2-03836");
-    fpCmdWaitEvents2KHR(m_commandBuffer->handle(), 1, &event_handle, &dependency_info);
+    vk::CmdWaitEvents2KHR(m_commandBuffer->handle(), 1, &event_handle, &dependency_info);
     m_errorMonitor->VerifyFound();
     if (vulkan_13) {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWaitEvents2-synchronization2-03836");
@@ -3436,7 +3656,7 @@ TEST_F(VkLayerTest, CmdWaitEvents2KHRUsedButSynchronizaion2Disabled) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, Sync2FeatureDisabled) {
+TEST_F(NegativeSyncVal, Sync2FeatureDisabled) {
     TEST_DESCRIPTION("Call sync2 functions when the feature is disabled");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -3453,13 +3673,6 @@ TEST_F(VkLayerTest, Sync2FeatureDisabled) {
     synchronization2.synchronization2 = VK_FALSE;  // Invalid
     GetPhysicalDeviceFeatures2(synchronization2);
 
-    auto vkCmdPipelineBarrier2KHR =
-        (PFN_vkCmdPipelineBarrier2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdPipelineBarrier2KHR");
-    auto vkCmdResetEvent2KHR = (PFN_vkCmdResetEvent2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdResetEvent2KHR");
-    auto vkCmdSetEvent2KHR = (PFN_vkCmdSetEvent2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdSetEvent2KHR");
-    auto vkCmdWriteTimestamp2KHR =
-        (PFN_vkCmdWriteTimestamp2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdWriteTimestamp2KHR");
-
     bool timestamp = false;
 
     uint32_t queue_count;
@@ -3475,7 +3688,7 @@ TEST_F(VkLayerTest, Sync2FeatureDisabled) {
     VkDependencyInfoKHR dependency_info = LvlInitStruct<VkDependencyInfoKHR>();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-synchronization2-03848");
-    vkCmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
+    vk::CmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 
     VkEventCreateInfo eci = LvlInitStruct<VkEventCreateInfo>();
@@ -3485,11 +3698,11 @@ TEST_F(VkLayerTest, Sync2FeatureDisabled) {
     VkPipelineStageFlagBits2KHR stage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdResetEvent2-synchronization2-03829");
-    vkCmdResetEvent2KHR(m_commandBuffer->handle(), event.handle(), stage);
+    vk::CmdResetEvent2KHR(m_commandBuffer->handle(), event.handle(), stage);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetEvent2-synchronization2-03824");
-    vkCmdSetEvent2KHR(m_commandBuffer->handle(), event.handle(), &dependency_info);
+    vk::CmdSetEvent2KHR(m_commandBuffer->handle(), event.handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 
     if (timestamp) {
@@ -3501,7 +3714,7 @@ TEST_F(VkLayerTest, Sync2FeatureDisabled) {
         query_pool.init(*m_device, qpci);
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWriteTimestamp2-synchronization2-03858");
-        vkCmdWriteTimestamp2KHR(m_commandBuffer->handle(), stage, query_pool.handle(), 0);
+        vk::CmdWriteTimestamp2KHR(m_commandBuffer->handle(), stage, query_pool.handle(), 0);
         m_errorMonitor->VerifyFound();
         if (vulkan_13) {
             m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdWriteTimestamp2-synchronization2-03858");
@@ -3526,7 +3739,7 @@ TEST_F(VkLayerTest, Sync2FeatureDisabled) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkSyncValTest, DestroyedUnusedDescriptors) {
+TEST_F(NegativeSyncVal, DestroyedUnusedDescriptors) {
     TEST_DESCRIPTION("Verify unused descriptors are ignored and don't crash syncval if they've been destroyed.");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
@@ -3749,7 +3962,7 @@ TEST_F(VkSyncValTest, DestroyedUnusedDescriptors) {
     vk::QueueWaitIdle(m_device->m_queue);
 }
 
-TEST_F(VkSyncValTest, TestInvalidExternalSubpassDependency) {
+TEST_F(NegativeSyncVal, TestInvalidExternalSubpassDependency) {
     TEST_DESCRIPTION("Test write after write hazard with invalid external subpass dependency");
 
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
@@ -3873,7 +4086,7 @@ TEST_F(VkSyncValTest, TestInvalidExternalSubpassDependency) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkSyncValTest, TestCopyingToCompressedImage) {
+TEST_F(NegativeSyncVal, TestCopyingToCompressedImage) {
     TEST_DESCRIPTION("Copy from uncompressed to compressed image with and without overlap.");
 
     AddOptionalExtensions(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
@@ -3933,10 +4146,6 @@ TEST_F(VkSyncValTest, TestCopyingToCompressedImage) {
     m_commandBuffer->end();
 
     if (copy_commands_2) {
-        auto vkCmdCopyImage2KHR =
-            reinterpret_cast<PFN_vkCmdCopyImage2KHR>(vk::GetInstanceProcAddr(instance(), "vkCmdCopyImage2KHR"));
-        assert(vkCmdCopyImage2KHR != nullptr);
-
         m_commandBuffer->reset();
 
         VkImageCopy2KHR copy_regions2[2];
@@ -3975,19 +4184,19 @@ TEST_F(VkSyncValTest, TestCopyingToCompressedImage) {
 
         m_commandBuffer->begin();
 
-        vkCmdCopyImage2KHR(m_commandBuffer->handle(), &copy_image_info);
+        vk::CmdCopyImage2KHR(m_commandBuffer->handle(), &copy_image_info);
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "SYNC-HAZARD-WRITE-AFTER-WRITE");
         copy_image_info.regionCount = 1;
         copy_image_info.pRegions = &copy_regions2[1];
         copy_regions[1].dstOffset = {7, 0, 0};
-        vkCmdCopyImage2KHR(m_commandBuffer->handle(), &copy_image_info);
+        vk::CmdCopyImage2KHR(m_commandBuffer->handle(), &copy_image_info);
         m_errorMonitor->VerifyFound();
 
         m_commandBuffer->end();
     }
 }
 
-TEST_F(VkSyncValTest, StageAccessExpansion) {
+TEST_F(NegativeSyncVal, StageAccessExpansion) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
 
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework());
@@ -4426,7 +4635,7 @@ void QSTestContext::RecordCopy(VkCommandBufferObj& cb, VkBufferObj& from, VkBuff
     End();
 }
 
-TEST_F(VkSyncValTest, SyncQSBufferCopyHazards) {
+TEST_F(NegativeSyncVal, QSBufferCopyHazards) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -4482,7 +4691,7 @@ TEST_F(VkSyncValTest, SyncQSBufferCopyHazards) {
     test.DeviceWait();
 }
 
-TEST_F(VkSyncValTest, SyncQSSubmit2) {
+TEST_F(NegativeSyncVal, QSSubmit2) {
     SetTargetApiVersion(VK_API_VERSION_1_3);
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
@@ -4520,7 +4729,7 @@ TEST_F(VkSyncValTest, SyncQSSubmit2) {
     test.DeviceWait();
 }
 
-TEST_F(VkSyncValTest, SyncQSBufferCopyVsIdle) {
+TEST_F(NegativeSyncVal, QSBufferCopyVsIdle) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -4560,7 +4769,7 @@ TEST_F(VkSyncValTest, SyncQSBufferCopyVsIdle) {
     m_device->wait();
 }
 
-TEST_F(VkSyncValTest, SyncQSBufferCopyVsFence) {
+TEST_F(NegativeSyncVal, QSBufferCopyVsFence) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -4610,7 +4819,7 @@ TEST_F(VkSyncValTest, SyncQSBufferCopyVsFence) {
     test.DeviceWait();
 }
 
-TEST_F(VkSyncValTest, SyncQSBufferCopyQSORules) {
+TEST_F(NegativeSyncVal, QSBufferCopyQSORules) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -4694,7 +4903,7 @@ TEST_F(VkSyncValTest, SyncQSBufferCopyQSORules) {
     m_device->wait();
 }
 
-TEST_F(VkSyncValTest, SyncQSBufferEvents) {
+TEST_F(NegativeSyncVal, QSBufferEvents) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -4770,7 +4979,7 @@ TEST_F(VkSyncValTest, SyncQSBufferEvents) {
     m_device->wait();
 }
 
-TEST_F(VkSyncValTest, SyncQSOBarrierHazard) {
+TEST_F(NegativeSyncVal, QSOBarrierHazard) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
 
@@ -4827,7 +5036,7 @@ TEST_F(VkSyncValTest, SyncQSOBarrierHazard) {
     m_device->wait();
 }
 
-TEST_F(VkSyncValTest, SyncQSRenderPass) {
+TEST_F(NegativeSyncVal, QSRenderPass) {
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
     if (IsPlatform(kNexusPlayer)) {
@@ -4893,11 +5102,8 @@ TEST_F(VkSyncValTest, SyncQSRenderPass) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkSyncValTest, SyncQSPresentAcquire) {
+TEST_F(NegativeSyncVal, QSPresentAcquire) {
     TEST_DESCRIPTION("Try destroying a swapchain presentable image with vkDestroyImage");
-#if defined(VVL_ENABLE_ASAN)
-    auto leak_sanitizer_disabler = __lsan::ScopedDisabler();
-#endif
 
     AddSurfaceExtension();
     ASSERT_NO_FATAL_FAILURE(InitSyncValFramework(true));  // Enable QueueSubmit validation

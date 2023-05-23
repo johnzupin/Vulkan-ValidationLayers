@@ -21,29 +21,23 @@ While it's not technically required, it's practically required for most users.
 
 ## Building Overview
 
-The following will be enough for most people, for platform-specific instructions, see below.
+The following will be enough for most people, for more detailed instructions, see below.
 
 ```bash
 git clone https://github.com/KhronosGroup/Vulkan-ValidationLayers.git
 cd Vulkan-ValidationLayers
 
-mkdir build
-cd build
+cmake -S . -B build -D UPDATE_DEPS=ON -D BUILD_WERROR=ON -D BUILD_TESTS=ON -D CMAKE_BUILD_TYPE=Debug
+cmake --build build --config Debug
 
-# Linux
-python3 ../scripts/update_deps.py --dir ../external --arch x64 --config debug
-cmake -G Ninja -C ../external/helper.cmake -DCMAKE_BUILD_TYPE=Debug ..
-
-# Windows
-python ..\scripts\update_deps.py --dir ..\external --arch x64 --config debug
-cmake -A x64 -C ..\external\helper.cmake -DCMAKE_BUILD_TYPE=Debug ..
-
-cmake --build . --config Debug
+# CMake 3.21+
+cmake -S . -B build --preset dev
+cmake --build build --config Debug
 ```
 
 ## Generated source code
 
-This repository contains generated source code in the `layers/generated`
+This repository contains generated source code in the `layers/vulkan/generated`
 directory which is not intended to be modified directly.
 
 Please see the [Generated Code documentation](./docs/generated_code.md) for more information
@@ -185,73 +179,40 @@ cmake -S . -B build/ --preset dev
 
 ### Windows Development Environment Requirements
 
-- Windows
-  - Any Personal Computer version supported by Microsoft
-- Microsoft [Visual Studio](https://www.visualstudio.com/)
-  - Versions
-    - [2022](https://www.visualstudio.com/vs/downloads/)
-    - [2017-2019](https://www.visualstudio.com/vs/older-downloads/)
-  - The Community Edition of each of the above versions is sufficient, as
-    well as any more capable edition.
-- [CMake 3.17.2](https://cmake.org/files/v3.17/cmake-3.17.2-win64-x64.zip) is the minimum CMake version supported.  [CMake 3.19.3](https://cmake.org/files/v3.19/cmake-3.19.3-win64-x64.zip) is recommended.
-  - Use the installer option to add CMake to the system PATH
-- Git Client Support
-  - [Git for Windows](http://git-scm.com/download/win) is a popular solution
-    for Windows
-  - Some IDEs (e.g., [Visual Studio](https://www.visualstudio.com/),
-    [GitHub Desktop](https://desktop.github.com/)) have integrated
-    Git client support
+- Windows 10+
+- Visual Studio
+- CMake
+- Git
+
+Note: Anything less than `Visual Studio 2019` is not guaranteed to compile/work.
 
 ### Windows Build - Microsoft Visual Studio
 
-Run CMake to generate the Visual Studio project files.
+Run CMake to generate [Visual Studio project files](https://cmake.org/cmake/help/latest/guide/user-interaction/index.html#command-line-g-option).
 
-The `-A` option is used to select either the "Win32" or "x64" architecture.
+```bash
+# NOTE: By default CMake picks the latest version of Visual Studio as the default generator.
+cmake -S . -B build --preset dev
 
-If a generator for a specific version of Visual Studio is required, you can
-specify it with the `-G` switch.
-
-```batch
-# Generates Visual Studio 2022 for x64
-cmake -G "Visual Studio 17 2022" -A x64 -C ..\external\helper.cmake -DCMAKE_BUILD_TYPE=Debug ..
-# Generates Visual Studio 2022 for Win32
-cmake -G "Visual Studio 17 2022" -A Win32 -C ..\external\helper.cmake -DCMAKE_BUILD_TYPE=Debug ..
+# Open the Visual Studio solution
+cmake --open build
 ```
-
-Note: VS2019 and higher target "x64" by default. VS2017 and lower target "Win32" by default
 
 Check the [official CMake documentation](https://cmake.org/cmake/help/latest/manual/cmake-generators.7.html#visual-studio-generators) for further information on Visual Studio generators.
-
-The above steps create a Windows solution file named
-`Vulkan-ValidationLayers.sln` in the build directory.
-
-At this point, you can build the solution from the command line or open the
-generated solution with Visual Studio.
-
-If you want to build the Solution From the Command Line
-
-```batch
-cmake --build . --config Debug
-# Or
-cmake --build . --config Release
-```
 
 ## Building On Linux
 
 ### Linux Build Requirements
 
-This repository has been built and tested on the two most recent Ubuntu LTS
-versions. Currently, the oldest supported version is Ubuntu 18.04, meaning
-that the minimum officially supported C++17 compiler version is GCC 7.3.0,
-although earlier versions may work. It should be straightforward to adapt this
-repository to other Linux distributions.
+This repository is regularly built and tested on the two most recent Ubuntu LTS versions.
 
 [CMake 3.17.2](https://cmake.org/files/v3.17/cmake-3.17.2-Linux-x86_64.tar.gz) is recommended.
 
 ```bash
-sudo apt-get install git build-essential libx11-xcb-dev \
-        libxkbcommon-dev libwayland-dev libxrandr-dev \
-        libegl1-mesa-dev python3-distutils
+sudo apt-get install git build-essential python3
+
+# Linux WSI system libraries
+sudo apt-get install libwayland-dev xorg-dev
 ```
 
 ### WSI Support Build Options
@@ -306,15 +267,6 @@ NDK r20 or greater required
   - SDK Tools > Android SDK Tools
   - SDK Tools > NDK
 
-#### Android Hardware Buffer support
-
-The Validation Layers by default build and release for Android 26 (Android Oreo). While Vulkan is supported in Android 24 and 25, there is no AHardwareBuffer support. To build a version of the Validation Layers for use with Android that will not require AHB support, simply addjust the `APP_PLATFORM` in [build-android/jni/Application.mk](build-android/jni/Application.mk)
-
-```patch
--APP_PLATFORM := android-26
-+APP_PLATFORM := android-24
-```
-
 #### Add Android specifics to environment
 
 For each of the below, you may need to specify a different build-tools
@@ -356,8 +308,6 @@ A common way to install on the system:
 
 #### Additional OSX System Requirements
 
-Tested on OSX version 10.15
-
 Setup Homebrew and components
 
 - Ensure Homebrew is at the beginning of your PATH:
@@ -383,6 +333,8 @@ tools.
 
     cd build-android
     ./build_all.sh
+
+> **NOTE:** To allow manual installation of Android layer libraries on development devices, `build_all.sh` will use the static version of the c++ library (libc++_static.so). For testing purposes and general usage including installation via APK the c++ shared library should be used (libc++_shared.so). See comments in [build_all.sh](build-android/build_all.sh) for details.
 
 > **NOTE:** By default, the `build_all.sh` script will build for all Android ABI variations. To **speed up the build time** if you know your target(s), set `APP_ABI` in both [build-android/jni/Application.mk](build-android/jni/Application.mk) and [build-android/jni/shaderc/Application.mk](build-android/jni/shaderc/Application.mk) to the desired [Android ABI](https://developer.android.com/ndk/guides/application_mk#app_abi)
 
@@ -414,10 +366,6 @@ Follow the setup steps for Windows above, then from the Developer Command Prompt
 ## Building on MacOS
 
 ### MacOS Build Requirements
-
-Tested on OSX version 10.15
-
-NOTE: To force the OSX version set the environment variable [MACOSX_DEPLOYMENT_TARGET](https://cmake.org/cmake/help/latest/envvar/MACOSX_DEPLOYMENT_TARGET.html) when building VVL and it's dependencies.
 
 [CMake 3.17.2](https://cmake.org/files/v3.17/cmake-3.17.2-Darwin-x86_64.tar.gz) is recommended.
 

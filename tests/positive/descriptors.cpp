@@ -12,19 +12,15 @@
  */
 
 #include "../framework/layer_validation_tests.h"
-#include "vk_extension_helper.h"
 
-#include <algorithm>
+#include "generated/vk_extension_helper.h"
+#include "../framework/ray_tracing_objects.h"
+
 #include <array>
-#include <chrono>
-#include <thread>
 
-//
-// POSITIVE VALIDATION TESTS
-//
-// These tests do not expect to encounter ANY validation errors pass only if this is true
+class PositiveDescriptors : public VkPositiveLayerTest {};
 
-TEST_F(VkPositiveLayerTest, CopyNonupdatedDescriptors) {
+TEST_F(PositiveDescriptors, CopyNonupdatedDescriptors) {
     TEST_DESCRIPTION("Copy non-updated descriptors");
     unsigned int i;
 
@@ -53,7 +49,7 @@ TEST_F(VkPositiveLayerTest, CopyNonupdatedDescriptors) {
     vk::UpdateDescriptorSets(m_device->device(), 0, NULL, copy_size, copy_ds_update);
 }
 
-TEST_F(VkPositiveLayerTest, DeleteDescriptorSetLayoutsBeforeDescriptorSets) {
+TEST_F(PositiveDescriptors, DeleteDescriptorSetLayoutsBeforeDescriptorSets) {
     TEST_DESCRIPTION("Create DSLayouts and DescriptorSets and then delete the DSLayouts before the DescriptorSets.");
     ASSERT_NO_FATAL_FAILURE(Init());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
@@ -92,8 +88,7 @@ TEST_F(VkPositiveLayerTest, DeleteDescriptorSetLayoutsBeforeDescriptorSets) {
     vk::FreeDescriptorSets(m_device->device(), ds_pool_one.handle(), 1, &descriptorSet);
 }
 
-// This is a positive test. No failures are expected.
-TEST_F(VkPositiveLayerTest, IgnoreUnrelatedDescriptor) {
+TEST_F(PositiveDescriptors, IgnoreUnrelatedDescriptor) {
     TEST_DESCRIPTION(
         "Ensure that the vkUpdateDescriptorSets validation code is ignoring VkWriteDescriptorSet members that are not related to "
         "the descriptor type specified by VkWriteDescriptorSet::descriptorType.  Correct validation behavior will result in the "
@@ -228,7 +223,7 @@ TEST_F(VkPositiveLayerTest, IgnoreUnrelatedDescriptor) {
     }
 }
 
-TEST_F(VkPositiveLayerTest, ImmutableSamplerOnlyDescriptor) {
+TEST_F(PositiveDescriptors, ImmutableSamplerOnlyDescriptor) {
     TEST_DESCRIPTION("Bind a DescriptorSet with only an immutable sampler and make sure that we don't warn for no update.");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -254,8 +249,7 @@ TEST_F(VkPositiveLayerTest, ImmutableSamplerOnlyDescriptor) {
     m_commandBuffer->end();
 }
 
-// This is a positive test. No failures are expected.
-TEST_F(VkPositiveLayerTest, EmptyDescriptorUpdateTest) {
+TEST_F(PositiveDescriptors, EmptyDescriptorUpdate) {
     TEST_DESCRIPTION("Update last descriptor in a set that includes an empty binding");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -294,8 +288,7 @@ TEST_F(VkPositiveLayerTest, EmptyDescriptorUpdateTest) {
     vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, NULL);
 }
 
-// This is a positive test. No failures are expected.
-TEST_F(VkPositiveLayerTest, PushDescriptorNullDstSetTest) {
+TEST_F(PositiveDescriptors, PushDescriptorNullDstSet) {
     TEST_DESCRIPTION("Use null dstSet in CmdPushDescriptorSetKHR");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -306,14 +299,6 @@ TEST_F(VkPositiveLayerTest, PushDescriptorNullDstSetTest) {
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState());
-
-    auto push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
-    GetPhysicalDeviceProperties2(push_descriptor_prop);
-    if (push_descriptor_prop.maxPushDescriptors < 1) {
-        // Some implementations report an invalid maxPushDescriptors of 0
-        GTEST_SKIP() << "maxPushDescriptors is zero";
-    }
-
     ASSERT_NO_FATAL_FAILURE(InitViewport());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -351,21 +336,15 @@ TEST_F(VkPositiveLayerTest, PushDescriptorNullDstSetTest) {
     descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     descriptor_write.dstSet = 0;  // Should not cause a validation error
 
-    // Find address of extension call and make the call
-    PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR =
-        (PFN_vkCmdPushDescriptorSetKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdPushDescriptorSetKHR");
-    assert(vkCmdPushDescriptorSetKHR != nullptr);
-
     m_commandBuffer->begin();
 
     // In Intel GPU, it needs to bind pipeline before push descriptor set.
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, helper.pipeline_);
-    vkCmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, helper.pipeline_layout_.handle(), 0, 1,
-                              &descriptor_write);
+    vk::CmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, helper.pipeline_layout_.handle(), 0, 1,
+                                &descriptor_write);
 }
 
-// This is a positive test. No failures are expected.
-TEST_F(VkPositiveLayerTest, PushDescriptorUnboundSetTest) {
+TEST_F(PositiveDescriptors, PushDescriptorUnboundSet) {
     TEST_DESCRIPTION("Ensure that no validation errors are produced for not bound push descriptor sets");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -375,14 +354,6 @@ TEST_F(VkPositiveLayerTest, PushDescriptorUnboundSetTest) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
-
-    auto push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
-    GetPhysicalDeviceProperties2(push_descriptor_prop);
-    if (push_descriptor_prop.maxPushDescriptors < 1) {
-        // Some implementations report an invalid maxPushDescriptors of 0
-        GTEST_SKIP() << "maxPushDescriptors is zero";
-    }
-
     ASSERT_NO_FATAL_FAILURE(InitViewport());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -427,17 +398,13 @@ TEST_F(VkPositiveLayerTest, PushDescriptorUnboundSetTest) {
     descriptor_set.WriteDescriptorBufferInfo(2, buffer.handle(), 0, sizeof(bo_data));
     descriptor_set.UpdateDescriptorSets();
 
-    PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR =
-        (PFN_vkCmdPushDescriptorSetKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdPushDescriptorSetKHR");
-    assert(vkCmdPushDescriptorSetKHR != nullptr);
-
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
 
     // Push descriptors and bind descriptor set
-    vkCmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0, 1,
-                              descriptor_set.descriptor_writes.data());
+    vk::CmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0, 1,
+                                descriptor_set.descriptor_writes.data());
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 1, 1,
                               &descriptor_set.set_, 0, NULL);
 
@@ -448,8 +415,7 @@ TEST_F(VkPositiveLayerTest, PushDescriptorUnboundSetTest) {
     m_commandBuffer->end();
 }
 
-// This is a positive test. No failures are expected.
-TEST_F(VkPositiveLayerTest, BindingPartiallyBound) {
+TEST_F(PositiveDescriptors, BindingPartiallyBound) {
     TEST_DESCRIPTION("Ensure that no validation errors for invalid descriptors if binding is PARTIALLY_BOUND");
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
@@ -555,7 +521,7 @@ TEST_F(VkPositiveLayerTest, BindingPartiallyBound) {
     m_commandBuffer->QueueCommandBuffer();
 }
 
-TEST_F(VkPositiveLayerTest, PushDescriptorSetUpdatingSetNumber) {
+TEST_F(PositiveDescriptors, PushDescriptorSetUpdatingSetNumber) {
     TEST_DESCRIPTION(
         "Ensure that no validation errors are produced when the push descriptor set number changes "
         "between two vk::CmdPushDescriptorSetKHR calls.");
@@ -567,12 +533,6 @@ TEST_F(VkPositiveLayerTest, PushDescriptorSetUpdatingSetNumber) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
     ASSERT_NO_FATAL_FAILURE(InitState());
-    auto push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
-    GetPhysicalDeviceProperties2(push_descriptor_prop);
-    if (push_descriptor_prop.maxPushDescriptors < 1) {
-        // Some implementations report an invalid maxPushDescriptors of 0
-        GTEST_SKIP() << "maxPushDescriptors is zero";
-    }
     ASSERT_NO_FATAL_FAILURE(InitViewport());
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
@@ -584,10 +544,6 @@ TEST_F(VkPositiveLayerTest, PushDescriptorSetUpdatingSetNumber) {
     ASSERT_TRUE(buffer_obj.initialized());
 
     VkDescriptorBufferInfo buffer_info = {buffer_obj.handle(), 0, VK_WHOLE_SIZE};
-
-    PFN_vkCmdPushDescriptorSetKHR vkCmdPushDescriptorSetKHR =
-        (PFN_vkCmdPushDescriptorSetKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdPushDescriptorSetKHR");
-    ASSERT_TRUE(vkCmdPushDescriptorSetKHR != nullptr);
 
     const VkDescriptorSetLayoutBinding ds_binding_0 = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
                                                        nullptr};
@@ -637,8 +593,8 @@ TEST_F(VkPositiveLayerTest, PushDescriptorSetUpdatingSetNumber) {
             vk_testing::DescriptorSet(), 0, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &buffer_info);
 
         // Note: pushing to desciptor set number 2.
-        vkCmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 2, 1,
-                                  &descriptor_write);
+        vk::CmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 2, 1,
+                                    &descriptor_write);
         vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     }
 
@@ -672,8 +628,8 @@ TEST_F(VkPositiveLayerTest, PushDescriptorSetUpdatingSetNumber) {
         vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.handle());
 
         // Note: now pushing to desciptor set number 3.
-        vkCmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 3, 1,
-                                  &descriptor_write);
+        vk::CmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 3, 1,
+                                    &descriptor_write);
         vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     }
 
@@ -681,7 +637,7 @@ TEST_F(VkPositiveLayerTest, PushDescriptorSetUpdatingSetNumber) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkPositiveLayerTest, DynamicOffsetWithInactiveBinding) {
+TEST_F(PositiveDescriptors, DynamicOffsetWithInactiveBinding) {
     // Create a descriptorSet w/ dynamic descriptors where 1 binding is inactive
     // We previously had a bug where dynamic offset of inactive bindings was still being used
 
@@ -767,7 +723,7 @@ TEST_F(VkPositiveLayerTest, DynamicOffsetWithInactiveBinding) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkPositiveLayerTest, CreateDescriptorSetBindingWithIgnoredSamplers) {
+TEST_F(PositiveDescriptors, CreateDescriptorSetBindingWithIgnoredSamplers) {
     TEST_DESCRIPTION("Test that layers conditionally do ignore the pImmutableSamplers on vkCreateDescriptorSetLayout");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -776,12 +732,6 @@ TEST_F(VkPositiveLayerTest, CreateDescriptorSetBindingWithIgnoredSamplers) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
-    // In addition to the extension being supported we need to have at least one available
-    // Some implementations report an invalid maxPushDescriptors of 0
-    auto push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
-    GetPhysicalDeviceProperties2(push_descriptor_prop);
-    bool push_descriptor_found = push_descriptor_prop.maxPushDescriptors > 0;
 
     ASSERT_NO_FATAL_FAILURE(InitState());
     const uint64_t fake_address_64 = 0xCDCDCDCDCDCDCDCD;
@@ -808,27 +758,25 @@ TEST_F(VkPositiveLayerTest, CreateDescriptorSetBindingWithIgnoredSamplers) {
         vk_testing::DescriptorSetLayout dsl(*m_device, dslci);
     }
 
-    if (push_descriptor_found) {
-        // push descriptors
-        {
-            const VkDescriptorSetLayoutBinding non_sampler_bindings[] = {
-                {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
-                {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
-                {2, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
-                {3, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
-                {4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
-                {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
-                {6, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
-            };
-            const auto dslci = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>(
-                nullptr, static_cast<VkDescriptorSetLayoutCreateFlags>(VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR),
-                size32(non_sampler_bindings), non_sampler_bindings);
-            vk_testing::DescriptorSetLayout dsl(*m_device, dslci);
-        }
+    // push descriptors
+    {
+        const VkDescriptorSetLayoutBinding non_sampler_bindings[] = {
+            {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
+            {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
+            {2, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
+            {3, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
+            {4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
+            {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
+            {6, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, hopefully_undereferencable_pointer},
+        };
+        const auto dslci = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>(
+            nullptr, static_cast<VkDescriptorSetLayoutCreateFlags>(VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR),
+            size32(non_sampler_bindings), non_sampler_bindings);
+        vk_testing::DescriptorSetLayout dsl(*m_device, dslci);
     }
 }
 
-TEST_F(VkPositiveLayerTest, PushingDescriptorSetWithImmutableSampler) {
+TEST_F(PositiveDescriptors, PushingDescriptorSetWithImmutableSampler) {
     TEST_DESCRIPTION("Use a push descriptor with an immutable sampler.");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -837,14 +785,6 @@ TEST_F(VkPositiveLayerTest, PushingDescriptorSetWithImmutableSampler) {
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
-
-    auto push_descriptor_prop = LvlInitStruct<VkPhysicalDevicePushDescriptorPropertiesKHR>();
-    GetPhysicalDeviceProperties2(push_descriptor_prop);
-    if (push_descriptor_prop.maxPushDescriptors < 1) {
-        // Some implementations report an invalid maxPushDescriptors of 0
-        GTEST_SKIP() << "maxPushDescriptors is zero";
-    }
-
     ASSERT_NO_FATAL_FAILURE(InitState());
 
     VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
@@ -855,9 +795,6 @@ TEST_F(VkPositiveLayerTest, PushingDescriptorSetWithImmutableSampler) {
     VkImageObj image(m_device);
     image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
     VkImageView imageView = image.targetView(VK_FORMAT_R8G8B8A8_UNORM);
-
-    auto vkCmdPushDescriptorSetKHR =
-        (PFN_vkCmdPushDescriptorSetKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdPushDescriptorSetKHR");
 
     std::vector<VkDescriptorSetLayoutBinding> ds_bindings = {
         {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, &sampler_handle}};
@@ -882,59 +819,12 @@ TEST_F(VkPositiveLayerTest, PushingDescriptorSetWithImmutableSampler) {
     descriptor_write.dstSet = descriptor_set.set_;
 
     m_commandBuffer->begin();
-    vkCmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
-                              &descriptor_write);
+    vk::CmdPushDescriptorSetKHR(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+                                &descriptor_write);
     m_commandBuffer->end();
 }
 
-TEST_F(VkPositiveLayerTest, BindVertexBuffers2EXTNullDescriptors) {
-    TEST_DESCRIPTION("Test nullDescriptor works wih CmdBindVertexBuffers variants");
-
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    AddRequiredExtensions(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
-    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto robustness2_features = LvlInitStruct<VkPhysicalDeviceRobustness2FeaturesEXT>();
-    auto features2 = GetPhysicalDeviceFeatures2(robustness2_features);
-    if (!robustness2_features.nullDescriptor) {
-        GTEST_SKIP() << "nullDescriptor feature not supported";
-    }
-
-    PFN_vkCmdBindVertexBuffers2EXT vkCmdBindVertexBuffers2EXT =
-        (PFN_vkCmdBindVertexBuffers2EXT)vk::GetInstanceProcAddr(instance(), "vkCmdBindVertexBuffers2EXT");
-    ASSERT_TRUE(vkCmdBindVertexBuffers2EXT != nullptr);
-
-    VkCommandPoolCreateFlags pool_flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, pool_flags));
-    ASSERT_NO_FATAL_FAILURE(InitViewport());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-
-    OneOffDescriptorSet descriptor_set(m_device, {
-                                                     {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr},
-                                                     {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
-                                                     {2, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
-                                                 });
-
-    descriptor_set.WriteDescriptorImageInfo(0, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
-    descriptor_set.WriteDescriptorBufferInfo(1, VK_NULL_HANDLE, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-    VkBufferView buffer_view = VK_NULL_HANDLE;
-    descriptor_set.WriteDescriptorBufferView(2, buffer_view, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
-    descriptor_set.UpdateDescriptorSets();
-    descriptor_set.descriptor_writes.clear();
-
-    m_commandBuffer->begin();
-    VkBuffer buffer = VK_NULL_HANDLE;
-    VkDeviceSize offset = 0;
-    vk::CmdBindVertexBuffers(m_commandBuffer->handle(), 0, 1, &buffer, &offset);
-    vkCmdBindVertexBuffers2EXT(m_commandBuffer->handle(), 0, 1, &buffer, &offset, nullptr, nullptr);
-    m_commandBuffer->end();
-}
-
-TEST_F(VkPositiveLayerTest, CopyMutableDescriptors) {
+TEST_F(PositiveDescriptors, CopyMutableDescriptors) {
     TEST_DESCRIPTION("Copy mutable descriptors.");
 
     AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
@@ -1036,7 +926,113 @@ TEST_F(VkPositiveLayerTest, CopyMutableDescriptors) {
     vk::UpdateDescriptorSets(m_device->device(), 0, nullptr, 1, &copy_set);
 }
 
-TEST_F(VkPositiveLayerTest, TestImageViewAsDescriptorReadAndInputAttachment) {
+TEST_F(PositiveDescriptors, CopyAccelerationStructureMutableDescriptors) {
+    TEST_DESCRIPTION("Copy acceleration structure descriptor in a mutable descriptor.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto mutable_descriptor_type_features = LvlInitStruct<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT>();
+    auto acc_struct_features = LvlInitStruct<VkPhysicalDeviceAccelerationStructureFeaturesKHR>(&mutable_descriptor_type_features);
+    auto bda_features = LvlInitStruct<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>(&acc_struct_features);
+    auto features2 = GetPhysicalDeviceFeatures2(bda_features);
+    if (mutable_descriptor_type_features.mutableDescriptorType == VK_FALSE) {
+        GTEST_SKIP() << "mutableDescriptorType feature not supported";
+    }
+    if (acc_struct_features.accelerationStructure == VK_FALSE) {
+        GTEST_SKIP() << "accelerationStructure feature not supported";
+    }
+    if (bda_features.bufferDeviceAddress == VK_FALSE) {
+        GTEST_SKIP() << "bufferDeviceAddress feature not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    std::array descriptor_types = {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR};
+
+    VkMutableDescriptorTypeListEXT mutable_descriptor_type_list = {};
+    mutable_descriptor_type_list.descriptorTypeCount = descriptor_types.size();
+    mutable_descriptor_type_list.pDescriptorTypes = descriptor_types.data();
+
+    auto mdtci = LvlInitStruct<VkMutableDescriptorTypeCreateInfoEXT>();
+    mdtci.mutableDescriptorTypeListCount = 1;
+    mdtci.pMutableDescriptorTypeLists = &mutable_descriptor_type_list;
+
+    std::array<VkDescriptorPoolSize, 2> pool_sizes = {};
+    pool_sizes[0].type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    pool_sizes[0].descriptorCount = 1;
+    pool_sizes[1].type = VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
+    pool_sizes[1].descriptorCount = 1;
+
+    auto ds_pool_ci = LvlInitStruct<VkDescriptorPoolCreateInfo>(&mdtci);
+    ds_pool_ci.maxSets = 2;
+    ds_pool_ci.poolSizeCount = pool_sizes.size();
+    ds_pool_ci.pPoolSizes = pool_sizes.data();
+
+    vk_testing::DescriptorPool pool;
+    pool.init(*m_device, ds_pool_ci);
+
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings = {};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_ALL;
+    bindings[0].pImmutableSamplers = nullptr;
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_ALL;
+    bindings[1].pImmutableSamplers = nullptr;
+
+    auto create_info = LvlInitStruct<VkDescriptorSetLayoutCreateInfo>(&mdtci);
+    create_info.bindingCount = bindings.size();
+    create_info.pBindings = bindings.data();
+
+    vk_testing::DescriptorSetLayout set_layout;
+    set_layout.init(*m_device, create_info);
+
+    std::array<VkDescriptorSetLayout, 2> layouts = {set_layout.handle(), set_layout.handle()};
+
+    auto allocate_info = LvlInitStruct<VkDescriptorSetAllocateInfo>();
+    allocate_info.descriptorPool = pool.handle();
+    allocate_info.descriptorSetCount = layouts.size();
+    allocate_info.pSetLayouts = layouts.data();
+
+    std::array<VkDescriptorSet, layouts.size()> descriptor_sets;
+    vk::AllocateDescriptorSets(device(), &allocate_info, descriptor_sets.data());
+
+    auto tlas = rt::as::blueprint::AccelStructSimpleOnDeviceTopLevel(DeviceValidationVersion(), 4096);
+    tlas->Build(*m_device);
+
+    auto blas_descriptor = LvlInitStruct<VkWriteDescriptorSetAccelerationStructureKHR>();
+    blas_descriptor.accelerationStructureCount = 1;
+    blas_descriptor.pAccelerationStructures = &tlas->handle();
+
+    auto descriptor_write = LvlInitStruct<VkWriteDescriptorSet>();
+    descriptor_write.dstSet = descriptor_sets[0];
+    descriptor_write.dstBinding = 0;
+    descriptor_write.descriptorCount = blas_descriptor.accelerationStructureCount;
+    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    descriptor_write.pNext = &blas_descriptor;
+
+    vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, nullptr);
+
+    auto copy_set = LvlInitStruct<VkCopyDescriptorSet>();
+    copy_set.srcSet = descriptor_sets[0];
+    copy_set.srcBinding = 0;
+    copy_set.dstSet = descriptor_sets[1];
+    copy_set.dstBinding = 1;
+    copy_set.descriptorCount = 1;
+
+    vk::UpdateDescriptorSets(m_device->device(), 0, nullptr, 1, &copy_set);
+}
+
+TEST_F(PositiveDescriptors, tImageViewAsDescriptorReadAndInputAttachment) {
     TEST_DESCRIPTION("Test reading from a descriptor that uses same image view as framebuffer input attachment");
 
     ASSERT_NO_FATAL_FAILURE(Init());
@@ -1195,7 +1191,7 @@ TEST_F(VkPositiveLayerTest, TestImageViewAsDescriptorReadAndInputAttachment) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkPositiveLayerTest, UpdateImageDescriptorSetThatHasImageViewUsage) {
+TEST_F(PositiveDescriptors, UpdateImageDescriptorSetThatHasImageViewUsage) {
     TEST_DESCRIPTION("Update a descriptor set with an image view that includes VkImageViewUsageCreateInfo");
 
     AddRequiredExtensions(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
@@ -1235,7 +1231,7 @@ TEST_F(VkPositiveLayerTest, UpdateImageDescriptorSetThatHasImageViewUsage) {
     ds.UpdateDescriptorSets();
 }
 
-TEST_F(VkPositiveLayerTest, MultipleThreadsUsingHostOnlyDescriptorSet) {
+TEST_F(PositiveDescriptors, MultipleThreadsUsingHostOnlyDescriptorSet) {
     TEST_DESCRIPTION("Test using host only descriptor set in multiple threads");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -1306,7 +1302,7 @@ TEST_F(VkPositiveLayerTest, MultipleThreadsUsingHostOnlyDescriptorSet) {
     for (auto &t : threads) t.join();
 }
 
-TEST_F(VkPositiveLayerTest, BindingEmptyDescriptorSets) {
+TEST_F(PositiveDescriptors, BindingEmptyDescriptorSets) {
     ASSERT_NO_FATAL_FAILURE(Init());
 
     OneOffDescriptorSet empty_ds(m_device, {});
@@ -1318,7 +1314,7 @@ TEST_F(VkPositiveLayerTest, BindingEmptyDescriptorSets) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkPositiveLayerTest, DrawingWithUnboundUnusedSetWithInputAttachments) {
+TEST_F(PositiveDescriptors, DrawingWithUnboundUnusedSetWithInputAttachments) {
     TEST_DESCRIPTION(
         "Test issuing draw command with pipeline layout that has 2 descriptor sets with input attachment descriptors. "
         "The second descriptor set is unused and unbound. Its purpose is to catch regression of the following bug or similar "
@@ -1417,7 +1413,7 @@ TEST_F(VkPositiveLayerTest, DrawingWithUnboundUnusedSetWithInputAttachments) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkPositiveLayerTest, UpdateDescritorSetsNoLongerInUse) {
+TEST_F(PositiveDescriptors, UpdateDescritorSetsNoLongerInUse) {
     TEST_DESCRIPTION("Use descriptor in the draw call and then update descriptor when it is no longer in use");
     ASSERT_NO_FATAL_FAILURE(InitFramework());
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
@@ -1544,4 +1540,320 @@ TEST_F(VkPositiveLayerTest, UpdateDescritorSetsNoLongerInUse) {
 
         ASSERT_VK_SUCCESS(vk::QueueWaitIdle(m_device->m_queue));
     }
+}
+
+TEST_F(PositiveDescriptors, PushDescriptorTemplateBasic) {
+    TEST_DESCRIPTION("Basic use of vkCmdPushDescriptorSetWithTemplateKHR");
+
+    AddRequiredExtensions(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState());
+
+    auto buffer_ci = LvlInitStruct<VkBufferCreateInfo>();
+    buffer_ci.size = 32;
+    buffer_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    VkBufferObj buffer;
+    buffer.init(*m_device, buffer_ci);
+
+    std::vector<VkDescriptorSetLayoutBinding> ds_bindings = {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    OneOffDescriptorSet descriptor_set(m_device, ds_bindings);
+
+    VkDescriptorSetLayoutObj push_dsl(m_device, ds_bindings, VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
+
+    VkPipelineLayoutObj pipeline_layout(m_device, {&push_dsl});
+
+    struct SimpleTemplateData {
+        VkDescriptorBufferInfo buff_info;
+    };
+
+    VkDescriptorUpdateTemplateEntry update_template_entry = {};
+    update_template_entry.dstBinding = 0;
+    update_template_entry.dstArrayElement = 0;
+    update_template_entry.descriptorCount = 1;
+    update_template_entry.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    update_template_entry.offset = offsetof(SimpleTemplateData, buff_info);
+    update_template_entry.stride = sizeof(SimpleTemplateData);
+
+    auto update_template_ci = LvlInitStruct<VkDescriptorUpdateTemplateCreateInfoKHR>();
+    update_template_ci.descriptorUpdateEntryCount = 1;
+    update_template_ci.pDescriptorUpdateEntries = &update_template_entry;
+    update_template_ci.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS_KHR;
+    update_template_ci.descriptorSetLayout = descriptor_set.layout_.handle();
+    update_template_ci.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    update_template_ci.pipelineLayout = pipeline_layout.handle();
+
+    VkDescriptorUpdateTemplate update_template = VK_NULL_HANDLE;
+    vk::CreateDescriptorUpdateTemplateKHR(m_device->device(), &update_template_ci, nullptr, &update_template);
+
+    SimpleTemplateData update_template_data;
+    update_template_data.buff_info = {buffer.handle(), 0, 32};
+
+    m_commandBuffer->begin();
+    vk::CmdPushDescriptorSetWithTemplateKHR(m_commandBuffer->handle(), update_template, pipeline_layout.handle(), 0,
+                                            &update_template_data);
+    m_commandBuffer->end();
+
+    vk::DestroyDescriptorUpdateTemplateKHR(m_device->device(), update_template, nullptr);
+}
+
+TEST_F(PositiveDescriptors, UpdateAfterBind) {
+    TEST_DESCRIPTION("Test UPDATE_AFTER_BIND does not reset command buffers.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto descriptor_indexing = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeatures>();
+    auto synchronization2 = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>(&descriptor_indexing);
+    auto features2 = GetPhysicalDeviceFeatures2(synchronization2);
+    if (descriptor_indexing.descriptorBindingStorageBufferUpdateAfterBind == VK_FALSE) {
+        GTEST_SKIP() << "descriptorBindingStorageBufferUpdateAfterBind feature is not available";
+    }
+    if (synchronization2.synchronization2 == VK_FALSE) {
+        GTEST_SKIP() << "synchronization2 feature is not available";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    auto buffer_ci = LvlInitStruct<VkBufferCreateInfo>();
+    buffer_ci.size = 4096;
+    buffer_ci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
+    VkBuffer buffer1, buffer2, buffer3;
+    vk::CreateBuffer(device(), &buffer_ci, nullptr, &buffer1);
+    vk::CreateBuffer(device(), &buffer_ci, nullptr, &buffer2);
+    vk::CreateBuffer(device(), &buffer_ci, nullptr, &buffer3);
+
+    VkMemoryRequirements buffer_mem_reqs;
+    vk::GetBufferMemoryRequirements(device(), buffer1, &buffer_mem_reqs);
+
+    auto alloc_info = LvlInitStruct<VkMemoryAllocateInfo>();
+    alloc_info.allocationSize = buffer_mem_reqs.size;
+
+    VkDeviceMemory memory1, memory2, memory3;
+    vk::AllocateMemory(device(), &alloc_info, nullptr, &memory1);
+    vk::AllocateMemory(device(), &alloc_info, nullptr, &memory2);
+    vk::AllocateMemory(device(), &alloc_info, nullptr, &memory3);
+
+    vk::BindBufferMemory(device(), buffer1, memory1, 0);
+    vk::BindBufferMemory(device(), buffer2, memory2, 0);
+    vk::BindBufferMemory(device(), buffer3, memory3, 0);
+
+    OneOffDescriptorSet::Bindings binding_defs = {
+        {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+    };
+    VkDescriptorBindingFlagsEXT flags[2] = {VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT, 0};
+    auto flags_create_info = LvlInitStruct<VkDescriptorSetLayoutBindingFlagsCreateInfoEXT>();
+    flags_create_info.bindingCount = 2;
+    flags_create_info.pBindingFlags = flags;
+    OneOffDescriptorSet descriptor_set(m_device, binding_defs, VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
+                                       &flags_create_info, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT);
+    const VkPipelineLayoutObj pipeline_layout(m_device, {&descriptor_set.layout_});
+
+    VkDescriptorBufferInfo buffer_info = {buffer1, 0, sizeof(uint32_t)};
+
+    VkWriteDescriptorSet descriptor_write = LvlInitStruct<VkWriteDescriptorSet>();
+    descriptor_write.dstSet = descriptor_set.set_;
+    descriptor_write.dstBinding = 0;
+    descriptor_write.descriptorCount = 1;
+    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptor_write.pBufferInfo = &buffer_info;
+
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
+
+    descriptor_write.dstBinding = 1;
+    buffer_info.buffer = buffer3;
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
+    descriptor_write.dstBinding = 0;
+
+    const char fsSource[] = R"glsl(
+        #version 450
+        layout (set = 0, binding = 0) buffer buf1 {
+            float a;
+        } ubuf1;
+        layout (set = 0, binding = 1) buffer buf2 {
+            float a;
+        } ubuf2;
+        void main() {
+           float f = ubuf1.a * ubuf2.a;
+        }
+    )glsl";
+    VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipe.InitState();
+    pipe.pipeline_layout_ = VkPipelineLayoutObj(m_device, {&descriptor_set.layout_});
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    vk::DestroyBuffer(device(), buffer1, nullptr);
+    buffer_info.buffer = buffer2;
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
+
+    auto cb_info = LvlInitStruct<VkCommandBufferSubmitInfoKHR>();
+    cb_info.commandBuffer = m_commandBuffer->handle();
+
+    auto submit_info = LvlInitStruct<VkSubmitInfo2KHR>();
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &cb_info;
+
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+
+    vk::DestroyBuffer(device(), buffer2, nullptr);
+    vk::DestroyBuffer(device(), buffer3, nullptr);
+
+    vk::FreeMemory(device(), memory1, nullptr);
+    vk::FreeMemory(device(), memory2, nullptr);
+    vk::FreeMemory(device(), memory3, nullptr);
+}
+
+TEST_F(PositiveDescriptors, PartiallyBoundDescriptors) {
+    TEST_DESCRIPTION("Test partially bound descriptors do not reset command buffers.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
+        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    }
+    if (!AreRequiredExtensionsEnabled()) {
+        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
+    }
+
+    auto descriptor_indexing = LvlInitStruct<VkPhysicalDeviceDescriptorIndexingFeatures>();
+    auto synchronization2 = LvlInitStruct<VkPhysicalDeviceSynchronization2FeaturesKHR>(&descriptor_indexing);
+    auto features2 = GetPhysicalDeviceFeatures2(synchronization2);
+    if (descriptor_indexing.descriptorBindingStorageBufferUpdateAfterBind == VK_FALSE) {
+        GTEST_SKIP() << "descriptorBindingStorageBufferUpdateAfterBind feature is not available";
+    }
+    if (synchronization2.synchronization2 == VK_FALSE) {
+        GTEST_SKIP() << "synchronization2 feature is not available";
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    auto buffer_ci = LvlInitStruct<VkBufferCreateInfo>();
+    buffer_ci.size = 4096;
+    buffer_ci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
+    VkBuffer buffer1, buffer3;
+    vk::CreateBuffer(device(), &buffer_ci, nullptr, &buffer1);
+    vk::CreateBuffer(device(), &buffer_ci, nullptr, &buffer3);
+
+    VkMemoryRequirements buffer_mem_reqs;
+    vk::GetBufferMemoryRequirements(device(), buffer1, &buffer_mem_reqs);
+
+    auto alloc_info = LvlInitStruct<VkMemoryAllocateInfo>();
+    alloc_info.allocationSize = buffer_mem_reqs.size;
+
+    VkDeviceMemory memory1, memory3;
+    vk::AllocateMemory(device(), &alloc_info, nullptr, &memory1);
+    vk::AllocateMemory(device(), &alloc_info, nullptr, &memory3);
+
+    vk::BindBufferMemory(device(), buffer1, memory1, 0);
+    vk::BindBufferMemory(device(), buffer3, memory3, 0);
+
+    OneOffDescriptorSet::Bindings binding_defs = {
+        {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+    };
+    VkDescriptorBindingFlagsEXT flags[2] = {VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, 0};
+    auto flags_create_info = LvlInitStruct<VkDescriptorSetLayoutBindingFlagsCreateInfoEXT>();
+    flags_create_info.bindingCount = 2;
+    flags_create_info.pBindingFlags = flags;
+    OneOffDescriptorSet descriptor_set(m_device, binding_defs, VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
+                                       &flags_create_info, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT);
+    const VkPipelineLayoutObj pipeline_layout(m_device, {&descriptor_set.layout_});
+
+    VkDescriptorBufferInfo buffer_info = {buffer1, 0, sizeof(uint32_t)};
+
+    VkWriteDescriptorSet descriptor_write = LvlInitStruct<VkWriteDescriptorSet>();
+    descriptor_write.dstSet = descriptor_set.set_;
+    descriptor_write.dstBinding = 0;
+    descriptor_write.descriptorCount = 1;
+    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptor_write.pBufferInfo = &buffer_info;
+
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
+
+    descriptor_write.dstBinding = 1;
+    buffer_info.buffer = buffer3;
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
+    descriptor_write.dstBinding = 0;
+
+    const char fsSource[] = R"glsl(
+        #version 450
+        layout (set = 0, binding = 0) buffer buf1 {
+            float a;
+        } ubuf1;
+        layout (set = 0, binding = 1) buffer buf2 {
+            float a;
+        } ubuf2;
+        void main() {
+           float f = ubuf2.a;
+        }
+    )glsl";
+    VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipe.InitState();
+    pipe.pipeline_layout_ = VkPipelineLayoutObj(m_device, {&descriptor_set.layout_});
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    vk::DestroyBuffer(device(), buffer1, nullptr);
+
+    auto cb_info = LvlInitStruct<VkCommandBufferSubmitInfoKHR>();
+    cb_info.commandBuffer = m_commandBuffer->handle();
+
+    auto submit_info = LvlInitStruct<VkSubmitInfo2KHR>();
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &cb_info;
+
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueWaitIdle(m_device->m_queue);
+
+    vk::DestroyBuffer(device(), buffer3, nullptr);
+
+    vk::FreeMemory(device(), memory1, nullptr);
+    vk::FreeMemory(device(), memory3, nullptr);
 }

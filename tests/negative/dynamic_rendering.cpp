@@ -14,7 +14,7 @@
  *
  */
 
-#include "cast_utils.h"
+#include "utils/cast_utils.h"
 #include "../framework/layer_validation_tests.h"
 
 class DynamicRenderingCommandBufferInheritanceRenderingInfoTest : public VkLayerTest {
@@ -123,30 +123,35 @@ TEST_F(DynamicRenderingCommandBufferInheritanceRenderingInfoTest, LinearColorAtt
     Test(true);
 }
 
-TEST_F(VkLayerTest, DynamicRenderingCommandDraw) {
-    TEST_DESCRIPTION("vkCmdDraw* Dynamic Rendering Tests.");
+class NegativeDynamicRendering : public VkLayerTest {
+  public:
+    void InitBasicDynamicRendering();
+};
 
+void NegativeDynamicRendering::InitBasicDynamicRendering() {
     SetTargetApiVersion(VK_API_VERSION_1_2);
-
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
     ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
     if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
         GTEST_SKIP() << "At least Vulkan version 1.2 is required";
     }
-
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
+    GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering , skipping.";
     }
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &dynamic_rendering_features, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+}
+
+TEST_F(NegativeDynamicRendering, CommandDraw) {
+    TEST_DESCRIPTION("vkCmdDraw* Dynamic Rendering Tests.");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT);
     VkShaderObj fs(this, bindStateFragShaderText, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -221,30 +226,145 @@ TEST_F(VkLayerTest, DynamicRenderingCommandDraw) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingCmdClearAttachmentTests) {
-    TEST_DESCRIPTION("Various tests for validating usage of vkCmdClearAttachments with Dynamic Rendering");
+TEST_F(NegativeDynamicRendering, CommandDrawWithShaderTileImageRead) {
+    TEST_DESCRIPTION("vkCmdDraw* with shader tile image read extension using dynamic Rendering Tests.");
 
-    SetTargetApiVersion(VK_API_VERSION_1_1);
+    SetTargetApiVersion(VK_API_VERSION_1_3);
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_SHADER_TILE_IMAGE_EXTENSION_NAME);
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
+    }
 
     if (!AreRequiredExtensionsEnabled()) {
         GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
     }
 
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
     auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
+    auto shader_tile_image_features = LvlInitStruct<VkPhysicalDeviceShaderTileImageFeaturesEXT>();
+    dynamic_rendering_features.pNext = &shader_tile_image_features;
     auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (!dynamic_rendering_features.dynamicRendering) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
 
+    // shader tile image read features not supported skip the test.
+    if (!shader_tile_image_features.shaderTileImageDepthReadAccess &&
+        !shader_tile_image_features.shaderTileImageStencilReadAccess) {
+        GTEST_SKIP() << "Test requires (unsupported) shader tile image extension.";
+    }
+
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT);
+    auto fs =
+        VkShaderObj::CreateFromASM(*this, VK_SHADER_STAGE_FRAGMENT_BIT, bindShaderTileImageDepthStencilReadSpv, "main", nullptr);
+
+    const VkDynamicState dyn_states[] = {VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_STENCIL_WRITE_MASK};
+    auto dyn_state_ci = LvlInitStruct<VkPipelineDynamicStateCreateInfo>();
+    dyn_state_ci.dynamicStateCount = 2;
+    dyn_state_ci.pDynamicStates = dyn_states;
+
+    auto ds_state = LvlInitStruct<VkPipelineDepthStencilStateCreateInfo>();
+    ds_state.depthWriteEnable = VK_TRUE;
+
+    VkFormat depth_format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    VkFormat color_format = VK_FORMAT_B8G8R8A8_UNORM;
+    auto pipeline_rendering_info = LvlInitStruct<VkPipelineRenderingCreateInfoKHR>();
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &color_format;
+    pipeline_rendering_info.depthAttachmentFormat = depth_format;
+    pipeline_rendering_info.stencilAttachmentFormat = depth_format;
+
+    VkDescriptorSetLayoutBinding dslb = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+    const VkDescriptorSetLayoutObj dsl(m_device, {dslb});
+
+    auto ms_ci = LvlInitStruct<VkPipelineMultisampleStateCreateInfo>();
+    ms_ci.sampleShadingEnable = VK_TRUE;
+    ms_ci.minSampleShading = 1.0;
+    ms_ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs->GetStageCreateInfo()};
+    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
+    pipe.gp_ci_.pMultisampleState = &ms_ci;
+    pipe.gp_ci_.pDepthStencilState = &ds_state;
+    pipe.dyn_state_ci_ = dyn_state_ci;
+    pipe.pipeline_layout_ = VkPipelineLayoutObj(m_device, {&dsl});
+    pipe.InitState();
+    pipe.CreateGraphicsPipeline();
+
+    VkImageObj depth_image(m_device);
+    depth_image.Init(32, 32, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
+    ASSERT_TRUE(depth_image.initialized());
+
+    VkImageViewCreateInfo depth_view_ci = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                           nullptr,
+                                           0,
+                                           depth_image.handle(),
+                                           VK_IMAGE_VIEW_TYPE_2D,
+                                           depth_format,
+                                           {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                                            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
+                                           {VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1}};
+
+    vk_testing::ImageView depth_image_view(*m_device, depth_view_ci);
+
+    VkImageObj color_image(m_device);
+    color_image.Init(32, 32, 1, color_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
+    ASSERT_TRUE(color_image.initialized());
+
+    VkImageViewCreateInfo color_view_ci = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                           nullptr,
+                                           0,
+                                           color_image.handle(),
+                                           VK_IMAGE_VIEW_TYPE_2D,
+                                           color_format,
+                                           {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                                            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
+                                           {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+
+    vk_testing::ImageView color_image_view(*m_device, color_view_ci);
+
+    VkRenderingAttachmentInfoKHR depth_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depth_attachment.imageView = depth_image_view.handle();
+
+    VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment.imageView = color_image_view.handle();
+
+    VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.pDepthAttachment = &depth_attachment;
+    begin_rendering_info.pStencilAttachment = &depth_attachment;
+    begin_rendering_info.layerCount = 1;
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vk::CmdSetDepthWriteEnable(m_commandBuffer->handle(), true);
+    vk::CmdSetStencilWriteMask(m_commandBuffer->handle(), VK_STENCIL_FACE_FRONT_BIT, 0xff);
+    vk::CmdSetStencilWriteMask(m_commandBuffer->handle(), VK_STENCIL_FACE_BACK_BIT, 0);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-pDynamicStates-08715");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-pDynamicStates-08716");
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, CmdClearAttachmentTests) {
+    TEST_DESCRIPTION("Various tests for validating usage of vkCmdClearAttachments with Dynamic Rendering");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageFormatProperties image_format_properties{};
@@ -371,30 +491,10 @@ TEST_F(VkLayerTest, DynamicRenderingCmdClearAttachmentTests) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingClearAttachments) {
+TEST_F(NegativeDynamicRendering, ClearAttachments) {
     TEST_DESCRIPTION("Call CmdClearAttachments with invalid aspect masks.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        GTEST_SKIP() << "At least Vulkan version 1.2 is required.";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) " VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME ", skipping\n";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     // Create color image
     const VkFormat color_format = VK_FORMAT_R32_SFLOAT;
@@ -460,6 +560,7 @@ TEST_F(VkLayerTest, DynamicRenderingClearAttachments) {
     stencil_attachment_info.imageView = depth_stencil_image_view.handle();
     auto color_attachment_info = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     color_attachment_info.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment_info.imageView = color_image_view;
     auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
 
     begin_rendering_info.renderArea = rect;
@@ -512,15 +613,12 @@ TEST_F(VkLayerTest, DynamicRenderingClearAttachments) {
     renderpass_ci.pSubpasses = subpass_descs.data();
     renderpass_ci.dependencyCount = 1;
     renderpass_ci.pDependencies = &subpass_dependency;
-
-    VkRenderPass renderpass = VK_NULL_HANDLE;
-    VkResult err = vk::CreateRenderPass(m_device->handle(), &renderpass_ci, nullptr, &renderpass);
-    ASSERT_VK_SUCCESS(err);
+    vk_testing::RenderPass renderpass(*m_device, renderpass_ci);
 
     std::array<VkImageView, 2> renderpass_image_views = {depth_stencil_image_view.handle(), color_image_view.handle()};
 
     auto framebuffer_ci = LvlInitStruct<VkFramebufferCreateInfo>();
-    framebuffer_ci.renderPass = renderpass;
+    framebuffer_ci.renderPass = renderpass.handle();
     framebuffer_ci.attachmentCount = 2;
     framebuffer_ci.pAttachments = renderpass_image_views.data();
     framebuffer_ci.width = 32;
@@ -528,7 +626,7 @@ TEST_F(VkLayerTest, DynamicRenderingClearAttachments) {
     framebuffer_ci.layers = 1;
 
     auto renderpass_bi = LvlInitStruct<VkRenderPassBeginInfo>();
-    renderpass_bi.renderPass = renderpass;
+    renderpass_bi.renderPass = renderpass.handle();
     renderpass_bi.renderArea = rect;
     renderpass_bi.clearValueCount = 2;
     std::array<VkClearValue, 2> renderpass_clear_values;
@@ -717,7 +815,7 @@ TEST_F(VkLayerTest, DynamicRenderingClearAttachments) {
                 const VkResult err = vk::CreateFramebuffer(m_device->handle(), &framebuffer_ci, nullptr, &framebuffers[3]);
                 ASSERT_VK_SUCCESS(err);
                 renderpass_bi.framebuffer = framebuffers[3];
-                cmd_buffer_inheritance_info.renderPass = renderpass;
+                cmd_buffer_inheritance_info.renderPass = renderpass.handle();
                 cmd_buffer_inheritance_info.subpass = 0;
                 cmd_buffer_inheritance_info.framebuffer = framebuffers[3];
             }
@@ -777,34 +875,12 @@ TEST_F(VkLayerTest, DynamicRenderingClearAttachments) {
     delete m_commandBuffer;
     m_commandBuffer = new VkCommandBufferObj(m_device, m_commandPool);
     clear_cmd_test(false);
-
-    vk::DestroyRenderPass(m_device->handle(), renderpass, nullptr);
 }
 
-TEST_F(VkLayerTest, DynamicRenderingGraphicsPipelineCreateInfo) {
+TEST_F(NegativeDynamicRendering, GraphicsPipelineCreateInfo) {
     TEST_DESCRIPTION("Test graphics pipeline creation with dynamic rendering.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     if (m_device->props.limits.maxGeometryOutputVertices == 0) {
         GTEST_SKIP() << "Device doesn't support required maxGeometryOutputVertices";
@@ -892,7 +968,7 @@ TEST_F(VkLayerTest, DynamicRenderingGraphicsPipelineCreateInfo) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingWithMismatchingViewMask) {
+TEST_F(NegativeDynamicRendering, MismatchingViewMask) {
     TEST_DESCRIPTION("Draw with Dynamic Rendering and a mismatching viewMask");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -979,46 +1055,18 @@ TEST_F(VkLayerTest, DynamicRenderingWithMismatchingViewMask) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingWithMistmatchingAttachments) {
+TEST_F(NegativeDynamicRendering, MistmatchingAttachmentFormats) {
     TEST_DESCRIPTION("Draw with Dynamic Rendering with mismatching color attachment counts and depth/stencil formats");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
-
-    char const *fsSource = R"glsl(
-        #version 450
-        layout(location=0) out vec4 color;
-        void main() {
-           color = vec4(1.0f);
-        }
-    )glsl";
-
-    VkViewport viewport = {0, 0, 16, 16, 0, 1};
-    VkRect2D scissor = {{0, 0}, {16, 16}};
+    const VkViewport viewport = {0, 0, 16, 16, 0, 1};
+    const VkRect2D scissor = {{0, 0}, {16, 16}};
     m_viewports.push_back(viewport);
     m_scissors.push_back(scissor);
 
     VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT);
-    VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
+    VkShaderObj fs(this, bindStateFragColorOutputText, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     VkDescriptorSetLayoutBinding dslb = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     const VkDescriptorSetLayoutObj dsl(m_device, {dslb});
@@ -1115,15 +1163,15 @@ TEST_F(VkLayerTest, DynamicRenderingWithMistmatchingAttachments) {
     VkImageView depthStencilImageView =
         depthStencilImage.targetView(depthStencilFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
-    VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    auto color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     color_attachment.imageView = colorImageView;
 
-    VkRenderingAttachmentInfoKHR depth_stencil_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    auto depth_stencil_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     depth_stencil_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     depth_stencil_attachment.imageView = depthStencilImageView;
 
-    VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
     begin_rendering_info.layerCount = 1;
     m_commandBuffer->begin();
 
@@ -1171,30 +1219,148 @@ TEST_F(VkLayerTest, DynamicRenderingWithMistmatchingAttachments) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingWithMistmatchingAttachmentSamples) {
+TEST_F(NegativeDynamicRendering, MistmatchingAttachmentFormats2) {
+    TEST_DESCRIPTION(
+        "Draw with Dynamic Rendering with attachment specified as VK_NULL_HANDLE in VkRenderingInfoKHR, but with corresponding "
+        "format in VkPipelineRenderingCreateInfoKHR not set to VK_FORMAT_UNDEFINED");
+
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
+
+    const VkViewport viewport = {0, 0, 16, 16, 0, 1};
+    const VkRect2D scissor = {{0, 0}, {16, 16}};
+    m_viewports.push_back(viewport);
+    m_scissors.push_back(scissor);
+
+    VkShaderObj vs(this, bindStateVertShaderText, VK_SHADER_STAGE_VERTEX_BIT);
+    VkShaderObj fs(this, bindStateFragColorOutputText, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    VkDescriptorSetLayoutBinding dslb = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+    const VkDescriptorSetLayoutObj dsl(m_device, {dslb});
+    const VkPipelineLayoutObj pl(m_device, {&dsl});
+
+    auto pipeline_rendering_info = LvlInitStruct<VkPipelineRenderingCreateInfoKHR>();
+
+    VkPipelineObj pipeline_color(m_device);
+    pipeline_color.AddShader(&vs);
+    pipeline_color.AddShader(&fs);
+    pipeline_color.AddDefaultColorAttachment();
+    pipeline_color.SetViewport(m_viewports);
+    pipeline_color.SetScissor(m_scissors);
+
+    VkFormat color_formats[] = {VK_FORMAT_R8G8B8A8_UNORM};
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = color_formats;
+
+    auto create_info1 = LvlInitStruct<VkGraphicsPipelineCreateInfo>();
+    pipeline_color.InitGraphicsPipelineCreateInfo(&create_info1);
+    create_info1.pNext = &pipeline_rendering_info;
+
+    pipeline_color.CreateVKPipeline(pl.handle(), VK_NULL_HANDLE, &create_info1);
+
+    auto ds_state = LvlInitStruct<VkPipelineDepthStencilStateCreateInfo>();
+
+    VkPipelineObj pipeline_depth(m_device);
+    pipeline_depth.AddShader(&vs);
+    pipeline_depth.AddShader(&fs);
+    pipeline_depth.AddDefaultColorAttachment();
+    pipeline_depth.SetViewport(m_viewports);
+    pipeline_depth.SetScissor(m_scissors);
+    pipeline_depth.SetDepthStencil(&ds_state);
+
+    pipeline_rendering_info.colorAttachmentCount = 0;
+    pipeline_rendering_info.pColorAttachmentFormats = nullptr;
+    pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_D16_UNORM;
+
+    auto create_info2 = LvlInitStruct<VkGraphicsPipelineCreateInfo>();
+    pipeline_depth.InitGraphicsPipelineCreateInfo(&create_info2);
+    create_info2.pNext = &pipeline_rendering_info;
+
+    pipeline_depth.CreateVKPipeline(pl.handle(), VK_NULL_HANDLE, &create_info2);
+
+    const VkFormat depthStencilFormat = FindSupportedDepthStencilFormat(gpu());
+
+    VkPipelineObj pipeline_stencil(m_device);
+    pipeline_stencil.AddShader(&vs);
+    pipeline_stencil.AddShader(&fs);
+    pipeline_stencil.AddDefaultColorAttachment();
+    pipeline_stencil.SetViewport(m_viewports);
+    pipeline_stencil.SetScissor(m_scissors);
+    pipeline_stencil.SetDepthStencil(&ds_state);
+
+    pipeline_rendering_info.colorAttachmentCount = 0;
+    pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
+    pipeline_rendering_info.stencilAttachmentFormat = depthStencilFormat;
+
+    auto create_info3 = LvlInitStruct<VkGraphicsPipelineCreateInfo>();
+    pipeline_stencil.InitGraphicsPipelineCreateInfo(&create_info3);
+    create_info3.pNext = &pipeline_rendering_info;
+
+    pipeline_stencil.CreateVKPipeline(pl.handle(), VK_NULL_HANDLE, &create_info3);
+
+    VkImageObj colorImage(m_device);
+    colorImage.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+
+    VkImageObj depthStencilImage(m_device);
+    depthStencilImage.Init(32, 32, 1, depthStencilFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+
+    auto color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment.imageView = VK_NULL_HANDLE;
+
+    auto depth_stencil_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    depth_stencil_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depth_stencil_attachment.imageView = VK_NULL_HANDLE;
+
+    m_commandBuffer->begin();
+
+    {
+        // Mismatching color formats
+        auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+        begin_rendering_info.layerCount = 1;
+        begin_rendering_info.colorAttachmentCount = 1;
+        begin_rendering_info.pColorAttachments = &color_attachment;
+        m_commandBuffer->BeginRendering(begin_rendering_info);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_color.handle());
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-colorAttachmentCount-07616");
+        m_commandBuffer->Draw(1, 1, 0, 0);
+        m_errorMonitor->VerifyFound();
+        m_commandBuffer->EndRendering();
+    }
+
+    {
+        // Mismatching depth format
+        auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+        begin_rendering_info.layerCount = 1;
+        begin_rendering_info.pDepthAttachment = &depth_stencil_attachment;
+        m_commandBuffer->BeginRendering(begin_rendering_info);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_depth.handle());
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-pDepthAttachment-07617");
+        m_commandBuffer->Draw(1, 1, 0, 0);
+        m_errorMonitor->VerifyFound();
+        m_commandBuffer->EndRendering();
+    }
+
+    {
+        // Mismatching stencil format
+        auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+        begin_rendering_info.layerCount = 1;
+        begin_rendering_info.pStencilAttachment = &depth_stencil_attachment;
+        m_commandBuffer->BeginRendering(begin_rendering_info);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_stencil.handle());
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-pStencilAttachment-07618");
+        m_commandBuffer->Draw(1, 1, 0, 0);
+        m_errorMonitor->VerifyFound();
+        m_commandBuffer->EndRendering();
+    }
+
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, MistmatchingAttachmentSamples) {
     TEST_DESCRIPTION("Draw with Dynamic Rendering with mismatching color/depth/stencil sample counts");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     char const *fsSource = R"glsl(
         #version 450
@@ -1339,38 +1505,18 @@ TEST_F(VkLayerTest, DynamicRenderingWithMistmatchingAttachmentSamples) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingWithMismatchingMixedAttachmentSamples) {
+TEST_F(NegativeDynamicRendering, MismatchingMixedAttachmentSamples) {
     TEST_DESCRIPTION("Draw with Dynamic Rendering with mismatching mixed color/depth/stencil sample counts");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddOptionalExtensions(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
     AddOptionalExtensions(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     const bool amd_samples = IsExtensionsEnabled(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
     const bool nv_samples = IsExtensionsEnabled(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
     if (!amd_samples && !nv_samples) {
         GTEST_SKIP() << "Test requires either VK_AMD_mixed_attachment_samples or VK_NV_framebuffer_mixed_samples";
     }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     char const *fsSource = R"glsl(
         #version 450
@@ -1522,7 +1668,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithMismatchingMixedAttachmentSamples) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAttachmentInfo) {
+TEST_F(NegativeDynamicRendering, AttachmentInfo) {
     TEST_DESCRIPTION("AttachmentInfo Dynamic Rendering Tests.");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -1643,7 +1789,7 @@ TEST_F(VkLayerTest, DynamicRenderingAttachmentInfo) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBufferBeginInfoLegacy) {
+TEST_F(NegativeDynamicRendering, BufferBeginInfoLegacy) {
     TEST_DESCRIPTION("VkCommandBufferBeginInfo Dynamic Rendering Tests.");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -1705,7 +1851,7 @@ TEST_F(VkLayerTest, DynamicRenderingBufferBeginInfoLegacy) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBuffer) {
+TEST_F(NegativeDynamicRendering, SecondaryCommandBuffer) {
     TEST_DESCRIPTION("VkCommandBufferBeginInfo Dynamic Rendering Tests.");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -1755,7 +1901,7 @@ TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBuffer) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingPipelineMissingFlags) {
+TEST_F(NegativeDynamicRendering, PipelineMissingFlags) {
     TEST_DESCRIPTION("Test dynamic rendering with pipeline missing flags.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -1862,7 +2008,7 @@ TEST_F(VkLayerTest, DynamicRenderingPipelineMissingFlags) {
         begin_rendering_info.colorAttachmentCount = 1;
         begin_rendering_info.pColorAttachments = &color_attachment;
 
-        VkFormat color_format = VK_FORMAT_R8G8B8A8_UNORM;
+        const VkFormat color_format = VK_FORMAT_UNDEFINED;
 
         auto pipeline_rendering_info = LvlInitStruct<VkPipelineRenderingCreateInfoKHR>();
         pipeline_rendering_info.colorAttachmentCount = 1;
@@ -1897,7 +2043,7 @@ TEST_F(VkLayerTest, DynamicRenderingPipelineMissingFlags) {
         begin_rendering_info.colorAttachmentCount = 1;
         begin_rendering_info.pColorAttachments = &color_attachment;
 
-        VkFormat color_format = VK_FORMAT_R8G8B8A8_UNORM;
+        const VkFormat color_format = VK_FORMAT_UNDEFINED;
 
         auto pipeline_rendering_info = LvlInitStruct<VkPipelineRenderingCreateInfoKHR>();
         pipeline_rendering_info.colorAttachmentCount = 1;
@@ -1921,29 +2067,10 @@ TEST_F(VkLayerTest, DynamicRenderingPipelineMissingFlags) {
     }
 }
 
-TEST_F(VkLayerTest, DynamicRenderingLayerCount) {
+TEST_F(NegativeDynamicRendering, LayerCount) {
     TEST_DESCRIPTION("Test dynamic rendering with viewMask 0 and invalid layer count.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
 
@@ -1954,29 +2081,10 @@ TEST_F(VkLayerTest, DynamicRenderingLayerCount) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInfoMismatchedSamples) {
+TEST_F(NegativeDynamicRendering, InfoMismatchedSamples) {
     TEST_DESCRIPTION("Test beginning rendering with mismatched sample counts.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkImageCreateInfo image_ci = LvlInitStruct<VkImageCreateInfo>();
     image_ci.imageType = VK_IMAGE_TYPE_2D;
@@ -2038,12 +2146,14 @@ TEST_F(VkLayerTest, DynamicRenderingInfoMismatchedSamples) {
     begin_rendering_info.pColorAttachments = &color_attachment;
     begin_rendering_info.pDepthAttachment = &depth_attachment;
 
+    m_commandBuffer->begin();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-multisampledRenderToSingleSampled-06857");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBeginRenderingFragmentShadingRate) {
+TEST_F(NegativeDynamicRendering, BeginRenderingFragmentShadingRate) {
     TEST_DESCRIPTION("Test BeginRenderingInfo with FragmentShadingRateAttachment.");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -2141,29 +2251,10 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingFragmentShadingRate) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingDeviceGroupRenderPassBeginInfo) {
+TEST_F(NegativeDynamicRendering, DeviceGroupRenderPassBeginInfo) {
     TEST_DESCRIPTION("Test render area of DeviceGroupRenderPassBeginInfo.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkRect2D render_area = {};
     render_area.offset.x = 0;
@@ -2191,6 +2282,7 @@ TEST_F(VkLayerTest, DynamicRenderingDeviceGroupRenderPassBeginInfo) {
     m_commandBuffer->begin();
 
     m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_commandBuffer->EndRendering();
 
     render_area.offset.x = 1;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06083");
@@ -2202,35 +2294,18 @@ TEST_F(VkLayerTest, DynamicRenderingDeviceGroupRenderPassBeginInfo) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06084");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBeginRenderingInvalidFragmentShadingRateImage) {
+TEST_F(NegativeDynamicRendering, BeginRenderingFragmentShadingRateImage) {
     TEST_DESCRIPTION("Test BeginRendering with FragmentShadingRateAttachmentInfo with missing image usage bit.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     if (IsDriver(VK_DRIVER_ID_AMD_PROPRIETARY)) {
         GTEST_SKIP() << "Skipping on AMD proprietary driver pending further investigation.";
     }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
     auto properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
@@ -2315,29 +2390,10 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingInvalidFragmentShadingRateImag
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBeginRenderingInvalidDepthAttachmentFormat) {
+TEST_F(NegativeDynamicRendering, BeginRenderingDepthAttachmentFormat) {
     TEST_DESCRIPTION("Test begin rendering with a depth attachment that has an invalid format");
-
-    SetTargetApiVersion(VK_API_VERSION_1_3);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkFormat stencil_format = FindSupportedStencilOnlyFormat(gpu());
     if (stencil_format == VK_FORMAT_UNDEFINED) {
@@ -2356,35 +2412,18 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingInvalidDepthAttachmentFormat) 
     begin_rendering_info.layerCount = 1;
     begin_rendering_info.pDepthAttachment = &depth_attachment;
 
+    m_commandBuffer->begin();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pDepthAttachment-06547");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingTestFragmentDensityMapRenderArea) {
+TEST_F(NegativeDynamicRendering, TestFragmentDensityMapRenderArea) {
     TEST_DESCRIPTION("Validate VkRenderingFragmentDensityMapAttachmentInfo attachment image view extent.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     auto fdm_props = LvlInitStruct<VkPhysicalDeviceFragmentDensityMapPropertiesEXT>();
     auto props2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fdm_props);
@@ -2412,12 +2451,14 @@ TEST_F(VkLayerTest, DynamicRenderingTestFragmentDensityMapRenderArea) {
 
     begin_rendering_info.renderArea.offset.x = 1;
     begin_rendering_info.renderArea.extent.width = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.width) - 1;
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07815");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06112");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
     begin_rendering_info.renderArea.offset.x = vvl::MaxTypeValue(begin_rendering_info.renderArea.offset.x);
     begin_rendering_info.renderArea.extent.width = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.width);
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07815");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06112");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
@@ -2432,12 +2473,14 @@ TEST_F(VkLayerTest, DynamicRenderingTestFragmentDensityMapRenderArea) {
 
     begin_rendering_info.renderArea.offset.y = 1;
     begin_rendering_info.renderArea.extent.height = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.height) - 1;
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07816");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06114");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
     begin_rendering_info.renderArea.offset.y = vvl::MaxTypeValue(begin_rendering_info.renderArea.offset.y);
     begin_rendering_info.renderArea.extent.height = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.height);
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07816");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06114");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
@@ -2463,9 +2506,10 @@ TEST_F(VkLayerTest, DynamicRenderingTestFragmentDensityMapRenderArea) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06115");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingFragmentDensityMapRenderAreaWithoutDeviceGroupExt) {
+TEST_F(NegativeDynamicRendering, FragmentDensityMapRenderAreaWithoutDeviceGroupExt) {
     TEST_DESCRIPTION("Validate VkRenderingFragmentDensityMapAttachmentInfo attachment image view extent.");
 
     SetTargetApiVersion(VK_API_VERSION_1_0);
@@ -2524,7 +2568,7 @@ TEST_F(VkLayerTest, DynamicRenderingFragmentDensityMapRenderAreaWithoutDeviceGro
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingWithBarrier) {
+TEST_F(NegativeDynamicRendering, WithBarrier) {
     TEST_DESCRIPTION("Test setting buffer memory barrier when dynamic rendering is active.");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -2547,13 +2591,6 @@ TEST_F(VkLayerTest, DynamicRenderingWithBarrier) {
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
-    PFN_vkCmdBeginRendering vkCmdBeginRendering =
-        reinterpret_cast<PFN_vkCmdBeginRendering>(vk::GetDeviceProcAddr(m_device->device(), "vkCmdBeginRendering"));
-    assert(vkCmdBeginRendering != nullptr);
-    PFN_vkCmdEndRendering vkCmdEndRendering =
-        reinterpret_cast<PFN_vkCmdEndRendering>(vk::GetDeviceProcAddr(m_device->device(), "vkCmdEndRendering"));
-    assert(vkCmdEndRendering != nullptr);
-
     m_commandBuffer->begin();
 
     VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
@@ -2561,7 +2598,7 @@ TEST_F(VkLayerTest, DynamicRenderingWithBarrier) {
     begin_rendering_info.renderArea = clear_rect.rect;
     begin_rendering_info.layerCount = 1;
 
-    vkCmdBeginRendering(m_commandBuffer->handle(), &begin_rendering_info);
+    vk::CmdBeginRendering(m_commandBuffer->handle(), &begin_rendering_info);
 
     VkBufferObj buffer;
     VkMemoryPropertyFlags mem_reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
@@ -2586,33 +2623,259 @@ TEST_F(VkLayerTest, DynamicRenderingWithBarrier) {
                            nullptr, 0, nullptr, 0, nullptr);
     m_errorMonitor->VerifyFound();
 
-    vkCmdEndRendering(m_commandBuffer->handle());
+    vk::CmdEndRendering(m_commandBuffer->handle());
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBeginRenderingInvalidStencilAttachmentFormat) {
-    TEST_DESCRIPTION("Test begin rendering with a stencil attachment that has an invalid format");
+TEST_F(NegativeDynamicRendering, WithoutShaderTileImageAndBarrier) {
+    TEST_DESCRIPTION("Test setting memory barrier if the shader tile image features are not enabled.");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_SHADER_TILE_IMAGE_EXTENSION_NAME);
 
     ASSERT_NO_FATAL_FAILURE(InitFramework());
 
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
+    if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
     }
 
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
+    auto vk13features = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
+    auto shader_tile_image_features = LvlInitStruct<VkPhysicalDeviceShaderTileImageFeaturesEXT>();
+    vk13features.pNext = &shader_tile_image_features;
 
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
+    auto features2 = GetPhysicalDeviceFeatures2(vk13features);
+    if (!vk13features.dynamicRendering) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
+    }
+    if (!vk13features.synchronization2) {
+        GTEST_SKIP() << "Test requires (unsupported) synchronization2";
+    }
+
+    if (!shader_tile_image_features.shaderTileImageColorReadAccess && !shader_tile_image_features.shaderTileImageDepthReadAccess &&
+        !shader_tile_image_features.shaderTileImageStencilReadAccess) {
+        GTEST_SKIP() << "Test requires (unsupported) shader tile image extension.";
+    }
+
+    shader_tile_image_features.shaderTileImageColorReadAccess = false;
+    shader_tile_image_features.shaderTileImageDepthReadAccess = false;
+    shader_tile_image_features.shaderTileImageStencilReadAccess = false;
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    m_commandBuffer->begin();
+
+    VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    VkClearRect clear_rect = {{{0, 0}, {m_width, m_height}}, 0, 1};
+    begin_rendering_info.renderArea = clear_rect.rect;
+    begin_rendering_info.layerCount = 1;
+
+    vk::CmdBeginRendering(m_commandBuffer->handle(), &begin_rendering_info);
+
+    auto memory_barrier_2 = LvlInitStruct<VkMemoryBarrier2KHR>();
+    memory_barrier_2.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    memory_barrier_2.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    memory_barrier_2.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    memory_barrier_2.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+
+    auto dependency_info = LvlInitStruct<VkDependencyInfoKHR>();
+    dependency_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    dependency_info.memoryBarrierCount = 1;
+    dependency_info.pMemoryBarriers = &memory_barrier_2;
+    dependency_info.bufferMemoryBarrierCount = 0;
+    dependency_info.pBufferMemoryBarriers = VK_NULL_HANDLE;
+    dependency_info.imageMemoryBarrierCount = 0;
+    dependency_info.pImageMemoryBarriers = VK_NULL_HANDLE;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-shaderTileImageColorReadAccess-08718");
+    vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    auto memory_barrier = LvlInitStruct<VkMemoryBarrier>();
+    memory_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    memory_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-shaderTileImageColorReadAccess-08718");
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 1, &memory_barrier, 0,
+                           nullptr, 0, nullptr);
+    m_errorMonitor->VerifyFound();
+
+    vk::CmdEndRendering(m_commandBuffer->handle());
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, WithShaderTileImageAndBarrier) {
+    TEST_DESCRIPTION("Test setting memory barrier if the shader tile image features are enabled.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredExtensions(VK_EXT_SHADER_TILE_IMAGE_EXTENSION_NAME);
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework());
+
+    if (DeviceValidationVersion() < VK_API_VERSION_1_3) {
+        GTEST_SKIP() << "At least Vulkan version 1.3 is required";
+    }
+
+    auto vk13features = LvlInitStruct<VkPhysicalDeviceVulkan13Features>();
+    auto shader_tile_image_features = LvlInitStruct<VkPhysicalDeviceShaderTileImageFeaturesEXT>();
+    vk13features.pNext = &shader_tile_image_features;
+
+    auto features2 = GetPhysicalDeviceFeatures2(vk13features);
+    if (!vk13features.dynamicRendering) {
+        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
+    }
+    if (!vk13features.synchronization2) {
+        GTEST_SKIP() << "Test requires (unsupported) synchronization2";
+    }
+
+    if (!shader_tile_image_features.shaderTileImageColorReadAccess && !shader_tile_image_features.shaderTileImageDepthReadAccess &&
+        !shader_tile_image_features.shaderTileImageStencilReadAccess) {
+        GTEST_SKIP() << "Test requires (unsupported) shader tile image extension.";
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    m_commandBuffer->begin();
+
+    VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    VkClearRect clear_rect = {{{0, 0}, {m_width, m_height}}, 0, 1};
+    begin_rendering_info.renderArea = clear_rect.rect;
+    begin_rendering_info.layerCount = 1;
+
+    vk::CmdBeginRendering(m_commandBuffer->handle(), &begin_rendering_info);
+
+    auto memory_barrier_2 = LvlInitStruct<VkMemoryBarrier2KHR>();
+    memory_barrier_2.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    memory_barrier_2.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    memory_barrier_2.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    memory_barrier_2.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+
+    auto dependency_info = LvlInitStruct<VkDependencyInfoKHR>();
+    dependency_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    dependency_info.memoryBarrierCount = 1;
+    dependency_info.pMemoryBarriers = &memory_barrier_2;
+    dependency_info.bufferMemoryBarrierCount = 0;
+    dependency_info.pBufferMemoryBarriers = VK_NULL_HANDLE;
+    dependency_info.imageMemoryBarrierCount = 0;
+    dependency_info.pImageMemoryBarriers = VK_NULL_HANDLE;
+
+    dependency_info.dependencyFlags = VK_DEPENDENCY_VIEW_LOCAL_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    VkBufferObj buffer;
+    VkMemoryPropertyFlags mem_reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    buffer.init_as_src_and_dst(*m_device, 256, mem_reqs);
+
+    auto buf_barrier_2 = LvlInitStruct<VkBufferMemoryBarrier2KHR>();
+    buf_barrier_2.buffer = buffer.handle();
+    buf_barrier_2.offset = 0;
+    buf_barrier_2.size = VK_WHOLE_SIZE;
+    buf_barrier_2.srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    buf_barrier_2.dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+    dependency_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    dependency_info.bufferMemoryBarrierCount = 1;
+    dependency_info.pBufferMemoryBarriers = &buf_barrier_2;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    dependency_info.bufferMemoryBarrierCount = 0;
+    dependency_info.pBufferMemoryBarriers = VK_NULL_HANDLE;
+    memory_barrier_2.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-srcAccessMask-03911");
+    vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    memory_barrier_2.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    memory_barrier_2.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-03910");
+    vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    memory_barrier_2.srcAccessMask = VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT;
+    memory_barrier_2.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-srcAccessMask-03903");
+    vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    memory_barrier_2.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    memory_barrier_2.dstAccessMask = VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-03903");
+    vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_DEVICE_GROUP_BIT, 0, nullptr, 0, nullptr, 0,
+                           nullptr);
+    m_errorMonitor->VerifyFound();
+
+    VkBufferMemoryBarrier buf_barrier = LvlInitStruct<VkBufferMemoryBarrier>();
+    buf_barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+    buf_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    buf_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    buf_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    buf_barrier.buffer = buffer.handle();
+    buf_barrier.offset = 0;
+    buf_barrier.size = VK_WHOLE_SIZE;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcAccessMask-02815");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-dstAccessMask-02816");
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 1, &buf_barrier,
+                           0, nullptr);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 0,
+                           nullptr);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                           VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
+    m_errorMonitor->VerifyFound();
+
+    auto memory_barrier = LvlInitStruct<VkMemoryBarrier>();
+    memory_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    memory_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcAccessMask-02815");
+    memory_barrier.srcAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 1, &memory_barrier, 0,
+                           nullptr, 0, nullptr);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-dstAccessMask-02816 ");
+    memory_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    memory_barrier.dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 1, &memory_barrier, 0,
+                           nullptr, 0, nullptr);
+    m_errorMonitor->VerifyFound();
+
+    vk::CmdEndRendering(m_commandBuffer->handle());
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, BeginRenderingStencilAttachmentFormat) {
+    TEST_DESCRIPTION("Test begin rendering with a stencil attachment that has an invalid format");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkFormat depth_format = FindSupportedDepthOnlyFormat(gpu());
 
@@ -2628,34 +2891,17 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingInvalidStencilAttachmentFormat
     begin_rendering_info.layerCount = 1;
     begin_rendering_info.pStencilAttachment = &stencil_attachment;
 
+    m_commandBuffer->begin();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pStencilAttachment-06548");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInheritanceRenderingInfoStencilAttachmentFormat) {
+TEST_F(NegativeDynamicRendering, InheritanceRenderingInfoStencilAttachmentFormat) {
     TEST_DESCRIPTION("Test begin rendering with a stencil attachment that has an invalid format");
-
-    SetTargetApiVersion(VK_API_VERSION_1_3);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkFormat depth_format = FindSupportedDepthOnlyFormat(gpu());
 
@@ -2689,30 +2935,12 @@ TEST_F(VkLayerTest, DynamicRenderingInheritanceRenderingInfoStencilAttachmentFor
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingCreateGraphicsPipelineWithInvalidAttachmentSampleCount) {
+TEST_F(NegativeDynamicRendering, CreateGraphicsPipelineWithAttachmentSampleCount) {
     TEST_DESCRIPTION("Create pipeline with fragment shader that uses samples, but multisample state not begin set");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     VkFormat color_format = VK_FORMAT_R8G8B8A8_UNORM;
 
     auto sample_count_info_amd = LvlInitStruct<VkAttachmentSampleCountInfoNV>();
@@ -2734,7 +2962,7 @@ TEST_F(VkLayerTest, DynamicRenderingCreateGraphicsPipelineWithInvalidAttachmentS
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingCreatePipelineWithoutFeature) {
+TEST_F(NegativeDynamicRendering, CreatePipelineWithoutFeature) {
     TEST_DESCRIPTION("Create graphcis pipeline that uses dynamic rendering, but feature is not enabled");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -2763,7 +2991,7 @@ TEST_F(VkLayerTest, DynamicRenderingCreatePipelineWithoutFeature) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAreaGreaterThanAttachmentExtent) {
+TEST_F(NegativeDynamicRendering, AreaGreaterThanAttachmentExtent) {
     TEST_DESCRIPTION("Begin dynamic rendering with render area greater than extent of attachments");
 
     SetTargetApiVersion(VK_API_VERSION_1_0);
@@ -2867,28 +3095,11 @@ TEST_F(VkLayerTest, DynamicRenderingAreaGreaterThanAttachmentExtent) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingDeviceGroupAreaGreaterThanAttachmentExtent) {
+TEST_F(NegativeDynamicRendering, DeviceGroupAreaGreaterThanAttachmentExtent) {
     TEST_DESCRIPTION("Begin dynamic rendering with device group with render area greater than extent of attachments");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkImageObj colorImage(m_device);
     colorImage.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
@@ -2913,12 +3124,14 @@ TEST_F(VkLayerTest, DynamicRenderingDeviceGroupAreaGreaterThanAttachmentExtent) 
 
     begin_rendering_info.renderArea.offset.x = 1;
     begin_rendering_info.renderArea.extent.width = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.width) - 1;
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07815");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06079");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
     begin_rendering_info.renderArea.offset.x = vvl::MaxTypeValue(begin_rendering_info.renderArea.offset.x);
     begin_rendering_info.renderArea.extent.width = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.width);
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07815");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06079");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
@@ -2933,12 +3146,14 @@ TEST_F(VkLayerTest, DynamicRenderingDeviceGroupAreaGreaterThanAttachmentExtent) 
 
     begin_rendering_info.renderArea.offset.y = 1;
     begin_rendering_info.renderArea.extent.height = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.height) - 1;
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07816");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06080");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
     begin_rendering_info.renderArea.offset.y = vvl::MaxTypeValue(begin_rendering_info.renderArea.offset.y);
     begin_rendering_info.renderArea.extent.height = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.height);
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07816");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06080");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
@@ -2966,7 +3181,7 @@ TEST_F(VkLayerTest, DynamicRenderingDeviceGroupAreaGreaterThanAttachmentExtent) 
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBufferIncompatibleRenderPass) {
+TEST_F(NegativeDynamicRendering, SecondaryCommandBufferIncompatibleRenderPass) {
     TEST_DESCRIPTION("Execute secondary command buffers within render pass instance with incompatible render pass");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3010,7 +3225,7 @@ TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBufferIncompatibleRenderPass
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBufferIncompatibleSubpass) {
+TEST_F(NegativeDynamicRendering, SecondaryCommandBufferIncompatibleSubpass) {
     TEST_DESCRIPTION("Execute secondary command buffers with different subpass");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3069,7 +3284,7 @@ TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBufferIncompatibleSubpass) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBufferInvalidContents) {
+TEST_F(NegativeDynamicRendering, SecondaryCommandBufferContents) {
     TEST_DESCRIPTION("Execute secondary command buffers within active render pass that was not begun with VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3105,7 +3320,7 @@ TEST_F(VkLayerTest, DynamicRenderingSecondaryCommandBufferInvalidContents) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingWithInvalidShaderLayerBuiltIn) {
+TEST_F(NegativeDynamicRendering, ShaderLayerBuiltIn) {
     TEST_DESCRIPTION("Create invalid pipeline that writes to Layer built-in");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3168,27 +3383,11 @@ TEST_F(VkLayerTest, DynamicRenderingWithInvalidShaderLayerBuiltIn) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingWithInputAttachmentCapability) {
+TEST_F(NegativeDynamicRendering, InputAttachmentCapability) {
     TEST_DESCRIPTION("Create invalid pipeline that uses InputAttachment capability");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     const char *fsSource = R"(
@@ -3233,27 +3432,10 @@ TEST_F(VkLayerTest, DynamicRenderingWithInputAttachmentCapability) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInvalidRenderingInfoColorAttachmentFormat) {
+TEST_F(NegativeDynamicRendering, RenderingInfoColorAttachmentFormat) {
     TEST_DESCRIPTION("Create pipeline with invalid color attachment format");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkFormat color_format = VK_FORMAT_MAX_ENUM;
@@ -3273,7 +3455,7 @@ TEST_F(VkLayerTest, DynamicRenderingInvalidRenderingInfoColorAttachmentFormat) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInvalidLibraryViewMask) {
+TEST_F(NegativeDynamicRendering, LibraryViewMask) {
     TEST_DESCRIPTION("Create pipeline with invalid view mask");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3339,32 +3521,16 @@ TEST_F(VkLayerTest, DynamicRenderingInvalidLibraryViewMask) {
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.shader_stages_ = {pipe.fs_->GetStageCreateInfo()};
     pipe.InitState();
+    m_errorMonitor->SetUnexpectedError("VUID-VkGraphicsPipelineCreateInfo-pStages-06895");  // spec bug
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-flags-06626");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInvalidAttachmentSampleCount) {
+TEST_F(NegativeDynamicRendering, AttachmentSampleCount) {
     TEST_DESCRIPTION("Create pipeline with invalid color attachment samples");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkSampleCountFlagBits color_attachment_samples = VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM;
@@ -3384,7 +3550,7 @@ TEST_F(VkLayerTest, DynamicRenderingInvalidAttachmentSampleCount) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInvalidLibrariesViewMask) {
+TEST_F(NegativeDynamicRendering, LibrariesViewMask) {
     TEST_DESCRIPTION("Create pipeline with libaries that have incompatible view mask");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3468,7 +3634,7 @@ TEST_F(VkLayerTest, DynamicRenderingInvalidLibrariesViewMask) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInvalidLibraryRenderPass) {
+TEST_F(NegativeDynamicRendering, LibraryRenderPass) {
     TEST_DESCRIPTION("Create pipeline with invalid library render pass");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3531,12 +3697,14 @@ TEST_F(VkLayerTest, DynamicRenderingInvalidLibraryRenderPass) {
     pipe.InitFragmentLibInfo(1, &fs_stage_ci, &library_create_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.InitState();
+    // If not Frag Output with frag shader, need depth/stencil struct
+    pipe.ds_ci_ = LvlInitStruct<VkPipelineDepthStencilStateCreateInfo>();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderpass-06625");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingPipelineMissingMultisampleState) {
+TEST_F(NegativeDynamicRendering, PipelineMissingMultisampleState) {
     TEST_DESCRIPTION("Create pipeline with missing multisample state");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3589,7 +3757,7 @@ TEST_F(VkLayerTest, DynamicRenderingPipelineMissingMultisampleState) {
     }
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInvalidRenderingFragmentDensityMapAttachment) {
+TEST_F(NegativeDynamicRendering, RenderingFragmentDensityMapAttachment) {
     TEST_DESCRIPTION("Use invalid VkRenderingFragmentDensityMapAttachmentInfoEXT");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3658,28 +3826,11 @@ TEST_F(VkLayerTest, DynamicRenderingInvalidRenderingFragmentDensityMapAttachment
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInvalidRenderingFragmentDensityMapAttachmentUsage) {
+TEST_F(NegativeDynamicRendering, RenderingFragmentDensityMapAttachmentUsage) {
     TEST_DESCRIPTION("Use VkRenderingFragmentDensityMapAttachmentInfoEXT with invalid imageLayout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageObj image(m_device);
@@ -3699,28 +3850,11 @@ TEST_F(VkLayerTest, DynamicRenderingInvalidRenderingFragmentDensityMapAttachment
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingFragmentDensityMapAttachmentCreateFlags) {
+TEST_F(NegativeDynamicRendering, FragmentDensityMapAttachmentCreateFlags) {
     TEST_DESCRIPTION("Use VkRenderingFragmentDensityMapAttachmentInfoEXT with invalid image create flags");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -3751,7 +3885,7 @@ TEST_F(VkLayerTest, DynamicRenderingFragmentDensityMapAttachmentCreateFlags) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingFragmentDensityMapAttachmentLayerCount) {
+TEST_F(NegativeDynamicRendering, FragmentDensityMapAttachmentLayerCount) {
     TEST_DESCRIPTION("Use VkRenderingFragmentDensityMapAttachmentInfoEXT with invalid layer count");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -3808,7 +3942,7 @@ TEST_F(VkLayerTest, DynamicRenderingFragmentDensityMapAttachmentLayerCount) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingPNextImageView) {
+TEST_F(NegativeDynamicRendering, PNextImageView) {
     TEST_DESCRIPTION(
         "Use different image views in VkRenderingFragmentShadingRateAttachmentInfoKHR and "
         "VkRenderingFragmentDensityMapAttachmentInfoEXT");
@@ -3868,7 +4002,7 @@ TEST_F(VkLayerTest, DynamicRenderingPNextImageView) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingRenderArea) {
+TEST_F(NegativeDynamicRendering, RenderArea) {
     TEST_DESCRIPTION("Use negative offset in RenderingInfo render area");
 
     SetTargetApiVersion(VK_API_VERSION_1_0);
@@ -3951,7 +4085,7 @@ TEST_F(VkLayerTest, DynamicRenderingRenderArea) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInfoViewMask) {
+TEST_F(NegativeDynamicRendering, InfoViewMask) {
     TEST_DESCRIPTION("Use negative offset in RenderingInfo render area");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -4001,28 +4135,11 @@ TEST_F(VkLayerTest, DynamicRenderingInfoViewMask) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingColorAttachmentFormat) {
+TEST_F(NegativeDynamicRendering, ColorAttachmentFormat) {
     TEST_DESCRIPTION("Use format with missing potential format features in rendering color attachment");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_NV_LINEAR_COLOR_ATTACHMENT_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkFormat format = FindSupportedDepthStencilFormat(gpu());
@@ -4041,27 +4158,10 @@ TEST_F(VkLayerTest, DynamicRenderingColorAttachmentFormat) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveModeWithNonIntegerColorFormat) {
+TEST_F(NegativeDynamicRendering, ResolveModeWithNonIntegerColorFormat) {
     TEST_DESCRIPTION("Use invalid resolve mode with non integer color format");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4103,27 +4203,10 @@ TEST_F(VkLayerTest, DynamicRenderingResolveModeWithNonIntegerColorFormat) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveModeWithIntegerColorFormat) {
+TEST_F(NegativeDynamicRendering, ResolveModeWithIntegerColorFormat) {
     TEST_DESCRIPTION("Use invalid resolve mode with integer color format");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4166,27 +4249,10 @@ TEST_F(VkLayerTest, DynamicRenderingResolveModeWithIntegerColorFormat) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveModeSamples) {
+TEST_F(NegativeDynamicRendering, ResolveModeSamples) {
     TEST_DESCRIPTION("Use invalid sample count with resolve mode that is not none");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageObj image(m_device);
@@ -4214,27 +4280,10 @@ TEST_F(VkLayerTest, DynamicRenderingResolveModeSamples) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveImageViewSamples) {
+TEST_F(NegativeDynamicRendering, ResolveImageViewSamples) {
     TEST_DESCRIPTION("Use resolve image view with invalid sample count");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4281,27 +4330,10 @@ TEST_F(VkLayerTest, DynamicRenderingResolveImageViewSamples) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveImageViewFormatMatch) {
+TEST_F(NegativeDynamicRendering, ResolveImageViewFormatMatch) {
     TEST_DESCRIPTION("Use resolve image view with different format from image view");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4343,27 +4375,10 @@ TEST_F(VkLayerTest, DynamicRenderingResolveImageViewFormatMatch) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAttachmentImageViewLayout) {
+TEST_F(NegativeDynamicRendering, AttachmentImageViewLayout) {
     TEST_DESCRIPTION("Use rendering attachment image view with invalid layout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageObj image(m_device);
@@ -4388,27 +4403,10 @@ TEST_F(VkLayerTest, DynamicRenderingAttachmentImageViewLayout) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveImageViewLayout) {
+TEST_F(NegativeDynamicRendering, ResolveImageViewLayout) {
     TEST_DESCRIPTION("Use resolve image view with invalid layout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4450,28 +4448,11 @@ TEST_F(VkLayerTest, DynamicRenderingResolveImageViewLayout) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveImageViewLayoutSeparateDepthStencil) {
+TEST_F(NegativeDynamicRendering, ResolveImageViewLayoutSeparateDepthStencil) {
     TEST_DESCRIPTION("Use resolve image view with invalid layout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4513,21 +4494,12 @@ TEST_F(VkLayerTest, DynamicRenderingResolveImageViewLayoutSeparateDepthStencil) 
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAttachmentImageViewShadingRateLayout) {
+TEST_F(NegativeDynamicRendering, AttachmentImageViewShadingRateLayout) {
     TEST_DESCRIPTION("Use image view with invalid layout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddOptionalExtensions(VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     const bool nv_shading_rate = IsExtensionsEnabled(VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME);
     const bool khr_fragment_shading = IsExtensionsEnabled(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
@@ -4535,13 +4507,6 @@ TEST_F(VkLayerTest, DynamicRenderingAttachmentImageViewShadingRateLayout) {
         GTEST_SKIP() << "shading rate / fragment shading not supported";
     }
 
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageObj image(m_device);
@@ -4569,21 +4534,12 @@ TEST_F(VkLayerTest, DynamicRenderingAttachmentImageViewShadingRateLayout) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveImageViewShadingRateLayout) {
+TEST_F(NegativeDynamicRendering, ResolveImageViewShadingRateLayout) {
     TEST_DESCRIPTION("Use resolve image view with invalid shading ratelayout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddOptionalExtensions(VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME);
-    AddOptionalExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     const bool nv_shading_rate = IsExtensionsEnabled(VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME);
     const bool khr_fragment_shading = IsExtensionsEnabled(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
@@ -4591,13 +4547,6 @@ TEST_F(VkLayerTest, DynamicRenderingResolveImageViewShadingRateLayout) {
         GTEST_SKIP() << "shading rate / fragment shading not supported";
     }
 
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4642,28 +4591,11 @@ TEST_F(VkLayerTest, DynamicRenderingResolveImageViewShadingRateLayout) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAttachmentImageViewFragmentDensityLayout) {
+TEST_F(NegativeDynamicRendering, AttachmentImageViewFragmentDensityLayout) {
     TEST_DESCRIPTION("Use image view with invalid layout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageObj image(m_device);
@@ -4688,28 +4620,11 @@ TEST_F(VkLayerTest, DynamicRenderingAttachmentImageViewFragmentDensityLayout) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveImageViewFragmentDensityLayout) {
+TEST_F(NegativeDynamicRendering, ResolveImageViewFragmentDensityLayout) {
     TEST_DESCRIPTION("Use resolve image view with invalid fragment density layout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4751,28 +4666,11 @@ TEST_F(VkLayerTest, DynamicRenderingResolveImageViewFragmentDensityLayout) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingResolveImageViewReadOnlyOptimalLayout) {
+TEST_F(NegativeDynamicRendering, ResolveImageViewReadOnlyOptimalLayout) {
     TEST_DESCRIPTION("Use resolve image view with invalid read only optimal layout");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageCreateInfo image_create_info = LvlInitStruct<VkImageCreateInfo>();
@@ -4814,32 +4712,14 @@ TEST_F(VkLayerTest, DynamicRenderingResolveImageViewReadOnlyOptimalLayout) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBeginRenderingFragmentShadingRateImageView) {
+TEST_F(NegativeDynamicRendering, BeginRenderingFragmentShadingRateImageView) {
     TEST_DESCRIPTION("Test BeginRenderingInfo image view with FragmentShadingRateAttachment.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     if (IsDriver(VK_DRIVER_ID_AMD_PROPRIETARY)) {
         GTEST_SKIP() << "Skipping on AMD proprietary driver pending further investigation.";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
 
     auto fsr_properties = LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
@@ -4847,7 +4727,6 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingFragmentShadingRateImageView) 
     auto phys_dev_props_2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&fsr_properties);
     GetPhysicalDeviceProperties2(phys_dev_props_2);
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageObj image(m_device);
@@ -4877,31 +4756,11 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingFragmentShadingRateImageView) 
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingRenderingInfoColorAttachment) {
+TEST_F(NegativeDynamicRendering, RenderingInfoColorAttachment) {
     TEST_DESCRIPTION("Test RenderingInfo color attachment.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     VkImageObj invalid_image(m_device);
@@ -4997,32 +4856,13 @@ TEST_F(VkLayerTest, DynamicRenderingRenderingInfoColorAttachment) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingRenderingInfoDepthAttachment) {
+TEST_F(NegativeDynamicRendering, RenderingInfoDepthAttachment) {
     TEST_DESCRIPTION("Test RenderingInfo depth attachment.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     const bool separate_ds_layouts = IsExtensionsEnabled(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
@@ -5223,27 +5063,10 @@ TEST_F(VkLayerTest, DynamicRenderingRenderingInfoDepthAttachment) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingRenderAreaWithDeviceGroupExt) {
+TEST_F(NegativeDynamicRendering, RenderAreaWithDeviceGroupExt) {
     TEST_DESCRIPTION("Use negative offset in RenderingInfo render area");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-        auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-        auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-        if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-            GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-        }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
@@ -5268,30 +5091,10 @@ TEST_F(VkLayerTest, DynamicRenderingRenderAreaWithDeviceGroupExt) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingPipeline) {
+TEST_F(NegativeDynamicRendering, Pipeline) {
     TEST_DESCRIPTION("Use pipeline created with render pass in dynamic render pass.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
     ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
 
     CreatePipelineHelper pipe(*this);
@@ -5314,7 +5117,7 @@ TEST_F(VkLayerTest, DynamicRenderingPipeline) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBeginRenderingFragmentShadingRateAttachmentSize) {
+TEST_F(NegativeDynamicRendering, BeginRenderingFragmentShadingRateAttachmentSize) {
     TEST_DESCRIPTION("Test FragmentShadingRateAttachment size.");
 
     SetTargetApiVersion(VK_API_VERSION_1_0);
@@ -5386,7 +5189,7 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingFragmentShadingRateAttachmentS
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingFragmentShadingRateAttachmentSizeWithDeviceGroupExt) {
+TEST_F(NegativeDynamicRendering, FragmentShadingRateAttachmentSizeWithDeviceGroupExt) {
     TEST_DESCRIPTION("Test FragmentShadingRateAttachment size with device group extension.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -5453,12 +5256,14 @@ TEST_F(VkLayerTest, DynamicRenderingFragmentShadingRateAttachmentSizeWithDeviceG
 
     begin_rendering_info.renderArea.offset.x = 1;
     begin_rendering_info.renderArea.extent.width = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.width) - 1;
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07815");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06119");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
 
     begin_rendering_info.renderArea.offset.x = vvl::MaxTypeValue(begin_rendering_info.renderArea.offset.x);
     begin_rendering_info.renderArea.extent.width = vvl::MaxTypeValue(begin_rendering_info.renderArea.extent.width);
+    m_errorMonitor->SetUnexpectedError("VUID-VkRenderingInfo-pNext-07815");  // if over max
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-06119");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
@@ -5503,30 +5308,10 @@ TEST_F(VkLayerTest, DynamicRenderingFragmentShadingRateAttachmentSizeWithDeviceG
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingSuspendingRenderPassInstance) {
+TEST_F(NegativeDynamicRendering, SuspendingRenderPassInstance) {
     TEST_DESCRIPTION("Test suspending render pass instance.");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeatures>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-
-    if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkCommandPoolObj command_pool(m_device, m_device->graphics_queue_node_index_);
     VkCommandBufferObj cmd_buffer1(m_device, &command_pool);
@@ -5597,7 +5382,7 @@ TEST_F(VkLayerTest, DynamicRenderingSuspendingRenderPassInstance) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingSuspendingRenderPassInstanceQueueSubmit2) {
+TEST_F(NegativeDynamicRendering, SuspendingRenderPassInstanceQueueSubmit2) {
     TEST_DESCRIPTION("Test suspending render pass instance with QueueSubmit2.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -5626,10 +5411,6 @@ TEST_F(VkLayerTest, DynamicRenderingSuspendingRenderPassInstanceQueueSubmit2) {
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
-
-    auto vkQueueSubmit2KHR =
-        reinterpret_cast<PFN_vkQueueSubmit2KHR>(vk::GetDeviceProcAddr(m_device->device(), "vkQueueSubmit2KHR"));
-    ASSERT_TRUE(vkQueueSubmit2KHR != nullptr);
 
     VkCommandPoolObj command_pool(m_device, m_device->graphics_queue_node_index_);
     VkCommandBufferObj cmd_buffer1(m_device, &command_pool);
@@ -5675,13 +5456,13 @@ TEST_F(VkLayerTest, DynamicRenderingSuspendingRenderPassInstanceQueueSubmit2) {
     VkSubmitInfo2KHR submit_info = LvlInitStruct<VkSubmitInfo2KHR>();
     submit_info.commandBufferInfoCount = 2;
     submit_info.pCommandBufferInfos = command_buffer_submit_info;
-    vkQueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     vk::QueueWaitIdle(m_device->m_queue);
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo2KHR-commandBuffer-06010");
 
     submit_info.commandBufferInfoCount = 1;
-    vkQueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     vk::QueueWaitIdle(m_device->m_queue);
 
     m_errorMonitor->VerifyFound();
@@ -5691,7 +5472,7 @@ TEST_F(VkLayerTest, DynamicRenderingSuspendingRenderPassInstanceQueueSubmit2) {
     command_buffer_submit_info[1].commandBuffer = cmd_buffer3.handle();
     command_buffer_submit_info[2].commandBuffer = cmd_buffer2.handle();
     submit_info.commandBufferInfoCount = 3;
-    vkQueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     vk::QueueWaitIdle(m_device->m_queue);
 
     m_errorMonitor->VerifyFound();
@@ -5700,13 +5481,13 @@ TEST_F(VkLayerTest, DynamicRenderingSuspendingRenderPassInstanceQueueSubmit2) {
 
     command_buffer_submit_info[0].commandBuffer = cmd_buffer2.handle();
     submit_info.commandBufferInfoCount = 1;
-    vkQueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit2KHR(m_device->m_queue, 1, &submit_info, VK_NULL_HANDLE);
     vk::QueueWaitIdle(m_device->m_queue);
 
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingNullDepthStencilExecuteCommands) {
+TEST_F(NegativeDynamicRendering, NullDepthStencilExecuteCommands) {
     TEST_DESCRIPTION(
         "Test for NULL depth stencil attachments in dynamic rendering with secondary command buffer with depth stencil format "
         "inheritance info");
@@ -5807,30 +5588,10 @@ TEST_F(VkLayerTest, DynamicRenderingNullDepthStencilExecuteCommands) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBeginRenderingWithSecondaryContents) {
+TEST_F(NegativeDynamicRendering, BeginRenderingWithSecondaryContents) {
     TEST_DESCRIPTION("Test that an error is produced when a secondary command buffer calls BeginRendering with secondary contents");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -5852,34 +5613,14 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingWithSecondaryContents) {
     secondary.end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBadRenderPassContentsWhenCallingCmdExecuteCommands) {
+TEST_F(NegativeDynamicRendering, BadRenderPassContentsWhenCallingCmdExecuteCommands) {
     TEST_DESCRIPTION(
         "Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that hasn't set "
         "VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
-
-    VkFormat color_formats = {VK_FORMAT_R8G8B8A8_UNORM};
+    constexpr VkFormat color_formats = {VK_FORMAT_UNDEFINED};  // undefined because no image view will be used
 
     VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -5924,32 +5665,12 @@ TEST_F(VkLayerTest, DynamicRenderingBadRenderPassContentsWhenCallingCmdExecuteCo
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithNonNullRenderPass) {
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithNonNullRenderPass) {
     TEST_DESCRIPTION(
         "Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that hasn't set "
         "renderPass to VK_NULL_HANDLE in pInheritanceInfo");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkAttachmentDescription attach[] = {
         {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -5963,9 +5684,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithNonNullRenderPass) {
     };
 
     VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, 1, attach, 2, subpasses, 0, nullptr};
-    VkRenderPass render_pass;
-    VkResult err = vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &render_pass);
-    ASSERT_VK_SUCCESS(err);
+    vk_testing::RenderPass render_pass(*m_device, rpci);
 
     VkFormat color_formats = {VK_FORMAT_R8G8B8A8_UNORM};
 
@@ -5989,7 +5708,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithNonNullRenderPass) {
     const VkCommandBufferInheritanceInfo cmdbuff_ii = {
         VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
         &inheritance_rendering_info,  // pNext
-        render_pass,
+        render_pass.handle(),
         0,  // subpass
         VK_NULL_HANDLE,
     };
@@ -6011,36 +5730,14 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithNonNullRenderPass) {
 
     m_commandBuffer->EndRendering();
     m_commandBuffer->end();
-
-    vk::DestroyRenderPass(m_device->device(), render_pass, nullptr);
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingFlags) {
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithMismatchingFlags) {
     TEST_DESCRIPTION("Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that has mismatching flags");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
-
-    VkFormat color_formats = {VK_FORMAT_R8G8B8A8_UNORM};
+    constexpr VkFormat color_formats = {VK_FORMAT_UNDEFINED};  // undefined because no image view will be used
 
     VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -6087,31 +5784,11 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingFlags) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorAttachmentCount) {
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithMismatchingColorAttachmentCount) {
     TEST_DESCRIPTION(
         "Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that has mismatching colorAttachmentCount");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkFormat color_formats = {VK_FORMAT_R8G8B8A8_UNORM};
 
@@ -6159,49 +5836,28 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorAttach
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorImageViewFormat) {
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithMismatchingColorImageViewFormat) {
     TEST_DESCRIPTION(
         "Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that has mismatching color image view format");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
     VkImageView imageView = image.targetView(VK_FORMAT_R8G8B8A8_UNORM);
 
-    VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    auto color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     color_attachment.imageView = imageView;
 
-    VkFormat bad_color_formats = {VK_FORMAT_R8G8B8A8_UINT};
+    constexpr std::array bad_color_formats = {VK_FORMAT_R8G8B8A8_UINT};
 
-    VkCommandBufferInheritanceRenderingInfoKHR inheritance_rendering_info =
-        LvlInitStruct<VkCommandBufferInheritanceRenderingInfoKHR>();
-    inheritance_rendering_info.colorAttachmentCount = 1;
-    inheritance_rendering_info.pColorAttachmentFormats = &bad_color_formats;
+    auto inheritance_rendering_info = LvlInitStruct<VkCommandBufferInheritanceRenderingInfoKHR>();
+    inheritance_rendering_info.colorAttachmentCount = bad_color_formats.size();
+    inheritance_rendering_info.pColorAttachmentFormats = bad_color_formats.data();
     inheritance_rendering_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    VkRenderingInfoKHR begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
     begin_rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
     begin_rendering_info.colorAttachmentCount = 1;
     begin_rendering_info.pColorAttachments = &color_attachment;
@@ -6209,19 +5865,13 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorImageV
 
     VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
-    const VkCommandBufferInheritanceInfo cmdbuff_ii = {
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
-        &inheritance_rendering_info,  // pNext
-        VK_NULL_HANDLE,
-        0,  // subpass
-        VK_NULL_HANDLE,
-    };
+    const auto cmdbuff_ii = LvlInitStruct<VkCommandBufferInheritanceInfo>(&inheritance_rendering_info);
 
-    VkCommandBufferBeginInfo cmdbuff__bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                                            nullptr,  // pNext
-                                            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, &cmdbuff_ii};
-    cmdbuff__bi.flags |= VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-    secondary.begin(&cmdbuff__bi);
+    auto cmdbuff_bi = LvlInitStruct<VkCommandBufferBeginInfo>();
+    cmdbuff_bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+    cmdbuff_bi.pInheritanceInfo = &cmdbuff_ii;
+
+    secondary.begin(&cmdbuff_bi);
     secondary.end();
 
     m_commandBuffer->begin();
@@ -6236,33 +5886,60 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingColorImageV
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingDepthStencilImageViewFormat) {
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithNullImageView) {
+    TEST_DESCRIPTION(
+        "Test CmdExecuteCommands with an inherited image format that is not VK_FORMAT_UNDEFINED inside a render pass begun with "
+        "CmdBeginRendering where the same image is specified as null");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
+
+    auto color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment.imageView = VK_NULL_HANDLE;
+
+    constexpr std::array bad_color_formats = {VK_FORMAT_R8G8B8A8_UINT};
+
+    auto inheritance_rendering_info = LvlInitStruct<VkCommandBufferInheritanceRenderingInfoKHR>();
+    inheritance_rendering_info.colorAttachmentCount = bad_color_formats.size();
+    inheritance_rendering_info.pColorAttachmentFormats = bad_color_formats.data();
+    inheritance_rendering_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    begin_rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
+
+    VkCommandBufferObj secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+
+    const auto cmdbuff_ii = LvlInitStruct<VkCommandBufferInheritanceInfo>(&inheritance_rendering_info);
+
+    auto cmdbuff_bi = LvlInitStruct<VkCommandBufferBeginInfo>();
+    cmdbuff_bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+    cmdbuff_bi.pInheritanceInfo = &cmdbuff_ii;
+
+    secondary.begin(&cmdbuff_bi);
+    secondary.end();
+
+    m_commandBuffer->begin();
+
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdExecuteCommands-imageView-07606");
+    vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithMismatchingDepthStencilImageViewFormat) {
     TEST_DESCRIPTION(
         "Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that has mismatching depth/stencil image view "
         "format");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkImageObj image(m_device);
     auto depth_stencil_format = FindSupportedDepthStencilFormat(gpu());
@@ -6316,7 +5993,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingDepthStenci
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingViewMask) {
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithMismatchingViewMask) {
     TEST_DESCRIPTION(
         "Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that has mismatching viewMask format");
 
@@ -6349,7 +6026,7 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingViewMask) {
     VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    VkFormat color_formats = {VK_FORMAT_R8G8B8A8_UNORM};
+    VkFormat color_formats = {VK_FORMAT_UNDEFINED};  // undefined because no image view will be used
 
     VkCommandBufferInheritanceRenderingInfoKHR inheritance_rendering_info =
         LvlInitStruct<VkCommandBufferInheritanceRenderingInfoKHR>();
@@ -6390,31 +6067,11 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingViewMask) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewRasterizationSamples) {
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithMismatchingImageViewRasterizationSamples) {
     TEST_DESCRIPTION(
         "Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that has mismatching rasterization samples");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
@@ -6510,40 +6167,20 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewRa
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewAttachmentSamples) {
+TEST_F(NegativeDynamicRendering, ExecuteCommandsWithMismatchingImageViewAttachmentSamples) {
     TEST_DESCRIPTION(
         "Test CmdExecuteCommands inside a render pass begun with CmdBeginRendering that has mismatching that has mismatching "
         "attachment samples");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddOptionalExtensions(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
     AddOptionalExtensions(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     bool amd_samples = IsExtensionsEnabled(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
     bool nv_samples = IsExtensionsEnabled(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
     if (!amd_samples && !nv_samples) {
         GTEST_SKIP() << "Test requires either VK_AMD_mixed_attachment_samples or VK_NV_framebuffer_mixed_samples";
     }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL, 0);
@@ -6646,30 +6283,10 @@ TEST_F(VkLayerTest, DynamicRenderingAndExecuteCommandsWithMismatchingImageViewAt
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInSecondaryCommandBuffers) {
+TEST_F(NegativeDynamicRendering, InSecondaryCommandBuffers) {
     TEST_DESCRIPTION("Test drawing in secondary command buffers with dynamic rendering");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkFormat format = VK_FORMAT_R32G32B32A32_UINT;
 
@@ -6704,7 +6321,7 @@ TEST_F(VkLayerTest, DynamicRenderingInSecondaryCommandBuffers) {
     secondary.end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingCommandBufferInheritanceWithInvalidDepthFormat) {
+TEST_F(NegativeDynamicRendering, CommandBufferInheritanceDepthFormat) {
     TEST_DESCRIPTION(
         "Test VkCommandBufferInheritanceRenderingInfoKHR with depthAttachmentFormat that does not include depth aspect");
 
@@ -6753,29 +6370,10 @@ TEST_F(VkLayerTest, DynamicRenderingCommandBufferInheritanceWithInvalidDepthForm
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingInvalidDeviceGroupRenderArea) {
+TEST_F(NegativeDynamicRendering, DeviceGroupRenderArea) {
     TEST_DESCRIPTION("Begin rendering with invaid device group render area.");
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkRect2D renderArea = {};
     renderArea.offset.x = -1;
@@ -6817,30 +6415,32 @@ TEST_F(VkLayerTest, DynamicRenderingInvalidDeviceGroupRenderArea) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingEndRenderingWithIncorrectlyStartedRenderpassInstance) {
+TEST_F(NegativeDynamicRendering, MaxFramebufferLayers) {
+    TEST_DESCRIPTION("Go over maxFramebufferLayers");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
+
+    VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    begin_rendering_info.layerCount = m_device->props.limits.maxFramebufferLayers + 1;
+    begin_rendering_info.renderArea = {{0, 0}, {64, 64}};
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment;
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-layerCount-07817");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, EndRenderingWithIncorrectlyStartedRenderpassInstance) {
     TEST_DESCRIPTION(
         "Test EndRendering without starting the instance with BeginRendering, in the same command buffer or in a different once");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering , skipping.";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     VkAttachmentDescription attach[] = {
         {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -6901,7 +6501,7 @@ TEST_F(VkLayerTest, DynamicRenderingEndRenderingWithIncorrectlyStartedRenderpass
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingEndRenderpassWithBeginRenderingRenderpassInstance) {
+TEST_F(NegativeDynamicRendering, EndRenderpassWithBeginRenderingRenderpassInstance) {
     TEST_DESCRIPTION("Test EndRenderpass(2) starting the renderpass instance with BeginRendering");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -6947,10 +6547,6 @@ TEST_F(VkLayerTest, DynamicRenderingEndRenderpassWithBeginRenderingRenderpassIns
     m_commandBuffer->EndRenderPass();
     m_errorMonitor->VerifyFound();
 
-    auto vkCmdEndRenderPass2KHR =
-        reinterpret_cast<PFN_vkCmdEndRenderPass2KHR>(vk::GetDeviceProcAddr(m_device->device(), "vkCmdEndRenderPass2KHR"));
-    ASSERT_TRUE(vkCmdEndRenderPass2KHR != nullptr);
-
     VkSubpassEndInfoKHR subpassEndInfo = {VK_STRUCTURE_TYPE_SUBPASS_END_INFO_KHR, nullptr};
 
     VkCommandBufferObj primary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
@@ -6958,11 +6554,11 @@ TEST_F(VkLayerTest, DynamicRenderingEndRenderpassWithBeginRenderingRenderpassIns
     primary.begin();
     primary.BeginRendering(begin_rendering_info);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndRenderPass2-None-06171");
-    vkCmdEndRenderPass2KHR(primary.handle(), &subpassEndInfo);
+    vk::CmdEndRenderPass2KHR(primary.handle(), &subpassEndInfo);
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingBeginRenderingDisabled) {
+TEST_F(NegativeDynamicRendering, BeginRenderingDisabled) {
     TEST_DESCRIPTION("Validate VK_KHR_dynamic_rendering VUs when disabled");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -7005,30 +6601,10 @@ TEST_F(VkLayerTest, DynamicRenderingBeginRenderingDisabled) {
     m_commandBuffer->end();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingPipelineRenderingParameters) {
+TEST_F(NegativeDynamicRendering, PipelineRenderingParameters) {
     TEST_DESCRIPTION("Test pipeline rendering formats and viewmask");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     char const *fsSource = R"glsl(
         #version 450
@@ -7127,7 +6703,7 @@ TEST_F(VkLayerTest, DynamicRenderingPipelineRenderingParameters) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingPipelineRenderingViewMaskParameter) {
+TEST_F(NegativeDynamicRendering, PipelineRenderingViewMaskParameter) {
     TEST_DESCRIPTION("Test pipeline rendering viewmask maximum index");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -7201,25 +6777,10 @@ TEST_F(VkLayerTest, DynamicRenderingPipelineRenderingViewMaskParameter) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingCreateGraphicsPipeline) {
+TEST_F(NegativeDynamicRendering, CreateGraphicsPipeline) {
     TEST_DESCRIPTION("Test for a creating a pipeline with VK_KHR_dynamic_rendering enabled");
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-
-    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto dynamic_rendering_features = LvlInitStruct<VkPhysicalDeviceDynamicRenderingFeaturesKHR>();
-    auto features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
 
     char const *fsSource = R"glsl(
         #version 450
@@ -7256,7 +6817,7 @@ TEST_F(VkLayerTest, DynamicRenderingCreateGraphicsPipeline) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingCreateGraphicsPipelineNoInfo) {
+TEST_F(NegativeDynamicRendering, CreateGraphicsPipelineNoInfo) {
     TEST_DESCRIPTION("Test for a creating a pipeline with VK_KHR_dynamic_rendering enabled but no rendering info struct.");
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
@@ -7306,7 +6867,7 @@ TEST_F(VkLayerTest, DynamicRenderingCreateGraphicsPipelineNoInfo) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, DynamicRenderingDynamicColorBlendAttchment) {
+TEST_F(NegativeDynamicRendering, DynamicColorBlendAttchment) {
     TEST_DESCRIPTION("Test all color blend attachments are dynamically set at draw time with Dynamic Rendering.");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -7332,8 +6893,6 @@ TEST_F(VkLayerTest, DynamicRenderingDynamicColorBlendAttchment) {
     }
 
     ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &dynamic_rendering_features));
-
-    auto vkCmdSetColorWriteMaskEXT = GetDeviceProcAddr<PFN_vkCmdSetColorWriteMaskEXT>("vkCmdSetColorWriteMaskEXT");
 
     VkFormat color_formats = VK_FORMAT_UNDEFINED;
     auto pipeline_rendering_info = LvlInitStruct<VkPipelineRenderingCreateInfoKHR>();
@@ -7371,9 +6930,71 @@ TEST_F(VkLayerTest, DynamicRenderingDynamicColorBlendAttchment) {
 
     // once set error goes away
     VkColorComponentFlags color_component_flags = VK_COLOR_COMPONENT_R_BIT;
-    vkCmdSetColorWriteMaskEXT(m_commandBuffer->handle(), 0, 1, &color_component_flags);
+    vk::CmdSetColorWriteMaskEXT(m_commandBuffer->handle(), 0, 1, &color_component_flags);
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
 
     m_commandBuffer->EndRendering();
     m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, BeginTwice) {
+    TEST_DESCRIPTION("Call vkCmdBeginRendering twice in a row");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
+
+    VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    begin_rendering_info.layerCount = 1;
+    begin_rendering_info.renderArea = {{0, 0}, {64, 64}};
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment;
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBeginRendering-renderpass");
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_commandBuffer->EndRendering();
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, EndTwice) {
+    TEST_DESCRIPTION("Call vkCmdEndRendering twice in a row");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
+
+    VkRenderingAttachmentInfoKHR color_attachment = LvlInitStruct<VkRenderingAttachmentInfoKHR>();
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    auto begin_rendering_info = LvlInitStruct<VkRenderingInfoKHR>();
+    begin_rendering_info.layerCount = 1;
+    begin_rendering_info.renderArea = {{0, 0}, {64, 64}};
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment;
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    m_commandBuffer->EndRendering();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdEndRendering-renderpass");
+    m_commandBuffer->EndRendering();
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, MissingMultisampleState) {
+    TEST_DESCRIPTION("Create pipeline with fragment shader that uses samples, but multisample state not begin set");
+    InitBasicDynamicRendering();
+    if (::testing::Test::IsSkipped()) return;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
+    pipe.gp_ci_.pMultisampleState = nullptr;
+    pipe.InitState();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-rasterizerDiscardEnable-00751");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
 }

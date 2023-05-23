@@ -11,7 +11,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "cast_utils.h"
+#include "utils/cast_utils.h"
 #include "../framework/layer_validation_tests.h"
 
 const char *kEnableArmValidation = "VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM";
@@ -104,14 +104,8 @@ TEST_F(VkArmBestPracticesLayerTest, SamplerCreation) {
     sampler_info.anisotropyEnable = VK_FALSE;
     sampler_info.maxAnisotropy = 4.0f;
 
-    VkSampler sampler = VK_NULL_HANDLE;
-    vk::CreateSampler(m_device->device(), &sampler_info, nullptr, &sampler);
-
+    vk_testing::Sampler sampler(*m_device, sampler_info);
     m_errorMonitor->VerifyFound();
-
-    if (sampler) {
-        vk::DestroySampler(m_device->device(), sampler, nullptr);
-    }
 }
 
 TEST_F(VkArmBestPracticesLayerTest, MultisampledBlending) {

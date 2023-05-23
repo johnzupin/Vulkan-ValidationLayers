@@ -18,21 +18,18 @@
 
 #pragma once
 
-#include "lvt_function_pointers.h"
+#include "generated/lvt_function_pointers.h"
 #include "error_monitor.h"
 
-#ifdef ANDROID
-#include "test_framework_android.h"
-class VkImageObj;
-#else
+#if defined(VVL_TESTS_USE_CMAKE)
 #include "test_framework.h"
+#else
+#include "test_framework_android.h"
 #endif
 
-#if defined(ANDROID)
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
 #include <android/log.h>
-#if defined(VALIDATION_APK)
 #include <android_native_app_glue.h>
-#endif
 #endif
 
 #include <algorithm>
@@ -80,50 +77,8 @@ class VkDeviceObj : public vk_testing::Device {
     VkQueueObj *m_queue_obj = nullptr;
     VkQueue m_queue;
 };
-struct DebugReporter {
-    void Create(VkInstance instance) noexcept;
-    void Destroy(VkInstance instance) noexcept;
 
-    ErrorMonitor error_monitor_;
-
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-    static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugReportFlagsEXT message_flags, VkDebugReportObjectTypeEXT, uint64_t,
-                                                        size_t, int32_t, const char *, const char *msg, void *user_data);
-
-    const char *debug_extension_name = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
-    VkDebugReportCallbackCreateInfoEXT debug_create_info_ = {VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT, nullptr,
-                                                             VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT |
-                                                                 VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
-                                                                 VK_DEBUG_REPORT_INFORMATION_BIT_EXT,
-                                                             &DebugCallback, &error_monitor_};
-    using DebugCreateFnType = PFN_vkCreateDebugReportCallbackEXT;
-    const char *debug_create_fn_name_ = "vkCreateDebugReportCallbackEXT";
-    using DebugDestroyFnType = PFN_vkDestroyDebugReportCallbackEXT;
-    const char *debug_destroy_fn_name_ = "vkDestroyDebugReportCallbackEXT";
-    VkDebugReportCallbackEXT debug_obj_ = VK_NULL_HANDLE;
-#else
-    static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-                                                        VkDebugUtilsMessageTypeFlagsEXT message_types,
-                                                        const VkDebugUtilsMessengerCallbackDataEXT *callback_data, void *user_data);
-
-    const char *debug_extension_name = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-    VkDebugUtilsMessengerCreateInfoEXT debug_create_info_ = {
-        VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        nullptr,
-        0,
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-        &DebugCallback,
-        &error_monitor_};
-    using DebugCreateFnType = PFN_vkCreateDebugUtilsMessengerEXT;
-    const char *debug_create_fn_name_ = "vkCreateDebugUtilsMessengerEXT";
-    using DebugDestroyFnType = PFN_vkDestroyDebugUtilsMessengerEXT;
-    const char *debug_destroy_fn_name_ = "vkDestroyDebugUtilsMessengerEXT";
-    VkDebugUtilsMessengerEXT debug_obj_ = VK_NULL_HANDLE;
-#endif
-};
-
+class VkImageObj;
 class VkCommandPoolObj;
 class VkCommandBufferObj;
 class VkDepthStencilObj;
@@ -234,6 +189,8 @@ class VkRenderFramework : public VkTestFramework {
     // Does not return anything as the caller should use AreRequiredExtensionsEnabled or AddOptionalExtensions then
     // `ext_name` can refer to a device or instance extension.
     void AddRequiredExtensions(const char *ext_name);
+    // Ensures at least 1 WSI instance extension is enabled
+    void AddWsiExtensions(const char *ext_name);
     // Same as AddRequiredExtensions but won't fail a check to AreRequiredExtensionsEnabled
     void AddOptionalExtensions(const char *ext_name);
     // After instance and physical device creation (e.g., after InitFramework), returns true if all required extensions are
@@ -262,8 +219,8 @@ class VkRenderFramework : public VkTestFramework {
     std::vector<VkLayerProperties> available_layers_; // allow caching of available layers
     std::vector<VkExtensionProperties> available_extensions_; // allow caching of available instance extensions
 
-    DebugReporter debug_reporter_;
-    ErrorMonitor *m_errorMonitor = &debug_reporter_.error_monitor_;  // compatibility alias name
+    ErrorMonitor monitor_;
+    ErrorMonitor *m_errorMonitor = &monitor_;  // TODO: Removing this properly is it's own PR. It's a big change.
 
     VkApplicationInfo app_info_;
     std::vector<const char *> instance_layers_;
@@ -316,6 +273,7 @@ class VkRenderFramework : public VkTestFramework {
     uint32_t m_width, m_height;
     VkFormat m_render_target_fmt;
     VkFormat m_depth_stencil_fmt;
+    VkImageLayout m_depth_stencil_layout;
     VkClearColorValue m_clear_color;
     bool m_clear_via_load_op;
     float m_depth_clear_color;
@@ -326,6 +284,8 @@ class VkRenderFramework : public VkTestFramework {
     std::vector<const char *> m_required_extensions;
     // Optional extensions to try and enable at device creation time
     std::vector<const char *> m_optional_extensions;
+    // wsi extensions to try and enable
+    std::vector<const char *> m_wsi_extensions;
     // Device extensions to enable
     std::vector<const char *> m_device_extension_names;
 
@@ -363,7 +323,7 @@ typedef vk_testing::Fence VkFenceObj;
 typedef vk_testing::Semaphore VkSemaphoreObj;
 typedef vk_testing::Buffer VkBufferObj;
 typedef vk_testing::AccelerationStructure VkAccelerationStructureObj;
-typedef vk_testing::AccelerationStructureKHR VkAccelerationStructurekhrObj;
+using VkDeviceMemoryObj = vk_testing::DeviceMemory;
 class VkCommandPoolObj : public vk_testing::CommandPool {
   public:
     VkCommandPoolObj() : vk_testing::CommandPool(){};
@@ -518,7 +478,7 @@ class VkImageObj : public vk_testing::Image {
         return ci;
     }
 
-    VkImageView targetView(VkImageViewCreateInfo ci) {
+    const VkImageView &targetView(VkImageViewCreateInfo ci) {
         if (!m_targetView.initialized()) {
             ci.image = handle();
             m_targetView.init(*m_device, ci);
@@ -526,9 +486,9 @@ class VkImageObj : public vk_testing::Image {
         return m_targetView.handle();
     }
 
-    VkImageView targetView(VkFormat format, VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT, uint32_t baseMipLevel = 0,
-                           uint32_t levelCount = VK_REMAINING_MIP_LEVELS, uint32_t baseArrayLayer = 0,
-                           uint32_t layerCount = VK_REMAINING_ARRAY_LAYERS, VkImageViewType type = VK_IMAGE_VIEW_TYPE_2D) {
+    const VkImageView &targetView(VkFormat format, VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT, uint32_t baseMipLevel = 0,
+                                  uint32_t levelCount = VK_REMAINING_MIP_LEVELS, uint32_t baseArrayLayer = 0,
+                                  uint32_t layerCount = VK_REMAINING_ARRAY_LAYERS, VkImageViewType type = VK_IMAGE_VIEW_TYPE_2D) {
         if (!m_targetView.initialized()) {
             VkImageViewCreateInfo createView = LvlInitStruct<VkImageViewCreateInfo>();
             createView.image = handle();
@@ -676,8 +636,7 @@ class VkShaderObj : public vk_testing::ShaderModule {
                                                       const VkSpecializationInfo *spec_info = nullptr,
                                                       const spv_target_env spv_env = SPV_ENV_VULKAN_1_0);
 
-    // TODO (ncesario) remove ifndef once android build consolidation changes go in
-#ifndef __ANDROID__
+#if defined(VVL_TESTS_USE_CMAKE)
     struct GlslangTargetEnv {
         GlslangTargetEnv(const spv_target_env env) {
             switch (env) {

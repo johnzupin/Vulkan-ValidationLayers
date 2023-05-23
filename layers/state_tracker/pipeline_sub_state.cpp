@@ -16,6 +16,12 @@
  */
 
 #include "state_tracker/pipeline_sub_state.h"
+#include "state_tracker/pipeline_state.h"
+
+VkPipelineLayoutCreateFlags PipelineSubState::PipelineLayoutCreateFlags() const {
+    const auto layout_state = parent.PipelineLayoutState();
+    return (layout_state) ? layout_state->CreateFlags() : static_cast<VkPipelineLayoutCreateFlags>(0);
+}
 
 VertexInputState::VertexInputState(const PIPELINE_STATE &p, const safe_VkGraphicsPipelineCreateInfo &create_info)
     : PipelineSubState(p), input_state(create_info.pVertexInputState), input_assembly_state(create_info.pInputAssemblyState) {
@@ -74,6 +80,15 @@ PreRasterState::PreRasterState(const PIPELINE_STATE &p, const ValidationStateTra
                 if (shader_ci) {
                     const uint32_t unique_shader_id = 0;  // TODO GPU-AV rework required to get this value properly
                     module_state = dev_data.CreateShaderModuleState(*shader_ci, unique_shader_id);
+                }
+            }
+
+            // Check if a shader module identifier is used to reference the shader module.
+            if (!module_state) {
+                if (const auto shader_stage_id =
+                        LvlFindInChain<VkPipelineShaderStageModuleIdentifierCreateInfoEXT>(create_info.pStages[i].pNext);
+                    shader_stage_id) {
+                    module_state = dev_data.GetShaderModuleStateFromIdentifier(*shader_stage_id);
                 }
             }
 
@@ -161,6 +176,15 @@ void SetFragmentShaderInfoPrivate(FragmentShaderState &fs_state, const Validatio
                 if (shader_ci) {
                     const uint32_t unique_shader_id = 0;  // TODO GPU-AV rework required to get this value properly
                     module_state = state_data.CreateShaderModuleState(*shader_ci, unique_shader_id);
+                }
+            }
+
+            // Check if a shader module identifier is used to reference the shader module.
+            if (!module_state) {
+                if (const auto shader_stage_id =
+                        LvlFindInChain<VkPipelineShaderStageModuleIdentifierCreateInfoEXT>(create_info.pStages[i].pNext);
+                    shader_stage_id) {
+                    module_state = state_data.GetShaderModuleStateFromIdentifier(*shader_stage_id);
                 }
             }
 
