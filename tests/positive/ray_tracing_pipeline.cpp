@@ -13,7 +13,9 @@
 
 #include "../framework/layer_validation_tests.h"
 
-TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
+class PositiveRayTracingPipeline : public VkPositiveLayerTest {};
+
+TEST_F(PositiveRayTracingPipeline, ShaderGroupsKHR) {
     TEST_DESCRIPTION("Test that no warning is produced when a library is referenced in the raytracing shader groups.");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -32,10 +34,6 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
     const VkPipelineLayoutObj empty_pipeline_layout(m_device, {});
     VkShaderObj rgen_shader(this, bindStateRTShaderText, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
     VkShaderObj chit_shader(this, bindStateRTShaderText, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
-
-    const auto vkCreateRayTracingPipelinesKHR =
-        GetInstanceProcAddr<PFN_vkCreateRayTracingPipelinesKHR>("vkCreateRayTracingPipelinesKHR");
-    const auto vkDestroyPipeline = GetInstanceProcAddr<PFN_vkDestroyPipeline>("vkDestroyPipeline");
 
     VkPipeline pipeline = VK_NULL_HANDLE;
 
@@ -67,7 +65,7 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
     library_pipeline.pLibraryInterface = &interface_ci;
 
     VkPipeline library = VK_NULL_HANDLE;
-    vkCreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &library_pipeline, nullptr, &library);
+    vk::CreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &library_pipeline, nullptr, &library);
 
     VkPipelineLibraryCreateInfoKHR library_info_one = LvlInitStruct<VkPipelineLibraryCreateInfoKHR>();
     library_info_one.libraryCount = 1;
@@ -109,15 +107,15 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineShaderGroupsKHR) {
     pipeline_ci.pLibraryInterface = &interface_ci;
 
     VkResult err =
-        vkCreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &pipeline);
+        vk::CreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &pipeline);
     ASSERT_VK_SUCCESS(err);
     ASSERT_NE(pipeline, VK_NULL_HANDLE);
 
-    vkDestroyPipeline(m_device->handle(), pipeline, nullptr);
-    vkDestroyPipeline(m_device->handle(), library, nullptr);
+    vk::DestroyPipeline(m_device->handle(), pipeline, nullptr);
+    vk::DestroyPipeline(m_device->handle(), library, nullptr);
 }
 
-TEST_F(VkPositiveLayerTest, RayTracingPipelineCacheControl) {
+TEST_F(PositiveRayTracingPipeline, CacheControl) {
     TEST_DESCRIPTION("Create ray tracing pipeline with VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT.");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -143,9 +141,6 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineCacheControl) {
     const VkPipelineLayoutObj empty_pipeline_layout(m_device, {});
     VkShaderObj rgen_shader(this, bindStateRTShaderText, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
     VkShaderObj chit_shader(this, bindStateRTShaderText, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
-
-    const auto vkCreateRayTracingPipelinesKHR =
-        GetInstanceProcAddr<PFN_vkCreateRayTracingPipelinesKHR>("vkCreateRayTracingPipelinesKHR");
 
     const VkPipelineLayoutObj pipeline_layout(m_device, {});
 
@@ -175,11 +170,11 @@ TEST_F(VkPositiveLayerTest, RayTracingPipelineCacheControl) {
     library_pipeline.pLibraryInterface = &interface_ci;
 
     VkPipeline library = VK_NULL_HANDLE;
-    vkCreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &library_pipeline, nullptr, &library);
+    vk::CreateRayTracingPipelinesKHR(m_device->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &library_pipeline, nullptr, &library);
     vk::DestroyPipeline(device(), library, nullptr);
 }
 
-TEST_F(VkPositiveLayerTest, NVRayTracingPipeline) {
+TEST_F(PositiveRayTracingPipeline, BasicUsageNV) {
     TEST_DESCRIPTION("Test VK_NV_ray_tracing.");
 
     if (!InitFrameworkForRayTracingTest(this, false)) {

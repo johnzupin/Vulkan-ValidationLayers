@@ -10,7 +10,7 @@
  */
 
 #include "../framework/video_objects.h"
-#include "vk_extension_helper.h"
+#include "generated/vk_extension_helper.h"
 
 #include <algorithm>
 #include <chrono>
@@ -37,6 +37,45 @@ TEST_F(VkPositiveVideoLayerTest, VideoCodingScope) {
     cb.ControlVideoCoding(context.Control().Reset());
     cb.EndVideoCoding(context.End());
     cb.end();
+}
+
+TEST_F(VkPositiveVideoLayerTest, MultipleCmdBufs) {
+    TEST_DESCRIPTION("Tests submit-time validation with multiple command buffers submitted at once");
+
+    ASSERT_NO_FATAL_FAILURE(Init());
+
+    VideoConfig config = GetConfig(GetConfigsWithDpbSlots(GetConfigsDecode()));
+    if (!config) {
+        GTEST_SKIP() << "Test requires video support";
+    }
+
+    config.SessionCreateInfo()->maxDpbSlots = 1;
+    config.SessionCreateInfo()->maxActiveReferencePictures = 1;
+
+    VideoContext context(DeviceObj(), config);
+    context.CreateAndBindSessionMemory();
+    context.CreateResources();
+
+    VkCommandPoolObj cmd_pool(m_device, config.QueueFamilyIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBufferObj cb1(m_device, &cmd_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, &context.Queue());
+    VkCommandBufferObj cb2(m_device, &cmd_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, &context.Queue());
+
+    cb1.begin();
+    cb1.BeginVideoCoding(context.Begin());
+    cb1.ControlVideoCoding(context.Control().Reset());
+    cb1.EndVideoCoding(context.End());
+    cb1.end();
+
+    cb2.begin();
+    cb2.PipelineBarrier2KHR(context.DecodeOutput()->LayoutTransition(VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR));
+    cb2.BeginVideoCoding(context.Begin());
+    cb2.DecodeVideo(context.DecodeFrame());
+    cb2.EndVideoCoding(context.End());
+    cb2.end();
+
+    VkFenceObj fence{};
+    context.Queue().submit({&cb1, &cb2}, fence, true);
+    m_device->wait();
 }
 
 TEST_F(VkPositiveVideoLayerTest, VideoDecodeH264) {

@@ -21,15 +21,16 @@
 #include "state_tracker/base_node.h"
 #include "state_tracker/query_state.h"
 #include "state_tracker/video_session_state.h"
-#include "command_validation.h"
-#include "hash_vk_types.h"
-#include "subresource_adapter.h"
+#include "generated/command_validation.h"
+#include "generated/dynamic_state_helper.h"
+#include "utils/hash_vk_types.h"
+#include "containers/subresource_adapter.h"
 #include "state_tracker/image_layout_map.h"
 #include "state_tracker/pipeline_state.h"
 #include "state_tracker/device_state.h"
 #include "state_tracker/descriptor_sets.h"
-#include "qfo_transfer.h"
-#include "vk_layer_data.h"
+#include "containers/qfo_transfer.h"
+#include "containers/custom_containers.h"
 
 struct SUBPASS_INFO;
 class FRAMEBUFFER_STATE;
@@ -122,6 +123,11 @@ struct BufferBinding {
     VkDeviceSize stride;
 
     BufferBinding() : buffer_state(), size(0), offset(0), stride(0) {}
+    BufferBinding(const std::shared_ptr<BUFFER_STATE> &buffer_state_, VkDeviceSize size_, VkDeviceSize offset_,
+                  VkDeviceSize stride_)
+        : buffer_state(buffer_state_), size(size_), offset(offset_), stride(stride_) {}
+    BufferBinding(const std::shared_ptr<BUFFER_STATE> &buffer_state_, VkDeviceSize offset_)
+        : BufferBinding(buffer_state_, BUFFER_STATE::ComputeSize(buffer_state_, offset_, VK_WHOLE_SIZE), offset_, 0U) {}
     virtual ~BufferBinding() {}
 
     virtual void reset() { *this = BufferBinding(); }
@@ -132,6 +138,8 @@ struct IndexBufferBinding : BufferBinding {
     VkIndexType index_type;
 
     IndexBufferBinding() : BufferBinding(), index_type(static_cast<VkIndexType>(0)) {}
+    IndexBufferBinding(const std::shared_ptr<BUFFER_STATE> &buffer_state_, VkDeviceSize offset_, VkIndexType index_type_)
+        : BufferBinding(buffer_state_, offset_), index_type(index_type_) {}
     virtual ~IndexBufferBinding() {}
 
     virtual void reset() override { *this = IndexBufferBinding(); }
@@ -172,11 +180,13 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     typedef uint64_t ImageLayoutUpdateCount;
     ImageLayoutUpdateCount image_layout_change_count;  // The sequence number for changes to image layout (for cached validation)
 
-    // Dynamic State
-    CBDynamicFlags status;          // Track status of various bindings on cmd buffer
-    CBDynamicFlags static_status;   // All state bits provided by current graphics pipeline
-                                    // rather than dynamic state
-    CBDynamicFlags dynamic_status;  // dynamic state set up in pipeline
+    // Track status of all vkCmdSet* calls, if 1, means it was set
+    struct DynamicStateStatus {
+        CBDynamicFlags cb;        // for lifetime of CommandBuffer
+        CBDynamicFlags pipeline;  // for lifetime since last bound pipeline
+    } dynamic_state_status;
+
+    // These are values that are being set with vkCmdSet* tied to a command buffer
     struct DynamicStateValue {
         // VK_DYNAMIC_STATE_STENCIL_WRITE_MASK
         uint32_t write_mask_front;
@@ -206,6 +216,8 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
         // VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT
         bool stippled_line_enable;
 
+        uint32_t color_write_enable_attachment_count;
+
         // maxColorAttachments is at max 8 on all known implementations currently
         std::bitset<32> color_blend_enable_attachments;    // VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT
         std::bitset<32> color_blend_equation_attachments;  // VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT
@@ -213,7 +225,7 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
         std::bitset<32> color_blend_advanced_attachments;  // VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT
 
         // When the Command Buffer resets, the value most things in this struct don't matter because if they are read without
-        // setting the state, it will fail in ValidateCBDynamicStatus() for us. Some values (ex. the bitset) are tracking in
+        // setting the state, it will fail in ValidateDynamicStateIsSet() for us. Some values (ex. the bitset) are tracking in
         // replacement for static_status/dynamic_status so this needs to reset along with those
         void reset() {
             discard_rectangles.reset();
@@ -251,8 +263,8 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
 
     // For each draw command D recorded to this command buffer, let
     //  * g_D be the graphics pipeline used
-    //  * v_G be the viewportCount of g_D (0 if g_D disables rasterization or enables VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT)
-    //  * s_G be the scissorCount  of g_D (0 if g_D disables rasterization or enables VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT)
+    //  * v_G be the viewportCount of g_D (0 if g_D disables rasterization or enables VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT)
+    //  * s_G be the scissorCount  of g_D (0 if g_D disables rasterization or enables VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT)
     // Then this value is max(0, max(v_G for all D in cb), max(s_G for all D in cb))
     uint32_t usedViewportScissorCount;
     uint32_t pipelineStaticViewportCount;  // v_G for currently-bound graphics pipeline.
@@ -353,9 +365,6 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     std::vector<uint8_t> push_constant_data;
     PushConstantRangesId push_constant_data_ranges;
 
-    std::map<VkShaderStageFlagBits, std::vector<uint8_t>>
-        push_constant_data_update;  // vector's value is enum PushConstantByteState.
-
     // Used for Best Practices tracking
     uint32_t small_indexed_draw_call_count;
 
@@ -369,7 +378,6 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     bool conditional_rendering_active{false};
     bool conditional_rendering_inside_render_pass{false};
     uint32_t conditional_rendering_subpass{0};
-    uint32_t dynamicColorWriteEnableAttachmentCount{0};
     std::vector<VkDescriptorBufferBindingInfoEXT> descriptor_buffer_binding_info;
 
     mutable std::shared_mutex lock;
@@ -494,9 +502,8 @@ class CMD_BUFFER_STATE : public REFCOUNTED_NODE {
     void UpdatePipelineState(CMD_TYPE cmd_type, const VkPipelineBindPoint bind_point);
 
     virtual void RecordCmd(CMD_TYPE cmd_type);
-    void RecordStateCmd(CMD_TYPE cmd_type, CBDynamicStatus state);
+    void RecordStateCmd(CMD_TYPE cmd_type, CBDynamicState dynamic_state);
     void RecordStateCmd(CMD_TYPE cmd_type, CBDynamicFlags const &state_bits);
-    void RecordColorWriteEnableStateCmd(CMD_TYPE cmd_type, CBDynamicStatus state, uint32_t attachment_count);
     void RecordTransferCmd(CMD_TYPE cmd_type, std::shared_ptr<BINDABLE> &&buf1, std::shared_ptr<BINDABLE> &&buf2 = nullptr);
     void RecordSetEvent(CMD_TYPE cmd_type, VkEvent event, VkPipelineStageFlags2KHR stageMask);
     void RecordResetEvent(CMD_TYPE cmd_type, VkEvent event, VkPipelineStageFlags2KHR stageMask);

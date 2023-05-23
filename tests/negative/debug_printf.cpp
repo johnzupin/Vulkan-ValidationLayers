@@ -13,7 +13,7 @@
 
 #include "../framework/layer_validation_tests.h"
 
-void VkDebugPrintfTest::InitDebugPrintfFramework() {
+void NegativeDebugPrintf::InitDebugPrintfFramework() {
     VkValidationFeatureEnableEXT enables[] = {VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT};
     VkValidationFeatureDisableEXT disables[] = {
         VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
@@ -27,7 +27,7 @@ void VkDebugPrintfTest::InitDebugPrintfFramework() {
     InitFramework(m_errorMonitor, &features);
 }
 
-TEST_F(VkDebugPrintfTest, GpuDebugPrintf) {
+TEST_F(NegativeDebugPrintf, BasicUsage) {
     TEST_DESCRIPTION("Verify that calls to debugPrintfEXT are received in debug stream");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
@@ -193,10 +193,6 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintf) {
     }
 
     if (multi_draw_features.multiDraw) {
-        auto vkCmdDrawMultiEXT = (PFN_vkCmdDrawMultiEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawMultiEXT");
-        auto vkCmdDrawMultiIndexedEXT =
-            (PFN_vkCmdDrawMultiIndexedEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawMultiIndexedEXT");
-        assert(vkCmdDrawMultiEXT != nullptr && vkCmdDrawMultiIndexedEXT != nullptr);
         VkMultiDrawInfoEXT multi_draws[3] = {};
         multi_draws[0].vertexCount = multi_draws[1].vertexCount = multi_draws[2].vertexCount = 3;
         VkMultiDrawIndexedInfoEXT multi_draw_indices[3] = {};
@@ -208,7 +204,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintf) {
                                   &descriptor_set.set_, 0, nullptr);
         vk::CmdSetViewport(m_commandBuffer->handle(), 0, 1, &viewport);
         vk::CmdSetScissor(m_commandBuffer->handle(), 0, 1, &scissors);
-        vkCmdDrawMultiEXT(m_commandBuffer->handle(), 3, multi_draws, 1, 0, sizeof(VkMultiDrawInfoEXT));
+        vk::CmdDrawMultiEXT(m_commandBuffer->handle(), 3, multi_draws, 1, 0, sizeof(VkMultiDrawInfoEXT));
         vk::CmdEndRenderPass(m_commandBuffer->handle());
         m_commandBuffer->end();
 
@@ -239,7 +235,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintf) {
         vk::CmdSetViewport(m_commandBuffer->handle(), 0, 1, &viewport);
         vk::CmdSetScissor(m_commandBuffer->handle(), 0, 1, &scissors);
         m_commandBuffer->BindIndexBuffer(&buffer, 0, VK_INDEX_TYPE_UINT16);
-        vkCmdDrawMultiIndexedEXT(m_commandBuffer->handle(), 3, multi_draw_indices, 1, 0, sizeof(VkMultiDrawIndexedInfoEXT), 0);
+        vk::CmdDrawMultiIndexedEXT(m_commandBuffer->handle(), 3, multi_draw_indices, 1, 0, sizeof(VkMultiDrawIndexedInfoEXT), 0);
         vk::CmdEndRenderPass(m_commandBuffer->handle());
         m_commandBuffer->end();
 
@@ -335,7 +331,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintf) {
         m_errorMonitor->VerifyFound();
     }
 }
-TEST_F(VkDebugPrintfTest, MeshTaskShadersPrintf) {
+TEST_F(NegativeDebugPrintf, MeshTaskShaders) {
     TEST_DESCRIPTION("Test debug printf in mesh and task shaders.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -406,14 +402,10 @@ TEST_F(VkDebugPrintfTest, MeshTaskShadersPrintf) {
     VkResult err = pipe.CreateVKPipeline(pipeline_layout.handle(), renderPass());
     ASSERT_VK_SUCCESS(err);
 
-    PFN_vkCmdDrawMeshTasksNV vkCmdDrawMeshTasksNV =
-        (PFN_vkCmdDrawMeshTasksNV)vk::GetInstanceProcAddr(instance(), "vkCmdDrawMeshTasksNV");
-    ASSERT_TRUE(vkCmdDrawMeshTasksNV != nullptr);
-
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.handle());
-    vkCmdDrawMeshTasksNV(m_commandBuffer->handle(), 1, 0);
+    vk::CmdDrawMeshTasksNV(m_commandBuffer->handle(), 1, 0);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
@@ -425,7 +417,7 @@ TEST_F(VkDebugPrintfTest, MeshTaskShadersPrintf) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPL) {
+TEST_F(NegativeDebugPrintf, GPL) {
     TEST_DESCRIPTION("Verify that calls to debugPrintfEXT are received in debug stream");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
@@ -574,7 +566,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPL) {
         fragment.pipeline_,
         frag_out.pipeline_,
     };
-    vk_testing::GraphicsPipelineFromLibraries pipe(*m_device, libraries);
+    vk_testing::GraphicsPipelineFromLibraries pipe(*m_device, libraries, pipeline_layout.handle());
     ASSERT_TRUE(pipe);
 
     VkSubmitInfo submit_info = LvlInitStruct<VkSubmitInfo>();
@@ -623,10 +615,6 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPL) {
     }
 
     if (multi_draw_features.multiDraw) {
-        auto vkCmdDrawMultiEXT = (PFN_vkCmdDrawMultiEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawMultiEXT");
-        auto vkCmdDrawMultiIndexedEXT =
-            (PFN_vkCmdDrawMultiIndexedEXT)vk::GetDeviceProcAddr(m_device->device(), "vkCmdDrawMultiIndexedEXT");
-        assert(vkCmdDrawMultiEXT != nullptr && vkCmdDrawMultiIndexedEXT != nullptr);
         VkMultiDrawInfoEXT multi_draws[3] = {};
         multi_draws[0].vertexCount = multi_draws[1].vertexCount = multi_draws[2].vertexCount = 3;
         VkMultiDrawIndexedInfoEXT multi_draw_indices[3] = {};
@@ -636,7 +624,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPL) {
         vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
         vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                                   &descriptor_set.set_, 0, nullptr);
-        vkCmdDrawMultiEXT(m_commandBuffer->handle(), 3, multi_draws, 1, 0, sizeof(VkMultiDrawInfoEXT));
+        vk::CmdDrawMultiEXT(m_commandBuffer->handle(), 3, multi_draws, 1, 0, sizeof(VkMultiDrawInfoEXT));
         vk::CmdEndRenderPass(m_commandBuffer->handle());
         m_commandBuffer->end();
 
@@ -663,7 +651,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPL) {
         vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                                   &descriptor_set.set_, 0, nullptr);
         m_commandBuffer->BindIndexBuffer(&buffer, 0, VK_INDEX_TYPE_UINT16);
-        vkCmdDrawMultiIndexedEXT(m_commandBuffer->handle(), 3, multi_draw_indices, 1, 0, sizeof(VkMultiDrawIndexedInfoEXT), 0);
+        vk::CmdDrawMultiIndexedEXT(m_commandBuffer->handle(), 3, multi_draw_indices, 1, 0, sizeof(VkMultiDrawIndexedInfoEXT), 0);
         vk::CmdEndRenderPass(m_commandBuffer->handle());
         m_commandBuffer->end();
 
@@ -710,6 +698,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPL) {
 
         CreatePipelineHelper pre_raster_i64(*this);
         pre_raster_i64.InitPreRasterLibInfo(1, &pre_raster_i64_stage.stage_ci);
+        pre_raster_i64.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
         pre_raster_i64.gp_ci_.layout = pipeline_layout.handle();
         pre_raster_i64.gp_ci_.renderPass = render_pass;
         pre_raster_i64.gp_ci_.subpass = subpass;
@@ -722,7 +711,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPL) {
             frag_out.pipeline_,
         };
 
-        vk_testing::GraphicsPipelineFromLibraries pipe2(*m_device, libraries_i64);
+        vk_testing::GraphicsPipelineFromLibraries pipe2(*m_device, libraries_i64, pipeline_layout.handle());
         ASSERT_TRUE(pipe2);
 
         m_commandBuffer->begin(&begin_info);
@@ -762,7 +751,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPL) {
     }
 }
 
-TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPLFragment) {
+TEST_F(NegativeDebugPrintf, GPLFragment) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -893,7 +882,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPLFragment) {
         fragment.pipeline_,
         frag_out.pipeline_,
     };
-    vk_testing::GraphicsPipelineFromLibraries pipe(*m_device, libraries);
+    vk_testing::GraphicsPipelineFromLibraries pipe(*m_device, libraries, layout);
     ASSERT_TRUE(pipe);
 
     m_commandBuffer->begin();
@@ -916,7 +905,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPLFragment) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPLFragmentIndependentSets) {
+TEST_F(NegativeDebugPrintf, GPLFragmentIndependentSets) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -1052,7 +1041,7 @@ TEST_F(VkDebugPrintfTest, GpuDebugPrintfGPLFragmentIndependentSets) {
         fragment.pipeline_,
         frag_out.pipeline_,
     };
-    vk_testing::GraphicsPipelineFromLibraries pipe(*m_device, libraries);
+    vk_testing::GraphicsPipelineFromLibraries pipe(*m_device, libraries, layout);
     ASSERT_TRUE(pipe);
 
     m_commandBuffer->begin();

@@ -18,21 +18,20 @@
 #include "../layers/vk_lunarg_device_profile_api_layer.h"
 #include "vk_layer_settings_ext.h"
 
-#if defined(ANDROID)
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
 #include <android/log.h>
-#if defined(VALIDATION_APK)
 #include <android_native_app_glue.h>
-#endif
 #endif
 
 #include "icd-spv.h"
 #include "test_common.h"
 #include "vk_layer_config.h"
-#include "vk_layer_data.h"
-#include "vk_format_utils.h"
+#include "containers/custom_containers.h"
+#include "generated/vk_format_utils.h"
+#include "generated/vk_extension_helper.h"
 #include "render.h"
-#include "vk_typemap_helper.h"
-#include "convert_to_renderpass2.h"
+#include "generated/vk_typemap_helper.h"
+#include "utils/convert_to_renderpass2.h"
 
 #include <algorithm>
 #include <cmath>
@@ -117,6 +116,10 @@ static char const bindStateGeomPointSizeShaderText[] = R"glsl(
     layout (points) in;
     layout (points) out;
     layout (max_vertices = 1) out;
+    in gl_PerVertex {
+        vec4 gl_Position;
+        float gl_PointSize;
+    };
     void main() {
        gl_Position = vec4(1);
        gl_PointSize = 1.0;
@@ -173,6 +176,22 @@ static char const bindStateFragSubpassLoadInputText[] = R"glsl(
     }
 )glsl";
 
+static char const bindStateFragColorOutputText[] = R"glsl(
+    #version 460
+    layout(location=0) out vec4 color;
+    void main() {
+        color = vec4(1.0f);
+    }
+)glsl";
+
+[[maybe_unused]] static const char *bindStateMeshShaderText = R"glsl(
+    #version 460
+    #extension GL_EXT_mesh_shader : require // Requires SPIR-V 1.5 (Vulkan 1.2)
+    layout(max_vertices = 3, max_primitives=1) out;
+    layout(triangles) out;
+    void main() {}
+)glsl";
+
 [[maybe_unused]] static const char *bindStateRTShaderText = R"glsl(
     #version 460
     #extension GL_EXT_ray_tracing : require // Requires SPIR-V 1.5 (Vulkan 1.2)
@@ -184,6 +203,156 @@ static char const bindStateFragSubpassLoadInputText[] = R"glsl(
     #extension GL_NV_ray_tracing : require
     void main() {}
 )glsl";
+
+static char const bindShaderTileImageDepthReadSpv[] = R"(
+               OpCapability Shader
+               OpCapability TileImageDepthReadAccessEXT
+               OpExtension "SPV_EXT_shader_tile_image"
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %depth_output
+               OpExecutionMode %main OriginUpperLeft
+               OpExecutionMode %main EarlyFragmentTests
+               OpSource GLSL 450
+               OpSourceExtension "GL_EXT_shader_tile_image"
+               OpName %main "main"
+               OpName %depth "depth"
+               OpName %depth_output "depth_output"
+               OpDecorate %depth_output Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+%_ptr_Function_float = OpTypePointer Function %float
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%depth_output = OpVariable %_ptr_Output_v4float Output
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+      %depth = OpVariable %_ptr_Function_float Function
+          %9 = OpDepthAttachmentReadEXT %float
+               OpStore %depth %9
+         %13 = OpLoad %float %depth
+         %14 = OpCompositeConstruct %v4float %13 %13 %13 %13
+               OpStore %depth_output %14
+               OpReturn
+               OpFunctionEnd
+        )";
+
+static char const bindShaderTileImageStencilReadSpv[] = R"(
+               OpCapability Shader
+               OpCapability TileImageStencilReadAccessEXT
+               OpExtension "SPV_EXT_shader_tile_image"
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %stencil_output
+               OpExecutionMode %main OriginUpperLeft
+               OpExecutionMode %main EarlyFragmentTests
+               OpSource GLSL 450
+               OpSourceExtension "GL_EXT_shader_tile_image"
+               OpName %main "main"
+               OpName %stencil "stencil"
+               OpName %stencil_output "stencil_output"
+               OpDecorate %9 RelaxedPrecision
+               OpDecorate %stencil_output Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+       %uint = OpTypeInt 32 0
+%_ptr_Function_uint = OpTypePointer Function %uint
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%stencil_output = OpVariable %_ptr_Output_v4float Output
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+    %stencil = OpVariable %_ptr_Function_uint Function
+          %9 = OpStencilAttachmentReadEXT %uint
+               OpStore %stencil %9
+         %14 = OpLoad %uint %stencil
+         %15 = OpConvertUToF %float %14
+         %16 = OpCompositeConstruct %v4float %15 %15 %15 %15
+               OpStore %stencil_output %16
+               OpReturn
+               OpFunctionEnd
+        )";
+
+static char const bindShaderTileImageColorReadSpv[] = R"(
+               OpCapability Shader
+               OpCapability TileImageColorReadAccessEXT
+               OpExtension "SPV_EXT_shader_tile_image"
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %color_output
+               OpExecutionMode %main OriginUpperLeft
+               OpSource GLSL 450
+               OpSourceExtension "GL_EXT_shader_tile_image"
+               OpName %main "main"
+               OpName %color_output "color_output"
+               OpName %color_f "color_f"
+               OpDecorate %color_output Location 0
+               OpDecorate %color_f Location 1
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%color_output = OpVariable %_ptr_Output_v4float Output
+         %10 = OpTypeImage %float TileImageDataEXT 0 0 0 2 Unknown
+%_ptr_TileImageEXT_10 = OpTypePointer TileImageEXT %10
+    %color_f = OpVariable %_ptr_TileImageEXT_10 TileImageEXT
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+         %13 = OpLoad %10 %color_f
+         %14 = OpColorAttachmentReadEXT %v4float %13
+               OpStore %color_output %14
+               OpReturn
+               OpFunctionEnd
+        )";
+
+static char const bindShaderTileImageDepthStencilReadSpv[] = R"(
+               OpCapability Shader
+               OpCapability TileImageDepthReadAccessEXT
+               OpCapability TileImageStencilReadAccessEXT
+               OpExtension "SPV_EXT_shader_tile_image"
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %uFragColor
+               OpExecutionMode %main OriginUpperLeft
+               OpExecutionMode %main EarlyFragmentTests
+               OpSource GLSL 450
+               OpSourceExtension "GL_EXT_shader_tile_image"
+               OpName %main "main"
+               OpName %depth "depth"
+               OpName %stencil "stencil"
+               OpName %uFragColor "uFragColor"
+               OpDecorate %13 RelaxedPrecision
+               OpDecorate %uFragColor Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+%_ptr_Function_float = OpTypePointer Function %float
+       %uint = OpTypeInt 32 0
+%_ptr_Function_uint = OpTypePointer Function %uint
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+ %uFragColor = OpVariable %_ptr_Output_v4float Output
+    %float_0 = OpConstant %float 0
+    %float_1 = OpConstant %float 1
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+      %depth = OpVariable %_ptr_Function_float Function
+    %stencil = OpVariable %_ptr_Function_uint Function
+          %9 = OpDepthAttachmentReadEXT %float
+               OpStore %depth %9
+         %13 = OpStencilAttachmentReadEXT %uint
+               OpStore %stencil %13
+         %17 = OpLoad %float %depth
+         %18 = OpLoad %uint %stencil
+         %19 = OpConvertUToF %float %18
+         %22 = OpCompositeConstruct %v4float %17 %19 %float_0 %float_1
+               OpStore %uFragColor %22
+               OpReturn
+               OpFunctionEnd
+        )";
 
 // Static arrays helper
 template <class ElementT, size_t array_size>
@@ -229,7 +398,7 @@ VkImageViewCreateInfo SafeSaneImageViewCreateInfo(VkImage image, VkFormat format
 
 VkImageViewCreateInfo SafeSaneImageViewCreateInfo(const VkImageObj &image, VkFormat format, VkImageAspectFlags aspect_mask);
 
-bool CheckSynchronization2SupportAndInitState(VkRenderFramework *renderFramework);
+bool CheckSynchronization2SupportAndInitState(VkRenderFramework *render_framework, void *phys_dev_pnext = nullptr);
 
 // Dependent "false" type for the static assert, as GCC will evaluate
 // non-dependent static_asserts even for non-instantiated templates
@@ -265,8 +434,7 @@ class VkLayerTest : public VkRenderFramework {
 
     void Init(VkPhysicalDeviceFeatures *features = nullptr, VkPhysicalDeviceFeatures2 *features2 = nullptr,
               const VkCommandPoolCreateFlags flags = 0, void *instance_pnext = nullptr);
-    enum class WsiPreference { Default, Wayland, X11, XCB };
-    void AddSurfaceExtension(const WsiPreference preference = WsiPreference::Default);
+    void AddSurfaceExtension();
     VkCommandBufferObj *CommandBuffer();
     void OOBRayTracingShadersTestBody(bool gpu_assisted);
 
@@ -307,12 +475,12 @@ class VkLayerTest : public VkRenderFramework {
     bool IsDriver(VkDriverId driver_id);
 
   protected:
-    uint32_t m_instance_api_version = 0;
-    uint32_t m_target_api_version = 0;
-    bool m_enableWSI;
+    APIVersion m_instance_api_version = 0;
+    APIVersion m_target_api_version = 0;
+    APIVersion m_attempted_api_version = 0;
 
-    void SetTargetApiVersion(uint32_t target_api_version);
-    uint32_t DeviceValidationVersion() const;
+    void SetTargetApiVersion(APIVersion target_api_version);
+    APIVersion DeviceValidationVersion() const;
     bool LoadDeviceProfileLayer(
         PFN_vkSetPhysicalDeviceFormatPropertiesEXT &fpvkSetPhysicalDeviceFormatPropertiesEXT,
         PFN_vkGetOriginalPhysicalDeviceFormatPropertiesEXT &fpvkGetOriginalPhysicalDeviceFormatPropertiesEXT);
@@ -364,12 +532,6 @@ class VkArmBestPracticesLayerTest : public VkBestPracticesLayerTest {
 };
 class VkNvidiaBestPracticesLayerTest : public VkBestPracticesLayerTest {};
 
-class VkWsiEnabledLayerTest : public VkLayerTest {
-  public:
-  protected:
-    VkWsiEnabledLayerTest() { m_enableWSI = true; }
-};
-
 class VkGpuAssistedLayerTest : public VkLayerTest {
   public:
     VkValidationFeaturesEXT GetValidationFeatures();
@@ -380,7 +542,7 @@ class VkGpuAssistedLayerTest : public VkLayerTest {
     bool CanEnableGpuAV();
 };
 
-class VkDebugPrintfTest : public VkLayerTest {
+class NegativeDebugPrintf : public VkLayerTest {
   public:
     void InitDebugPrintfFramework();
 
@@ -430,30 +592,6 @@ class VkBufferTest {
     VkBuffer VulkanBuffer;
     VkDevice VulkanDevice;
     VkDeviceMemory VulkanMemory;
-};
-
-struct CreatePipelineHelper;
-class VkVerticesObj {
-  public:
-    VkVerticesObj(VkDeviceObj *aVulkanDevice, unsigned aAttributeCount, unsigned aBindingCount, unsigned aByteStride,
-                  VkDeviceSize aVertexCount, const float *aVerticies);
-    ~VkVerticesObj();
-    bool AddVertexInputToPipe(VkPipelineObj &aPipelineObj);
-    bool AddVertexInputToPipeHelpr(CreatePipelineHelper *pipelineHelper);
-    void BindVertexBuffers(VkCommandBuffer aCommandBuffer, unsigned aOffsetCount = 0, VkDeviceSize *aOffsetList = nullptr);
-
-  protected:
-    static uint32_t BindIdGenerator;
-
-    bool BoundCurrent;
-    unsigned AttributeCount;
-    unsigned BindingCount;
-    uint32_t BindId;
-
-    VkPipelineVertexInputStateCreateInfo PipelineVertexInputStateCreateInfo;
-    VkVertexInputAttributeDescription *VertexInputAttributeDescription;
-    VkVertexInputBindingDescription *VertexInputBindingDescription;
-    VkConstantBufferObj VulkanMemoryBuffer;
 };
 
 struct OneOffDescriptorSet {
@@ -868,9 +1006,16 @@ class ThreadTimeoutHelper {
 
     struct Guard {
         Guard(ThreadTimeoutHelper &timeout_helper) : timeout_helper_(timeout_helper) {}
+        Guard(const Guard &) = delete;
+        Guard &operator=(const Guard &) = delete;
+
         ~Guard() { timeout_helper_.OnThreadDone(); }
+
         ThreadTimeoutHelper &timeout_helper_;
     };
+    // Mandatory elision of copy/move operations guarantees the destructor is not called
+    // (even in the presence of copy/move constructor) and the object is constructed directly
+    // into the destination storage: https://en.cppreference.com/w/cpp/language/copy_elision
     Guard ThreadGuard() { return Guard(*this); }
 
   private:
@@ -883,14 +1028,13 @@ class ThreadTimeoutHelper {
 
 void ReleaseNullFence(ThreadTestData *);
 
-void TestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, const VkRenderPassCreateInfo *create_info,
+void TestRenderPassCreate(ErrorMonitor *error_monitor, const vk_testing::Device &device, const VkRenderPassCreateInfo &create_info,
                           bool rp2_supported, const char *rp1_vuid, const char *rp2_vuid);
-void PositiveTestRenderPassCreate(ErrorMonitor *error_monitor, const VkDevice device, const VkRenderPassCreateInfo *create_info,
-                                  bool rp2_supported);
-void PositiveTestRenderPass2KHRCreate(ErrorMonitor *error_monitor, const VkDevice device,
-                                      const VkRenderPassCreateInfo2KHR *create_info);
-void TestRenderPass2KHRCreate(ErrorMonitor *error_monitor, const VkDevice device, const VkRenderPassCreateInfo2KHR *create_info,
-                              const char *rp2_vuid);
+void PositiveTestRenderPassCreate(ErrorMonitor *error_monitor, const vk_testing::Device &device,
+                                  const VkRenderPassCreateInfo &create_info, bool rp2_supported);
+void PositiveTestRenderPass2KHRCreate(const vk_testing::Device &device, const VkRenderPassCreateInfo2KHR &create_info);
+void TestRenderPass2KHRCreate(ErrorMonitor &error_monitor, const vk_testing::Device &device,
+                              const VkRenderPassCreateInfo2KHR &create_info, const std::initializer_list<const char *> &vuids);
 void TestRenderPassBegin(ErrorMonitor *error_monitor, const VkDevice device, const VkCommandBuffer command_buffer,
                          const VkRenderPassBeginInfo *begin_info, bool rp2Supported, const char *rp1_vuid, const char *rp2_vuid);
 
@@ -924,6 +1068,9 @@ VkExternalMemoryHandleTypeFlags FindSupportedExternalMemoryHandleTypes(VkPhysica
                                                                        const VkBufferCreateInfo &buffer_create_info,
                                                                        VkExternalMemoryFeatureFlags requested_features);
 
+bool HandleTypeNeedsDedicatedAllocation(VkPhysicalDevice gpu, const VkBufferCreateInfo &buffer_create_info,
+                                        VkExternalMemoryHandleTypeFlagBits handle_type);
+
 VkExternalMemoryHandleTypeFlags FindSupportedExternalMemoryHandleTypes(VkPhysicalDevice gpu,
                                                                        const VkImageCreateInfo &image_create_info,
                                                                        VkExternalMemoryFeatureFlags requested_features);
@@ -931,6 +1078,9 @@ VkExternalMemoryHandleTypeFlags FindSupportedExternalMemoryHandleTypes(VkPhysica
 VkExternalMemoryHandleTypeFlagsNV FindSupportedExternalMemoryHandleTypesNV(const VkLayerTest &test,
                                                                            const VkImageCreateInfo &image_create_info,
                                                                            VkExternalMemoryFeatureFlagsNV requested_features);
+
+bool HandleTypeNeedsDedicatedAllocation(VkPhysicalDevice gpu, const VkImageCreateInfo &image_create_info,
+                                        VkExternalMemoryHandleTypeFlagBits handle_type);
 
 VkExternalFenceHandleTypeFlags FindSupportedExternalFenceHandleTypes(VkPhysicalDevice gpu,
                                                                      VkExternalFenceFeatureFlags requested_features);
@@ -973,6 +1123,6 @@ void GetSimpleGeometryForAccelerationStructureTests(const VkDeviceObj &device, V
                                                     VkGeometryNV *geometry, VkDeviceSize offset = 0, bool buffer_device_address = false);
 
 std::pair<VkBufferObj &&, VkAccelerationStructureGeometryKHR> GetSimpleAABB(const VkDeviceObj &device,
-                                                                            uint32_t vk_api_version = VK_API_VERSION_1_2);
+                                                                            APIVersion vk_api_version = VK_API_VERSION_1_2);
 
 void print_android(const char *c);

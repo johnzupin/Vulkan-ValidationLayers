@@ -14,12 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import argparse
-import shutil
 import subprocess
 import sys
-import platform
 
 import common_ci
 
@@ -33,7 +29,7 @@ def Build(args):
         common_ci.BuildLoader()
         common_ci.BuildProfileLayer()
         common_ci.BuildMockICD()
-        common_ci.CheckVVLCodegenConsistency(config = config)
+        common_ci.CheckVVL(config = config)
 
     except subprocess.CalledProcessError as proc_error:
         print('Command "%s" failed with return code %s' % (' '.join(proc_error.cmd), proc_error.returncode))
@@ -44,11 +40,9 @@ def Build(args):
 
     sys.exit(0)
 
-def Test(args):
-    config = args.configuration
-
+def Test():
     try:
-        common_ci.RunVVLTests(config = config)
+        common_ci.RunVVLTests()
 
     except subprocess.CalledProcessError as proc_error:
         print('Command "%s" failed with return code %s' % (' '.join(proc_error.cmd), proc_error.returncode))
@@ -66,4 +60,4 @@ if __name__ == '__main__':
     if (args.build):
         Build(args)
     if (args.test):
-        Test(args)
+        Test()
