@@ -1,3 +1,14 @@
+vulkan-validationlayers (1.3.250.0~rc2-1lunarg22.04-1) jammy; urgency=medium
+
+  [ juan-lunarg ]
+  * docs: Update Android build documentation
+  * android: Remove usage of AHB_VALIDATION_SUPPORT
+
+  [ spencer-lunarg ]
+  * layers: Remove false positive for Vertex Input Structs
+
+ -- john <john@odin>  Fri, 26 May 2023 13:32:13 -0600
+
 vulkan-validationlayers (1.3.250.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ spencer-lunarg ]
