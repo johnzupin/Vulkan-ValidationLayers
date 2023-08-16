@@ -24,8 +24,6 @@
 // Can be used by tests to record additional details / description of test
 #define TEST_DESCRIPTION(desc) RecordProperty("description", desc)
 
-#define ICD_SPV_MAGIC 0x07230203
-
 class VkTestFramework : public ::testing::Test {
   public:
     static void InitArgs(int *argc, char *argv[]);
@@ -38,6 +36,7 @@ class VkTestFramework : public ::testing::Test {
 
     static inline int m_phys_device_index = -1;
     static inline ANativeWindow *window = nullptr;
+    static inline bool m_print_vu = false;
 };
 
 class TestEnvironment : public ::testing::Environment {

@@ -16,16 +16,20 @@
  */
 #pragma once
 
-// This file list all VUID that are no possible to validate.
+// This file list all VUID that are not possible to validate.
 // This file should never be included, but here for searchability and statistics
 
 const char* unimplementable_validation[] = {
-    // TODO - This might be able to be rewritten as how VUID-VkWaylandSurfaceCreateInfoKHR-display-01304 is
-    //
-    // Not possible to validate a "valid" handle for fd
-    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5431#issuecomment-1484167442
-    "VUID-vkGetMemoryFdPropertiesKHR-fd-00673",
-
     // sparseAddressSpaceSize can't be tracked in a layer
     // https://gitlab.khronos.org/vulkan/vulkan/-/issues/2403
-    "VUID-vkCreateBuffer-flags-00911"};
+    "VUID-vkCreateBuffer-flags-00911",
+
+    // Some of the early extensions were not created with a feature bit. This means if the extension is used, we considered it
+    // "enabled". This becomes a problem as some coniditional VUIDs depend on the Extension to be enabled, this means we are left
+    // with 2 variations of the VUIDs, but only one is not possible to ever get to.
+    // The following are a list of these:
+    "VUID-VkSubpassDescription2-multisampledRenderToSingleSampled-06869",  // VUID-VkSubpassDescription2-multisampledRenderToSingleSampled-06872
+
+    // This VUID cannot be validated at vkCmdEndDebugUtilsLabelEXT time. Needs spec clarification.
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5671
+    "VUID-vkCmdEndDebugUtilsLabelEXT-commandBuffer-01912"};

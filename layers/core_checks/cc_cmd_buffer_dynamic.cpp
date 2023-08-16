@@ -44,9 +44,9 @@ bool CoreChecks::ValidateDynamicStateSetStatus(const LAST_BOUND_STATE &last_boun
     const CBDynamicFlags unset_status_pipeline =
         (cb_state.dynamic_state_status.pipeline ^ pipeline.dynamic_state) & cb_state.dynamic_state_status.pipeline;
     if (unset_status_pipeline.any()) {
-        skip |= LogError(objlist, vuid.dynamic_state_setting_commands_02859,
+        skip |= LogError(objlist, vuid.dynamic_state_setting_commands_08608,
                          "%s: %s doesn't set up %s, but it calls the related dynamic state setting commands.",
-                         CommandTypeString(cmd_type), report_data->FormatHandle(pipeline.pipeline()).c_str(),
+                         CommandTypeString(cmd_type), FormatHandle(pipeline).c_str(),
                          DynamicStatesToString(unset_status_pipeline).c_str());
     }
 
@@ -74,7 +74,7 @@ bool CoreChecks::ValidateDynamicStateSetStatus(const LAST_BOUND_STATE &last_boun
         skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_STENCIL_OP, objlist, cmd_type,
                                           vuid.dynamic_stencil_op_07848);
         skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE, objlist, cmd_type,
-                                          vuid.vertex_input_binding_stride_04884);
+                                          vuid.vertex_input_binding_stride_04913);
     }
 
     // VK_EXT_extended_dynamic_state2
@@ -141,11 +141,11 @@ bool CoreChecks::ValidateDynamicStateSetStatus(const LAST_BOUND_STATE &last_boun
         skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_COVERAGE_MODULATION_TABLE_NV, objlist, cmd_type,
                                           vuid.dynamic_coverage_modulation_table_07646);
         skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_SHADING_RATE_IMAGE_ENABLE_NV, objlist, cmd_type,
-                                          vuid.dynamic_shading_rate_image_enable_07649);
+                                          vuid.dynamic_shading_rate_image_enable_07647);
         skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_REPRESENTATIVE_FRAGMENT_TEST_ENABLE_NV, objlist,
                                           cmd_type, vuid.dynamic_representative_fragment_test_enable_07648);
         skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_COVERAGE_REDUCTION_MODE_NV, objlist, cmd_type,
-                                          vuid.dynamic_coverage_reduction_mode_07647);
+                                          vuid.dynamic_coverage_reduction_mode_07649);
         skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT, objlist, cmd_type,
                                           vuid.dynamic_sample_locations_06666);
         skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_EXCLUSIVE_SCISSOR_NV, objlist, cmd_type,
@@ -397,16 +397,17 @@ bool CoreChecks::ValidateDrawDynamicState(const LAST_BOUND_STATE &last_bound_sta
     {
         const bool dyn_depth_write_enable = pipeline.IsDynamic(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE);
         const bool dyn_stencil_write_mask = pipeline.IsDynamic(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK);
-        if (IsExtEnabled(device_extensions.vk_ext_shader_tile_image) && (dyn_depth_write_enable || dyn_stencil_write_mask) &&
+        if ((dyn_depth_write_enable || dyn_stencil_write_mask) &&
             (pipeline.fragment_shader_state && pipeline.fragment_shader_state->fragment_shader)) {
+            // TODO - Find better way to get SPIR-V static data
             std::shared_ptr<const SHADER_MODULE_STATE> module_state = pipeline.fragment_shader_state->fragment_shader;
             const safe_VkPipelineShaderStageCreateInfo *stage_ci = pipeline.fragment_shader_state->fragment_shader_ci.get();
-            auto entrypoint = module_state->FindEntrypoint(stage_ci->pName, stage_ci->stage);
+            auto entrypoint = module_state->spirv->FindEntrypoint(stage_ci->pName, stage_ci->stage);
             const bool mode_early_fragment_test =
                 entrypoint && entrypoint->execution_mode.Has(ExecutionModeSet::early_fragment_test_bit);
 
-            if (module_state->static_data_.has_shader_tile_image_depth_read && dyn_depth_write_enable && mode_early_fragment_test &&
-                cb_state.dynamic_state_value.depth_write_enable) {
+            if (module_state->spirv->static_data_.has_shader_tile_image_depth_read && dyn_depth_write_enable &&
+                mode_early_fragment_test && cb_state.dynamic_state_value.depth_write_enable) {
                 const LogObjectList objlist(cb_state.commandBuffer(), pipeline.pipeline());
                 skip |=
                     LogError(objlist, vuid.dynamic_depth_enable_08715,
@@ -415,7 +416,7 @@ bool CoreChecks::ValidateDrawDynamicState(const LAST_BOUND_STATE &last_bound_sta
                              CommandTypeString(cmd_type));
             }
 
-            if (module_state->static_data_.has_shader_tile_image_stencil_read && dyn_stencil_write_mask &&
+            if (module_state->spirv->static_data_.has_shader_tile_image_stencil_read && dyn_stencil_write_mask &&
                 mode_early_fragment_test &&
                 ((cb_state.dynamic_state_value.write_mask_front != 0) || (cb_state.dynamic_state_value.write_mask_back != 0))) {
                 const LogObjectList objlist(cb_state.commandBuffer(), pipeline.pipeline());
@@ -491,11 +492,8 @@ bool CoreChecks::ValidateDrawDynamicState(const LAST_BOUND_STATE &last_bound_sta
                 break;
         }
         if (!compatible_topology) {
-            const char *vuid_error = IsExtEnabled(device_extensions.vk_ext_extended_dynamic_state3)
-                                         ? vuid.primitive_topology_class_ds3_07500
-                                         : vuid.primitive_topology_class_03420;
             const LogObjectList objlist(cb_state.commandBuffer(), pipeline.pipeline());
-            skip |= LogError(objlist, vuid_error,
+            skip |= LogError(objlist, vuid.primitive_topology_class_07500,
                              "%s: the last primitive topology %s state set by vkCmdSetPrimitiveTopology is "
                              "not compatible with the pipeline topology %s.",
                              CommandTypeString(cmd_type), string_VkPrimitiveTopology(dynamic_topology),
@@ -603,11 +601,60 @@ bool CoreChecks::PreCallValidateCmdSetDepthBias(VkCommandBuffer commandBuffer, f
     auto cb_state = GetRead<CMD_BUFFER_STATE>(commandBuffer);
     bool skip = false;
     skip |= ValidateExtendedDynamicState(*cb_state, CMD_SETDEPTHBIAS, VK_TRUE, nullptr, nullptr);
-    if ((depthBiasClamp != 0.0) && (!enabled_features.core.depthBiasClamp)) {
+    if ((depthBiasClamp != 0.0) && !enabled_features.core.depthBiasClamp) {
         skip |= LogError(commandBuffer, "VUID-vkCmdSetDepthBias-depthBiasClamp-00790",
-                         "vkCmdSetDepthBias(): the depthBiasClamp device feature is disabled: the depthBiasClamp parameter must "
-                         "be set to 0.0.");
+                         "vkCmdSetDepthBias(): the depthBiasClamp device feature is disabled but depthBiasClamp is %f.",
+                         depthBiasClamp);
     }
+    return skip;
+}
+
+bool CoreChecks::ValidateDepthBiasRepresentationInfo(const char *caller, const LogObjectList &objlist,
+                                                     const VkDepthBiasRepresentationInfoEXT &depth_bias_representation) const {
+    bool skip = false;
+
+    if ((depth_bias_representation.depthBiasRepresentation ==
+         VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORCE_UNORM_EXT) &&
+        !enabled_features.depth_bias_control_features.leastRepresentableValueForceUnormRepresentation) {
+        skip |= LogError(objlist, "VUID-VkDepthBiasRepresentationInfoEXT-leastRepresentableValueForceUnormRepresentation-08947",
+                         "%s: the "
+                         "VkPhysicalDeviceDepthBiasControlFeaturesEXT::leastRepresentableValueForceUnormRepresentation device "
+                         "feature is disabled but depthBiasRepresentation is %s.",
+                         caller, string_VkDepthBiasRepresentationEXT(depth_bias_representation.depthBiasRepresentation));
+    }
+
+    if ((depth_bias_representation.depthBiasRepresentation == VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT) &&
+        !enabled_features.depth_bias_control_features.floatRepresentation) {
+        skip |= LogError(objlist, "VUID-VkDepthBiasRepresentationInfoEXT-floatRepresentation-08948",
+                         "%s: the VkPhysicalDeviceDepthBiasControlFeaturesEXT::floatReprensentation "
+                         "device feature is disabled but depthBiasRepresentation is %s.",
+                         caller, string_VkDepthBiasRepresentationEXT(depth_bias_representation.depthBiasRepresentation));
+    }
+
+    if ((depth_bias_representation.depthBiasExact != VK_FALSE) && !enabled_features.depth_bias_control_features.depthBiasExact) {
+        skip |= LogError(objlist, "VUID-VkDepthBiasRepresentationInfoEXT-depthBiasExact-08949",
+                         "%s: the VkPhysicalDeviceDepthBiasControlFeaturesEXT::depthBiasExact device "
+                         "feature is disabled but depthBiasExact is %" PRIu32 ".",
+                         caller, depth_bias_representation.depthBiasExact);
+    }
+
+    return skip;
+}
+
+bool CoreChecks::PreCallValidateCmdSetDepthBias2EXT(VkCommandBuffer commandBuffer, const VkDepthBiasInfoEXT *pDepthBiasInfo) const {
+    bool skip = false;
+
+    if ((pDepthBiasInfo->depthBiasClamp != 0.0) && !enabled_features.core.depthBiasClamp) {
+        skip |= LogError(commandBuffer, "VUID-VkDepthBiasInfoEXT-depthBiasClamp-08950",
+                         "vkCmdSetDepthBias2EXT(): the depthBiasClamp device feature is disabled but depthBiasClamp is %f.",
+                         pDepthBiasInfo->depthBiasClamp);
+    }
+
+    if (const auto *depth_bias_representation = LvlFindInChain<VkDepthBiasRepresentationInfoEXT>(pDepthBiasInfo->pNext)) {
+        skip |= ValidateDepthBiasRepresentationInfo("vkCmdSetDepthBias2EXT()", LogObjectList(commandBuffer),
+                                                    *depth_bias_representation);
+    }
+
     return skip;
 }
 
@@ -621,19 +668,16 @@ bool CoreChecks::PreCallValidateCmdSetDepthBounds(VkCommandBuffer commandBuffer,
     bool skip = false;
     skip |= ValidateExtendedDynamicState(*cb_state, CMD_SETDEPTHBOUNDS, VK_TRUE, nullptr, nullptr);
 
-    // The extension was not created with a feature bit whichs prevents displaying the 2 variations of the VUIDs
     if (!IsExtEnabled(device_extensions.vk_ext_depth_range_unrestricted)) {
         if (!(minDepthBounds >= 0.0) || !(minDepthBounds <= 1.0)) {
-            // Also VUID-vkCmdSetDepthBounds-minDepthBounds-00600
-            skip |= LogError(commandBuffer, "VUID-vkCmdSetDepthBounds-minDepthBounds-02508",
+            skip |= LogError(commandBuffer, "VUID-vkCmdSetDepthBounds-minDepthBounds-00600",
                              "vkCmdSetDepthBounds(): VK_EXT_depth_range_unrestricted extension is not enabled and minDepthBounds "
                              "(=%f) is not within the [0.0, 1.0] range.",
                              minDepthBounds);
         }
 
         if (!(maxDepthBounds >= 0.0) || !(maxDepthBounds <= 1.0)) {
-            // Also VUID-vkCmdSetDepthBounds-maxDepthBounds-00601
-            skip |= LogError(commandBuffer, "VUID-vkCmdSetDepthBounds-maxDepthBounds-02509",
+            skip |= LogError(commandBuffer, "VUID-vkCmdSetDepthBounds-maxDepthBounds-00601",
                              "vkCmdSetDepthBounds(): VK_EXT_depth_range_unrestricted extension is not enabled and maxDepthBounds "
                              "(=%f) is not within the [0.0, 1.0] range.",
                              maxDepthBounds);
@@ -741,7 +785,7 @@ bool CoreChecks::PreCallValidateCmdSetRasterizerDiscardEnableEXT(VkCommandBuffer
     return ValidateExtendedDynamicState(*cb_state, CMD_SETRASTERIZERDISCARDENABLEEXT,
                                         enabled_features.extended_dynamic_state2_features.extendedDynamicState2 ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetRasterizerDiscardEnable-None-08548", "extendedDynamicState2 or shaderObject");
+                                        "VUID-vkCmdSetRasterizerDiscardEnable-None-08970", "extendedDynamicState2 or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetRasterizerDiscardEnable(VkCommandBuffer commandBuffer,
@@ -755,7 +799,7 @@ bool CoreChecks::PreCallValidateCmdSetDepthBiasEnableEXT(VkCommandBuffer command
     return ValidateExtendedDynamicState(*cb_state, CMD_SETDEPTHBIASENABLEEXT,
                                         enabled_features.extended_dynamic_state2_features.extendedDynamicState2 ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetDepthBiasEnable-None-08568", "extendedDynamicState2 or shaderObject");
+                                        "VUID-vkCmdSetDepthBiasEnable-None-08970", "extendedDynamicState2 or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetDepthBiasEnable(VkCommandBuffer commandBuffer, VkBool32 depthBiasEnable) const {
@@ -769,7 +813,7 @@ bool CoreChecks::PreCallValidateCmdSetPrimitiveRestartEnableEXT(VkCommandBuffer 
     return ValidateExtendedDynamicState(*cb_state, CMD_SETPRIMITIVERESTARTENABLEEXT,
                                         enabled_features.extended_dynamic_state2_features.extendedDynamicState2 ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetPrimitiveRestartEnable-None-08500", "extendedDynamicState2 or shaderObject");
+                                        "VUID-vkCmdSetPrimitiveRestartEnable-None-08970", "extendedDynamicState2 or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetPrimitiveRestartEnable(VkCommandBuffer commandBuffer, VkBool32 primitiveRestartEnable) const {
@@ -782,7 +826,7 @@ bool CoreChecks::PreCallValidateCmdSetCullModeEXT(VkCommandBuffer commandBuffer,
     return ValidateExtendedDynamicState(*cb_state, CMD_SETCULLMODEEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetCullMode-None-08564", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetCullMode-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetCullMode(VkCommandBuffer commandBuffer, VkCullModeFlags cullMode) const {
@@ -795,7 +839,7 @@ bool CoreChecks::PreCallValidateCmdSetFrontFaceEXT(VkCommandBuffer commandBuffer
     return ValidateExtendedDynamicState(*cb_state, CMD_SETFRONTFACEEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetFrontFace-None-08562", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetFrontFace-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetFrontFace(VkCommandBuffer commandBuffer, VkFrontFace frontFace) const {
@@ -809,7 +853,7 @@ bool CoreChecks::PreCallValidateCmdSetPrimitiveTopologyEXT(VkCommandBuffer comma
     return ValidateExtendedDynamicState(*cb_state, CMD_SETPRIMITIVETOPOLOGYEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetPrimitiveTopology-None-08502", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetPrimitiveTopology-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetPrimitiveTopology(VkCommandBuffer commandBuffer,
@@ -825,7 +869,7 @@ bool CoreChecks::PreCallValidateCmdSetViewportWithCountEXT(VkCommandBuffer comma
     skip = ValidateExtendedDynamicState(*cb_state, CMD_SETVIEWPORTWITHCOUNTEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetViewportWithCount-None-08588", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetViewportWithCount-None-08971", "extendedDynamicState or shaderObject");
     skip |= ForbidInheritedViewportScissor(*cb_state, "VUID-vkCmdSetViewportWithCount-commandBuffer-04819",
                                            CMD_SETVIEWPORTWITHCOUNTEXT);
 
@@ -850,7 +894,7 @@ bool CoreChecks::PreCallValidateCmdSetScissorWithCountEXT(VkCommandBuffer comman
     skip = ValidateExtendedDynamicState(*cb_state, CMD_SETSCISSORWITHCOUNTEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetScissorWithCount-None-08590", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetScissorWithCount-None-08971", "extendedDynamicState or shaderObject");
     skip |=
         ForbidInheritedViewportScissor(*cb_state, "VUID-vkCmdSetScissorWithCount-commandBuffer-04820", CMD_SETSCISSORWITHCOUNTEXT);
 
@@ -872,7 +916,7 @@ bool CoreChecks::PreCallValidateCmdSetDepthTestEnableEXT(VkCommandBuffer command
     return ValidateExtendedDynamicState(*cb_state, CMD_SETDEPTHTESTENABLEEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetDepthTestEnable-None-08516", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetDepthTestEnable-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetDepthTestEnable(VkCommandBuffer commandBuffer, VkBool32 depthTestEnable) const {
@@ -885,7 +929,7 @@ bool CoreChecks::PreCallValidateCmdSetDepthWriteEnableEXT(VkCommandBuffer comman
     return ValidateExtendedDynamicState(*cb_state, CMD_SETDEPTHWRITEENABLEEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetDepthWriteEnable-None-08520", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetDepthWriteEnable-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetDepthWriteEnable(VkCommandBuffer commandBuffer, VkBool32 depthWriteEnable) const {
@@ -898,7 +942,7 @@ bool CoreChecks::PreCallValidateCmdSetDepthCompareOpEXT(VkCommandBuffer commandB
     return ValidateExtendedDynamicState(*cb_state, CMD_SETDEPTHCOMPAREOPEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetDepthCompareOp-None-08518", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetDepthCompareOp-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetDepthCompareOp(VkCommandBuffer commandBuffer, VkCompareOp depthCompareOp) const {
@@ -912,7 +956,7 @@ bool CoreChecks::PreCallValidateCmdSetDepthBoundsTestEnableEXT(VkCommandBuffer c
     return ValidateExtendedDynamicState(*cb_state, CMD_SETDEPTHBOUNDSTESTENABLEEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetDepthBoundsTestEnable-None-08510", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetDepthBoundsTestEnable-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetDepthBoundsTestEnable(VkCommandBuffer commandBuffer, VkBool32 depthBoundsTestEnable) const {
@@ -925,7 +969,7 @@ bool CoreChecks::PreCallValidateCmdSetStencilTestEnableEXT(VkCommandBuffer comma
     return ValidateExtendedDynamicState(*cb_state, CMD_SETSTENCILTESTENABLEEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetStencilTestEnable-None-08512", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetStencilTestEnable-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetStencilTestEnable(VkCommandBuffer commandBuffer, VkBool32 stencilTestEnable) const {
@@ -939,7 +983,7 @@ bool CoreChecks::PreCallValidateCmdSetStencilOpEXT(VkCommandBuffer commandBuffer
     return ValidateExtendedDynamicState(*cb_state, CMD_SETSTENCILOPEXT,
                                         enabled_features.extended_dynamic_state_features.extendedDynamicState ||
                                             enabled_features.shader_object_features.shaderObject,
-                                        "VUID-vkCmdSetStencilOp-None-08514", "extendedDynamicState or shaderObject");
+                                        "VUID-vkCmdSetStencilOp-None-08971", "extendedDynamicState or shaderObject");
 }
 
 bool CoreChecks::PreCallValidateCmdSetStencilOp(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, VkStencilOp failOp,

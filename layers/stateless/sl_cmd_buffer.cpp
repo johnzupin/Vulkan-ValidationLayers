@@ -31,15 +31,35 @@ bool StatelessValidation::manual_PreCallValidateCmdBindIndexBuffer(VkCommandBuff
                                                                    VkDeviceSize offset, VkIndexType indexType) const {
     bool skip = false;
 
-    if (indexType == VK_INDEX_TYPE_NONE_NV) {
-        skip |= LogError(commandBuffer, "VUID-vkCmdBindIndexBuffer-indexType-02507",
-                         "vkCmdBindIndexBuffer() indexType must not be VK_INDEX_TYPE_NONE_NV.");
+    if (indexType == VK_INDEX_TYPE_NONE_KHR) {
+        skip |= LogError(commandBuffer, "VUID-vkCmdBindIndexBuffer-indexType-08786",
+                         "vkCmdBindIndexBuffer() indexType must not be VK_INDEX_TYPE_NONE_KHR.");
     }
 
     const auto *index_type_uint8_features = LvlFindInChain<VkPhysicalDeviceIndexTypeUint8FeaturesEXT>(device_createinfo_pnext);
     if (indexType == VK_INDEX_TYPE_UINT8_EXT && (!index_type_uint8_features || !index_type_uint8_features->indexTypeUint8)) {
-        skip |= LogError(commandBuffer, "VUID-vkCmdBindIndexBuffer-indexType-02765",
+        skip |= LogError(commandBuffer, "VUID-vkCmdBindIndexBuffer-indexType-08787",
                          "vkCmdBindIndexBuffer() indexType is VK_INDEX_TYPE_UINT8_EXT but indexTypeUint8 feature is not enabled.");
+    }
+
+    return skip;
+}
+
+bool StatelessValidation::manual_PreCallValidateCmdBindIndexBuffer2KHR(VkCommandBuffer commandBuffer, VkBuffer buffer,
+                                                                       VkDeviceSize offset, VkDeviceSize size,
+                                                                       VkIndexType indexType) const {
+    bool skip = false;
+
+    if (indexType == VK_INDEX_TYPE_NONE_KHR) {
+        skip |= LogError(commandBuffer, "VUID-vkCmdBindIndexBuffer2KHR-indexType-08786",
+                         "vkCmdBindIndexBuffer2KHR() indexType must not be VK_INDEX_TYPE_NONE_KHR.");
+    } else if (indexType == VK_INDEX_TYPE_UINT8_EXT) {
+        const auto *index_type_uint8_features = LvlFindInChain<VkPhysicalDeviceIndexTypeUint8FeaturesEXT>(device_createinfo_pnext);
+        if (!index_type_uint8_features || !index_type_uint8_features->indexTypeUint8) {
+            skip |= LogError(
+                commandBuffer, "VUID-vkCmdBindIndexBuffer2KHR-indexType-08787",
+                "vkCmdBindIndexBuffer2KHR() indexType is VK_INDEX_TYPE_UINT8_EXT but indexTypeUint8 feature is not enabled.");
+        }
     }
 
     return skip;
@@ -227,9 +247,8 @@ bool StatelessValidation::ValidateCmdBindVertexBuffers2(VkCommandBuffer commandB
                     not_null_msg = "pSizes is not NULL";
                 else
                     not_null_msg = "pStrides is not NULL";
-                const char *vuid_breach_msg = "%s: %s, so bindingCount must be greater that 0.";
-                skip |= LogError(commandBuffer, "VUID-vkCmdBindVertexBuffers2-bindingCount-arraylength", vuid_breach_msg, api_call,
-                                 not_null_msg);
+                skip |= LogError(commandBuffer, "VUID-vkCmdBindVertexBuffers2-bindingCount-arraylength",
+                                 "%s: %s, so bindingCount must be greater than 0.", api_call, not_null_msg);
             }
         }
     }
@@ -1374,11 +1393,9 @@ bool StatelessValidation::manual_PreCallValidateViewport(const VkViewport &viewp
         }
     }
 
-    // The extension was not created with a feature bit whichs prevents displaying the 2 variations of the VUIDs
     if (!IsExtEnabled(device_extensions.vk_ext_depth_range_unrestricted)) {
         // minDepth
         if (!(viewport.minDepth >= 0.0) || !(viewport.minDepth <= 1.0)) {
-            // Also VUID-VkViewport-minDepth-02540
             skip |= LogError(object, "VUID-VkViewport-minDepth-01234",
                              "%s: VK_EXT_depth_range_unrestricted extension is not enabled and %s.minDepth (=%f) is not within the "
                              "[0.0, 1.0] range.",
@@ -1387,7 +1404,6 @@ bool StatelessValidation::manual_PreCallValidateViewport(const VkViewport &viewp
 
         // maxDepth
         if (!(viewport.maxDepth >= 0.0) || !(viewport.maxDepth <= 1.0)) {
-            // Also VUID-VkViewport-maxDepth-02541
             skip |= LogError(object, "VUID-VkViewport-maxDepth-01235",
                              "%s: VK_EXT_depth_range_unrestricted extension is not enabled and %s.maxDepth (=%f) is not within the "
                              "[0.0, 1.0] range.",
@@ -1407,7 +1423,7 @@ bool StatelessValidation::manual_PreCallValidateFreeCommandBuffers(VkDevice devi
     // This is an array of handles, where the elements are allowed to be VK_NULL_HANDLE, and does not require any validation beyond
     // ValidateArray()
     skip |= ValidateArray("vkFreeCommandBuffers", "commandBufferCount", "pCommandBuffers", commandBufferCount, &pCommandBuffers,
-                          true, true, kVUIDUndefined, kVUIDUndefined);
+                          true, true, kVUIDUndefined, "VUID-vkFreeCommandBuffers-pCommandBuffers-00048");
     return skip;
 }
 

@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "generated/lvt_function_pointers.h"
+#include "generated/vk_function_pointers.h"
 #include "error_monitor.h"
 
 #if defined(VVL_TESTS_USE_CMAKE)
@@ -86,24 +86,14 @@ class VkDepthStencilObj;
 typedef enum {
     kGalaxyS10,
     kPixel3,
-    kPixelC,
-    kNexusPlayer,
-    kShieldTV,
     kShieldTVb,
-    kPixel3aXL,
-    kPixel2XL,
     kMockICD,
 } PlatformType;
 
 const std::unordered_map<PlatformType, std::string, std::hash<int>> vk_gpu_table = {
     {kGalaxyS10, "Mali-G76"},
     {kPixel3, "Adreno (TM) 630"},
-    {kPixelC, "NVIDIA Tegra X1"},
-    {kNexusPlayer, "PowerVR Rogue G6430"},
-    {kShieldTV, "NVIDIA Tegra X1 (nvgpu)"},
     {kShieldTVb, "NVIDIA Tegra X1 (rev B) (nvgpu)"},
-    {kPixel3aXL, "Adreno (TM) 615"},
-    {kPixel2XL, "Adreno (TM) 540"},
     {kMockICD, "Vulkan Mock Device"},
 };
 struct SurfaceContext {
@@ -219,7 +209,7 @@ class VkRenderFramework : public VkTestFramework {
     std::vector<VkLayerProperties> available_layers_; // allow caching of available layers
     std::vector<VkExtensionProperties> available_extensions_; // allow caching of available instance extensions
 
-    ErrorMonitor monitor_;
+    ErrorMonitor monitor_ = ErrorMonitor(m_print_vu);
     ErrorMonitor *m_errorMonitor = &monitor_;  // TODO: Removing this properly is it's own PR. It's a big change.
 
     VkApplicationInfo app_info_;
@@ -255,16 +245,6 @@ class VkRenderFramework : public VkTestFramework {
 
     std::vector<VkViewport> m_viewports;
     std::vector<VkRect2D> m_scissors;
-    float m_lineWidth;
-    float m_depthBiasConstantFactor;
-    float m_depthBiasClamp;
-    float m_depthBiasSlopeFactor;
-    float m_blendConstants[4];
-    float m_minDepthBounds;
-    float m_maxDepthBounds;
-    uint32_t m_compareMask;
-    uint32_t m_writeMask;
-    uint32_t m_reference;
     bool m_addRenderPassSelfDependency;
     std::vector<VkSubpassDependency> m_additionalSubpassDependencies;
     std::vector<VkClearValue> m_renderPassClearValues;
@@ -289,7 +269,7 @@ class VkRenderFramework : public VkTestFramework {
     // Device extensions to enable
     std::vector<const char *> m_device_extension_names;
 
-    VkValidationFeaturesEXT validation_features;
+    VkValidationFeaturesEXT m_validation_features;
     VkValidationFeatureEnableEXT validation_enable_all[4] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
                                                              VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
                                                              VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
@@ -439,7 +419,7 @@ class VkImageObj : public vk_testing::Image {
 
     void Layout(VkImageLayout const layout) { m_descriptorImageInfo.imageLayout = layout; }
 
-    VkDeviceMemory memory() const { return Image::memory().handle(); }
+    VkDeviceMemory Memory() const { return Image::memory().handle(); }
 
     void *MapMemory() { return Image::memory().map(); }
 
@@ -459,21 +439,16 @@ class VkImageObj : public vk_testing::Image {
 
     VkImage image() const { return handle(); }
 
-    VkImageViewCreateInfo TargetViewCI(VkFormat format) const {
+    VkImageViewCreateInfo BasicViewCreatInfo(VkImageAspectFlags aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT) const {
         auto ci = LvlInitStruct<VkImageViewCreateInfo>();
-        ci.format = format;
+        ci.image = handle();
+        ci.format = format();
         ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
         ci.components.r = VK_COMPONENT_SWIZZLE_R;
         ci.components.g = VK_COMPONENT_SWIZZLE_G;
         ci.components.b = VK_COMPONENT_SWIZZLE_B;
         ci.components.a = VK_COMPONENT_SWIZZLE_A;
-        ci.subresourceRange = {
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            0,                          // base mip level
-            VK_REMAINING_MIP_LEVELS,    // level count
-            0,                          // base array layer
-            VK_REMAINING_ARRAY_LAYERS,  // layer count
-        };
+        ci.subresourceRange = {aspect_mask, 0, 1, 0, 1};
         ci.flags = 0;
         return ci;
     }
@@ -617,7 +592,7 @@ class VkShaderObj : public vk_testing::ShaderModule {
     // optional arguments listed order of most likely to be changed manually by a test
     VkShaderObj(VkRenderFramework *framework, const char *source, VkShaderStageFlagBits stage,
                 const spv_target_env env = SPV_ENV_VULKAN_1_0, SpvSourceType source_type = SPV_SOURCE_GLSL,
-                const VkSpecializationInfo *spec_info = nullptr, char const *name = "main", bool debug = false);
+                const VkSpecializationInfo *spec_info = nullptr, char const *entry_point = "main", bool debug = false);
     VkPipelineShaderStageCreateInfo const &GetStageCreateInfo() const;
 
     bool InitFromGLSL(bool debug = false);
@@ -627,14 +602,14 @@ class VkShaderObj : public vk_testing::ShaderModule {
 
     // These functions return a pointer to a newly created _and initialized_ VkShaderObj if initialization was successful.
     // Otherwise, {} is returned.
-    static std::unique_ptr<VkShaderObj> CreateFromGLSL(VkRenderFramework &framework, VkShaderStageFlagBits stage,
-                                                       const std::string &code, const char *entry_point = "main",
+    static std::unique_ptr<VkShaderObj> CreateFromGLSL(VkRenderFramework *framework, const char *source,
+                                                       VkShaderStageFlagBits stage, const spv_target_env = SPV_ENV_VULKAN_1_0,
                                                        const VkSpecializationInfo *spec_info = nullptr,
-                                                       const spv_target_env = SPV_ENV_VULKAN_1_0, bool debug = false);
-    static std::unique_ptr<VkShaderObj> CreateFromASM(VkRenderFramework &framework, VkShaderStageFlagBits stage,
-                                                      const std::string &code, const char *entry_point = "main",
+                                                       const char *entry_point = "main", bool debug = false);
+    static std::unique_ptr<VkShaderObj> CreateFromASM(VkRenderFramework *framework, const char *source, VkShaderStageFlagBits stage,
+                                                      const spv_target_env spv_env = SPV_ENV_VULKAN_1_0,
                                                       const VkSpecializationInfo *spec_info = nullptr,
-                                                      const spv_target_env spv_env = SPV_ENV_VULKAN_1_0);
+                                                      const char *entry_point = "main");
 
 #if defined(VVL_TESTS_USE_CMAKE)
     struct GlslangTargetEnv {

@@ -1,32 +1,34 @@
+// *** THIS FILE IS GENERATED - DO NOT EDIT ***
+// See layer_chassis_dispatch_generator.py for modifications
 
+/***************************************************************************
+*
+* Copyright (c) 2015-2023 The Khronos Group Inc.
+* Copyright (c) 2015-2023 Valve Corporation
+* Copyright (c) 2015-2023 LunarG, Inc.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+****************************************************************************/
 
-// This file is ***GENERATED***.  Do Not Edit.
-// See layer_chassis_dispatch_generator.py for modifications.
+// NOLINTBEGIN
 
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 #pragma once
 
-#if defined(LAYER_CHASSIS_CAN_WRAP_HANDLES)
 extern bool wrap_handles;
-#else
-extern bool wrap_handles;
-#endif
+
+class ValidationObject;
+void WrapPnextChainHandles(ValidationObject *layer_data, const void *pNext);
+
 VkResult DispatchCreateInstance(
     const VkInstanceCreateInfo*                 pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1556,6 +1558,20 @@ VkResult DispatchUnmapMemory2KHR(
     VkDevice                                    device,
     const VkMemoryUnmapInfoKHR*                 pMemoryUnmapInfo);
 #ifdef VK_ENABLE_BETA_EXTENSIONS
+VkResult DispatchGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    const VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR* pQualityLevelInfo,
+    VkVideoEncodeQualityLevelPropertiesKHR*     pQualityLevelProperties);
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+VkResult DispatchGetEncodedVideoSessionParametersKHR(
+    VkDevice                                    device,
+    const VkVideoEncodeSessionParametersGetInfoKHR* pVideoSessionParametersInfo,
+    VkVideoEncodeSessionParametersFeedbackInfoKHR* pFeedbackInfo,
+    size_t*                                     pDataSize,
+    void*                                       pData);
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 void DispatchCmdEncodeVideoKHR(
     VkCommandBuffer                             commandBuffer,
     const VkVideoEncodeInfoKHR*                 pEncodeInfo);
@@ -1630,6 +1646,29 @@ void DispatchGetDeviceImageSparseMemoryRequirementsKHR(
     const VkDeviceImageMemoryRequirements*      pInfo,
     uint32_t*                                   pSparseMemoryRequirementCount,
     VkSparseImageMemoryRequirements2*           pSparseMemoryRequirements);
+void DispatchCmdBindIndexBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkDeviceSize                                size,
+    VkIndexType                                 indexType);
+void DispatchGetRenderingAreaGranularityKHR(
+    VkDevice                                    device,
+    const VkRenderingAreaInfoKHR*               pRenderingAreaInfo,
+    VkExtent2D*                                 pGranularity);
+void DispatchGetDeviceImageSubresourceLayoutKHR(
+    VkDevice                                    device,
+    const VkDeviceImageSubresourceInfoKHR*      pInfo,
+    VkSubresourceLayout2KHR*                    pLayout);
+void DispatchGetImageSubresourceLayout2KHR(
+    VkDevice                                    device,
+    VkImage                                     image,
+    const VkImageSubresource2KHR*               pSubresource,
+    VkSubresourceLayout2KHR*                    pLayout);
+VkResult DispatchGetPhysicalDeviceCooperativeMatrixPropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkCooperativeMatrixPropertiesKHR*           pProperties);
 VkResult DispatchCreateDebugReportCallbackEXT(
     VkInstance                                  instance,
     const VkDebugReportCallbackCreateInfoEXT*   pCreateInfo,
@@ -1918,6 +1957,51 @@ VkResult DispatchGetMemoryAndroidHardwareBufferANDROID(
     const VkMemoryGetAndroidHardwareBufferInfoANDROID* pInfo,
     struct AHardwareBuffer**                    pBuffer);
 #endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+VkResult DispatchCreateExecutionGraphPipelinesAMDX(
+    VkDevice                                    device,
+    VkPipelineCache                             pipelineCache,
+    uint32_t                                    createInfoCount,
+    const VkExecutionGraphPipelineCreateInfoAMDX* pCreateInfos,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPipeline*                                 pPipelines);
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+VkResult DispatchGetExecutionGraphPipelineScratchSizeAMDX(
+    VkDevice                                    device,
+    VkPipeline                                  executionGraph,
+    VkExecutionGraphPipelineScratchSizeAMDX*    pSizeInfo);
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+VkResult DispatchGetExecutionGraphPipelineNodeIndexAMDX(
+    VkDevice                                    device,
+    VkPipeline                                  executionGraph,
+    const VkPipelineShaderStageNodeCreateInfoAMDX* pNodeInfo,
+    uint32_t*                                   pNodeIndex);
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+void DispatchCmdInitializeGraphScratchMemoryAMDX(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             scratch);
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+void DispatchCmdDispatchGraphAMDX(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             scratch,
+    const VkDispatchGraphCountInfoAMDX*         pCountInfo);
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+void DispatchCmdDispatchGraphIndirectAMDX(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             scratch,
+    const VkDispatchGraphCountInfoAMDX*         pCountInfo);
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+void DispatchCmdDispatchGraphIndirectCountAMDX(
+    VkCommandBuffer                             commandBuffer,
+    VkDeviceAddress                             scratch,
+    VkDeviceAddress                             countInfo);
+#endif // VK_ENABLE_BETA_EXTENSIONS
 void DispatchCmdSetSampleLocationsEXT(
     VkCommandBuffer                             commandBuffer,
     const VkSampleLocationsInfoEXT*             pSampleLocationsInfo);
@@ -2248,6 +2332,24 @@ void DispatchCmdSetStencilOpEXT(
     VkStencilOp                                 passOp,
     VkStencilOp                                 depthFailOp,
     VkCompareOp                                 compareOp);
+VkResult DispatchCopyMemoryToImageEXT(
+    VkDevice                                    device,
+    const VkCopyMemoryToImageInfoEXT*           pCopyMemoryToImageInfo);
+VkResult DispatchCopyImageToMemoryEXT(
+    VkDevice                                    device,
+    const VkCopyImageToMemoryInfoEXT*           pCopyImageToMemoryInfo);
+VkResult DispatchCopyImageToImageEXT(
+    VkDevice                                    device,
+    const VkCopyImageToImageInfoEXT*            pCopyImageToImageInfo);
+VkResult DispatchTransitionImageLayoutEXT(
+    VkDevice                                    device,
+    uint32_t                                    transitionCount,
+    const VkHostImageLayoutTransitionInfoEXT*   pTransitions);
+void DispatchGetImageSubresourceLayout2EXT(
+    VkDevice                                    device,
+    VkImage                                     image,
+    const VkImageSubresource2KHR*               pSubresource,
+    VkSubresourceLayout2KHR*                    pLayout);
 VkResult DispatchReleaseSwapchainImagesEXT(
     VkDevice                                    device,
     const VkReleaseSwapchainImagesInfoEXT*      pReleaseInfo);
@@ -2276,6 +2378,9 @@ void DispatchDestroyIndirectCommandsLayoutNV(
     VkDevice                                    device,
     VkIndirectCommandsLayoutNV                  indirectCommandsLayout,
     const VkAllocationCallbacks*                pAllocator);
+void DispatchCmdSetDepthBias2EXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkDepthBiasInfoEXT*                   pDepthBiasInfo);
 VkResult DispatchAcquireDrmDisplayEXT(
     VkPhysicalDevice                            physicalDevice,
     int32_t                                     drmFd,
@@ -2366,11 +2471,6 @@ void DispatchCmdSetFragmentShadingRateEnumNV(
     VkCommandBuffer                             commandBuffer,
     VkFragmentShadingRateNV                     shadingRate,
     const VkFragmentShadingRateCombinerOpKHR    combinerOps[2]);
-void DispatchGetImageSubresourceLayout2EXT(
-    VkDevice                                    device,
-    VkImage                                     image,
-    const VkImageSubresource2EXT*               pSubresource,
-    VkSubresourceLayout2EXT*                    pLayout);
 VkResult DispatchGetDeviceFaultInfoEXT(
     VkDevice                                    device,
     VkDeviceFaultCountsEXT*                     pFaultCounts,
@@ -2631,6 +2731,17 @@ void DispatchCmdDecompressMemoryIndirectCountNV(
     VkDeviceAddress                             indirectCommandsAddress,
     VkDeviceAddress                             indirectCommandsCountAddress,
     uint32_t                                    stride);
+void DispatchGetPipelineIndirectMemoryRequirementsNV(
+    VkDevice                                    device,
+    const VkComputePipelineCreateInfo*          pCreateInfo,
+    VkMemoryRequirements2*                      pMemoryRequirements);
+void DispatchCmdUpdatePipelineIndirectBufferNV(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineBindPoint                         pipelineBindPoint,
+    VkPipeline                                  pipeline);
+VkDeviceAddress DispatchGetPipelineIndirectDeviceAddressNV(
+    VkDevice                                    device,
+    const VkPipelineIndirectDeviceAddressInfoNV* pInfo);
 void DispatchCmdSetTessellationDomainOriginEXT(
     VkCommandBuffer                             commandBuffer,
     VkTessellationDomainOrigin                  domainOrigin);
@@ -2800,6 +2911,12 @@ VkResult DispatchGetDynamicRenderingTilePropertiesQCOM(
 void DispatchCmdSetAttachmentFeedbackLoopEnableEXT(
     VkCommandBuffer                             commandBuffer,
     VkImageAspectFlags                          aspectMask);
+#ifdef VK_USE_PLATFORM_SCREEN_QNX
+VkResult DispatchGetScreenBufferPropertiesQNX(
+    VkDevice                                    device,
+    const struct _screen_buffer*                buffer,
+    VkScreenBufferPropertiesQNX*                pProperties);
+#endif // VK_USE_PLATFORM_SCREEN_QNX
 VkResult DispatchCreateAccelerationStructureKHR(
     VkDevice                                    device,
     const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
@@ -2934,3 +3051,5 @@ void DispatchCmdDrawMeshTasksIndirectCountEXT(
     VkDeviceSize                                countBufferOffset,
     uint32_t                                    maxDrawCount,
     uint32_t                                    stride);
+
+// NOLINTEND

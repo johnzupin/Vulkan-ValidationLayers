@@ -20,7 +20,6 @@
  */
 
 #include <fstream>
-#include <string>
 #include <sys/stat.h>
 #include <vector>
 
@@ -31,6 +30,7 @@
 #include "generated/vk_enum_string_helper.h"
 #include "generated/chassis.h"
 #include "core_validation.h"
+#include "utils/shader_utils.h"
 
 bool CoreChecks::ValidateDeviceQueueFamily(uint32_t queue_family, const char *cmd_name, const char *parameter_name,
                                            const char *error_code, bool optional = false) const {
@@ -76,8 +76,8 @@ bool CoreChecks::ValidatePhysicalDeviceQueueFamilies(uint32_t queue_family_count
                         LogError(objlist, vuid,
                                  "%s: %s (= %" PRIu32
                                  ") is not one of the queue families supported by the parent PhysicalDevice %s of this device %s.",
-                                 cmd_name, parameter_name.c_str(), queue_families[i],
-                                 report_data->FormatHandle(physical_device).c_str(), report_data->FormatHandle(device).c_str());
+                                 cmd_name, parameter_name.c_str(), queue_families[i], FormatHandle(physical_device).c_str(),
+                                 FormatHandle(device).c_str());
                 }
             }
         }
@@ -145,7 +145,7 @@ bool CoreChecks::ValidateDeviceMaskToCommandBuffer(const CMD_BUFFER_STATE &cb_st
     bool skip = false;
     if ((deviceMask & cb_state.initial_device_mask) != deviceMask) {
         skip |= LogError(objlist, VUID, "deviceMask(0x%" PRIx32 ") is not a subset of %s initial device mask(0x%" PRIx32 ").",
-                         deviceMask, report_data->FormatHandle(cb_state.commandBuffer()).c_str(), cb_state.initial_device_mask);
+                         deviceMask, FormatHandle(cb_state).c_str(), cb_state.initial_device_mask);
     }
     return skip;
 }
@@ -153,10 +153,9 @@ bool CoreChecks::ValidateDeviceMaskToCommandBuffer(const CMD_BUFFER_STATE &cb_st
 bool CoreChecks::ValidateDeviceMaskToRenderPass(const CMD_BUFFER_STATE &cb_state, uint32_t deviceMask, const char *VUID) const {
     bool skip = false;
     if ((deviceMask & cb_state.active_render_pass_device_mask) != deviceMask) {
-        skip |=
-            LogError(cb_state.commandBuffer(), VUID, "deviceMask(0x%" PRIx32 ") is not a subset of %s device mask(0x%" PRIx32 ").",
-                     deviceMask, report_data->FormatHandle(cb_state.activeRenderPass->renderPass()).c_str(),
-                     cb_state.active_render_pass_device_mask);
+        skip |= LogError(cb_state.commandBuffer(), VUID,
+                         "deviceMask(0x%" PRIx32 ") is not a subset of %s device mask(0x%" PRIx32 ").", deviceMask,
+                         FormatHandle(cb_state.activeRenderPass->renderPass()).c_str(), cb_state.active_render_pass_device_mask);
     }
     return skip;
 }
@@ -209,7 +208,7 @@ bool CoreChecks::ValidateDeviceQueueCreateInfos(const PHYSICAL_DEVICE_STATE *pd_
             // Vulkan 1.0 didn't have protected memory so always needed unique info
             create_flags flags = {requested_queue_family, not_used};
             if (queue_family_map.emplace(requested_queue_family, flags).second == false) {
-                skip |= LogError(pd_state->Handle(), "VUID-VkDeviceCreateInfo-queueFamilyIndex-00372",
+                skip |= LogError(pd_state->Handle(), "VUID-VkDeviceCreateInfo-queueFamilyIndex-02802",
                                  "CreateDevice(): %s (=%" PRIu32
                                  ") is not unique and was also used in pCreateInfo->pQueueCreateInfos[%d].",
                                  queue_family_var_name.c_str(), requested_queue_family,
@@ -766,7 +765,7 @@ bool CoreChecks::ValidateObjectNotInUse(const BASE_NODE *obj_node, const char *c
     bool skip = false;
     if (obj_node->InUse()) {
         skip |= LogError(device, error_code, "Cannot call %s on %s that is currently in use by a command buffer.", caller_name,
-                         report_data->FormatHandle(obj_struct).c_str());
+                         FormatHandle(obj_struct).c_str());
     }
     return skip;
 }

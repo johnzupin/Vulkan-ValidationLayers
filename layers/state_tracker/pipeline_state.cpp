@@ -22,9 +22,10 @@
 #include "generated/enum_flag_bits.h"
 
 PipelineStageState::PipelineStageState(const safe_VkPipelineShaderStageCreateInfo *create_info,
-                                       std::shared_ptr<const SHADER_MODULE_STATE> &module_state,
-                                       std::shared_ptr<const EntryPoint> &entrypoint)
-    : module_state(module_state), create_info(create_info), entrypoint(entrypoint) {}
+                                       std::shared_ptr<const SHADER_MODULE_STATE> &module_state)
+    : module_state(module_state),
+      create_info(create_info),
+      entrypoint(module_state->spirv ? module_state->spirv->FindEntrypoint(create_info->pName, create_info->stage) : nullptr) {}
 
 // static
 PIPELINE_STATE::StageStateVec PIPELINE_STATE::GetStageStates(const ValidationStateTracker &state_data,
@@ -38,29 +39,28 @@ PIPELINE_STATE::StageStateVec PIPELINE_STATE::GetStageStates(const ValidationSta
         // shader stages need to be recorded in pipeline order
         for (const auto &stage_ci : pipe_state.shader_stages_ci) {
             if (stage_ci.stage == stage) {
-                auto module = state_data.Get<SHADER_MODULE_STATE>(stage_ci.module);
-                if (!module) {
+                auto module_state = state_data.Get<SHADER_MODULE_STATE>(stage_ci.module);
+                if (!module_state) {
                     // See if the module is referenced in a library sub state
-                    module = pipe_state.GetSubStateShader(stage_ci.stage);
+                    module_state = pipe_state.GetSubStateShader(stage_ci.stage);
                 }
 
-                if (!module) {
+                if (!module_state || !module_state->spirv) {
                     // If module is null and there is a VkShaderModuleCreateInfo in the pNext chain of the stage info, then this
                     // module is part of a library and the state must be created
                     const auto shader_ci = LvlFindInChain<VkShaderModuleCreateInfo>(stage_ci.pNext);
                     const uint32_t unique_shader_id = (csm_states) ? (*csm_states)[stage].unique_shader_id : 0;
                     if (shader_ci) {
-                        module = state_data.CreateShaderModuleState(*shader_ci, unique_shader_id);
+                        // don't need to worry about GroupDecoration in GPL
+                        auto spirv_module = std::make_shared<SPIRV_MODULE_STATE>(shader_ci->codeSize, shader_ci->pCode);
+                        module_state = std::make_shared<SHADER_MODULE_STATE>(VK_NULL_HANDLE, spirv_module, unique_shader_id);
                     } else {
-                        // shader_module_identifier could legally provide a null module handle
-                        VkShaderModuleCreateInfo dummy_module_ci = LvlInitStruct<VkShaderModuleCreateInfo>();
-                        dummy_module_ci.pCode = &unique_shader_id;  // Ensure tripping invalid spirv
-                        module = state_data.CreateShaderModuleState(dummy_module_ci, unique_shader_id);
+                        // VK_EXT_shader_module_identifier could legally provide a null module handle
+                        module_state = std::make_shared<SHADER_MODULE_STATE>(unique_shader_id);
                     }
                 }
 
-                auto entrypoint = module->FindEntrypoint(stage_ci.pName, stage_ci.stage);
-                stage_states.emplace_back(&stage_ci, module, entrypoint);
+                stage_states.emplace_back(&stage_ci, module_state);
                 stage_found = true;
             }
         }
@@ -118,8 +118,8 @@ PIPELINE_STATE::StageStateVec PIPELINE_STATE::GetStageStates(const ValidationSta
             if (!stage_ci) {
                 continue;
             }
-            auto entrypoint = module_state->FindEntrypoint(stage_ci->pName, stage_ci->stage);
-            stage_states.emplace_back(stage_ci, module_state, entrypoint);
+
+            stage_states.emplace_back(stage_ci, module_state);
         }
     }
     return stage_states;
@@ -396,8 +396,15 @@ static bool UsesPipelineRobustness(const void *pNext, const PIPELINE_STATE &pipe
     return result;
 }
 
-static bool IgnoreColorAttachments(PIPELINE_STATE &pipe_state) {
+static bool IgnoreColorAttachments(const ValidationStateTracker *state_data, PIPELINE_STATE &pipe_state) {
     bool ignore = false;
+    // If the libraries used to create this pipeline are ignoring color attachments, this pipeline should as well
+    if (pipe_state.library_create_info) {
+        for (uint32_t i = 0; i < pipe_state.library_create_info->libraryCount; i++) {
+            const auto lib = state_data->Get<PIPELINE_STATE>(pipe_state.library_create_info->pLibraries[i]);
+            if (lib->ignore_color_attachments) return true;
+        }
+    }
     // According to the spec, pAttachments is to be ignored if the pipeline is created with
     // VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT, VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT, VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT
     // and VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT dynamic states set
@@ -449,7 +456,7 @@ static VkPrimitiveTopology GetTopologyAtRasterizer(const PIPELINE_STATE &pipelin
         if (!stage.entrypoint) {
             continue;
         }
-        auto stage_topo = stage.module_state->GetTopology(*stage.entrypoint);
+        auto stage_topo = stage.module_state->spirv->GetTopology(*stage.entrypoint);
         if (stage_topo) {
             result = *stage_topo;
         }
@@ -646,6 +653,7 @@ VkShaderModule PIPELINE_STATE::GetShaderModuleByCIIndex<VkRayTracingPipelineCrea
 }
 
 // TODO (ncesario) this needs to be automated. As a first step, need to leverage SubState::ValidShaderStages()
+// Currently will return SHADER_MODULE_STATE with no SPIR-V
 std::shared_ptr<const SHADER_MODULE_STATE> PIPELINE_STATE::GetSubStateShader(VkShaderStageFlagBits state) const {
     switch (state) {
         case VK_SHADER_STAGE_VERTEX_BIT: {
@@ -723,7 +731,7 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       topology_at_rasterizer(GetTopologyAtRasterizer(*this)),
       descriptor_buffer_mode((create_info.graphics.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
       uses_pipeline_robustness(UsesPipelineRobustness(PNext(), *this)),
-      ignore_color_attachments(IgnoreColorAttachments(*this)),
+      ignore_color_attachments(IgnoreColorAttachments(state_data, *this)),
       csm_states(csm_states) {
     if (library_create_info) {
         const auto &exe_layout_state = state_data->Get<PIPELINE_LAYOUT_STATE>(create_info.graphics.layout);
@@ -768,7 +776,7 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       dynamic_state(0),  // compute has no dynamic state
       descriptor_buffer_mode((create_info.compute.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
       uses_pipeline_robustness(UsesPipelineRobustness(PNext(), *this)),
-      ignore_color_attachments(IgnoreColorAttachments(*this)),
+      ignore_color_attachments(IgnoreColorAttachments(state_data, *this)),
       csm_states(csm_states),
       merged_graphics_layout(layout) {
     assert(active_shaders == VK_SHADER_STAGE_COMPUTE_BIT);
@@ -793,7 +801,7 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       dynamic_state(0),  // RTX has no dynamic states being validated
       descriptor_buffer_mode((create_info.raytracing.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
       uses_pipeline_robustness(UsesPipelineRobustness(PNext(), *this)),
-      ignore_color_attachments(IgnoreColorAttachments(*this)),
+      ignore_color_attachments(IgnoreColorAttachments(state_data, *this)),
       csm_states(csm_states),
       merged_graphics_layout(std::move(layout)) {
     assert(0 == (active_shaders &
@@ -820,7 +828,7 @@ PIPELINE_STATE::PIPELINE_STATE(const ValidationStateTracker *state_data, const V
       dynamic_state(0),  // RTX has no dynamic states being validated
       descriptor_buffer_mode((create_info.graphics.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
       uses_pipeline_robustness(UsesPipelineRobustness(PNext(), *this)),
-      ignore_color_attachments(IgnoreColorAttachments(*this)),
+      ignore_color_attachments(IgnoreColorAttachments(state_data, *this)),
       csm_states(csm_states),
       merged_graphics_layout(std::move(layout)) {
     assert(0 == (active_shaders &
@@ -895,4 +903,24 @@ VkStencilOpState LAST_BOUND_STATE::GetStencilOpStateBack() const {
         back.depthFailOp = cb_state.dynamic_state_value.depth_fail_op_back;
     }
     return back;
+}
+
+VkSampleCountFlagBits LAST_BOUND_STATE::GetRasterizationSamples() const {
+    // For given pipeline, return number of MSAA samples, or one if MSAA disabled
+    VkSampleCountFlagBits rasterization_samples = VK_SAMPLE_COUNT_1_BIT;
+    if (pipeline_state->IsDynamic(VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT)) {
+        rasterization_samples = cb_state.dynamic_state_value.rasterization_samples;
+    } else {
+        const auto ms_state = pipeline_state->MultisampleState();
+        if (ms_state) {
+            rasterization_samples = ms_state->rasterizationSamples;
+        }
+    }
+    return rasterization_samples;
+}
+
+bool LAST_BOUND_STATE::IsRasterizationDisabled() const {
+    return pipeline_state->IsDynamic(VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)
+               ? cb_state.dynamic_state_value.rasterizer_discard_enable
+               : pipeline_state->RasterizationDisabled();
 }

@@ -167,7 +167,7 @@ bool StatelessValidation::ValidateAccelerationStructureInfoNV(const VkAccelerati
         }
     }
     skip |=
-        ValidateFlags(func_name, "info.flags", "VkBuildAccelerationStructureFlagBitsNV", AllVkBuildAccelerationStructureFlagBitsNV,
+        ValidateFlags(func_name, "info.flags", "VkBuildAccelerationStructureFlagBitsNV", AllVkBuildAccelerationStructureFlagBitsKHR,
                       info.flags, kOptionalFlags, "VUID-VkAccelerationStructureInfoNV-flags-parameter");
     return skip;
 }
@@ -776,17 +776,12 @@ bool StatelessValidation::manual_PreCallValidateCmdWriteAccelerationStructuresPr
     VkQueryType queryType, VkQueryPool queryPool, uint32_t firstQuery) const {
     bool skip = false;
     if (!(queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR ||
-          queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR)) {
-        if (!IsExtEnabled(device_extensions.vk_khr_ray_tracing_maintenance1)) {
-            skip |= LogError(device, "VUID-vkCmdWriteAccelerationStructuresPropertiesKHR-queryType-03432",
-                             "vkCmdWriteAccelerationStructuresPropertiesKHR(): queryType (%s) is invalid.",
-                             string_VkQueryType(queryType));
-        } else if (!(queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR ||
-                     queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR)) {
-            skip |= LogError(device, "VUID-vkCmdWriteAccelerationStructuresPropertiesKHR-queryType-06742",
-                             "vkCmdWriteAccelerationStructuresPropertiesKHR(): queryType (%s) must be is invalid.",
-                             string_VkQueryType(queryType));
-        }
+          queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR ||
+          queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR ||
+          queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR)) {
+        skip |=
+            LogError(device, "VUID-vkCmdWriteAccelerationStructuresPropertiesKHR-queryType-06742",
+                     "vkCmdWriteAccelerationStructuresPropertiesKHR(): queryType (%s) is invalid.", string_VkQueryType(queryType));
     }
     return skip;
 }
@@ -810,23 +805,16 @@ bool StatelessValidation::manual_PreCallValidateWriteAccelerationStructuresPrope
     }
 
     if (!(queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR ||
-          queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR)) {
-        if (!IsExtEnabled(device_extensions.vk_khr_ray_tracing_maintenance1)) {
-            skip |= LogError(device, "VUID-vkWriteAccelerationStructuresPropertiesKHR-queryType-03432",
-                             "vkWriteAccelerationStructuresPropertiesKHR(): queryType (%s) must be "
-                             "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR or "
-                             "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR.",
-                             string_VkQueryType(queryType));
-        } else if (!(queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR ||
-                     queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR)) {
-            skip |= LogError(device, "VUID-vkWriteAccelerationStructuresPropertiesKHR-queryType-06742",
-                             "vkWriteAccelerationStructuresPropertiesKHR(): queryType (%s) must be "
-                             "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR or "
-                             "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR or "
-                             "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR or "
-                             "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR.",
-                             string_VkQueryType(queryType));
-        }
+          queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR ||
+          queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR ||
+          queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR)) {
+        skip |= LogError(device, "VUID-vkWriteAccelerationStructuresPropertiesKHR-queryType-06742",
+                         "vkWriteAccelerationStructuresPropertiesKHR(): queryType (%s) must be "
+                         "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR or "
+                         "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR or "
+                         "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR or "
+                         "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR.",
+                         string_VkQueryType(queryType));
     }
 
     if (SafeModulo(stride, sizeof(VkDeviceSize)) != 0) {
@@ -1157,12 +1145,10 @@ bool StatelessValidation::manual_PreCallValidateGetDeviceAccelerationStructureCo
     VkDevice device, const VkAccelerationStructureVersionInfoKHR *pVersionInfo,
     VkAccelerationStructureCompatibilityKHR *pCompatibility) const {
     bool skip = false;
-    const auto *ray_query_features = LvlFindInChain<VkPhysicalDeviceRayQueryFeaturesKHR>(device_createinfo_pnext);
-    const auto *raytracing_features = LvlFindInChain<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>(device_createinfo_pnext);
-    if ((!raytracing_features && !ray_query_features) || ((ray_query_features && !(ray_query_features->rayQuery)) ||
-                                                          (raytracing_features && !raytracing_features->rayTracingPipeline))) {
-        skip |= LogError(device, "VUID-vkGetDeviceAccelerationStructureCompatibilityKHR-rayTracingPipeline-03661",
-                         "vkGetDeviceAccelerationStructureCompatibilityKHR: The rayTracing or rayQuery feature must be enabled.");
+    const auto *accel_struct_features = LvlFindInChain<VkPhysicalDeviceAccelerationStructureFeaturesKHR>(device_createinfo_pnext);
+    if (!(accel_struct_features && accel_struct_features->accelerationStructure)) {
+        skip |= LogError(device, "VUID-vkGetDeviceAccelerationStructureCompatibilityKHR-accelerationStructure-08928",
+                         "vkGetDeviceAccelerationStructureCompatibilityKHR: The accelerationStructure feature must be enabled");
     }
     return skip;
 }
@@ -1785,13 +1771,10 @@ bool StatelessValidation::manual_PreCallValidateGetAccelerationStructureBuildSiz
     }
     skip |= ValidateAccelerationStructureBuildGeometryInfoKHR(pBuildInfo, 1, total_primitive_count,
                                                               "vkGetAccelerationStructureBuildSizesKHR");
-    const auto *ray_tracing_pipeline_features =
-        LvlFindInChain<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>(device_createinfo_pnext);
-    const auto *ray_query_features = LvlFindInChain<VkPhysicalDeviceRayQueryFeaturesKHR>(device_createinfo_pnext);
-    if (!((ray_tracing_pipeline_features && ray_tracing_pipeline_features->rayTracingPipeline == VK_TRUE) ||
-          (ray_query_features && ray_query_features->rayQuery == VK_TRUE))) {
-        skip |= LogError(device, "VUID-vkGetAccelerationStructureBuildSizesKHR-rayTracingPipeline-03617",
-                         "vkGetAccelerationStructureBuildSizesKHR: The rayTracingPipeline or rayQuery feature must be enabled");
+    const auto *accel_struct_features = LvlFindInChain<VkPhysicalDeviceAccelerationStructureFeaturesKHR>(device_createinfo_pnext);
+    if (!(accel_struct_features && accel_struct_features->accelerationStructure)) {
+        skip |= LogError(device, "VUID-vkGetAccelerationStructureBuildSizesKHR-accelerationStructure-08933",
+                         "vkGetAccelerationStructureBuildSizesKHR: The accelerationStructure feature must be enabled");
     }
     if (pBuildInfo) {
         if (pBuildInfo->geometryCount != 0 && !pMaxPrimitiveCounts) {

@@ -17,7 +17,6 @@
  */
 
 #include "layer_options.h"
-#include "xxhash.h"
 
 // Include new / delete overrides if using mimalloc. This needs to be include exactly once in a file that is
 // part of the VVL but not the layer utils library.
@@ -273,7 +272,7 @@ uint32_t TokenToUint(std::string &token) {
     return int_id;
 }
 
-void CreateFilterMessageIdList(std::string raw_id_list, const std::string &delimiter, std::vector<uint32_t> &filter_list) {
+void CreateFilterMessageIdList(std::string raw_id_list, const std::string &delimiter, std::unordered_set<uint32_t> &filter_list) {
     size_t pos = 0;
     std::string token;
     while (raw_id_list.length() != 0) {
@@ -285,8 +284,8 @@ void CreateFilterMessageIdList(std::string raw_id_list, const std::string &delim
                 int_id = id_hash;
             }
         }
-        if ((int_id != 0) && (std::find(filter_list.begin(), filter_list.end(), int_id)) == filter_list.end()) {
-            filter_list.push_back(int_id);
+        if ((int_id != 0) && filter_list.find(int_id) == filter_list.end()) {
+            filter_list.insert(int_id);
         }
     }
 }
@@ -354,7 +353,7 @@ static bool SetBool(const std::string &config_string, const std::string &env_str
         setting = config_string;
     }
     if (!setting.empty()) {
-        transform(setting.begin(), setting.end(), setting.begin(), ::tolower);
+        vvl::ToLower(setting);
         if (setting == "true") {
             result = true;
         } else {
@@ -376,7 +375,7 @@ static std::string GetConfigValue(const char *setting) {
 
 static std::string GetEnvVarValue(const char *setting) {
     std::string env_var = setting;
-    std::transform(env_var.begin(), env_var.end(), env_var.begin(), ::toupper);
+    vvl::ToUpper(env_var);
     return GetEnvironment((std::string("VK_LAYER_") + env_var).c_str());
 }
 

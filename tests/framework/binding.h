@@ -24,7 +24,7 @@
 #include <memory>
 #include <vector>
 
-#include "generated/lvt_function_pointers.h"
+#include "generated/vk_function_pointers.h"
 #include "generated/vk_extension_helper.h"
 #include "test_common.h"
 
@@ -63,7 +63,6 @@ class BufferView;
 class Image;
 class ImageView;
 class DepthStencilView;
-class Shader;
 class Pipeline;
 class PipelineDelta;
 class Sampler;
@@ -433,25 +432,15 @@ static constexpr NoMemT no_mem{};
 class Buffer : public internal::NonDispHandle<VkBuffer> {
   public:
     explicit Buffer() : NonDispHandle(), create_info_(LvlInitStruct<decltype(create_info_)>()) {}
-    explicit Buffer(const Device &dev, const VkBufferCreateInfo &info) { init(dev, info); }
-    explicit Buffer(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props) {
-        init(dev, info, mem_props);
-    }
-    explicit Buffer(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props, void *alloc_info_pnext) {
+    explicit Buffer(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props = 0,
+                    void *alloc_info_pnext = nullptr) {
         init(dev, info, mem_props, alloc_info_pnext);
     }
-    explicit Buffer(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props,
-                    VkMemoryAllocateFlags alloc_flags) {
-        auto memflagsinfo = LvlInitStruct<VkMemoryAllocateFlagsInfo>();
-        memflagsinfo.flags = alloc_flags;
-        init(dev, info, mem_props, &memflagsinfo);
-    }
-    explicit Buffer(const Device &dev, VkDeviceSize size, VkMemoryPropertyFlags mem_props, VkBufferUsageFlags usage,
-                    void *alloc_info_pnext) {
-        init(dev, size, mem_props, usage, alloc_info_pnext);
+    explicit Buffer(const Device &dev, VkDeviceSize size, VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VkMemoryPropertyFlags mem_props = 0,
+                    void *alloc_info_pnext = nullptr) {
+        init(dev, size, usage, mem_props, alloc_info_pnext);
     }
     explicit Buffer(const Device &dev, const VkBufferCreateInfo &info, NoMemT) { init_no_mem(dev, info); }
-    explicit Buffer(const Device &dev, VkDeviceSize size) { init(dev, size); }
     Buffer(Buffer &&rhs) noexcept : NonDispHandle(std::move(rhs)) {
         create_info_ = std::move(rhs.create_info_);
         internal_mem_ = std::move(rhs.internal_mem_);
@@ -471,38 +460,13 @@ class Buffer : public internal::NonDispHandle<VkBuffer> {
     void destroy() noexcept;
 
     // vkCreateBuffer()
-    void init(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props, void *alloc_info_pnext = nullptr);
-    void init(const Device &dev, const VkBufferCreateInfo &info) { init(dev, info, 0); }
-    void init(const Device &dev, VkDeviceSize size, VkMemoryPropertyFlags mem_props,
-              VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, const std::vector<uint32_t> &queue_families = {}) {
-        init(dev, create_info(size, usage, &queue_families), mem_props);
+    void init(const Device &dev, const VkBufferCreateInfo &info, VkMemoryPropertyFlags mem_props = 0,
+              void *alloc_info_pnext = nullptr);
+    void init(const Device &dev, VkDeviceSize size, VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+              VkMemoryPropertyFlags mem_props = 0, void *alloc_info_pnext = nullptr,
+              const std::vector<uint32_t> &queue_families = {}) {
+        init(dev, create_info(size, usage, &queue_families), mem_props, alloc_info_pnext);
     }
-    void init(const Device &dev, VkDeviceSize size, VkMemoryPropertyFlags mem_props, VkBufferUsageFlags usage,
-              void *alloc_info_pnext) {
-        init(dev, create_info(size, usage), mem_props, alloc_info_pnext);
-    }
-    void init(const Device &dev, VkDeviceSize size) { init(dev, size, 0); }
-    void init_as_src(const Device &dev, VkDeviceSize size, VkMemoryPropertyFlags &reqs,
-                     const std::vector<uint32_t> *queue_families = nullptr) {
-        init(dev, create_info(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, queue_families), reqs);
-    }
-    void init_as_dst(const Device &dev, VkDeviceSize size, VkMemoryPropertyFlags &reqs,
-                     const std::vector<uint32_t> *queue_families = nullptr) {
-        init(dev, create_info(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, queue_families), reqs);
-    }
-    void init_as_src_and_dst(const Device &dev, VkDeviceSize size, VkMemoryPropertyFlags &reqs,
-                             const std::vector<uint32_t> *queue_families = nullptr, bool memory = true) {
-        if (memory)
-            init(dev, create_info(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, queue_families), reqs);
-        else
-            init_no_mem(dev,
-                        create_info(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, queue_families));
-    }
-    void init_as_storage(const Device &dev, VkDeviceSize size, VkMemoryPropertyFlags &reqs,
-        const std::vector<uint32_t> *queue_families = nullptr) {
-        init(dev, create_info(size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, queue_families), reqs);
-    }
-
     void init_no_mem(const Device &dev, const VkBufferCreateInfo &info);
 
     // get the internal memory
@@ -746,6 +710,17 @@ class ShaderModule : public internal::NonDispHandle<VkShaderModule> {
     VkResult init_try(const Device &dev, const VkShaderModuleCreateInfo &info);
 
     static VkShaderModuleCreateInfo create_info(size_t code_size, const uint32_t *code, VkFlags flags);
+};
+
+class Shader : public internal::NonDispHandle<VkShaderEXT> {
+  public:
+    Shader(const Device &dev, const VkShaderCreateInfoEXT &info) { init(dev, info); }
+    ~Shader() noexcept;
+    void destroy() noexcept;
+
+    // vkCreateShaderModule()
+    void init(const Device &dev, const VkShaderCreateInfoEXT &info);
+    VkResult init_try(const Device &dev, const VkShaderCreateInfoEXT &info);
 };
 
 class Pipeline : public internal::NonDispHandle<VkPipeline> {

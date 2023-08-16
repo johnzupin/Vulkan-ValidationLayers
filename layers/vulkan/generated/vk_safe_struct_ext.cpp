@@ -1,27 +1,27 @@
 // *** THIS FILE IS GENERATED - DO NOT EDIT ***
-// See helper_file_generator.py for modifications
-
+// See safe_struct_generator.py for modifications
 
 /***************************************************************************
- *
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- ****************************************************************************/
+*
+* Copyright (c) 2015-2023 The Khronos Group Inc.
+* Copyright (c) 2015-2023 Valve Corporation
+* Copyright (c) 2015-2023 LunarG, Inc.
+* Copyright (c) 2015-2023 Google Inc.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+****************************************************************************/
 
+// NOLINTBEGIN
 
 #include "vk_safe_struct.h"
 #include "vk_typemap_helper.h"
@@ -33,7 +33,6 @@
 #include <vector>
 
 #include <vulkan/vk_layer.h>
-
 
 safe_VkRenderingFragmentDensityMapAttachmentInfoEXT::safe_VkRenderingFragmentDensityMapAttachmentInfoEXT(const VkRenderingFragmentDensityMapAttachmentInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -625,18 +624,21 @@ void safe_VkPipelineRasterizationStateStreamCreateInfoEXT::initialize(const safe
 }
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
-
 safe_VkVideoEncodeH264CapabilitiesEXT::safe_VkVideoEncodeH264CapabilitiesEXT(const VkVideoEncodeH264CapabilitiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     flags(in_struct->flags),
+    maxLevelIdc(in_struct->maxLevelIdc),
+    maxSliceCount(in_struct->maxSliceCount),
     maxPPictureL0ReferenceCount(in_struct->maxPPictureL0ReferenceCount),
     maxBPictureL0ReferenceCount(in_struct->maxBPictureL0ReferenceCount),
     maxL1ReferenceCount(in_struct->maxL1ReferenceCount),
-    motionVectorsOverPicBoundariesFlag(in_struct->motionVectorsOverPicBoundariesFlag),
-    maxBytesPerPicDenom(in_struct->maxBytesPerPicDenom),
-    maxBitsPerMbDenom(in_struct->maxBitsPerMbDenom),
-    log2MaxMvLengthHorizontal(in_struct->log2MaxMvLengthHorizontal),
-    log2MaxMvLengthVertical(in_struct->log2MaxMvLengthVertical)
+    maxTemporalLayerCount(in_struct->maxTemporalLayerCount),
+    expectDyadicTemporalLayerPattern(in_struct->expectDyadicTemporalLayerPattern),
+    minQp(in_struct->minQp),
+    maxQp(in_struct->maxQp),
+    prefersGopRemainingFrames(in_struct->prefersGopRemainingFrames),
+    requiresGopRemainingFrames(in_struct->requiresGopRemainingFrames),
+    stdSyntaxFlags(in_struct->stdSyntaxFlags)
 {
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
 }
@@ -645,28 +647,36 @@ safe_VkVideoEncodeH264CapabilitiesEXT::safe_VkVideoEncodeH264CapabilitiesEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_CAPABILITIES_EXT),
     pNext(nullptr),
     flags(),
+    maxLevelIdc(),
+    maxSliceCount(),
     maxPPictureL0ReferenceCount(),
     maxBPictureL0ReferenceCount(),
     maxL1ReferenceCount(),
-    motionVectorsOverPicBoundariesFlag(),
-    maxBytesPerPicDenom(),
-    maxBitsPerMbDenom(),
-    log2MaxMvLengthHorizontal(),
-    log2MaxMvLengthVertical()
+    maxTemporalLayerCount(),
+    expectDyadicTemporalLayerPattern(),
+    minQp(),
+    maxQp(),
+    prefersGopRemainingFrames(),
+    requiresGopRemainingFrames(),
+    stdSyntaxFlags()
 {}
 
 safe_VkVideoEncodeH264CapabilitiesEXT::safe_VkVideoEncodeH264CapabilitiesEXT(const safe_VkVideoEncodeH264CapabilitiesEXT& copy_src)
 {
     sType = copy_src.sType;
     flags = copy_src.flags;
+    maxLevelIdc = copy_src.maxLevelIdc;
+    maxSliceCount = copy_src.maxSliceCount;
     maxPPictureL0ReferenceCount = copy_src.maxPPictureL0ReferenceCount;
     maxBPictureL0ReferenceCount = copy_src.maxBPictureL0ReferenceCount;
     maxL1ReferenceCount = copy_src.maxL1ReferenceCount;
-    motionVectorsOverPicBoundariesFlag = copy_src.motionVectorsOverPicBoundariesFlag;
-    maxBytesPerPicDenom = copy_src.maxBytesPerPicDenom;
-    maxBitsPerMbDenom = copy_src.maxBitsPerMbDenom;
-    log2MaxMvLengthHorizontal = copy_src.log2MaxMvLengthHorizontal;
-    log2MaxMvLengthVertical = copy_src.log2MaxMvLengthVertical;
+    maxTemporalLayerCount = copy_src.maxTemporalLayerCount;
+    expectDyadicTemporalLayerPattern = copy_src.expectDyadicTemporalLayerPattern;
+    minQp = copy_src.minQp;
+    maxQp = copy_src.maxQp;
+    prefersGopRemainingFrames = copy_src.prefersGopRemainingFrames;
+    requiresGopRemainingFrames = copy_src.requiresGopRemainingFrames;
+    stdSyntaxFlags = copy_src.stdSyntaxFlags;
     pNext = SafePnextCopy(copy_src.pNext);
 }
 
@@ -679,14 +689,18 @@ safe_VkVideoEncodeH264CapabilitiesEXT& safe_VkVideoEncodeH264CapabilitiesEXT::op
 
     sType = copy_src.sType;
     flags = copy_src.flags;
+    maxLevelIdc = copy_src.maxLevelIdc;
+    maxSliceCount = copy_src.maxSliceCount;
     maxPPictureL0ReferenceCount = copy_src.maxPPictureL0ReferenceCount;
     maxBPictureL0ReferenceCount = copy_src.maxBPictureL0ReferenceCount;
     maxL1ReferenceCount = copy_src.maxL1ReferenceCount;
-    motionVectorsOverPicBoundariesFlag = copy_src.motionVectorsOverPicBoundariesFlag;
-    maxBytesPerPicDenom = copy_src.maxBytesPerPicDenom;
-    maxBitsPerMbDenom = copy_src.maxBitsPerMbDenom;
-    log2MaxMvLengthHorizontal = copy_src.log2MaxMvLengthHorizontal;
-    log2MaxMvLengthVertical = copy_src.log2MaxMvLengthVertical;
+    maxTemporalLayerCount = copy_src.maxTemporalLayerCount;
+    expectDyadicTemporalLayerPattern = copy_src.expectDyadicTemporalLayerPattern;
+    minQp = copy_src.minQp;
+    maxQp = copy_src.maxQp;
+    prefersGopRemainingFrames = copy_src.prefersGopRemainingFrames;
+    requiresGopRemainingFrames = copy_src.requiresGopRemainingFrames;
+    stdSyntaxFlags = copy_src.stdSyntaxFlags;
     pNext = SafePnextCopy(copy_src.pNext);
 
     return *this;
@@ -704,14 +718,18 @@ void safe_VkVideoEncodeH264CapabilitiesEXT::initialize(const VkVideoEncodeH264Ca
         FreePnextChain(pNext);
     sType = in_struct->sType;
     flags = in_struct->flags;
+    maxLevelIdc = in_struct->maxLevelIdc;
+    maxSliceCount = in_struct->maxSliceCount;
     maxPPictureL0ReferenceCount = in_struct->maxPPictureL0ReferenceCount;
     maxBPictureL0ReferenceCount = in_struct->maxBPictureL0ReferenceCount;
     maxL1ReferenceCount = in_struct->maxL1ReferenceCount;
-    motionVectorsOverPicBoundariesFlag = in_struct->motionVectorsOverPicBoundariesFlag;
-    maxBytesPerPicDenom = in_struct->maxBytesPerPicDenom;
-    maxBitsPerMbDenom = in_struct->maxBitsPerMbDenom;
-    log2MaxMvLengthHorizontal = in_struct->log2MaxMvLengthHorizontal;
-    log2MaxMvLengthVertical = in_struct->log2MaxMvLengthVertical;
+    maxTemporalLayerCount = in_struct->maxTemporalLayerCount;
+    expectDyadicTemporalLayerPattern = in_struct->expectDyadicTemporalLayerPattern;
+    minQp = in_struct->minQp;
+    maxQp = in_struct->maxQp;
+    prefersGopRemainingFrames = in_struct->prefersGopRemainingFrames;
+    requiresGopRemainingFrames = in_struct->requiresGopRemainingFrames;
+    stdSyntaxFlags = in_struct->stdSyntaxFlags;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
 }
 
@@ -719,20 +737,192 @@ void safe_VkVideoEncodeH264CapabilitiesEXT::initialize(const safe_VkVideoEncodeH
 {
     sType = copy_src->sType;
     flags = copy_src->flags;
+    maxLevelIdc = copy_src->maxLevelIdc;
+    maxSliceCount = copy_src->maxSliceCount;
     maxPPictureL0ReferenceCount = copy_src->maxPPictureL0ReferenceCount;
     maxBPictureL0ReferenceCount = copy_src->maxBPictureL0ReferenceCount;
     maxL1ReferenceCount = copy_src->maxL1ReferenceCount;
-    motionVectorsOverPicBoundariesFlag = copy_src->motionVectorsOverPicBoundariesFlag;
-    maxBytesPerPicDenom = copy_src->maxBytesPerPicDenom;
-    maxBitsPerMbDenom = copy_src->maxBitsPerMbDenom;
-    log2MaxMvLengthHorizontal = copy_src->log2MaxMvLengthHorizontal;
-    log2MaxMvLengthVertical = copy_src->log2MaxMvLengthVertical;
+    maxTemporalLayerCount = copy_src->maxTemporalLayerCount;
+    expectDyadicTemporalLayerPattern = copy_src->expectDyadicTemporalLayerPattern;
+    minQp = copy_src->minQp;
+    maxQp = copy_src->maxQp;
+    prefersGopRemainingFrames = copy_src->prefersGopRemainingFrames;
+    requiresGopRemainingFrames = copy_src->requiresGopRemainingFrames;
+    stdSyntaxFlags = copy_src->stdSyntaxFlags;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
+safe_VkVideoEncodeH264QualityLevelPropertiesEXT::safe_VkVideoEncodeH264QualityLevelPropertiesEXT(const VkVideoEncodeH264QualityLevelPropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    preferredRateControlFlags(in_struct->preferredRateControlFlags),
+    preferredGopFrameCount(in_struct->preferredGopFrameCount),
+    preferredIdrPeriod(in_struct->preferredIdrPeriod),
+    preferredConsecutiveBFrameCount(in_struct->preferredConsecutiveBFrameCount),
+    preferredTemporalLayerCount(in_struct->preferredTemporalLayerCount),
+    preferredConstantQp(in_struct->preferredConstantQp),
+    preferredMaxL0ReferenceCount(in_struct->preferredMaxL0ReferenceCount),
+    preferredMaxL1ReferenceCount(in_struct->preferredMaxL1ReferenceCount),
+    preferredStdEntropyCodingModeFlag(in_struct->preferredStdEntropyCodingModeFlag)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH264QualityLevelPropertiesEXT::safe_VkVideoEncodeH264QualityLevelPropertiesEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_QUALITY_LEVEL_PROPERTIES_EXT),
+    pNext(nullptr),
+    preferredRateControlFlags(),
+    preferredGopFrameCount(),
+    preferredIdrPeriod(),
+    preferredConsecutiveBFrameCount(),
+    preferredTemporalLayerCount(),
+    preferredConstantQp(),
+    preferredMaxL0ReferenceCount(),
+    preferredMaxL1ReferenceCount(),
+    preferredStdEntropyCodingModeFlag()
+{}
+
+safe_VkVideoEncodeH264QualityLevelPropertiesEXT::safe_VkVideoEncodeH264QualityLevelPropertiesEXT(const safe_VkVideoEncodeH264QualityLevelPropertiesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    preferredRateControlFlags = copy_src.preferredRateControlFlags;
+    preferredGopFrameCount = copy_src.preferredGopFrameCount;
+    preferredIdrPeriod = copy_src.preferredIdrPeriod;
+    preferredConsecutiveBFrameCount = copy_src.preferredConsecutiveBFrameCount;
+    preferredTemporalLayerCount = copy_src.preferredTemporalLayerCount;
+    preferredConstantQp = copy_src.preferredConstantQp;
+    preferredMaxL0ReferenceCount = copy_src.preferredMaxL0ReferenceCount;
+    preferredMaxL1ReferenceCount = copy_src.preferredMaxL1ReferenceCount;
+    preferredStdEntropyCodingModeFlag = copy_src.preferredStdEntropyCodingModeFlag;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH264QualityLevelPropertiesEXT& safe_VkVideoEncodeH264QualityLevelPropertiesEXT::operator=(const safe_VkVideoEncodeH264QualityLevelPropertiesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    preferredRateControlFlags = copy_src.preferredRateControlFlags;
+    preferredGopFrameCount = copy_src.preferredGopFrameCount;
+    preferredIdrPeriod = copy_src.preferredIdrPeriod;
+    preferredConsecutiveBFrameCount = copy_src.preferredConsecutiveBFrameCount;
+    preferredTemporalLayerCount = copy_src.preferredTemporalLayerCount;
+    preferredConstantQp = copy_src.preferredConstantQp;
+    preferredMaxL0ReferenceCount = copy_src.preferredMaxL0ReferenceCount;
+    preferredMaxL1ReferenceCount = copy_src.preferredMaxL1ReferenceCount;
+    preferredStdEntropyCodingModeFlag = copy_src.preferredStdEntropyCodingModeFlag;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH264QualityLevelPropertiesEXT::~safe_VkVideoEncodeH264QualityLevelPropertiesEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH264QualityLevelPropertiesEXT::initialize(const VkVideoEncodeH264QualityLevelPropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    preferredRateControlFlags = in_struct->preferredRateControlFlags;
+    preferredGopFrameCount = in_struct->preferredGopFrameCount;
+    preferredIdrPeriod = in_struct->preferredIdrPeriod;
+    preferredConsecutiveBFrameCount = in_struct->preferredConsecutiveBFrameCount;
+    preferredTemporalLayerCount = in_struct->preferredTemporalLayerCount;
+    preferredConstantQp = in_struct->preferredConstantQp;
+    preferredMaxL0ReferenceCount = in_struct->preferredMaxL0ReferenceCount;
+    preferredMaxL1ReferenceCount = in_struct->preferredMaxL1ReferenceCount;
+    preferredStdEntropyCodingModeFlag = in_struct->preferredStdEntropyCodingModeFlag;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH264QualityLevelPropertiesEXT::initialize(const safe_VkVideoEncodeH264QualityLevelPropertiesEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    preferredRateControlFlags = copy_src->preferredRateControlFlags;
+    preferredGopFrameCount = copy_src->preferredGopFrameCount;
+    preferredIdrPeriod = copy_src->preferredIdrPeriod;
+    preferredConsecutiveBFrameCount = copy_src->preferredConsecutiveBFrameCount;
+    preferredTemporalLayerCount = copy_src->preferredTemporalLayerCount;
+    preferredConstantQp = copy_src->preferredConstantQp;
+    preferredMaxL0ReferenceCount = copy_src->preferredMaxL0ReferenceCount;
+    preferredMaxL1ReferenceCount = copy_src->preferredMaxL1ReferenceCount;
+    preferredStdEntropyCodingModeFlag = copy_src->preferredStdEntropyCodingModeFlag;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+safe_VkVideoEncodeH264SessionCreateInfoEXT::safe_VkVideoEncodeH264SessionCreateInfoEXT(const VkVideoEncodeH264SessionCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    useMaxLevelIdc(in_struct->useMaxLevelIdc),
+    maxLevelIdc(in_struct->maxLevelIdc)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH264SessionCreateInfoEXT::safe_VkVideoEncodeH264SessionCreateInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_CREATE_INFO_EXT),
+    pNext(nullptr),
+    useMaxLevelIdc(),
+    maxLevelIdc()
+{}
+
+safe_VkVideoEncodeH264SessionCreateInfoEXT::safe_VkVideoEncodeH264SessionCreateInfoEXT(const safe_VkVideoEncodeH264SessionCreateInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    useMaxLevelIdc = copy_src.useMaxLevelIdc;
+    maxLevelIdc = copy_src.maxLevelIdc;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH264SessionCreateInfoEXT& safe_VkVideoEncodeH264SessionCreateInfoEXT::operator=(const safe_VkVideoEncodeH264SessionCreateInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    useMaxLevelIdc = copy_src.useMaxLevelIdc;
+    maxLevelIdc = copy_src.maxLevelIdc;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH264SessionCreateInfoEXT::~safe_VkVideoEncodeH264SessionCreateInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH264SessionCreateInfoEXT::initialize(const VkVideoEncodeH264SessionCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    useMaxLevelIdc = in_struct->useMaxLevelIdc;
+    maxLevelIdc = in_struct->maxLevelIdc;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH264SessionCreateInfoEXT::initialize(const safe_VkVideoEncodeH264SessionCreateInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    useMaxLevelIdc = copy_src->useMaxLevelIdc;
+    maxLevelIdc = copy_src->maxLevelIdc;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 safe_VkVideoEncodeH264SessionParametersAddInfoEXT::safe_VkVideoEncodeH264SessionParametersAddInfoEXT(const VkVideoEncodeH264SessionParametersAddInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -860,9 +1050,7 @@ void safe_VkVideoEncodeH264SessionParametersAddInfoEXT::initialize(const safe_Vk
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH264SessionParametersCreateInfoEXT::safe_VkVideoEncodeH264SessionParametersCreateInfoEXT(const VkVideoEncodeH264SessionParametersCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -948,20 +1136,154 @@ void safe_VkVideoEncodeH264SessionParametersCreateInfoEXT::initialize(const safe
         pParametersAddInfo = new safe_VkVideoEncodeH264SessionParametersAddInfoEXT(*copy_src->pParametersAddInfo);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
+safe_VkVideoEncodeH264SessionParametersGetInfoEXT::safe_VkVideoEncodeH264SessionParametersGetInfoEXT(const VkVideoEncodeH264SessionParametersGetInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    writeStdSPS(in_struct->writeStdSPS),
+    writeStdPPS(in_struct->writeStdPPS),
+    stdSPSId(in_struct->stdSPSId),
+    stdPPSId(in_struct->stdPPSId)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH264SessionParametersGetInfoEXT::safe_VkVideoEncodeH264SessionParametersGetInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_GET_INFO_EXT),
+    pNext(nullptr),
+    writeStdSPS(),
+    writeStdPPS(),
+    stdSPSId(),
+    stdPPSId()
+{}
+
+safe_VkVideoEncodeH264SessionParametersGetInfoEXT::safe_VkVideoEncodeH264SessionParametersGetInfoEXT(const safe_VkVideoEncodeH264SessionParametersGetInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    writeStdSPS = copy_src.writeStdSPS;
+    writeStdPPS = copy_src.writeStdPPS;
+    stdSPSId = copy_src.stdSPSId;
+    stdPPSId = copy_src.stdPPSId;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH264SessionParametersGetInfoEXT& safe_VkVideoEncodeH264SessionParametersGetInfoEXT::operator=(const safe_VkVideoEncodeH264SessionParametersGetInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    writeStdSPS = copy_src.writeStdSPS;
+    writeStdPPS = copy_src.writeStdPPS;
+    stdSPSId = copy_src.stdSPSId;
+    stdPPSId = copy_src.stdPPSId;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH264SessionParametersGetInfoEXT::~safe_VkVideoEncodeH264SessionParametersGetInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH264SessionParametersGetInfoEXT::initialize(const VkVideoEncodeH264SessionParametersGetInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    writeStdSPS = in_struct->writeStdSPS;
+    writeStdPPS = in_struct->writeStdPPS;
+    stdSPSId = in_struct->stdSPSId;
+    stdPPSId = in_struct->stdPPSId;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH264SessionParametersGetInfoEXT::initialize(const safe_VkVideoEncodeH264SessionParametersGetInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    writeStdSPS = copy_src->writeStdSPS;
+    writeStdPPS = copy_src->writeStdPPS;
+    stdSPSId = copy_src->stdSPSId;
+    stdPPSId = copy_src->stdPPSId;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT::safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT(const VkVideoEncodeH264SessionParametersFeedbackInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    hasStdSPSOverrides(in_struct->hasStdSPSOverrides),
+    hasStdPPSOverrides(in_struct->hasStdPPSOverrides)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT::safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_FEEDBACK_INFO_EXT),
+    pNext(nullptr),
+    hasStdSPSOverrides(),
+    hasStdPPSOverrides()
+{}
+
+safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT::safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT(const safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    hasStdSPSOverrides = copy_src.hasStdSPSOverrides;
+    hasStdPPSOverrides = copy_src.hasStdPPSOverrides;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT& safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT::operator=(const safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    hasStdSPSOverrides = copy_src.hasStdSPSOverrides;
+    hasStdPPSOverrides = copy_src.hasStdPPSOverrides;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT::~safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT::initialize(const VkVideoEncodeH264SessionParametersFeedbackInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    hasStdSPSOverrides = in_struct->hasStdSPSOverrides;
+    hasStdPPSOverrides = in_struct->hasStdPPSOverrides;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT::initialize(const safe_VkVideoEncodeH264SessionParametersFeedbackInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    hasStdSPSOverrides = copy_src->hasStdSPSOverrides;
+    hasStdPPSOverrides = copy_src->hasStdPPSOverrides;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 safe_VkVideoEncodeH264NaluSliceInfoEXT::safe_VkVideoEncodeH264NaluSliceInfoEXT(const VkVideoEncodeH264NaluSliceInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
-    mbCount(in_struct->mbCount),
-    pStdReferenceFinalLists(nullptr),
+    constantQp(in_struct->constantQp),
     pStdSliceHeader(nullptr)
 {
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    if (in_struct->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*in_struct->pStdReferenceFinalLists);
-    }
     if (in_struct->pStdSliceHeader) {
         pStdSliceHeader = new StdVideoEncodeH264SliceHeader(*in_struct->pStdSliceHeader);
     }
@@ -970,21 +1292,16 @@ safe_VkVideoEncodeH264NaluSliceInfoEXT::safe_VkVideoEncodeH264NaluSliceInfoEXT(c
 safe_VkVideoEncodeH264NaluSliceInfoEXT::safe_VkVideoEncodeH264NaluSliceInfoEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_NALU_SLICE_INFO_EXT),
     pNext(nullptr),
-    mbCount(),
-    pStdReferenceFinalLists(nullptr),
+    constantQp(),
     pStdSliceHeader(nullptr)
 {}
 
 safe_VkVideoEncodeH264NaluSliceInfoEXT::safe_VkVideoEncodeH264NaluSliceInfoEXT(const safe_VkVideoEncodeH264NaluSliceInfoEXT& copy_src)
 {
     sType = copy_src.sType;
-    mbCount = copy_src.mbCount;
-    pStdReferenceFinalLists = nullptr;
+    constantQp = copy_src.constantQp;
     pStdSliceHeader = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
-    if (copy_src.pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*copy_src.pStdReferenceFinalLists);
-    }
     if (copy_src.pStdSliceHeader) {
         pStdSliceHeader = new StdVideoEncodeH264SliceHeader(*copy_src.pStdSliceHeader);
     }
@@ -994,21 +1311,15 @@ safe_VkVideoEncodeH264NaluSliceInfoEXT& safe_VkVideoEncodeH264NaluSliceInfoEXT::
 {
     if (&copy_src == this) return *this;
 
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pStdSliceHeader)
         delete pStdSliceHeader;
     if (pNext)
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
-    mbCount = copy_src.mbCount;
-    pStdReferenceFinalLists = nullptr;
+    constantQp = copy_src.constantQp;
     pStdSliceHeader = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
-    if (copy_src.pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*copy_src.pStdReferenceFinalLists);
-    }
     if (copy_src.pStdSliceHeader) {
         pStdSliceHeader = new StdVideoEncodeH264SliceHeader(*copy_src.pStdSliceHeader);
     }
@@ -1018,8 +1329,6 @@ safe_VkVideoEncodeH264NaluSliceInfoEXT& safe_VkVideoEncodeH264NaluSliceInfoEXT::
 
 safe_VkVideoEncodeH264NaluSliceInfoEXT::~safe_VkVideoEncodeH264NaluSliceInfoEXT()
 {
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pStdSliceHeader)
         delete pStdSliceHeader;
     if (pNext)
@@ -1028,20 +1337,14 @@ safe_VkVideoEncodeH264NaluSliceInfoEXT::~safe_VkVideoEncodeH264NaluSliceInfoEXT(
 
 void safe_VkVideoEncodeH264NaluSliceInfoEXT::initialize(const VkVideoEncodeH264NaluSliceInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
 {
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pStdSliceHeader)
         delete pStdSliceHeader;
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
-    mbCount = in_struct->mbCount;
-    pStdReferenceFinalLists = nullptr;
+    constantQp = in_struct->constantQp;
     pStdSliceHeader = nullptr;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    if (in_struct->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*in_struct->pStdReferenceFinalLists);
-    }
     if (in_struct->pStdSliceHeader) {
         pStdSliceHeader = new StdVideoEncodeH264SliceHeader(*in_struct->pStdSliceHeader);
     }
@@ -1050,33 +1353,24 @@ void safe_VkVideoEncodeH264NaluSliceInfoEXT::initialize(const VkVideoEncodeH264N
 void safe_VkVideoEncodeH264NaluSliceInfoEXT::initialize(const safe_VkVideoEncodeH264NaluSliceInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
 {
     sType = copy_src->sType;
-    mbCount = copy_src->mbCount;
-    pStdReferenceFinalLists = nullptr;
+    constantQp = copy_src->constantQp;
     pStdSliceHeader = nullptr;
     pNext = SafePnextCopy(copy_src->pNext);
-    if (copy_src->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*copy_src->pStdReferenceFinalLists);
-    }
     if (copy_src->pStdSliceHeader) {
         pStdSliceHeader = new StdVideoEncodeH264SliceHeader(*copy_src->pStdSliceHeader);
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
-
-safe_VkVideoEncodeH264VclFrameInfoEXT::safe_VkVideoEncodeH264VclFrameInfoEXT(const VkVideoEncodeH264VclFrameInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+safe_VkVideoEncodeH264PictureInfoEXT::safe_VkVideoEncodeH264PictureInfoEXT(const VkVideoEncodeH264PictureInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
-    pStdReferenceFinalLists(nullptr),
     naluSliceEntryCount(in_struct->naluSliceEntryCount),
     pNaluSliceEntries(nullptr),
-    pStdPictureInfo(nullptr)
+    pStdPictureInfo(nullptr),
+    generatePrefixNalu(in_struct->generatePrefixNalu)
 {
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    if (in_struct->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*in_struct->pStdReferenceFinalLists);
-    }
     if (naluSliceEntryCount && in_struct->pNaluSliceEntries) {
         pNaluSliceEntries = new safe_VkVideoEncodeH264NaluSliceInfoEXT[naluSliceEntryCount];
         for (uint32_t i = 0; i < naluSliceEntryCount; ++i) {
@@ -1088,26 +1382,23 @@ safe_VkVideoEncodeH264VclFrameInfoEXT::safe_VkVideoEncodeH264VclFrameInfoEXT(con
     }
 }
 
-safe_VkVideoEncodeH264VclFrameInfoEXT::safe_VkVideoEncodeH264VclFrameInfoEXT() :
-    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_VCL_FRAME_INFO_EXT),
+safe_VkVideoEncodeH264PictureInfoEXT::safe_VkVideoEncodeH264PictureInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PICTURE_INFO_EXT),
     pNext(nullptr),
-    pStdReferenceFinalLists(nullptr),
     naluSliceEntryCount(),
     pNaluSliceEntries(nullptr),
-    pStdPictureInfo(nullptr)
+    pStdPictureInfo(nullptr),
+    generatePrefixNalu()
 {}
 
-safe_VkVideoEncodeH264VclFrameInfoEXT::safe_VkVideoEncodeH264VclFrameInfoEXT(const safe_VkVideoEncodeH264VclFrameInfoEXT& copy_src)
+safe_VkVideoEncodeH264PictureInfoEXT::safe_VkVideoEncodeH264PictureInfoEXT(const safe_VkVideoEncodeH264PictureInfoEXT& copy_src)
 {
     sType = copy_src.sType;
-    pStdReferenceFinalLists = nullptr;
     naluSliceEntryCount = copy_src.naluSliceEntryCount;
     pNaluSliceEntries = nullptr;
     pStdPictureInfo = nullptr;
+    generatePrefixNalu = copy_src.generatePrefixNalu;
     pNext = SafePnextCopy(copy_src.pNext);
-    if (copy_src.pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*copy_src.pStdReferenceFinalLists);
-    }
     if (naluSliceEntryCount && copy_src.pNaluSliceEntries) {
         pNaluSliceEntries = new safe_VkVideoEncodeH264NaluSliceInfoEXT[naluSliceEntryCount];
         for (uint32_t i = 0; i < naluSliceEntryCount; ++i) {
@@ -1119,12 +1410,10 @@ safe_VkVideoEncodeH264VclFrameInfoEXT::safe_VkVideoEncodeH264VclFrameInfoEXT(con
     }
 }
 
-safe_VkVideoEncodeH264VclFrameInfoEXT& safe_VkVideoEncodeH264VclFrameInfoEXT::operator=(const safe_VkVideoEncodeH264VclFrameInfoEXT& copy_src)
+safe_VkVideoEncodeH264PictureInfoEXT& safe_VkVideoEncodeH264PictureInfoEXT::operator=(const safe_VkVideoEncodeH264PictureInfoEXT& copy_src)
 {
     if (&copy_src == this) return *this;
 
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pNaluSliceEntries)
         delete[] pNaluSliceEntries;
     if (pStdPictureInfo)
@@ -1133,14 +1422,11 @@ safe_VkVideoEncodeH264VclFrameInfoEXT& safe_VkVideoEncodeH264VclFrameInfoEXT::op
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
-    pStdReferenceFinalLists = nullptr;
     naluSliceEntryCount = copy_src.naluSliceEntryCount;
     pNaluSliceEntries = nullptr;
     pStdPictureInfo = nullptr;
+    generatePrefixNalu = copy_src.generatePrefixNalu;
     pNext = SafePnextCopy(copy_src.pNext);
-    if (copy_src.pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*copy_src.pStdReferenceFinalLists);
-    }
     if (naluSliceEntryCount && copy_src.pNaluSliceEntries) {
         pNaluSliceEntries = new safe_VkVideoEncodeH264NaluSliceInfoEXT[naluSliceEntryCount];
         for (uint32_t i = 0; i < naluSliceEntryCount; ++i) {
@@ -1154,10 +1440,8 @@ safe_VkVideoEncodeH264VclFrameInfoEXT& safe_VkVideoEncodeH264VclFrameInfoEXT::op
     return *this;
 }
 
-safe_VkVideoEncodeH264VclFrameInfoEXT::~safe_VkVideoEncodeH264VclFrameInfoEXT()
+safe_VkVideoEncodeH264PictureInfoEXT::~safe_VkVideoEncodeH264PictureInfoEXT()
 {
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pNaluSliceEntries)
         delete[] pNaluSliceEntries;
     if (pStdPictureInfo)
@@ -1166,10 +1450,8 @@ safe_VkVideoEncodeH264VclFrameInfoEXT::~safe_VkVideoEncodeH264VclFrameInfoEXT()
         FreePnextChain(pNext);
 }
 
-void safe_VkVideoEncodeH264VclFrameInfoEXT::initialize(const VkVideoEncodeH264VclFrameInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+void safe_VkVideoEncodeH264PictureInfoEXT::initialize(const VkVideoEncodeH264PictureInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
 {
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pNaluSliceEntries)
         delete[] pNaluSliceEntries;
     if (pStdPictureInfo)
@@ -1177,14 +1459,11 @@ void safe_VkVideoEncodeH264VclFrameInfoEXT::initialize(const VkVideoEncodeH264Vc
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
-    pStdReferenceFinalLists = nullptr;
     naluSliceEntryCount = in_struct->naluSliceEntryCount;
     pNaluSliceEntries = nullptr;
     pStdPictureInfo = nullptr;
+    generatePrefixNalu = in_struct->generatePrefixNalu;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    if (in_struct->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*in_struct->pStdReferenceFinalLists);
-    }
     if (naluSliceEntryCount && in_struct->pNaluSliceEntries) {
         pNaluSliceEntries = new safe_VkVideoEncodeH264NaluSliceInfoEXT[naluSliceEntryCount];
         for (uint32_t i = 0; i < naluSliceEntryCount; ++i) {
@@ -1196,17 +1475,14 @@ void safe_VkVideoEncodeH264VclFrameInfoEXT::initialize(const VkVideoEncodeH264Vc
     }
 }
 
-void safe_VkVideoEncodeH264VclFrameInfoEXT::initialize(const safe_VkVideoEncodeH264VclFrameInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+void safe_VkVideoEncodeH264PictureInfoEXT::initialize(const safe_VkVideoEncodeH264PictureInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
 {
     sType = copy_src->sType;
-    pStdReferenceFinalLists = nullptr;
     naluSliceEntryCount = copy_src->naluSliceEntryCount;
     pNaluSliceEntries = nullptr;
     pStdPictureInfo = nullptr;
+    generatePrefixNalu = copy_src->generatePrefixNalu;
     pNext = SafePnextCopy(copy_src->pNext);
-    if (copy_src->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH264ReferenceListsInfo(*copy_src->pStdReferenceFinalLists);
-    }
     if (naluSliceEntryCount && copy_src->pNaluSliceEntries) {
         pNaluSliceEntries = new safe_VkVideoEncodeH264NaluSliceInfoEXT[naluSliceEntryCount];
         for (uint32_t i = 0; i < naluSliceEntryCount; ++i) {
@@ -1218,9 +1494,7 @@ void safe_VkVideoEncodeH264VclFrameInfoEXT::initialize(const safe_VkVideoEncodeH
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH264DpbSlotInfoEXT::safe_VkVideoEncodeH264DpbSlotInfoEXT(const VkVideoEncodeH264DpbSlotInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -1299,9 +1573,7 @@ void safe_VkVideoEncodeH264DpbSlotInfoEXT::initialize(const safe_VkVideoEncodeH2
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH264ProfileInfoEXT::safe_VkVideoEncodeH264ProfileInfoEXT(const VkVideoEncodeH264ProfileInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -1359,16 +1631,14 @@ void safe_VkVideoEncodeH264ProfileInfoEXT::initialize(const safe_VkVideoEncodeH2
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH264RateControlInfoEXT::safe_VkVideoEncodeH264RateControlInfoEXT(const VkVideoEncodeH264RateControlInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
+    flags(in_struct->flags),
     gopFrameCount(in_struct->gopFrameCount),
     idrPeriod(in_struct->idrPeriod),
     consecutiveBFrameCount(in_struct->consecutiveBFrameCount),
-    rateControlStructure(in_struct->rateControlStructure),
     temporalLayerCount(in_struct->temporalLayerCount)
 {
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
@@ -1377,20 +1647,20 @@ safe_VkVideoEncodeH264RateControlInfoEXT::safe_VkVideoEncodeH264RateControlInfoE
 safe_VkVideoEncodeH264RateControlInfoEXT::safe_VkVideoEncodeH264RateControlInfoEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_INFO_EXT),
     pNext(nullptr),
+    flags(),
     gopFrameCount(),
     idrPeriod(),
     consecutiveBFrameCount(),
-    rateControlStructure(),
     temporalLayerCount()
 {}
 
 safe_VkVideoEncodeH264RateControlInfoEXT::safe_VkVideoEncodeH264RateControlInfoEXT(const safe_VkVideoEncodeH264RateControlInfoEXT& copy_src)
 {
     sType = copy_src.sType;
+    flags = copy_src.flags;
     gopFrameCount = copy_src.gopFrameCount;
     idrPeriod = copy_src.idrPeriod;
     consecutiveBFrameCount = copy_src.consecutiveBFrameCount;
-    rateControlStructure = copy_src.rateControlStructure;
     temporalLayerCount = copy_src.temporalLayerCount;
     pNext = SafePnextCopy(copy_src.pNext);
 }
@@ -1403,10 +1673,10 @@ safe_VkVideoEncodeH264RateControlInfoEXT& safe_VkVideoEncodeH264RateControlInfoE
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
+    flags = copy_src.flags;
     gopFrameCount = copy_src.gopFrameCount;
     idrPeriod = copy_src.idrPeriod;
     consecutiveBFrameCount = copy_src.consecutiveBFrameCount;
-    rateControlStructure = copy_src.rateControlStructure;
     temporalLayerCount = copy_src.temporalLayerCount;
     pNext = SafePnextCopy(copy_src.pNext);
 
@@ -1424,10 +1694,10 @@ void safe_VkVideoEncodeH264RateControlInfoEXT::initialize(const VkVideoEncodeH26
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
+    flags = in_struct->flags;
     gopFrameCount = in_struct->gopFrameCount;
     idrPeriod = in_struct->idrPeriod;
     consecutiveBFrameCount = in_struct->consecutiveBFrameCount;
-    rateControlStructure = in_struct->rateControlStructure;
     temporalLayerCount = in_struct->temporalLayerCount;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
 }
@@ -1435,23 +1705,18 @@ void safe_VkVideoEncodeH264RateControlInfoEXT::initialize(const VkVideoEncodeH26
 void safe_VkVideoEncodeH264RateControlInfoEXT::initialize(const safe_VkVideoEncodeH264RateControlInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
 {
     sType = copy_src->sType;
+    flags = copy_src->flags;
     gopFrameCount = copy_src->gopFrameCount;
     idrPeriod = copy_src->idrPeriod;
     consecutiveBFrameCount = copy_src->consecutiveBFrameCount;
-    rateControlStructure = copy_src->rateControlStructure;
     temporalLayerCount = copy_src->temporalLayerCount;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH264RateControlLayerInfoEXT::safe_VkVideoEncodeH264RateControlLayerInfoEXT(const VkVideoEncodeH264RateControlLayerInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
-    temporalLayerId(in_struct->temporalLayerId),
-    useInitialRcQp(in_struct->useInitialRcQp),
-    initialRcQp(in_struct->initialRcQp),
     useMinQp(in_struct->useMinQp),
     minQp(in_struct->minQp),
     useMaxQp(in_struct->useMaxQp),
@@ -1465,9 +1730,6 @@ safe_VkVideoEncodeH264RateControlLayerInfoEXT::safe_VkVideoEncodeH264RateControl
 safe_VkVideoEncodeH264RateControlLayerInfoEXT::safe_VkVideoEncodeH264RateControlLayerInfoEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_LAYER_INFO_EXT),
     pNext(nullptr),
-    temporalLayerId(),
-    useInitialRcQp(),
-    initialRcQp(),
     useMinQp(),
     minQp(),
     useMaxQp(),
@@ -1479,9 +1741,6 @@ safe_VkVideoEncodeH264RateControlLayerInfoEXT::safe_VkVideoEncodeH264RateControl
 safe_VkVideoEncodeH264RateControlLayerInfoEXT::safe_VkVideoEncodeH264RateControlLayerInfoEXT(const safe_VkVideoEncodeH264RateControlLayerInfoEXT& copy_src)
 {
     sType = copy_src.sType;
-    temporalLayerId = copy_src.temporalLayerId;
-    useInitialRcQp = copy_src.useInitialRcQp;
-    initialRcQp = copy_src.initialRcQp;
     useMinQp = copy_src.useMinQp;
     minQp = copy_src.minQp;
     useMaxQp = copy_src.useMaxQp;
@@ -1499,9 +1758,6 @@ safe_VkVideoEncodeH264RateControlLayerInfoEXT& safe_VkVideoEncodeH264RateControl
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
-    temporalLayerId = copy_src.temporalLayerId;
-    useInitialRcQp = copy_src.useInitialRcQp;
-    initialRcQp = copy_src.initialRcQp;
     useMinQp = copy_src.useMinQp;
     minQp = copy_src.minQp;
     useMaxQp = copy_src.useMaxQp;
@@ -1524,9 +1780,6 @@ void safe_VkVideoEncodeH264RateControlLayerInfoEXT::initialize(const VkVideoEnco
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
-    temporalLayerId = in_struct->temporalLayerId;
-    useInitialRcQp = in_struct->useInitialRcQp;
-    initialRcQp = in_struct->initialRcQp;
     useMinQp = in_struct->useMinQp;
     minQp = in_struct->minQp;
     useMaxQp = in_struct->useMaxQp;
@@ -1539,9 +1792,6 @@ void safe_VkVideoEncodeH264RateControlLayerInfoEXT::initialize(const VkVideoEnco
 void safe_VkVideoEncodeH264RateControlLayerInfoEXT::initialize(const safe_VkVideoEncodeH264RateControlLayerInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
 {
     sType = copy_src->sType;
-    temporalLayerId = copy_src->temporalLayerId;
-    useInitialRcQp = copy_src->useInitialRcQp;
-    initialRcQp = copy_src->initialRcQp;
     useMinQp = copy_src->useMinQp;
     minQp = copy_src->minQp;
     useMaxQp = copy_src->useMaxQp;
@@ -1551,30 +1801,102 @@ void safe_VkVideoEncodeH264RateControlLayerInfoEXT::initialize(const safe_VkVide
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
+safe_VkVideoEncodeH264GopRemainingFrameInfoEXT::safe_VkVideoEncodeH264GopRemainingFrameInfoEXT(const VkVideoEncodeH264GopRemainingFrameInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    useGopRemainingFrames(in_struct->useGopRemainingFrames),
+    gopRemainingI(in_struct->gopRemainingI),
+    gopRemainingP(in_struct->gopRemainingP),
+    gopRemainingB(in_struct->gopRemainingB)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH264GopRemainingFrameInfoEXT::safe_VkVideoEncodeH264GopRemainingFrameInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_GOP_REMAINING_FRAME_INFO_EXT),
+    pNext(nullptr),
+    useGopRemainingFrames(),
+    gopRemainingI(),
+    gopRemainingP(),
+    gopRemainingB()
+{}
+
+safe_VkVideoEncodeH264GopRemainingFrameInfoEXT::safe_VkVideoEncodeH264GopRemainingFrameInfoEXT(const safe_VkVideoEncodeH264GopRemainingFrameInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    useGopRemainingFrames = copy_src.useGopRemainingFrames;
+    gopRemainingI = copy_src.gopRemainingI;
+    gopRemainingP = copy_src.gopRemainingP;
+    gopRemainingB = copy_src.gopRemainingB;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH264GopRemainingFrameInfoEXT& safe_VkVideoEncodeH264GopRemainingFrameInfoEXT::operator=(const safe_VkVideoEncodeH264GopRemainingFrameInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    useGopRemainingFrames = copy_src.useGopRemainingFrames;
+    gopRemainingI = copy_src.gopRemainingI;
+    gopRemainingP = copy_src.gopRemainingP;
+    gopRemainingB = copy_src.gopRemainingB;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH264GopRemainingFrameInfoEXT::~safe_VkVideoEncodeH264GopRemainingFrameInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH264GopRemainingFrameInfoEXT::initialize(const VkVideoEncodeH264GopRemainingFrameInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    useGopRemainingFrames = in_struct->useGopRemainingFrames;
+    gopRemainingI = in_struct->gopRemainingI;
+    gopRemainingP = in_struct->gopRemainingP;
+    gopRemainingB = in_struct->gopRemainingB;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH264GopRemainingFrameInfoEXT::initialize(const safe_VkVideoEncodeH264GopRemainingFrameInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    useGopRemainingFrames = copy_src->useGopRemainingFrames;
+    gopRemainingI = copy_src->gopRemainingI;
+    gopRemainingP = copy_src->gopRemainingP;
+    gopRemainingB = copy_src->gopRemainingB;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 safe_VkVideoEncodeH265CapabilitiesEXT::safe_VkVideoEncodeH265CapabilitiesEXT(const VkVideoEncodeH265CapabilitiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     flags(in_struct->flags),
+    maxLevelIdc(in_struct->maxLevelIdc),
+    maxSliceSegmentCount(in_struct->maxSliceSegmentCount),
+    maxTiles(in_struct->maxTiles),
     ctbSizes(in_struct->ctbSizes),
     transformBlockSizes(in_struct->transformBlockSizes),
     maxPPictureL0ReferenceCount(in_struct->maxPPictureL0ReferenceCount),
     maxBPictureL0ReferenceCount(in_struct->maxBPictureL0ReferenceCount),
     maxL1ReferenceCount(in_struct->maxL1ReferenceCount),
-    maxSubLayersCount(in_struct->maxSubLayersCount),
-    minLog2MinLumaCodingBlockSizeMinus3(in_struct->minLog2MinLumaCodingBlockSizeMinus3),
-    maxLog2MinLumaCodingBlockSizeMinus3(in_struct->maxLog2MinLumaCodingBlockSizeMinus3),
-    minLog2MinLumaTransformBlockSizeMinus2(in_struct->minLog2MinLumaTransformBlockSizeMinus2),
-    maxLog2MinLumaTransformBlockSizeMinus2(in_struct->maxLog2MinLumaTransformBlockSizeMinus2),
-    minMaxTransformHierarchyDepthInter(in_struct->minMaxTransformHierarchyDepthInter),
-    maxMaxTransformHierarchyDepthInter(in_struct->maxMaxTransformHierarchyDepthInter),
-    minMaxTransformHierarchyDepthIntra(in_struct->minMaxTransformHierarchyDepthIntra),
-    maxMaxTransformHierarchyDepthIntra(in_struct->maxMaxTransformHierarchyDepthIntra),
-    maxDiffCuQpDeltaDepth(in_struct->maxDiffCuQpDeltaDepth),
-    minMaxNumMergeCand(in_struct->minMaxNumMergeCand),
-    maxMaxNumMergeCand(in_struct->maxMaxNumMergeCand)
+    maxSubLayerCount(in_struct->maxSubLayerCount),
+    expectDyadicTemporalSubLayerPattern(in_struct->expectDyadicTemporalSubLayerPattern),
+    minQp(in_struct->minQp),
+    maxQp(in_struct->maxQp),
+    prefersGopRemainingFrames(in_struct->prefersGopRemainingFrames),
+    requiresGopRemainingFrames(in_struct->requiresGopRemainingFrames),
+    stdSyntaxFlags(in_struct->stdSyntaxFlags)
 {
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
 }
@@ -1583,46 +1905,42 @@ safe_VkVideoEncodeH265CapabilitiesEXT::safe_VkVideoEncodeH265CapabilitiesEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_CAPABILITIES_EXT),
     pNext(nullptr),
     flags(),
+    maxLevelIdc(),
+    maxSliceSegmentCount(),
+    maxTiles(),
     ctbSizes(),
     transformBlockSizes(),
     maxPPictureL0ReferenceCount(),
     maxBPictureL0ReferenceCount(),
     maxL1ReferenceCount(),
-    maxSubLayersCount(),
-    minLog2MinLumaCodingBlockSizeMinus3(),
-    maxLog2MinLumaCodingBlockSizeMinus3(),
-    minLog2MinLumaTransformBlockSizeMinus2(),
-    maxLog2MinLumaTransformBlockSizeMinus2(),
-    minMaxTransformHierarchyDepthInter(),
-    maxMaxTransformHierarchyDepthInter(),
-    minMaxTransformHierarchyDepthIntra(),
-    maxMaxTransformHierarchyDepthIntra(),
-    maxDiffCuQpDeltaDepth(),
-    minMaxNumMergeCand(),
-    maxMaxNumMergeCand()
+    maxSubLayerCount(),
+    expectDyadicTemporalSubLayerPattern(),
+    minQp(),
+    maxQp(),
+    prefersGopRemainingFrames(),
+    requiresGopRemainingFrames(),
+    stdSyntaxFlags()
 {}
 
 safe_VkVideoEncodeH265CapabilitiesEXT::safe_VkVideoEncodeH265CapabilitiesEXT(const safe_VkVideoEncodeH265CapabilitiesEXT& copy_src)
 {
     sType = copy_src.sType;
     flags = copy_src.flags;
+    maxLevelIdc = copy_src.maxLevelIdc;
+    maxSliceSegmentCount = copy_src.maxSliceSegmentCount;
+    maxTiles = copy_src.maxTiles;
     ctbSizes = copy_src.ctbSizes;
     transformBlockSizes = copy_src.transformBlockSizes;
     maxPPictureL0ReferenceCount = copy_src.maxPPictureL0ReferenceCount;
     maxBPictureL0ReferenceCount = copy_src.maxBPictureL0ReferenceCount;
     maxL1ReferenceCount = copy_src.maxL1ReferenceCount;
-    maxSubLayersCount = copy_src.maxSubLayersCount;
-    minLog2MinLumaCodingBlockSizeMinus3 = copy_src.minLog2MinLumaCodingBlockSizeMinus3;
-    maxLog2MinLumaCodingBlockSizeMinus3 = copy_src.maxLog2MinLumaCodingBlockSizeMinus3;
-    minLog2MinLumaTransformBlockSizeMinus2 = copy_src.minLog2MinLumaTransformBlockSizeMinus2;
-    maxLog2MinLumaTransformBlockSizeMinus2 = copy_src.maxLog2MinLumaTransformBlockSizeMinus2;
-    minMaxTransformHierarchyDepthInter = copy_src.minMaxTransformHierarchyDepthInter;
-    maxMaxTransformHierarchyDepthInter = copy_src.maxMaxTransformHierarchyDepthInter;
-    minMaxTransformHierarchyDepthIntra = copy_src.minMaxTransformHierarchyDepthIntra;
-    maxMaxTransformHierarchyDepthIntra = copy_src.maxMaxTransformHierarchyDepthIntra;
-    maxDiffCuQpDeltaDepth = copy_src.maxDiffCuQpDeltaDepth;
-    minMaxNumMergeCand = copy_src.minMaxNumMergeCand;
-    maxMaxNumMergeCand = copy_src.maxMaxNumMergeCand;
+    maxSubLayerCount = copy_src.maxSubLayerCount;
+    expectDyadicTemporalSubLayerPattern = copy_src.expectDyadicTemporalSubLayerPattern;
+    minQp = copy_src.minQp;
+    maxQp = copy_src.maxQp;
+    prefersGopRemainingFrames = copy_src.prefersGopRemainingFrames;
+    requiresGopRemainingFrames = copy_src.requiresGopRemainingFrames;
+    stdSyntaxFlags = copy_src.stdSyntaxFlags;
     pNext = SafePnextCopy(copy_src.pNext);
 }
 
@@ -1635,23 +1953,21 @@ safe_VkVideoEncodeH265CapabilitiesEXT& safe_VkVideoEncodeH265CapabilitiesEXT::op
 
     sType = copy_src.sType;
     flags = copy_src.flags;
+    maxLevelIdc = copy_src.maxLevelIdc;
+    maxSliceSegmentCount = copy_src.maxSliceSegmentCount;
+    maxTiles = copy_src.maxTiles;
     ctbSizes = copy_src.ctbSizes;
     transformBlockSizes = copy_src.transformBlockSizes;
     maxPPictureL0ReferenceCount = copy_src.maxPPictureL0ReferenceCount;
     maxBPictureL0ReferenceCount = copy_src.maxBPictureL0ReferenceCount;
     maxL1ReferenceCount = copy_src.maxL1ReferenceCount;
-    maxSubLayersCount = copy_src.maxSubLayersCount;
-    minLog2MinLumaCodingBlockSizeMinus3 = copy_src.minLog2MinLumaCodingBlockSizeMinus3;
-    maxLog2MinLumaCodingBlockSizeMinus3 = copy_src.maxLog2MinLumaCodingBlockSizeMinus3;
-    minLog2MinLumaTransformBlockSizeMinus2 = copy_src.minLog2MinLumaTransformBlockSizeMinus2;
-    maxLog2MinLumaTransformBlockSizeMinus2 = copy_src.maxLog2MinLumaTransformBlockSizeMinus2;
-    minMaxTransformHierarchyDepthInter = copy_src.minMaxTransformHierarchyDepthInter;
-    maxMaxTransformHierarchyDepthInter = copy_src.maxMaxTransformHierarchyDepthInter;
-    minMaxTransformHierarchyDepthIntra = copy_src.minMaxTransformHierarchyDepthIntra;
-    maxMaxTransformHierarchyDepthIntra = copy_src.maxMaxTransformHierarchyDepthIntra;
-    maxDiffCuQpDeltaDepth = copy_src.maxDiffCuQpDeltaDepth;
-    minMaxNumMergeCand = copy_src.minMaxNumMergeCand;
-    maxMaxNumMergeCand = copy_src.maxMaxNumMergeCand;
+    maxSubLayerCount = copy_src.maxSubLayerCount;
+    expectDyadicTemporalSubLayerPattern = copy_src.expectDyadicTemporalSubLayerPattern;
+    minQp = copy_src.minQp;
+    maxQp = copy_src.maxQp;
+    prefersGopRemainingFrames = copy_src.prefersGopRemainingFrames;
+    requiresGopRemainingFrames = copy_src.requiresGopRemainingFrames;
+    stdSyntaxFlags = copy_src.stdSyntaxFlags;
     pNext = SafePnextCopy(copy_src.pNext);
 
     return *this;
@@ -1669,23 +1985,21 @@ void safe_VkVideoEncodeH265CapabilitiesEXT::initialize(const VkVideoEncodeH265Ca
         FreePnextChain(pNext);
     sType = in_struct->sType;
     flags = in_struct->flags;
+    maxLevelIdc = in_struct->maxLevelIdc;
+    maxSliceSegmentCount = in_struct->maxSliceSegmentCount;
+    maxTiles = in_struct->maxTiles;
     ctbSizes = in_struct->ctbSizes;
     transformBlockSizes = in_struct->transformBlockSizes;
     maxPPictureL0ReferenceCount = in_struct->maxPPictureL0ReferenceCount;
     maxBPictureL0ReferenceCount = in_struct->maxBPictureL0ReferenceCount;
     maxL1ReferenceCount = in_struct->maxL1ReferenceCount;
-    maxSubLayersCount = in_struct->maxSubLayersCount;
-    minLog2MinLumaCodingBlockSizeMinus3 = in_struct->minLog2MinLumaCodingBlockSizeMinus3;
-    maxLog2MinLumaCodingBlockSizeMinus3 = in_struct->maxLog2MinLumaCodingBlockSizeMinus3;
-    minLog2MinLumaTransformBlockSizeMinus2 = in_struct->minLog2MinLumaTransformBlockSizeMinus2;
-    maxLog2MinLumaTransformBlockSizeMinus2 = in_struct->maxLog2MinLumaTransformBlockSizeMinus2;
-    minMaxTransformHierarchyDepthInter = in_struct->minMaxTransformHierarchyDepthInter;
-    maxMaxTransformHierarchyDepthInter = in_struct->maxMaxTransformHierarchyDepthInter;
-    minMaxTransformHierarchyDepthIntra = in_struct->minMaxTransformHierarchyDepthIntra;
-    maxMaxTransformHierarchyDepthIntra = in_struct->maxMaxTransformHierarchyDepthIntra;
-    maxDiffCuQpDeltaDepth = in_struct->maxDiffCuQpDeltaDepth;
-    minMaxNumMergeCand = in_struct->minMaxNumMergeCand;
-    maxMaxNumMergeCand = in_struct->maxMaxNumMergeCand;
+    maxSubLayerCount = in_struct->maxSubLayerCount;
+    expectDyadicTemporalSubLayerPattern = in_struct->expectDyadicTemporalSubLayerPattern;
+    minQp = in_struct->minQp;
+    maxQp = in_struct->maxQp;
+    prefersGopRemainingFrames = in_struct->prefersGopRemainingFrames;
+    requiresGopRemainingFrames = in_struct->requiresGopRemainingFrames;
+    stdSyntaxFlags = in_struct->stdSyntaxFlags;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
 }
 
@@ -1693,29 +2007,189 @@ void safe_VkVideoEncodeH265CapabilitiesEXT::initialize(const safe_VkVideoEncodeH
 {
     sType = copy_src->sType;
     flags = copy_src->flags;
+    maxLevelIdc = copy_src->maxLevelIdc;
+    maxSliceSegmentCount = copy_src->maxSliceSegmentCount;
+    maxTiles = copy_src->maxTiles;
     ctbSizes = copy_src->ctbSizes;
     transformBlockSizes = copy_src->transformBlockSizes;
     maxPPictureL0ReferenceCount = copy_src->maxPPictureL0ReferenceCount;
     maxBPictureL0ReferenceCount = copy_src->maxBPictureL0ReferenceCount;
     maxL1ReferenceCount = copy_src->maxL1ReferenceCount;
-    maxSubLayersCount = copy_src->maxSubLayersCount;
-    minLog2MinLumaCodingBlockSizeMinus3 = copy_src->minLog2MinLumaCodingBlockSizeMinus3;
-    maxLog2MinLumaCodingBlockSizeMinus3 = copy_src->maxLog2MinLumaCodingBlockSizeMinus3;
-    minLog2MinLumaTransformBlockSizeMinus2 = copy_src->minLog2MinLumaTransformBlockSizeMinus2;
-    maxLog2MinLumaTransformBlockSizeMinus2 = copy_src->maxLog2MinLumaTransformBlockSizeMinus2;
-    minMaxTransformHierarchyDepthInter = copy_src->minMaxTransformHierarchyDepthInter;
-    maxMaxTransformHierarchyDepthInter = copy_src->maxMaxTransformHierarchyDepthInter;
-    minMaxTransformHierarchyDepthIntra = copy_src->minMaxTransformHierarchyDepthIntra;
-    maxMaxTransformHierarchyDepthIntra = copy_src->maxMaxTransformHierarchyDepthIntra;
-    maxDiffCuQpDeltaDepth = copy_src->maxDiffCuQpDeltaDepth;
-    minMaxNumMergeCand = copy_src->minMaxNumMergeCand;
-    maxMaxNumMergeCand = copy_src->maxMaxNumMergeCand;
+    maxSubLayerCount = copy_src->maxSubLayerCount;
+    expectDyadicTemporalSubLayerPattern = copy_src->expectDyadicTemporalSubLayerPattern;
+    minQp = copy_src->minQp;
+    maxQp = copy_src->maxQp;
+    prefersGopRemainingFrames = copy_src->prefersGopRemainingFrames;
+    requiresGopRemainingFrames = copy_src->requiresGopRemainingFrames;
+    stdSyntaxFlags = copy_src->stdSyntaxFlags;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
+safe_VkVideoEncodeH265SessionCreateInfoEXT::safe_VkVideoEncodeH265SessionCreateInfoEXT(const VkVideoEncodeH265SessionCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    useMaxLevelIdc(in_struct->useMaxLevelIdc),
+    maxLevelIdc(in_struct->maxLevelIdc)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH265SessionCreateInfoEXT::safe_VkVideoEncodeH265SessionCreateInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_CREATE_INFO_EXT),
+    pNext(nullptr),
+    useMaxLevelIdc(),
+    maxLevelIdc()
+{}
+
+safe_VkVideoEncodeH265SessionCreateInfoEXT::safe_VkVideoEncodeH265SessionCreateInfoEXT(const safe_VkVideoEncodeH265SessionCreateInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    useMaxLevelIdc = copy_src.useMaxLevelIdc;
+    maxLevelIdc = copy_src.maxLevelIdc;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH265SessionCreateInfoEXT& safe_VkVideoEncodeH265SessionCreateInfoEXT::operator=(const safe_VkVideoEncodeH265SessionCreateInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    useMaxLevelIdc = copy_src.useMaxLevelIdc;
+    maxLevelIdc = copy_src.maxLevelIdc;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH265SessionCreateInfoEXT::~safe_VkVideoEncodeH265SessionCreateInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH265SessionCreateInfoEXT::initialize(const VkVideoEncodeH265SessionCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    useMaxLevelIdc = in_struct->useMaxLevelIdc;
+    maxLevelIdc = in_struct->maxLevelIdc;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH265SessionCreateInfoEXT::initialize(const safe_VkVideoEncodeH265SessionCreateInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    useMaxLevelIdc = copy_src->useMaxLevelIdc;
+    maxLevelIdc = copy_src->maxLevelIdc;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+safe_VkVideoEncodeH265QualityLevelPropertiesEXT::safe_VkVideoEncodeH265QualityLevelPropertiesEXT(const VkVideoEncodeH265QualityLevelPropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    preferredRateControlFlags(in_struct->preferredRateControlFlags),
+    preferredGopFrameCount(in_struct->preferredGopFrameCount),
+    preferredIdrPeriod(in_struct->preferredIdrPeriod),
+    preferredConsecutiveBFrameCount(in_struct->preferredConsecutiveBFrameCount),
+    preferredSubLayerCount(in_struct->preferredSubLayerCount),
+    preferredConstantQp(in_struct->preferredConstantQp),
+    preferredMaxL0ReferenceCount(in_struct->preferredMaxL0ReferenceCount),
+    preferredMaxL1ReferenceCount(in_struct->preferredMaxL1ReferenceCount)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH265QualityLevelPropertiesEXT::safe_VkVideoEncodeH265QualityLevelPropertiesEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_QUALITY_LEVEL_PROPERTIES_EXT),
+    pNext(nullptr),
+    preferredRateControlFlags(),
+    preferredGopFrameCount(),
+    preferredIdrPeriod(),
+    preferredConsecutiveBFrameCount(),
+    preferredSubLayerCount(),
+    preferredConstantQp(),
+    preferredMaxL0ReferenceCount(),
+    preferredMaxL1ReferenceCount()
+{}
+
+safe_VkVideoEncodeH265QualityLevelPropertiesEXT::safe_VkVideoEncodeH265QualityLevelPropertiesEXT(const safe_VkVideoEncodeH265QualityLevelPropertiesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    preferredRateControlFlags = copy_src.preferredRateControlFlags;
+    preferredGopFrameCount = copy_src.preferredGopFrameCount;
+    preferredIdrPeriod = copy_src.preferredIdrPeriod;
+    preferredConsecutiveBFrameCount = copy_src.preferredConsecutiveBFrameCount;
+    preferredSubLayerCount = copy_src.preferredSubLayerCount;
+    preferredConstantQp = copy_src.preferredConstantQp;
+    preferredMaxL0ReferenceCount = copy_src.preferredMaxL0ReferenceCount;
+    preferredMaxL1ReferenceCount = copy_src.preferredMaxL1ReferenceCount;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH265QualityLevelPropertiesEXT& safe_VkVideoEncodeH265QualityLevelPropertiesEXT::operator=(const safe_VkVideoEncodeH265QualityLevelPropertiesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    preferredRateControlFlags = copy_src.preferredRateControlFlags;
+    preferredGopFrameCount = copy_src.preferredGopFrameCount;
+    preferredIdrPeriod = copy_src.preferredIdrPeriod;
+    preferredConsecutiveBFrameCount = copy_src.preferredConsecutiveBFrameCount;
+    preferredSubLayerCount = copy_src.preferredSubLayerCount;
+    preferredConstantQp = copy_src.preferredConstantQp;
+    preferredMaxL0ReferenceCount = copy_src.preferredMaxL0ReferenceCount;
+    preferredMaxL1ReferenceCount = copy_src.preferredMaxL1ReferenceCount;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH265QualityLevelPropertiesEXT::~safe_VkVideoEncodeH265QualityLevelPropertiesEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH265QualityLevelPropertiesEXT::initialize(const VkVideoEncodeH265QualityLevelPropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    preferredRateControlFlags = in_struct->preferredRateControlFlags;
+    preferredGopFrameCount = in_struct->preferredGopFrameCount;
+    preferredIdrPeriod = in_struct->preferredIdrPeriod;
+    preferredConsecutiveBFrameCount = in_struct->preferredConsecutiveBFrameCount;
+    preferredSubLayerCount = in_struct->preferredSubLayerCount;
+    preferredConstantQp = in_struct->preferredConstantQp;
+    preferredMaxL0ReferenceCount = in_struct->preferredMaxL0ReferenceCount;
+    preferredMaxL1ReferenceCount = in_struct->preferredMaxL1ReferenceCount;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH265QualityLevelPropertiesEXT::initialize(const safe_VkVideoEncodeH265QualityLevelPropertiesEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    preferredRateControlFlags = copy_src->preferredRateControlFlags;
+    preferredGopFrameCount = copy_src->preferredGopFrameCount;
+    preferredIdrPeriod = copy_src->preferredIdrPeriod;
+    preferredConsecutiveBFrameCount = copy_src->preferredConsecutiveBFrameCount;
+    preferredSubLayerCount = copy_src->preferredSubLayerCount;
+    preferredConstantQp = copy_src->preferredConstantQp;
+    preferredMaxL0ReferenceCount = copy_src->preferredMaxL0ReferenceCount;
+    preferredMaxL1ReferenceCount = copy_src->preferredMaxL1ReferenceCount;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 safe_VkVideoEncodeH265SessionParametersAddInfoEXT::safe_VkVideoEncodeH265SessionParametersAddInfoEXT(const VkVideoEncodeH265SessionParametersAddInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -1881,9 +2355,7 @@ void safe_VkVideoEncodeH265SessionParametersAddInfoEXT::initialize(const safe_Vk
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH265SessionParametersCreateInfoEXT::safe_VkVideoEncodeH265SessionParametersCreateInfoEXT(const VkVideoEncodeH265SessionParametersCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -1975,20 +2447,172 @@ void safe_VkVideoEncodeH265SessionParametersCreateInfoEXT::initialize(const safe
         pParametersAddInfo = new safe_VkVideoEncodeH265SessionParametersAddInfoEXT(*copy_src->pParametersAddInfo);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
+safe_VkVideoEncodeH265SessionParametersGetInfoEXT::safe_VkVideoEncodeH265SessionParametersGetInfoEXT(const VkVideoEncodeH265SessionParametersGetInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    writeStdVPS(in_struct->writeStdVPS),
+    writeStdSPS(in_struct->writeStdSPS),
+    writeStdPPS(in_struct->writeStdPPS),
+    stdVPSId(in_struct->stdVPSId),
+    stdSPSId(in_struct->stdSPSId),
+    stdPPSId(in_struct->stdPPSId)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH265SessionParametersGetInfoEXT::safe_VkVideoEncodeH265SessionParametersGetInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_GET_INFO_EXT),
+    pNext(nullptr),
+    writeStdVPS(),
+    writeStdSPS(),
+    writeStdPPS(),
+    stdVPSId(),
+    stdSPSId(),
+    stdPPSId()
+{}
+
+safe_VkVideoEncodeH265SessionParametersGetInfoEXT::safe_VkVideoEncodeH265SessionParametersGetInfoEXT(const safe_VkVideoEncodeH265SessionParametersGetInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    writeStdVPS = copy_src.writeStdVPS;
+    writeStdSPS = copy_src.writeStdSPS;
+    writeStdPPS = copy_src.writeStdPPS;
+    stdVPSId = copy_src.stdVPSId;
+    stdSPSId = copy_src.stdSPSId;
+    stdPPSId = copy_src.stdPPSId;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH265SessionParametersGetInfoEXT& safe_VkVideoEncodeH265SessionParametersGetInfoEXT::operator=(const safe_VkVideoEncodeH265SessionParametersGetInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    writeStdVPS = copy_src.writeStdVPS;
+    writeStdSPS = copy_src.writeStdSPS;
+    writeStdPPS = copy_src.writeStdPPS;
+    stdVPSId = copy_src.stdVPSId;
+    stdSPSId = copy_src.stdSPSId;
+    stdPPSId = copy_src.stdPPSId;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH265SessionParametersGetInfoEXT::~safe_VkVideoEncodeH265SessionParametersGetInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH265SessionParametersGetInfoEXT::initialize(const VkVideoEncodeH265SessionParametersGetInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    writeStdVPS = in_struct->writeStdVPS;
+    writeStdSPS = in_struct->writeStdSPS;
+    writeStdPPS = in_struct->writeStdPPS;
+    stdVPSId = in_struct->stdVPSId;
+    stdSPSId = in_struct->stdSPSId;
+    stdPPSId = in_struct->stdPPSId;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH265SessionParametersGetInfoEXT::initialize(const safe_VkVideoEncodeH265SessionParametersGetInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    writeStdVPS = copy_src->writeStdVPS;
+    writeStdSPS = copy_src->writeStdSPS;
+    writeStdPPS = copy_src->writeStdPPS;
+    stdVPSId = copy_src->stdVPSId;
+    stdSPSId = copy_src->stdSPSId;
+    stdPPSId = copy_src->stdPPSId;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+
+safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT::safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT(const VkVideoEncodeH265SessionParametersFeedbackInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    hasStdVPSOverrides(in_struct->hasStdVPSOverrides),
+    hasStdSPSOverrides(in_struct->hasStdSPSOverrides),
+    hasStdPPSOverrides(in_struct->hasStdPPSOverrides)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT::safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_FEEDBACK_INFO_EXT),
+    pNext(nullptr),
+    hasStdVPSOverrides(),
+    hasStdSPSOverrides(),
+    hasStdPPSOverrides()
+{}
+
+safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT::safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT(const safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    hasStdVPSOverrides = copy_src.hasStdVPSOverrides;
+    hasStdSPSOverrides = copy_src.hasStdSPSOverrides;
+    hasStdPPSOverrides = copy_src.hasStdPPSOverrides;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT& safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT::operator=(const safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    hasStdVPSOverrides = copy_src.hasStdVPSOverrides;
+    hasStdSPSOverrides = copy_src.hasStdSPSOverrides;
+    hasStdPPSOverrides = copy_src.hasStdPPSOverrides;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT::~safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT::initialize(const VkVideoEncodeH265SessionParametersFeedbackInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    hasStdVPSOverrides = in_struct->hasStdVPSOverrides;
+    hasStdSPSOverrides = in_struct->hasStdSPSOverrides;
+    hasStdPPSOverrides = in_struct->hasStdPPSOverrides;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT::initialize(const safe_VkVideoEncodeH265SessionParametersFeedbackInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    hasStdVPSOverrides = copy_src->hasStdVPSOverrides;
+    hasStdSPSOverrides = copy_src->hasStdSPSOverrides;
+    hasStdPPSOverrides = copy_src->hasStdPPSOverrides;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT(const VkVideoEncodeH265NaluSliceSegmentInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
-    ctbCount(in_struct->ctbCount),
-    pStdReferenceFinalLists(nullptr),
+    constantQp(in_struct->constantQp),
     pStdSliceSegmentHeader(nullptr)
 {
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    if (in_struct->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*in_struct->pStdReferenceFinalLists);
-    }
     if (in_struct->pStdSliceSegmentHeader) {
         pStdSliceSegmentHeader = new StdVideoEncodeH265SliceSegmentHeader(*in_struct->pStdSliceSegmentHeader);
     }
@@ -1997,21 +2621,16 @@ safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::safe_VkVideoEncodeH265NaluSliceSe
 safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_NALU_SLICE_SEGMENT_INFO_EXT),
     pNext(nullptr),
-    ctbCount(),
-    pStdReferenceFinalLists(nullptr),
+    constantQp(),
     pStdSliceSegmentHeader(nullptr)
 {}
 
 safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT(const safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT& copy_src)
 {
     sType = copy_src.sType;
-    ctbCount = copy_src.ctbCount;
-    pStdReferenceFinalLists = nullptr;
+    constantQp = copy_src.constantQp;
     pStdSliceSegmentHeader = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
-    if (copy_src.pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*copy_src.pStdReferenceFinalLists);
-    }
     if (copy_src.pStdSliceSegmentHeader) {
         pStdSliceSegmentHeader = new StdVideoEncodeH265SliceSegmentHeader(*copy_src.pStdSliceSegmentHeader);
     }
@@ -2021,21 +2640,15 @@ safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT& safe_VkVideoEncodeH265NaluSliceSe
 {
     if (&copy_src == this) return *this;
 
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pStdSliceSegmentHeader)
         delete pStdSliceSegmentHeader;
     if (pNext)
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
-    ctbCount = copy_src.ctbCount;
-    pStdReferenceFinalLists = nullptr;
+    constantQp = copy_src.constantQp;
     pStdSliceSegmentHeader = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
-    if (copy_src.pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*copy_src.pStdReferenceFinalLists);
-    }
     if (copy_src.pStdSliceSegmentHeader) {
         pStdSliceSegmentHeader = new StdVideoEncodeH265SliceSegmentHeader(*copy_src.pStdSliceSegmentHeader);
     }
@@ -2045,8 +2658,6 @@ safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT& safe_VkVideoEncodeH265NaluSliceSe
 
 safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::~safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT()
 {
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pStdSliceSegmentHeader)
         delete pStdSliceSegmentHeader;
     if (pNext)
@@ -2055,20 +2666,14 @@ safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::~safe_VkVideoEncodeH265NaluSliceS
 
 void safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::initialize(const VkVideoEncodeH265NaluSliceSegmentInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
 {
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pStdSliceSegmentHeader)
         delete pStdSliceSegmentHeader;
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
-    ctbCount = in_struct->ctbCount;
-    pStdReferenceFinalLists = nullptr;
+    constantQp = in_struct->constantQp;
     pStdSliceSegmentHeader = nullptr;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    if (in_struct->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*in_struct->pStdReferenceFinalLists);
-    }
     if (in_struct->pStdSliceSegmentHeader) {
         pStdSliceSegmentHeader = new StdVideoEncodeH265SliceSegmentHeader(*in_struct->pStdSliceSegmentHeader);
     }
@@ -2077,33 +2682,23 @@ void safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::initialize(const VkVideoEnco
 void safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT::initialize(const safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
 {
     sType = copy_src->sType;
-    ctbCount = copy_src->ctbCount;
-    pStdReferenceFinalLists = nullptr;
+    constantQp = copy_src->constantQp;
     pStdSliceSegmentHeader = nullptr;
     pNext = SafePnextCopy(copy_src->pNext);
-    if (copy_src->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*copy_src->pStdReferenceFinalLists);
-    }
     if (copy_src->pStdSliceSegmentHeader) {
         pStdSliceSegmentHeader = new StdVideoEncodeH265SliceSegmentHeader(*copy_src->pStdSliceSegmentHeader);
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 
-
-safe_VkVideoEncodeH265VclFrameInfoEXT::safe_VkVideoEncodeH265VclFrameInfoEXT(const VkVideoEncodeH265VclFrameInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+safe_VkVideoEncodeH265PictureInfoEXT::safe_VkVideoEncodeH265PictureInfoEXT(const VkVideoEncodeH265PictureInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
-    pStdReferenceFinalLists(nullptr),
     naluSliceSegmentEntryCount(in_struct->naluSliceSegmentEntryCount),
     pNaluSliceSegmentEntries(nullptr),
     pStdPictureInfo(nullptr)
 {
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    if (in_struct->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*in_struct->pStdReferenceFinalLists);
-    }
     if (naluSliceSegmentEntryCount && in_struct->pNaluSliceSegmentEntries) {
         pNaluSliceSegmentEntries = new safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT[naluSliceSegmentEntryCount];
         for (uint32_t i = 0; i < naluSliceSegmentEntryCount; ++i) {
@@ -2115,26 +2710,21 @@ safe_VkVideoEncodeH265VclFrameInfoEXT::safe_VkVideoEncodeH265VclFrameInfoEXT(con
     }
 }
 
-safe_VkVideoEncodeH265VclFrameInfoEXT::safe_VkVideoEncodeH265VclFrameInfoEXT() :
-    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_VCL_FRAME_INFO_EXT),
+safe_VkVideoEncodeH265PictureInfoEXT::safe_VkVideoEncodeH265PictureInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PICTURE_INFO_EXT),
     pNext(nullptr),
-    pStdReferenceFinalLists(nullptr),
     naluSliceSegmentEntryCount(),
     pNaluSliceSegmentEntries(nullptr),
     pStdPictureInfo(nullptr)
 {}
 
-safe_VkVideoEncodeH265VclFrameInfoEXT::safe_VkVideoEncodeH265VclFrameInfoEXT(const safe_VkVideoEncodeH265VclFrameInfoEXT& copy_src)
+safe_VkVideoEncodeH265PictureInfoEXT::safe_VkVideoEncodeH265PictureInfoEXT(const safe_VkVideoEncodeH265PictureInfoEXT& copy_src)
 {
     sType = copy_src.sType;
-    pStdReferenceFinalLists = nullptr;
     naluSliceSegmentEntryCount = copy_src.naluSliceSegmentEntryCount;
     pNaluSliceSegmentEntries = nullptr;
     pStdPictureInfo = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
-    if (copy_src.pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*copy_src.pStdReferenceFinalLists);
-    }
     if (naluSliceSegmentEntryCount && copy_src.pNaluSliceSegmentEntries) {
         pNaluSliceSegmentEntries = new safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT[naluSliceSegmentEntryCount];
         for (uint32_t i = 0; i < naluSliceSegmentEntryCount; ++i) {
@@ -2146,12 +2736,10 @@ safe_VkVideoEncodeH265VclFrameInfoEXT::safe_VkVideoEncodeH265VclFrameInfoEXT(con
     }
 }
 
-safe_VkVideoEncodeH265VclFrameInfoEXT& safe_VkVideoEncodeH265VclFrameInfoEXT::operator=(const safe_VkVideoEncodeH265VclFrameInfoEXT& copy_src)
+safe_VkVideoEncodeH265PictureInfoEXT& safe_VkVideoEncodeH265PictureInfoEXT::operator=(const safe_VkVideoEncodeH265PictureInfoEXT& copy_src)
 {
     if (&copy_src == this) return *this;
 
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pNaluSliceSegmentEntries)
         delete[] pNaluSliceSegmentEntries;
     if (pStdPictureInfo)
@@ -2160,14 +2748,10 @@ safe_VkVideoEncodeH265VclFrameInfoEXT& safe_VkVideoEncodeH265VclFrameInfoEXT::op
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
-    pStdReferenceFinalLists = nullptr;
     naluSliceSegmentEntryCount = copy_src.naluSliceSegmentEntryCount;
     pNaluSliceSegmentEntries = nullptr;
     pStdPictureInfo = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
-    if (copy_src.pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*copy_src.pStdReferenceFinalLists);
-    }
     if (naluSliceSegmentEntryCount && copy_src.pNaluSliceSegmentEntries) {
         pNaluSliceSegmentEntries = new safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT[naluSliceSegmentEntryCount];
         for (uint32_t i = 0; i < naluSliceSegmentEntryCount; ++i) {
@@ -2181,10 +2765,8 @@ safe_VkVideoEncodeH265VclFrameInfoEXT& safe_VkVideoEncodeH265VclFrameInfoEXT::op
     return *this;
 }
 
-safe_VkVideoEncodeH265VclFrameInfoEXT::~safe_VkVideoEncodeH265VclFrameInfoEXT()
+safe_VkVideoEncodeH265PictureInfoEXT::~safe_VkVideoEncodeH265PictureInfoEXT()
 {
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pNaluSliceSegmentEntries)
         delete[] pNaluSliceSegmentEntries;
     if (pStdPictureInfo)
@@ -2193,10 +2775,8 @@ safe_VkVideoEncodeH265VclFrameInfoEXT::~safe_VkVideoEncodeH265VclFrameInfoEXT()
         FreePnextChain(pNext);
 }
 
-void safe_VkVideoEncodeH265VclFrameInfoEXT::initialize(const VkVideoEncodeH265VclFrameInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+void safe_VkVideoEncodeH265PictureInfoEXT::initialize(const VkVideoEncodeH265PictureInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
 {
-    if (pStdReferenceFinalLists)
-        delete pStdReferenceFinalLists;
     if (pNaluSliceSegmentEntries)
         delete[] pNaluSliceSegmentEntries;
     if (pStdPictureInfo)
@@ -2204,14 +2784,10 @@ void safe_VkVideoEncodeH265VclFrameInfoEXT::initialize(const VkVideoEncodeH265Vc
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
-    pStdReferenceFinalLists = nullptr;
     naluSliceSegmentEntryCount = in_struct->naluSliceSegmentEntryCount;
     pNaluSliceSegmentEntries = nullptr;
     pStdPictureInfo = nullptr;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    if (in_struct->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*in_struct->pStdReferenceFinalLists);
-    }
     if (naluSliceSegmentEntryCount && in_struct->pNaluSliceSegmentEntries) {
         pNaluSliceSegmentEntries = new safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT[naluSliceSegmentEntryCount];
         for (uint32_t i = 0; i < naluSliceSegmentEntryCount; ++i) {
@@ -2223,17 +2799,13 @@ void safe_VkVideoEncodeH265VclFrameInfoEXT::initialize(const VkVideoEncodeH265Vc
     }
 }
 
-void safe_VkVideoEncodeH265VclFrameInfoEXT::initialize(const safe_VkVideoEncodeH265VclFrameInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+void safe_VkVideoEncodeH265PictureInfoEXT::initialize(const safe_VkVideoEncodeH265PictureInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
 {
     sType = copy_src->sType;
-    pStdReferenceFinalLists = nullptr;
     naluSliceSegmentEntryCount = copy_src->naluSliceSegmentEntryCount;
     pNaluSliceSegmentEntries = nullptr;
     pStdPictureInfo = nullptr;
     pNext = SafePnextCopy(copy_src->pNext);
-    if (copy_src->pStdReferenceFinalLists) {
-        pStdReferenceFinalLists = new StdVideoEncodeH265ReferenceListsInfo(*copy_src->pStdReferenceFinalLists);
-    }
     if (naluSliceSegmentEntryCount && copy_src->pNaluSliceSegmentEntries) {
         pNaluSliceSegmentEntries = new safe_VkVideoEncodeH265NaluSliceSegmentInfoEXT[naluSliceSegmentEntryCount];
         for (uint32_t i = 0; i < naluSliceSegmentEntryCount; ++i) {
@@ -2245,9 +2817,7 @@ void safe_VkVideoEncodeH265VclFrameInfoEXT::initialize(const safe_VkVideoEncodeH
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH265DpbSlotInfoEXT::safe_VkVideoEncodeH265DpbSlotInfoEXT(const VkVideoEncodeH265DpbSlotInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -2326,9 +2896,7 @@ void safe_VkVideoEncodeH265DpbSlotInfoEXT::initialize(const safe_VkVideoEncodeH2
     }
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH265ProfileInfoEXT::safe_VkVideoEncodeH265ProfileInfoEXT(const VkVideoEncodeH265ProfileInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -2386,16 +2954,14 @@ void safe_VkVideoEncodeH265ProfileInfoEXT::initialize(const safe_VkVideoEncodeH2
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH265RateControlInfoEXT::safe_VkVideoEncodeH265RateControlInfoEXT(const VkVideoEncodeH265RateControlInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
+    flags(in_struct->flags),
     gopFrameCount(in_struct->gopFrameCount),
     idrPeriod(in_struct->idrPeriod),
     consecutiveBFrameCount(in_struct->consecutiveBFrameCount),
-    rateControlStructure(in_struct->rateControlStructure),
     subLayerCount(in_struct->subLayerCount)
 {
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
@@ -2404,20 +2970,20 @@ safe_VkVideoEncodeH265RateControlInfoEXT::safe_VkVideoEncodeH265RateControlInfoE
 safe_VkVideoEncodeH265RateControlInfoEXT::safe_VkVideoEncodeH265RateControlInfoEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_RATE_CONTROL_INFO_EXT),
     pNext(nullptr),
+    flags(),
     gopFrameCount(),
     idrPeriod(),
     consecutiveBFrameCount(),
-    rateControlStructure(),
     subLayerCount()
 {}
 
 safe_VkVideoEncodeH265RateControlInfoEXT::safe_VkVideoEncodeH265RateControlInfoEXT(const safe_VkVideoEncodeH265RateControlInfoEXT& copy_src)
 {
     sType = copy_src.sType;
+    flags = copy_src.flags;
     gopFrameCount = copy_src.gopFrameCount;
     idrPeriod = copy_src.idrPeriod;
     consecutiveBFrameCount = copy_src.consecutiveBFrameCount;
-    rateControlStructure = copy_src.rateControlStructure;
     subLayerCount = copy_src.subLayerCount;
     pNext = SafePnextCopy(copy_src.pNext);
 }
@@ -2430,10 +2996,10 @@ safe_VkVideoEncodeH265RateControlInfoEXT& safe_VkVideoEncodeH265RateControlInfoE
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
+    flags = copy_src.flags;
     gopFrameCount = copy_src.gopFrameCount;
     idrPeriod = copy_src.idrPeriod;
     consecutiveBFrameCount = copy_src.consecutiveBFrameCount;
-    rateControlStructure = copy_src.rateControlStructure;
     subLayerCount = copy_src.subLayerCount;
     pNext = SafePnextCopy(copy_src.pNext);
 
@@ -2451,10 +3017,10 @@ void safe_VkVideoEncodeH265RateControlInfoEXT::initialize(const VkVideoEncodeH26
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
+    flags = in_struct->flags;
     gopFrameCount = in_struct->gopFrameCount;
     idrPeriod = in_struct->idrPeriod;
     consecutiveBFrameCount = in_struct->consecutiveBFrameCount;
-    rateControlStructure = in_struct->rateControlStructure;
     subLayerCount = in_struct->subLayerCount;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
 }
@@ -2462,23 +3028,18 @@ void safe_VkVideoEncodeH265RateControlInfoEXT::initialize(const VkVideoEncodeH26
 void safe_VkVideoEncodeH265RateControlInfoEXT::initialize(const safe_VkVideoEncodeH265RateControlInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
 {
     sType = copy_src->sType;
+    flags = copy_src->flags;
     gopFrameCount = copy_src->gopFrameCount;
     idrPeriod = copy_src->idrPeriod;
     consecutiveBFrameCount = copy_src->consecutiveBFrameCount;
-    rateControlStructure = copy_src->rateControlStructure;
     subLayerCount = copy_src->subLayerCount;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
-
 #ifdef VK_ENABLE_BETA_EXTENSIONS
-
 
 safe_VkVideoEncodeH265RateControlLayerInfoEXT::safe_VkVideoEncodeH265RateControlLayerInfoEXT(const VkVideoEncodeH265RateControlLayerInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
-    temporalId(in_struct->temporalId),
-    useInitialRcQp(in_struct->useInitialRcQp),
-    initialRcQp(in_struct->initialRcQp),
     useMinQp(in_struct->useMinQp),
     minQp(in_struct->minQp),
     useMaxQp(in_struct->useMaxQp),
@@ -2492,9 +3053,6 @@ safe_VkVideoEncodeH265RateControlLayerInfoEXT::safe_VkVideoEncodeH265RateControl
 safe_VkVideoEncodeH265RateControlLayerInfoEXT::safe_VkVideoEncodeH265RateControlLayerInfoEXT() :
     sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_RATE_CONTROL_LAYER_INFO_EXT),
     pNext(nullptr),
-    temporalId(),
-    useInitialRcQp(),
-    initialRcQp(),
     useMinQp(),
     minQp(),
     useMaxQp(),
@@ -2506,9 +3064,6 @@ safe_VkVideoEncodeH265RateControlLayerInfoEXT::safe_VkVideoEncodeH265RateControl
 safe_VkVideoEncodeH265RateControlLayerInfoEXT::safe_VkVideoEncodeH265RateControlLayerInfoEXT(const safe_VkVideoEncodeH265RateControlLayerInfoEXT& copy_src)
 {
     sType = copy_src.sType;
-    temporalId = copy_src.temporalId;
-    useInitialRcQp = copy_src.useInitialRcQp;
-    initialRcQp = copy_src.initialRcQp;
     useMinQp = copy_src.useMinQp;
     minQp = copy_src.minQp;
     useMaxQp = copy_src.useMaxQp;
@@ -2526,9 +3081,6 @@ safe_VkVideoEncodeH265RateControlLayerInfoEXT& safe_VkVideoEncodeH265RateControl
         FreePnextChain(pNext);
 
     sType = copy_src.sType;
-    temporalId = copy_src.temporalId;
-    useInitialRcQp = copy_src.useInitialRcQp;
-    initialRcQp = copy_src.initialRcQp;
     useMinQp = copy_src.useMinQp;
     minQp = copy_src.minQp;
     useMaxQp = copy_src.useMaxQp;
@@ -2551,9 +3103,6 @@ void safe_VkVideoEncodeH265RateControlLayerInfoEXT::initialize(const VkVideoEnco
     if (pNext)
         FreePnextChain(pNext);
     sType = in_struct->sType;
-    temporalId = in_struct->temporalId;
-    useInitialRcQp = in_struct->useInitialRcQp;
-    initialRcQp = in_struct->initialRcQp;
     useMinQp = in_struct->useMinQp;
     minQp = in_struct->minQp;
     useMaxQp = in_struct->useMaxQp;
@@ -2566,9 +3115,6 @@ void safe_VkVideoEncodeH265RateControlLayerInfoEXT::initialize(const VkVideoEnco
 void safe_VkVideoEncodeH265RateControlLayerInfoEXT::initialize(const safe_VkVideoEncodeH265RateControlLayerInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
 {
     sType = copy_src->sType;
-    temporalId = copy_src->temporalId;
-    useInitialRcQp = copy_src->useInitialRcQp;
-    initialRcQp = copy_src->initialRcQp;
     useMinQp = copy_src->useMinQp;
     minQp = copy_src->minQp;
     useMaxQp = copy_src->useMaxQp;
@@ -2578,7 +3124,82 @@ void safe_VkVideoEncodeH265RateControlLayerInfoEXT::initialize(const safe_VkVide
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
+safe_VkVideoEncodeH265GopRemainingFrameInfoEXT::safe_VkVideoEncodeH265GopRemainingFrameInfoEXT(const VkVideoEncodeH265GopRemainingFrameInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    useGopRemainingFrames(in_struct->useGopRemainingFrames),
+    gopRemainingI(in_struct->gopRemainingI),
+    gopRemainingP(in_struct->gopRemainingP),
+    gopRemainingB(in_struct->gopRemainingB)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkVideoEncodeH265GopRemainingFrameInfoEXT::safe_VkVideoEncodeH265GopRemainingFrameInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_GOP_REMAINING_FRAME_INFO_EXT),
+    pNext(nullptr),
+    useGopRemainingFrames(),
+    gopRemainingI(),
+    gopRemainingP(),
+    gopRemainingB()
+{}
+
+safe_VkVideoEncodeH265GopRemainingFrameInfoEXT::safe_VkVideoEncodeH265GopRemainingFrameInfoEXT(const safe_VkVideoEncodeH265GopRemainingFrameInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    useGopRemainingFrames = copy_src.useGopRemainingFrames;
+    gopRemainingI = copy_src.gopRemainingI;
+    gopRemainingP = copy_src.gopRemainingP;
+    gopRemainingB = copy_src.gopRemainingB;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkVideoEncodeH265GopRemainingFrameInfoEXT& safe_VkVideoEncodeH265GopRemainingFrameInfoEXT::operator=(const safe_VkVideoEncodeH265GopRemainingFrameInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    useGopRemainingFrames = copy_src.useGopRemainingFrames;
+    gopRemainingI = copy_src.gopRemainingI;
+    gopRemainingP = copy_src.gopRemainingP;
+    gopRemainingB = copy_src.gopRemainingB;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkVideoEncodeH265GopRemainingFrameInfoEXT::~safe_VkVideoEncodeH265GopRemainingFrameInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkVideoEncodeH265GopRemainingFrameInfoEXT::initialize(const VkVideoEncodeH265GopRemainingFrameInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    useGopRemainingFrames = in_struct->useGopRemainingFrames;
+    gopRemainingI = in_struct->gopRemainingI;
+    gopRemainingP = in_struct->gopRemainingP;
+    gopRemainingB = in_struct->gopRemainingB;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkVideoEncodeH265GopRemainingFrameInfoEXT::initialize(const safe_VkVideoEncodeH265GopRemainingFrameInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    useGopRemainingFrames = copy_src->useGopRemainingFrames;
+    gopRemainingI = copy_src->gopRemainingI;
+    gopRemainingP = copy_src->gopRemainingP;
+    gopRemainingB = copy_src->gopRemainingB;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+#endif // VK_ENABLE_BETA_EXTENSIONS
 
 safe_VkValidationFlagsEXT::safe_VkValidationFlagsEXT(const VkValidationFlagsEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -7503,7 +8124,6 @@ void safe_VkPipelineRasterizationProvokingVertexStateCreateInfoEXT::initialize(c
 }
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-
 safe_VkSurfaceFullScreenExclusiveInfoEXT::safe_VkSurfaceFullScreenExclusiveInfoEXT(const VkSurfaceFullScreenExclusiveInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     fullScreenExclusive(in_struct->fullScreenExclusive)
@@ -7560,9 +8180,7 @@ void safe_VkSurfaceFullScreenExclusiveInfoEXT::initialize(const safe_VkSurfaceFu
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_WIN32_KHR
-
 #ifdef VK_USE_PLATFORM_WIN32_KHR
-
 
 safe_VkSurfaceCapabilitiesFullScreenExclusiveEXT::safe_VkSurfaceCapabilitiesFullScreenExclusiveEXT(const VkSurfaceCapabilitiesFullScreenExclusiveEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -7620,9 +8238,7 @@ void safe_VkSurfaceCapabilitiesFullScreenExclusiveEXT::initialize(const safe_VkS
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_WIN32_KHR
-
 #ifdef VK_USE_PLATFORM_WIN32_KHR
-
 
 safe_VkSurfaceFullScreenExclusiveWin32InfoEXT::safe_VkSurfaceFullScreenExclusiveWin32InfoEXT(const VkSurfaceFullScreenExclusiveWin32InfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -7680,7 +8296,6 @@ void safe_VkSurfaceFullScreenExclusiveWin32InfoEXT::initialize(const safe_VkSurf
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_WIN32_KHR
-
 
 safe_VkHeadlessSurfaceCreateInfoEXT::safe_VkHeadlessSurfaceCreateInfoEXT(const VkHeadlessSurfaceCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -8185,6 +8800,933 @@ void safe_VkPhysicalDeviceExtendedDynamicStateFeaturesEXT::initialize(const safe
 {
     sType = copy_src->sType;
     extendedDynamicState = copy_src->extendedDynamicState;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceHostImageCopyFeaturesEXT::safe_VkPhysicalDeviceHostImageCopyFeaturesEXT(const VkPhysicalDeviceHostImageCopyFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    hostImageCopy(in_struct->hostImageCopy)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkPhysicalDeviceHostImageCopyFeaturesEXT::safe_VkPhysicalDeviceHostImageCopyFeaturesEXT() :
+    sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES_EXT),
+    pNext(nullptr),
+    hostImageCopy()
+{}
+
+safe_VkPhysicalDeviceHostImageCopyFeaturesEXT::safe_VkPhysicalDeviceHostImageCopyFeaturesEXT(const safe_VkPhysicalDeviceHostImageCopyFeaturesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    hostImageCopy = copy_src.hostImageCopy;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceHostImageCopyFeaturesEXT& safe_VkPhysicalDeviceHostImageCopyFeaturesEXT::operator=(const safe_VkPhysicalDeviceHostImageCopyFeaturesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    hostImageCopy = copy_src.hostImageCopy;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceHostImageCopyFeaturesEXT::~safe_VkPhysicalDeviceHostImageCopyFeaturesEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceHostImageCopyFeaturesEXT::initialize(const VkPhysicalDeviceHostImageCopyFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    hostImageCopy = in_struct->hostImageCopy;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceHostImageCopyFeaturesEXT::initialize(const safe_VkPhysicalDeviceHostImageCopyFeaturesEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    hostImageCopy = copy_src->hostImageCopy;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceHostImageCopyPropertiesEXT::safe_VkPhysicalDeviceHostImageCopyPropertiesEXT(const VkPhysicalDeviceHostImageCopyPropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    copySrcLayoutCount(in_struct->copySrcLayoutCount),
+    pCopySrcLayouts(nullptr),
+    copyDstLayoutCount(in_struct->copyDstLayoutCount),
+    pCopyDstLayouts(nullptr),
+    identicalMemoryTypeRequirements(in_struct->identicalMemoryTypeRequirements)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (in_struct->pCopySrcLayouts) {
+        pCopySrcLayouts = new VkImageLayout[in_struct->copySrcLayoutCount];
+        memcpy ((void *)pCopySrcLayouts, (void *)in_struct->pCopySrcLayouts, sizeof(VkImageLayout)*in_struct->copySrcLayoutCount);
+    }
+    if (in_struct->pCopyDstLayouts) {
+        pCopyDstLayouts = new VkImageLayout[in_struct->copyDstLayoutCount];
+        memcpy ((void *)pCopyDstLayouts, (void *)in_struct->pCopyDstLayouts, sizeof(VkImageLayout)*in_struct->copyDstLayoutCount);
+    }
+    for (uint32_t i = 0; i < VK_UUID_SIZE; ++i) {
+        optimalTilingLayoutUUID[i] = in_struct->optimalTilingLayoutUUID[i];
+    }
+}
+
+safe_VkPhysicalDeviceHostImageCopyPropertiesEXT::safe_VkPhysicalDeviceHostImageCopyPropertiesEXT() :
+    sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES_EXT),
+    pNext(nullptr),
+    copySrcLayoutCount(),
+    pCopySrcLayouts(nullptr),
+    copyDstLayoutCount(),
+    pCopyDstLayouts(nullptr),
+    identicalMemoryTypeRequirements()
+{}
+
+safe_VkPhysicalDeviceHostImageCopyPropertiesEXT::safe_VkPhysicalDeviceHostImageCopyPropertiesEXT(const safe_VkPhysicalDeviceHostImageCopyPropertiesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    copySrcLayoutCount = copy_src.copySrcLayoutCount;
+    pCopySrcLayouts = nullptr;
+    copyDstLayoutCount = copy_src.copyDstLayoutCount;
+    pCopyDstLayouts = nullptr;
+    identicalMemoryTypeRequirements = copy_src.identicalMemoryTypeRequirements;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (copy_src.pCopySrcLayouts) {
+        pCopySrcLayouts = new VkImageLayout[copy_src.copySrcLayoutCount];
+        memcpy ((void *)pCopySrcLayouts, (void *)copy_src.pCopySrcLayouts, sizeof(VkImageLayout)*copy_src.copySrcLayoutCount);
+    }
+    if (copy_src.pCopyDstLayouts) {
+        pCopyDstLayouts = new VkImageLayout[copy_src.copyDstLayoutCount];
+        memcpy ((void *)pCopyDstLayouts, (void *)copy_src.pCopyDstLayouts, sizeof(VkImageLayout)*copy_src.copyDstLayoutCount);
+    }
+    for (uint32_t i = 0; i < VK_UUID_SIZE; ++i) {
+        optimalTilingLayoutUUID[i] = copy_src.optimalTilingLayoutUUID[i];
+    }
+}
+
+safe_VkPhysicalDeviceHostImageCopyPropertiesEXT& safe_VkPhysicalDeviceHostImageCopyPropertiesEXT::operator=(const safe_VkPhysicalDeviceHostImageCopyPropertiesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pCopySrcLayouts)
+        delete[] pCopySrcLayouts;
+    if (pCopyDstLayouts)
+        delete[] pCopyDstLayouts;
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    copySrcLayoutCount = copy_src.copySrcLayoutCount;
+    pCopySrcLayouts = nullptr;
+    copyDstLayoutCount = copy_src.copyDstLayoutCount;
+    pCopyDstLayouts = nullptr;
+    identicalMemoryTypeRequirements = copy_src.identicalMemoryTypeRequirements;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (copy_src.pCopySrcLayouts) {
+        pCopySrcLayouts = new VkImageLayout[copy_src.copySrcLayoutCount];
+        memcpy ((void *)pCopySrcLayouts, (void *)copy_src.pCopySrcLayouts, sizeof(VkImageLayout)*copy_src.copySrcLayoutCount);
+    }
+    if (copy_src.pCopyDstLayouts) {
+        pCopyDstLayouts = new VkImageLayout[copy_src.copyDstLayoutCount];
+        memcpy ((void *)pCopyDstLayouts, (void *)copy_src.pCopyDstLayouts, sizeof(VkImageLayout)*copy_src.copyDstLayoutCount);
+    }
+    for (uint32_t i = 0; i < VK_UUID_SIZE; ++i) {
+        optimalTilingLayoutUUID[i] = copy_src.optimalTilingLayoutUUID[i];
+    }
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceHostImageCopyPropertiesEXT::~safe_VkPhysicalDeviceHostImageCopyPropertiesEXT()
+{
+    if (pCopySrcLayouts)
+        delete[] pCopySrcLayouts;
+    if (pCopyDstLayouts)
+        delete[] pCopyDstLayouts;
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceHostImageCopyPropertiesEXT::initialize(const VkPhysicalDeviceHostImageCopyPropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pCopySrcLayouts)
+        delete[] pCopySrcLayouts;
+    if (pCopyDstLayouts)
+        delete[] pCopyDstLayouts;
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    copySrcLayoutCount = in_struct->copySrcLayoutCount;
+    pCopySrcLayouts = nullptr;
+    copyDstLayoutCount = in_struct->copyDstLayoutCount;
+    pCopyDstLayouts = nullptr;
+    identicalMemoryTypeRequirements = in_struct->identicalMemoryTypeRequirements;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (in_struct->pCopySrcLayouts) {
+        pCopySrcLayouts = new VkImageLayout[in_struct->copySrcLayoutCount];
+        memcpy ((void *)pCopySrcLayouts, (void *)in_struct->pCopySrcLayouts, sizeof(VkImageLayout)*in_struct->copySrcLayoutCount);
+    }
+    if (in_struct->pCopyDstLayouts) {
+        pCopyDstLayouts = new VkImageLayout[in_struct->copyDstLayoutCount];
+        memcpy ((void *)pCopyDstLayouts, (void *)in_struct->pCopyDstLayouts, sizeof(VkImageLayout)*in_struct->copyDstLayoutCount);
+    }
+    for (uint32_t i = 0; i < VK_UUID_SIZE; ++i) {
+        optimalTilingLayoutUUID[i] = in_struct->optimalTilingLayoutUUID[i];
+    }
+}
+
+void safe_VkPhysicalDeviceHostImageCopyPropertiesEXT::initialize(const safe_VkPhysicalDeviceHostImageCopyPropertiesEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    copySrcLayoutCount = copy_src->copySrcLayoutCount;
+    pCopySrcLayouts = nullptr;
+    copyDstLayoutCount = copy_src->copyDstLayoutCount;
+    pCopyDstLayouts = nullptr;
+    identicalMemoryTypeRequirements = copy_src->identicalMemoryTypeRequirements;
+    pNext = SafePnextCopy(copy_src->pNext);
+    if (copy_src->pCopySrcLayouts) {
+        pCopySrcLayouts = new VkImageLayout[copy_src->copySrcLayoutCount];
+        memcpy ((void *)pCopySrcLayouts, (void *)copy_src->pCopySrcLayouts, sizeof(VkImageLayout)*copy_src->copySrcLayoutCount);
+    }
+    if (copy_src->pCopyDstLayouts) {
+        pCopyDstLayouts = new VkImageLayout[copy_src->copyDstLayoutCount];
+        memcpy ((void *)pCopyDstLayouts, (void *)copy_src->pCopyDstLayouts, sizeof(VkImageLayout)*copy_src->copyDstLayoutCount);
+    }
+    for (uint32_t i = 0; i < VK_UUID_SIZE; ++i) {
+        optimalTilingLayoutUUID[i] = copy_src->optimalTilingLayoutUUID[i];
+    }
+}
+
+safe_VkMemoryToImageCopyEXT::safe_VkMemoryToImageCopyEXT(const VkMemoryToImageCopyEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    pHostPointer(in_struct->pHostPointer),
+    memoryRowLength(in_struct->memoryRowLength),
+    memoryImageHeight(in_struct->memoryImageHeight),
+    imageSubresource(in_struct->imageSubresource),
+    imageOffset(in_struct->imageOffset),
+    imageExtent(in_struct->imageExtent)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkMemoryToImageCopyEXT::safe_VkMemoryToImageCopyEXT() :
+    sType(VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY_EXT),
+    pNext(nullptr),
+    pHostPointer(nullptr),
+    memoryRowLength(),
+    memoryImageHeight(),
+    imageSubresource(),
+    imageOffset(),
+    imageExtent()
+{}
+
+safe_VkMemoryToImageCopyEXT::safe_VkMemoryToImageCopyEXT(const safe_VkMemoryToImageCopyEXT& copy_src)
+{
+    sType = copy_src.sType;
+    pHostPointer = copy_src.pHostPointer;
+    memoryRowLength = copy_src.memoryRowLength;
+    memoryImageHeight = copy_src.memoryImageHeight;
+    imageSubresource = copy_src.imageSubresource;
+    imageOffset = copy_src.imageOffset;
+    imageExtent = copy_src.imageExtent;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkMemoryToImageCopyEXT& safe_VkMemoryToImageCopyEXT::operator=(const safe_VkMemoryToImageCopyEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    pHostPointer = copy_src.pHostPointer;
+    memoryRowLength = copy_src.memoryRowLength;
+    memoryImageHeight = copy_src.memoryImageHeight;
+    imageSubresource = copy_src.imageSubresource;
+    imageOffset = copy_src.imageOffset;
+    imageExtent = copy_src.imageExtent;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkMemoryToImageCopyEXT::~safe_VkMemoryToImageCopyEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkMemoryToImageCopyEXT::initialize(const VkMemoryToImageCopyEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    pHostPointer = in_struct->pHostPointer;
+    memoryRowLength = in_struct->memoryRowLength;
+    memoryImageHeight = in_struct->memoryImageHeight;
+    imageSubresource = in_struct->imageSubresource;
+    imageOffset = in_struct->imageOffset;
+    imageExtent = in_struct->imageExtent;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkMemoryToImageCopyEXT::initialize(const safe_VkMemoryToImageCopyEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    pHostPointer = copy_src->pHostPointer;
+    memoryRowLength = copy_src->memoryRowLength;
+    memoryImageHeight = copy_src->memoryImageHeight;
+    imageSubresource = copy_src->imageSubresource;
+    imageOffset = copy_src->imageOffset;
+    imageExtent = copy_src->imageExtent;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkImageToMemoryCopyEXT::safe_VkImageToMemoryCopyEXT(const VkImageToMemoryCopyEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    pHostPointer(in_struct->pHostPointer),
+    memoryRowLength(in_struct->memoryRowLength),
+    memoryImageHeight(in_struct->memoryImageHeight),
+    imageSubresource(in_struct->imageSubresource),
+    imageOffset(in_struct->imageOffset),
+    imageExtent(in_struct->imageExtent)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkImageToMemoryCopyEXT::safe_VkImageToMemoryCopyEXT() :
+    sType(VK_STRUCTURE_TYPE_IMAGE_TO_MEMORY_COPY_EXT),
+    pNext(nullptr),
+    pHostPointer(nullptr),
+    memoryRowLength(),
+    memoryImageHeight(),
+    imageSubresource(),
+    imageOffset(),
+    imageExtent()
+{}
+
+safe_VkImageToMemoryCopyEXT::safe_VkImageToMemoryCopyEXT(const safe_VkImageToMemoryCopyEXT& copy_src)
+{
+    sType = copy_src.sType;
+    pHostPointer = copy_src.pHostPointer;
+    memoryRowLength = copy_src.memoryRowLength;
+    memoryImageHeight = copy_src.memoryImageHeight;
+    imageSubresource = copy_src.imageSubresource;
+    imageOffset = copy_src.imageOffset;
+    imageExtent = copy_src.imageExtent;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkImageToMemoryCopyEXT& safe_VkImageToMemoryCopyEXT::operator=(const safe_VkImageToMemoryCopyEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    pHostPointer = copy_src.pHostPointer;
+    memoryRowLength = copy_src.memoryRowLength;
+    memoryImageHeight = copy_src.memoryImageHeight;
+    imageSubresource = copy_src.imageSubresource;
+    imageOffset = copy_src.imageOffset;
+    imageExtent = copy_src.imageExtent;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkImageToMemoryCopyEXT::~safe_VkImageToMemoryCopyEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkImageToMemoryCopyEXT::initialize(const VkImageToMemoryCopyEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    pHostPointer = in_struct->pHostPointer;
+    memoryRowLength = in_struct->memoryRowLength;
+    memoryImageHeight = in_struct->memoryImageHeight;
+    imageSubresource = in_struct->imageSubresource;
+    imageOffset = in_struct->imageOffset;
+    imageExtent = in_struct->imageExtent;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkImageToMemoryCopyEXT::initialize(const safe_VkImageToMemoryCopyEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    pHostPointer = copy_src->pHostPointer;
+    memoryRowLength = copy_src->memoryRowLength;
+    memoryImageHeight = copy_src->memoryImageHeight;
+    imageSubresource = copy_src->imageSubresource;
+    imageOffset = copy_src->imageOffset;
+    imageExtent = copy_src->imageExtent;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkCopyMemoryToImageInfoEXT::safe_VkCopyMemoryToImageInfoEXT(const VkCopyMemoryToImageInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    flags(in_struct->flags),
+    dstImage(in_struct->dstImage),
+    dstImageLayout(in_struct->dstImageLayout),
+    regionCount(in_struct->regionCount),
+    pRegions(nullptr)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (regionCount && in_struct->pRegions) {
+        pRegions = new safe_VkMemoryToImageCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&in_struct->pRegions[i]);
+        }
+    }
+}
+
+safe_VkCopyMemoryToImageInfoEXT::safe_VkCopyMemoryToImageInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO_EXT),
+    pNext(nullptr),
+    flags(),
+    dstImage(),
+    dstImageLayout(),
+    regionCount(),
+    pRegions(nullptr)
+{}
+
+safe_VkCopyMemoryToImageInfoEXT::safe_VkCopyMemoryToImageInfoEXT(const safe_VkCopyMemoryToImageInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    dstImage = copy_src.dstImage;
+    dstImageLayout = copy_src.dstImageLayout;
+    regionCount = copy_src.regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (regionCount && copy_src.pRegions) {
+        pRegions = new safe_VkMemoryToImageCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src.pRegions[i]);
+        }
+    }
+}
+
+safe_VkCopyMemoryToImageInfoEXT& safe_VkCopyMemoryToImageInfoEXT::operator=(const safe_VkCopyMemoryToImageInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    dstImage = copy_src.dstImage;
+    dstImageLayout = copy_src.dstImageLayout;
+    regionCount = copy_src.regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (regionCount && copy_src.pRegions) {
+        pRegions = new safe_VkMemoryToImageCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src.pRegions[i]);
+        }
+    }
+
+    return *this;
+}
+
+safe_VkCopyMemoryToImageInfoEXT::~safe_VkCopyMemoryToImageInfoEXT()
+{
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkCopyMemoryToImageInfoEXT::initialize(const VkCopyMemoryToImageInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    flags = in_struct->flags;
+    dstImage = in_struct->dstImage;
+    dstImageLayout = in_struct->dstImageLayout;
+    regionCount = in_struct->regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (regionCount && in_struct->pRegions) {
+        pRegions = new safe_VkMemoryToImageCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&in_struct->pRegions[i]);
+        }
+    }
+}
+
+void safe_VkCopyMemoryToImageInfoEXT::initialize(const safe_VkCopyMemoryToImageInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    flags = copy_src->flags;
+    dstImage = copy_src->dstImage;
+    dstImageLayout = copy_src->dstImageLayout;
+    regionCount = copy_src->regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src->pNext);
+    if (regionCount && copy_src->pRegions) {
+        pRegions = new safe_VkMemoryToImageCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src->pRegions[i]);
+        }
+    }
+}
+
+safe_VkCopyImageToMemoryInfoEXT::safe_VkCopyImageToMemoryInfoEXT(const VkCopyImageToMemoryInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    flags(in_struct->flags),
+    srcImage(in_struct->srcImage),
+    srcImageLayout(in_struct->srcImageLayout),
+    regionCount(in_struct->regionCount),
+    pRegions(nullptr)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (regionCount && in_struct->pRegions) {
+        pRegions = new safe_VkImageToMemoryCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&in_struct->pRegions[i]);
+        }
+    }
+}
+
+safe_VkCopyImageToMemoryInfoEXT::safe_VkCopyImageToMemoryInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_COPY_IMAGE_TO_MEMORY_INFO_EXT),
+    pNext(nullptr),
+    flags(),
+    srcImage(),
+    srcImageLayout(),
+    regionCount(),
+    pRegions(nullptr)
+{}
+
+safe_VkCopyImageToMemoryInfoEXT::safe_VkCopyImageToMemoryInfoEXT(const safe_VkCopyImageToMemoryInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    srcImage = copy_src.srcImage;
+    srcImageLayout = copy_src.srcImageLayout;
+    regionCount = copy_src.regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (regionCount && copy_src.pRegions) {
+        pRegions = new safe_VkImageToMemoryCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src.pRegions[i]);
+        }
+    }
+}
+
+safe_VkCopyImageToMemoryInfoEXT& safe_VkCopyImageToMemoryInfoEXT::operator=(const safe_VkCopyImageToMemoryInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    srcImage = copy_src.srcImage;
+    srcImageLayout = copy_src.srcImageLayout;
+    regionCount = copy_src.regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (regionCount && copy_src.pRegions) {
+        pRegions = new safe_VkImageToMemoryCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src.pRegions[i]);
+        }
+    }
+
+    return *this;
+}
+
+safe_VkCopyImageToMemoryInfoEXT::~safe_VkCopyImageToMemoryInfoEXT()
+{
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkCopyImageToMemoryInfoEXT::initialize(const VkCopyImageToMemoryInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    flags = in_struct->flags;
+    srcImage = in_struct->srcImage;
+    srcImageLayout = in_struct->srcImageLayout;
+    regionCount = in_struct->regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (regionCount && in_struct->pRegions) {
+        pRegions = new safe_VkImageToMemoryCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&in_struct->pRegions[i]);
+        }
+    }
+}
+
+void safe_VkCopyImageToMemoryInfoEXT::initialize(const safe_VkCopyImageToMemoryInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    flags = copy_src->flags;
+    srcImage = copy_src->srcImage;
+    srcImageLayout = copy_src->srcImageLayout;
+    regionCount = copy_src->regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src->pNext);
+    if (regionCount && copy_src->pRegions) {
+        pRegions = new safe_VkImageToMemoryCopyEXT[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src->pRegions[i]);
+        }
+    }
+}
+
+safe_VkCopyImageToImageInfoEXT::safe_VkCopyImageToImageInfoEXT(const VkCopyImageToImageInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    flags(in_struct->flags),
+    srcImage(in_struct->srcImage),
+    srcImageLayout(in_struct->srcImageLayout),
+    dstImage(in_struct->dstImage),
+    dstImageLayout(in_struct->dstImageLayout),
+    regionCount(in_struct->regionCount),
+    pRegions(nullptr)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (regionCount && in_struct->pRegions) {
+        pRegions = new safe_VkImageCopy2[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&in_struct->pRegions[i]);
+        }
+    }
+}
+
+safe_VkCopyImageToImageInfoEXT::safe_VkCopyImageToImageInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_COPY_IMAGE_TO_IMAGE_INFO_EXT),
+    pNext(nullptr),
+    flags(),
+    srcImage(),
+    srcImageLayout(),
+    dstImage(),
+    dstImageLayout(),
+    regionCount(),
+    pRegions(nullptr)
+{}
+
+safe_VkCopyImageToImageInfoEXT::safe_VkCopyImageToImageInfoEXT(const safe_VkCopyImageToImageInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    srcImage = copy_src.srcImage;
+    srcImageLayout = copy_src.srcImageLayout;
+    dstImage = copy_src.dstImage;
+    dstImageLayout = copy_src.dstImageLayout;
+    regionCount = copy_src.regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (regionCount && copy_src.pRegions) {
+        pRegions = new safe_VkImageCopy2[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src.pRegions[i]);
+        }
+    }
+}
+
+safe_VkCopyImageToImageInfoEXT& safe_VkCopyImageToImageInfoEXT::operator=(const safe_VkCopyImageToImageInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    srcImage = copy_src.srcImage;
+    srcImageLayout = copy_src.srcImageLayout;
+    dstImage = copy_src.dstImage;
+    dstImageLayout = copy_src.dstImageLayout;
+    regionCount = copy_src.regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (regionCount && copy_src.pRegions) {
+        pRegions = new safe_VkImageCopy2[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src.pRegions[i]);
+        }
+    }
+
+    return *this;
+}
+
+safe_VkCopyImageToImageInfoEXT::~safe_VkCopyImageToImageInfoEXT()
+{
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkCopyImageToImageInfoEXT::initialize(const VkCopyImageToImageInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pRegions)
+        delete[] pRegions;
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    flags = in_struct->flags;
+    srcImage = in_struct->srcImage;
+    srcImageLayout = in_struct->srcImageLayout;
+    dstImage = in_struct->dstImage;
+    dstImageLayout = in_struct->dstImageLayout;
+    regionCount = in_struct->regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (regionCount && in_struct->pRegions) {
+        pRegions = new safe_VkImageCopy2[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&in_struct->pRegions[i]);
+        }
+    }
+}
+
+void safe_VkCopyImageToImageInfoEXT::initialize(const safe_VkCopyImageToImageInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    flags = copy_src->flags;
+    srcImage = copy_src->srcImage;
+    srcImageLayout = copy_src->srcImageLayout;
+    dstImage = copy_src->dstImage;
+    dstImageLayout = copy_src->dstImageLayout;
+    regionCount = copy_src->regionCount;
+    pRegions = nullptr;
+    pNext = SafePnextCopy(copy_src->pNext);
+    if (regionCount && copy_src->pRegions) {
+        pRegions = new safe_VkImageCopy2[regionCount];
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            pRegions[i].initialize(&copy_src->pRegions[i]);
+        }
+    }
+}
+
+safe_VkHostImageLayoutTransitionInfoEXT::safe_VkHostImageLayoutTransitionInfoEXT(const VkHostImageLayoutTransitionInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    image(in_struct->image),
+    oldLayout(in_struct->oldLayout),
+    newLayout(in_struct->newLayout),
+    subresourceRange(in_struct->subresourceRange)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkHostImageLayoutTransitionInfoEXT::safe_VkHostImageLayoutTransitionInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_HOST_IMAGE_LAYOUT_TRANSITION_INFO_EXT),
+    pNext(nullptr),
+    image(),
+    oldLayout(),
+    newLayout(),
+    subresourceRange()
+{}
+
+safe_VkHostImageLayoutTransitionInfoEXT::safe_VkHostImageLayoutTransitionInfoEXT(const safe_VkHostImageLayoutTransitionInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    image = copy_src.image;
+    oldLayout = copy_src.oldLayout;
+    newLayout = copy_src.newLayout;
+    subresourceRange = copy_src.subresourceRange;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkHostImageLayoutTransitionInfoEXT& safe_VkHostImageLayoutTransitionInfoEXT::operator=(const safe_VkHostImageLayoutTransitionInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    image = copy_src.image;
+    oldLayout = copy_src.oldLayout;
+    newLayout = copy_src.newLayout;
+    subresourceRange = copy_src.subresourceRange;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkHostImageLayoutTransitionInfoEXT::~safe_VkHostImageLayoutTransitionInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkHostImageLayoutTransitionInfoEXT::initialize(const VkHostImageLayoutTransitionInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    image = in_struct->image;
+    oldLayout = in_struct->oldLayout;
+    newLayout = in_struct->newLayout;
+    subresourceRange = in_struct->subresourceRange;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkHostImageLayoutTransitionInfoEXT::initialize(const safe_VkHostImageLayoutTransitionInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    image = copy_src->image;
+    oldLayout = copy_src->oldLayout;
+    newLayout = copy_src->newLayout;
+    subresourceRange = copy_src->subresourceRange;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkSubresourceHostMemcpySizeEXT::safe_VkSubresourceHostMemcpySizeEXT(const VkSubresourceHostMemcpySizeEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    size(in_struct->size)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkSubresourceHostMemcpySizeEXT::safe_VkSubresourceHostMemcpySizeEXT() :
+    sType(VK_STRUCTURE_TYPE_SUBRESOURCE_HOST_MEMCPY_SIZE_EXT),
+    pNext(nullptr),
+    size()
+{}
+
+safe_VkSubresourceHostMemcpySizeEXT::safe_VkSubresourceHostMemcpySizeEXT(const safe_VkSubresourceHostMemcpySizeEXT& copy_src)
+{
+    sType = copy_src.sType;
+    size = copy_src.size;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkSubresourceHostMemcpySizeEXT& safe_VkSubresourceHostMemcpySizeEXT::operator=(const safe_VkSubresourceHostMemcpySizeEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    size = copy_src.size;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkSubresourceHostMemcpySizeEXT::~safe_VkSubresourceHostMemcpySizeEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkSubresourceHostMemcpySizeEXT::initialize(const VkSubresourceHostMemcpySizeEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    size = in_struct->size;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkSubresourceHostMemcpySizeEXT::initialize(const safe_VkSubresourceHostMemcpySizeEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    size = copy_src->size;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkHostImageCopyDevicePerformanceQueryEXT::safe_VkHostImageCopyDevicePerformanceQueryEXT(const VkHostImageCopyDevicePerformanceQueryEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    optimalDeviceAccess(in_struct->optimalDeviceAccess),
+    identicalMemoryLayout(in_struct->identicalMemoryLayout)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkHostImageCopyDevicePerformanceQueryEXT::safe_VkHostImageCopyDevicePerformanceQueryEXT() :
+    sType(VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY_EXT),
+    pNext(nullptr),
+    optimalDeviceAccess(),
+    identicalMemoryLayout()
+{}
+
+safe_VkHostImageCopyDevicePerformanceQueryEXT::safe_VkHostImageCopyDevicePerformanceQueryEXT(const safe_VkHostImageCopyDevicePerformanceQueryEXT& copy_src)
+{
+    sType = copy_src.sType;
+    optimalDeviceAccess = copy_src.optimalDeviceAccess;
+    identicalMemoryLayout = copy_src.identicalMemoryLayout;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkHostImageCopyDevicePerformanceQueryEXT& safe_VkHostImageCopyDevicePerformanceQueryEXT::operator=(const safe_VkHostImageCopyDevicePerformanceQueryEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    optimalDeviceAccess = copy_src.optimalDeviceAccess;
+    identicalMemoryLayout = copy_src.identicalMemoryLayout;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkHostImageCopyDevicePerformanceQueryEXT::~safe_VkHostImageCopyDevicePerformanceQueryEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkHostImageCopyDevicePerformanceQueryEXT::initialize(const VkHostImageCopyDevicePerformanceQueryEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    optimalDeviceAccess = in_struct->optimalDeviceAccess;
+    identicalMemoryLayout = in_struct->identicalMemoryLayout;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkHostImageCopyDevicePerformanceQueryEXT::initialize(const safe_VkHostImageCopyDevicePerformanceQueryEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    optimalDeviceAccess = copy_src->optimalDeviceAccess;
+    identicalMemoryLayout = copy_src->identicalMemoryLayout;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
@@ -9082,6 +10624,210 @@ void safe_VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT::initialize(const safe
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
+safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT::safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT(const VkPhysicalDeviceDepthBiasControlFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    depthBiasControl(in_struct->depthBiasControl),
+    leastRepresentableValueForceUnormRepresentation(in_struct->leastRepresentableValueForceUnormRepresentation),
+    floatRepresentation(in_struct->floatRepresentation),
+    depthBiasExact(in_struct->depthBiasExact)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT::safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT() :
+    sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT),
+    pNext(nullptr),
+    depthBiasControl(),
+    leastRepresentableValueForceUnormRepresentation(),
+    floatRepresentation(),
+    depthBiasExact()
+{}
+
+safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT::safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT(const safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    depthBiasControl = copy_src.depthBiasControl;
+    leastRepresentableValueForceUnormRepresentation = copy_src.leastRepresentableValueForceUnormRepresentation;
+    floatRepresentation = copy_src.floatRepresentation;
+    depthBiasExact = copy_src.depthBiasExact;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT& safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT::operator=(const safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    depthBiasControl = copy_src.depthBiasControl;
+    leastRepresentableValueForceUnormRepresentation = copy_src.leastRepresentableValueForceUnormRepresentation;
+    floatRepresentation = copy_src.floatRepresentation;
+    depthBiasExact = copy_src.depthBiasExact;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT::~safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT::initialize(const VkPhysicalDeviceDepthBiasControlFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    depthBiasControl = in_struct->depthBiasControl;
+    leastRepresentableValueForceUnormRepresentation = in_struct->leastRepresentableValueForceUnormRepresentation;
+    floatRepresentation = in_struct->floatRepresentation;
+    depthBiasExact = in_struct->depthBiasExact;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT::initialize(const safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    depthBiasControl = copy_src->depthBiasControl;
+    leastRepresentableValueForceUnormRepresentation = copy_src->leastRepresentableValueForceUnormRepresentation;
+    floatRepresentation = copy_src->floatRepresentation;
+    depthBiasExact = copy_src->depthBiasExact;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkDepthBiasInfoEXT::safe_VkDepthBiasInfoEXT(const VkDepthBiasInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    depthBiasConstantFactor(in_struct->depthBiasConstantFactor),
+    depthBiasClamp(in_struct->depthBiasClamp),
+    depthBiasSlopeFactor(in_struct->depthBiasSlopeFactor)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkDepthBiasInfoEXT::safe_VkDepthBiasInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_DEPTH_BIAS_INFO_EXT),
+    pNext(nullptr),
+    depthBiasConstantFactor(),
+    depthBiasClamp(),
+    depthBiasSlopeFactor()
+{}
+
+safe_VkDepthBiasInfoEXT::safe_VkDepthBiasInfoEXT(const safe_VkDepthBiasInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    depthBiasConstantFactor = copy_src.depthBiasConstantFactor;
+    depthBiasClamp = copy_src.depthBiasClamp;
+    depthBiasSlopeFactor = copy_src.depthBiasSlopeFactor;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkDepthBiasInfoEXT& safe_VkDepthBiasInfoEXT::operator=(const safe_VkDepthBiasInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    depthBiasConstantFactor = copy_src.depthBiasConstantFactor;
+    depthBiasClamp = copy_src.depthBiasClamp;
+    depthBiasSlopeFactor = copy_src.depthBiasSlopeFactor;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkDepthBiasInfoEXT::~safe_VkDepthBiasInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkDepthBiasInfoEXT::initialize(const VkDepthBiasInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    depthBiasConstantFactor = in_struct->depthBiasConstantFactor;
+    depthBiasClamp = in_struct->depthBiasClamp;
+    depthBiasSlopeFactor = in_struct->depthBiasSlopeFactor;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkDepthBiasInfoEXT::initialize(const safe_VkDepthBiasInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    depthBiasConstantFactor = copy_src->depthBiasConstantFactor;
+    depthBiasClamp = copy_src->depthBiasClamp;
+    depthBiasSlopeFactor = copy_src->depthBiasSlopeFactor;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkDepthBiasRepresentationInfoEXT::safe_VkDepthBiasRepresentationInfoEXT(const VkDepthBiasRepresentationInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    depthBiasRepresentation(in_struct->depthBiasRepresentation),
+    depthBiasExact(in_struct->depthBiasExact)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkDepthBiasRepresentationInfoEXT::safe_VkDepthBiasRepresentationInfoEXT() :
+    sType(VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT),
+    pNext(nullptr),
+    depthBiasRepresentation(),
+    depthBiasExact()
+{}
+
+safe_VkDepthBiasRepresentationInfoEXT::safe_VkDepthBiasRepresentationInfoEXT(const safe_VkDepthBiasRepresentationInfoEXT& copy_src)
+{
+    sType = copy_src.sType;
+    depthBiasRepresentation = copy_src.depthBiasRepresentation;
+    depthBiasExact = copy_src.depthBiasExact;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkDepthBiasRepresentationInfoEXT& safe_VkDepthBiasRepresentationInfoEXT::operator=(const safe_VkDepthBiasRepresentationInfoEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    depthBiasRepresentation = copy_src.depthBiasRepresentation;
+    depthBiasExact = copy_src.depthBiasExact;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkDepthBiasRepresentationInfoEXT::~safe_VkDepthBiasRepresentationInfoEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkDepthBiasRepresentationInfoEXT::initialize(const VkDepthBiasRepresentationInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    depthBiasRepresentation = in_struct->depthBiasRepresentation;
+    depthBiasExact = in_struct->depthBiasExact;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkDepthBiasRepresentationInfoEXT::initialize(const safe_VkDepthBiasRepresentationInfoEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    depthBiasRepresentation = copy_src->depthBiasRepresentation;
+    depthBiasExact = copy_src->depthBiasExact;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
 safe_VkPhysicalDeviceDeviceMemoryReportFeaturesEXT::safe_VkPhysicalDeviceDeviceMemoryReportFeaturesEXT(const VkPhysicalDeviceDeviceMemoryReportFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     deviceMemoryReport(in_struct->deviceMemoryReport)
@@ -9609,7 +11355,6 @@ void safe_VkPhysicalDeviceCustomBorderColorFeaturesEXT::initialize(const safe_Vk
 }
 #ifdef VK_USE_PLATFORM_METAL_EXT
 
-
 safe_VkExportMetalObjectCreateInfoEXT::safe_VkExportMetalObjectCreateInfoEXT(const VkExportMetalObjectCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     exportObjectType(in_struct->exportObjectType)
@@ -9666,9 +11411,7 @@ void safe_VkExportMetalObjectCreateInfoEXT::initialize(const safe_VkExportMetalO
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkExportMetalObjectsInfoEXT::safe_VkExportMetalObjectsInfoEXT(const VkExportMetalObjectsInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType)
@@ -9720,9 +11463,7 @@ void safe_VkExportMetalObjectsInfoEXT::initialize(const safe_VkExportMetalObject
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkExportMetalDeviceInfoEXT::safe_VkExportMetalDeviceInfoEXT(const VkExportMetalDeviceInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -9780,9 +11521,7 @@ void safe_VkExportMetalDeviceInfoEXT::initialize(const safe_VkExportMetalDeviceI
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkExportMetalCommandQueueInfoEXT::safe_VkExportMetalCommandQueueInfoEXT(const VkExportMetalCommandQueueInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -9846,9 +11585,7 @@ void safe_VkExportMetalCommandQueueInfoEXT::initialize(const safe_VkExportMetalC
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkExportMetalBufferInfoEXT::safe_VkExportMetalBufferInfoEXT(const VkExportMetalBufferInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -9912,9 +11649,7 @@ void safe_VkExportMetalBufferInfoEXT::initialize(const safe_VkExportMetalBufferI
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkImportMetalBufferInfoEXT::safe_VkImportMetalBufferInfoEXT(const VkImportMetalBufferInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -9972,9 +11707,7 @@ void safe_VkImportMetalBufferInfoEXT::initialize(const safe_VkImportMetalBufferI
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkExportMetalTextureInfoEXT::safe_VkExportMetalTextureInfoEXT(const VkExportMetalTextureInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -10056,9 +11789,7 @@ void safe_VkExportMetalTextureInfoEXT::initialize(const safe_VkExportMetalTextur
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkImportMetalTextureInfoEXT::safe_VkImportMetalTextureInfoEXT(const VkImportMetalTextureInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -10122,9 +11853,7 @@ void safe_VkImportMetalTextureInfoEXT::initialize(const safe_VkImportMetalTextur
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkExportMetalIOSurfaceInfoEXT::safe_VkExportMetalIOSurfaceInfoEXT(const VkExportMetalIOSurfaceInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -10188,9 +11917,7 @@ void safe_VkExportMetalIOSurfaceInfoEXT::initialize(const safe_VkExportMetalIOSu
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkImportMetalIOSurfaceInfoEXT::safe_VkImportMetalIOSurfaceInfoEXT(const VkImportMetalIOSurfaceInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -10248,9 +11975,7 @@ void safe_VkImportMetalIOSurfaceInfoEXT::initialize(const safe_VkImportMetalIOSu
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkExportMetalSharedEventInfoEXT::safe_VkExportMetalSharedEventInfoEXT(const VkExportMetalSharedEventInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -10320,9 +12045,7 @@ void safe_VkExportMetalSharedEventInfoEXT::initialize(const safe_VkExportMetalSh
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 #ifdef VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkImportMetalSharedEventInfoEXT::safe_VkImportMetalSharedEventInfoEXT(const VkImportMetalSharedEventInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -10380,7 +12103,6 @@ void safe_VkImportMetalSharedEventInfoEXT::initialize(const safe_VkImportMetalSh
     pNext = SafePnextCopy(copy_src->pNext);
 }
 #endif // VK_USE_PLATFORM_METAL_EXT
-
 
 safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT::safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT(const VkPhysicalDeviceDescriptorBufferPropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -12116,118 +13838,6 @@ void safe_VkImageCompressionControlEXT::initialize(const safe_VkImageCompression
     }
 }
 
-safe_VkSubresourceLayout2EXT::safe_VkSubresourceLayout2EXT(const VkSubresourceLayout2EXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
-    sType(in_struct->sType),
-    subresourceLayout(in_struct->subresourceLayout)
-{
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-}
-
-safe_VkSubresourceLayout2EXT::safe_VkSubresourceLayout2EXT() :
-    sType(VK_STRUCTURE_TYPE_SUBRESOURCE_LAYOUT_2_EXT),
-    pNext(nullptr),
-    subresourceLayout()
-{}
-
-safe_VkSubresourceLayout2EXT::safe_VkSubresourceLayout2EXT(const safe_VkSubresourceLayout2EXT& copy_src)
-{
-    sType = copy_src.sType;
-    subresourceLayout = copy_src.subresourceLayout;
-    pNext = SafePnextCopy(copy_src.pNext);
-}
-
-safe_VkSubresourceLayout2EXT& safe_VkSubresourceLayout2EXT::operator=(const safe_VkSubresourceLayout2EXT& copy_src)
-{
-    if (&copy_src == this) return *this;
-
-    if (pNext)
-        FreePnextChain(pNext);
-
-    sType = copy_src.sType;
-    subresourceLayout = copy_src.subresourceLayout;
-    pNext = SafePnextCopy(copy_src.pNext);
-
-    return *this;
-}
-
-safe_VkSubresourceLayout2EXT::~safe_VkSubresourceLayout2EXT()
-{
-    if (pNext)
-        FreePnextChain(pNext);
-}
-
-void safe_VkSubresourceLayout2EXT::initialize(const VkSubresourceLayout2EXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
-{
-    if (pNext)
-        FreePnextChain(pNext);
-    sType = in_struct->sType;
-    subresourceLayout = in_struct->subresourceLayout;
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-}
-
-void safe_VkSubresourceLayout2EXT::initialize(const safe_VkSubresourceLayout2EXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
-{
-    sType = copy_src->sType;
-    subresourceLayout = copy_src->subresourceLayout;
-    pNext = SafePnextCopy(copy_src->pNext);
-}
-
-safe_VkImageSubresource2EXT::safe_VkImageSubresource2EXT(const VkImageSubresource2EXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
-    sType(in_struct->sType),
-    imageSubresource(in_struct->imageSubresource)
-{
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-}
-
-safe_VkImageSubresource2EXT::safe_VkImageSubresource2EXT() :
-    sType(VK_STRUCTURE_TYPE_IMAGE_SUBRESOURCE_2_EXT),
-    pNext(nullptr),
-    imageSubresource()
-{}
-
-safe_VkImageSubresource2EXT::safe_VkImageSubresource2EXT(const safe_VkImageSubresource2EXT& copy_src)
-{
-    sType = copy_src.sType;
-    imageSubresource = copy_src.imageSubresource;
-    pNext = SafePnextCopy(copy_src.pNext);
-}
-
-safe_VkImageSubresource2EXT& safe_VkImageSubresource2EXT::operator=(const safe_VkImageSubresource2EXT& copy_src)
-{
-    if (&copy_src == this) return *this;
-
-    if (pNext)
-        FreePnextChain(pNext);
-
-    sType = copy_src.sType;
-    imageSubresource = copy_src.imageSubresource;
-    pNext = SafePnextCopy(copy_src.pNext);
-
-    return *this;
-}
-
-safe_VkImageSubresource2EXT::~safe_VkImageSubresource2EXT()
-{
-    if (pNext)
-        FreePnextChain(pNext);
-}
-
-void safe_VkImageSubresource2EXT::initialize(const VkImageSubresource2EXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
-{
-    if (pNext)
-        FreePnextChain(pNext);
-    sType = in_struct->sType;
-    imageSubresource = in_struct->imageSubresource;
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-}
-
-void safe_VkImageSubresource2EXT::initialize(const safe_VkImageSubresource2EXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
-{
-    sType = copy_src->sType;
-    imageSubresource = copy_src->imageSubresource;
-    pNext = SafePnextCopy(copy_src->pNext);
-}
-
 safe_VkImageCompressionPropertiesEXT::safe_VkImageCompressionPropertiesEXT(const VkImageCompressionPropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     imageCompressionFlags(in_struct->imageCompressionFlags),
@@ -12788,7 +14398,6 @@ void safe_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT::initialize(const safe_VkPh
 }
 #ifdef VK_USE_PLATFORM_DIRECTFB_EXT
 
-
 safe_VkDirectFBSurfaceCreateInfoEXT::safe_VkDirectFBSurfaceCreateInfoEXT(const VkDirectFBSurfaceCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     flags(in_struct->flags),
@@ -12899,7 +14508,6 @@ void safe_VkDirectFBSurfaceCreateInfoEXT::initialize(const safe_VkDirectFBSurfac
     }
 }
 #endif // VK_USE_PLATFORM_DIRECTFB_EXT
-
 
 safe_VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT::safe_VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT(const VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
@@ -16118,6 +17726,62 @@ void safe_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT::initializ
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
+safe_VkExternalMemoryAcquireUnmodifiedEXT::safe_VkExternalMemoryAcquireUnmodifiedEXT(const VkExternalMemoryAcquireUnmodifiedEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    acquireUnmodifiedMemory(in_struct->acquireUnmodifiedMemory)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkExternalMemoryAcquireUnmodifiedEXT::safe_VkExternalMemoryAcquireUnmodifiedEXT() :
+    sType(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_ACQUIRE_UNMODIFIED_EXT),
+    pNext(nullptr),
+    acquireUnmodifiedMemory()
+{}
+
+safe_VkExternalMemoryAcquireUnmodifiedEXT::safe_VkExternalMemoryAcquireUnmodifiedEXT(const safe_VkExternalMemoryAcquireUnmodifiedEXT& copy_src)
+{
+    sType = copy_src.sType;
+    acquireUnmodifiedMemory = copy_src.acquireUnmodifiedMemory;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkExternalMemoryAcquireUnmodifiedEXT& safe_VkExternalMemoryAcquireUnmodifiedEXT::operator=(const safe_VkExternalMemoryAcquireUnmodifiedEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    acquireUnmodifiedMemory = copy_src.acquireUnmodifiedMemory;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkExternalMemoryAcquireUnmodifiedEXT::~safe_VkExternalMemoryAcquireUnmodifiedEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkExternalMemoryAcquireUnmodifiedEXT::initialize(const VkExternalMemoryAcquireUnmodifiedEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    acquireUnmodifiedMemory = in_struct->acquireUnmodifiedMemory;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkExternalMemoryAcquireUnmodifiedEXT::initialize(const safe_VkExternalMemoryAcquireUnmodifiedEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    acquireUnmodifiedMemory = copy_src->acquireUnmodifiedMemory;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
 safe_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT::safe_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT(const VkPhysicalDeviceExtendedDynamicState3FeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     extendedDynamicState3TessellationDomainOrigin(in_struct->extendedDynamicState3TessellationDomainOrigin),
@@ -17454,6 +19118,62 @@ void safe_VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT::initialize(con
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
+safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT::safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT(const VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
+    sType(in_struct->sType),
+    dynamicRenderingUnusedAttachments(in_struct->dynamicRenderingUnusedAttachments)
+{
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT::safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT() :
+    sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT),
+    pNext(nullptr),
+    dynamicRenderingUnusedAttachments()
+{}
+
+safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT::safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT(const safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT& copy_src)
+{
+    sType = copy_src.sType;
+    dynamicRenderingUnusedAttachments = copy_src.dynamicRenderingUnusedAttachments;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT& safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT::operator=(const safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT& copy_src)
+{
+    if (&copy_src == this) return *this;
+
+    if (pNext)
+        FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    dynamicRenderingUnusedAttachments = copy_src.dynamicRenderingUnusedAttachments;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT::~safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT()
+{
+    if (pNext)
+        FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT::initialize(const VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    if (pNext)
+        FreePnextChain(pNext);
+    sType = in_struct->sType;
+    dynamicRenderingUnusedAttachments = in_struct->dynamicRenderingUnusedAttachments;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT::initialize(const safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state)
+{
+    sType = copy_src->sType;
+    dynamicRenderingUnusedAttachments = copy_src->dynamicRenderingUnusedAttachments;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
 safe_VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT::safe_VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT(const VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) :
     sType(in_struct->sType),
     attachmentFeedbackLoopDynamicState(in_struct->attachmentFeedbackLoopDynamicState)
@@ -17843,3 +19563,5 @@ void safe_VkPhysicalDeviceMeshShaderPropertiesEXT::initialize(const safe_VkPhysi
         maxMeshWorkGroupSize[i] = copy_src->maxMeshWorkGroupSize[i];
     }
 }
+
+// NOLINTEND

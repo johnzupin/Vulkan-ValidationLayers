@@ -18,6 +18,10 @@ cmake_minimum_required(VERSION 3.17.2)
 
 project(VVL LANGUAGES CXX)
 
+# This variable enables downstream users to customize the target API
+# variant (e.g. Vulkan SC)
+set(API_TYPE "vulkan")
+
 add_subdirectory(scripts)
 
 set(VVL_CPP_STANDARD 17 CACHE STRING "Set the C++ standard to build against.")
@@ -103,14 +107,13 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "(GNU|Clang)")
         )
     endif()
 elseif(MSVC)
-    add_compile_options("/W3") # TODO: Update to /W4   
-    add_compile_options("/w34456") # Warn about nested declarations
-    add_compile_options("/w34701") # Warn about potentially uninitialized variables
-    add_compile_options("/w34703") # Warn about potentially uninitialized variables    
-    add_compile_options("/w34057") # Warn about different indirection types.
-    add_compile_options("/w34245") # Warn about signed/unsigned mismatch.
-    add_compile_options("/we4189") # Warn about unused variables
-    add_compile_options("/we5038") # Warn about MIL ordering in constructors
+    add_compile_options(
+        /W4
+        /we5038 # Enable warning about MIL ordering in constructors
+    )
+
+    # Enforce stricter ISO C++
+    add_compile_options(/permissive-)
 
     # PDBs aren't generated on Release builds by default.
     add_compile_options("$<$<CONFIG:Release>:/Zi>")

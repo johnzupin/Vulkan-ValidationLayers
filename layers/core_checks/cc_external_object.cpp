@@ -44,7 +44,7 @@ bool CoreChecks::PreCallValidateImportSemaphoreFdKHR(VkDevice device, const VkIm
     const char *func_name = "vkImportSemaphoreFdKHR";
     auto sem_state = Get<SEMAPHORE_STATE>(info->semaphore);
     if (sem_state) {
-        skip |= ValidateObjectNotInUse(sem_state.get(), func_name, kVUIDUndefined);
+        skip |= ValidateObjectNotInUse(sem_state.get(), func_name, "VUID-vkImportSemaphoreFdKHR-semaphore-01142");
 
         if ((info->flags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT) != 0 && sem_state->type == VK_SEMAPHORE_TYPE_TIMELINE) {
             skip |= LogError(sem_state->Handle(), "VUID-VkImportSemaphoreFdInfoKHR-flags-03323",
@@ -85,8 +85,7 @@ bool CoreChecks::ValidateImportFence(VkFence fence, const char *vuid, const char
     auto fence_node = Get<FENCE_STATE>(fence);
     bool skip = false;
     if (fence_node && fence_node->Scope() == kSyncScopeInternal && fence_node->State() == FENCE_INFLIGHT) {
-        skip |=
-            LogError(fence, vuid, "%s: Fence %s that is currently in use.", caller_name, report_data->FormatHandle(fence).c_str());
+        skip |= LogError(fence, vuid, "%s: Fence %s that is currently in use.", caller_name, FormatHandle(fence).c_str());
     }
     return skip;
 }
@@ -122,6 +121,7 @@ bool CoreChecks::PreCallValidateImportSemaphoreWin32HandleKHR(VkDevice device,
     const char *func_name = "vkImportSemaphoreWin32HandleKHR";
     auto sem_state = Get<SEMAPHORE_STATE>(info->semaphore);
     if (sem_state) {
+        // Waiting for: https://gitlab.khronos.org/vulkan/vulkan/-/issues/3507
         skip |= ValidateObjectNotInUse(sem_state.get(), func_name, kVUIDUndefined);
 
         if ((info->flags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT) != 0 && sem_state->type == VK_SEMAPHORE_TYPE_TIMELINE) {
@@ -141,7 +141,7 @@ bool CoreChecks::PreCallValidateGetSemaphoreWin32HandleKHR(VkDevice device, cons
     if (sem_state) {
         if ((info->handleType & sem_state->exportHandleTypes) == 0) {
             skip |= LogError(sem_state->Handle(), "VUID-VkSemaphoreGetWin32HandleInfoKHR-handleType-01126",
-                             "%s: handleType %s was not VkExportSemaphoreCreateInfo::handleTypes (%s)", func_name,
+                             "%s: handleType %s was not included in VkExportSemaphoreCreateInfo::handleTypes (%s)", func_name,
                              string_VkExternalSemaphoreHandleTypeFlagBits(info->handleType),
                              string_VkExternalSemaphoreHandleTypeFlags(sem_state->exportHandleTypes).c_str());
         }
@@ -179,7 +179,7 @@ bool CoreChecks::PreCallValidateImportSemaphoreZirconHandleFUCHSIA(VkDevice devi
     const char *func_name = "vkImportSemaphoreZirconHandleFUCHSIA";
     auto sem_state = Get<SEMAPHORE_STATE>(info->semaphore);
     if (sem_state) {
-        skip |= ValidateObjectNotInUse(sem_state.get(), func_name, kVUIDUndefined);
+        skip |= ValidateObjectNotInUse(sem_state.get(), func_name, "VUID-vkImportSemaphoreZirconHandleFUCHSIA-semaphore-04764");
 
         if (sem_state->type == VK_SEMAPHORE_TYPE_TIMELINE) {
             skip |=
@@ -220,7 +220,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                         "but instance %s did not have a "
                         "VkExportMetalObjectCreateInfoEXT struct with exportObjectType of "
                         "VK_EXPORT_METAL_OBJECT_TYPE_METAL_DEVICE_BIT_EXT in the pNext chain of its VkInstanceCreateInfo structure",
-                        report_data->FormatHandle(instance_state->instance).c_str());
+                        FormatHandle(instance_state->instance).c_str());
                 }
                 break;
 
@@ -234,7 +234,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                      "VkExportMetalObjectCreateInfoEXT struct with exportObjectType of "
                                      "VK_EXPORT_METAL_OBJECT_TYPE_METAL_COMMAND_QUEUE_BIT_EXT in the pNext chain of its "
                                      "VkInstanceCreateInfo structure",
-                                     report_data->FormatHandle(instance_state->instance).c_str());
+                                     FormatHandle(instance_state->instance).c_str());
                 }
                 break;
 
@@ -249,7 +249,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                             "%s, but that memory was not allocated with a VkExportMetalObjectCreateInfoEXT whose exportObjectType "
                             "member was set to VK_EXPORT_METAL_OBJECT_TYPE_METAL_BUFFER_BIT_EXT in the pNext chain of the "
                             "VkMemoryAllocateInfo structure",
-                            report_data->FormatHandle(metal_buffer_ptr->memory).c_str());
+                            FormatHandle(metal_buffer_ptr->memory).c_str());
                     }
                 }
             } break;
@@ -268,9 +268,8 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                         LogError(device, "VUID-VkExportMetalObjectsInfoEXT-pNext-06794",
                                  "ExportMetalObjectsEXT: pNext chain contains a VkExportMetalTextureInfoEXT structure with image = "
                                  "%s, imageView = %s and bufferView = %s, but exactly one of those 3 must not be VK_NULL_HANDLE",
-                                 report_data->FormatHandle(metal_texture_ptr->image).c_str(),
-                                 report_data->FormatHandle(metal_texture_ptr->imageView).c_str(),
-                                 report_data->FormatHandle(metal_texture_ptr->bufferView).c_str());
+                                 FormatHandle(metal_texture_ptr->image).c_str(), FormatHandle(metal_texture_ptr->imageView).c_str(),
+                                 FormatHandle(metal_texture_ptr->bufferView).c_str());
                 }
                 if (metal_texture_ptr->image) {
                     auto image_info = Get<IMAGE_STATE>(metal_texture_ptr->image);
@@ -282,7 +281,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "%s, but that image was not created with a VkExportMetalObjectCreateInfoEXT whose exportObjectType "
                                 "member was set to VK_EXPORT_METAL_OBJECT_TYPE_METAL_TEXTURE_BIT_EXT in the pNext chain of the "
                                 "VkImageCreateInfo structure",
-                                report_data->FormatHandle(metal_texture_ptr->image).c_str());
+                                FormatHandle(metal_texture_ptr->image).c_str());
                         }
                         auto format_plane_count = FormatPlaneCount(image_info->createInfo.format);
                         auto image_plane = metal_texture_ptr->plane;
@@ -292,8 +291,8 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "ExportMetalObjectsEXT: pNext chain contains a VkExportMetalTextureInfoEXT structure with image = "
                                 "%s, and plane = %s, but image was created with format %s, which is not multiplaner and plane is "
                                 "required to be VK_IMAGE_ASPECT_PLANE_0_BIT",
-                                report_data->FormatHandle(metal_texture_ptr->image).c_str(),
-                                string_VkImageAspectFlags(image_plane).c_str(), string_VkFormat(image_info->createInfo.format));
+                                FormatHandle(metal_texture_ptr->image).c_str(), string_VkImageAspectFlags(image_plane).c_str(),
+                                string_VkFormat(image_info->createInfo.format));
                         }
                         if ((format_plane_count == 2) && (image_plane == VK_IMAGE_ASPECT_PLANE_2_BIT)) {
                             skip |= LogError(
@@ -302,8 +301,8 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "%s, and plane = %s, but image was created with format %s, which has exactly 2 planes and plane "
                                 "cannot"
                                 "be VK_IMAGE_ASPECT_PLANE_2_BIT",
-                                report_data->FormatHandle(metal_texture_ptr->image).c_str(),
-                                string_VkImageAspectFlags(image_plane).c_str(), string_VkFormat(image_info->createInfo.format));
+                                FormatHandle(metal_texture_ptr->image).c_str(), string_VkImageAspectFlags(image_plane).c_str(),
+                                string_VkFormat(image_info->createInfo.format));
                         }
                     }
                 }
@@ -319,7 +318,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "exportObjectType "
                                 "member was set to VK_EXPORT_METAL_OBJECT_TYPE_METAL_TEXTURE_BIT_EXT in the pNext chain of the "
                                 "VkImageViewCreateInfo structure",
-                                report_data->FormatHandle(metal_texture_ptr->imageView).c_str());
+                                FormatHandle(metal_texture_ptr->imageView).c_str());
                         }
                         auto format_plane_count = FormatPlaneCount(image_view_info->create_info.format);
                         auto image_plane = metal_texture_ptr->plane;
@@ -331,8 +330,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "%s, and plane = %s, but imageView was created with format %s, which is not multiplaner and "
                                 "plane is "
                                 "required to be VK_IMAGE_ASPECT_PLANE_0_BIT",
-                                report_data->FormatHandle(metal_texture_ptr->imageView).c_str(),
-                                string_VkImageAspectFlags(image_plane).c_str(),
+                                FormatHandle(metal_texture_ptr->imageView).c_str(), string_VkImageAspectFlags(image_plane).c_str(),
                                 string_VkFormat(image_view_info->create_info.format));
                         }
                         if ((format_plane_count == 2) && (image_plane == VK_IMAGE_ASPECT_PLANE_2_BIT)) {
@@ -343,7 +341,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                              "planes and plane "
                                              "cannot"
                                              "be VK_IMAGE_ASPECT_PLANE_2_BIT",
-                                             report_data->FormatHandle(metal_texture_ptr->imageView).c_str(),
+                                             FormatHandle(metal_texture_ptr->imageView).c_str(),
                                              string_VkImageAspectFlags(image_plane).c_str(),
                                              string_VkFormat(image_view_info->create_info.format));
                         }
@@ -361,7 +359,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "exportObjectType "
                                 "member was set to VK_EXPORT_METAL_OBJECT_TYPE_METAL_TEXTURE_BIT_EXT in the pNext chain of the "
                                 "VkBufferViewCreateInfo structure",
-                                report_data->FormatHandle(metal_texture_ptr->bufferView).c_str());
+                                FormatHandle(metal_texture_ptr->bufferView).c_str());
                         }
                     }
                 }
@@ -375,8 +373,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                             "image = %s and imageView = "
                             "%s, but plane = %s which is not one of  VK_IMAGE_ASPECT_PLANE_0_BIT,  VK_IMAGE_ASPECT_PLANE_1_BIT, "
                             "or  VK_IMAGE_ASPECT_PLANE_2_BIT",
-                            report_data->FormatHandle(metal_texture_ptr->image).c_str(),
-                            report_data->FormatHandle(metal_texture_ptr->imageView).c_str(),
+                            FormatHandle(metal_texture_ptr->image).c_str(), FormatHandle(metal_texture_ptr->imageView).c_str(),
                             string_VkImageAspectFlags(metal_texture_ptr->plane).c_str());
                     }
                 }
@@ -393,7 +390,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                             "%s, but that image was not created with a VkExportMetalObjectCreateInfoEXT whose exportObjectType "
                             "member was set to VK_EXPORT_METAL_OBJECT_TYPE_METAL_IOSURFACE_BIT_EXT in the pNext chain of the "
                             "VkImageCreateInfo structure",
-                            report_data->FormatHandle(metal_io_surface_ptr->image).c_str());
+                            FormatHandle(metal_io_surface_ptr->image).c_str());
                     }
                 }
             } break;
@@ -406,8 +403,8 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                         device, "VUID-VkExportMetalObjectsInfoEXT-pNext-06804",
                         "ExportMetalObjectsEXT: pNext chain contains a VkExportMetalSharedEventInfoEXT structure with semaphore = "
                         "%s, and event = %s, but exactly one of them must not be VK_NULL_HANDLE",
-                        report_data->FormatHandle(metal_shared_event_ptr->semaphore).c_str(),
-                        report_data->FormatHandle(metal_shared_event_ptr->event).c_str());
+                        FormatHandle(metal_shared_event_ptr->semaphore).c_str(),
+                        FormatHandle(metal_shared_event_ptr->event).c_str());
                 }
 
                 if (metal_shared_event_ptr->semaphore) {
@@ -420,7 +417,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                             "%s, but that semaphore was not created with a VkExportMetalObjectCreateInfoEXT whose exportObjectType "
                             "member was set to VK_EXPORT_METAL_OBJECT_TYPE_METAL_SHARED_EVENT_BIT_EXT in the pNext chain of the "
                             "VkSemaphoreCreateInfo structure",
-                            report_data->FormatHandle(metal_shared_event_ptr->semaphore).c_str());
+                            FormatHandle(metal_shared_event_ptr->semaphore).c_str());
                     }
                 }
                 if (metal_shared_event_ptr->event) {
@@ -433,7 +430,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                             "%s, but that event was not created with a VkExportMetalObjectCreateInfoEXT whose exportObjectType "
                             "member was set to VK_EXPORT_METAL_OBJECT_TYPE_METAL_SHARED_EVENT_BIT_EXT in the pNext chain of the "
                             "VkEventCreateInfo structure",
-                            report_data->FormatHandle(metal_shared_event_ptr->event).c_str());
+                            FormatHandle(metal_shared_event_ptr->event).c_str());
                     }
                 }
             } break;

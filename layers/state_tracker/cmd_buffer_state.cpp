@@ -130,7 +130,7 @@ void CMD_BUFFER_STATE::ResetCBState() {
     hasRenderPassInstance = false;
     suspendsRenderPassInstance = false;
     resumesRenderPassInstance = false;
-    state = CB_NEW;
+    state = CbState::New;
     command_count = 0;
     submitCount = 0;
     image_layout_change_count = 1;  // Start at 1. 0 is insert value for validation cache versions, s.t. new == dirty
@@ -143,10 +143,8 @@ void CMD_BUFFER_STATE::ResetCBState() {
     pipelineStaticScissorCount = 0;
     viewportMask = 0;
     viewportWithCountMask = 0;
-    viewportWithCountCount = 0;
     scissorMask = 0;
     scissorWithCountMask = 0;
-    scissorWithCountCount = 0;
     trashedViewportMask = 0;
     trashedScissorMask = 0;
     trashedViewportCount = false;
@@ -154,7 +152,7 @@ void CMD_BUFFER_STATE::ResetCBState() {
     usedDynamicViewportCount = false;
     usedDynamicScissorCount = false;
 
-    activeRenderPassBeginInfo = safe_VkRenderPassBeginInfo();
+    active_render_pass_begin_info = safe_VkRenderPassBeginInfo();
     activeRenderPass = nullptr;
     active_attachments = nullptr;
     active_subpasses = nullptr;
@@ -297,10 +295,10 @@ void CMD_BUFFER_STATE::NotifyInvalidate(const BASE_NODE::NodeList &invalid_nodes
             }
         }
         if (found_invalid) {
-            if (state == CB_RECORDING) {
-                state = CB_INVALID_INCOMPLETE;
-            } else if (state == CB_RECORDED) {
-                state = CB_INVALID_COMPLETE;
+            if (state == CbState::Recording) {
+                state = CbState::InvalidIncomplete;
+            } else if (state == CbState::Recorded) {
+                state = CbState::InvalidComplete;
             }
             broken_bindings.emplace(invalid_nodes[0]->Handle(), log_list);
         }
@@ -393,17 +391,17 @@ bool CMD_BUFFER_STATE::UpdatesQuery(const QueryObject &query_obj) const {
 static bool SetQueryStateMulti(VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, uint32_t perfPass, QueryState value,
                                QueryMap *localQueryToStateMap) {
     for (uint32_t i = 0; i < queryCount; i++) {
-        QueryObject object = QueryObject(QueryObject(queryPool, firstQuery + i), perfPass);
-        (*localQueryToStateMap)[object] = value;
+        QueryObject query_obj = {queryPool, firstQuery + i, perfPass};
+        (*localQueryToStateMap)[query_obj] = value;
     }
     return false;
 }
 
 void CMD_BUFFER_STATE::EndQueries(VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount) {
     for (uint32_t slot = firstQuery; slot < (firstQuery + queryCount); slot++) {
-        QueryObject query = {queryPool, slot};
-        activeQueries.erase(query);
-        updatedQueries.insert(query);
+        QueryObject query_obj = {queryPool, slot};
+        activeQueries.erase(query_obj);
+        updatedQueries.insert(query_obj);
     }
     queryUpdates.emplace_back([queryPool, firstQuery, queryCount](CMD_BUFFER_STATE &cb_state_arg, bool do_validate,
                                                                   VkQueryPool &firstPerfQueryPool, uint32_t perfQueryPass,
@@ -414,9 +412,9 @@ void CMD_BUFFER_STATE::EndQueries(VkQueryPool queryPool, uint32_t firstQuery, ui
 
 void CMD_BUFFER_STATE::ResetQueryPool(VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount) {
     for (uint32_t slot = firstQuery; slot < (firstQuery + queryCount); slot++) {
-        QueryObject query = {queryPool, slot};
-        resetQueries.insert(query);
-        updatedQueries.insert(query);
+        QueryObject query_obj = {queryPool, slot};
+        resetQueries.insert(query_obj);
+        updatedQueries.insert(query_obj);
     }
 
     queryUpdates.emplace_back([queryPool, firstQuery, queryCount](CMD_BUFFER_STATE &cb_state_arg, bool do_validate,
@@ -488,20 +486,18 @@ void CMD_BUFFER_STATE::BeginRenderPass(CMD_TYPE cmd_type, const VkRenderPassBegi
     RecordCmd(cmd_type);
     activeFramebuffer = dev_data->Get<FRAMEBUFFER_STATE>(pRenderPassBegin->framebuffer);
     activeRenderPass = dev_data->Get<RENDER_PASS_STATE>(pRenderPassBegin->renderPass);
-    activeRenderPassBeginInfo = safe_VkRenderPassBeginInfo(pRenderPassBegin);
+    active_render_pass_begin_info = safe_VkRenderPassBeginInfo(pRenderPassBegin);
     SetActiveSubpass(0);
     activeSubpassContents = contents;
 
-    if (activeRenderPass) {
-        // Connect this RP to cmdBuffer
-        if (!dev_data->disabled[command_buffer_state]) {
-            AddChild(activeRenderPass);
-        }
+    // Connect this RP to cmdBuffer
+    if (!dev_data->disabled[command_buffer_state]) {
+        AddChild(activeRenderPass);
+    }
 
-        // Spec states that after BeginRenderPass all resources should be rebound
-        if (activeRenderPass->has_multiview_enabled) {
-            UnbindResources();
-        }
+    // Spec states that after BeginRenderPass all resources should be rebound
+    if (activeRenderPass->has_multiview_enabled) {
+        UnbindResources();
     }
 
     auto chained_device_group_struct = LvlFindInChain<VkDeviceGroupRenderPassBeginInfo>(pRenderPassBegin->pNext);
@@ -535,21 +531,19 @@ void CMD_BUFFER_STATE::NextSubpass(CMD_TYPE cmd_type, VkSubpassContents contents
     activeSubpassContents = contents;
 
     // Update cb_state->active_subpasses
-    if (activeRenderPass) {
-        if (activeFramebuffer) {
-            active_subpasses = nullptr;
-            active_subpasses = std::make_shared<std::vector<SUBPASS_INFO>>(activeFramebuffer->createInfo.attachmentCount);
+    if (activeFramebuffer) {
+        active_subpasses = nullptr;
+        active_subpasses = std::make_shared<std::vector<SUBPASS_INFO>>(activeFramebuffer->createInfo.attachmentCount);
 
-            if (GetActiveSubpass() < activeRenderPass->createInfo.subpassCount) {
-                const auto &subpass = activeRenderPass->createInfo.pSubpasses[GetActiveSubpass()];
-                UpdateSubpassAttachments(subpass, *active_subpasses);
-            }
+        if (GetActiveSubpass() < activeRenderPass->createInfo.subpassCount) {
+            const auto &subpass = activeRenderPass->createInfo.pSubpasses[GetActiveSubpass()];
+            UpdateSubpassAttachments(subpass, *active_subpasses);
         }
+    }
 
-        // Spec states that after NextSubpass all resources should be rebound
-        if (activeRenderPass->has_multiview_enabled) {
-            UnbindResources();
-        }
+    // Spec states that after NextSubpass all resources should be rebound
+    if (activeRenderPass->has_multiview_enabled) {
+        UnbindResources();
     }
 }
 
@@ -565,7 +559,6 @@ void CMD_BUFFER_STATE::EndRenderPass(CMD_TYPE cmd_type) {
 
 void CMD_BUFFER_STATE::BeginRendering(CMD_TYPE cmd_type, const VkRenderingInfo *pRenderingInfo) {
     RecordCmd(cmd_type);
-    begin_rendering_func_name = CommandTypeString(cmd_type);
     activeRenderPass = std::make_shared<RENDER_PASS_STATE>(pRenderingInfo, true);
 
     auto chained_device_group_struct = LvlFindInChain<VkDeviceGroupRenderPassBeginInfo>(pRenderingInfo->pNext);
@@ -587,7 +580,6 @@ void CMD_BUFFER_STATE::BeginRendering(CMD_TYPE cmd_type, const VkRenderingInfo *
     hasRenderPassInstance = true;
 
     active_attachments = nullptr;
-    active_color_attachments_index.clear();
     uint32_t attachment_count = (pRenderingInfo->colorAttachmentCount + 2) * 2;
 
     // Set cb_state->active_attachments & cb_state->attachments_view_states
@@ -641,6 +633,12 @@ void CMD_BUFFER_STATE::BeginRendering(CMD_TYPE cmd_type, const VkRenderingInfo *
     }
 }
 
+void CMD_BUFFER_STATE::EndRendering(CMD_TYPE cmd_type) {
+    RecordCmd(cmd_type);
+    activeRenderPass = nullptr;
+    active_color_attachments_index.clear();
+}
+
 void CMD_BUFFER_STATE::BeginVideoCoding(const VkVideoBeginCodingInfoKHR *pBeginInfo) {
     RecordCmd(CMD_BEGINVIDEOCODINGKHR);
     bound_video_session = dev_data->Get<VIDEO_SESSION_STATE>(pBeginInfo->videoSession);
@@ -688,16 +686,16 @@ void CMD_BUFFER_STATE::BeginVideoCoding(const VkVideoBeginCodingInfoKHR *pBeginI
                         if (!dev_state.IsSlotActive(slot.index)) {
                             skip |= dev_data->LogError(vs_state->Handle(), "VUID-vkCmdBeginVideoCodingKHR-slotIndex-07239",
                                                        "DPB slot index %d is not active in %s", slot.index,
-                                                       dev_data->report_data->FormatHandle(vs_state->Handle()).c_str());
+                                                       dev_data->FormatHandle(*vs_state).c_str());
                         } else if (slot.resource && !dev_state.IsSlotPicture(slot.index, slot.resource)) {
-                            skip |= dev_data->LogError(
-                                vs_state->Handle(), "VUID-vkCmdBeginVideoCodingKHR-pPictureResource-07265",
-                                "DPB slot index %d of %s is not currently associated with the specified "
-                                "video picture resource: %s, layer %u, offset (%u,%u), extent (%u,%u)",
-                                slot.index, dev_data->report_data->FormatHandle(vs_state->Handle()).c_str(),
-                                dev_data->report_data->FormatHandle(slot.resource.image_state->Handle()).c_str(),
-                                slot.resource.range.baseArrayLayer, slot.resource.coded_offset.x, slot.resource.coded_offset.y,
-                                slot.resource.coded_extent.width, slot.resource.coded_extent.height);
+                            skip |= dev_data->LogError(vs_state->Handle(), "VUID-vkCmdBeginVideoCodingKHR-pPictureResource-07265",
+                                                       "DPB slot index %d of %s is not currently associated with the specified "
+                                                       "video picture resource: %s, layer %u, offset (%u,%u), extent (%u,%u)",
+                                                       slot.index, dev_data->FormatHandle(*vs_state).c_str(),
+                                                       dev_data->FormatHandle(slot.resource.image_state->Handle()).c_str(),
+                                                       slot.resource.range.baseArrayLayer, slot.resource.coded_offset.x,
+                                                       slot.resource.coded_offset.y, slot.resource.coded_extent.width,
+                                                       slot.resource.coded_extent.height);
                         }
                     }
                 }
@@ -743,7 +741,7 @@ void CMD_BUFFER_STATE::ControlVideoCoding(const VkVideoCodingControlInfoKHR *pCo
                     if (!reset_session && !dev_state.IsInitialized()) {
                         skip |= dev_data->LogError(vs_state->Handle(), "VUID-vkCmdControlVideoCodingKHR-flags-07017",
                                                    "Bound video session %s is uninitialized",
-                                                   dev_data->report_data->FormatHandle(vs_state->Handle()).c_str());
+                                                   dev_data->FormatHandle(*vs_state).c_str());
                     }
                 }
 
@@ -788,19 +786,19 @@ void CMD_BUFFER_STATE::DecodeVideo(const VkVideoDecodeInfoKHR *pDecodeInfo) {
                 if (do_validate) {
                     if (!dev_state.IsInitialized()) {
                         skip |= dev_data->LogError(vs_state->Handle(), "VUID-vkCmdDecodeVideoKHR-None-07011", "%s is uninitialized",
-                                                   dev_data->report_data->FormatHandle(vs_state->Handle()).c_str());
+                                                   dev_data->FormatHandle(*vs_state).c_str());
                     }
 
                     const auto log_picture_kind_error = [&](const VideoReferenceSlot &slot, const char *vuid,
                                                             const char *picture_kind) -> bool {
-                        return dev_data->LogError(
-                            vs_state->Handle(), vuid,
-                            "DPB slot index %d of %s does not currently contain a %s with the specified "
-                            "video picture resource: %s, layer %u, offset (%u,%u), extent (%u,%u)",
-                            slot.index, dev_data->report_data->FormatHandle(vs_state->Handle()).c_str(), picture_kind,
-                            dev_data->report_data->FormatHandle(slot.resource.image_state->Handle()).c_str(),
-                            slot.resource.range.baseArrayLayer, slot.resource.coded_offset.x, slot.resource.coded_offset.y,
-                            slot.resource.coded_extent.width, slot.resource.coded_extent.height);
+                        return dev_data->LogError(vs_state->Handle(), vuid,
+                                                  "DPB slot index %d of %s does not currently contain a %s with the specified "
+                                                  "video picture resource: %s, layer %u, offset (%u,%u), extent (%u,%u)",
+                                                  slot.index, dev_data->FormatHandle(*vs_state).c_str(), picture_kind,
+                                                  dev_data->FormatHandle(slot.resource.image_state->Handle()).c_str(),
+                                                  slot.resource.range.baseArrayLayer, slot.resource.coded_offset.x,
+                                                  slot.resource.coded_offset.y, slot.resource.coded_extent.width,
+                                                  slot.resource.coded_extent.height);
                     };
 
                     for (const auto &slot : reference_slots) {
@@ -836,14 +834,14 @@ void CMD_BUFFER_STATE::DecodeVideo(const VkVideoDecodeInfoKHR *pDecodeInfo) {
 }
 
 void CMD_BUFFER_STATE::Begin(const VkCommandBufferBeginInfo *pBeginInfo) {
-    if (CB_RECORDED == state || CB_INVALID_COMPLETE == state) {
+    if (CbState::Recorded == state || CbState::InvalidComplete == state) {
         Reset();
     }
 
     descriptorset_cache.clear();
 
     // Set updated state here in case implicit reset occurs above
-    state = CB_RECORDING;
+    state = CbState::Recording;
     beginInfo = *pBeginInfo;
     if (beginInfo.pInheritanceInfo && (createInfo.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
         inheritanceInfo = *(beginInfo.pInheritanceInfo);
@@ -911,7 +909,7 @@ void CMD_BUFFER_STATE::End(VkResult result) {
     // Cached validation is specific to a specific recording of a specific command buffer.
     descriptorset_cache.clear();
     if (VK_SUCCESS == result) {
-        state = CB_RECORDED;
+        state = CbState::Recorded;
     }
 }
 
@@ -1083,7 +1081,7 @@ void CMD_BUFFER_STATE::UpdatePipelineState(CMD_TYPE cmd_type, const VkPipelineBi
             }
 
             // We can skip updating the state if "nothing" has changed since the last validation.
-            // See CoreChecks::ValidateCmdBufDrawState for more details.
+            // See CoreChecks::ValidateActionState for more details.
             const bool descriptor_set_changed = !reduced_map.IsManyDescriptors() ||
                                                 // Update if descriptor set (or contents) has changed
                                                 set_info.validated_set != descriptor_set.get() ||
@@ -1470,8 +1468,8 @@ void CMD_BUFFER_STATE::RecordWriteTimestamp(CMD_TYPE cmd_type, VkPipelineStageFl
         auto pool_state = dev_data->Get<QUERY_POOL_STATE>(queryPool);
         AddChild(pool_state);
     }
-    QueryObject query = {queryPool, slot};
-    EndQuery(query);
+    QueryObject query_obj = {queryPool, slot};
+    EndQuery(query_obj);
 }
 
 void CMD_BUFFER_STATE::Submit(uint32_t perf_submit_pass) {
@@ -1484,7 +1482,7 @@ void CMD_BUFFER_STATE::Submit(uint32_t perf_submit_pass) {
 
     for (const auto &query_state_pair : local_query_to_state_map) {
         auto query_pool_state = dev_data->Get<QUERY_POOL_STATE>(query_state_pair.first.pool);
-        query_pool_state->SetQueryState(query_state_pair.first.query, query_state_pair.first.perf_pass, query_state_pair.second);
+        query_pool_state->SetQueryState(query_state_pair.first.slot, query_state_pair.first.perf_pass, query_state_pair.second);
     }
 
     for (const auto &function : eventUpdates) {
@@ -1523,7 +1521,7 @@ void CMD_BUFFER_STATE::Retire(uint32_t perf_submit_pass, const std::function<boo
         if (query_state_pair.second == QUERYSTATE_ENDED && !is_query_updated_after(query_state_pair.first)) {
             auto query_pool_state = dev_data->Get<QUERY_POOL_STATE>(query_state_pair.first.pool);
             if (query_pool_state) {
-                query_pool_state->SetQueryState(query_state_pair.first.query, query_state_pair.first.perf_pass,
+                query_pool_state->SetQueryState(query_state_pair.first.slot, query_state_pair.first.perf_pass,
                                                 QUERYSTATE_AVAILABLE);
             }
         }
@@ -1547,18 +1545,4 @@ void CMD_BUFFER_STATE::UnbindResources() {
 
     // Pipeline and descriptor sets
     lastBound[BindPoint_Graphics].Reset();
-}
-
-// Need to think about dynamic state when grabbing state
-bool CMD_BUFFER_STATE::RasterizationDisabled() const {
-    auto pipeline = lastBound[BindPoint_Graphics].pipeline_state;
-    if (pipeline) {
-        if (pipeline->IsDynamic(VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)) {
-            return rasterization_disabled;
-        } else {
-            return pipeline->RasterizationDisabled();
-        }
-    }
-
-    return false;
 }
