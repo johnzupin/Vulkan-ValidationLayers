@@ -1,3 +1,784 @@
+vulkan-validationlayers (1.3.261.0~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ spencer-lunarg ]
+  * tests: Add tests if Sampler/SampledImage share same slot
+
+  [ juan-lunarg ]
+  * ci: Use ccache for MinGW CI
+  * ci: Fix integration_test failing on CI
+  * ci: Build quietly with Ninja
+
+  [ Tony-LunarG ]
+  * tests: Fix BindingAndOffsets by using BufferMemoryRequirements
+  * tests: Check image format compatibility
+  * tests: Check for dynamic patch ctrl points feature
+
+  [ Juan Ramos ]
+  * scripts: Enable testing script on Windows
+
+  [ spencer-lunarg ]
+  * layers: Remove false positive for Vertex Input Structs
+
+  [ Aaron Clarke ]
+  * build: Fixed rtti settings for chromium builds
+
+  [ juan-lunarg ]
+  * ci: Fix linux performance
+  * ci: Removing caching from GN build
+  * ci: Remove verbose comment and pointless environment variable
+
+  [ spencer-lunarg ]
+  * layers: Reduce repeated shader error messages
+  * layers: Fix crash with push constants using spec const
+  * layers: Stop false positive for PushConstant spec const
+
+  [ Artem Kharytoniuk ]
+  * layers: Split thread-safety into regular and generated code
+
+  [ Ben Clayton ]
+  * license: Add BSD license to LICENSE.txt
+
+  [ spencer-lunarg ]
+  * layers: Handle OpUndef used for Image Accesses
+
+  [ Artem Kharytoniuk ]
+  * layers: Add previously unimplementable external memory VUs
+  * tests: Test external memory VUs
+
+  [ spencer-lunarg ]
+  * tests: Add missing command negative tests
+  * scripts: Use python file built-in helper
+  * layers: Add unimplementable VUIDs from extensions
+
+  [ Juan Ramos ]
+  * tests: Fix NegativeQuery.PerformanceCreation
+  * tests: Enable fullscreen tests on MockICD
+  * ci: Enable Win32 testing
+
+  [ spencer-lunarg ]
+  * layers: Fix printing wrong SPIR-V type for builtin
+
+  [ Artem Kharytoniuk ]
+  * layers: Add missing vkImportSemaphore{Type} VUIDs
+  * tests: Test missing semaphore import VUs
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.251
+
+  [ Tony-LunarG ]
+  * layers: Inherit ignore_attachments from libraries
+
+  [ spencer-lunarg ]
+  * tests: Use DeviceFeature and DeviceProp helpers
+  * layers: Fix VUID for CmbBuffers and DescriptorsSets
+  * tests: Add Free with Null tests
+  * layers: Label framebuffer VUID correctly
+  * tests: Add more Framebuffer tests
+  * tests: Add SPIRV-Hopper
+  * layers: Improve CommonParent ObjectTracker VU message
+  * layers: Pass api name to ValidateObject calls
+  * tests: Add commonparent test
+  * tests: Make dedicated device_queue.cpp test file
+  * tests: Add missing DeviceQueue tests
+  * tests: Add MapMemory2 test
+  * tests: Add missing sampler tests
+
+  [ Juan Ramos ]
+  * cmake: Enable /W4 for MSVC users
+
+  [ spencer-lunarg ]
+  * layers: Add values to vkCmdSetVertexInput error
+  * layers: Remove unused stateless for PresentRegions
+  * tests: Add VkPresentRegionsKHR tests
+  * layers: Add new PrimitiveTopology VUIDs
+  * tests: Add new PrimitiveTopology VUIDs
+  * tests: Add --print-vu for viewing new VU messages
+  * layers: Label missing pSampleMask parameter VUID
+
+  [ Juan Ramos ]
+  * cmake: Fix MSVC warning 4244
+  * cmake: Fix MSVC warning 4310
+  * cmake: Enforce stricter ISO C++ on MSVC
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix vuid 01126 message
+  * layers: Fix queue progression with imported semaphore
+  * tests: Add test for queue progression issue
+
+  [ Juan Ramos ]
+  * cmake: Fix MSVC warning 4130
+
+  [ spencer-lunarg ]
+  * layers: Add missing VkQueryPoolCreateInfo VUs
+  * tests: Add meshShaderQueries tests
+  * layers: Make switch case for vkCmdBeginQuery
+  * layers: Add LogObjectList to vkCmdBeginQuery
+
+  [ juan-lunarg ]
+  * layers: Fix debug label validation
+  * cmake: Add VVL_SPIRV_HOPPER option
+
+  [ Piers Daniell ]
+  * layers: VVL for VK_EXT_dynamic_rendering_unused_attachments
+  * layers: Add missing profiles stuff
+  * layers: Positive tests
+  * layers: Remove uneeded IsSkipped() call
+
+  [ juan-lunarg ]
+  * cmake: Fix CMAKE_FIND_ROOT_PATH
+
+  [ Juan Ramos ]
+  * cmake: Fix MSVC warning 4127
+
+  [ juan-lunarg ]
+  * layers: Fix compiler warning
+  * ci: Enable thread sanitizer
+
+  [ Nathaniel Cesario ]
+  * tests: Portability fixes
+
+  [ Aaron Ruby ]
+  * layers: Add missing support for VK_QNX_screen_surface extension
+
+  [ Ziga ]
+  * layers: Fix test creating instance with portability
+
+  [ spencer-lunarg ]
+  * layers: Add Const Ref for CopyBlitResolve checks
+  * layers: Add Const Ref for Buffer CoreChecks
+  * layers: Add Const Ref for Image CoreChecks
+  * tests: Remove unused test args
+  * layers: Label VUID 08921
+  * layers: Add Const Ref for ImageLayout CoreChecks
+
+  [ Juan Ramos ]
+  * cmake: Fix MSVC warning 4706
+
+  [ spencer-lunarg ]
+  * tests: Remove unused IsPlatform checks
+
+  [ arno-lunarg ]
+  * tests: Add missing new lines
+
+  [ spencer-lunarg ]
+  * layers: Define when to use IsExtEnabled
+
+  [ juan-lunarg ]
+  * ci: Skip PositiveSyncObject.WaitTimelineSemThreadRace
+
+  [ Juan Ramos ]
+  * cmake: Fix MSVC warning 4754
+
+  [ spencer-lunarg ]
+  * layers: Move Dynamic State helper to LastBoundState
+  * layers: Remove false positve for dynamic vertex input
+  * tests: Add missing max_profile ext/features
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.253
+
+  [ spencer-lunarg ]
+  * layers: Label new Vertex 64-bit VUIDs
+  * layers: Move Viewport and Scissor to DynamicState
+  * layers: Move SPIRV-Reflect to known_goods
+  * layers: Add Const Ref for Query CoreChecks
+  * layers: Improve Query state code
+
+  [ juan-lunarg ]
+  * cmake: Fix MSVC warning 4459
+
+  [ Seweryn Bronislaw Zielas ]
+  * layers: VK_IMAGE_COMPRESSION_DEFAULT_EXT flag fix
+  * tests: VkImageCompressionPropertiesEXT flags
+
+  [ spencer-lunarg ]
+  * tests: Move ExternalMemorySync helpers to test file
+
+  [ Artem Kharytoniuk ]
+  * scripts: Change ordering/formatting to minimize next diffs
+
+  [ spencer-lunarg ]
+  * layers: Use XML for sync val generation
+
+  [ Artem Kharytoniuk ]
+  * layers: Update logic to handle syncpipeline without TOP/BOTTOM
+  * layers: Apply latest sync XML
+
+  [ spencer-lunarg ]
+  * tests: Use Create*Test helpers
+
+  [ juan-lunarg ]
+  * tests: Fix PositiveCommand.ThreadedCommandBuffersWithLabels
+
+  [ spencer-lunarg ]
+  * tests: Combine Test class helpers
+
+  [ Artem Kharytoniuk ]
+  * layers: Add image barrier conversion routine
+  * tests: Add positive test for subpass self-dependency
+  * layers: Do not check self-dependency in ValidateDependencyInfo
+  * tests: Add regression test for issue 4258
+
+  [ Aitor Camacho ]
+  * layers: Ignore raster's multisample struct when no raster
+  * tests: Extend invalid pipeline pointer test for multisample
+
+  [ Juan Ramos ]
+  * cmake: Disable warnings per target
+
+  [ arno-lunarg ]
+  * layers: Fix 02679 validation
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Tools to fix issue 5691
+  * layers: Avoid warnings from std::tolower
+
+  [ Aitor Camacho ]
+  * tests: Rollback invalid pipeline pointer test for multisample
+  * layers: Rollback raster's multisample struct when no raster
+
+  [ juan-lunarg ]
+  * android: Script that can create APK from CMake build
+  * docs: Cleanup build instructions
+
+  [ John Zulauf ]
+  * tests: Add aliased image subcase for sync
+  * layers: Refactor CreateImage implementation
+  * syncval: Add Opaque fake address support
+  * syncval: Flatten addressspaces to single space
+  * docs: Single addresspace/ideal->opaque rewrite
+
+  [ juan-lunarg ]
+  * docs: Streamline build information
+  * android: Sign APK with apksigner
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.254
+
+  [ spencer-lunarg ]
+  * tests: Expand Init helpers to allow other features
+
+  [ arno-lunarg ]
+  * layers: Update buffer address validation API
+  * layers: Add 03701 to 03705
+  * layers: Improve error msg
+
+  [ spencer-lunarg ]
+  * scripts: Initial version of VulkanObject in script
+  * tests: Add Task/Mesh support for SPIRV-Hopper
+  * tests: Split and fix RasterizationLine tests
+
+  [ Tony-LunarG ]
+  * gpu: Warn if descriptor buffer is enabled with GPU-AV
+
+  [ Juan Ramos ]
+  * docs: Inform users about scripts/check_code_format.py
+
+  [ arno-lunarg ]
+  * layers: Disable calls ComputeScratchSize
+
+  [ Nathaniel Cesario ]
+  * tests: Fix invalid parameters
+
+  [ spencer-lunarg ]
+  * scripts: Move CommandValidation to VulkanObject
+  * tests: SPIRV-Hopper handle multiple known structs
+  * tests: SPIRV-Hopper use reflect EnumerateEntryPoint
+  * tests: SPIRV-Hopper typo and better mesh coverage
+  * layers: Fix ViewportScissorInheritanceTracker range
+  * tests: Move and rename test shader templates
+  * scripts: Use VulkanObject for BestPractice
+  * tests: Fix RasterizationLineModeDefault
+  * tests: Use make_unique for VkShaderObj
+
+  [ Juan Ramos ]
+  * ci: Test with robin hood disabled
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix syncval undefined initialization order
+  * tests: Add regression test for initialization order
+  * layers: Do not use std::move with std::initiailzer_list
+
+  [ Charles Giessen ]
+  * build: Apply Robinhood setting to tests
+
+  [ spencer-lunarg ]
+  * scripts: Move SpirvValidationHelper to VulkanObject
+  * scripts: Move enum_string_helper to own generator
+  * scripts: Move typemap_helper to own generator
+  * scripts: Move object_typemap to own generator
+  * layers: Create a Stateless Util source file
+  * tests: Move tests to Unit folder and rename
+
+  [ Juan Ramos ]
+  * cmake: Fix build_platform usage when dealing with Android
+
+  [ spencer-lunarg ]
+  * scripts: FormatUtil use f-string and join
+  * scripts: Move FormatUtil to VulkanObject
+
+  [ Piers Daniell ]
+  * layers: VVL coverage for new linear attachment VUs
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.255
+
+  [ Juan Ramos ]
+  * tests: Delete icd-spv.h
+  * tests: Cleanup VkTestFramework::InitArgs
+  * tests: Fix MSVC warning 4457
+
+  [ Jeremy Gebben ]
+  * layers: Update SPIRV-Tools for GPU-AV improvements
+
+  [ spencer-lunarg ]
+  * layers: Remove Warning from Enum String helper
+  * layers: Remove VUID in new validusage.json
+
+  [ Daniel Rakos ]
+  * layers: Change message filter container to unordered_set
+
+  [ spencer-lunarg ]
+  * scripts: Move SafeStruct to VulkanObject
+
+  [ arno-lunarg ]
+  * tests: Add perf test
+
+  [ John Zulauf ]
+  * syncval: Two fixes for update memory state
+  * syncval: Skip acquire context event processing
+  * syncval: New generic range traversal
+  * layers: New merge/split in buffer_address_map
+
+  [ Juan Ramos ]
+  * cmake: Update googletest / glslang to fix CMake warnings
+  * tests: Fix unreachable code warnings
+
+  [ arno-lunarg ]
+  * layers: Add 08947 08948 08949 08950
+  * tests: Add 08947 08948 08949 08950
+
+  [ Juan Ramos ]
+  * android: Generate valid APK from CMake binaries
+
+  [ Nathaniel Cesario ]
+  * android: Use debug.vvl. for settings
+
+  [ Tony-LunarG ]
+  * gpu: Use single buffer device address buffer
+  * tests: Add positive gpu-av test for late bda buffer
+
+  [ Juan Ramos ]
+  * tests: Fix hiding class member warnings
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix vkGetSemaphoreCounterValue timeout with GPU-AV
+  * tests: Add regression test for semaphore time with GPU-AV
+
+  [ Jeremy Gebben ]
+  * gpu: Handle OOB errors on mutable descriptors
+
+  [ Juan Ramos ]
+  * ci: Add ccache for CMake android builds
+  * ci: Make macos ccache consistent
+
+  [ arno-lunarg ]
+  * layers: Add state tracking for CmdSetDepthBias2EXT
+
+  [ spencer-lunarg ]
+  * scripts: First phase of refactoring Stateless codegen
+  * scripts: Move FunctionPointers to VulkanObject
+  * scripts: Move LayerDispatchTable to VulkanObject
+  * scripts: Move DispatchTableHelper to VulkanObject
+  * scripts: Improve how Extensions work in VulkanObjects
+  * scripts: Make dynamicStateGenerators like others
+  * scripts: Remove useless file name variables
+  * scripts: Move ThreadSaftey over to VulkanObject
+  * scripts: Cleanup generators to be pep8 friendly
+  * scripts: Move SpirvGrammar to use BaseGenerator
+
+  [ arno-lunarg ]
+  * layers: Store buffers with raw pointers
+
+  [ Juan Ramos ]
+  * android: Cleanup android.py script
+
+  [ Nathaniel Cesario ]
+  * layers: Fix attachment feedback EXT state tracking
+  * tests: Check attachment feedback loop state
+
+  [ spencer-lunarg ]
+  * scripts: Clean up scripts to be Pep8 friendly
+  * scripts: Move SyncVal to VulkanObject
+  * layers: Create a layer_chassis_dispatch_manual.cpp file
+  * scripts: Move layer_chassis_dispatch to VulkanObject
+  * scripts: Fix SyncVal generators to handle 192 bits
+
+  [ John Zulauf ]
+  * syncval: Restore byte accurate linear images
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.256
+  * layers: Enable CooperativeMatrixKHR generation
+
+  [ spencer-lunarg ]
+  * scripts: Move chassis to use VulkanObject
+  * scripts: Move ObjectTracker to VulkanObjects
+
+  [ Artem Kharytoniuk ]
+  * layers: Add write lock to protect timeline modification
+
+  [ spencer-lunarg ]
+  * scripts: Move SafeStruct source to VulkanObject
+
+  [ Juan Ramos ]
+  * android: Add argparse to android.py
+  * layers: Make CB_STATE an enum class
+  * layers: CommandBufferSingleSubmitViolation cleanup
+  * ci: Add to TSAN blacklist
+
+  [ spencer-lunarg ]
+  * build: Remove unused includes from files
+  * layers: Add computeFullSubgroups stage VU
+  * tests: Add computeFullSubgroups stage VU
+
+  [ Jeremy Gebben ]
+  * layers: Fix descriptor copies with a mutable source
+  * tests: Add GPU-AV Mutable positive test
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.257
+
+  [ spencer-lunarg ]
+  * docs: Add design philosophy for new code gen flow
+  * scripts: Move Stateless source to VulkanObject
+  * scripts: Cleanup VulkanObject layout and comments
+  * scripts: Fix issues around stateless validation
+
+  [ Juan Ramos ]
+  * cmake: Install shared STL from CMake instead of python
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix json in max profile
+
+  [ spencer-lunarg ]
+  * scripts: Refactor generate_source.py
+
+  [ Boris Zanin ]
+  * tests: VK_KHR_cooperative_matrix
+  * tests: Improve error handling and comments
+  * tests: Bugfix double copy
+
+  [ spencer-lunarg ]
+  * scripts: Final VulkanObject cleanup
+  * scripts: Bump python version to 3.10
+  * scripts: Use fixedSizeArray over staticArray
+  * tests: Remove unused includes
+  * layers: Check Image and ImageView having different Device
+  * tests: Add MultiDevice tests
+  * scripts: Remove fileIsGeneratedWarning util
+  * scripts: Move code gen logic to a single script
+  * git: Add moving test commits to git blame ignore
+  * layers: Improve message for 02251
+  * tests: Add test for 02251
+
+  [ Juan Ramos ]
+  * ci: Remove ndk-build from github actions CI
+
+  [ spencer-lunarg ]
+  * layers: Remove manual logic for 2 prop extensions
+
+  [ John Zulauf ]
+  * sync: Clarify aspect mask specification
+
+  [ spencer-lunarg ]
+  * scripts: Fix path to tests for vk_validation_stats.py
+  * layers: Handle vertex input struct
+  * tests: Add more VertexInput tests for structs
+  * layers: Add alphaToCoverageEnabled VUs
+  * tests: Add alphaToCoverageEnabled VUs
+  * layers: Move cc_shader.h to proper util
+
+  [ Juan Ramos ]
+  * ci: Move chromium build under integration testing
+  * android: Require CMake 3.21+ and ndk r24+
+
+  [ spencer-lunarg ]
+  * scripts: Refactor format utils to use new generate style
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix semaphore wait timeout
+  * tests: Add regression tests for semaphore wait timeout
+
+  [ Juan Ramos ]
+  * android: Fix Android NDK check
+
+  [ spencer-lunarg ]
+  * tests: Move common utils to dedicated files
+  * layers: Create dedicated shader interface file
+  * layers: Use new string_VkShaderStageFlags
+
+  [ Juan Ramos ]
+  * docs: Update Android build documentation to use CMake
+
+  [ spencer-lunarg ]
+  * layers: Guarantee there is an active renderpass
+
+  [ Juan Ramos ]
+  * ci: Automate creating SDK Android Binaries
+  * android: Remove unused scripts
+
+  [ spencer-lunarg ]
+  * layers: Add IsArray helper
+  * tests: Add struct interface tests
+  * layers: Add support for structs in interface block
+  * layers: Handle Multidimensional Arrays
+  * tests: Add Multidimensional Arrays
+  * tests: Add 64-bit interface tests
+
+  [ Artem Kharytoniuk ]
+  * layers: Add support for concurrent blocking operations
+  * tests: Add regression test for multiple concurrent waiters
+
+  [ ziga-lunarg ]
+  * layers: Add basic shader object validation
+  * tests: Add basic tests for shader objects
+
+  [ Juan Ramos ]
+  * build: Fix Chromium build
+  * docs: Cleanup Android docs
+
+  [ Daniel Rakos ]
+  * build: Redo API parameterization
+
+  [ Artem Kharytoniuk ]
+  * scripts: Support multiple files with --target option
+
+  [ Juan Ramos ]
+  * ci: Improve Android SDK performance
+
+  [ spencer-lunarg ]
+  * layers: Prevent crash for physicalStorageBuffer interface
+
+  [ Nathan Gauër ]
+  * scripts: Restore the -o option on generate_source
+
+  [ spencer-lunarg ]
+  * layers: Remove CooperativeMatrixKHR until glslang supports
+
+  [ Juan Ramos ]
+  * docs: Document Android middleware
+  * android: Add ability to do dirty builds for Android developers
+
+  [ Nathan Gauër ]
+  * scripts: Removes exclusivity constraint on -o
+
+  [ Juan Ramos ]
+  * android: Allow usage of c++_static when running tests
+
+  [ spencer-lunarg ]
+  * layers: Reorganize draw/dispatch/rayTracing common checks
+  * tests: Add common init for Descriptor Buffers
+  * layers: Group cmdWriteTimestamp commands together
+  * tests: Add HasZeroTimestampValidBits helper
+  * tests: Add queryPool parameter tests
+  * layers: Cleanup usage of query_pool_state
+
+  [ Artem Kharytoniuk ]
+  * tests: Increase timeout value for debug build
+
+  [ ziga-lunarg ]
+  * layers: Rename SHADER_MODULE_STATE to SPIRV_MODULE_STATE
+
+  [ Artem Kharytoniuk ]
+  * layers: Check out of bounds access in syncval
+  * tests: Add regression test for syncval crash
+  * layers: Add descriptor buffer offset VU 09006
+  * tests: Test descriptor buffer offset VU 09006
+
+  [ ziga-lunarg ]
+  * layers: Fix tracking extension versions
+  * tests: Test using exclusive scissor
+
+  [ Artem Kharytoniuk ]
+  * layers: Use constant for ObjectUseData alignment
+
+  [ spencer-lunarg ]
+  * layers: Separate SHADER_MODULE_STATE and SPIRV_MODULE_STATE
+  * tests: Dedicated file for Descriptor Indexing
+
+  [ Artem Kharytoniuk ]
+  * tests: Move swapchain tests
+  * tests: Use helper to get swapchain images
+  * layers: Fix record_guard misses clean up
+
+  [ Mike Schuchardt ]
+  * layers: Fix nullptr returned by GetDeviceProcAddr
+  * build: Update to header 1.3.259
+
+  [ spencer-lunarg ]
+  * layers: Fix VUID for Sync2 in 1.3.258
+  * layers: Update 1.3.258 dynamic state VUIDs
+  * layers: Fix 1.3.258 VUID Churn
+  * layers: Fix 64-bit vertex input logic
+  * layers: Remove unused UNASSIGNED descriptor VU
+  * layers: Label unassigned Query VUIDs
+  * layers: Add Not Active query check
+  * tests: Add Not Active query check
+
+  [ Juan Ramos ]
+  * cmake: Fix UPDATE_DEPS_DIR default value
+  * ci: Cleanup CI scripts
+
+  [ spencer-lunarg ]
+  * layers: Relabel subpass attachment draw VUID
+  * layers: Fix VUID churn
+
+  [ Arno Galvez ]
+  * layers: Improve logged objects
+
+  [ spencer-lunarg ]
+  * tests: Null pipeline layout in CmdBindDescriptorSet
+  * tests: Splitup NegativeDescriptorBuffer.DescriptorGetInfo
+  * layers: Fix VkDescriptorAddressInfoEXT VUs
+
+  [ Charles Giessen ]
+  * ci: Update Vulkan-Loader library unloading option
+
+  [ Arno Galvez ]
+  * tests: ImageLayoutTransitionOf3dImageWith2dViews
+
+  [ Juan Ramos ]
+  * android: Fix dirty builds
+  * android: Fix extra space
+  * docs: Cleanup Android test documentation
+  * git: Document android artifacts
+
+  [ Artem Kharytoniuk ]
+  * layers: Check for unhandled vuids
+  * tests: Add regression test for nullptr crash
+
+  [ John Zulauf ]
+  * layers: Eliminate the need for explicit report_data
+  * layers: Remove need for Handle type calls in FormatHandle
+
+  [ spencer-lunarg ]
+  * gpuav: Create gpu_error_message file
+  * gpuav: Create faster lookup for OpString
+  * gpuav: Rename Utils to StateTracker
+  * layers: Add Zero RenderArea checks
+  * layers: Fix VUID churn for VK_EXT_shader_object
+
+  [ Artem Kharytoniuk ]
+  * layers: Clean up subpass dependency helper
+  * layers: Update RenderPassDepState messages
+  * layers: Fix RenderPassDepState stage subset test
+  * tests: Add regression test for subset test bug
+
+  [ spencer-lunarg ]
+  * tests: Remove unused VkRenderFramework fields
+  * tests: Unify Shader creation parameters
+  * layers: Fix VK_EXT_shader_module_identifier checks
+  * tests: Add more VK_EXT_shader_module_identifier
+  * layers: Turn off VK_KHR_cooperative_matrix
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.260
+
+  [ spencer-lunarg ]
+  * tests: Remove CheckSynchronization2SupportAndInitState
+  * tests: Reduce ways to create VkImageViewCreateInfo
+  * tests: Split NegativeImage.MaxLimits
+  * tests: Inline Image support helper functions
+  * tests: Rename BasicViewCreateInfo
+
+  [ ziga-lunarg ]
+  * layers: Add active query type check for vkCmdExecuteCommands
+  * tests: Test invalid active query type in vkCmdExecuteCommands
+  * layers: Fix skip in shader tile image validation
+
+  [ spencer-lunarg ]
+  * tests: Remove features checks not needed
+  * tests: Remove some BufferObj overloads
+  * scripts: Add addIndent helper
+  * ci: Remove Profiles not adding value in CI
+  * layers: Use const ref for secondary cmdBuffer
+  * layers: Add queryFlag Inheritance check
+  * tests: Add queryFlag Inheritance check
+  * layers: Move SPIRV_MODULE_STATE creation to PreRecord
+
+  [ Christophe ]
+  * cmake: Add utility libraries repository dependence
+
+  [ Daniel Rakos ]
+  * layers: Fix and test VUID 03230 and 03233
+
+  [ John Zulauf ]
+  * layers: Minimal fix for double used unique_ptr
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.261
+
+  [ Jeroen Ruigrok van der Werven ]
+  * layers: Fix typo in logging output
+
+  [ spencer-lunarg ]
+  * tests: Add missing negative image tests
+  * layers: Pass pNext from vkCreatImage to dispatch
+  * layers: Add initial VK_KHR_maintenance5
+  * scripts: Fixes for parent and commonparent VUIDs
+  * layers: Improve SPIR-V Capabilty/Extension error message
+  * layers: Improve ValidateImageFormatFeatureFlags error
+  * layers: Label new 09198 VUID
+
+  [ Arno Galvez ]
+  * tests: Move nv ray tracing framework
+
+  [ arno-lunarg ]
+  * layers: Fix code gen for spirv validation helper
+
+  [ Mike Schuchardt ]
+  * tests: Disable broken tests until they are fixed
+  * tests: Fix ray tracing test name
+
+  [ ziga-lunarg ]
+  * layers: Fix misassigned dynamic state vuids
+  * tests: Test required dynamic states not set
+
+  [ spencer-lunarg ]
+  * tests: More VkBufferObj cleanup
+  * layers: Add generated Error Location Helper
+  * layers: Add more VK_KHR_maintenance5
+
+  [ arno-lunarg ]
+  * layers: Fix validation of 03704
+
+  [ spencer-lunarg ]
+  * layers: Fix VkRenderingFlags matching logic
+  * layers: Improve VK_EXT_shader_tile_image feature VU message
+  * tests: Confirm ShaderVal handles descriptorIndexing
+  * layers: Only print VK_OBJECT_TYPE_DEVICE if multi-device
+
+  [ arno-lunarg ]
+  * layers: Add 09200 09201 09202
+
+  [ spencer-lunarg ]
+  * layers: Add VkBufferUsageFlags2CreateInfoKHR support
+  * tests: Add VkBufferUsageFlags2CreateInfoKHR support
+  * build: Fix SPIRV-Header VK_KHR_cooperative_matrix
+
+  [ Nico Weber ]
+  * build: Don't pass -std= in BUILD.gn
+
+  [ ziga-lunarg ]
+  * layers: Fix multiview check with dynamic rendering
+  * tests: Test multiview instance index
+
+  [ Christophe ]
+  * revert: Add utility libraries repository dependence
+
+ -- john <john@odin>  Wed, 16 Aug 2023 09:19:02 -0600
+
 vulkan-validationlayers (1.3.250.1~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ arno-lunarg ]
