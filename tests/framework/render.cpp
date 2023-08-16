@@ -19,14 +19,12 @@
 
 #include "render.h"
 
-#include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <utility>
-#include <vector>
 
 #include "generated/vk_format_utils.h"
 #include "generated/vk_extension_helper.h"
+#include "utils/vk_layer_utils.h"
 #include "vk_layer_settings_ext.h"
 #include "layer_validation_tests.h"
 
@@ -160,7 +158,7 @@ VkInstanceCreateInfo VkRenderFramework::GetInstanceCreateInfo() const {
 
 inline void CheckDisableCoreValidation(VkValidationFeaturesEXT &features) {
     auto disable = GetEnvironment("VK_LAYER_TESTS_DISABLE_CORE_VALIDATION");
-    std::transform(disable.begin(), disable.end(), disable.begin(), ::tolower);
+    vvl::ToLower(disable);
     if (disable == "false" || disable == "0" || disable == "FALSE") {       // default is to change nothing, unless flag is correctly specified
         features.disabledValidationFeatureCount = 0;                        // remove all disables to get all validation messages
     }
@@ -168,14 +166,14 @@ inline void CheckDisableCoreValidation(VkValidationFeaturesEXT &features) {
 
 void *VkRenderFramework::SetupValidationSettings(void *first_pnext) {
     auto validation = GetEnvironment("VK_LAYER_TESTS_VALIDATION_FEATURES");
-    std::transform(validation.begin(), validation.end(), validation.begin(), ::tolower);
+    vvl::ToLower(validation);
     VkValidationFeaturesEXT *features = LvlFindModInChain<VkValidationFeaturesEXT>(first_pnext);
     if (features) {
         CheckDisableCoreValidation(*features);
     }
     if (validation == "all" || validation == "core" || validation == "none") {
         if (!features) {
-            features = &validation_features;
+            features = &m_validation_features;
             features->sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
             features->pNext = first_pnext;
             first_pnext = features;
@@ -561,24 +559,6 @@ void VkRenderFramework::InitState(VkPhysicalDeviceFeatures *features, void *crea
     m_depthStencil = new VkDepthStencilObj(m_device);
 
     m_render_target_fmt = GetRenderTargetFormat();
-
-    m_lineWidth = 1.0f;
-
-    m_depthBiasConstantFactor = 0.0f;
-    m_depthBiasClamp = 0.0f;
-    m_depthBiasSlopeFactor = 0.0f;
-
-    m_blendConstants[0] = 1.0f;
-    m_blendConstants[1] = 1.0f;
-    m_blendConstants[2] = 1.0f;
-    m_blendConstants[3] = 1.0f;
-
-    m_minDepthBounds = 0.f;
-    m_maxDepthBounds = 1.f;
-
-    m_compareMask = 0xff;
-    m_writeMask = 0xff;
-    m_reference = 0;
 
     m_commandPool = new VkCommandPoolObj(m_device, m_device->graphics_queue_node_index_, flags);
 
@@ -1800,12 +1780,7 @@ VkConstantBufferObj::VkConstantBufferObj(VkDeviceObj *device, VkDeviceSize alloc
     memset(&m_descriptorBufferInfo, 0, sizeof(m_descriptorBufferInfo));
 
     VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-    if ((VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT) == usage) {
-        init_as_src_and_dst(*m_device, allocationSize, reqs);
-    } else {
-        init(*m_device, create_info(allocationSize, usage), reqs);
-    }
+    init(*m_device, create_info(allocationSize, usage), reqs);
 
     void *pData = memory().map();
     memcpy(pData, data, static_cast<size_t>(allocationSize));
@@ -1824,13 +1799,13 @@ VkConstantBufferObj::VkConstantBufferObj(VkDeviceObj *device, VkDeviceSize alloc
 VkPipelineShaderStageCreateInfo const &VkShaderObj::GetStageCreateInfo() const { return m_stage_info; }
 
 VkShaderObj::VkShaderObj(VkRenderFramework *framework, const char *source, VkShaderStageFlagBits stage, const spv_target_env env,
-                         SpvSourceType source_type, const VkSpecializationInfo *spec_info, char const *name, bool debug)
+                         SpvSourceType source_type, const VkSpecializationInfo *spec_info, char const *entry_point, bool debug)
     : m_framework(*framework), m_device(*(framework->DeviceObj())), m_source(source), m_spv_env(env) {
     m_stage_info = LvlInitStruct<VkPipelineShaderStageCreateInfo>();
     m_stage_info.flags = 0;
     m_stage_info.stage = stage;
     m_stage_info.module = VK_NULL_HANDLE;
-    m_stage_info.pName = name;
+    m_stage_info.pName = entry_point;
     m_stage_info.pSpecializationInfo = spec_info;
     if (source_type == SPV_SOURCE_GLSL) {
         InitFromGLSL(debug);
@@ -1898,12 +1873,12 @@ VkResult VkShaderObj::InitFromASMTry() {
 }
 
 // static
-std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromGLSL(VkRenderFramework &framework, VkShaderStageFlagBits stage,
-                                                         const std::string &code, const char *entry_point,
-                                                         const VkSpecializationInfo *spec_info, const spv_target_env spv_env,
+std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromGLSL(VkRenderFramework *framework, const char *source,
+                                                         VkShaderStageFlagBits stage, const spv_target_env spv_env,
+                                                         const VkSpecializationInfo *spec_info, const char *entry_point,
                                                          bool debug) {
     auto shader =
-        std::make_unique<VkShaderObj>(&framework, code.c_str(), stage, spv_env, SPV_SOURCE_GLSL_TRY, spec_info, entry_point, debug);
+        std::make_unique<VkShaderObj>(framework, source, stage, spv_env, SPV_SOURCE_GLSL_TRY, spec_info, entry_point, debug);
     if (VK_SUCCESS == shader->InitFromGLSLTry(debug)) {
         return shader;
     }
@@ -1911,11 +1886,10 @@ std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromGLSL(VkRenderFramework &fram
 }
 
 // static
-std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromASM(VkRenderFramework &framework, VkShaderStageFlagBits stage,
-                                                        const std::string &code, const char *entry_point,
-                                                        const VkSpecializationInfo *spec_info, const spv_target_env spv_env) {
-    auto shader =
-        std::make_unique<VkShaderObj>(&framework, code.c_str(), stage, spv_env, SPV_SOURCE_ASM_TRY, spec_info, entry_point);
+std::unique_ptr<VkShaderObj> VkShaderObj::CreateFromASM(VkRenderFramework *framework, const char *source,
+                                                        VkShaderStageFlagBits stage, const spv_target_env spv_env,
+                                                        const VkSpecializationInfo *spec_info, const char *entry_point) {
+    auto shader = std::make_unique<VkShaderObj>(framework, source, stage, spv_env, SPV_SOURCE_ASM_TRY, spec_info, entry_point);
     if (VK_SUCCESS == shader->InitFromASMTry()) {
         return shader;
     }
@@ -2044,8 +2018,9 @@ void VkPipelineObj::SetScissor(const vector<VkRect2D> &scissors) {
 
 void VkPipelineObj::MakeDynamic(VkDynamicState state) {
     /* Only add a state once */
-    for (auto it = m_dynamic_state_enables.begin(); it != m_dynamic_state_enables.end(); it++) {
-        if ((*it) == state) return;
+    if (const auto search = std::find(m_dynamic_state_enables.begin(), m_dynamic_state_enables.end(), state);
+        search != m_dynamic_state_enables.end()) {
+        return;
     }
     m_dynamic_state_enables.push_back(state);
 }
@@ -2054,10 +2029,7 @@ void VkPipelineObj::SetMSAA(const VkPipelineMultisampleStateCreateInfo *ms_state
 
 void VkPipelineObj::SetInputAssembly(const VkPipelineInputAssemblyStateCreateInfo *ia_state) { m_ia_state = *ia_state; }
 
-void VkPipelineObj::SetRasterization(const VkPipelineRasterizationStateCreateInfo *rs_state) {
-    m_rs_state = *rs_state;
-    m_rs_state.pNext = &m_line_state;
-}
+void VkPipelineObj::SetRasterization(const VkPipelineRasterizationStateCreateInfo *rs_state) { m_rs_state = *rs_state; }
 
 void VkPipelineObj::SetTessellation(const VkPipelineTessellationStateCreateInfo *te_state) { m_te_state = te_state; }
 
@@ -2270,19 +2242,19 @@ void VkCommandBufferObj::NextSubpass(VkSubpassContents contents) { vk::CmdNextSu
 void VkCommandBufferObj::EndRenderPass() { vk::CmdEndRenderPass(handle()); }
 
 void VkCommandBufferObj::BeginRendering(const VkRenderingInfoKHR &renderingInfo) {
-    PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR =
-        (PFN_vkCmdBeginRenderingKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdBeginRenderingKHR");
-    assert(vkCmdBeginRenderingKHR != nullptr);
-
-    vkCmdBeginRenderingKHR(handle(), &renderingInfo);
+    if (vk::CmdBeginRenderingKHR) {
+        vk::CmdBeginRenderingKHR(handle(), &renderingInfo);
+    } else {
+        vk::CmdBeginRendering(handle(), &renderingInfo);
+    }
 }
 
 void VkCommandBufferObj::EndRendering() {
-    PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR =
-        (PFN_vkCmdEndRenderingKHR)vk::GetDeviceProcAddr(m_device->device(), "vkCmdEndRenderingKHR");
-    assert(vkCmdEndRenderingKHR != nullptr);
-
-    vkCmdEndRenderingKHR(handle());
+    if (vk::CmdEndRenderingKHR) {
+        vk::CmdEndRenderingKHR(handle());
+    } else {
+        vk::CmdEndRendering(handle());
+    }
 }
 
 void VkCommandBufferObj::BeginVideoCoding(const VkVideoBeginCodingInfoKHR &beginInfo) {

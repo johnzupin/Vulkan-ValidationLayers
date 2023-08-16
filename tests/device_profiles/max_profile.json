@@ -133,6 +133,9 @@
                 "VkPhysicalDeviceMaintenance4Features": {
                     "maintenance4": true
                 },
+                "VkPhysicalDeviceMaintenance5FeaturesKHR": {
+                    "maintenance5": true
+                },
                 "VkPhysicalDeviceShaderDrawParametersFeatures": {
                     "shaderDrawParameters": true
                 },
@@ -226,6 +229,9 @@
                 },
                 "VkPhysicalDeviceASTCDecodeFeaturesEXT": {
                     "decodeModeSharedExponent": true
+                },
+                "VkPhysicalDeviceShaderObjectFeaturesEXT": {
+                    "shaderObject": true
                 },
                 "VkPhysicalDeviceTransformFeedbackFeaturesEXT": {
                     "transformFeedback": true,
@@ -666,6 +672,11 @@
                 "VkPhysicalDeviceImageViewMinLodFeaturesEXT": {
                     "minLod": true
                 },
+                "VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM": {
+                    "rasterizationOrderColorAttachmentAccess": true,
+                    "rasterizationOrderDepthAttachmentAccess": true,
+                    "rasterizationOrderStencilAttachmentAccess": true
+                },
                 "VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT": {
                     "rasterizationOrderColorAttachmentAccess": true,
                     "rasterizationOrderDepthAttachmentAccess": true,
@@ -761,6 +772,15 @@
                     "shaderTileImageColorReadAccess": true,
                     "shaderTileImageDepthReadAccess": true,
                     "shaderTileImageStencilReadAccess": true
+                },
+                "VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT": {
+                    "dynamicRenderingUnusedAttachments": true
+                },
+                "VkPhysicalDeviceDepthBiasControlFeaturesEXT": {
+                    "depthBiasControl": true,
+                    "leastRepresentableValueForceUnormRepresentation": true,
+                    "floatRepresentation": true,
+                    "depthBiasExact": true
                 }
             },
             "properties": {
@@ -1286,7 +1306,7 @@
                     "maxFragmentDensityTexelSize": {
                         "width": 16,
                         "height": 16
-                    },
+                    }
                 },
                 "VkPhysicalDeviceFragmentDensityMap2PropertiesEXT": {
                     "subsampledLoads": true,
@@ -1677,6 +1697,7 @@
                 "VK_EXT_debug_marker": 1,
                 "VK_EXT_debug_report": 1,
                 "VK_EXT_debug_utils": 1,
+                "VK_EXT_depth_bias_control": 1,
                 "VK_EXT_depth_clamp_zero_one": 1,
                 "VK_EXT_depth_clip_control": 1,
                 "VK_EXT_depth_clip_enable": 1,
@@ -1755,6 +1776,7 @@
                 "VK_EXT_shader_demote_to_helper_invocation": 1,
                 "VK_EXT_shader_image_atomic_int64": 1,
                 "VK_EXT_shader_module_identifier": 1,
+                "VK_EXT_shader_object": 1,
                 "VK_EXT_shader_stencil_export": 1,
                 "VK_EXT_shader_subgroup_ballot": 1,
                 "VK_EXT_shader_subgroup_vote": 1,
@@ -1841,6 +1863,7 @@
                 "VK_KHR_maintenance2": 1,
                 "VK_KHR_maintenance3": 1,
                 "VK_KHR_maintenance4": 1,
+                "VK_KHR_maintenance5": 1,
                 "VK_KHR_multiview": 1,
                 "VK_KHR_performance_query": 1,
                 "VK_KHR_pipeline_executable_properties": 1,
@@ -1952,7 +1975,8 @@
                 "VK_VALVE_descriptor_set_host_mapping": 1,
                 "VK_VALVE_mutable_descriptor_type": 1,
                 "VK_EXT_image_sliced_view_of_3d": 1,
-                "VK_EXT_shader_tile_image": 1
+                "VK_EXT_shader_tile_image": 1,
+                "VK_EXT_dynamic_rendering_unused_attachments": 1
             },
             "formats": {
                 "VK_FORMAT_R4G4_UNORM_PACK8": {
@@ -5096,7 +5120,7 @@
                         "linearTilingFeatures": [],
                         "optimalTilingFeatures": [],
                         "bufferFeatures": [
-                            "VK_FORMAT_FEATURE_2_VERTEX_BUFFER_BIT",
+                            "VK_FORMAT_FEATURE_2_VERTEX_BUFFER_BIT"
                         ]
                     }
                 },
@@ -7273,6 +7297,16 @@
                             "VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT",
                             "VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT"
                         ]
+                    }
+                },
+                "VK_FORMAT_A8_UNORM_KHR": {
+                    "VkFormatProperties3": {
+                        "linearTilingFeatures": [],
+                        "optimalTilingFeatures": [
+                            "VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT",
+                            "VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT"
+                        ],
+                        "bufferFeatures": []
                     }
                 }
             },

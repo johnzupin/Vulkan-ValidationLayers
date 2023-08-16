@@ -1,6 +1,5 @@
 // *** THIS FILE IS GENERATED - DO NOT EDIT ***
-// See spirv_gramar_generator.py for modifications
-
+// See spirv_grammar_generator.py for modifications
 
 /***************************************************************************
  *
@@ -22,6 +21,8 @@
  * file found in the SPIRV-Headers. Mainly used for SPIR-V util functions.
  *
  ****************************************************************************/
+
+// NOLINTBEGIN
 
 #include "containers/custom_containers.h"
 #include "spirv_grammar_helper.h"
@@ -352,6 +353,11 @@ static const vvl::unordered_map<uint32_t, InstructionInfo> kInstructionTable {
     {spv::OpSDotAccSatKHR, {"OpSDotAccSatKHR", true, true, 0, 0, 0, 0, 0}},
     {spv::OpUDotAccSatKHR, {"OpUDotAccSatKHR", true, true, 0, 0, 0, 0, 0}},
     {spv::OpSUDotAccSatKHR, {"OpSUDotAccSatKHR", true, true, 0, 0, 0, 0, 0}},
+    {spv::OpTypeCooperativeMatrixKHR, {"OpTypeCooperativeMatrixKHR", false, true, 0, 3, 0, 0, 0}},
+    {spv::OpCooperativeMatrixLoadKHR, {"OpCooperativeMatrixLoadKHR", true, true, 0, 0, 0, 0, 0}},
+    {spv::OpCooperativeMatrixStoreKHR, {"OpCooperativeMatrixStoreKHR", false, false, 0, 0, 0, 0, 0}},
+    {spv::OpCooperativeMatrixMulAddKHR, {"OpCooperativeMatrixMulAddKHR", true, true, 0, 0, 0, 0, 0}},
+    {spv::OpCooperativeMatrixLengthKHR, {"OpCooperativeMatrixLengthKHR", true, true, 0, 0, 0, 0, 0}},
     {spv::OpTypeRayQueryKHR, {"OpTypeRayQueryKHR", false, true, 0, 0, 0, 0, 0}},
     {spv::OpRayQueryInitializeKHR, {"OpRayQueryInitializeKHR", false, false, 0, 0, 0, 0, 0}},
     {spv::OpRayQueryTerminateKHR, {"OpRayQueryTerminateKHR", false, false, 0, 0, 0, 0, 0}},
@@ -551,7 +557,6 @@ bool AtomicOperation(uint32_t opcode) {
     return found;
 }
 
-
 // Any non supported operation will be covered with VUID 01090
 bool GroupOperation(uint32_t opcode) {
     bool found = false;
@@ -599,7 +604,6 @@ bool GroupOperation(uint32_t opcode) {
     return found;
 }
 
-
 spv::StorageClass Instruction::StorageClass() const {
     spv::StorageClass storage_class = spv::StorageClassMax;
     switch (Opcode()) {
@@ -612,12 +616,12 @@ spv::StorageClass Instruction::StorageClass() const {
         case spv::OpVariable:
             storage_class = static_cast<spv::StorageClass>(Word(3));
             break;
+
         default:
             break;
     }
     return storage_class;
 }
-
 
 bool ImageGatherOperation(uint32_t opcode) {
     bool found = false;
@@ -634,7 +638,6 @@ bool ImageGatherOperation(uint32_t opcode) {
     return found;
 }
 
-
 bool ImageFetchOperation(uint32_t opcode) {
     bool found = false;
     switch (opcode) {
@@ -646,7 +649,6 @@ bool ImageFetchOperation(uint32_t opcode) {
     }
     return found;
 }
-
 
 bool ImageSampleOperation(uint32_t opcode) {
     bool found = false;
@@ -688,7 +690,6 @@ uint32_t SampledImageAccessOperandsPosition(uint32_t opcode) {
     }
     return position;
 }
-
 
 bool OpcodeHasType(uint32_t opcode) {
     bool has_type = false;
@@ -762,12 +763,12 @@ uint32_t ImageOperandsParamCount(uint32_t image_operand) {
             return 1;
         case spv::ImageOperandsGradMask:
             return 2;
+
         default:
             break;
     }
     return count;
 }
-
 
 const char* string_SpvOpcode(uint32_t opcode) {
     auto format_info = kInstructionTable.find(opcode);
@@ -776,7 +777,7 @@ const char* string_SpvOpcode(uint32_t opcode) {
     } else {
         return "Unknown Opcode";
     }
-};
+}
 
 const char* string_SpvStorageClass(uint32_t storage_class) {
     switch(storage_class) {
@@ -832,10 +833,11 @@ const char* string_SpvStorageClass(uint32_t storage_class) {
             return "DeviceOnlyINTEL";
         case spv::StorageClassHostOnlyINTEL:
             return "HostOnlyINTEL";
+
         default:
             return "Unknown Storage Class";
     }
-};
+}
 
 const char* string_SpvExecutionModel(uint32_t execution_model) {
     switch(execution_model) {
@@ -873,10 +875,11 @@ const char* string_SpvExecutionModel(uint32_t execution_model) {
             return "TaskEXT";
         case spv::ExecutionModelMeshEXT:
             return "MeshEXT";
+
         default:
             return "Unknown Execution Model";
     }
-};
+}
 
 const char* string_SpvDecoration(uint32_t decoration) {
     switch(decoration) {
@@ -1104,6 +1107,8 @@ const char* string_SpvDecoration(uint32_t decoration) {
             return "VectorComputeCallableFunctionINTEL";
         case spv::DecorationMediaBlockIOINTEL:
             return "MediaBlockIOINTEL";
+        case spv::DecorationFPMaxErrorDecorationINTEL:
+            return "FPMaxErrorDecorationINTEL";
         case spv::DecorationLatencyControlLabelINTEL:
             return "LatencyControlLabelINTEL";
         case spv::DecorationLatencyControlConstraintINTEL:
@@ -1126,10 +1131,239 @@ const char* string_SpvDecoration(uint32_t decoration) {
             return "MMHostInterfaceWaitRequestINTEL";
         case spv::DecorationStableKernelArgumentINTEL:
             return "StableKernelArgumentINTEL";
+
         default:
             return "Unknown Decoration";
     }
-};
+}
+
+const char* string_SpvBuiltIn(uint32_t built_in) {
+    switch(built_in) {
+        case spv::BuiltInPosition:
+            return "Position";
+        case spv::BuiltInPointSize:
+            return "PointSize";
+        case spv::BuiltInClipDistance:
+            return "ClipDistance";
+        case spv::BuiltInCullDistance:
+            return "CullDistance";
+        case spv::BuiltInVertexId:
+            return "VertexId";
+        case spv::BuiltInInstanceId:
+            return "InstanceId";
+        case spv::BuiltInPrimitiveId:
+            return "PrimitiveId";
+        case spv::BuiltInInvocationId:
+            return "InvocationId";
+        case spv::BuiltInLayer:
+            return "Layer";
+        case spv::BuiltInViewportIndex:
+            return "ViewportIndex";
+        case spv::BuiltInTessLevelOuter:
+            return "TessLevelOuter";
+        case spv::BuiltInTessLevelInner:
+            return "TessLevelInner";
+        case spv::BuiltInTessCoord:
+            return "TessCoord";
+        case spv::BuiltInPatchVertices:
+            return "PatchVertices";
+        case spv::BuiltInFragCoord:
+            return "FragCoord";
+        case spv::BuiltInPointCoord:
+            return "PointCoord";
+        case spv::BuiltInFrontFacing:
+            return "FrontFacing";
+        case spv::BuiltInSampleId:
+            return "SampleId";
+        case spv::BuiltInSamplePosition:
+            return "SamplePosition";
+        case spv::BuiltInSampleMask:
+            return "SampleMask";
+        case spv::BuiltInFragDepth:
+            return "FragDepth";
+        case spv::BuiltInHelperInvocation:
+            return "HelperInvocation";
+        case spv::BuiltInNumWorkgroups:
+            return "NumWorkgroups";
+        case spv::BuiltInWorkgroupSize:
+            return "WorkgroupSize";
+        case spv::BuiltInWorkgroupId:
+            return "WorkgroupId";
+        case spv::BuiltInLocalInvocationId:
+            return "LocalInvocationId";
+        case spv::BuiltInGlobalInvocationId:
+            return "GlobalInvocationId";
+        case spv::BuiltInLocalInvocationIndex:
+            return "LocalInvocationIndex";
+        case spv::BuiltInWorkDim:
+            return "WorkDim";
+        case spv::BuiltInGlobalSize:
+            return "GlobalSize";
+        case spv::BuiltInEnqueuedWorkgroupSize:
+            return "EnqueuedWorkgroupSize";
+        case spv::BuiltInGlobalOffset:
+            return "GlobalOffset";
+        case spv::BuiltInGlobalLinearId:
+            return "GlobalLinearId";
+        case spv::BuiltInSubgroupSize:
+            return "SubgroupSize";
+        case spv::BuiltInSubgroupMaxSize:
+            return "SubgroupMaxSize";
+        case spv::BuiltInNumSubgroups:
+            return "NumSubgroups";
+        case spv::BuiltInNumEnqueuedSubgroups:
+            return "NumEnqueuedSubgroups";
+        case spv::BuiltInSubgroupId:
+            return "SubgroupId";
+        case spv::BuiltInSubgroupLocalInvocationId:
+            return "SubgroupLocalInvocationId";
+        case spv::BuiltInVertexIndex:
+            return "VertexIndex";
+        case spv::BuiltInInstanceIndex:
+            return "InstanceIndex";
+        case spv::BuiltInCoreIDARM:
+            return "CoreIDARM";
+        case spv::BuiltInCoreCountARM:
+            return "CoreCountARM";
+        case spv::BuiltInCoreMaxIDARM:
+            return "CoreMaxIDARM";
+        case spv::BuiltInWarpIDARM:
+            return "WarpIDARM";
+        case spv::BuiltInWarpMaxIDARM:
+            return "WarpMaxIDARM";
+        case spv::BuiltInSubgroupEqMask:
+            return "SubgroupEqMask";
+        case spv::BuiltInSubgroupGeMask:
+            return "SubgroupGeMask";
+        case spv::BuiltInSubgroupGtMask:
+            return "SubgroupGtMask";
+        case spv::BuiltInSubgroupLeMask:
+            return "SubgroupLeMask";
+        case spv::BuiltInSubgroupLtMask:
+            return "SubgroupLtMask";
+        case spv::BuiltInBaseVertex:
+            return "BaseVertex";
+        case spv::BuiltInBaseInstance:
+            return "BaseInstance";
+        case spv::BuiltInDrawIndex:
+            return "DrawIndex";
+        case spv::BuiltInPrimitiveShadingRateKHR:
+            return "PrimitiveShadingRateKHR";
+        case spv::BuiltInDeviceIndex:
+            return "DeviceIndex";
+        case spv::BuiltInViewIndex:
+            return "ViewIndex";
+        case spv::BuiltInShadingRateKHR:
+            return "ShadingRateKHR";
+        case spv::BuiltInBaryCoordNoPerspAMD:
+            return "BaryCoordNoPerspAMD";
+        case spv::BuiltInBaryCoordNoPerspCentroidAMD:
+            return "BaryCoordNoPerspCentroidAMD";
+        case spv::BuiltInBaryCoordNoPerspSampleAMD:
+            return "BaryCoordNoPerspSampleAMD";
+        case spv::BuiltInBaryCoordSmoothAMD:
+            return "BaryCoordSmoothAMD";
+        case spv::BuiltInBaryCoordSmoothCentroidAMD:
+            return "BaryCoordSmoothCentroidAMD";
+        case spv::BuiltInBaryCoordSmoothSampleAMD:
+            return "BaryCoordSmoothSampleAMD";
+        case spv::BuiltInBaryCoordPullModelAMD:
+            return "BaryCoordPullModelAMD";
+        case spv::BuiltInFragStencilRefEXT:
+            return "FragStencilRefEXT";
+        case spv::BuiltInViewportMaskNV:
+            return "ViewportMaskNV";
+        case spv::BuiltInSecondaryPositionNV:
+            return "SecondaryPositionNV";
+        case spv::BuiltInSecondaryViewportMaskNV:
+            return "SecondaryViewportMaskNV";
+        case spv::BuiltInPositionPerViewNV:
+            return "PositionPerViewNV";
+        case spv::BuiltInViewportMaskPerViewNV:
+            return "ViewportMaskPerViewNV";
+        case spv::BuiltInFullyCoveredEXT:
+            return "FullyCoveredEXT";
+        case spv::BuiltInTaskCountNV:
+            return "TaskCountNV";
+        case spv::BuiltInPrimitiveCountNV:
+            return "PrimitiveCountNV";
+        case spv::BuiltInPrimitiveIndicesNV:
+            return "PrimitiveIndicesNV";
+        case spv::BuiltInClipDistancePerViewNV:
+            return "ClipDistancePerViewNV";
+        case spv::BuiltInCullDistancePerViewNV:
+            return "CullDistancePerViewNV";
+        case spv::BuiltInLayerPerViewNV:
+            return "LayerPerViewNV";
+        case spv::BuiltInMeshViewCountNV:
+            return "MeshViewCountNV";
+        case spv::BuiltInMeshViewIndicesNV:
+            return "MeshViewIndicesNV";
+        case spv::BuiltInBaryCoordKHR:
+            return "BaryCoordKHR";
+        case spv::BuiltInBaryCoordNoPerspKHR:
+            return "BaryCoordNoPerspKHR";
+        case spv::BuiltInFragSizeEXT:
+            return "FragSizeEXT";
+        case spv::BuiltInFragInvocationCountEXT:
+            return "FragInvocationCountEXT";
+        case spv::BuiltInPrimitivePointIndicesEXT:
+            return "PrimitivePointIndicesEXT";
+        case spv::BuiltInPrimitiveLineIndicesEXT:
+            return "PrimitiveLineIndicesEXT";
+        case spv::BuiltInPrimitiveTriangleIndicesEXT:
+            return "PrimitiveTriangleIndicesEXT";
+        case spv::BuiltInCullPrimitiveEXT:
+            return "CullPrimitiveEXT";
+        case spv::BuiltInLaunchIdNV:
+            return "LaunchIdNV";
+        case spv::BuiltInLaunchSizeNV:
+            return "LaunchSizeNV";
+        case spv::BuiltInWorldRayOriginNV:
+            return "WorldRayOriginNV";
+        case spv::BuiltInWorldRayDirectionNV:
+            return "WorldRayDirectionNV";
+        case spv::BuiltInObjectRayOriginNV:
+            return "ObjectRayOriginNV";
+        case spv::BuiltInObjectRayDirectionNV:
+            return "ObjectRayDirectionNV";
+        case spv::BuiltInRayTminNV:
+            return "RayTminNV";
+        case spv::BuiltInRayTmaxNV:
+            return "RayTmaxNV";
+        case spv::BuiltInInstanceCustomIndexNV:
+            return "InstanceCustomIndexNV";
+        case spv::BuiltInObjectToWorldNV:
+            return "ObjectToWorldNV";
+        case spv::BuiltInWorldToObjectNV:
+            return "WorldToObjectNV";
+        case spv::BuiltInHitTNV:
+            return "HitTNV";
+        case spv::BuiltInHitKindNV:
+            return "HitKindNV";
+        case spv::BuiltInCurrentRayTimeNV:
+            return "CurrentRayTimeNV";
+        case spv::BuiltInHitTriangleVertexPositionsKHR:
+            return "HitTriangleVertexPositionsKHR";
+        case spv::BuiltInIncomingRayFlagsNV:
+            return "IncomingRayFlagsNV";
+        case spv::BuiltInRayGeometryIndexKHR:
+            return "RayGeometryIndexKHR";
+        case spv::BuiltInWarpsPerSMNV:
+            return "WarpsPerSMNV";
+        case spv::BuiltInSMCountNV:
+            return "SMCountNV";
+        case spv::BuiltInWarpIDNV:
+            return "WarpIDNV";
+        case spv::BuiltInSMIDNV:
+            return "SMIDNV";
+        case spv::BuiltInCullMaskKHR:
+            return "CullMaskKHR";
+
+        default:
+            return "Unknown BuiltIn";
+    }
+}
 
 const char* string_SpvDim(uint32_t dim) {
     switch(dim) {
@@ -1149,8 +1383,10 @@ const char* string_SpvDim(uint32_t dim) {
             return "SubpassData";
         case spv::DimTileImageDataEXT:
             return "TileImageDataEXT";
+
         default:
             return "Unknown Dim";
     }
-};
+}
 
+// NOLINTEND

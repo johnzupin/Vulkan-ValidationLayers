@@ -69,8 +69,8 @@ bool StatelessValidation::ValidateSwapchainCreateInfo(const char *func_name, VkS
             }
         }
 
-        skip |= ValidateGreaterThanZero(pCreateInfo->imageArrayLayers, "pCreateInfo->imageArrayLayers",
-                                        "VUID-VkSwapchainCreateInfoKHR-imageArrayLayers-01275", func_name);
+        skip |= ValidateNotZero(pCreateInfo->imageArrayLayers == 0, "pCreateInfo->imageArrayLayers",
+                                "VUID-VkSwapchainCreateInfoKHR-imageArrayLayers-01275", func_name);
 
         // Validate VK_KHR_image_format_list VkImageFormatListCreateInfo
         const auto format_list_info = LvlFindInChain<VkImageFormatListCreateInfo>(pCreateInfo->pNext);
@@ -186,14 +186,6 @@ bool StatelessValidation::manual_PreCallValidateQueuePresentKHR(VkQueue queue, c
             skip |= ValidateStructPnext("QueuePresentKHR", "pCreateInfo->pNext->pNext", NULL, present_regions->pNext, 0, NULL,
                                         GeneratedVulkanHeaderVersion, "VUID-VkPresentInfoKHR-pNext-pNext",
                                         "VUID-VkPresentInfoKHR-sType-unique");
-            skip |= ValidateArray("QueuePresentKHR", "pCreateInfo->pNext->swapchainCount", "pCreateInfo->pNext->pRegions",
-                                  present_regions->swapchainCount, &present_regions->pRegions, true, false, kVUIDUndefined,
-                                  kVUIDUndefined);
-            for (uint32_t i = 0; i < present_regions->swapchainCount; ++i) {
-                skip |= ValidateArray("QueuePresentKHR", "pCreateInfo->pNext->pRegions[].rectangleCount",
-                                      "pCreateInfo->pNext->pRegions[].pRectangles", present_regions->pRegions[i].rectangleCount,
-                                      &present_regions->pRegions[i].pRectangles, true, false, kVUIDUndefined, kVUIDUndefined);
-            }
         }
     }
 
@@ -254,7 +246,7 @@ bool StatelessValidation::manual_PreCallValidateGetPhysicalDeviceSurfaceCapabili
     VkSurfaceCapabilities2KHR *pSurfaceCapabilities) const {
     bool skip = false;
     if (pSurfaceInfo && pSurfaceInfo->surface == VK_NULL_HANDLE && !instance_extensions.vk_google_surfaceless_query) {
-        skip |= LogError(physicalDevice, "VUID-vkGetPhysicalDeviceSurfaceCapabilities2KHR-pSurfaceInfo-06520",
+        skip |= LogError(physicalDevice, "VUID-vkGetPhysicalDeviceSurfaceCapabilities2KHR-pSurfaceInfo-06521",
                          "vkGetPhysicalDeviceSurfaceCapabilities2KHR: pSurfaceInfo->surface is VK_NULL_HANDLE and "
                          "VK_GOOGLE_surfaceless_query is not enabled.");
     }

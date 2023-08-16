@@ -30,6 +30,7 @@ LOCAL_SRC_FILES += $(SRC_DIR)/layers/vk_layer_config.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/utils/vk_layer_extension_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/error_message/logging.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/utils/vk_layer_utils.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/utils/ray_tracing_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/vk_format_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/external/xxhash.cpp
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/$(SRC_DIR)/layers/vulkan \
@@ -76,14 +77,18 @@ LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_descriptor.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_buffer.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/state_tracker/shader_module.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/state_tracker/shader_instruction.cpp
-LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_shader.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_spirv.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_shader_interface.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_shader_object.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_synchronization.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/spirv_validation_helper.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/spirv_grammar_helper.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/command_validation.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/dynamic_state_helper.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/error_location_helper.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/gpu_validation/gpu_validation.cpp
-LOCAL_SRC_FILES += $(SRC_DIR)/layers/gpu_validation/gpu_utils.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/gpu_validation/gpu_state_tracker.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/gpu_validation/gpu_error_message.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/gpu_validation/gv_descriptor_sets.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/gpu_validation/debug_printf.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/best_practices/best_practices_utils.cpp
@@ -108,17 +113,18 @@ LOCAL_SRC_FILES += $(SRC_DIR)/layers/sync/sync_vuid_maps.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/error_message/core_error_location.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/sync_validation_types.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/sync/sync_validation.cpp
-LOCAL_SRC_FILES += $(SRC_DIR)/layers/utils/convert_to_renderpass2.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/utils/convert_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/layer_chassis_dispatch.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/layer_chassis_dispatch_manual.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/chassis.cpp
-LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/valid_param_values.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/valid_enum_values.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/layer_options.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_query.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_queue.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_ray_tracing.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_wsi.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_checks/cc_ycbcr.cpp
-LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/parameter_validation.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/stateless_validation_helper.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_buffer.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_cmd_buffer_dynamic.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_cmd_buffer.cpp
@@ -131,11 +137,14 @@ LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_instance_device.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_pipeline.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_ray_tracing.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_render_pass.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_shader_object.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_synchronization.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/stateless/sl_wsi.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/object_tracker.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/object_tracker/object_tracker_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/thread_safety.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/thread_tracker/thread_safety_validation.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_core.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_khr.cpp
@@ -144,6 +153,7 @@ LOCAL_SRC_FILES += $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_vendor.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/state_tracker/image_layout_map.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/containers/subresource_adapter.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/external/vma/vma.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/utils/shader_utils.cpp
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/$(SRC_DIR)/layers \
                     $(LOCAL_PATH)/$(SRC_DIR)/layers/vulkan
 LOCAL_CPPFLAGS += -isystem $(VULKAN_INCLUDE)
@@ -161,107 +171,117 @@ include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := VulkanLayerValidationTests
 LOCAL_SRC_FILES += $(SRC_DIR)/tests/framework/layer_validation_tests.cpp \
-                   $(SRC_DIR)/tests/negative/instanceless.cpp \
-                   $(SRC_DIR)/tests/negative/pipeline_advanced_blend.cpp \
-                   $(SRC_DIR)/tests/negative/pipeline_layout.cpp \
-                   $(SRC_DIR)/tests/negative/pipeline_topology.cpp \
-                   $(SRC_DIR)/tests/negative/pipeline.cpp \
-                   $(SRC_DIR)/tests/negative/buffer.cpp \
-                   $(SRC_DIR)/tests/negative/external_memory_sync.cpp \
-                   $(SRC_DIR)/tests/negative/image.cpp \
-                   $(SRC_DIR)/tests/negative/memory.cpp \
-                   $(SRC_DIR)/tests/negative/object_lifetime.cpp \
-                   $(SRC_DIR)/tests/negative/sampler.cpp \
-                   $(SRC_DIR)/tests/negative/shader_compute.cpp \
-                   $(SRC_DIR)/tests/negative/shader_interface.cpp \
-                   $(SRC_DIR)/tests/negative/shader_limits.cpp \
-                   $(SRC_DIR)/tests/negative/shader_push_constants.cpp \
-                   $(SRC_DIR)/tests/negative/shader_mesh.cpp \
-                   $(SRC_DIR)/tests/negative/shader_spirv.cpp \
-                   $(SRC_DIR)/tests/negative/shader_storage_image.cpp \
-                   $(SRC_DIR)/tests/negative/shader_storage_texel.cpp \
-                   $(SRC_DIR)/tests/negative/sparse.cpp \
-                   $(SRC_DIR)/tests/negative/sync_object.cpp \
-                   $(SRC_DIR)/tests/negative/ycbcr.cpp \
-                   $(SRC_DIR)/tests/negative/others.cpp \
-                   $(SRC_DIR)/tests/negative/query.cpp \
-                   $(SRC_DIR)/tests/negative/atomics.cpp \
-                   $(SRC_DIR)/tests/negative/descriptor_buffer.cpp \
-                   $(SRC_DIR)/tests/negative/descriptors.cpp \
-                   $(SRC_DIR)/tests/negative/renderpass.cpp \
-                   $(SRC_DIR)/tests/negative/robustness.cpp \
-                   $(SRC_DIR)/tests/negative/command.cpp \
-                   $(SRC_DIR)/tests/negative/dynamic_state.cpp \
-                   $(SRC_DIR)/tests/negative/fragment_shading_rate.cpp \
-                   $(SRC_DIR)/tests/negative/multiview.cpp \
-                   $(SRC_DIR)/tests/negative/transform_feedback.cpp \
-                   $(SRC_DIR)/tests/negative/subgroups.cpp \
-                   $(SRC_DIR)/tests/negative/subpass.cpp \
-                   $(SRC_DIR)/tests/negative/mesh.cpp \
-                   $(SRC_DIR)/tests/negative/protected_memory.cpp \
-                   $(SRC_DIR)/tests/negative/geometry_tessellation.cpp \
-                   $(SRC_DIR)/tests/negative/vertex_input.cpp \
-                   $(SRC_DIR)/tests/negative/gpu_av.cpp \
-                   $(SRC_DIR)/tests/negative/debug_printf.cpp \
-                   $(SRC_DIR)/tests/negative/best_practices.cpp \
-                   $(SRC_DIR)/tests/negative/arm_best_practices.cpp \
-                   $(SRC_DIR)/tests/negative/wsi.cpp \
-                   $(SRC_DIR)/tests/negative/imageless_framebuffer.cpp \
-                   $(SRC_DIR)/tests/negative/graphics_library.cpp \
-                   $(SRC_DIR)/tests/negative/android_hardware_buffer.cpp \
-                   $(SRC_DIR)/tests/negative/ray_tracing.cpp \
-                   $(SRC_DIR)/tests/negative/ray_tracing_pipeline.cpp \
-                   $(SRC_DIR)/tests/negative/ray_tracing_gpu.cpp \
-                   $(SRC_DIR)/tests/positive/buffer.cpp \
-                   $(SRC_DIR)/tests/positive/command.cpp \
-                   $(SRC_DIR)/tests/positive/descriptor_buffer.cpp \
-                   $(SRC_DIR)/tests/positive/descriptors.cpp \
-                   $(SRC_DIR)/tests/positive/dynamic_state.cpp \
-                   $(SRC_DIR)/tests/positive/image.cpp \
-                   $(SRC_DIR)/tests/positive/gpu_av.cpp \
-                   $(SRC_DIR)/tests/positive/instance.cpp \
-                   $(SRC_DIR)/tests/positive/layer_utils.cpp \
-                   $(SRC_DIR)/tests/positive/format_utils.cpp \
-                   $(SRC_DIR)/tests/positive/other.cpp \
-                   $(SRC_DIR)/tests/positive/pipeline_topology.cpp \
-                   $(SRC_DIR)/tests/positive/pipeline.cpp \
-                   $(SRC_DIR)/tests/positive/protected_memory.cpp \
-                   $(SRC_DIR)/tests/positive/query.cpp \
-                   $(SRC_DIR)/tests/positive/render_pass.cpp \
-                   $(SRC_DIR)/tests/positive/robustness.cpp \
-                   $(SRC_DIR)/tests/positive/sampler.cpp \
-                   $(SRC_DIR)/tests/positive/shader_compute.cpp \
-                   $(SRC_DIR)/tests/positive/shader_image_access.cpp \
-                   $(SRC_DIR)/tests/positive/shader_interface.cpp \
-                   $(SRC_DIR)/tests/positive/shader_limits.cpp \
-                   $(SRC_DIR)/tests/positive/shader_push_constants.cpp \
-                   $(SRC_DIR)/tests/positive/shader_spirv.cpp \
-                   $(SRC_DIR)/tests/positive/shader_storage_image.cpp \
-                   $(SRC_DIR)/tests/positive/shader_storage_texel.cpp \
-                   $(SRC_DIR)/tests/positive/sparse.cpp \
-                   $(SRC_DIR)/tests/positive/sync_object.cpp \
-                   $(SRC_DIR)/tests/positive/tooling.cpp \
-                   $(SRC_DIR)/tests/positive/vertex_input.cpp \
-                   $(SRC_DIR)/tests/positive/android_hardware_buffer.cpp \
-                   $(SRC_DIR)/tests/positive/atomics.cpp \
-                   $(SRC_DIR)/tests/positive/ray_tracing.cpp \
-                   $(SRC_DIR)/tests/positive/ray_tracing_pipeline.cpp \
-                   $(SRC_DIR)/tests/positive/ycbcr.cpp \
-                   $(SRC_DIR)/tests/positive/wsi.cpp \
-                   $(SRC_DIR)/tests/negative/sync_val.cpp \
+                   $(SRC_DIR)/tests/unit/instanceless.cpp \
+                   $(SRC_DIR)/tests/unit/pipeline_advanced_blend.cpp \
+                   $(SRC_DIR)/tests/unit/pipeline_layout.cpp \
+                   $(SRC_DIR)/tests/unit/pipeline_topology.cpp \
+                   $(SRC_DIR)/tests/unit/pipeline.cpp \
+                   $(SRC_DIR)/tests/unit/buffer.cpp \
+                   $(SRC_DIR)/tests/unit/external_memory_sync.cpp \
+                   $(SRC_DIR)/tests/unit/image.cpp \
+                   $(SRC_DIR)/tests/unit/memory.cpp \
+                   $(SRC_DIR)/tests/unit/object_lifetime.cpp \
+                   $(SRC_DIR)/tests/unit/sampler.cpp \
+                   $(SRC_DIR)/tests/unit/shader_compute.cpp \
+                   $(SRC_DIR)/tests/unit/shader_interface.cpp \
+                   $(SRC_DIR)/tests/unit/shader_limits.cpp \
+                   $(SRC_DIR)/tests/unit/shader_push_constants.cpp \
+                   $(SRC_DIR)/tests/unit/shader_mesh.cpp \
+                   $(SRC_DIR)/tests/unit/shader_spirv.cpp \
+                   $(SRC_DIR)/tests/unit/shader_storage_image.cpp \
+                   $(SRC_DIR)/tests/unit/shader_storage_texel.cpp \
+                   $(SRC_DIR)/tests/unit/sparse.cpp \
+                   $(SRC_DIR)/tests/unit/sync_object.cpp \
+                   $(SRC_DIR)/tests/unit/ycbcr.cpp \
+                   $(SRC_DIR)/tests/unit/others.cpp \
+                   $(SRC_DIR)/tests/unit/query.cpp \
+                   $(SRC_DIR)/tests/unit/atomics.cpp \
+                   $(SRC_DIR)/tests/unit/descriptor_buffer.cpp \
+                   $(SRC_DIR)/tests/unit/descriptor_indexing.cpp \
+                   $(SRC_DIR)/tests/unit/descriptor_indexing_positive.cpp \
+                   $(SRC_DIR)/tests/unit/descriptors.cpp \
+                   $(SRC_DIR)/tests/unit/device_queue.cpp \
+                   $(SRC_DIR)/tests/unit/renderpass.cpp \
+                   $(SRC_DIR)/tests/unit/robustness.cpp \
+                   $(SRC_DIR)/tests/unit/command.cpp \
+                   $(SRC_DIR)/tests/unit/dynamic_state.cpp \
+                   $(SRC_DIR)/tests/unit/fragment_shading_rate.cpp \
+                   $(SRC_DIR)/tests/unit/multi_device.cpp \
+                   $(SRC_DIR)/tests/unit/multiview.cpp \
+                   $(SRC_DIR)/tests/unit/transform_feedback.cpp \
+                   $(SRC_DIR)/tests/unit/subgroups.cpp \
+                   $(SRC_DIR)/tests/unit/subpass.cpp \
+                   $(SRC_DIR)/tests/unit/mesh.cpp \
+                   $(SRC_DIR)/tests/unit/protected_memory.cpp \
+                   $(SRC_DIR)/tests/unit/geometry_tessellation.cpp \
+                   $(SRC_DIR)/tests/unit/vertex_input.cpp \
+                   $(SRC_DIR)/tests/unit/gpu_av.cpp \
+                   $(SRC_DIR)/tests/unit/debug_printf.cpp \
+                   $(SRC_DIR)/tests/unit/best_practices.cpp \
+                   $(SRC_DIR)/tests/unit/arm_best_practices.cpp \
+                   $(SRC_DIR)/tests/unit/wsi.cpp \
+                   $(SRC_DIR)/tests/unit/imageless_framebuffer.cpp \
+                   $(SRC_DIR)/tests/unit/graphics_library.cpp \
+                   $(SRC_DIR)/tests/unit/android_hardware_buffer.cpp \
+                   $(SRC_DIR)/tests/unit/ray_tracing.cpp \
+                   $(SRC_DIR)/tests/unit/ray_tracing_pipeline.cpp \
+                   $(SRC_DIR)/tests/unit/ray_tracing_gpu.cpp \
+                   $(SRC_DIR)/tests/unit/buffer_positive.cpp \
+                   $(SRC_DIR)/tests/unit/command_positive.cpp \
+                   $(SRC_DIR)/tests/unit/descriptor_buffer_positive.cpp \
+                   $(SRC_DIR)/tests/unit/descriptors_positive.cpp \
+                   $(SRC_DIR)/tests/unit/dynamic_state_positive.cpp \
+                   $(SRC_DIR)/tests/unit/external_memory_sync_positive.cpp \
+                   $(SRC_DIR)/tests/unit/image_positive.cpp \
+                   $(SRC_DIR)/tests/unit/imageless_framebuffer_positive.cpp \
+                   $(SRC_DIR)/tests/unit/graphics_library_positive.cpp \
+                   $(SRC_DIR)/tests/unit/gpu_av_positive.cpp \
+                   $(SRC_DIR)/tests/unit/instance_positive.cpp \
+                   $(SRC_DIR)/tests/unit/layer_utils_positive.cpp \
+                   $(SRC_DIR)/tests/unit/format_utils_positive.cpp \
+                   $(SRC_DIR)/tests/unit/other_positive.cpp \
+                   $(SRC_DIR)/tests/unit/pipeline_layout_positive.cpp \
+                   $(SRC_DIR)/tests/unit/pipeline_topology_positive.cpp \
+                   $(SRC_DIR)/tests/unit/pipeline_positive.cpp \
+                   $(SRC_DIR)/tests/unit/protected_memory_positive.cpp \
+                   $(SRC_DIR)/tests/unit/query_positive.cpp \
+                   $(SRC_DIR)/tests/unit/render_pass_positive.cpp \
+                   $(SRC_DIR)/tests/unit/robustness_positive.cpp \
+                   $(SRC_DIR)/tests/unit/sampler_positive.cpp \
+                   $(SRC_DIR)/tests/unit/shader_compute_positive.cpp \
+                   $(SRC_DIR)/tests/unit/shader_image_access_positive.cpp \
+                   $(SRC_DIR)/tests/unit/shader_interface_positive.cpp \
+                   $(SRC_DIR)/tests/unit/shader_limits_positive.cpp \
+                   $(SRC_DIR)/tests/unit/shader_push_constants_positive.cpp \
+                   $(SRC_DIR)/tests/unit/shader_spirv_positive.cpp \
+                   $(SRC_DIR)/tests/unit/shader_storage_image_positive.cpp \
+                   $(SRC_DIR)/tests/unit/shader_storage_texel_positive.cpp \
+                   $(SRC_DIR)/tests/unit/sparse_positive.cpp \
+                   $(SRC_DIR)/tests/unit/subpass_positive.cpp \
+                   $(SRC_DIR)/tests/unit/sync_object_positive.cpp \
+                   $(SRC_DIR)/tests/unit/tooling_positive.cpp \
+                   $(SRC_DIR)/tests/unit/vertex_input_positive.cpp \
+                   $(SRC_DIR)/tests/unit/android_hardware_buffer_positive.cpp \
+                   $(SRC_DIR)/tests/unit/atomics_positive.cpp \
+                   $(SRC_DIR)/tests/unit/ray_tracing_positive.cpp \
+                   $(SRC_DIR)/tests/unit/ray_tracing_pipeline_positive.cpp \
+                   $(SRC_DIR)/tests/unit/ycbcr_positive.cpp \
+                   $(SRC_DIR)/tests/unit/wsi_positive.cpp \
+                   $(SRC_DIR)/tests/unit/sync_val.cpp \
                    $(SRC_DIR)/tests/containers/small_vector.cpp \
                    $(SRC_DIR)/tests/framework/binding.cpp \
                    $(SRC_DIR)/tests/framework/test_framework_android.cpp \
                    $(SRC_DIR)/tests/framework/error_monitor.cpp \
                    $(SRC_DIR)/tests/framework/render.cpp \
                    $(SRC_DIR)/tests/framework/ray_tracing_objects.cpp \
-                   $(SRC_DIR)/layers/utils/convert_to_renderpass2.cpp \
+                   $(SRC_DIR)/tests/framework/ray_tracing_nv.cpp \
+                   $(SRC_DIR)/layers/utils/convert_utils.cpp \
                    $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_utils.cpp \
                    $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_core.cpp \
                    $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_khr.cpp \
                    $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_ext.cpp \
                    $(SRC_DIR)/layers/vulkan/generated/vk_safe_struct_vendor.cpp \
-                   $(SRC_DIR)/layers/vulkan/generated/lvt_function_pointers.cpp
+                   $(SRC_DIR)/layers/vulkan/generated/vk_function_pointers.cpp
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/$(SRC_DIR)/layers/vulkan \
                     $(LOCAL_PATH)/$(SRC_DIR)/layers
 LOCAL_CPPFLAGS += -isystem $(VULKAN_INCLUDE)

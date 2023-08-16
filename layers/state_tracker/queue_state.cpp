@@ -196,7 +196,12 @@ void QUEUE_STATE::ThreadFunc() {
     };
 
     // Roll this queue forward, one submission at a time.
-    while ((submission = NextSubmission())) {
+    while (true) {
+        submission = NextSubmission();
+        if (submission == nullptr) {
+            break;
+        }
+
         submission->EndUse();
         for (auto &wait : submission->wait_semaphores) {
             wait.semaphore->Retire(this, wait.payload);
@@ -259,7 +264,7 @@ void FENCE_STATE::NotifyAndWait() {
         auto result = waiter.wait_until(GetCondWaitTimeout());
         if (result != std::future_status::ready) {
             dev_data_.LogError(Handle(), "UNASSIGNED-VkFence-state-timeout",
-                               "Timeout waiting for fence state to update. This is most likley a validation bug.");
+                               "Timeout waiting for fence state to update. This is most likely a validation bug.");
         }
     }
 }
@@ -483,7 +488,7 @@ void SEMAPHORE_STATE::Retire(QUEUE_STATE *current_queue, uint64_t payload) {
 }
 
 std::shared_future<void> SEMAPHORE_STATE::Wait(uint64_t payload) {
-    auto guard = ReadLock();
+    auto guard = WriteLock();
     if (payload <= completed_.payload) {
         std::promise<void> already_done;
         auto result = already_done.get_future();
@@ -503,7 +508,9 @@ void SEMAPHORE_STATE::NotifyAndWait(uint64_t payload) {
     if (scope_ == kSyncScopeInternal) {
         Notify(payload);
         auto waiter = Wait(payload);
+        dev_data_.BeginBlockingOperation();
         auto result = waiter.wait_until(GetCondWaitTimeout());
+        dev_data_.EndBlockingOperation();
         if (result != std::future_status::ready) {
             dev_data_.LogError(Handle(), "UNASSIGNED-VkSemaphore-state-timeout",
                                "Timeout waiting for timeline semaphore state to update. This is most likely a validation bug."
@@ -512,8 +519,18 @@ void SEMAPHORE_STATE::NotifyAndWait(uint64_t payload) {
         }
     } else {
         // For external timeline semaphores we should bump the completed payload to whatever the driver
-        // tells us.
-        EnqueueSignal(nullptr, 0, payload);
+        // tells us. That value may originate from an external process that imported the semaphore and
+        // might not be signaled through the application queues.
+        //
+        // However, there is one exception. The current process can still signal the semaphore, even if
+        // it was imported. The queue's semaphore signal should not be overwritten by a potentially
+        // external signal. Otherwise, queue information (queue/seq) can be lost, which may prevent the
+        // advancement of the queue simulation.
+        const auto it = timeline_.find(payload);
+        const bool already_signaled = it != timeline_.end() && it->second.signal_op.has_value();
+        if (!already_signaled) {
+            EnqueueSignal(nullptr, 0, payload);
+        }
         Retire(nullptr, payload);
     }
 }

@@ -13,12 +13,13 @@ Make sure `-DBUILD_TESTS` was passed into the CMake command when generating the 
 
 The tests are grouped into different categories. Some of the main test categories are:
 
-- `VkLayerTest` - General tests that expect the Validation Layers to trigger an error
-    - Also known as "negative tests"
-- `VkPositiveLayerTest` - Tests that make sure Validation isn't accidentally triggering an error
-- `VkBestPracticesLayerTest` - Tests the [best practice layer](../docs/best_practices.md)
-- `VkGpuAssistedLayerTest` - Test [GPU-Assisted Validation](../docs/gpu_validation.md)
-- `VkPortabilitySubsetTest` - Test [VK_KHR_portability_subset validation](../docs/portability_validation.md)
+- Negative testing
+    - General tests that expect the Validation Layers to trigger an error
+- Positive testing
+    - Make sure Validation isn't accidentally triggering an error
+    - Commonly created to prevent bug regressions
+- SPIR-V testing with [SPIRV-Hopper](./spirv_hopper/)
+    - Seperate tool for testing shader runtime validation
 
 ## Implicit Layers note
 
@@ -64,20 +65,13 @@ cd build-android
 # Optional
 adb uninstall com.example.VulkanLayerValidationTests
 
-adb install -r bin/VulkanLayerValidationTests.apk
+adb install -r -g --no-incremental bin/VulkanLayerValidationTests.apk
 
-# Runs all test
-adb shell am start com.example.VulkanLayerValidationTests/android.app.NativeActivity
+# Runs all test (And print the VUIDs)
+adb shell am start -a android.intent.action.MAIN -c android-intent.category.LAUNCH -n com.example.VulkanLayerValidationTests/android.app.NativeActivity --es args --print-vu
 
 # Run test with gtest_filter
 adb shell am start -a android.intent.action.MAIN -c android-intent.category.LAUNCH -n com.example.VulkanLayerValidationTests/android.app.NativeActivity --es args --gtest_filter="*AndroidHardwareBuffer*"
-```
-
-Alternatively, you can use the test_APK script to install and run the layer
-validation tests:
-
-```bash
-test_APK.sh -s <serial number> -p <plaform name> -f <gtest_filter>
 ```
 
 To view to logging while running in a separate terminal run
@@ -164,17 +158,26 @@ This file will **never** fully cover all tests because some require certain prop
 
 ### Address Sanitization (ASAN)
 
-As of [38341564f523cdc290a92217d9043c9a6bb428f8](https://github.com/KhronosGroup/Vulkan-ValidationLayers/commit/38341564f523cdc290a92217d9043c9a6bb428f8) ASAN (Address Sanitization) has become a part of our CI process
-to ensure high quality code.
+ASAN (Address Sanitization) has become a part of our CI process to ensure high quality code.
 
-`-D VVL_ENABLE_ASAN=ON` will enable ASAN in the build which is `OFF` by default.
+`-D VVL_ENABLE_ASAN=ON` will enable address sanitization in the build for GCC/Clang users. NOTE: This will only enable address sanitzation for validation layer code.
+
+You could also set the needed compiler flags via environment variables:
+```bash
+export CFLAGS=-fsanitize=address
+export CXXFLAGS=-fsanitize=address
+export LDFLAGS=-fsanitize=address
+```
 
 - https://clang.llvm.org/docs/AddressSanitizer.html
 - https://github.com/google/sanitizers/wiki/AddressSanitizer
+- https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html
+
+NOTE: `MSVC` offers thread sanitization but isn't yet part of our CI process.
 
 ### Thread Sanitization (TSAN)
 
-WIP (Not yet part of our CI process)
+TSAN (Thread Sanitization) has become a part of our CI process to detect data race bugs.
 
 ```bash
 # NOTE: ThreadSanitizer generally requires all code to be compiled with -fsanitize=thread to prevent false positives.
@@ -186,3 +189,6 @@ export LDFLAGS=-fsanitize=thread
 
 - https://clang.llvm.org/docs/ThreadSanitizer.html
 - https://github.com/google/sanitizers/wiki/ThreadSanitizerCppManual
+- https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html
+
+NOTE: `MSVC` currently doesn't offer any form of thread sanitization.

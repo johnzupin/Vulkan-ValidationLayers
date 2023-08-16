@@ -155,12 +155,13 @@ bool CoreChecks::VerifyImageLayoutRange(const CMD_BUFFER_STATE &cb_state, const 
             if (!layout_check.Check(state)) {
                 *error = true;
                 auto subres = subresource_map->Decode(range.begin);
-                subres_skip |= LogError(cb_state.commandBuffer(), layout_mismatch_msg_code,
+                const LogObjectList objlist(cb_state.commandBuffer(), image_state.image());
+                subres_skip |= LogError(objlist, layout_mismatch_msg_code,
                                         "%s: Cannot use %s (layer=%" PRIu32 " mip=%" PRIu32
                                         ") with specific layout %s that doesn't match the "
                                         "%s layout %s.",
-                                        caller, report_data->FormatHandle(image_state.Handle()).c_str(), subres.arrayLayer,
-                                        subres.mipLevel, string_VkImageLayout(layout_check.expected_layout), layout_check.message,
+                                        caller, FormatHandle(image_state).c_str(), subres.arrayLayer, subres.mipLevel,
+                                        string_VkImageLayout(layout_check.expected_layout), layout_check.message,
                                         string_VkImageLayout(layout_check.layout));
             }
             return subres_skip;
@@ -186,26 +187,27 @@ bool CoreChecks::VerifyImageLayout(const CMD_BUFFER_STATE &cb_state, const IMAGE
         if (VK_IMAGE_LAYOUT_GENERAL == explicit_layout) {
             if (image_state.createInfo.tiling != VK_IMAGE_TILING_LINEAR) {
                 // LAYOUT_GENERAL is allowed, but may not be performance optimal, flag as perf warning.
-                skip |= LogPerformanceWarning(cb_state.commandBuffer(), kVUID_Core_DrawState_InvalidImageLayout,
+                const LogObjectList objlist(cb_state.commandBuffer(), image_state.Handle());
+                skip |= LogPerformanceWarning(objlist, kVUID_Core_DrawState_InvalidImageLayout,
                                               "%s: For optimal performance %s layout should be %s instead of GENERAL.", caller,
-                                              report_data->FormatHandle(image_state.Handle()).c_str(),
-                                              string_VkImageLayout(optimal_layout));
+                                              FormatHandle(image_state).c_str(), string_VkImageLayout(optimal_layout));
             }
         } else if (IsExtEnabled(device_extensions.vk_khr_shared_presentable_image)) {
             if (image_state.shared_presentable) {
                 if (VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR != explicit_layout) {
+                    const LogObjectList objlist(cb_state.commandBuffer(), image_state.Handle());
                     skip |=
-                        LogError(device, layout_invalid_msg_code,
+                        LogError(objlist, layout_invalid_msg_code,
                                  "%s: Layout for shared presentable image is %s but must be VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR.",
                                  caller, string_VkImageLayout(optimal_layout));
                 }
             }
         } else {
             *error = true;
-            skip |= LogError(cb_state.commandBuffer(), layout_invalid_msg_code,
-                             "%s: Layout for %s is %s but can only be %s or VK_IMAGE_LAYOUT_GENERAL.", caller,
-                             report_data->FormatHandle(image_state.Handle()).c_str(), string_VkImageLayout(explicit_layout),
-                             string_VkImageLayout(optimal_layout));
+            const LogObjectList objlist(cb_state.commandBuffer(), image_state.Handle());
+            skip |= LogError(
+                objlist, layout_invalid_msg_code, "%s: Layout for %s is %s but can only be %s or VK_IMAGE_LAYOUT_GENERAL.", caller,
+                FormatHandle(image_state).c_str(), string_VkImageLayout(explicit_layout), string_VkImageLayout(optimal_layout));
         }
     }
     return skip;
@@ -242,24 +244,24 @@ bool CoreChecks::VerifyImageLayout(const CMD_BUFFER_STATE &cb_state, const IMAGE
                                   layout_mismatch_msg_code, error);
 }
 
-void CoreChecks::TransitionFinalSubpassLayouts(CMD_BUFFER_STATE *cb_state, const VkRenderPassBeginInfo *pRenderPassBegin,
-                                               FRAMEBUFFER_STATE *framebuffer_state) {
-    auto render_pass = Get<RENDER_PASS_STATE>(pRenderPassBegin->renderPass);
-    if (!render_pass) return;
+void CoreChecks::TransitionFinalSubpassLayouts(CMD_BUFFER_STATE *cb_state) {
+    auto render_pass_state = cb_state->activeRenderPass.get();
+    auto framebuffer_state = cb_state->activeFramebuffer.get();
+    if (!render_pass_state || !framebuffer_state) {
+        return;
+    }
 
-    const VkRenderPassCreateInfo2 *render_pass_info = render_pass->createInfo.ptr();
-    if (framebuffer_state) {
-        for (uint32_t i = 0; i < render_pass_info->attachmentCount; ++i) {
-            auto *view_state = cb_state->GetActiveAttachmentImageViewState(i);
-            if (view_state) {
-                VkImageLayout stencil_layout = kInvalidLayout;
-                const auto *attachment_description_stencil_layout =
-                    LvlFindInChain<VkAttachmentDescriptionStencilLayout>(render_pass_info->pAttachments[i].pNext);
-                if (attachment_description_stencil_layout) {
-                    stencil_layout = attachment_description_stencil_layout->stencilFinalLayout;
-                }
-                cb_state->SetImageViewLayout(*view_state, render_pass_info->pAttachments[i].finalLayout, stencil_layout);
+    const VkRenderPassCreateInfo2 *render_pass_info = render_pass_state->createInfo.ptr();
+    for (uint32_t i = 0; i < render_pass_info->attachmentCount; ++i) {
+        auto *view_state = cb_state->GetActiveAttachmentImageViewState(i);
+        if (view_state) {
+            VkImageLayout stencil_layout = kInvalidLayout;
+            const auto *attachment_description_stencil_layout =
+                LvlFindInChain<VkAttachmentDescriptionStencilLayout>(render_pass_info->pAttachments[i].pNext);
+            if (attachment_description_stencil_layout) {
+                stencil_layout = attachment_description_stencil_layout->stencilFinalLayout;
             }
+            cb_state->SetImageViewLayout(*view_state, render_pass_info->pAttachments[i].finalLayout, stencil_layout);
         }
     }
 }
@@ -343,15 +345,15 @@ bool CoreChecks::ValidateCmdBufImageLayouts(const Location &loc, const CMD_BUFFE
                     // We can report all the errors for the intersected range directly
                     for (auto index : sparse_container::range_view<decltype(intersected_range)>(intersected_range)) {
                         const auto subresource = image_state->subresource_encoder.Decode(index);
-                        skip |= LogError(cb_state.commandBuffer(), kVUID_Core_DrawState_InvalidImageLayout,
+                        const LogObjectList objlist(cb_state.commandBuffer(), image_state->Handle());
+                        skip |= LogError(objlist, kVUID_Core_DrawState_InvalidImageLayout,
                                          "%s command buffer %s expects %s (subresource: aspectMask 0x%x array layer %" PRIu32
                                          ", mip level %" PRIu32
                                          ") "
                                          "to be in layout %s--instead, current layout is %s.",
-                                         loc.Message().c_str(), report_data->FormatHandle(cb_state.commandBuffer()).c_str(),
-                                         report_data->FormatHandle(image_state->Handle()).c_str(), subresource.aspectMask,
-                                         subresource.arrayLayer, subresource.mipLevel, string_VkImageLayout(initial_layout),
-                                         string_VkImageLayout(image_layout));
+                                         loc.Message().c_str(), FormatHandle(cb_state).c_str(), FormatHandle(*image_state).c_str(),
+                                         subresource.aspectMask, subresource.arrayLayer, subresource.mipLevel,
+                                         string_VkImageLayout(initial_layout), string_VkImageLayout(image_layout));
                     }
                 }
             }
@@ -371,8 +373,8 @@ bool CoreChecks::ValidateCmdBufImageLayouts(const Location &loc, const CMD_BUFFE
     return skip;
 }
 
-void CoreChecks::UpdateCmdBufImageLayouts(const CMD_BUFFER_STATE *cb_state) {
-    for (const auto &layout_map_entry : cb_state->image_layout_map) {
+void CoreChecks::UpdateCmdBufImageLayouts(const CMD_BUFFER_STATE &cb_state) {
+    for (const auto &layout_map_entry : cb_state.image_layout_map) {
         const auto *image_state = layout_map_entry.first;
         const auto &subres_map = layout_map_entry.second;
         auto guard = image_state->layout_range_map->WriteLock();
@@ -453,7 +455,8 @@ bool CoreChecks::ValidateMultipassRenderedToSingleSampledSampleCount(RenderPassC
         } else {
             msg << "attachment " << attachment_index;
         }
-        skip |= LogError(device, "VUID-VkRenderPassAttachmentBeginInfo-pAttachments-07010",
+        const LogObjectList objlist(renderpass, framebuffer, image_state->Handle());
+        skip |= LogError(objlist, "VUID-VkRenderPassAttachmentBeginInfo-pAttachments-07010",
                          "%s(): Renderpass subpass %" PRIu32
                          " enables "
                          "multisampled-render-to-single-sampled and %s"
@@ -461,7 +464,7 @@ bool CoreChecks::ValidateMultipassRenderedToSingleSampledSampleCount(RenderPassC
                          "VK_SAMPLE_COUNT_1_BIT samples, but image (%s) created with format %s imageType: %s, "
                          "tiling: %s, usage: %s, "
                          "flags: %s does not support a rasterizationSamples count of %s",
-                         function_name, subpass, msg.str().c_str(), report_data->FormatHandle(image_state->Handle()).c_str(),
+                         function_name, subpass, msg.str().c_str(), FormatHandle(*image_state).c_str(),
                          string_VkFormat(image_create_info.format), string_VkImageType(image_create_info.imageType),
                          string_VkImageTiling(image_create_info.tiling), string_VkImageUsageFlags(image_create_info.usage).c_str(),
                          string_VkImageCreateFlags(image_create_info.flags).c_str(), string_VkSampleCountFlagBits(msrtss_samples));
@@ -482,11 +485,10 @@ bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(RenderPass
 
     if (!image_state) {
         const LogObjectList objlist(image, renderpass, framebuffer, image_view);
-        skip |=
-            LogError(objlist, "VUID-VkRenderPassBeginInfo-framebuffer-parameter",
-                     "%s: RenderPass %s uses %s where pAttachments[%" PRIu32 "] = %s, which refers to an invalid image.",
-                     function_name, report_data->FormatHandle(renderpass).c_str(), report_data->FormatHandle(framebuffer).c_str(),
-                     attachment_index, report_data->FormatHandle(image_view).c_str());
+        skip |= LogError(objlist, "VUID-VkRenderPassBeginInfo-framebuffer-parameter",
+                         "%s: RenderPass %s uses %s where pAttachments[%" PRIu32 "] = %s, which refers to an invalid image.",
+                         function_name, FormatHandle(renderpass).c_str(), FormatHandle(framebuffer).c_str(), attachment_index,
+                         FormatHandle(image_view).c_str());
         return skip;
     }
 
@@ -506,9 +508,9 @@ bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(RenderPass
                          " in %s"
                          " - the %s is %s but the image attached to %s via %s"
                          " was not created with VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT. Image usage: %s.",
-                         function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                         string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                         report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
+                         function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name,
+                         string_VkImageLayout(layout), FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(),
+                         string_VkImageUsageFlags(image_usage).c_str());
     }
 
     if (layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
@@ -516,15 +518,14 @@ bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(RenderPass
         const char *vuid =
             use_rp2 ? "VUID-vkCmdBeginRenderPass2-initialLayout-03097" : "VUID-vkCmdBeginRenderPass-initialLayout-00897";
         const LogObjectList objlist(renderpass, framebuffer, image_view, image);
-        skip |=
-            LogError(objlist, vuid,
-                     "%s: Layout/usage mismatch for attachment %" PRIu32
-                     " in %s"
-                     " - the %s is %s but the image attached to %s via %s"
-                     " was not created with VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT or VK_IMAGE_USAGE_SAMPLED_BIT. Image usage: %s.",
-                     function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                     string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                     report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
+        skip |= LogError(
+            objlist, vuid,
+            "%s: Layout/usage mismatch for attachment %" PRIu32
+            " in %s"
+            " - the %s is %s but the image attached to %s via %s"
+            " was not created with VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT or VK_IMAGE_USAGE_SAMPLED_BIT. Image usage: %s.",
+            function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name, string_VkImageLayout(layout),
+            FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
     }
 
     if (layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && !(image_usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
@@ -536,9 +537,9 @@ bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(RenderPass
                          " in %s"
                          " - the %s is %s but the image attached to %s via %s"
                          " was not created with VK_IMAGE_USAGE_TRANSFER_SRC_BIT. Image usage: %s.",
-                         function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                         string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                         report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
+                         function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name,
+                         string_VkImageLayout(layout), FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(),
+                         string_VkImageUsageFlags(image_usage).c_str());
     }
 
     if (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && !(image_usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
@@ -550,9 +551,9 @@ bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(RenderPass
                          " in %s"
                          " - the %s is %s but the image attached to %s via %s"
                          " was not created with VK_IMAGE_USAGE_TRANSFER_DST_BIT. Image usage: %s.",
-                         function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                         string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                         report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
+                         function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name,
+                         string_VkImageLayout(layout), FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(),
+                         string_VkImageUsageFlags(image_usage).c_str());
     }
 
     if (layout == VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT) {
@@ -561,67 +562,47 @@ bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(RenderPass
             const char *vuid =
                 use_rp2 ? "VUID-vkCmdBeginRenderPass2-initialLayout-07002" : "VUID-vkCmdBeginRenderPass-initialLayout-07000";
             const LogObjectList objlist(renderpass, framebuffer, image_view, image);
-            skip |=
-                LogError(objlist, vuid,
-                         "%s: Layout/usage mismatch for attachment %" PRIu32
-                         " in %s"
-                         " - the %s is %s but the image attached to %s via %s"
-                         " was not created with either the VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT or "
-                         "VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT usage bits, and the VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT or "
-                         "VK_IMAGE_USAGE_SAMPLED_BIT usage bits. Image usage: %s.",
-                         function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                         string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                         report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
+            skip |= LogError(
+                objlist, vuid,
+                "%s: Layout/usage mismatch for attachment %" PRIu32
+                " in %s"
+                " - the %s is %s but the image attached to %s via %s"
+                " was not created with either the VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT or "
+                "VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT usage bits, and the VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT or "
+                "VK_IMAGE_USAGE_SAMPLED_BIT usage bits. Image usage: %s.",
+                function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name, string_VkImageLayout(layout),
+                FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
         }
         if (!(image_usage & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT)) {
             const char *vuid =
                 use_rp2 ? "VUID-vkCmdBeginRenderPass2-initialLayout-07003" : "VUID-vkCmdBeginRenderPass-initialLayout-07001";
             const LogObjectList objlist(renderpass, framebuffer, image_view, image);
-            skip |=
-                LogError(objlist, vuid,
-                         "%s: Layout/usage mismatch for attachment %" PRIu32
-                         " in %s"
-                         " - the %s is %s but the image attached to %s via %s"
-                         " was not created with the VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT usage bit. Image usage: %s.",
-                         function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                         string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                         report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
+            skip |= LogError(
+                objlist, vuid,
+                "%s: Layout/usage mismatch for attachment %" PRIu32
+                " in %s"
+                " - the %s is %s but the image attached to %s via %s"
+                " was not created with the VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT usage bit. Image usage: %s.",
+                function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name, string_VkImageLayout(layout),
+                FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
         }
     }
 
-    if (IsExtEnabled(device_extensions.vk_khr_maintenance2)) {
-        if ((layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL ||
-             layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL ||
-             layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-             layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) &&
-            !(image_usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
-            const char *vuid =
-                use_rp2 ? "VUID-vkCmdBeginRenderPass2-initialLayout-03096" : "VUID-vkCmdBeginRenderPass-initialLayout-01758";
-            const LogObjectList objlist(renderpass, framebuffer, image_view, image);
-            skip |= LogError(objlist, vuid,
-                             "%s: Layout/usage mismatch for attachment %" PRIu32
-                             " in %s"
-                             " - the %s is %s but the image attached to %s via %s"
-                             " was not created with VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT. Image usage: %s.",
-                             function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                             string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                             report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
-        }
-    } else {
-        // The create render pass 2 extension requires maintenance 2 (the previous branch), so no vuid switch needed here.
-        if ((layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-             layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) &&
-            !(image_usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
-            const LogObjectList objlist(renderpass, framebuffer, image_view, image);
-            skip |= LogError(objlist, "VUID-vkCmdBeginRenderPass-initialLayout-00896",
-                             "%s: Layout/usage mismatch for attachment %" PRIu32
-                             " in %s"
-                             " - the %s is %s but the image attached to %s via %s"
-                             " was not created with VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT. Image usage: %s.",
-                             function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                             string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                             report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
-        }
+    if ((layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL ||
+         layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL ||
+         layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL || layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) &&
+        !(image_usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+        const char *vuid =
+            use_rp2 ? "VUID-vkCmdBeginRenderPass2-initialLayout-03096" : "VUID-vkCmdBeginRenderPass-initialLayout-01758";
+        const LogObjectList objlist(renderpass, framebuffer, image_view, image);
+        skip |= LogError(objlist, vuid,
+                         "%s: Layout/usage mismatch for attachment %" PRIu32
+                         " in %s"
+                         " - the %s is %s but the image attached to %s via %s"
+                         " was not created with VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT. Image usage: %s.",
+                         function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name,
+                         string_VkImageLayout(layout), FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(),
+                         string_VkImageUsageFlags(image_usage).c_str());
     }
 
     if ((IsImageLayoutDepthOnly(layout) || IsImageLayoutStencilOnly(layout)) &&
@@ -634,9 +615,9 @@ bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(RenderPass
                          " in %s"
                          " - the %s is %s but the image attached to %s via %s"
                          " was not created with VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT. Image usage: %s.",
-                         function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                         string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                         report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
+                         function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name,
+                         string_VkImageLayout(layout), FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(),
+                         string_VkImageUsageFlags(image_usage).c_str());
     }
 
     return skip;
@@ -670,9 +651,9 @@ bool CoreChecks::ValidateRenderPassStencilLayoutAgainstFramebufferImageUsage(
                          " in %s"
                          " - the %s is %s but the image attached to %s via %s"
                          " was not created with VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT. Image usage: %s.",
-                         function_name, attachment_index, report_data->FormatHandle(renderpass).c_str(), variable_name,
-                         string_VkImageLayout(layout), report_data->FormatHandle(framebuffer).c_str(),
-                         report_data->FormatHandle(image_view).c_str(), string_VkImageUsageFlags(image_usage).c_str());
+                         function_name, attachment_index, FormatHandle(renderpass).c_str(), variable_name,
+                         string_VkImageLayout(layout), FormatHandle(framebuffer).c_str(), FormatHandle(image_view).c_str(),
+                         string_VkImageUsageFlags(image_usage).c_str());
     }
 
     return skip;
@@ -680,17 +661,18 @@ bool CoreChecks::ValidateRenderPassStencilLayoutAgainstFramebufferImageUsage(
 
 bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(RenderPassCreateVersion rp_version, const CMD_BUFFER_STATE &cb_state,
                                                        const VkRenderPassBeginInfo *pRenderPassBegin,
-                                                       const FRAMEBUFFER_STATE *framebuffer_state) const {
+                                                       const FRAMEBUFFER_STATE &framebuffer_state) const {
     bool skip = false;
     auto render_pass_state = Get<RENDER_PASS_STATE>(pRenderPassBegin->renderPass);
     const auto *render_pass_info = render_pass_state->createInfo.ptr();
     auto render_pass = render_pass_state->renderPass();
-    auto const &framebuffer_info = framebuffer_state->createInfo;
+    auto const &framebuffer_info = framebuffer_state.createInfo;
     const VkImageView *attachments = framebuffer_info.pAttachments;
 
-    auto framebuffer = framebuffer_state->framebuffer();
+    auto framebuffer = framebuffer_state.framebuffer();
 
     if (render_pass_info->attachmentCount != framebuffer_info.attachmentCount) {
+        const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state.framebuffer());
         skip |= LogError(cb_state.commandBuffer(), kVUID_Core_DrawState_InvalidRenderpass,
                          "You cannot start a render pass using a framebuffer with a different number of attachments.");
     }
@@ -708,11 +690,10 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(RenderPassCreateVersion r
         auto view_state = Get<IMAGE_VIEW_STATE>(image_view);
 
         if (!view_state) {
-            const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state->framebuffer(), image_view);
+            const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state.framebuffer(), image_view);
             skip |= LogError(objlist, "VUID-VkRenderPassBeginInfo-framebuffer-parameter",
                              "vkCmdBeginRenderPass(): %s pAttachments[%" PRIu32 "] = %s is not a valid VkImageView handle.",
-                             report_data->FormatHandle(framebuffer_state->framebuffer()).c_str(), i,
-                             report_data->FormatHandle(image_view).c_str());
+                             FormatHandle(framebuffer_state).c_str(), i, FormatHandle(image_view).c_str());
             continue;
         }
 
@@ -720,11 +701,11 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(RenderPassCreateVersion r
         const auto *image_state = view_state->image_state.get();
 
         if (!image_state) {
-            const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state->framebuffer(), image_view, image);
-            skip |= LogError(objlist, "VUID-VkRenderPassBeginInfo-framebuffer-parameter",
-                             "vkCmdBeginRenderPass(): %s pAttachments[%" PRIu32 "] =  %s references non-extant %s.",
-                             report_data->FormatHandle(framebuffer_state->framebuffer()).c_str(), i,
-                             report_data->FormatHandle(image_view).c_str(), report_data->FormatHandle(image).c_str());
+            const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state.framebuffer(), image_view, image);
+            skip |=
+                LogError(objlist, "VUID-VkRenderPassBeginInfo-framebuffer-parameter",
+                         "vkCmdBeginRenderPass(): %s pAttachments[%" PRIu32 "] =  %s references non-extant %s.",
+                         FormatHandle(framebuffer_state).c_str(), i, FormatHandle(image_view).c_str(), FormatHandle(image).c_str());
             continue;
         }
         auto attachment_initial_layout = render_pass_info->pAttachments[i].initialLayout;
@@ -774,10 +755,14 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(RenderPassCreateVersion r
             LayoutUseCheckAndMessage layout_check(check_layout, test_aspect);
 
             skip |= subresource_map->AnyInRange(
-                normalized_range, [this, &layout_check, i](const LayoutRange &range, const LayoutEntry &state) {
+                normalized_range,
+                [this, &layout_check, i, cb = cb_state.commandBuffer(), render_pass = pRenderPassBegin->renderPass,
+                 framebuffer = framebuffer_state.framebuffer(), image = view_state->image_state->image(),
+                 image_view = view_state->image_view()](const LayoutRange &range, const LayoutEntry &state) {
                     bool subres_skip = false;
                     if (!layout_check.Check(state)) {
-                        subres_skip = LogError(device, kVUID_Core_DrawState_InvalidRenderpass,
+                        const LogObjectList objlist(cb, render_pass, framebuffer, image, image_view);
+                        subres_skip = LogError(objlist, kVUID_Core_DrawState_InvalidRenderpass,
                                                "You cannot start a render pass using attachment %" PRIu32
                                                " where the render pass initial "
                                                "layout is %s "
@@ -887,8 +872,7 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(RenderPassCreateVersion r
     return skip;
 }
 
-void CoreChecks::TransitionAttachmentRefLayout(CMD_BUFFER_STATE *cb_state, FRAMEBUFFER_STATE *pFramebuffer,
-                                               const safe_VkAttachmentReference2 &ref) {
+void CoreChecks::TransitionAttachmentRefLayout(CMD_BUFFER_STATE *cb_state, const safe_VkAttachmentReference2 &ref) {
     if (ref.attachment != VK_ATTACHMENT_UNUSED) {
         IMAGE_VIEW_STATE *image_view = cb_state->GetActiveAttachmentImageViewState(ref.attachment);
         if (image_view) {
@@ -903,31 +887,26 @@ void CoreChecks::TransitionAttachmentRefLayout(CMD_BUFFER_STATE *cb_state, FRAME
     }
 }
 
-void CoreChecks::TransitionSubpassLayouts(CMD_BUFFER_STATE *cb_state, const RENDER_PASS_STATE *render_pass_state,
-                                          const int subpass_index, FRAMEBUFFER_STATE *framebuffer_state) {
-    assert(render_pass_state);
-
-    if (framebuffer_state) {
-        auto const &subpass = render_pass_state->createInfo.pSubpasses[subpass_index];
-        for (uint32_t j = 0; j < subpass.inputAttachmentCount; ++j) {
-            TransitionAttachmentRefLayout(cb_state, framebuffer_state, subpass.pInputAttachments[j]);
-        }
-        for (uint32_t j = 0; j < subpass.colorAttachmentCount; ++j) {
-            TransitionAttachmentRefLayout(cb_state, framebuffer_state, subpass.pColorAttachments[j]);
-        }
-        if (subpass.pDepthStencilAttachment) {
-            TransitionAttachmentRefLayout(cb_state, framebuffer_state, *subpass.pDepthStencilAttachment);
-        }
+void CoreChecks::TransitionSubpassLayouts(CMD_BUFFER_STATE *cb_state, const RENDER_PASS_STATE &render_pass_state,
+                                          const int subpass_index) {
+    auto const &subpass = render_pass_state.createInfo.pSubpasses[subpass_index];
+    for (uint32_t j = 0; j < subpass.inputAttachmentCount; ++j) {
+        TransitionAttachmentRefLayout(cb_state, subpass.pInputAttachments[j]);
+    }
+    for (uint32_t j = 0; j < subpass.colorAttachmentCount; ++j) {
+        TransitionAttachmentRefLayout(cb_state, subpass.pColorAttachments[j]);
+    }
+    if (subpass.pDepthStencilAttachment) {
+        TransitionAttachmentRefLayout(cb_state, *subpass.pDepthStencilAttachment);
     }
 }
 
 // Transition the layout state for renderpass attachments based on the BeginRenderPass() call. This includes:
 // 1. Transition into initialLayout state
 // 2. Transition from initialLayout to layout used in subpass 0
-void CoreChecks::TransitionBeginRenderPassLayouts(CMD_BUFFER_STATE *cb_state, const RENDER_PASS_STATE *render_pass_state,
-                                                  FRAMEBUFFER_STATE *framebuffer_state) {
+void CoreChecks::TransitionBeginRenderPassLayouts(CMD_BUFFER_STATE *cb_state, const RENDER_PASS_STATE &render_pass_state) {
     // First record expected initialLayout as a potential initial layout usage.
-    auto const rpci = render_pass_state->createInfo.ptr();
+    auto const rpci = render_pass_state.createInfo.ptr();
     for (uint32_t i = 0; i < rpci->attachmentCount; ++i) {
         auto *view_state = cb_state->GetActiveAttachmentImageViewState(i);
         if (view_state) {
@@ -948,16 +927,16 @@ void CoreChecks::TransitionBeginRenderPassLayouts(CMD_BUFFER_STATE *cb_state, co
         }
     }
     // Now transition for first subpass (index 0)
-    TransitionSubpassLayouts(cb_state, render_pass_state, 0, framebuffer_state);
+    TransitionSubpassLayouts(cb_state, render_pass_state, 0);
 }
 
-bool CoreChecks::VerifyClearImageLayout(const CMD_BUFFER_STATE &cb_state, const IMAGE_STATE *image_state,
+bool CoreChecks::VerifyClearImageLayout(const CMD_BUFFER_STATE &cb_state, const IMAGE_STATE &image_state,
                                         const VkImageSubresourceRange &range, VkImageLayout dest_image_layout,
                                         const char *func_name) const {
     bool skip = false;
     if (strcmp(func_name, "vkCmdClearDepthStencilImage()") == 0) {
         if ((dest_image_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) && (dest_image_layout != VK_IMAGE_LAYOUT_GENERAL)) {
-            LogObjectList objlist(cb_state.commandBuffer(), image_state->image());
+            LogObjectList objlist(cb_state.commandBuffer(), image_state.image());
             skip |= LogError(objlist, "VUID-vkCmdClearDepthStencilImage-imageLayout-00012",
                              "%s: Layout for cleared image is %s but can only be TRANSFER_DST_OPTIMAL or GENERAL.", func_name,
                              string_VkImageLayout(dest_image_layout));
@@ -965,34 +944,26 @@ bool CoreChecks::VerifyClearImageLayout(const CMD_BUFFER_STATE &cb_state, const 
 
     } else {
         assert(strcmp(func_name, "vkCmdClearColorImage()") == 0);
-        if (!IsExtEnabled(device_extensions.vk_khr_shared_presentable_image)) {
-            if ((dest_image_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) && (dest_image_layout != VK_IMAGE_LAYOUT_GENERAL)) {
-                LogObjectList objlist(cb_state.commandBuffer(), image_state->image());
-                skip |= LogError(objlist, "VUID-vkCmdClearColorImage-imageLayout-00005",
-                                 "%s: Layout for cleared image is %s but can only be TRANSFER_DST_OPTIMAL or GENERAL.", func_name,
-                                 string_VkImageLayout(dest_image_layout));
-            }
-        } else {
-            if ((dest_image_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) && (dest_image_layout != VK_IMAGE_LAYOUT_GENERAL) &&
-                (dest_image_layout != VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR)) {
-                LogObjectList objlist(cb_state.commandBuffer(), image_state->image());
-                skip |= LogError(
-                    objlist, "VUID-vkCmdClearColorImage-imageLayout-01394",
-                    "%s: Layout for cleared image is %s but can only be TRANSFER_DST_OPTIMAL, SHARED_PRESENT_KHR, or GENERAL.",
-                    func_name, string_VkImageLayout(dest_image_layout));
-            }
+        if ((dest_image_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) && (dest_image_layout != VK_IMAGE_LAYOUT_GENERAL) &&
+            (dest_image_layout != VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR)) {
+            LogObjectList objlist(cb_state.commandBuffer(), image_state.image());
+            skip |=
+                LogError(objlist, "VUID-vkCmdClearColorImage-imageLayout-01394",
+                         "%s: Layout for cleared image is %s but can only be TRANSFER_DST_OPTIMAL, SHARED_PRESENT_KHR, or GENERAL.",
+                         func_name, string_VkImageLayout(dest_image_layout));
         }
     }
 
     // Cast to const to prevent creation at validate time.
-    const auto *subresource_map = cb_state.GetImageSubresourceLayoutMap(*image_state);
+    const auto *subresource_map = cb_state.GetImageSubresourceLayoutMap(image_state);
     if (subresource_map) {
         LayoutUseCheckAndMessage layout_check(dest_image_layout);
-        auto normalized_isr = image_state->NormalizeSubresourceRange(range);
+        auto normalized_isr = image_state.NormalizeSubresourceRange(range);
         // IncrementInterval skips over all the subresources that have the same state as we just checked, incrementing to
         // the next "constant value" range
-        skip |= subresource_map->AnyInRange(
-            normalized_isr, [this, &cb_state, &layout_check, func_name](const LayoutRange &range, const LayoutEntry &state) {
+        skip |=
+            subresource_map->AnyInRange(normalized_isr, [this, &cb_state, &layout_check, func_name, image = image_state.image()](
+                                                            const LayoutRange &range, const LayoutEntry &state) {
                 bool subres_skip = false;
                 if (!layout_check.Check(state)) {
                     const char *error_code = "VUID-vkCmdClearColorImage-imageLayout-00004";
@@ -1001,7 +972,8 @@ bool CoreChecks::VerifyClearImageLayout(const CMD_BUFFER_STATE &cb_state, const 
                     } else {
                         assert(strcmp(func_name, "vkCmdClearColorImage()") == 0);
                     }
-                    subres_skip |= LogError(cb_state.commandBuffer(), error_code,
+                    LogObjectList objlist(cb_state.commandBuffer(), image);
+                    subres_skip |= LogError(objlist, error_code,
                                             "%s: Cannot clear an image whose layout is %s and doesn't match the %s layout %s.",
                                             func_name, string_VkImageLayout(layout_check.expected_layout), layout_check.message,
                                             string_VkImageLayout(layout_check.layout));
@@ -1047,13 +1019,13 @@ bool CoreChecks::UpdateCommandBufferImageLayoutMap(const CMD_BUFFER_STATE *cb_st
                 if (!layout_check.Check(state)) {
                     const auto &vuid = GetImageBarrierVUID(loc, sync_vuid_maps::ImageError::kConflictingLayout);
                     auto subres = read_subresource_map->Decode(range.begin);
-                    subres_skip =
-                        LogError(cb_state->commandBuffer(), vuid,
-                                 "%s %s cannot transition the layout of aspect=%d level=%d layer=%d from %s when the "
-                                 "%s layout is %s.",
-                                 loc.Message().c_str(), report_data->FormatHandle(img_barrier.image).c_str(), subres.aspectMask,
-                                 subres.mipLevel, subres.arrayLayer, string_VkImageLayout(img_barrier.oldLayout),
-                                 layout_check.message, string_VkImageLayout(layout_check.layout));
+                    const LogObjectList objlist(cb_state->commandBuffer(), img_barrier.image);
+                    subres_skip = LogError(objlist, vuid,
+                                           "%s %s cannot transition the layout of aspect=%d level=%d layer=%d from %s when the "
+                                           "%s layout is %s.",
+                                           loc.Message().c_str(), FormatHandle(img_barrier.image).c_str(), subres.aspectMask,
+                                           subres.mipLevel, subres.arrayLayer, string_VkImageLayout(img_barrier.oldLayout),
+                                           layout_check.message, string_VkImageLayout(layout_check.layout));
                 }
                 return subres_skip;
             });
@@ -1093,14 +1065,14 @@ bool CoreChecks::FindLayouts(const IMAGE_STATE &image_state, std::vector<VkImage
 }
 
 template <typename ImgBarrier>
-void CoreChecks::RecordTransitionImageLayout(CMD_BUFFER_STATE *cb_state, const IMAGE_STATE *image_state,
+void CoreChecks::RecordTransitionImageLayout(CMD_BUFFER_STATE *cb_state, const IMAGE_STATE &image_state,
                                              const ImgBarrier &mem_barrier, bool is_release_op) {
     if (enabled_features.core13.synchronization2) {
         if (mem_barrier.oldLayout == mem_barrier.newLayout) {
             return;
         }
     }
-    auto normalized_isr = image_state->NormalizeSubresourceRange(mem_barrier.subresourceRange);
+    auto normalized_isr = image_state.NormalizeSubresourceRange(mem_barrier.subresourceRange);
 
     VkImageLayout initial_layout = NormalizeSynchronization2Layout(mem_barrier.subresourceRange.aspectMask, mem_barrier.oldLayout);
     VkImageLayout new_layout = NormalizeSynchronization2Layout(mem_barrier.subresourceRange.aspectMask, mem_barrier.newLayout);
@@ -1111,9 +1083,9 @@ void CoreChecks::RecordTransitionImageLayout(CMD_BUFFER_STATE *cb_state, const I
     }
 
     if (is_release_op) {
-        cb_state->SetImageInitialLayout(*image_state, normalized_isr, initial_layout);
+        cb_state->SetImageInitialLayout(image_state, normalized_isr, initial_layout);
     } else {
-        cb_state->SetImageLayout(*image_state, normalized_isr, new_layout, initial_layout);
+        cb_state->SetImageLayout(image_state, normalized_isr, new_layout, initial_layout);
     }
 }
 
@@ -1133,7 +1105,7 @@ void CoreChecks::TransitionImageLayouts(CMD_BUFFER_STATE *cb_state, uint32_t bar
         const bool is_release_op = cb_state->IsReleaseOp(mem_barrier);
         auto image_state = Get<IMAGE_STATE>(mem_barrier.image);
         if (image_state) {
-            RecordTransitionImageLayout(cb_state, image_state.get(), mem_barrier, is_release_op);
+            RecordTransitionImageLayout(cb_state, *image_state, mem_barrier, is_release_op);
         }
     }
 }

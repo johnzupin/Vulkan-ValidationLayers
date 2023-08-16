@@ -84,12 +84,14 @@ inline bool operator<(const DescriptorRequirement &a, const DescriptorRequiremen
 typedef std::map<uint32_t, DescriptorRequirement> BindingVariableMap;
 
 struct PipelineStageState {
+    // We use this over a SPIRV_MODULE_STATE because there are times we need to create empty objects
     std::shared_ptr<const SHADER_MODULE_STATE> module_state;
     const safe_VkPipelineShaderStageCreateInfo *create_info;
+    // If null, means it is an empty object, no SPIR-V backing it
     std::shared_ptr<const EntryPoint> entrypoint;
 
     PipelineStageState(const safe_VkPipelineShaderStageCreateInfo *create_info,
-                       std::shared_ptr<const SHADER_MODULE_STATE> &module_state, std::shared_ptr<const EntryPoint> &entrypoint);
+                       std::shared_ptr<const SHADER_MODULE_STATE> &module_state);
 };
 
 class PIPELINE_CACHE_STATE : public BASE_NODE {
@@ -381,6 +383,13 @@ class PIPELINE_STATE : public BASE_NODE {
     bool RasterizationDisabled() const {
         if (pre_raster_state && pre_raster_state->raster_state) {
             return pre_raster_state->raster_state->rasterizerDiscardEnable == VK_TRUE;
+        }
+        return false;
+    }
+
+    bool DualSourceBlending() const {
+        if (fragment_output_state) {
+            return fragment_output_state->dual_source_blending == VK_TRUE;
         }
         return false;
     }
@@ -796,7 +805,7 @@ struct LAST_BOUND_STATE {
         std::vector<uint32_t> dynamicOffsets;
         PipelineLayoutCompatId compat_id_for_set{0};
 
-        // Cache most recently validated descriptor state for ValidateCmdBufDrawState/UpdateDrawState
+        // Cache most recently validated descriptor state for ValidateActionState/UpdateDrawState
         const cvdescriptorset::DescriptorSet *validated_set{nullptr};
         uint64_t validated_set_change_count{~0ULL};
         uint64_t validated_set_image_layout_change_count{~0ULL};
@@ -823,6 +832,8 @@ struct LAST_BOUND_STATE {
     bool IsStencilTestEnable() const;
     VkStencilOpState GetStencilOpStateFront() const;
     VkStencilOpState GetStencilOpStateBack() const;
+    VkSampleCountFlagBits GetRasterizationSamples() const;
+    bool IsRasterizationDisabled() const;
 };
 
 static inline bool IsBoundSetCompat(uint32_t set, const LAST_BOUND_STATE &last_bound,

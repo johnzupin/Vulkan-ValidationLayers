@@ -43,17 +43,17 @@ bool StatelessValidation::manual_PreCallValidateCreateImage(VkDevice device, con
             }
         }
 
-        skip |= ValidateGreaterThanZero(pCreateInfo->extent.width, "pCreateInfo->extent.width",
-                                        "VUID-VkImageCreateInfo-extent-00944", "vkCreateImage");
-        skip |= ValidateGreaterThanZero(pCreateInfo->extent.height, "pCreateInfo->extent.height",
-                                        "VUID-VkImageCreateInfo-extent-00945", "vkCreateImage");
-        skip |= ValidateGreaterThanZero(pCreateInfo->extent.depth, "pCreateInfo->extent.depth",
-                                        "VUID-VkImageCreateInfo-extent-00946", "vkCreateImage");
+        skip |= ValidateNotZero(pCreateInfo->extent.width == 0, "pCreateInfo->extent.width", "VUID-VkImageCreateInfo-extent-00944",
+                                "vkCreateImage");
+        skip |= ValidateNotZero(pCreateInfo->extent.height == 0, "pCreateInfo->extent.height",
+                                "VUID-VkImageCreateInfo-extent-00945", "vkCreateImage");
+        skip |= ValidateNotZero(pCreateInfo->extent.depth == 0, "pCreateInfo->extent.depth", "VUID-VkImageCreateInfo-extent-00946",
+                                "vkCreateImage");
 
-        skip |= ValidateGreaterThanZero(pCreateInfo->mipLevels, "pCreateInfo->mipLevels", "VUID-VkImageCreateInfo-mipLevels-00947",
-                                        "vkCreateImage");
-        skip |= ValidateGreaterThanZero(pCreateInfo->arrayLayers, "pCreateInfo->arrayLayers",
-                                        "VUID-VkImageCreateInfo-arrayLayers-00948", "vkCreateImage");
+        skip |= ValidateNotZero(pCreateInfo->mipLevels == 0, "pCreateInfo->mipLevels", "VUID-VkImageCreateInfo-mipLevels-00947",
+                                "vkCreateImage");
+        skip |= ValidateNotZero(pCreateInfo->arrayLayers == 0, "pCreateInfo->arrayLayers",
+                                "VUID-VkImageCreateInfo-arrayLayers-00948", "vkCreateImage");
 
         // InitialLayout must be PREINITIALIZED or UNDEFINED
         if ((pCreateInfo->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED) &&
@@ -581,11 +581,8 @@ bool StatelessValidation::manual_PreCallValidateCreateImage(VkDevice device, con
 
         const auto image_compression_control = LvlFindInChain<VkImageCompressionControlEXT>(pCreateInfo->pNext);
         if (image_compression_control) {
-            constexpr VkImageCompressionFlagsEXT AllVkImageCompressionFlagBitsEXT =
-                (VK_IMAGE_COMPRESSION_DEFAULT_EXT | VK_IMAGE_COMPRESSION_FIXED_RATE_DEFAULT_EXT |
-                 VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT | VK_IMAGE_COMPRESSION_DISABLED_EXT);
             skip |= ValidateFlags("vkCreateImage", "VkImageCompressionControlEXT::flags", "VkImageCompressionFlagsEXT",
-                                  AllVkImageCompressionFlagBitsEXT, image_compression_control->flags, kRequiredSingleBit,
+                                  AllVkImageCompressionFlagBitsEXT, image_compression_control->flags, kOptionalSingleBit,
                                   "VUID-VkImageCompressionControlEXT-flags-06747");
 
             if (image_compression_control->flags == VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT &&
@@ -660,13 +657,13 @@ bool StatelessValidation::manual_PreCallValidateCreateImageView(VkDevice device,
 
         if (pCreateInfo->subresourceRange.layerCount != VK_REMAINING_ARRAY_LAYERS) {
             if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_CUBE && pCreateInfo->subresourceRange.layerCount != 6) {
-                skip |= LogError(device, "VUID-VkImageViewCreateInfo-viewType-02960",
+                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-viewType-02960",
                                  "vkCreateImageView(): subresourceRange.layerCount (%" PRIu32
                                  ") must be 6 or VK_REMAINING_ARRAY_LAYERS.",
                                  pCreateInfo->subresourceRange.layerCount);
             }
             if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY && (pCreateInfo->subresourceRange.layerCount % 6) != 0) {
-                skip |= LogError(device, "VUID-VkImageViewCreateInfo-viewType-02961",
+                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewCreateInfo-viewType-02961",
                                  "vkCreateImageView(): subresourceRange.layerCount (%" PRIu32
                                  ") must be a multiple of 6 or VK_REMAINING_ARRAY_LAYERS.",
                                  pCreateInfo->subresourceRange.layerCount);
@@ -674,17 +671,17 @@ bool StatelessValidation::manual_PreCallValidateCreateImageView(VkDevice device,
         }
 
         auto astc_decode_mode = LvlFindInChain<VkImageViewASTCDecodeModeEXT>(pCreateInfo->pNext);
-        if (IsExtEnabled(device_extensions.vk_ext_astc_decode_mode) && (astc_decode_mode != nullptr)) {
+        if (astc_decode_mode != nullptr) {
             if ((astc_decode_mode->decodeMode != VK_FORMAT_R16G16B16A16_SFLOAT) &&
                 (astc_decode_mode->decodeMode != VK_FORMAT_R8G8B8A8_UNORM) &&
                 (astc_decode_mode->decodeMode != VK_FORMAT_E5B9G9R9_UFLOAT_PACK32)) {
-                skip |= LogError(device, "VUID-VkImageViewASTCDecodeModeEXT-decodeMode-02230",
+                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewASTCDecodeModeEXT-decodeMode-02230",
                                  "vkCreateImageView(): VkImageViewASTCDecodeModeEXT::decodeMode must be "
                                  "VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8G8B8A8_UNORM, or VK_FORMAT_E5B9G9R9_UFLOAT_PACK32.");
             }
             if ((FormatIsCompressed_ASTC_LDR(pCreateInfo->format) == false) &&
                 (FormatIsCompressed_ASTC_HDR(pCreateInfo->format) == false)) {
-                skip |= LogError(device, "VUID-VkImageViewASTCDecodeModeEXT-format-04084",
+                skip |= LogError(pCreateInfo->image, "VUID-VkImageViewASTCDecodeModeEXT-format-04084",
                                  "vkCreateImageView(): is using a VkImageViewASTCDecodeModeEXT but the image view format is %s and "
                                  "not an ASTC format.",
                                  string_VkFormat(pCreateInfo->format));
@@ -696,7 +693,7 @@ bool StatelessValidation::manual_PreCallValidateCreateImageView(VkDevice device,
             if (ycbcr_conversion->conversion != VK_NULL_HANDLE) {
                 if (IsIdentitySwizzle(pCreateInfo->components) == false) {
                     skip |= LogError(
-                        device, "VUID-VkImageViewCreateInfo-pNext-01970",
+                        pCreateInfo->image, "VUID-VkImageViewCreateInfo-pNext-01970",
                         "vkCreateImageView(): If there is a VkSamplerYcbcrConversion, the imageView must "
                         "be created with the identity swizzle. Here are the actual swizzle values:\n"
                         "r swizzle = %s\n"

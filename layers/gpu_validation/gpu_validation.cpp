@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-#include <climits>
 #include <cmath>
 #include "utils/cast_utils.h"
+#include "utils/shader_utils.h"
 #include "gpu_validation/gpu_validation.h"
-#include "spirv-tools/optimizer.hpp"
 #include "spirv-tools/instrument.hpp"
 #include "generated/layer_chassis_dispatch.h"
 #include "gpu_vuids.h"
@@ -100,8 +99,7 @@ void GpuAssisted::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
     }
     GpuAssistedBase::CreateDevice(pCreateInfo);
 
-    buffer_oob_enabled = GpuGetOption("khronos_validation.gpuav_buffer_oob", true);
-    const bool validate_descriptor_indexing = GpuGetOption("khronos_validation.gpuav_descriptor_indexing", true);
+    validate_descriptors = GpuGetOption("khronos_validation.gpuav_descriptor_checks", true);
     validate_draw_indirect = GpuGetOption("khronos_validation.validate_draw_indirect", true);
     validate_dispatch_indirect = GpuGetOption("khronos_validation.validate_dispatch_indirect", true);
     warn_on_robust_oob = GpuGetOption("khronos_validation.warn_on_robust_oob", true);
@@ -133,21 +131,45 @@ void GpuAssisted::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
                               IsExtEnabled(device_extensions.vk_khr_buffer_device_address)) &&
                              shaderInt64 && enabled_features.core12.bufferDeviceAddress);
 
+    if (buffer_device_address) {
+        const char *size_string = getLayerOption("khronos_validation.gpuav_max_buffer_device_addresses");
+        app_bda_max_addresses = *size_string ? atoi(size_string) : 10000;
+        VkBufferCreateInfo buffer_info = LvlInitStruct<VkBufferCreateInfo>();
+        buffer_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        VmaAllocationCreateInfo alloc_info = {};
+        // We need 2 words per address (address and size), 1 word for the start of sizes index, 2 words for the address section
+        // bounds, and 2 more words for the size section bounds
+        app_bda_buffer_size = (1 + (app_bda_max_addresses + 2) + (app_bda_max_addresses + 2)) * 8;  // 64 bit words
+        buffer_info.size = app_bda_buffer_size;
+        // This buffer could be very large if an application uses many buffers. Allocating it as HOST_CACHED
+        // and manually flushing it at the end of the state updates is faster than using HOST_COHERENT.
+        alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        VkResult result = vmaCreateBuffer(vmaAllocator, &buffer_info, &alloc_info, &app_buffer_device_addresses.buffer,
+                                          &app_buffer_device_addresses.allocation, nullptr);
+        if (result != VK_SUCCESS) {
+            ReportSetupProblem(
+                device, "Unable to allocate device memory for buffer device address data.  Device could become unstable.", true);
+            aborted = true;
+            return;
+        }
+    }
+
     if (IsExtEnabled(device_extensions.vk_ext_shader_object)) {
         LogWarning(device, "UNASSIGNED-GPU-Assisted Validation Warning",
                    "VK_EXT_shader_Object is enabled, but GPU-AV does not currently support validation of shader objects");
     }
 
+    if (IsExtEnabled(device_extensions.vk_ext_descriptor_buffer)) {
+        LogWarning(device, "UNASSIGNED-GPU-Assisted Validation Warning",
+                   "VK_EXT_descriptor_buffer is enabled, but GPU-AV does not currently support validation of descriptor buffers");
+    }
+
     output_buffer_size = sizeof(uint32_t) * (spvtools::kInstMaxOutCnt + spvtools::kDebugOutputDataOffset);
 
-    if (validate_descriptor_indexing) {
-        descriptor_indexing = CheckForDescriptorIndexing(enabled_features);
-        if (descriptor_indexing && !force_buffer_device_address) {
-            descriptor_indexing = false;
-            LogWarning(
-                device, "UNASSIGNED-GPU-Assisted Validation Warning",
-                "Buffer Device Address + feature is not available.  No descriptor indexing checking will be attempted");
-        }
+    if (validate_descriptors && !force_buffer_device_address) {
+        validate_descriptors = false;
+        LogWarning(device, "UNASSIGNED-GPU-Assisted Validation Warning",
+                   "Buffer Device Address + feature is not available.  No descriptor checking will be attempted");
     }
 
     const bool use_linear_output_pool = GpuGetOption("khronos_validation.vma_linear_output", true);
@@ -219,6 +241,9 @@ void GpuAssisted::PreCallRecordDestroyDevice(VkDevice device, const VkAllocation
     acceleration_structure_validation_state.Destroy(device, vmaAllocator);
     pre_draw_validation_state.Destroy(device);
     pre_dispatch_validation_state.Destroy(device);
+    if (app_buffer_device_addresses.buffer) {
+        vmaDestroyBuffer(vmaAllocator, app_buffer_device_addresses.buffer, app_buffer_device_addresses.allocation);
+    }
     GpuAssistedBase::PreCallRecordDestroyDevice(device, pAllocator);
 }
 
@@ -844,9 +869,6 @@ void GpuAssisted::PostCallRecordBindAccelerationStructureMemoryNV(VkDevice devic
 // Free the device memory and descriptor set(s) associated with a command buffer.
 void GpuAssisted::DestroyBuffer(GpuAssistedBufferInfo &buffer_info) {
     vmaDestroyBuffer(vmaAllocator, buffer_info.output_mem_block.buffer, buffer_info.output_mem_block.allocation);
-    if (buffer_info.bda_input_mem_block.buffer) {
-        vmaDestroyBuffer(vmaAllocator, buffer_info.bda_input_mem_block.buffer, buffer_info.bda_input_mem_block.allocation);
-    }
     if (buffer_info.desc_set != VK_NULL_HANDLE) {
         desc_set_manager->PutBackDescriptorSet(buffer_info.desc_pool, buffer_info.desc_set);
     }
@@ -956,8 +978,10 @@ bool GpuAssisted::InstrumentShader(const vvl::span<const uint32_t> &input, std::
     opt_options.set_validator_options(val_options);
     Optimizer optimizer(target_env);
     optimizer.SetMessageConsumer(gpu_console_message_consumer);
-    optimizer.RegisterPass(CreateInstBindlessCheckPass(desc_set_bind_index, unique_shader_module_id, descriptor_indexing,
-                                                       descriptor_indexing, buffer_oob_enabled, buffer_oob_enabled));
+    if (validate_descriptors) {
+        optimizer.RegisterPass(CreateInstBindlessCheckPass(desc_set_bind_index, unique_shader_module_id));
+    }
+
     // Call CreateAggressiveDCEPass with preserve_interface == true
     optimizer.RegisterPass(CreateAggressiveDCEPass(true));
     if ((IsExtEnabled(device_extensions.vk_ext_buffer_device_address) ||
@@ -984,19 +1008,26 @@ bool GpuAssisted::InstrumentShader(const vvl::span<const uint32_t> &input, std::
 void GpuAssisted::PreCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo,
                                                   const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule,
                                                   void *csm_state_data) {
-    create_shader_module_api_state *csm_state = reinterpret_cast<create_shader_module_api_state *>(csm_state_data);
+    ValidationStateTracker::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, csm_state_data);
+    create_shader_module_api_state *csm_state = static_cast<create_shader_module_api_state *>(csm_state_data);
     const bool pass = InstrumentShader(vvl::make_span(pCreateInfo->pCode, pCreateInfo->codeSize / sizeof(uint32_t)),
                                        csm_state->instrumented_pgm, &csm_state->unique_shader_id);
     if (pass) {
         csm_state->instrumented_create_info.pCode = csm_state->instrumented_pgm.data();
         csm_state->instrumented_create_info.codeSize = csm_state->instrumented_pgm.size() * sizeof(uint32_t);
     }
-    ValidationStateTracker::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, csm_state_data);
+}
+
+void GpuAssisted::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount,
+                                                const VkShaderCreateInfoEXT *pCreateInfos, const VkAllocationCallbacks *pAllocator,
+                                                VkShaderEXT *pShaders, void *csm_state_data) {
+    // TODO - Add VK_EXT_shader_object support
 }
 
 // Generate the part of the message describing the violation.
 bool GenerateValidationMessage(const uint32_t *debug_record, std::string &msg, std::string &vuid_msg, bool &oob_access,
-                               const GpuAssistedBufferInfo &buf_info, GpuAssisted *gpu_assisted) {
+                               const GpuAssistedBufferInfo &buf_info, GpuAssisted *gpu_assisted,
+                               const std::vector<GpuAssistedDescSetState> &descriptor_sets) {
     using namespace spvtools;
     std::ostringstream strm;
     bool return_code = true;
@@ -1026,42 +1057,51 @@ bool GenerateValidationMessage(const uint32_t *debug_record, std::string &msg, s
             strm << "Device address 0x" << std::hex << *ptr << " access out of bounds. ";
             vuid_msg = "UNASSIGNED-Device address out of bounds";
         } break;
-        case kInstErrorBuffOOBUniform:
-        case kInstErrorBuffOOBStorage: {
-            auto size = debug_record[kInstBindlessBuffOOBOutBuffSize];
+        case kInstErrorOOB: {
+            const uint32_t set_num = debug_record[kInstBindlessBuffOOBOutDescSet];
+            const uint32_t binding_num = debug_record[kInstBindlessBuffOOBOutDescBinding];
+            const uint32_t desc_index = debug_record[kInstBindlessBuffOOBOutDescIndex];
+            const uint32_t size = debug_record[kInstBindlessBuffOOBOutBuffSize];
+            const uint32_t offset = debug_record[kInstBindlessBuffOOBOutBuffOff];
+            const auto *binding_state = descriptor_sets[set_num].set_state->GetBinding(binding_num);
+            assert(binding_state);
             if (size == 0) {
-                strm << "(set = " << debug_record[kInstBindlessBuffOOBOutDescSet] << ", binding = " << debug_record[kInstBindlessBuffOOBOutDescBinding]
-                     << ") Descriptor index " << debug_record[kInstBindlessBuffOOBOutDescIndex] << " is uninitialized.";
+                strm << "(set = " << set_num << ", binding = " << binding_num << ") Descriptor index " << desc_index
+                     << " is uninitialized.";
                 vuid_msg = "UNASSIGNED-Descriptor uninitialized";
-            } else {
-                oob_access = true;
-                strm << "(set = " << debug_record[kInstBindlessBuffOOBOutDescSet] << ", binding = " << debug_record[kInstBindlessBuffOOBOutDescBinding]
-                     << ") Descriptor index " << debug_record[kInstBindlessBuffOOBOutDescIndex]
-                     << " access out of bounds. Descriptor size is " << debug_record[kInstBindlessBuffOOBOutBuffSize]
-                     << " and highest byte accessed was " << debug_record[kInstBindlessBuffOOBOutBuffOff];
-                if (debug_record[kInstValidationOutError] == kInstErrorBuffOOBUniform)
-                    vuid_msg = vuid.uniform_access_oob;
-                else
-                    vuid_msg = vuid.storage_access_oob;
+                break;
             }
-        } break;
-        case kInstErrorBuffOOBUniformTexel:
-        case kInstErrorBuffOOBStorageTexel: {
-            auto size = debug_record[kInstBindlessBuffOOBOutBuffSize];
-            if (size == 0) {
-                strm << "(set = " << debug_record[kInstBindlessBuffOOBOutDescSet] << ", binding = " << debug_record[kInstBindlessBuffOOBOutDescBinding]
-                     << ") Descriptor index " << debug_record[kInstBindlessBuffOOBOutDescIndex] << " is uninitialized.";
-                vuid_msg = "UNASSIGNED-Descriptor uninitialized";
-            } else {
-                oob_access = true;
-                strm << "(set = " << debug_record[kInstBindlessBuffOOBOutDescSet] << ", binding = " << debug_record[kInstBindlessBuffOOBOutDescBinding]
-                     << ") Descriptor index " << debug_record[kInstBindlessBuffOOBOutDescIndex]
-                     << " access out of bounds. Descriptor size is " << debug_record[kInstBindlessBuffOOBOutBuffSize]
-                     << " texels and highest texel accessed was " << debug_record[kInstBindlessBuffOOBOutBuffOff];
-                if (debug_record[kInstValidationOutError] == kInstErrorBuffOOBUniformTexel)
-                    vuid_msg = vuid.uniform_access_oob;
-                else
-                    vuid_msg = vuid.storage_access_oob;
+            oob_access = true;
+            auto desc_class = binding_state->descriptor_class;
+            if (desc_class == cvdescriptorset::DescriptorClass::Mutable) {
+                desc_class =
+                    static_cast<const cvdescriptorset::MutableBinding *>(binding_state)->descriptors[desc_index].ActiveClass();
+            }
+
+            switch (desc_class) {
+                case cvdescriptorset::DescriptorClass::GeneralBuffer:
+                    strm << "(set = " << set_num << ", binding = " << binding_num << ") Descriptor index " << desc_index
+                         << " access out of bounds. Descriptor size is " << size << " and highest byte accessed was " << offset;
+                    if (binding_state->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+                        binding_state->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) {
+                        vuid_msg = vuid.uniform_access_oob;
+                    } else {
+                        vuid_msg = vuid.storage_access_oob;
+                    }
+                    break;
+                case cvdescriptorset::DescriptorClass::TexelBuffer:
+                    strm << "(set = " << set_num << ", binding = " << binding_num << ") Descriptor index " << desc_index
+                         << " access out of bounds. Descriptor size is " << size << " texels and highest texel accessed was "
+                         << offset;
+                    if (binding_state->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
+                        vuid_msg = vuid.uniform_access_oob;
+                    } else {
+                        vuid_msg = vuid.storage_access_oob;
+                    }
+                    break;
+                default:
+                    // other OOB checks are not implemented yet
+                    assert(false);
             }
         } break;
         case _kInstErrorPreDrawValidate: {
@@ -1133,7 +1173,8 @@ bool GenerateValidationMessage(const uint32_t *debug_record, std::string &msg, s
 // keeps a copy, but it can be destroyed after the pipeline is created and before it is submitted.)
 //
 void GpuAssisted::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQueue queue, GpuAssistedBufferInfo &buffer_info,
-                                             uint32_t operation_index, uint32_t *const debug_output_buffer) {
+                                             uint32_t operation_index, uint32_t *const debug_output_buffer,
+                                             const std::vector<GpuAssistedDescSetState> &descriptor_sets) {
     using namespace spvtools;
     const uint32_t total_words = debug_output_buffer[kDebugOutputSizeOffset];
     bool oob_access;
@@ -1171,7 +1212,7 @@ void GpuAssisted::AnalyzeAndGenerateMessages(VkCommandBuffer command_buffer, VkQ
         pgm = it->second.pgm;
     }
     const bool gen_full_message =
-        GenerateValidationMessage(debug_record, validation_message, vuid_msg, oob_access, buffer_info, this);
+        GenerateValidationMessage(debug_record, validation_message, vuid_msg, oob_access, buffer_info, this, descriptor_sets);
     if (gen_full_message) {
         UtilGenerateStageMessage(debug_record, stage_message);
         UtilGenerateCommonMessage(report_data, command_buffer, debug_record, shader_module_handle, pipeline_handle,
@@ -1207,6 +1248,11 @@ void gpuav_state::CommandBuffer::Process(VkQueue queue) {
 
         for (auto &buffer_info : gpu_buffer_list) {
             char *data;
+            GpuAssistedInputBuffers *di_info = nullptr;
+            if (buffer_info.desc_binding_index != vvl::kU32Max) {
+                di_info = &di_input_buffer_list[buffer_info.desc_binding_index];
+            }
+            std::vector<GpuAssistedDescSetState> empty;
 
             uint32_t operation_index = 0;
             if (buffer_info.pipeline_bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS) {
@@ -1224,7 +1270,8 @@ void gpuav_state::CommandBuffer::Process(VkQueue queue) {
 
             VkResult result = vmaMapMemory(device_state->vmaAllocator, buffer_info.output_mem_block.allocation, (void **)&data);
             if (result == VK_SUCCESS) {
-                device_state->AnalyzeAndGenerateMessages(commandBuffer(), queue, buffer_info, operation_index, (uint32_t *)data);
+                device_state->AnalyzeAndGenerateMessages(commandBuffer(), queue, buffer_info, operation_index, (uint32_t *)data,
+                                                         di_info ? di_info->descriptor_set_buffers : empty);
                 vmaUnmapMemory(device_state->vmaAllocator, buffer_info.output_mem_block.allocation);
             }
         }
@@ -1250,6 +1297,58 @@ void GpuAssisted::UpdateInstrumentationBuffer(gpuav_state::CommandBuffer *cb_nod
     }
 }
 
+void GpuAssisted::UpdateBDABuffer(GpuAssistedDeviceMemoryBlock device_address_buffer) {
+    if (gpuav_bda_buffer_version == buffer_device_address_ranges_version) {
+        return;
+    }
+    auto address_ranges = GetBufferAddressRanges();
+    auto address_ranges_num_addresses = address_ranges.size();
+    if (address_ranges_num_addresses == 0) return;
+
+    // Example BDA input buffer assuming 2 buffers using BDA:
+    // Word 0 | Index of start of buffer sizes (in this case 5)
+    // Word 1 | 0x0000000000000000
+    // Word 2 | Device Address of first buffer  (Addresses sorted in ascending order)
+    // Word 3 | Device Address of second buffer
+    // Word 4 | 0xffffffffffffffff
+    // Word 5 | 0 (size of pretend buffer at word 1)
+    // Word 6 | Size in bytes of first buffer
+    // Word 7 | Size in bytes of second buffer
+    // Word 8 | 0 (size of pretend buffer in word 4)
+
+    uint64_t *bda_data;
+    // Make sure to limit writes to size of the buffer
+    [[maybe_unused]] VkResult result;
+    result = vmaMapMemory(vmaAllocator, device_address_buffer.allocation, reinterpret_cast<void **>(&bda_data));
+    assert(result == VK_SUCCESS);
+    uint32_t address_index = 1;
+    size_t size_index = 3 + address_ranges.size();
+    memset(bda_data, 0, static_cast<size_t>(app_bda_buffer_size));
+    bda_data[0] = size_index;       // Start of buffer sizes
+    bda_data[address_index++] = 0;  // NULL address
+    bda_data[size_index++] = 0;
+    if (address_ranges_num_addresses > app_bda_max_addresses) {
+        std::ostringstream problem_string;
+        problem_string << "Number of buffer device addresses in use (" << address_ranges_num_addresses
+                       << ") is greapter than khronos_validation.max_buffer_device_addresses (" << app_bda_max_addresses
+                       << "). Truncating BDA table which could result in invalid validation";
+        ReportSetupProblem(device, problem_string.str().c_str());
+    }
+    size_t num_addresses = std::min(address_ranges_num_addresses, app_bda_max_addresses);
+    for (size_t i = 0; i < num_addresses; i++) {
+        bda_data[address_index++] = address_ranges[i].begin;
+        bda_data[size_index++] = address_ranges[i].end - address_ranges[i].begin;
+    }
+    bda_data[address_index] = std::numeric_limits<uintptr_t>::max();
+    bda_data[size_index] = 0;
+    // Flush the BDA buffer before unmapping so that the new state is visible to the GPU
+    result = vmaFlushAllocation(vmaAllocator, device_address_buffer.allocation, 0, VK_WHOLE_SIZE);
+    // No good way to handle this error, we should still try to unmap.
+    assert(result == VK_SUCCESS);
+    vmaUnmapMemory(vmaAllocator, device_address_buffer.allocation);
+    gpuav_bda_buffer_version = buffer_device_address_ranges_version;
+}
+
 void GpuAssisted::UpdateBoundDescriptors(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint) {
     if (aborted) return;
     auto cb_node = GetWrite<gpuav_state::CommandBuffer>(commandBuffer);
@@ -1264,7 +1363,7 @@ void GpuAssisted::UpdateBoundDescriptors(VkCommandBuffer commandBuffer, VkPipeli
     uint32_t number_of_sets = static_cast<uint32_t>(last_bound.per_set.size());
     // Figure out how much memory we need for the input block based on how many sets and bindings there are
     // and how big each of the bindings is
-    if (number_of_sets > 0 && (descriptor_indexing || buffer_oob_enabled) && force_buffer_device_address) {
+    if (number_of_sets > 0 && validate_descriptors && force_buffer_device_address) {
         VkBufferCreateInfo buffer_info = LvlInitStruct<VkBufferCreateInfo>();
         assert(number_of_sets <= spvtools::kDebugInputBindlessMaxDescSets);
         buffer_info.size = spvtools::kDebugInputBindlessMaxDescSets * 8; // 64 bit addresses
@@ -1293,25 +1392,11 @@ void GpuAssisted::UpdateBoundDescriptors(VkCommandBuffer commandBuffer, VkPipeli
         cb_node->current_input_buffer = di_buffers.address_buffer;
         buffer_info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
         for (const auto &s : last_bound.per_set) {
-            bool has_buffers = false;
             auto set = s.bound_descriptor_set;
             if (!set) {
                 continue;
             }
-            if (set->GetBindingCount() > 0) {
-                for (const auto &binding : *set) {
-                    if (binding->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
-                        binding->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
-                        binding->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-                        binding->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-                        binding->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
-                        binding->type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER) {
-                        has_buffers = true;
-                        break;
-                    }
-                }
-            }
-            if (descriptor_indexing || has_buffers) {
+            if (validate_descriptors) {
                 GpuAssistedDescSetState desc_set_state;
                 desc_set_state.set_state = std::static_pointer_cast<gpuav_state::DescriptorSet>(set);
                 if (!desc_set_state.set_state->IsUpdateAfterBind()) {
@@ -1363,6 +1448,7 @@ void GpuAssisted::PreCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, 
             PreRecordCommandBuffer(submit->pCommandBuffers[i]);
         }
     }
+    UpdateBDABuffer(app_buffer_device_addresses);
 }
 
 void GpuAssisted::PreCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
@@ -1374,15 +1460,18 @@ void GpuAssisted::PreCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCou
             PreRecordCommandBuffer(submit->pCommandBufferInfos[i].commandBuffer);
         }
     }
+    UpdateBDABuffer(app_buffer_device_addresses);
 }
 
 void GpuAssisted::PreCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence) {
+    ValidationStateTracker::PreCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence);
     for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
         const VkSubmitInfo2 *submit = &pSubmits[submit_idx];
         for (uint32_t i = 0; i < submit->commandBufferInfoCount; i++) {
             PreRecordCommandBuffer(submit->pCommandBufferInfos[i].commandBuffer);
         }
     }
+    UpdateBDABuffer(app_buffer_device_addresses);
 }
 
 void GpuAssisted::PreCallRecordCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
@@ -1877,7 +1966,7 @@ void GpuAssisted::AllocateValidationResources(const VkCommandBuffer cmd_buffer, 
     result = vmaMapMemory(vmaAllocator, output_block.allocation, reinterpret_cast<void **>(&data_ptr));
     if (result == VK_SUCCESS) {
         memset(data_ptr, 0, output_buffer_size);
-        if (buffer_oob_enabled || buffer_device_address) {
+        if (validate_descriptors) {
             uses_robustness =
                 (enabled_features.core.robustBufferAccess || enabled_features.robustness2_features.robustBufferAccess2 ||
                  pipeline_state->uses_pipeline_robustness);
@@ -1886,7 +1975,6 @@ void GpuAssisted::AllocateValidationResources(const VkCommandBuffer cmd_buffer, 
         vmaUnmapMemory(vmaAllocator, output_block.allocation);
     }
 
-    GpuAssistedDeviceMemoryBlock bda_input_block = {};
     VkDescriptorBufferInfo di_input_desc_buffer_info = {};
     VkDescriptorBufferInfo bda_input_desc_buffer_info = {};
     VkWriteDescriptorSet desc_writes[3] = {};
@@ -2028,66 +2116,17 @@ void GpuAssisted::AllocateValidationResources(const VkCommandBuffer cmd_buffer, 
     }
 
     if (buffer_device_address) {
-        auto address_ranges = GetBufferAddressRanges();
-        if (address_ranges.size() > 0) {
-            // Example BDA input buffer assuming 2 buffers using BDA:
-            // Word 0 | Index of start of buffer sizes (in this case 5)
-            // Word 1 | 0x0000000000000000
-            // Word 2 | Device Address of first buffer  (Addresses sorted in ascending order)
-            // Word 3 | Device Address of second buffer
-            // Word 4 | 0xffffffffffffffff
-            // Word 5 | 0 (size of pretend buffer at word 1)
-            // Word 6 | Size in bytes of first buffer
-            // Word 7 | Size in bytes of second buffer
-            // Word 8 | 0 (size of pretend buffer in word 4)
+        bda_input_desc_buffer_info.range = app_bda_buffer_size;
+        bda_input_desc_buffer_info.buffer = app_buffer_device_addresses.buffer;
+        bda_input_desc_buffer_info.offset = 0;
 
-            uint32_t num_buffers = static_cast<uint32_t>(address_ranges.size());
-            uint32_t words_needed = (num_buffers + 3) + (num_buffers + 2);
-            buffer_info.size = words_needed * 8;  // 64 bit words
-            alloc_info.pool = VK_NULL_HANDLE;
-            // This buffer could be very large if an application uses many buffers. Allocating it as HOST_CACHED
-            // and manually flushing it at the end of the state updates is faster than using HOST_COHERENT.
-            alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-            result = vmaCreateBuffer(vmaAllocator, &buffer_info, &alloc_info, &bda_input_block.buffer, &bda_input_block.allocation,
-                                     nullptr);
-            if (result != VK_SUCCESS) {
-                ReportSetupProblem(device, "Unable to allocate device memory.  Device could become unstable.", true);
-                aborted = true;
-                return;
-            }
-            uint64_t *bda_data;
-            result = vmaMapMemory(vmaAllocator, bda_input_block.allocation, reinterpret_cast<void **>(&bda_data));
-            uint32_t address_index = 1;
-            uint32_t size_index = 3 + num_buffers;
-            memset(bda_data, 0, static_cast<size_t>(buffer_info.size));
-            bda_data[0] = size_index;       // Start of buffer sizes
-            bda_data[address_index++] = 0;  // NULL address
-            bda_data[size_index++] = 0;
-
-            for (const auto &range : address_ranges) {
-                bda_data[address_index++] = range.begin;
-                bda_data[size_index++] = range.end - range.begin;
-            }
-            bda_data[address_index] = std::numeric_limits<uintptr_t>::max();
-            bda_data[size_index] = 0;
-            // Flush the BDA buffer before unmapping so that the new state is visible to the GPU
-            result = vmaFlushAllocation(vmaAllocator, bda_input_block.allocation, 0, VK_WHOLE_SIZE);
-            // No good way to handle this error, we should still try to unmap.
-            assert(result == VK_SUCCESS);
-            vmaUnmapMemory(vmaAllocator, bda_input_block.allocation);
-
-            bda_input_desc_buffer_info.range = (words_needed * 8);
-            bda_input_desc_buffer_info.buffer = bda_input_block.buffer;
-            bda_input_desc_buffer_info.offset = 0;
-
-            desc_writes[desc_count] = LvlInitStruct<VkWriteDescriptorSet>();
-            desc_writes[desc_count].dstBinding = 2;
-            desc_writes[desc_count].descriptorCount = 1;
-            desc_writes[desc_count].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            desc_writes[desc_count].pBufferInfo = &bda_input_desc_buffer_info;
-            desc_writes[desc_count].dstSet = desc_sets[0];
-            desc_count++;
-        }
+        desc_writes[desc_count] = LvlInitStruct<VkWriteDescriptorSet>();
+        desc_writes[desc_count].dstBinding = 2;
+        desc_writes[desc_count].descriptorCount = 1;
+        desc_writes[desc_count].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        desc_writes[desc_count].pBufferInfo = &bda_input_desc_buffer_info;
+        desc_writes[desc_count].dstSet = desc_sets[0];
+        desc_count++;
     }
 
     // Write the descriptor
@@ -2121,12 +2160,14 @@ void GpuAssisted::AllocateValidationResources(const VkCommandBuffer cmd_buffer, 
     if (pipeline_layout_handle == VK_NULL_HANDLE) {
         ReportSetupProblem(device, "Unable to find pipeline layout to bind debug descriptor set. Aborting GPU-AV");
         aborted = true;
-        vmaDestroyBuffer(vmaAllocator, bda_input_block.buffer, bda_input_block.allocation);
         vmaDestroyBuffer(vmaAllocator, output_block.buffer, output_block.allocation);
     } else {
+        // It is possible to have no descriptor sets bound, for example if using push constants.
+        uint32_t di_buf_index =
+            cb_node->di_input_buffer_list.size() > 0 ? uint32_t(cb_node->di_input_buffer_list.size()) - 1 : vvl::kU32Max;
         // Record buffer and memory info in CB state tracking
-        cb_node->per_draw_buffer_list.emplace_back(output_block, bda_input_block, pre_draw_resources, pre_dispatch_resources,
-                                                   desc_sets[0], desc_pool, bind_point, uses_robustness, cmd_type);
+        cb_node->per_draw_buffer_list.emplace_back(output_block, pre_draw_resources, pre_dispatch_resources, desc_sets[0],
+                                                   desc_pool, bind_point, uses_robustness, cmd_type, di_buf_index);
     }
 }
 

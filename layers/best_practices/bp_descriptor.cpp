@@ -19,7 +19,6 @@
 
 #include "best_practices/best_practices_validation.h"
 #include "best_practices/best_practices_error_enums.h"
-#include "core_checks/cc_shader.h"
 
 bool BestPractices::PreCallValidateAllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo,
                                                           VkDescriptorSet* pDescriptorSets, void* ads_state_data) const {
@@ -45,7 +44,7 @@ bool BestPractices::PreCallValidateAllocateDescriptorSets(VkDevice device, const
                                    "vkAllocateDescriptorSets(): Unable to allocate %" PRIu32
                                    " descriptorSets from %s"
                                    ". This pool only has %" PRIu32 " descriptorSets remaining.",
-                                   pAllocateInfo->descriptorSetCount, report_data->FormatHandle(pool_state->Handle()).c_str(),
+                                   pAllocateInfo->descriptorSetCount, FormatHandle(*pool_state).c_str(),
                                    pool_state->GetAvailableSets());
             }
 

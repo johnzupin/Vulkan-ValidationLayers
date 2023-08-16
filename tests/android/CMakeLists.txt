@@ -15,27 +15,20 @@
 # limitations under the License.
 # ~~~
 
-# "CMAKE_ANDROID_STL_TYPE specifies the C++ STL implementation to be used. Earlier NDK releases
-# supported a range of different options, but projects should now use either c++_shared or c++_static.
-# Only use the latter if your application consists of a single shared library."- Professional CMake
+# NOTE: This can be removed when the minimum API level we support is 28.
 #
-# Here is the problem we encountered when building tests with c++_static:
+# Our unit tests on Android repeatedly close/open the vulkan validation layers.
+# This causes issues with issues with thread_local variables.
 #
-# https://developer.android.com/ndk/guides/cpp-support recommends using
-# c++_shared for applications that use more than one shared library.
-# If multiple libraries using c++_static are loaded several copies of
-# the globals will be present in the C++ runtime. This also happens
-# if the same library is dlopen/dlclosed several times, as when running
-# the Layer Validation Tests. Some of the c++ runtime globals are
-# thread_local, so each copy consumes a TLS key. There are only 128 TLS
-# keys allowed on android, and the unit tests can hit this because of
-# repeatedly loading and unloading VVL.
+# To run our tests on more devices without issue we can inform the linker to not unload VVL at runtime.
+# This will prevent VVL from being unloaded by dlclose which will avoid the issue.
 #
-# The drawback to using c++_shared is that the layer library can no longer
-# be installed manually, but must be installed in an APK. It is still
-# common practice to load layer libraries manually.
+# https://github.com/android/ndk/issues/360
+# https://github.com/android/ndk/issues/360#issuecomment-339107521
+# https://github.com/android/ndk/releases/tag/r26-beta1
 if ("${CMAKE_ANDROID_STL_TYPE}" MATCHES "static")
-    message(FATAL_ERROR "Cannot build tests with ${CMAKE_ANDROID_STL_TYPE}!")
+    # nodelete : Marks that vvl shouldn't be unloaded at runtime. 
+    target_link_options(vvl PRIVATE -Wl,-z,nodelete)
 endif()
 
 set_directory_properties(PROPERTIES "COMPILE_OPTIONS" "") # Disable compiler warnings
@@ -62,13 +55,16 @@ target_link_options(android_glue PUBLIC -u ANativeActivity_onCreate)
 
 target_link_libraries(vk_layer_validation_tests PRIVATE android_glue)
 
-# 'VulkanLayerValidationTests.so' needed for Android.mk backcompat
-set_target_properties(vk_layer_validation_tests PROPERTIES
-    OUTPUT_NAME "VulkanLayerValidationTests"
-    PREFIX ""
-)
+set_target_properties(vk_layer_validation_tests PROPERTIES OUTPUT_NAME "VulkanLayerValidationTests")
 
 install(TARGETS vk_layer_validation_tests DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# https://stackoverflow.com/questions/76631917/cmake-how-to-install-shared-stl-libraries-for-android/76656492#76656492
+if ("${CMAKE_ANDROID_STL_TYPE}" MATCHES "shared")
+    file(READ "${CMAKE_ANDROID_NDK}/meta/abis.json" JSON_FILE)
+    string(JSON TRIPLE GET "${JSON_FILE}" "${CMAKE_ANDROID_ARCH_ABI}" "triple")
+    install(FILES "${CMAKE_SYSROOT}/usr/lib/${TRIPLE}/libc++_shared.so" DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+endif()
 
 find_program(GNU_NM NAMES nm)
 if (GNU_NM)

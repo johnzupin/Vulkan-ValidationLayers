@@ -6,7 +6,7 @@
             "sub_dir": "glslang",
             "build_dir": "glslang/build",
             "install_dir": "glslang/build/install",
-            "commit": "d1517d64cfca91f573af1bf7341dc3a5113349c0",
+            "commit": "76b52ebf77833908dc4c0dd6c70a9c357ac720bd",
             "optional": [
                 "tests"
             ]
@@ -18,7 +18,7 @@
             "sub_dir": "Vulkan-Headers",
             "build_dir": "Vulkan-Headers/build",
             "install_dir": "Vulkan-Headers/build/install",
-            "commit": "v1.3.250"
+            "commit": "v1.3.261"
         },
         {
             "name": "SPIRV-Headers",
@@ -26,7 +26,7 @@
             "sub_dir": "SPIRV-Headers",
             "build_dir": "SPIRV-Headers/build",
             "install_dir": "SPIRV-Headers/build/install",
-            "commit": "268a061764ee69f09a477a695bf6a11ffe311b8d"
+            "commit": "124a9665e464ef98b8b718d572d5f329311061eb"
         },
         {
             "name": "SPIRV-Tools",
@@ -36,9 +36,22 @@
             "install_dir": "SPIRV-Tools/build/install",
             "cmake_options": [
                 "-DSPIRV-Headers_SOURCE_DIR={repo_dir}/../SPIRV-Headers",
-                "-DSPIRV_WERROR=OFF"
+                "-DSPIRV_WERROR=OFF",
+                "-DSPIRV_SKIP_TESTS=ON",
+                "-DSPIRV_SKIP_EXECUTABLES=ON"
             ],
-            "commit": "e7c6084fd1d6d6f5ac393e842728d8be309688ca"
+            "commit": "e553b884c7c9febaa4e52334f683641fb5f196a0"
+        },
+        {
+            "name": "SPIRV-Reflect",
+            "url": "https://github.com/KhronosGroup/SPIRV-Reflect.git",
+            "sub_dir": "SPIRV-Reflect",
+            "install_dir": "SPIRV-Reflect",
+            "build_step": "skip",
+            "commit": "1e173e505d2549a99ee5d517dd82aa8a4e2a015c",
+            "optional": [
+                "tests"
+            ]
         },
         {
             "name": "robin-hood-hashing",
@@ -62,7 +75,7 @@
                 "-Dgtest_force_shared_crt=ON",
                 "-DBUILD_SHARED_LIBS=OFF"
             ],
-            "commit": "v1.13.0",
+            "commit": "ec4fed93217bc2830959bb8e86798c1d86956949",
             "optional": [
                 "tests"
             ]
@@ -90,6 +103,7 @@
         "Vulkan-Headers": "VULKAN_HEADERS_INSTALL_DIR",
         "SPIRV-Headers": "SPIRV_HEADERS_INSTALL_DIR",
         "SPIRV-Tools": "SPIRV_TOOLS_INSTALL_DIR",
+        "SPIRV-Reflect": "SPIRV_REFLECT_INSTALL_DIR",
         "robin-hood-hashing": "ROBIN_HOOD_HASHING_INSTALL_DIR",
         "googletest": "GOOGLETEST_INSTALL_DIR",
         "mimalloc": "MIMALLOC_INSTALL_DIR"

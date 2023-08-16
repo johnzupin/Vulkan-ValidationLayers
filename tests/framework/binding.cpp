@@ -19,11 +19,7 @@
 #include "binding.h"
 
 #include <string.h>  // memset(), memcmp()
-#include <algorithm>
 #include <cassert>
-#include <iostream>
-#include <vector>
-
 #include "generated/vk_typemap_helper.h"
 #include "generated/vk_format_utils.h"
 
@@ -893,6 +889,21 @@ VkResult ShaderModule::init_try(const Device &dev, const VkShaderModuleCreateInf
     VkShaderModule mod;
 
     VkResult err = vk::CreateShaderModule(dev.handle(), &info, NULL, &mod);
+    if (err == VK_SUCCESS) NonDispHandle::init(dev.handle(), mod);
+
+    return err;
+}
+
+NON_DISPATCHABLE_HANDLE_DTOR(Shader, vk::DestroyShaderEXT)
+
+void Shader::init(const Device &dev, const VkShaderCreateInfoEXT &info) {
+    NON_DISPATCHABLE_HANDLE_INIT(vk::CreateShadersEXT, dev, 1u, &info);
+}
+
+VkResult Shader::init_try(const Device &dev, const VkShaderCreateInfoEXT &info) {
+    VkShaderEXT mod;
+
+    VkResult err = vk::CreateShadersEXT(dev.handle(), 1u, &info, NULL, &mod);
     if (err == VK_SUCCESS) NonDispHandle::init(dev.handle(), mod);
 
     return err;
