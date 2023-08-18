@@ -1,3 +1,50 @@
+vulkan-validationlayers (1.3.261.0~rc3-1lunarg20.04-1) focal; urgency=medium
+
+  [ arno-lunarg ]
+  * layers: Disable part of accel struct validation
+
+  [ Tony Barbour ]
+  * layers: Fix debug_report with no objects
+
+  [ Tony-LunarG ]
+  * layers: Add scaffolding for cc validation
+
+  [ Tony Barbour ]
+  * layers: Validation for CopyMemoryToImage and CopyImageToMemory
+  * layers: Move stencil usage checks into helper
+  * layers: Use templates instead of typed handles
+  * layers: Validation for VkCopyImageToImageEXT
+  * layers: Add more ImageToImage validation
+  * layers: Add more ImageToImage validation
+  * layers: Add more ImageToImage validation
+  * layers: Add ValidateHostCopyImageCreateInfos
+  * layers: Add more ImageToImage validation
+  * layers: Fix ImageToImage usage checks
+  * layers: Fix too many calls to validate*CopyData
+  * tests: Fix CopyImageAspectMismatch
+  * layers: Validate existing structs in host_image_copy
+  * layers: Use VUIDs from public spec
+  * layers: Add validation for VkHostImageLayoutTransitionInfoEXT
+  * layers: Add misc host-image-copy VUIDs
+
+  [ John Zulauf ]
+  * layers: Add support for Image Layout check for CopyImage
+  * layers: Add support for TransitionImageLayoutEXT record
+
+  [ Tony Barbour ]
+  * layers: Add layout checks to MemoryToImage & ImageToMemory
+  * layers: Change 07968 vuids to 08790 vuids
+  * layers: Fix %d prints to be PRIu32
+  * tests: Add FindFormatWithoutFeatures2 utility
+  * tests: Add tests for ImageToMemory and MemoryToImage
+  * tests: Add test for CopyImageToImageEXT
+  * tests: Add test for TransitionImageLayoutEXT
+  * tests: Add more setup into InitHostImageCopyTest
+  * tests: Add feature test for host image copy
+  * tests: Add a positive test for host image copy
+
+ -- john <john@odin>  Fri, 18 Aug 2023 14:15:49 -0600
+
 vulkan-validationlayers (1.3.261.0~rc2-1lunarg20.04-1) focal; urgency=medium
 
   [ John Zupin ]
