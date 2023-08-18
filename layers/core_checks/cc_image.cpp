@@ -90,6 +90,15 @@ bool CoreChecks::ValidateImageFormatFeatures(const VkImageCreateInfo *pCreateInf
                          string_VkFormat(pCreateInfo->format), string_VkFormatFeatureFlags2(tiling_features).c_str());
     }
 
+    if (((tiling_features & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT) == 0) &&
+        (pCreateInfo->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT)) {
+        skip |=
+            LogError(device, "VUID-VkImageCreateInfo-imageCreateFormatFeatures-09048",
+                     "vkCreateImage(): usage cannot contain VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT because %s doesn't support "
+                     "VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT based on imageCreateFormatFeatures (supported features: %s).",
+                     string_VkFormat(pCreateInfo->format), string_VkFormatFeatureFlags2(tiling_features).c_str());
+    }
+
     return skip;
 }
 
@@ -1248,39 +1257,6 @@ bool CoreChecks::ValidateImageFormatFeatureFlags(VkCommandBuffer cb, IMAGE_STATE
     return skip;
 }
 
-bool CoreChecks::ValidateImageSubresourceLayers(const CMD_BUFFER_STATE &cb_state,
-                                                const VkImageSubresourceLayers *subresource_layers, char const *func_name,
-                                                char const *member, uint32_t i) const {
-    bool skip = false;
-    const VkImageAspectFlags apsect_mask = subresource_layers->aspectMask;
-    // layerCount must not be zero
-    if (subresource_layers->layerCount == 0) {
-        skip |= LogError(cb_state.commandBuffer(), "VUID-VkImageSubresourceLayers-layerCount-01700",
-                         "In %s, pRegions[%" PRIu32 "].%s.layerCount must not be zero.", func_name, i, member);
-    }
-    // aspectMask must not contain VK_IMAGE_ASPECT_METADATA_BIT
-    if (apsect_mask & VK_IMAGE_ASPECT_METADATA_BIT) {
-        skip |= LogError(cb_state.commandBuffer(), "VUID-VkImageSubresourceLayers-aspectMask-00168",
-                         "In %s, pRegions[%" PRIu32 "].%s.aspectMask has VK_IMAGE_ASPECT_METADATA_BIT set.", func_name, i, member);
-    }
-    // if aspectMask contains COLOR, it must not contain either DEPTH or STENCIL
-    if ((apsect_mask & VK_IMAGE_ASPECT_COLOR_BIT) && (apsect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))) {
-        skip |= LogError(cb_state.commandBuffer(), "VUID-VkImageSubresourceLayers-aspectMask-00167",
-                         "In %s, pRegions[%" PRIu32
-                         "].%s.aspectMask has VK_IMAGE_ASPECT_COLOR_BIT and either VK_IMAGE_ASPECT_DEPTH_BIT or "
-                         "VK_IMAGE_ASPECT_STENCIL_BIT set.",
-                         func_name, i, member);
-    }
-    // aspectMask must not contain VK_IMAGE_ASPECT_MEMORY_PLANE_i_BIT_EXT
-    if (apsect_mask & (VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT | VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT |
-                       VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT | VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT)) {
-        skip |= LogError(cb_state.commandBuffer(), "VUID-VkImageSubresourceLayers-aspectMask-02247",
-                         "In %s, pRegions[%" PRIu32 "].%s.aspectMask has a VK_IMAGE_ASPECT_MEMORY_PLANE_*_BIT_EXT bit set.",
-                         func_name, i, member);
-    }
-    return skip;
-}
-
 // For the given format verify that the aspect masks make sense
 bool CoreChecks::ValidateImageAspectMask(VkImage image, VkFormat format, VkImageAspectFlags aspect_mask, bool is_image_disjoint,
                                          const char *func_name, const char *vuid) const {
@@ -2321,6 +2297,141 @@ bool CoreChecks::PreCallValidateGetImageSubresourceLayout2EXT(VkDevice device, V
                                                  true);
     }
     return skip;
+}
+
+static const SubresourceRangeErrorCodes TransitionImageLayoutVUIDs{
+    "VUID-VkHostImageLayoutTransitionInfoEXT-subresourceRange-01486",
+    "VUID-VkHostImageLayoutTransitionInfoEXT-subresourceRange-01724",
+    "VUID-VkHostImageLayoutTransitionInfoEXT-subresourceRange-01488",
+    "VUID-VkHostImageLayoutTransitionInfoEXT-subresourceRange-01725",
+};
+
+bool CoreChecks::PreCallValidateTransitionImageLayoutEXT(VkDevice device, uint32_t transitionCount,
+                                                         const VkHostImageLayoutTransitionInfoEXT *pTransitions) const {
+    bool skip = false;
+    const char *func_name = "vkTransitionImageLayoutEXT()";
+
+    for (uint32_t i = 0; i < transitionCount; ++i) {
+        const auto &transition = pTransitions[i];
+        const auto image_state = Get<IMAGE_STATE>(transition.image);
+        const auto image_format = image_state->createInfo.format;
+        const auto aspect_mask = transition.subresourceRange.aspectMask;
+        const bool has_depth_mask = (aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+        const bool has_stencil_mask = (aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+
+        if ((image_state->createInfo.usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) == 0) {
+            const LogObjectList objlist(device, image_state->Handle());
+            skip |= LogError(objlist, "VUID-VkHostImageLayoutTransitionInfoEXT-image-09055",
+                             "%s: image in transition %d was created with usage (%s) which does not contain "
+                             "VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT",
+                             func_name, i, string_VkBufferUsageFlags(image_state->createInfo.usage).c_str());
+        }
+
+        skip |= ValidateImageSubresourceRange(image_state->createInfo.mipLevels, image_state->createInfo.arrayLayers,
+                                              transition.subresourceRange, func_name, "subresourceRange", "arrayLayers",
+                                              image_state->image(), TransitionImageLayoutVUIDs);
+        skip |=
+            ValidateMemoryIsBoundToImage(device, *image_state, func_name, "VUID-VkHostImageLayoutTransitionInfoEXT-image-01932");
+
+        if ((image_state->disjoint == false) ||
+            ((FormatIsColor(image_format) == true) && (FormatIsMultiplane(image_format) == false))) {
+            if (aspect_mask != VK_IMAGE_ASPECT_COLOR_BIT) {
+                const LogObjectList objlist(device, image_state->Handle());
+                skip |= LogError(objlist, "VUID-VkHostImageLayoutTransitionInfoEXT-image-01671",
+                                 "%s: image in transition %" PRIu32
+                                 " requires subresourceRange.aspectMask to be VK_IMAGE_ASPECT_COLOR_BIT, but it is %s",
+                                 func_name, i, string_VkImageAspectFlags(aspect_mask).c_str());
+            }
+        }
+        if ((FormatIsMultiplane(image_format)) && (image_state->disjoint == true)) {
+            if (!IsValidPlaneAspect(image_format, aspect_mask) && ((aspect_mask & VK_IMAGE_ASPECT_COLOR_BIT) == 0)) {
+                const LogObjectList objlist(device, image_state->Handle());
+                skip |= LogError(objlist, "VUID-VkHostImageLayoutTransitionInfoEXT-image-01672",
+                                 "%s: image in transition %d requires subresourceRange.aspectMask to include at least one "
+                                 "multi-planar aspect mask or to be VK_IMAGE_ASPECT_COLOR_BIT, but it is %s",
+                                 func_name, i, string_VkImageAspectFlags(aspect_mask).c_str());
+            }
+        }
+        if (FormatIsDepthAndStencil(image_format)) {
+            if (enabled_features.core12.separateDepthStencilLayouts) {
+                if (!has_depth_mask && !has_stencil_mask) {
+                    const LogObjectList objlist(device, image_state->Handle());
+                    skip |= LogError(objlist, "VUID-VkHostImageLayoutTransitionInfoEXT-image-03319",
+                                     "%s: image in transition %d of format %s requires subresourceRange.aspectMask to have either "
+                                     "the depth or stencil "
+                                     "aspects set, but its aspectMask is %s",
+                                     func_name, i, string_VkFormat(image_format), string_VkImageAspectFlags(aspect_mask).c_str());
+                }
+            } else {
+                if (!has_depth_mask || !has_stencil_mask) {
+                    const LogObjectList objlist(device, image_state->Handle());
+                    skip |= LogError(objlist, "VUID-VkHostImageLayoutTransitionInfoEXT-image-03320",
+                                     "%s: image in transition %d of format %s requires subresourceRange.aspectMask to have both "
+                                     "the depth and stencil "
+                                     "aspects set, but its aspectMask is %s",
+                                     func_name, i, string_VkFormat(image_format), string_VkImageAspectFlags(aspect_mask).c_str());
+                }
+            }
+        }
+        if (aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) {
+            if ((transition.oldLayout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL) ||
+                (transition.oldLayout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) ||
+                (transition.newLayout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL) ||
+                (transition.newLayout == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL)) {
+                const LogObjectList objlist(device, image_state->Handle());
+                skip |= LogError(objlist, "VUID-VkHostImageLayoutTransitionInfoEXT-aspectMask-08702",
+                                 "%s: the aspect mask in transition %i is %s meaning that neither oldLayout nor newLayout can be "
+                                 "VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL or VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL"
+                                 "oldLayout = %s and newLayout = %s",
+                                 func_name, i, string_VkImageAspectFlags(aspect_mask).c_str(),
+                                 string_VkImageLayout(transition.oldLayout), string_VkImageLayout(transition.oldLayout));
+            }
+        }
+        if (aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT) {
+            if ((transition.oldLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) ||
+                (transition.oldLayout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL) ||
+                (transition.newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) ||
+                (transition.newLayout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL)) {
+                const LogObjectList objlist(device, image_state->Handle());
+                skip |= LogError(objlist, "VUID-VkHostImageLayoutTransitionInfoEXT-aspectMask-08703",
+                                 "%s: the aspect mask in transition %i is %s meaning that neither oldLayout nor newLayout can be "
+                                 "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL or VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL"
+                                 "oldLayout = %s and newLayout = %s",
+                                 func_name, i, string_VkImageAspectFlags(aspect_mask).c_str(),
+                                 string_VkImageLayout(transition.oldLayout), string_VkImageLayout(transition.oldLayout));
+            }
+        }
+        if ((transition.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) && (transition.oldLayout != VK_IMAGE_LAYOUT_PREINITIALIZED)) {
+            auto *props = &phys_dev_ext_props.host_image_copy_properties;
+            skip |= ValidateHostCopyImageLayout(device, transition.image, props->copySrcLayoutCount, props->pCopySrcLayouts,
+                                                transition.oldLayout, func_name, "oldLayout", "pCopySrcLayouts",
+                                                "VUID-VkHostImageLayoutTransitionInfoEXT-oldLayout-09056");
+        }
+
+        const auto *props = &phys_dev_ext_props.host_image_copy_properties;
+        skip |= ValidateHostCopyImageLayout(device, transition.image, props->copyDstLayoutCount, props->pCopyDstLayouts,
+                                            transition.newLayout, func_name, "newLayout", "pCopyDstLayouts",
+                                            "VUID-VkHostImageLayoutTransitionInfoEXT-newLayout-09057");
+        if (transition.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+            skip |= ValidateHostCopyCurrentLayout(device, transition.oldLayout, transition.subresourceRange, i, *image_state,
+                                                  func_name, "transition", "oldLayout", "WIP: Should there be a VUID for this?");
+        }
+    }
+    return skip;
+};
+
+void CoreChecks::PostCallRecordTransitionImageLayoutEXT(VkDevice device, uint32_t transitionCount,
+                                                        const VkHostImageLayoutTransitionInfoEXT *pTransitions, VkResult result) {
+    ValidationStateTracker::PostCallRecordTransitionImageLayoutEXT(device, transitionCount, pTransitions, result);
+
+    if (VK_SUCCESS != result) return;
+
+    for (uint32_t i = 0; i < transitionCount; ++i) {
+        auto &transition = pTransitions[i];
+        auto image_state = Get<IMAGE_STATE>(transition.image);
+        if (!image_state) continue;
+        image_state->SetImageLayout(transition.subresourceRange, transition.newLayout);
+    }
 }
 
 // Validates the image is allowed to be protected

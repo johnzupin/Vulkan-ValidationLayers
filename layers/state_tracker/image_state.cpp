@@ -354,6 +354,16 @@ void IMAGE_STATE::SetInitialLayoutMap() {
     layout_range_map = std::move(layout_map);
 }
 
+void IMAGE_STATE::SetImageLayout(const VkImageSubresourceRange &range, VkImageLayout layout) {
+    using sparse_container::update_range_value;
+    using sparse_container::value_precedence;
+    GlobalImageLayoutRangeMap::RangeGenerator range_gen(subresource_encoder, NormalizeSubresourceRange(range));
+    auto guard = layout_range_map->WriteLock();
+    for (; range_gen->non_empty(); ++range_gen) {
+        update_range_value(*layout_range_map, *range_gen, layout, value_precedence::prefer_source);
+    }
+}
+
 void IMAGE_STATE::SetSwapchain(std::shared_ptr<SWAPCHAIN_NODE> &swapchain, uint32_t swapchain_index) {
     assert(IsSwapchainImage());
     bind_swapchain = swapchain;
@@ -921,4 +931,16 @@ VkSurfacePresentScalingCapabilitiesEXT SURFACE_STATE::GetPresentModeScalingCapab
     surface_capabilities.pNext = &scaling_caps;
     DispatchGetPhysicalDeviceSurfaceCapabilities2KHR(phys_dev, &surface_info, &surface_capabilities);
     return scaling_caps;
+}
+
+bool GlobalImageLayoutRangeMap::AnyInRange(RangeGenerator &gen,
+                                           std::function<bool(const key_type &range, const mapped_type &state)> &&func) const {
+    for (; gen->non_empty(); ++gen) {
+        for (auto pos = lower_bound(*gen); (pos != end()) && (gen->intersects(pos->first)); ++pos) {
+            if (func(pos->first, pos->second)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }

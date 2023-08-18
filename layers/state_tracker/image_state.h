@@ -62,9 +62,14 @@ static inline VkImageSubresourceRange RangeFromLayers(const VkImageSubresourceLa
 
 class GlobalImageLayoutRangeMap : public subresource_adapter::BothRangeMap<VkImageLayout, 16> {
   public:
+    using RangeGenerator = image_layout_map::RangeGenerator;
+    using RangeType = key_type;
+
     GlobalImageLayoutRangeMap(index_type index) : BothRangeMap<VkImageLayout, 16>(index) {}
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock_); }
     WriteLockGuard WriteLock() { return WriteLockGuard(lock_); }
+
+    bool AnyInRange(RangeGenerator &gen, std::function<bool(const key_type &range, const mapped_type &state)> &&func) const;
 
   private:
     mutable std::shared_mutex lock_;
@@ -219,6 +224,7 @@ class IMAGE_STATE : public BINDABLE {
     }
 
     void SetInitialLayoutMap();
+    void SetImageLayout(const VkImageSubresourceRange &range, VkImageLayout layout);
 
   protected:
     void NotifyInvalidate(const BASE_NODE::NodeList &invalid_nodes, bool unlink) override;
