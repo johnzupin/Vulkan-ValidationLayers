@@ -137,19 +137,20 @@ bool CoreChecks::VerifySetLayoutCompatibility(const DescriptorSetLayout &layout_
 
 // For given cvdescriptorset::DescriptorSet, verify that its Set is compatible w/ the setLayout corresponding to
 // pipelineLayout[layoutIndex]
-bool CoreChecks::VerifySetLayoutCompatibility(const cvdescriptorset::DescriptorSet &descriptor_set,
-                                              const PIPELINE_LAYOUT_STATE &pipeline_layout, const uint32_t layoutIndex,
-                                              std::string &errorMsg) const {
-    auto num_sets = pipeline_layout.set_layouts.size();
+bool CoreChecks::VerifySetLayoutCompatibility(
+    const cvdescriptorset::DescriptorSet &descriptor_set,
+    const std::vector<std::shared_ptr<cvdescriptorset::DescriptorSetLayout const>> &set_layouts, const std::string &handle,
+    const uint32_t layoutIndex, std::string &errorMsg) const {
+    auto num_sets = set_layouts.size();
     if (layoutIndex >= num_sets) {
         std::stringstream error_str;
-        error_str << FormatHandle(pipeline_layout) << ") only contains " << num_sets << " setLayouts corresponding to sets 0-"
-                  << num_sets - 1 << ", but you're attempting to bind set to index " << layoutIndex;
+        error_str << handle << ") only contains " << num_sets << " setLayouts corresponding to sets 0-" << num_sets - 1
+                  << ", but you're attempting to bind set to index " << layoutIndex;
         errorMsg = error_str.str();
         return false;
     }
     if (descriptor_set.IsPushDescriptor()) return true;
-    const auto *layout_node = pipeline_layout.set_layouts[layoutIndex].get();
+    const auto *layout_node = set_layouts[layoutIndex].get();
     if (layout_node) {
         return VerifySetLayoutCompatibility(*layout_node, *descriptor_set.GetLayout(), errorMsg);
     } else {
@@ -191,7 +192,8 @@ bool CoreChecks::PreCallValidateCmdBindDescriptorSets(VkCommandBuffer commandBuf
         auto descriptor_set = Get<cvdescriptorset::DescriptorSet>(pDescriptorSets[set_idx]);
         if (descriptor_set) {
             // Verify that set being bound is compatible with overlapping setLayout of pipelineLayout
-            if (!VerifySetLayoutCompatibility(*descriptor_set, *pipeline_layout, set_idx + firstSet, error_string)) {
+            if (!VerifySetLayoutCompatibility(*descriptor_set, pipeline_layout->set_layouts,
+                                              FormatHandle(pipeline_layout->Handle()), set_idx + firstSet, error_string)) {
                 skip |= LogError(pDescriptorSets[set_idx], "VUID-vkCmdBindDescriptorSets-pDescriptorSets-00358",
                                  "vkCmdBindDescriptorSets(): descriptorSet #%u being bound is not compatible with overlapping "
                                  "descriptorSetLayout at index %u of "
@@ -966,11 +968,17 @@ bool CoreChecks::ValidateDescriptor(const DescriptorContext &context, const Desc
                                   "VUID-VkDescriptorImageInfo-imageLayout-00344", &hit_error);
                 if (hit_error) {
                     auto set = context.descriptor_set.GetSet();
-                    return LogError(
-                        set, context.vuids.descriptor_buffer_bit_set_08114,
-                        "%s: Descriptor set %s Image layout specified at vkCmdBindDescriptorSets time doesn't match actual image "
-                        "layout at time descriptor is used. See previous error callback for specific details.",
-                        context.caller, FormatHandle(set).c_str());
+                    std::stringstream msg;
+                    if (!context.descriptor_set.IsPushDescriptor()) {
+                        msg << "Descriptor set " << FormatHandle(set)
+                            << " Image layout specified by vkCmdBindDescriptorSets doesn't match actual image layout at time "
+                               "descriptor is used.";
+                    } else {
+                        msg << "Image layout specified by vkCmdPushDescriptorSetKHR doesn't match actual image layout at time "
+                               "descriptor is used";
+                    }
+                    return LogError(set, context.vuids.descriptor_buffer_bit_set_08114,
+                                    "%s: %s. See previous error callback for specific details.", context.caller, msg.str().c_str());
                 }
                 if (context.checked_layouts) {
                     context.checked_layouts->emplace(image_view, image_layout);
