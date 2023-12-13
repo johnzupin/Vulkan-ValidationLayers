@@ -1,3 +1,1922 @@
+vulkan-validationlayers (1.3.273.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ spencer-lunarg ]
+  * layers: Revert GetConstantValueById assert assumption
+
+  [ ziga-lunarg ]
+  * layers: Fix enconding
+
+  [ Juan Ramos ]
+  * android: Remove ndk-build
+  * android: Move APK XML files
+  * tests: Remove VVL_TESTS_USE_CMAKE
+  * android: Remove outdated comment about gtest on Android
+  * android: Fix shaderc workaround done for Android
+
+  [ spencer-lunarg ]
+  * scripts: Move IsDuplicatePnext to proper file
+
+  [ arno-lunarg ]
+  * layers: Disable part of accel struct validation
+
+  [ Juan Ramos ]
+  * android: Remove build-android from source control
+
+  [ Tony Barbour ]
+  * layers: Fix debug_report with no objects
+
+  [ Juan Ramos ]
+  * tests: Remove vk_result_string
+
+  [ Tony-LunarG ]
+  * layers: Add scaffolding for cc validation
+
+  [ Tony Barbour ]
+  * layers: Validation for CopyMemoryToImage and CopyImageToMemory
+  * layers: Move stencil usage checks into helper
+  * layers: Use templates instead of typed handles
+  * layers: Validation for VkCopyImageToImageEXT
+  * layers: Add more ImageToImage validation
+  * layers: Add more ImageToImage validation
+  * layers: Add more ImageToImage validation
+  * layers: Add ValidateHostCopyImageCreateInfos
+  * layers: Add more ImageToImage validation
+  * layers: Fix ImageToImage usage checks
+  * layers: Fix too many calls to validate*CopyData
+  * tests: Fix CopyImageAspectMismatch
+  * layers: Validate existing structs in host_image_copy
+  * layers: Use VUIDs from public spec
+  * layers: Add validation for VkHostImageLayoutTransitionInfoEXT
+  * layers: Add misc host-image-copy VUIDs
+
+  [ John Zulauf ]
+  * layers: Add support for Image Layout check for CopyImage
+  * layers: Add support for TransitionImageLayoutEXT record
+
+  [ Tony Barbour ]
+  * layers: Add layout checks to MemoryToImage & ImageToMemory
+  * layers: Change 07968 vuids to 08790 vuids
+  * layers: Fix %d prints to be PRIu32
+  * tests: Add FindFormatWithoutFeatures2 utility
+  * tests: Add tests for ImageToMemory and MemoryToImage
+  * tests: Add test for CopyImageToImageEXT
+  * tests: Add test for TransitionImageLayoutEXT
+  * tests: Add more setup into InitHostImageCopyTest
+  * tests: Add feature test for host image copy
+  * tests: Add a positive test for host image copy
+
+  [ Dennis Brakhane ]
+  * layers: Fix typo in 06080 error description
+
+  [ Juan Ramos ]
+  * ci: Cleanup Android CI name
+  * tests: Remove xxhash.cpp dependency
+
+  [ Daniel Rakos ]
+  * scripts: Use uppercase names for APIVersion methods
+
+  [ ziga-lunarg ]
+  * layers: Add validation for VK_EXT_shader_object
+  * tests: Add tests for VK_EXT_shader_object
+
+  [ Tony Barbour ]
+  * tests: Enable pipeline robustness when appropriate
+  * gpu: Dont validate descriptors if descriptor buffer is enabled
+
+  [ spencer-lunarg ]
+  * layers: Add ErrorObject
+  * layers: Add ErrorObject to all render passes
+  * layers: Add ErrorObject to Queue
+  * layers: Add ErrorObject to YCbCr
+  * layers: Add ErrorObject to Memory
+  * layers: Make all ErrorObject const
+  * layers: Fix sync vuid map alias issues
+  * layers: Add ErrorObject to Buffer and Image
+  * layers: Add basic ErrorObject to Draw/Dispatch/TraceRay
+  * layers: Add ErrorObject to Query
+  * layers: Add ErrorObject to WSI
+  * layers: Add ErrorObject to buffer/image
+  * layers: Use pNext helper for Location
+  * layers: Add ErrorObj to rest of PreCallValidate functions
+  * layers: Add ErrorObject to most of stateless
+  * layers: Add more ErrorObject
+
+  [ ziga-lunarg ]
+  * layers: Fix swapped 07878 and 07879 VUIDs
+  * tests: Test missing exclusive scissor dynamic state
+  * layers: Fix error message with push descriptors
+
+  [ Juan Ramos ]
+  * build: Move build-gn to scripts/gn
+  * git: Ignore any build directories
+
+  [ spencer-lunarg ]
+  * layers: Remove CMD_TYPE for Location
+
+  [ arno-lunarg ]
+  * tests: Update NON_DISPATCHABLE_HANDLE destroy
+  * layers: Fix 00117 for sparse resources
+
+  [ spencer-lunarg ]
+  * layers: Add vkGetImageSubresourceLayout2KHR
+  * tests: Add vkGetImageSubresourceLayout2KHR
+  * layers: Combine alias functions calls
+
+  [ Tony Barbour ]
+  * tests: Fix support check in CooperativeMatrixKHR
+
+  [ Eearslya Sleiarion ]
+  * docs: Correct SPIR-V compilation instructions
+
+  [ Tony Barbour ]
+  * gpu: Add check for queue that supports graphics
+
+  [ Artem Kharytoniuk ]
+  * layers: Use vvl::Func in SemOp and reorder members
+  * layers: Use small_vector instead of std::set for SemOp waits
+  * layers: Check that timepoint's wait ops use the same payload
+
+  [ spencer-lunarg ]
+  * scripts: Add upcoming unicode to ascii in VUID
+  * layers: Add Location for Pipeline and Shaders
+
+  [ Juan Ramos ]
+  * ci: Set environment variables for the entire workflow
+
+  [ spencer-lunarg ]
+  * bp: Use Location and Func instead of const char
+  * layers: Don't print null or unknown object handles
+  * layers: Add Location for ObjectTracker
+
+  [ ziga-lunarg ]
+  * layers: Fix getting shader stage spirv
+  * layers: Use correct usage util function for image
+  * layers: Fix host image copy extent validation
+  * tests: Test copying image mip level to memory
+
+  [ spencer-lunarg ]
+  * scripts: Move ApiVersion to own file
+
+  [ Juan Ramos ]
+  * android: Use version-script / cleanup CMake Android code
+  * android: Make android_glue an object library
+  * build: Remove push/pop warning disabling for gtest
+  * tests: Move REQUIRE_SUCCESS to sync_val.cpp
+  * tests: Simplify error callback logic
+
+  [ arno-lunarg ]
+  * tests: Cleanup, move and rename sparse tests
+
+  [ spencer-lunarg ]
+  * tests: Add more missing negative tests
+  * tests: Use constructor over init
+  * tests: Remove SPIRV-Hopper
+
+  [ ziga-lunarg ]
+  * tests: Add more shader object positive tests
+
+  [ spencer-lunarg ]
+  * layers: Fix buffer size not using createInfo size
+  * layers: Add Location to Copy/Blit/Resolve
+  * layers: Remove more const char in functions args
+  * scripts: Fix new Visibility IdScope in SPIRV Grammar
+  * layers: Improve ValidateBarriersToImages messages
+  * tests: Split tests for depth/stencil barriers
+  * layers: Add remaining RenderArea VUs
+  * bp: Move InvalidCommandBufferSimultaneousUse
+  * layers: Remove kVUID_Core_DrawState_NoEndCommandBuffer
+
+  [ Juan Ramos ]
+  * tests: Profiles no longer depends on VVL
+
+  [ ziga-lunarg ]
+  * layers: Fix validating shader inputs
+  * tests: Test vertex shader 64 bit output
+
+  [ Artem Kharytoniuk ]
+  * tests: Add vkQueuePresentKHR syncval submit time tests
+  * tests: Keep only single test to validate 06256
+  * layers: Fix pBufferMemoryBarriers locator typo
+  * layers: Add sync1 AS read VUIDs
+  * tests: Test sync1 AS read VUIDs
+
+  [ spencer-lunarg ]
+  * tests: Add SpecConstantTextureArray test
+  * layers: VUID fixes for VK_KHR_maintenance5 in 1.3.262
+
+  [ Gareth ]
+  * layers: Warn if no present modes provided to create swapchain
+  * tests: Check for VkSwapchainPresentModesCreateInfoEXT
+
+  [ spencer-lunarg ]
+  * layers: Remove RenderPassCreateVersion and error cleanup
+
+  [ Tony Barbour ]
+  * gpu-av: Fix threaded access to unique_shader_module_id
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.262
+
+  [ arno-lunarg ]
+  * layers: Improve 00124 message
+
+  [ spencer-lunarg ]
+  * layers: Move all Action commands to CoreChecks
+  * layers: Add RecordObj for PostCallRecord
+
+  [ Christophe ]
+  * build: Add utility libraries repository dependence
+
+  [ spencer-lunarg ]
+  * layers: Replace errorObj with error_obj
+
+  [ Christophe ]
+  * layer: Use library to load layer settings
+
+  [ Gareth ]
+  * layers: Support per-present-mode surface capabilities
+  * tests: Query per-present-mode surface info when supported
+
+  [ Artem Kharytoniuk ]
+  * layers: Add barrier queue family VUs 03851 03854
+  * tests: Test barrier queue family VUs 03851 03854
+
+  [ Juan Ramos ]
+  * build: Remove vk_enum_string_helper.h from VVL
+
+  [ spencer-lunarg ]
+  * layers: Add full Location to ObjectTracker
+
+  [ arno-lunarg ]
+  * layers: Fix pnext chain handling for surface caps
+  * tests: Add CreateSwapchainFullscreenExclusive2
+
+  [ spencer-lunarg ]
+  * layers: Use Location for stateless external objects
+  * layers: Use Location for Shader Objects
+  * layers: Remove const char in ThreadSafety
+  * layers: Remove more const char
+  * layers: Fix PointSize VUs for Maintenance5
+  * layers: First move towards Stateless using Location
+
+  [ Juan Ramos ]
+  * cmake: Impending BUILD_LAYER_SUPPORT_FILES deprecation
+  * cmake: Remove CMakePresets.json
+
+  [ Jeremy Gebben ]
+  * layers: Simplify BINDABLE class hierarchy
+
+  [ spencer-lunarg ]
+  * layers: Remove const char from ThreadSafety Counter
+
+  [ Juan Ramos ]
+  * android: Remove dependency on strings.xml
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix perf regression from shader object validation
+
+  [ spencer-lunarg ]
+  * layers: Give better Location names
+  * layers: Remove incorrect Dual Source blending VU
+  * layers: Use Location for Update Descriptor checks
+
+  [ John Zulauf ]
+  * syncval: Rework of submit time renderpass val
+  * tests: More submit time event and renderpass tests
+  * syncval: Refactor the replay state
+
+  [ Jeremy Gebben ]
+  * layers: Revert "Simplify BINDABLE class hierarchy"
+
+  [ spencer-lunarg ]
+  * tests: Add poolSizeCount as zero test
+
+  [ Gareth ]
+  * tests: NegativeDescriptorBuffer.Various
+  * tests: PositiveGraphicsLibrary.NotAttachmentDynamicBlendEnable
+  * tests: NegativeImage.Image2DViewOf3D
+  * tests: NegativeWsi.SwapchainMaintenance1ExtensionAcquire
+  * tests: NegativeDynamicState.DiscardRectanglesVersion
+
+  [ spencer-lunarg ]
+  * layers: Remove more const char
+
+  [ Jeremy Gebben ]
+  * layers: Redo "Simplify BINDABLE class hierarchy""
+  * tests: Add BINDABLE destructor test
+
+  [ spencer-lunarg ]
+  * layers: Add explicit VkBufferCreateInfo usage flag VUs
+  * layers: Improve ImageLayout error messages
+  * tests: Remove GenericDrawPreparation
+  * tests: Remove implicit destroy from pipeline helper
+  * tests: Create dedicated pipeline helper file
+  * tests: Move VkPipelineObj to CreatePipelineHelper
+  * tests: Remove explicit InitInfo for PipelineHelper
+  * tests: Remove redundant init for GPL tests
+  * tests: Improve GPL tests
+  * tests: Remove unused helper functions
+
+  [ Juan Ramos ]
+  * android: Remove strings.xml
+
+  [ Yiwei Zhang ]
+  * layers: Add missing sType for VkSurfaceFormat2KHR
+
+  [ spencer-lunarg ]
+  * layers: Add arrow to pointers in Location error msg
+
+  [ Tony Barbour ]
+  * layers: Use correct vuid for bad oldLayout
+  * tests: Add test for bad oldLayout
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup queue family transfer helpers
+  * layers: Rename to avoid collision with new ImageBarrier type
+  * layers: Introduce barrier structures
+  * layers: Untemplate some barrier methods
+
+  [ Darianopolis ]
+  * layers: Check correct flag for SetColorBlendEnable
+  * layers: Fix blend enable incompatible format test
+  * layers: Add +ve DrawWithNonBlendableFormat test
+
+  [ ziga-lunarg ]
+  * tests: Add missing check in gpu av test
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.263
+
+  [ Alina Kalyakina ]
+  * layers: Add thread safety checks for vkQueuePresentKHR
+
+  [ Daniel Rakos ]
+  * layers: Error location improvements
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix double destruction in thread safety
+  * layers: Untemplate ValidateBarriersToImages
+  * layers: Untemplate RecordTransitionImageLayout
+  * tests: Fix tile image synchronization test
+  * layers: Untemplate ValidateShaderTileImageBarriers
+
+  [ Tony Barbour ]
+  * doc: Fix debug printf test name
+
+  [ Mike Gorchak ]
+  * corechecks: Make QNX buffer import validation according to spec
+
+  [ ziga-lunarg ]
+  * tests: Fix tests failing on intel A770
+
+  [ spencer-lunarg ]
+  * layers: Fix VUID for invalid SPIR-V
+
+  [ Mike Gorchak ]
+  * corechecks: Fix comment borrowed from Android to QNX
+
+  [ spencer-lunarg ]
+  * layers: Fix VUIDs for image copies
+  * layers: Improve dynamic state feature messages
+  * layers: Fix CoreCheck RenderPass to return earlier
+
+  [ Daniel Rakos ]
+  * layers: Various feature pre-requisite layer and test fixes
+
+  [ spencer-lunarg ]
+  * layers: Add Location to reset of CommandBuffer CoreChecks
+  * layers: Improve the Location in Protected helpers
+  * layers: Improve Location in Pipline and Shaders
+
+  [ Artem Kharytoniuk ]
+  * layers: Revert "Add thread safety checks for vkQueuePresentKHR"
+
+  [ spencer-lunarg ]
+  * layers: Improve nesting by returning back sooner
+  * scripts: Fix extra whitespace in VU messages
+  * tests: Fix mixing of Positive and Negative test names
+
+  [ Spencer Fricke ]
+  * git: Update git-blame-ignore-revs
+
+  [ spencer-lunarg ]
+  * layers: Add Location to drawtime errors
+  * scripts: Fix struct members not in IsFieldPointer
+
+  [ Artem Kharytoniuk ]
+  * layers: Extract thread safety message code into a function
+  * layers: Extract read and write error handling into functions
+
+  [ ziga-lunarg ]
+  * layers: Fix validating depth bounds dynamic state
+  * tests: Test drawing without setting depth bounds
+  * layers: Fix validating binary shaders
+  * tests: Test drawing with binary shaders
+  * layers: Fix validating linked shaders next stage
+  * tests: Test drawing with linked and unlinked shaders
+
+  [ spencer-lunarg ]
+  * layers: Fix VUIDs for 1.3.264
+
+  [ arno-lunarg ]
+  * git: Ask for driver version in issue template
+
+  [ spencer-lunarg ]
+  * tests: Add DynamicState helper for pipeline class
+  * layers: Fix pMultisampleState null check with dynamic state
+  * layers: Check if pipeline state info can be ignored
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup thread safety code
+  * layers: Checks that counters do not go negative
+  * tests: Introduce multi-threading test suite
+
+  [ John Zulauf ]
+  * syncval: Cleanup of ResourceAccessState for perf
+  * syncval: Convert usage index to info part 1
+  * syncval: Convert read/write to bit lookups
+  * syncval: Convert last InfoType
+  * syncval: Isolate last_write info to class
+  * syncval: Convert last_write to optional
+  * syncval: Convert First Access to InfoType
+  * syncval: Small refinements in ApplyBarrier
+  * syncval: Cached Insert for tag usage
+  * syncval: Encapsulate pending_write in write state
+  * syncval: Remove redunancy in WriteState member names
+
+  [ Juan Ramos ]
+  * cmake: Remove BUILD_LAYER_SUPPORT_FILES
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.264
+
+  [ spencer-lunarg ]
+  * scripts: Quality of life cleanup for statless validation
+  * layers: Remove ParameterName for Location
+  * layers: Run ObjectTracker on pNext structs
+  * tests: Fix LibraryViewMask test
+
+  [ arno-lunarg ]
+  * layers: Add pnext chain extraction logic
+  * layers: Add info to 00990
+
+  [ Charles Giessen ]
+  * build: Use Vulkan-Utility-Libraries for format utils
+
+  [ spencer-lunarg ]
+  * layers: Fix DynamicRendering AttachmentCount check
+  * layers: Combine and cleanup CooperativeMatrix
+  * tests: Add Push Descriptor test files
+  * layers: Cleanup Location code for Sync Objects
+  * layers: Print command buffer handle from InUse
+
+  [ Christophe ]
+  * layer: Clean up layer settings code
+
+  [ spencer-lunarg ]
+  * layers: Add Location to remaining Ray Tracing
+
+  [ Philip Katis ]
+  * layers: Fixed incorrect location for VUID 00749
+
+  [ Tony Barbour ]
+  * layers: Fix crash when no stage entrypoint
+
+  [ spencer-lunarg ]
+  * layers: Run Clang-Format on generated files
+
+  [ Maxim Solovyov ]
+  * layers: Remove an extra whitespace in the message for VUID 00171
+
+  [ spencer-lunarg ]
+  * layers: Remove an extra whitespace in the messages
+
+  [ Tony Barbour ]
+  * layers: Validate memory overlap in host image copy
+  * tests: Test memory overlap in host image copy
+  * layers: Fix error message for mismatched ImageCreateInfos
+  * layers: Validate sparse memory bound in host image copy
+  * tests: Test sparse images in host image copy
+  * layers: Add 09066 and 09061 to unimplementable validation
+
+  [ arno-lunarg ]
+  * layers: Cleanup RT error messages
+
+  [ spencer-lunarg ]
+  * layers: Add period automatically at end of message
+
+  [ Artem Kharytoniuk ]
+  * layers: Refactor CheckObjectValidity
+
+  [ spencer-lunarg ]
+  * layers: More error message to use Location
+
+  [ ziga-lunarg ]
+  * layers: Validate vertex inputs with dynamic state
+  * tests: Test not providing all dynamic vertex inputs
+  * layers: Use platform independent GetEnvironment in debug printf
+  * layers: Update unassigned shader object VUIDs
+  * tests: Update unassigned shader object VUIDs
+
+  [ Artem Kharytoniuk ]
+  * layers: Add templated GetValidationObject
+
+  [ ziga-lunarg ]
+  * layers: Add shader object gpu av
+  * tests: Add gpuav shader object tests
+
+  [ spencer-lunarg ]
+  * layers: Remove redudant message for valid pNext
+
+  [ ziga-lunarg ]
+  * tests: Fix mesh shader object debug printf test
+  * layers: Fix gpu av when no pipeline layout is bound
+  * tests: Test gpu av with compute shader object
+  * layers: Gpu av use shader objects when application does
+
+  [ spencer-lunarg ]
+  * git: Add clang-format pass to git blame ignore
+  * scripts: Make whitespace logic simpler
+  * scripts: Outdent all clang-formatted strings
+  * tests: Create Image DRM test file
+  * layers: Add some VK_EXT_image_drm_format_modifier checks
+  * tests: Add VK_EXT_image_drm_format_modifier tests
+
+  [ Spencer Fricke ]
+  * git: Update .git-blame-ignore-revs
+
+  [ Artem Kharytoniuk ]
+  * layers: Ensure uniqueness of kVUIDUndefined pointer
+  * layers: Remove ValidateDeviceObject
+
+  [ spencer-lunarg ]
+  * layers: Create single InvalidSpirvValue
+  * layers: Fix naming of Shader util functions
+  * layers: Cleanup TypeToDescriptorTypeSet
+  * layers: Misc cleanup to shader logic
+
+  [ arno-lunarg ]
+  * tests: Cleanup ray_tracing_positive
+  * layers: Fix issue 6461
+
+  [ spencer-lunarg ]
+  * layers: Add Location to Descriptor Draw time
+
+  [ Charles Giessen ]
+  * build: Use vk_struct_helper.hpp instead
+
+  [ Juan Ramos ]
+  * layers: Remove extern C usage from vk_layer_utils.h
+
+  [ spencer-lunarg ]
+  * tests: Use Pipeline Helper class everywhere
+  * layers: Add Location to more spots
+  * layers: Add Xfb Execution Mode for PreRaster
+
+  [ Christophe ]
+  * layer: Fix backward compatibility env var names
+
+  [ spencer-lunarg ]
+  * tests: Change vk_testing to vkt
+  * tests: Use vkt alias over Vk*Obj
+  * tests: Add extra Dynamic GPL test
+  * layers: Fix Location dot with index
+
+  [ arno-lunarg ]
+  * tests: Remove vk_testing
+
+  [ Jeremy Gebben ]
+  * gpu: Move GPU-AV helper functions to VVL
+  * gpu: Remove SPIR-V disassembly from generated headers
+
+  [ Juan Ramos ]
+  * gn: Generate .gn file
+
+  [ spencer-lunarg ]
+  * layers: Cleanup VerifyImageLayout code
+  * git: Add tests rename to git-blame-ignore
+  * tests: Remove VkObj for vkt classes
+
+  [ Juan Ramos ]
+  * ci: Fix Windows CI
+  * layers: Update utility libraries
+
+  [ arno-lunarg ]
+  * build: Fix asan option for MSVC
+
+  [ Juan Ramos ]
+  * layers: Remove unused code
+
+  [ arno-lunarg ]
+  * layers: Add _NV suffix to ACCEL_STRUCT_STATE
+  * tests: Change rt namespace to vkt
+  * layers: Fix group count calculation
+
+  [ ziga-lunarg ]
+  * layers: Add vuid 04912 and fix vuid 04913
+  * tests: Test vertex input dynamic state
+
+  [ Juan Ramos ]
+  * gn: Fix chromium build
+
+  [ Jeremy Gebben ]
+  * gn: Add inst_functions_comp.h
+
+  [ spencer-lunarg ]
+  * layers: Fix not checking for dynamic depth test state
+
+  [ Tony Barbour ]
+  * gpu: Fix gpuav raytracing
+
+  [ spencer-lunarg ]
+  * layers: Fix broken VUIDs
+
+  [ ziga-lunarg ]
+  * layers: Improve VUID 01979 message
+
+  [ arno-lunarg ]
+  * build: Add --asan option
+  * layers: Use vku::InitStructHelper
+
+  [ Tony Barbour ]
+  * printf: Use std::string for memory management
+
+  [ Juan Ramos ]
+  * cmake: Fix FetchContent usage
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.265
+
+  [ ziga-lunarg ]
+  * layers: Fix tracking dynamic viewports
+  * tests: Test viewport inheritance
+  * layers: Fix resetting performance queries
+  * tests: Test performance queries with multiple passes
+  * layers: Fix trashed inherited viewports and scissors
+  * tests: Re-enable viewport inheritance tests
+
+  [ Artem Kharytoniuk ]
+  * scripts: Make html/csv stats output deterministic
+  * layers: Do not validate dispatchable handles in object tracker
+  * tests: Add example of dispatchable handle validation
+
+  [ spencer-lunarg ]
+  * tests: Remove VkPipelineObj
+  * tests: Move GlslangTargetEnv
+  * tests: Remove VkDepthStencilObj
+  * tests: Cleanup and remove VkDeviceObj
+  * tests: More fixes to tests
+  * layers: Add VK_REMAINING_ARRAY_LAYERS maintenance5 VU
+  * tests: Add VK_REMAINING_ARRAY_LAYERS maintenance5 VU
+  * layers: Add VK_EXT_calibrated_timestamps
+  * tests: Add VK_EXT_calibrated_timestamps
+
+  [ arno-lunarg ]
+  * layers: Use IsValueIn
+
+  [ Tony Barbour ]
+  * gpu: Relax descriptor checking disable
+
+  [ ziga-lunarg ]
+  * layers: Update query VUID 00105
+  * tests: Test starting already active query
+  * layers: Fix log message for barrier stage mask
+  * layers: Fix checking feedback loop mask
+  * tests: Test attachment feedback loop mask
+
+  [ Mike Blumenkrantz ]
+  * layers: Fix modifier selection validation
+
+  [ ziga-lunarg ]
+  * layers: Fix pipeline create info best practices
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.266
+
+  [ Juan Ramos ]
+  * cmake: Begin to allow clang on Windows
+
+  [ ziga-lunarg ]
+  * layers: Verify swapchain image is valid in render pass
+  * tests: Render to a destroyed swapchain image
+
+  [ Juan Ramos ]
+  * sdk: Use/document new SDK naming convention
+
+  [ ziga-lunarg ]
+  * layers: Validate invalid compute pipeline flags
+  * tests: Test invalid compute pipeline flags
+  * layers: Fix VUID 06179 message
+  * layers: Validate linked tessellation shaders
+  * tests: Test linked tessellation shaders
+  * layers: Validate mesh work groups
+  * tests: Test mesh work groups
+  * layers: Validate MRTSS rasterization samples
+  * tests: Test mismatch rasterization samples
+  * layers: Validate performance query reset
+  * tests: Test resetting performance query
+  * layers: Validate cmd buffer begin flags
+  * test: Test invalid cmd buffer begin flags
+  * layers: Validate geometry shader input topology
+  * tests: Test geometry shader input topology
+  * tests: Fix tests with mismatched topology
+  * layers: Validate pipeline formats in secondary cmd buffers
+  * tests: Test wrong format in inheritance rendering info
+  * layers: Validate mesh shader queries
+  * tests: Test mesh shader queries
+  * layers: Validate pipeline library flags
+  * tests: Test pipeline library flags
+
+  [ artem-lunarg ]
+  * tests: Process single element in descriptor write helpers
+  * tests: Ensure pointers are valid in descriptor write helper
+
+  [ ziga-lunarg ]
+  * tests: Add invalid attachment description layout tests
+  * layers: Validate texel block extent in image copy
+  * tests: Test image copy texel block extents
+  * layers: Add missing shader object state checks
+  * layers: Fix render pass continue checks
+  * tests: Test incompatible framebuffer
+  * layers: Warn if VkPipelineRenderingCreateInfo is missing
+  * tests: Test creating pipeline without render pass
+
+  [ Daniel Rakos ]
+  * tests: Fix some dependency issues
+
+  [ ziga-lunarg ]
+  * layers: Fix crash with nullptr input assembly
+  * tests: Test invalid copy descriptor dst binding
+  * tests: Add copy descriptor tests with invalid layout flags
+  * layers: Validate color attachments with advanced blend
+  * tests: Test advanced blend color attachment count
+
+  [ Charles Giessen ]
+  * script: Fix vendorTags enumeration in base_generator
+
+  [ ziga-lunarg ]
+  * tests: Test color blend factor with portability subset
+  * tests: Test invalid framebuffer attachment image usage
+  * tests: Test binding flags with inline uniform block
+  * tests: Test set layout binding flags
+  * tests: Test invalid pipeline depth bias clamp
+
+  [ spencer-lunarg ]
+  * tests: Fix Android blacklist tests
+  * tests: Cleanup YCbCr tests
+  * layers: Validate DRM Disjoint MultiPlanar PlaneAspect
+
+  [ ziga-lunarg ]
+  * layers: Fix crash with out of bounds subpass
+  * tests: Test invalid pipeline rendering formats
+  * tests: Test invalid descriptor type in update descriptors
+  * layers: Validate query was reset
+  * tests: Test query was reset before getting results
+  * layers: Add best practice for unavailable query
+  * tests: Test getting unavailable query result
+  * tests: Fix test not resetting queries
+  * tests: Fix shader object invalid draw test
+
+  [ spencer-lunarg ]
+  * layers: Fix typo in error message
+
+  [ ziga-lunarg ]
+  * tests: Test tessellation point size
+
+  [ Juan Ramos ]
+  * cmake: Allow add_subdirectory usage
+  * cmake: Use CMAKE_REQUIRE_FIND_PACKAGE_PackageName
+  * cmake: Remove REQUIRED From test packages for consistency
+  * cmake: Fix vvl_codgen working directory
+
+  [ ziga-lunarg ]
+  * layers: Validate mesh count if values are found
+
+  [ Tony Barbour ]
+  * gpu: Pass shader id into InstrumentShader
+  * layers: Move temporary file path code to utils
+  * gpu: Add instrumented shader cache to GPU-AV
+  * gpu: Add instrumented shader cache to pipeline libraries
+  * gpu: Add setting init and file write to ISCache
+  * gpu: Add shader hash to determine when to clear cache
+  * gpu: Only hash a shader if we're shader caching
+
+  [ Artem Kharytoniuk ]
+  * layers: Add missing parent VUIDs
+  * layers: Propagate parent type to object tracker messages
+  * tests: Rename multi_device -> parent
+  * tests: Add instance and physical device parent tests
+  * layers: Fix swapchain parent handling in thread safety
+
+  [ ziga-lunarg ]
+  * tests: Fix incompatible descriptor set test
+  * layers: Improve best practice barrier message
+
+  [ Jeremy Gebben ]
+  * layers: Fix default constructor warnings
+  * gpu: Add detection of destroyed descriptor resources
+  * build: Update SPIRV-Tools
+
+  [ spencer-lunarg ]
+  * layers: Fix vkGetPhysicalDeviceSurfaceCapabilities2KHR
+
+  [ Alina Kalyakina ]
+  * layers: Add thread safety checks for vkQueuePresentKHR
+
+  [ Tony Barbour ]
+  * scripts: Explicitly exclude shaders from verification
+
+  [ spencer-lunarg ]
+  * tests: Fix InitFromASMTry logic
+
+  [ ziga-lunarg ]
+  * tests: Test device only events with host commands
+  * tests: Write descriptor set with invalid image info
+  * tests: Test clearing ds image with color aspect
+  * tests: Test color image clear with missing feature
+  * tests: Test clearing ds attachment with invalid aspect
+  * tests: Test storage buffer offset alignment
+
+  [ arno-lunarg ]
+  * tests: Move external handle functions
+  * layers: Add 01096 02730 02731
+
+  [ Spencer Fricke ]
+  * buid: Add gpu_inst_shader_hash.h to BUILD.gn
+
+  [ spencer-lunarg ]
+  * layers: Remove PRIxLEAST64 for sizes
+
+  [ ziga-lunarg ]
+  * tests: Test blitting color to depth
+  * tests: Test missing image plane info
+  * tests: Test resolving color image to depth image
+  * tests: Test invalid memory priority
+  * tests: Test enabling robustBufferAccess2
+  * tests: Test color write attachment count
+  * tests: Test creating pipeline with missing features
+  * tests: Test write descriptor image layout
+
+  [ spencer-lunarg ]
+  * layers: Improve ValidateMemoryTypes error message
+  * tests: Fix more blacklist tests on Android
+
+  [ ziga-lunarg ]
+  * layers: Add missing bp access layout combination
+  * tests: Test best practice image memory barrier
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.267
+
+  [ ziga-lunarg ]
+  * tests: Validate warning in best practice tests
+  * layers: Remove push descriptor assert
+  * tests: Test push descriptors
+  * tests: Add descriptor indexing missing features tests
+  * layers: Add missing copy AS validation
+  * tests: Test vkCmdCopyAccelerationStructureNV
+  * layers: Update VUID 09003 for feedback loop
+  * tests: Test attachment feedback loop
+  * layers: Validate color blend format features
+  * tests: Test missing color blend feature
+  * layers: Validate pipeline rendering info formats
+  * tests: Test invalid pipeline rendering formats
+
+  [ spencer-lunarg ]
+  * tests: Cleanup CommandBuffer binding class
+
+  [ ziga-lunarg ]
+  * layers: Add performance warning for non optimal resolve formats
+  * tests: Test non optimal resolve format
+
+  [ Juan Ramos ]
+  * ci: Run vvl scripts in seperate action
+
+  [ spencer-lunarg ]
+  * tests: Add support to mock AHB
+
+  [ ziga-lunarg ]
+  * layers: Validate required subgroup size in mesh shaders
+  * tests: Test required subgroup size in task shader
+
+  [ Artem Kharytoniuk ]
+  * layers: Support SHADER_READ access in AS build stage
+  * tests: Test SHADER_READ access with AS build stage
+
+  [ Juan Ramos ]
+  * tests: Update gtest to v1.14.0
+
+  [ spencer-lunarg ]
+  * layers: Fix pColorBlend dynamic rendering
+  * tests: Remove IsPlatform for android devices
+
+  [ Jeremy Gebben ]
+  * gpu: Fix descriptor update corner cases
+  * gpu: Don't crash on handles that may be VK_HANDLE_NULL
+
+  [ ziga-lunarg ]
+  * layers: Add sync2 access masks to layout validation
+  * tests: Test sync2 access mask in best practice
+
+  [ Jeremy Gebben ]
+  * tests: Fix PositiveGpuAssistedLayer.GpuValidationUnInitImage
+
+  [ Charles Giessen ]
+  * test: Replace usage of ASSERT_VK_SUCCESS
+  * layers: Dont Skip on LogInfo
+  * tests: Throw exception upon ASSERT_* failure
+
+  [ Juan Ramos ]
+  * doc: Remove LAYER_CONFIGURATION.md
+
+  [ Charles Giessen ]
+  * tests: Remove EXPECT() macro
+
+  [ ziga-lunarg ]
+  * tests: Add missing descriptors tests
+
+  [ spencer-lunarg ]
+  * tests: Single line to skip for version or extension
+
+  [ Jeremy Gebben ]
+  * scripts: Update gpu_inst_shader_hash.h from generate_spirv.py
+
+  [ spencer-lunarg ]
+  * layers: Add Location to all Log messages
+  * tests: Add min/max core profile and test cleanup
+
+  [ Piers Daniell ]
+  * layers: Compatibility for VK_EXT_nested_command_buffers
+
+  [ John Zulauf ]
+  * syncval: Make HazardResult optional for perf
+  * layers: Cache view validity in ImageDescriptor
+  * syncval: Optimize first access closing
+  * layers: Cache IsDepthSliced in view
+  * syncval: Cleanup UpdateMemoryAccess call tree
+  * syncval: Use precomputed range gen for image view
+
+  [ spencer-lunarg ]
+  * layers: Remove unused Pipeline state info
+
+  [ Juan Ramos ]
+  * mac: Use exported_symbols_list
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.268
+
+  [ spencer-lunarg ]
+  * tests: Remove version from RTX tests
+
+  [ Mike Schuchardt ]
+  * build: Update shader toolchain for SDK
+
+  [ spencer-lunarg ]
+  * tests: Remove unused VkBufferTest class
+  * layers: Fix VUID churn for 268
+  * bp: Use promoted alias function
+  * layers: Fix and unify VK_REMAINING_ARRAY_LAYERS logic
+
+  [ ziga-lunarg ]
+  * layers: Break pNext recursion into a while loop
+  * layers: Update shader object VUIDs for the spec change
+  * tests: Update shader object tests
+  * layers: Fix getting buffer size from image
+  * tests: Test copying buffer to remaining image layers
+
+  [ John Zulauf ]
+  * tests: More small_vector test cases
+  * layers: Cache small_vector working store
+  * layers: Dry and simplify small_vector
+
+  [ ziga-lunarg ]
+  * tests: Rename functions checking format support
+
+  [ arno-lunarg ]
+  * layers: Add 09388 09389 09390
+
+  [ Juan Ramos ]
+  * ci: Run 2 latest MacOS releases
+
+  [ spencer-lunarg ]
+  * layers: Add VK_ANDROID_external_format_resolve support
+  * tests: Breakup layer_validation_tests into more files
+
+  [ arno-lunarg ]
+  * tests: Remove unnecessary calls to get func ptrs
+  * tests: Simplify RT test init
+
+  [ Artem Kharytoniuk ]
+  * layers: Ensure available accesses are not hazardous during ILT
+  * tests: Add separate availability and visibility tests
+
+  [ artem-lunarg ]
+  * layers: IsOrderedWriteHazard collapses into !WriteInScope
+
+  [ spencer-lunarg ]
+  * layers: Add SetEvent2 VUs for HOST_BIT
+
+  [ Steven Perron ]
+  * scripts: Change the outfilename parameter to a directory
+
+  [ artem-lunarg ]
+  * layers: Workaround sync validation of descriptor arrays
+  * tests: Access resources through descriptor array in syncval
+
+  [ ziga-lunarg ]
+  * layers: Validate sample locations samples count
+  * tests: Test incompatible sample location samples
+
+  [ Tony Barbour ]
+  * layers: Add validation for host_image_copy 09393 and 09394
+  * tests: Add tests for host_image_copy 09393 and 09394
+
+  [ spencer-lunarg ]
+  * layers: Revert Shader interface to Core Checks
+  * layers: Add LogUndefinedValue
+  * tests: Make COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER default
+  * tests: Make use of default VkPhysicalDeviceFeatures
+  * layers: Fix label for 04080 and 07077
+
+  [ ziga-lunarg ]
+  * layers: Skip pipeline topology validation if dynamic
+  * tests: Test incompatible dynamic primitive topology
+
+  [ spencer-lunarg ]
+  * layers: Remove more UNASSIGNED VUs
+  * layers: Add missing VkAttachmentReference VU
+  * layers: Add missing vkCmdBeginQueryIndexedEXT VUID
+  * layers: Add WaitEvent VU for inside renderpass
+
+  [ Artem Kharytoniuk ]
+  * layers: Disable syncval for all descriptor arrays
+  * tests: Enable tests for syncval constant descriptor indexing
+
+  [ ziga-lunarg ]
+  * layers: Replace unassigned VUID for image layout
+  * tests: Test image layout not matching initial layout
+
+  [ Tony Barbour ]
+  * gpu: Add ability to select which shaders get instrumented
+  * gpu: Use vku utilities for GPU-AV settings
+  * tests: Pass pNext through VkShaderObj to CreateShaderModule
+  * tests: Add tests for GPU-AV shader selection
+
+  [ ziga-lunarg ]
+  * layers: Fix vuid 04809 nullptr dereference
+  * tests: Test 04809 with dynamic state
+
+  [ Shahbaz Youssefi ]
+  * layers: Autogen enabled feature detection
+
+  [ spencer-lunarg ]
+  * layers: Fix misc error messages
+  * layers: Add Dedicated Memory VUs for AHB
+
+  [ ziga-lunarg ]
+  * layers: Validate mesh shader required features
+  * tests: Test creating device with missing required features
+  * tests: Fix tests using mesh shader features
+  * layers: Validate render pass view masks
+  * tests: Test using view masks without multiview feature
+  * tests: Fix tests using but not enabling multiview
+  * layers: Validate render pass continue flag
+  * tests: Test missing render pass in inheritance info
+
+  [ Tony Barbour ]
+  * tests: Fix validation errors in GPU-AV tests
+
+  [ ziga-lunarg ]
+  * layers: Validate total byte limit of inline uniform blocks
+  * tests: Test total size limit of inline uniform blocks
+  * layers: Validate binding ray tracing pipeline
+  * tests: Test ray tracing pipeline in protected cmd buffer
+
+  [ spencer-lunarg ]
+  * tests: Remove VkDescriptorSetObj
+
+  [ ziga-lunarg ]
+  * layers: Validate dynamic samples
+  * tests: Test mismatched dynamic state sample count
+
+  [ spencer-lunarg ]
+  * layers: Fix ExternalFormatResolve UNDEFINED format
+  * layers: Remove unnecessary of IsExtEnabled
+
+  [ Juan Ramos ]
+  * iOS: Add iOS build to CI
+
+  [ spencer-lunarg ]
+  * tests: Remove IsDriver
+  * layers: Add RecordObj to PreCallRecord
+  * layers: Use RecordObject instead of hardcoded Func
+
+  [ arno-lunarg ]
+  * layers: Add 04628
+  * layers: Add vvl::enumerate
+  * layers: Add 03761 to 03767
+
+  [ spencer-lunarg ]
+  * layers: Fix non-Resolve flow in ExternalFormatResolve
+
+  [ Artem Kharytoniuk ]
+  * tests: Cleanup layout transitions for default render pass
+  * tests: Add minimal tests for load/store attachment hazards
+
+  [ spencer-lunarg ]
+  * layers: Add Imageless Framebuffer ObjectTracker
+  * tests: Remove unused dynamic state in DebugPrintF
+
+  [ Shahbaz Youssefi ]
+  * scripts: Use python3 everywhere
+
+  [ ziga-lunarg ]
+  * layers: Fix VUID for bindBufferMemory2
+
+  [ Juan Ramos ]
+  * scripts: Minimize update_deps.py noise
+
+  [ ziga-lunarg ]
+  * layers: Validate dynamic rasterization samples
+  * tests: Test dynamic rasterization samples
+  * layers: Validate ray tracing pipeline stage is allowed
+  * tests: Test using ray tracing stage without feature
+
+  [ Charles Giessen ]
+  * layers: Elide platform defines in code gen
+
+  [ ziga-lunarg ]
+  * layers: Validate imageCompressionControlSwapchain feature
+  * tests: Missing imageControlSwapchainFeature
+  * layers: Validate image compression control plane count
+  * tests: Test image compression control plane count
+  * layers: Update attachment access validation
+  * tests: Update attachment access tests
+  * tests: Test invalid command buffer begin inheritance info
+  * layers: Fix typo in VUID 08771
+  * tests: Test image without required subsampled flag
+  * tests: Change ray tracing test to avoid amd crash
+
+  [ spencer-lunarg ]
+  * tests: Cleanup use of error and warning bit
+
+  [ ziga-lunarg ]
+  * layers: Validate sample locations with rasterization samples
+  * tests: Test sample locations with rasterization samples
+
+  [ spencer-lunarg ]
+  * layers: Fix valid null pDepthStencilState
+  * layers: Fix Clear Attachment 07271
+
+  [ arno-lunarg ]
+  * tests: Move NV ray tracing tests to specific files
+
+  [ spencer-lunarg ]
+  * tests: Create dedicated shader helper file
+  * layers: Compare VkSubpassDescriptionFlags bewteen RP
+  * layers: Add VK_REMAINING_ARRAY_LAYERS VUs
+  * layers: Fix broken build
+
+  [ ziga-lunarg ]
+  * layers: Unwrap device generated commands shader modules
+  * tests: Test device generated commands
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.269
+
+  [ ziga-lunarg ]
+  * layers: Update VUID 09024 to include dynamic state
+  * tests: Test graphics pipeline viewport state not set
+
+  [ Juan Ramos ]
+  * gn: Remove VULKAN_NON_CMAKE_BUILD
+  * gn: Remove pointless variables
+  * ci: Cleanup chromium build GHA code
+
+  [ Mike Schuchardt ]
+  * gn: Run gn format BUILD.gn
+
+  [ Juan Ramos ]
+  * layers: Update to xxhash v0.8.2
+
+  [ spencer-lunarg ]
+  * layers: Fix VUID from 1.3.269
+  * layers: Fix use of is_const_param
+
+  [ arno-lunarg ]
+  * layers: Add 02732 02733
+
+  [ spencer-lunarg ]
+  * layers: Hash ResourceInterfaceVariable descriptor members
+
+  [ Tony Barbour ]
+  * layers: Don't dereference missing multisample state
+
+  [ spencer-lunarg ]
+  * layers: Check for bad descriptor type with known error
+  * layers: Cleanup pipeline state generic helpers
+
+  [ Juan Ramos ]
+  * build: Remove pointless linker flags
+  * gn: Remove copy pasted defines from the Vulkan-Loader
+
+  [ arno-lunarg ]
+  * layers: Fix for issue 4696
+
+  [ Spencer Fricke ]
+  * git: Use less minutes for GitHub Actions
+
+  [ ziga-lunarg ]
+  * layers: Add missing lock to FormatHandle
+  * tests: Test accessing debugObjectNameMap from threads
+  * layers: Validate image create flags
+  * tests: Test invalid combination of image create flags
+
+  [ spencer-lunarg ]
+  * layers: Check for explicit signedness
+
+  [ Artem Kharytoniuk ]
+  * layers: Comment event source stage tracking logic
+  * layers: Improve naming in event submit validation
+  * layers: Detect inter-queue event usage
+  * tests: Add tests for inter-queue event usage
+
+  [ spencer-lunarg ]
+  * layers: Add Location to Object Tracker errors
+  * layers: Add Location to Sync Val errors
+  * layers: Remove some old TODOs
+  * layers: Add new LogError to LogInternalError
+  * layers: Add Location to Thread Tracker errors
+
+  [ Juan Ramos ]
+  * ci: Cleanup vvl.yml
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix test that breaks nvidia driver
+
+  [ spencer-lunarg ]
+  * layers: Add more LogError with Location
+  * scripts: Add PositiveQuery.PerformanceQueries
+  * scripts: Generate noautovalidity pipeline structs
+  * layers: Add full Location on manual ObjectTracker
+
+  [ ziga-lunarg ]
+  * layers: Improve VUID 01922 message
+
+  [ Juan Ramos ]
+  * ci: Add dependabot
+  * ci: Disable linker warnings as errors
+  * scripts: Skip dependabot commits
+
+  [ ziga-lunarg ]
+  * layers: Fix pipeline rendering info validation
+  * tests: Test invalid pipeline rendering info
+  * layers: Replace hex values with enum names
+  * layers: Update shader object VUIDs
+  * tests: Add tests for new shader object VUIDs
+
+  [ spencer-lunarg ]
+  * layers: Add EntryPoint access to fragment_sub_state
+
+  [ ziga-lunarg ]
+  * layers: Validate instance create info pNext
+  * tests: Test pNext in VkInstanceCreateInfo
+  * tests: Fix enumerate portability test
+
+  [ Tony Barbour ]
+  * layers: Fix acc struct type when copied to mutable descriptor
+
+  [ dependabot[bot] ]
+  * build(deps): bump actions/download-artifact from 1 to 3
+
+  [ Juan Ramos ]
+  * cmake: Remove -fno-omit-frame-pointer
+  * cmake: Fix VVL_ENABLE_ASAN
+
+  [ spencer-lunarg ]
+  * layers: Remove more UNASSIGNED VUs
+  * layers: Fix misformated VUIDs
+
+  [ arno-lunarg ]
+  * layers: Refacto RT mem aliasing validation code
+  * layers: Add 03668
+  * layers: Cleanup 03759
+
+  [ Artem Kharytoniuk ]
+  * layers: Remove outdated comment
+  * tests: Make syncval to pass core validation
+  * tests: Add --syncval-enable-core command line option
+  * ci: Re-run syncval tests with core validation enabled
+
+  [ ziga-lunarg ]
+  * layers: Fix pipeline library rendering best practice
+  * tests: Test pipeline library without rendering info
+  * layers: Update pipeline layout check for libraries
+  * tests: Test pipeline library with NULL layout
+
+  [ Juan Ramos ]
+  * ci: Remove usage of VVL_CPP_STANDARD
+
+  [ ziga-lunarg ]
+  * layers: Fix pipeline library rendering best practice
+
+  [ Juan Ramos ]
+  * tsan: Blacklist PositiveSyncObject.WaitEventThenSet
+
+  [ spencer-lunarg ]
+  * layers: Refactor ValidatePipelineBindPoint
+
+  [ ziga-lunarg ]
+  * layers: Fix tessellation point mode output
+  * tests: Test tesselation point mode output
+
+  [ spencer-lunarg ]
+  * tests: Confirm using VkPhysicalDeviceIDProperties
+
+  [ ziga-lunarg ]
+  * layers: Fix allocating variable descriptor sets
+  * tests: Test allocating variable descriptor sets
+
+  [ dependabot[bot] ]
+  * build(deps): bump actions/checkout from 3 to 4
+  * layers: Validate dynamic conservative rasterization
+  * tests: Test dynamic conservative rasterization mode
+  * layers: Validate sample mask and rasterization samples
+  * tests: Test mismatched pipeline dynamic state samples
+
+  [ Artem Kharytoniuk ]
+  * tests: Cleanup tests and help Thread Sanitizer
+
+  [ ziga-lunarg ]
+  * layers: Fix tessellation validation with libraries
+  * tests: Test ignored pipeline tessellation state
+
+  [ Juan Ramos ]
+  * testing: Use known_good.json for all testing dependencies
+
+  [ spencer-lunarg ]
+  * layers: Add dedicated memory allocation FD VU
+  * layers: Add Stateless VkImportMemoryFdInfoKHR
+  * layers: Use Dedicated helpers
+  * layers: Move External Memory allocation to other file
+  * layers: Combine ExternalMemoryInfo lookup
+  * layers: Add VK_EXT_external_memory_host
+  * tests: Add Positive Parent tests
+  * tests: Fix UnknownWriteComponentA8Unorm
+  * layers: Use Struct Size for workgroup shared memory
+
+  [ Tony Barbour ]
+  * layers: Validate memory overlap in buffer/image copies
+  * tests: Add tests for buffer to/from image copy
+
+  [ ziga-lunarg ]
+  * layers: Track set push constant bytes
+  * tests: Test unset push constant bytes
+  * layers: Validate sample locations enable
+  * tests: Test sample locations enable
+  * layers: Validate pipeline micromap flags
+  * tests: Test creating graphics pipelien with micromap flags
+  * layers: Validate indirect bindable pipeline flag
+  * tests: Test indirect bindable pipeline flag
+
+  [ spencer-lunarg ]
+  * layers: Consalidate alias functions in StateTracker
+  * layers: Consalidate alias functions in GPU-AV
+  * layers: Fix checking VK_FORMAT_UNDEFINED for image props
+  * tests: Fix descriptor tests
+  * layers: Add vkSetDeviceMemoryPriorityEXT support
+  * layers: Fix new VU for vkCmdExecuteCommands secondary
+
+  [ arno-lunarg ]
+  * layers: Invert parameters order in vvl::enumerate
+
+  [ ziga-lunarg ]
+  * layers: Validate swapchain in present info are unique
+  * tests: Test presenting with non unique swapchains
+
+  [ spencer-lunarg ]
+  * layers: VK_KHR_pipeline_executable_properties Device parent
+
+  [ Tony Barbour ]
+  * gpu: Don't change app's const data for GPU-AV shader objs
+  * tests: Make CanEnableGpuAV a generic helper
+  * tests: Test GPU-AV shader selection with shader object
+
+  [ ziga-lunarg ]
+  * layers: Add warning for missing input attachment
+  * tests: Test missing input attachment in subpass
+  * layers: Fix crash when frag shader is not used
+  * layers: Validate conservative rasterization mode
+  * tests: Test conservative rasterization mode
+
+  [ Aitor Camacho ]
+  * layers: Mark color attachment used when external resolve present
+
+  [ spencer-lunarg ]
+  * scripts: Add remove duplicates from stats script
+
+  [ ziga-lunarg ]
+  * layers: Fix shader module identifier check
+  * tests: Test using empty shader module identifier
+
+  [ Artem Kharytoniuk ]
+  * layers: Unconfuse thread sanitizer
+
+  [ spencer-lunarg ]
+  * layers: Add Descriptor Update parent check
+
+  [ Daniel Rakos ]
+  * tests: Fix API dependent includes
+
+  [ spencer-lunarg ]
+  * layers: Remove calls to promoted func in StateTracker
+
+  [ John Zulauf ]
+  * syncval: Ensure Trim are safe for FirstAccess
+  * syncval: DetectHazard with range_gen/iterator walk
+  * syncval: Reduce lower_bound during Update
+
+  [ ziga-lunarg ]
+  * layers: Validate device create queue count
+  * tests: Test requesting more queues than available
+
+  [ Daniel Rakos ]
+  * scripts: Fix validation stats script issue
+
+  [ spencer-lunarg ]
+  * layer: Refactor ImageAccess to handle copies
+
+  [ ziga-lunarg ]
+  * layers: Validate active queries with mesh shaders
+  * tests: Test active queries with mesh shaders
+
+  [ spencer-lunarg ]
+  * layers: Use alias command for generated code
+  * layers: Add Sync FD Semaphore type
+
+  [ Tony Barbour ]
+  * layers: Fix texel size in image/buffer copies
+  * tests: Add copy buffer/image test with compressed format
+
+  [ spencer-lunarg ]
+  * layers: Add VkDeviceImageSubresourceInfoKHR
+  * layers: Label pRasterizationState VU
+
+  [ ziga-lunarg ]
+  * layers: Validate geometry shader streams feature
+  * tests: Test geometry streams capability without feature
+
+  [ Tony Barbour ]
+  * practices: Fix case with no stage entrypoint
+  * gpu: Fix setting name
+
+  [ Artem Kharytoniuk ]
+  * layers: Clarify naming for binary semaphore cases
+  * layers: Use manual WaitForPresentKHR in thread-safety
+
+  [ spencer-lunarg ]
+  * layers: Have single way to get SpecConstant values
+  * layers: Revert ImageBufferCopyMemoryOverlap
+
+  [ Tony Barbour ]
+  * gpu: Fix typo in error message
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.270
+
+  [ ziga-lunarg ]
+  * layers: Update VUID 06179
+  * tests: Test pipeline dynamic rendering attachment mismatch
+  * layers: Remove VUID 08010 that was removed from spec
+
+  [ Jeremy Gebben ]
+  * gpu: Track which descriptors are used by a shader
+  * corechecks: Remove descriptorset prefiltering
+  * tests: Add more GPU-AV descriptor indexing tests
+  * tests: Clean up GPUAV initialization
+
+  [ John Zulauf ]
+  * syncval: Remove bad assert/Avoid bad access
+
+  [ spencer-lunarg ]
+  * layers: Remove UNASSIGNED InvalidImageView
+
+  [ Jeremy Gebben ]
+  * state_tracker: Store Location for queue submissions
+
+  [ spencer-lunarg ]
+  * tests: Disable GpuBufferDeviceAddressOOB
+  * scripts: Cleanup remaining VUID consistency warnings
+
+  [ ziga-lunarg ]
+  * layers: Fix pipeline statistics inherited query check
+  * tests: Test pipeline statistics inherited query
+
+  [ spencer-lunarg ]
+  * layers: Add check for maxInlineUniformBlockBindings
+  * layers: Check Ycbcr sampling instructions
+
+  [ John Zulauf ]
+  * syncval: Add dynamic rendering support
+
+  [ Artem Kharytoniuk ]
+  * tests: Add dynamic rendering load/store hazard tests
+
+  [ John Zulauf ]
+  * syncval: Add Dynamic Rendering for CmdClearAttachment
+  * tests: Add DynamicRendering tests for CmdClearAttachment
+
+  [ Artem Kharytoniuk ]
+  * layers: Refactor how semaphore binary payload is tracked
+
+  [ John Zulauf ]
+  * syncval: Add end check to pos increment shortcut
+
+  [ Jeremy Gebben ]
+  * gpu: Fix handling of maximum descriptor records
+
+  [ spencer-lunarg ]
+  * bp: Check for valid RenderPass state
+  * layers: Add missing destroy VkAllocationCallbacks VUs
+  * layers: Move TracksObject to source file
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix description of wsi test
+  * tests: Add helper to transition to presentation layout
+
+  [ spencer-lunarg ]
+  * layers: Add Function support for ImageAccess
+  * layers: Fix not checking multiple functions
+
+  [ ziga-lunarg ]
+  * layers: Fix typo in VUID 02892
+  * layers: Validate dynamic rendering contents inline flag
+  * tests: Test missing dynamic rendering contents inline
+  * layers: Validate rasterization samples with MSRTSS
+  * tests: Test rasterization samples with MSRTSS
+  * layers: Validate tessellation shader execution modes
+  * tests: Test missing tessellation shader execution modes
+  * layers: Fix buffer view usage flags check
+  * tests: Test buffer view subset usage flags
+
+  [ Juan Ramos ]
+  * android: Document nodelete performance benefits
+  * scripts: Allow running tests on Mac
+
+  [ spencer-lunarg ]
+  * gpuav: Cleanup docs and script
+
+  [ Daniel Rakos ]
+  * tests: Better handling of promoted extensions
+
+  [ spencer-lunarg ]
+  * tests: Disable GpuBufferOOB
+
+  [ ziga-lunarg ]
+  * layers: Fix flag check for VUID 06183
+
+  [ Jeremy Gebben ]
+  * layers: Move cvdescriptorset namespace contents to vvl::
+
+  [ arno-lunarg ]
+  * tests: Add option --gpuav-enable-core
+
+  [ Artem Kharytoniuk ]
+  * layers: Validate image acquire wait
+  * tests: Test image acquire wait
+
+  [ Juan Ramos ]
+  * glslang: Remove usage of non-public header file
+
+  [ John Zulauf ]
+  * syncval: Add workaround to ensure monotonic rangegen
+
+  [ Jeremy Gebben ]
+  * gpu: Put GPUAV and DebugPrintf in namespaces
+  * scripts: Add --strip to the android.py install command
+
+  [ Juan Ramos ]
+  * ci: Cleanup how address sanitizer / robin hood are set
+  * ci: Remove pointless clang testing
+  * ci: Improve naming for linux runs
+  * ci: Remove unneccessary python usage from linux run
+
+  [ Charles Giessen ]
+  * chassis: Use vulkan_layer_chassis instead of globals
+
+  [ ziga-lunarg ]
+  * layers: Add support for VkPipelineCreateFlags2
+  * tests: Test VkPipelineCreateFlags2
+
+  [ Jeremy Gebben ]
+  * layers: De-shoutify queue_state.{h,cpp}
+  * layers: Split queue_state.{h,cpp} into multiple files
+
+  [ spencer-lunarg ]
+  * tests: Use semi-colon at end of macro
+  * tests: Use GLSL multistrings
+  * tests: Cleanup DebugPrintF tests
+  * tests: Cleanup GPU-AV tests
+  * tests: Disable PrintF for Portability
+
+  [ arno-lunarg ]
+  * gpu: Add vkTraceRaysIndirectKHR
+  * tests: Add CmdTraceRaysIndirectKHR
+
+  [ spencer-lunarg ]
+  * layers: Cleanup shader_instruction.cpp
+
+  [ arno-lunarg ]
+  * gpu: Create gpu_record.cpp and gpu_setup.cpp
+
+  [ spencer-lunarg ]
+  * gpuav: Combine Indirect Buffer settings
+
+  [ ziga-lunarg ]
+  * layers: Validate tessellation patch size and subdivision
+  * tests: Test mismatched patch size and subdivision
+
+  [ spencer-lunarg ]
+  * scripts: Separate vk_validation_error_messages.h script
+
+  [ Artem Kharytoniuk ]
+  * layers: Clarify no-locking nature of debug reporting routines
+
+  [ Daniel Rakos ]
+  * tests: Fix test case dependencies
+
+  [ ziga-lunarg ]
+  * layers: Add missing skip
+  * layers: Use correct 08913 VUID
+  * tests: Use 08913 for depth attachment instead of 08916
+  * tests: Fix color attachment mismatch test
+  * tests: Fix color blend state ignored test
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix MatchingAttachmentFormats2
+
+  [ ziga-lunarg ]
+  * tests: Fix sample locations enable test
+  * tests: Fix sample locations grid size test
+  * tests: Fix task shader invocations test
+  * layers: Validate pgq with rasterization stream
+  * tests: Test pgq with rasterization stream
+
+  [ Artem Kharytoniuk ]
+  * layeres: Fix semaphore signal error message
+  * tests: Cleanup MSVC c-runtime tweaks
+  * tests: Ensure --gtest_break_on_failure works as expected
+
+  [ John Zulauf ]
+  * syncval: Move ResourceAccessState to own file
+  * syncval: AccessContext interface cleanup for split
+  * syncval: Segregate AccessContext initial pass
+  * syncval: Migrate validation call from AccessContext
+  * syncval: Segregate SyncOps class family into own file
+  * syncval: Segregate Renderpass support into file
+  * syncval: Segregate CommandBufferAccessContext to file
+  * syncval: Minimize include of sync_validation.h
+  * syncval: Segregate submit/global operations
+  * syncval: Clear out sync_validation stay methods
+  * syncval: Final naming changes for file breakup
+
+  [ Juan Ramos ]
+  * android: Remove redundant --tests argument from android.py
+  * cmake: Remove VVL_CLANG_TIDY
+  * cmake: Remove warning
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.271
+
+  [ spencer-lunarg ]
+  * layers: Fix VUID Churn for 1.3.171
+
+  [ Daniel Rakos ]
+  * tests: Fix some more test case dependency issues
+  * scripts: Robustness improvements and cleanup
+
+  [ arno-lunarg ]
+  * gpu: Refacto validation and err msg logic
+  * gpu: Improve VUID selection
+
+  [ Tony Barbour ]
+  * gpu: Add select to pre-draw GPU-AV
+  * gpu: Add count validation for CmdDrawMeshTasksIndirectCountEXT
+  * tests: Add tests for CmdDrawMeshTasksIndirectCountEXT
+
+  [ Aitor Camacho ]
+  * layers: Check resolve attachment usage before access
+
+  [ ziga-lunarg ]
+  * tests: Fix descriptor buffer BindingAndOffsets test
+  * tests: Fix sample mask test
+  * tests: Fix shader storage image format test
+  * layers: Add missing validation for 00995
+  * tests: Add test for VkImageSwapchainCreateInfoKHR
+
+  [ spencer-lunarg ]
+  * layers: Fix upcoming VUID in 272
+  * layers: Add debug info for Instruction
+  * layers: Improve SPIRV-Tools related error message
+
+  [ Juan Ramos ]
+  * tests: Remove usage of unused glslang libraries
+
+  [ Tony Barbour ]
+  * layers: Fix crash when missing pipeline state
+
+  [ John Zulauf ]
+  * syncval: Correct hazard report for submit and exec
+
+  [ spencer-lunarg ]
+  * scripts: Run spirv-opt on generated SPIR-V for GPU-AV
+
+  [ Artem Kharytoniuk ]
+  * layers: Report when syncval reaches requested command
+
+  [ John Zulauf ]
+  * syncval: Disable all linear image range generation
+
+  [ Juan Ramos ]
+  * android: Minor Android SDK release fixes
+
+  [ Daniel Rakos ]
+  * scripts: Add Vulkan API tagging to new known_good.json elements
+
+  [ spencer-lunarg ]
+  * layers: BUFFER_STATE to vvl::Buffer
+
+  [ Artem Kharytoniuk ]
+  * scripts: Limit installation time precision to 3 decimal places
+  * tests: Fix cached targetView does not match requested values
+  * tests: Check for targetView misuse
+  * tests: Replace targetView with CreateView (part 1)
+
+  [ spencer-lunarg ]
+  * layers: BUFFER_VIEW_STATE to vvl::BufferView
+  * layers: SAMPLER_STATE to vvl::Sampler
+  * layers: SAMPLER_YCBCR to vvl::SamplerYcbcrConversion
+  * layers: FRAMEBUFFER_STATE to vvl::Framebuffer
+  * layers: RENDER_PASS_STATE to vvl::RenderPass
+  * layers: Change to vvl::AccelerationStructure
+  * layers: PIPELINE_CACHE_STATE to vvl:PipelineCache
+  * layers: SURFACE_STATE to vvl:Surface
+  * layers: DISPLAY_MODE_STATE to vvl:DisplayMode
+  * layers: PHYSICAL_DEVICE_STATE to vvl:PhysicalDevice
+
+  [ Artem Kharytoniuk ]
+  * tests: Replace targetView with CreateView (part 2)
+
+  [ Travis Vroman ]
+  * layers: Ran formatting on descriptor validator
+
+  [ Daniel Rakos ]
+  * tests: More test case dependency fixes
+
+  [ Julia Tatz ]
+  * layers: Fix drm tiling's VUID-08931,08932,09048
+
+  [ spencer-lunarg ]
+  * layers: EVENT_STATE to vvl:Event
+  * layers: PIPELINE_LAYOUT_STATE to vvl:PipelineLayout
+  * layers: DEVICE_MEMORY_STATE to vvl:DeviceMemory
+  * layers: IMAGE_VIEW_STATE to vvl:ImageView
+  * layers: SWAPCHAIN_NODE to vvl:Swapchain
+  * layers: IMAGE_STATE to vvl:Image
+  * layers: COMMAND_POOL_STATE to vvl:CommandPool
+  * layers: CMD_BUFFER_STATE to vvl:CommandBuffer
+  * layers: PIPELINE_STATE to vvl:Pipeline
+  * layers: QUERY_POOL_STATE to vvl:QueryPool
+  * layers: Fix shouty struct names
+  * layers: Rename ShaderModule and ShaderObject
+  * layers: Add a spirv namespace
+  * tests: Cleanup of RenderPass/Framebuffer helper
+
+  [ ziga-lunarg ]
+  * layers: Validate tessellation shader path size
+  * tests: Test tessellation shader patch size
+
+  [ Juan Ramos ]
+  * cmake: Cleanup mimalloc and robin_hood code
+
+  [ Tony Barbour ]
+  * gpu: Add validation for mesh shader draw buffers
+  * tests: Add tests for mesh indirect draws
+
+  [ spencer-lunarg ]
+  * layers: Early return in ValidateGraphicsPipelineLibrary
+  * layers: Use IsValueIn for Shader Stages
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.272
+
+  [ spencer-lunarg ]
+  * scripts: Move SPIR-V helper to constexpr
+  * scripts: Add Debug/Annotation SPIR-V helper
+  * scripts: SPIR-V Type helper
+  * scripts: Generate SPIR-V Operand info
+  * layers: Fix 272 VUID Churn
+  * tests: Confirm extension dependency works correctly
+  * tests: Add RenderPassSingleSubpass
+
+  [ Jeremy Gebben ]
+  * printf: Remove stage specific information
+  * tests: Disable tests that new SPIRV-Tools think are invalid
+  * build: Update SPIRV-Tools to fix a CTS problem
+
+  [ Tony Barbour ]
+  * gpu: Use 08114 vuid for invalid descriptor error
+
+  [ Juan Ramos ]
+  * apple: Add WSI support for tests on MacOS
+  * tests: Print return value of vk::CreateSwapchainKHR on failure
+
+  [ James Price ]
+  * gpu: Add missing argument to gpuavLogError
+  * gpu: Update generated shaders
+
+  [ Juan Ramos ]
+  * ci: Remove MacOS from CI
+
+  [ Artem Kharytoniuk ]
+  * syncval: Move SyncImageMemoryBarrier to sync_op module
+
+  [ Juan Ramos ]
+  * cmake: Fix CMake warning
+
+  [ Ho Cheung ]
+  * gn: Fix Python 3.12 compatibility
+
+  [ Juan Ramos ]
+  * scripts: Move TSAN blacklist into C++ code instead of script
+  * scripts: Remove sType workaround
+
+  [ spencer-lunarg ]
+  * tests: Fix disabled VK_KHR_workgroup_memory_explicit_layout
+  * layers: Remove UNASSIGNED for non-errors
+
+  [ arno-lunarg ]
+  * test: Add RT pipeline test template
+  * tests: Move RayTracingPipelineHelper
+  * layers: Add 09458
+  * tests: Add 09458
+  * tests: Update vkt::rt::Pipeline
+
+  [ Jeremy Gebben ]
+  * tests: Fix core validation errors in GPU-AV tests
+
+  [ Artem Kharytoniuk ]
+  * layers: Report resource handle in pipeline barrier messages
+
+  [ spencer-lunarg ]
+  * tests: Move threading helpers to dedicated file
+  * tests: Move AllocateDisjointMemory to file
+  * tests: Move SemaphoreExportImportSupported to file
+  * tests: Move SetImageLayout to WSI test helper
+  * tests: Move ValidOwnershipTransfer to file
+  * tests: Create common Framebuffer init
+
+  [ Juan Ramos ]
+  * ci: Update to macos-12 for iOS build
+
+  [ ziga-lunarg ]
+  * layers: Fix dynamic viewport and scissor with count check
+  * tests: Test missing viewport and scissor dynamic states
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.273
+
+  [ Artem Kharytoniuk ]
+  * tests: Use optimal layout as default in InitNoLayout
+  * tests: Use optimal layout as default in ImageCreateInfo2D
+  * tests: Use optimal layout as default in Init
+  * layers: Use 32bit size type for handle vector instead of 8bit
+  * tests: Test syncval message with many objects
+
+  [ spencer-lunarg ]
+  * tests: Rename GPU-AV test groups
+  * layers: Add VK_KHR_calibrated_timestamps support
+  * tests: Remove options from InitRenderTarget
+  * tests: Use vkt::Framebuffer for m_framebuffer
+  * tests: Remove more options from InitRenderTarget
+  * tests: Add common BeginRenderPass function
+  * tests: Cleanup GPU-AV tests
+  * tests: Move GPU-AV test to dedicated files
+  * tests: Cleanup QueryPool creation
+  * layers: Remove LAYOUT_GENERAL perf warning
+  * layers: Fix and add new VkImageLayout VUs
+
+  [ dependabot[bot] ]
+  * build(deps): bump actions/setup-python from 4 to 5
+
+  [ John Zupin ]
+  * packaging: debian: update debian rules
+  * packaging: debian: add VUL for dependency
+  * packaging: debian: remove the dev package
+  * packaging: debian: remove cpu core limit
+
+ -- john <john@odin>  Wed, 13 Dec 2023 14:42:11 -0700
+
 vulkan-validationlayers (1.3.261.0~rc5-1lunarg20.04-1) focal; urgency=medium
 
   [ Tony Barbour ]
