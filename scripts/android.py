@@ -21,7 +21,6 @@
 # https://github.com/actions/runner-images/blob/main/images/linux/Ubuntu2204-Readme.md#environment-variables-2
 
 import argparse
-import json
 import os
 import sys
 import shutil
@@ -35,17 +34,9 @@ def get_android_manifest() -> str:
         sys.exit(-1)
     return manifest
 
-# Resources for our test application.
-def get_android_resources() -> str:
-    res = common_ci.RepoRelative('tests/android/res')
-    if not os.path.isdir(res):
-        print(f"Unable to find android resources for APK! {res}")
-        sys.exit(-1)
-    return res
-
 # Generate the APK from the CMake binaries
 def generate_apk(SDK_ROOT : str, CMAKE_INSTALL_DIR : str) -> str:
-    apk_dir = common_ci.RepoRelative(f'build-android/bin')
+    apk_dir = common_ci.RepoRelative('build-android/bin')
 
     # Delete APK directory since it could contain files from old runs
     if os.path.isdir(apk_dir):
@@ -54,7 +45,6 @@ def generate_apk(SDK_ROOT : str, CMAKE_INSTALL_DIR : str) -> str:
     shutil.copytree(CMAKE_INSTALL_DIR, apk_dir)
 
     android_manifest = get_android_manifest()
-    android_resources = get_android_resources()
 
     android_jar = f"{SDK_ROOT}/platforms/android-26/android.jar"
     if not os.path.isfile(android_jar):
@@ -67,7 +57,7 @@ def generate_apk(SDK_ROOT : str, CMAKE_INSTALL_DIR : str) -> str:
     test_apk = f'{apk_dir}/{apk_name}.apk'
 
     # Create APK
-    common_ci.RunShellCmd(f'aapt package -f -M {android_manifest} -I {android_jar} -S {android_resources} -F {unaligned_apk} {CMAKE_INSTALL_DIR}')
+    common_ci.RunShellCmd(f'aapt package -f -M {android_manifest} -I {android_jar} -F {unaligned_apk} {CMAKE_INSTALL_DIR}')
 
     # Align APK
     common_ci.RunShellCmd(f'zipalign -f 4 {unaligned_apk} {test_apk}')
@@ -87,14 +77,13 @@ def generate_apk(SDK_ROOT : str, CMAKE_INSTALL_DIR : str) -> str:
 #
 # As a result CMake will need to be run multiple times to create a complete test APK that can be run on any Android device.
 def main():
-    configs = ['Release', 'Debug']
+    configs = ['Release', 'Debug', 'MinSizeRel']
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, choices=configs, default=configs[0])
     parser.add_argument('--app-abi', dest='android_abi', type=str, default="arm64-v8a")
     parser.add_argument('--app-stl', dest='android_stl', type=str, choices=["c++_static", "c++_shared"], default="c++_static")
     parser.add_argument('--apk', action='store_true', help='Generate an APK as a post build step.')
-    parser.add_argument('--tests', action='store_true', help='Build tests.')
     parser.add_argument('--clean', action='store_true', help='Cleans CMake build artifacts')
     args = parser.parse_args()
 
@@ -102,7 +91,6 @@ def main():
     android_abis = args.android_abi.split(" ")
     android_stl = args.android_stl
     create_apk = args.apk
-    build_tests = args.tests
     clean = args.clean
 
     if "ANDROID_NDK_HOME" not in os.environ:
@@ -140,7 +128,7 @@ def main():
 
         print(f"Using {tool} : {path}")
 
-    cmake_install_dir = common_ci.RepoRelative(f'build-android/libs')
+    cmake_install_dir = common_ci.RepoRelative('build-android/libs')
 
     # Delete install directory since it could contain files from old runs
     if os.path.isdir(cmake_install_dir):
@@ -148,7 +136,7 @@ def main():
         shutil.rmtree(cmake_install_dir)
 
     for abi in android_abis:
-        build_dir = common_ci.RepoRelative(f'build-android/obj/{abi}')
+        build_dir = common_ci.RepoRelative(f'build-android/cmake/{abi}')
         lib_dir = f'lib/{abi}'
 
         if clean:
@@ -167,7 +155,7 @@ def main():
         cmake_cmd += f' -D CMAKE_TOOLCHAIN_FILE={android_toolchain}'
         cmake_cmd += f' -D CMAKE_ANDROID_ARCH_ABI={abi}'
         cmake_cmd += f' -D CMAKE_INSTALL_LIBDIR={lib_dir}'
-        cmake_cmd += f' -D BUILD_TESTS={build_tests}'
+        cmake_cmd += f' -D BUILD_TESTS={create_apk}'
         cmake_cmd += f' -D CMAKE_ANDROID_STL_TYPE={android_stl}'
 
         cmake_cmd += ' -D ANDROID_PLATFORM=26'
@@ -179,6 +167,8 @@ def main():
         common_ci.RunShellCmd(build_cmd)
 
         install_cmd = f'cmake --install {build_dir} --prefix {cmake_install_dir}'
+        if cmake_config in ['Release', 'MinSizeRel']:
+            install_cmd += f' --strip'
         common_ci.RunShellCmd(install_cmd)
 
     if create_apk:

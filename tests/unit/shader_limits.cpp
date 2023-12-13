@@ -13,11 +13,13 @@
  */
 
 #include "../framework/layer_validation_tests.h"
+#include "../framework/pipeline_helper.h"
+#include "../framework/descriptor_helper.h"
 
 TEST_F(NegativeShaderLimits, MaxSampleMaskWords) {
     TEST_DESCRIPTION("Test limit of maxSampleMaskWords.");
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
+    RETURN_IF_SKIP(InitFramework());
     PFN_vkSetPhysicalDeviceLimitsEXT fpvkSetPhysicalDeviceLimitsEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceLimitsEXT fpvkGetOriginalPhysicalDeviceLimitsEXT = nullptr;
     if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceLimitsEXT, fpvkGetOriginalPhysicalDeviceLimitsEXT)) {
@@ -30,8 +32,8 @@ TEST_F(NegativeShaderLimits, MaxSampleMaskWords) {
     props.limits.maxSampleMaskWords = 3;
     fpvkSetPhysicalDeviceLimitsEXT(gpu(), &props.limits);
 
-    ASSERT_NO_FATAL_FAILURE(InitState());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(InitState());
+    InitRenderTarget();
 
     // Valid input of sample mask
     char const *validSource = R"glsl(
@@ -48,7 +50,7 @@ TEST_F(NegativeShaderLimits, MaxSampleMaskWords) {
     const auto validPipeline = [&](CreatePipelineHelper &helper) {
         helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fsValid.GetStageCreateInfo()};
     };
-    CreatePipelineHelper::OneshotTest(*this, validPipeline, kErrorBit | kWarningBit);
+    CreatePipelineHelper::OneshotTest(*this, validPipeline, kErrorBit);
 
     // Exceed sample mask input array size
     char const *inputSource = R"glsl(
@@ -88,10 +90,9 @@ TEST_F(NegativeShaderLimits, MaxSampleMaskWords) {
 TEST_F(NegativeShaderLimits, MinAndMaxTexelGatherOffset) {
     TEST_DESCRIPTION("Test shader with offset less than minTexelGatherOffset and greather than maxTexelGatherOffset");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
+    RETURN_IF_SKIP(Init());
 
-    if (m_device->phy().properties().limits.minTexelGatherOffset <= -100 ||
-        m_device->phy().properties().limits.maxTexelGatherOffset >= 100) {
+    if (m_device->phy().limits_.minTexelGatherOffset <= -100 || m_device->phy().limits_.maxTexelGatherOffset >= 100) {
         GTEST_SKIP() << "test needs minTexelGatherOffset greater than -100 and maxTexelGatherOffset less than 100";
     }
 
@@ -155,16 +156,15 @@ TEST_F(NegativeShaderLimits, MinAndMaxTexelGatherOffset) {
     auto cs = VkShaderObj::CreateFromASM(this, spv_source, VK_SHADER_STAGE_COMPUTE_BIT);
 
     CreateComputePipelineHelper cs_pipeline(*this);
-    cs_pipeline.InitInfo();
     cs_pipeline.cs_ = std::move(cs);
     cs_pipeline.InitState();
-    cs_pipeline.pipeline_layout_ = VkPipelineLayoutObj(m_device, {&descriptor_set.layout_});
+    cs_pipeline.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
     cs_pipeline.LateBindPipelineInfo();
     // as commented in SPIR-V should trigger the limits as following
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-OpImage-06376");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-OpImage-06377");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-OpImage-06377");
-    cs_pipeline.CreateComputePipeline(true, false);  // need false to prevent late binding
+    cs_pipeline.CreateComputePipeline(false);  // need false to prevent late binding
 
     m_errorMonitor->VerifyFound();
 }
@@ -172,10 +172,10 @@ TEST_F(NegativeShaderLimits, MinAndMaxTexelGatherOffset) {
 TEST_F(NegativeShaderLimits, MinAndMaxTexelOffset) {
     TEST_DESCRIPTION("Test shader with offset less than minTexelOffset and greather than maxTexelOffset");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
-    if (m_device->phy().properties().limits.minTexelOffset <= -100 || m_device->phy().properties().limits.maxTexelOffset >= 100) {
+    if (m_device->phy().limits_.minTexelOffset <= -100 || m_device->phy().limits_.maxTexelOffset >= 100) {
         GTEST_SKIP() << "test needs minTexelGatherOffset greater than -100 and maxTexelGatherOffset less than 100";
     }
 
@@ -236,10 +236,9 @@ TEST_F(NegativeShaderLimits, MinAndMaxTexelOffset) {
     VkShaderObj const fs(this, spv_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
-    pipe.pipeline_layout_ = VkPipelineLayoutObj(m_device, {&descriptor_set.layout_});
+    pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
     // as commented in SPIR-V should trigger the limits as following
     //
     // OpImageSampleImplicitLod
@@ -261,22 +260,18 @@ TEST_F(NegativeShaderLimits, DISABLED_MaxFragmentDualSrcAttachments) {
     TEST_DESCRIPTION("Test drawing with dual source blending with too many fragment output attachments.");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    RETURN_IF_SKIP(InitFramework());
 
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-
-    auto features2 = LvlInitStruct<VkPhysicalDeviceFeatures2>();
+    VkPhysicalDeviceFeatures2 features2 = vku::InitStructHelper();
     GetPhysicalDeviceFeatures2(features2);
 
     if (features2.features.dualSrcBlend == VK_FALSE) {
         GTEST_SKIP() << "dualSrcBlend feature is not available";
     }
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
-    uint32_t count = m_device->props.limits.maxFragmentDualSrcAttachments + 1;
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget(count));
+    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    uint32_t count = m_device->phy().limits_.maxFragmentDualSrcAttachments + 1;
+    InitRenderTarget(count);
 
     std::stringstream fsSource;
     fsSource << "#version 450\n";
@@ -301,7 +296,6 @@ TEST_F(NegativeShaderLimits, DISABLED_MaxFragmentDualSrcAttachments) {
     cb_attachments.alphaBlendOp = VK_BLEND_OP_ADD;
 
     CreatePipelineHelper pipe(*this, count);
-    pipe.InitInfo();
     pipe.cb_attachments_[0] = cb_attachments;
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
@@ -318,4 +312,70 @@ TEST_F(NegativeShaderLimits, DISABLED_MaxFragmentDualSrcAttachments) {
 
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
+}
+
+TEST_F(NegativeShaderLimits, OffsetMaxComputeSharedMemorySize) {
+    TEST_DESCRIPTION("Have an offset that is over maxComputeSharedMemorySize");
+
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitFramework());
+
+    // need at least SPIR-V 1.4 for SPV_KHR_workgroup_memory_explicit_layout
+
+    VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR explicit_layout_features = vku::InitStructHelper();
+    GetPhysicalDeviceFeatures2(explicit_layout_features);
+    RETURN_IF_SKIP(InitState(nullptr, &explicit_layout_features));
+
+    if (!explicit_layout_features.workgroupMemoryExplicitLayout) {
+        GTEST_SKIP() << "workgroupMemoryExplicitLayout feature not supported.";
+    }
+
+    const uint32_t max_shared_memory_size = m_device->phy().limits_.maxComputeSharedMemorySize;
+
+    // layout(constant_id = 0) const uint value = 4;
+    // shared X {
+    //     vec4 x1[value];
+    //     layout(offset = OVER_LIMIT) vec4 x2;
+    // };
+    std::stringstream csSource;
+    csSource << R"asm(
+               OpCapability Shader
+               OpCapability WorkgroupMemoryExplicitLayoutKHR
+               OpExtension "SPV_KHR_workgroup_memory_explicit_layout"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main" %_
+               OpExecutionMode %main LocalSize 1 1 1
+               OpDecorate %value SpecId 0
+               OpDecorate %_arr_v4float_value ArrayStride 16
+               OpMemberDecorate %X 0 Offset 0
+               OpMemberDecorate %X 1 Offset )asm";
+    // will be over the max if the spec constant uses default value
+    csSource << (max_shared_memory_size + 16);
+    csSource << R"asm(
+               OpDecorate %X Block
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+       %uint = OpTypeInt 32 0
+      %value = OpSpecConstant %uint 1
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_arr_v4float_value = OpTypeArray %v4float %value
+          %X = OpTypeStruct %_arr_v4float_value %v4float
+%_ptr_Workgroup_X = OpTypePointer Workgroup %X
+          %_ = OpVariable %_ptr_Workgroup_X Workgroup
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+               OpReturn
+               OpFunctionEnd
+    )asm";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource.str().c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2,
+                                             SPV_SOURCE_ASM);
+    pipe.InitState();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-Workgroup-06530");
+    pipe.CreateComputePipeline();
+    m_errorMonitor->VerifyFound();
 }

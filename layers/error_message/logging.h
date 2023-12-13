@@ -26,11 +26,12 @@
 #include <vector>
 #include <unordered_set>
 
+#include <vulkan/utility/vk_struct_helper.hpp>
+
 #include "vk_layer_config.h"
 #include "containers/custom_containers.h"
 #include "generated/vk_layer_dispatch_table.h"
 #include "generated/vk_object_types.h"
-#include "generated/vk_typemap_helper.h"
 
 #if defined __ANDROID__
 #include <android/log.h>
@@ -38,7 +39,7 @@
 [[maybe_unused]] static const char *kForceDefaultCallbackKey = "debug.vvl.forcelayerlog";
 #endif
 
-[[maybe_unused]] static const char *kVUIDUndefined = "VUID_Undefined";
+extern const char *kVUIDUndefined;
 
 typedef enum DebugCallbackStatusBits {
     DEBUG_CALLBACK_UTILS = 0x00000001,     // This struct describes a VK_EXT_debug_utils callback
@@ -113,7 +114,7 @@ struct LoggingLabel {
     bool Empty() const { return name.empty(); }
 
     VkDebugUtilsLabelEXT Export() const {
-        auto out = LvlInitStruct<VkDebugUtilsLabelEXT>();
+        VkDebugUtilsLabelEXT out = vku::InitStructHelper();
         out.pLabelName = name.c_str();
         std::copy(color.cbegin(), color.cend(), out.color);
         return out;
@@ -185,8 +186,8 @@ typedef struct _debug_report_data {
     // This mutex is defined as mutable since the normal usage for a debug report object is as 'const'. The mutable keyword allows
     // the layers to continue this pattern, but also allows them to use/change this specific member for synchronization purposes.
     mutable std::mutex debug_output_mutex;
-    int32_t duplicate_message_limit = 0;
-    mutable vvl::unordered_map<uint32_t, int32_t> duplicate_message_count_map{};
+    uint32_t duplicate_message_limit = 0;
+    mutable vvl::unordered_map<uint32_t, uint32_t> duplicate_message_count_map{};
     const void *instance_pnext_chain{};
     bool forceDefaultLogCallback{false};
     uint32_t device_created = 0;
@@ -209,7 +210,9 @@ typedef struct _debug_report_data {
         }
     }
 
-    std::string DebugReportGetUtilsObjectName(const uint64_t object) const {
+    // NoLock suffix means that the function itself does not hold debug_output_mutex lock,
+    // and it's **mandatory responsibility** of the caller to hold this lock.
+    std::string DebugReportGetUtilsObjectNameNoLock(const uint64_t object) const {
         std::string label = "";
         const auto utils_name_iter = debugUtilsObjectNameMap.find(object);
         if (utils_name_iter != debugUtilsObjectNameMap.end()) {
@@ -218,7 +221,9 @@ typedef struct _debug_report_data {
         return label;
     }
 
-    std::string DebugReportGetMarkerObjectName(const uint64_t object) const {
+    // NoLock suffix means that the function itself does not hold debug_output_mutex lock,
+    // and it's **mandatory responsibility** of the caller to hold this lock.
+    std::string DebugReportGetMarkerObjectNameNoLock(const uint64_t object) const {
         std::string label = "";
         const auto marker_name_iter = debugObjectNameMap.find(object);
         if (marker_name_iter != debugObjectNameMap.end()) {
@@ -228,9 +233,10 @@ typedef struct _debug_report_data {
     }
 
     std::string FormatHandle(const char *handle_type_name, uint64_t handle) const {
-        std::string handle_name = DebugReportGetUtilsObjectName(handle);
+        std::unique_lock<std::mutex> lock(debug_output_mutex);
+        std::string handle_name = DebugReportGetUtilsObjectNameNoLock(handle);
         if (handle_name.empty()) {
-            handle_name = DebugReportGetMarkerObjectName(handle);
+            handle_name = DebugReportGetMarkerObjectNameNoLock(handle);
         }
 
         std::ostringstream str;
@@ -282,26 +288,8 @@ static inline void DebugReportFlagsToAnnotFlags(VkDebugReportFlagsEXT dr_flags, 
     }
 }
 
-static inline LogMessageTypeFlags DebugAnnotFlagsToMsgTypeFlags(VkDebugUtilsMessageSeverityFlagBitsEXT da_severity,
-                                                                VkDebugUtilsMessageTypeFlagsEXT da_type) {
-    LogMessageTypeFlags msg_type_flags = 0;
-    if ((da_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0) {
-        msg_type_flags |= kErrorBit;
-    } else if ((da_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0) {
-        if ((da_type & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) != 0) {
-            msg_type_flags |= kPerformanceWarningBit;
-        } else {
-            msg_type_flags |= kWarningBit;
-        }
-    } else if ((da_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) != 0) {
-        msg_type_flags |= kInformationBit;
-    } else if ((da_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) != 0) {
-        msg_type_flags |= kVerboseBit;
-    }
-    return msg_type_flags;
-}
-
-VKAPI_ATTR bool LogMsg(const debug_report_data *debug_data, VkFlags msg_flags, const LogObjectList &objects,
+struct Location;
+VKAPI_ATTR bool LogMsg(const debug_report_data *debug_data, VkFlags msg_flags, const LogObjectList &objects, const Location *loc,
                        std::string_view vuid_text, const char *format, va_list argptr);
 
 VKAPI_ATTR VkResult LayerCreateMessengerCallback(debug_report_data *debug_data, bool default_callback,
@@ -447,5 +435,3 @@ static inline void EraseCmdDebugUtilsLabel(debug_report_data *report_data, VkCom
     std::unique_lock<std::mutex> lock(report_data->debug_output_mutex);
     report_data->debugUtilsCmdBufLabels.erase(command_buffer);
 }
-
-uint32_t vvl_vuid_hash(std::string_view vuid);

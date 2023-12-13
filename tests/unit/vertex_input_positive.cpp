@@ -12,13 +12,15 @@
  */
 
 #include "../framework/layer_validation_tests.h"
+#include "../framework/pipeline_helper.h"
+#include "../framework/render_pass_helper.h"
 #include "generated/vk_extension_helper.h"
 
 TEST_F(PositiveVertexInput, AttributeMatrixType) {
     TEST_DESCRIPTION("Test that pipeline validation accepts matrices passed as vertex attributes");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkVertexInputBindingDescription input_binding;
     memset(&input_binding, 0, sizeof(input_binding));
@@ -43,7 +45,6 @@ TEST_F(PositiveVertexInput, AttributeMatrixType) {
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
     pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     pipe.vi_ci_.pVertexAttributeDescriptions = input_attribs;
@@ -57,8 +58,8 @@ TEST_F(PositiveVertexInput, AttributeMatrixType) {
 TEST_F(PositiveVertexInput, AttributeArrayType) {
     TEST_DESCRIPTION("Input in OpTypeArray");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkVertexInputBindingDescription input_binding;
     memset(&input_binding, 0, sizeof(input_binding));
@@ -83,7 +84,6 @@ TEST_F(PositiveVertexInput, AttributeArrayType) {
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
     pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     pipe.vi_ci_.pVertexAttributeDescriptions = input_attribs;
@@ -96,8 +96,8 @@ TEST_F(PositiveVertexInput, AttributeArrayType) {
 TEST_F(PositiveVertexInput, AttributeStructType) {
     TEST_DESCRIPTION("Input is OpTypeStruct");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkVertexInputBindingDescription input_binding = {0, 32, VK_VERTEX_INPUT_RATE_VERTEX};
 
@@ -133,7 +133,6 @@ TEST_F(PositiveVertexInput, AttributeStructType) {
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
     pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     pipe.vi_ci_.pVertexAttributeDescriptions = &input_attrib;
@@ -146,8 +145,8 @@ TEST_F(PositiveVertexInput, AttributeStructType) {
 TEST_F(PositiveVertexInput, AttributeStructTypeWithArray) {
     TEST_DESCRIPTION("Input is OpTypeStruct that has an OpTypeArray. Locations are not in order netiher");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkVertexInputBindingDescription input_binding = {0, 48, VK_VERTEX_INPUT_RATE_VERTEX};
 
@@ -195,7 +194,6 @@ TEST_F(PositiveVertexInput, AttributeStructTypeWithArray) {
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
     pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     pipe.vi_ci_.pVertexAttributeDescriptions = input_attribs;
@@ -208,8 +206,8 @@ TEST_F(PositiveVertexInput, AttributeStructTypeWithArray) {
 TEST_F(PositiveVertexInput, AttributeStructTypeSecondLocation) {
     TEST_DESCRIPTION("Input is OpTypeStruct with 2 locations");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkVertexInputBindingDescription input_binding = {0, 24, VK_VERTEX_INPUT_RATE_VERTEX};
 
@@ -249,7 +247,6 @@ TEST_F(PositiveVertexInput, AttributeStructTypeSecondLocation) {
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
     pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     pipe.vi_ci_.pVertexAttributeDescriptions = input_attribs;
@@ -262,19 +259,19 @@ TEST_F(PositiveVertexInput, AttributeStructTypeSecondLocation) {
 TEST_F(PositiveVertexInput, AttributeStructTypeBlockLocation) {
     TEST_DESCRIPTION("Input is OpTypeStruct where the Block has the Location");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkVertexInputBindingDescription input_binding = {0, 24, VK_VERTEX_INPUT_RATE_VERTEX};
 
     VkVertexInputAttributeDescription input_attribs[2] = {
-        {4, 0, VK_FORMAT_R32G32B32A32_SINT, 0},
+        {4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
         {5, 0, VK_FORMAT_R32G32B32A32_UINT, 0},
     };
 
     // This is not valid GLSL (but is valid SPIR-V) - would look like:
     //     layout(location = 4) in VertexIn {
-    //         ivec4 x;
+    //         vec4 x;
     //         uvec4 y;
     //     } x_struct;
     char const *vsSource = R"(
@@ -302,16 +299,13 @@ TEST_F(PositiveVertexInput, AttributeStructTypeBlockLocation) {
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
     pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     pipe.vi_ci_.pVertexAttributeDescriptions = input_attribs;
     pipe.vi_ci_.vertexAttributeDescriptionCount = 2;
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.InitState();
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-Input-08733");
     pipe.CreateGraphicsPipeline();
-    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(PositiveVertexInput, AttributeComponents) {
@@ -320,8 +314,11 @@ TEST_F(PositiveVertexInput, AttributeComponents) {
         "a different subset of the components, and that fragment shader-attachment validation tolerates multiple duplicate "
         "location outputs");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+    if (!m_device->phy().features().independentBlend) {
+        GTEST_SKIP() << "independentBlend not supported";
+    }
 
     VkVertexInputBindingDescription input_binding;
     memset(&input_binding, 0, sizeof(input_binding));
@@ -361,53 +358,27 @@ TEST_F(PositiveVertexInput, AttributeComponents) {
     VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
     VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    VkPipelineObj pipe(m_device);
-
-    VkDescriptorSetObj descriptorSet(m_device);
-    descriptorSet.AppendDummy();
-    descriptorSet.CreateVKDescriptorSet(m_commandBuffer);
-
     // Create a renderPass with two color attachments
-    VkAttachmentReference attachments[2] = {};
-    attachments[0].layout = VK_IMAGE_LAYOUT_GENERAL;
-    attachments[1].attachment = 1;
-    attachments[1].layout = VK_IMAGE_LAYOUT_GENERAL;
+    RenderPassSingleSubpass rp(*this);
+    rp.AddAttachmentDescription(VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED);
+    rp.AddAttachmentDescription(VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED);
+    rp.AddAttachmentReference({0, VK_IMAGE_LAYOUT_GENERAL});
+    rp.AddAttachmentReference({1, VK_IMAGE_LAYOUT_GENERAL});
+    rp.AddColorAttachment(0);
+    rp.AddColorAttachment(1);
+    rp.CreateRenderPass();
 
-    VkSubpassDescription subpass = {};
-    subpass.pColorAttachments = attachments;
-    subpass.colorAttachmentCount = 2;
-
-    VkRenderPassCreateInfo rpci = LvlInitStruct<VkRenderPassCreateInfo>();
-    rpci.subpassCount = 1;
-    rpci.pSubpasses = &subpass;
-    rpci.attachmentCount = 2;
-
-    VkAttachmentDescription attach_desc[2] = {};
-    attach_desc[0].format = VK_FORMAT_B8G8R8A8_UNORM;
-    attach_desc[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attach_desc[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attach_desc[0].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-    attach_desc[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attach_desc[1].format = VK_FORMAT_B8G8R8A8_UNORM;
-    attach_desc[1].samples = VK_SAMPLE_COUNT_1_BIT;
-    attach_desc[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attach_desc[1].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-    attach_desc[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-
-    rpci.pAttachments = attach_desc;
-    vk_testing::RenderPass renderpass(*m_device, rpci);
-    pipe.AddShader(&vs);
-    pipe.AddShader(&fs);
-
-    VkPipelineColorBlendAttachmentState att_state1 = {};
-    att_state1.dstAlphaBlendFactor = VK_BLEND_FACTOR_CONSTANT_COLOR;
-    att_state1.blendEnable = VK_FALSE;
-
-    pipe.AddColorAttachment(0, att_state1);
-    pipe.AddColorAttachment(1, att_state1);
-    pipe.AddVertexInputBindings(&input_binding, 1);
-    pipe.AddVertexInputAttribs(input_attribs, 3);
-    pipe.CreateVKPipeline(descriptorSet.GetPipelineLayout(), renderpass.handle());
+    CreatePipelineHelper pipe(*this, 2);
+    pipe.InitState();
+    pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipe.gp_ci_.renderPass = rp.Handle();
+    pipe.cb_attachments_[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_CONSTANT_COLOR;
+    pipe.cb_attachments_[0].blendEnable = VK_FALSE;
+    pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
+    pipe.vi_ci_.vertexBindingDescriptionCount = 1;
+    pipe.vi_ci_.pVertexAttributeDescriptions = input_attribs;
+    pipe.vi_ci_.vertexAttributeDescriptionCount = 3;
+    pipe.CreateGraphicsPipeline();
 }
 
 TEST_F(PositiveVertexInput, CreatePipeline64BitAttributes) {
@@ -415,9 +386,9 @@ TEST_F(PositiveVertexInput, CreatePipeline64BitAttributes) {
         "Test that pipeline validation accepts basic use of 64bit vertex attributes. This is interesting because they consume "
         "multiple locations.");
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    ASSERT_NO_FATAL_FAILURE(InitState());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(InitState());
+    InitRenderTarget();
 
     if (!m_device->phy().features().shaderFloat64) {
         GTEST_SKIP() << "Device does not support 64bit vertex attributes";
@@ -459,7 +430,6 @@ TEST_F(PositiveVertexInput, CreatePipeline64BitAttributes) {
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.vi_ci_.pVertexBindingDescriptions = input_bindings;
     pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     pipe.vi_ci_.pVertexAttributeDescriptions = input_attribs;
@@ -472,8 +442,8 @@ TEST_F(PositiveVertexInput, CreatePipeline64BitAttributes) {
 TEST_F(PositiveVertexInput, VertexAttribute64bit) {
     TEST_DESCRIPTION("Use 64-bit Vertex format");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     if (!m_device->phy().features().shaderFloat64) {
         GTEST_SKIP() << "Device does not support 64bit vertex attributes";
@@ -485,7 +455,7 @@ TEST_F(PositiveVertexInput, VertexAttribute64bit) {
         GTEST_SKIP() << "Format not supported for Vertex Buffer";
     }
 
-    VkBufferObj vtx_buf(*m_device, 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    vkt::Buffer vtx_buf(*m_device, 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
     char const *vsSource = R"glsl(
         #version 450 core
@@ -496,7 +466,6 @@ TEST_F(PositiveVertexInput, VertexAttribute64bit) {
     VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     VkVertexInputBindingDescription input_binding = {0, 0, VK_VERTEX_INPUT_RATE_VERTEX};
     VkVertexInputAttributeDescription input_attribs = {0, 0, format, 0};
 
@@ -512,8 +481,8 @@ TEST_F(PositiveVertexInput, VertexAttribute64bit) {
 TEST_F(PositiveVertexInput, AttributeStructTypeBlockLocation64bit) {
     TEST_DESCRIPTION("Input is OpTypeStruct where the Block has the Location with 64-bit Vertex format");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     if (!m_device->phy().features().shaderFloat64) {
         GTEST_SKIP() << "Device does not support 64bit vertex attributes";
@@ -565,7 +534,6 @@ TEST_F(PositiveVertexInput, AttributeStructTypeBlockLocation64bit) {
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.vi_ci_.pVertexBindingDescriptions = &input_binding;
     pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     pipe.vi_ci_.pVertexAttributeDescriptions = input_attribs;
@@ -578,8 +546,8 @@ TEST_F(PositiveVertexInput, AttributeStructTypeBlockLocation64bit) {
 TEST_F(PositiveVertexInput, Attribute64bitMissingComponent) {
     TEST_DESCRIPTION("Shader uses f64vec2, but provides too many component with R64G64B64A64, which is valid");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     if (!m_device->phy().features().shaderFloat64) {
         GTEST_SKIP() << "Device does not support 64bit vertex attributes";
@@ -600,7 +568,6 @@ TEST_F(PositiveVertexInput, Attribute64bitMissingComponent) {
     VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitInfo();
     VkVertexInputBindingDescription input_binding = {0, 32, VK_VERTEX_INPUT_RATE_VERTEX};
     VkVertexInputAttributeDescription input_attribs = {0, 0, format, 0};
 
