@@ -28,6 +28,7 @@ override_dh_auto_configure:
 				-DGLSLANG_INSTALL_DIR=/usr/bin \
 				-DSPIRV_TOOLS_INSTALL_DIR="/usr" \
 				-DSPIRV_HEADERS_INSTALL_DIR="/usr" \
+				-DVULKAN_UTILITY_LIBRARIES_INSTALL_DIR="/usr" \
 				-DUSE_ROBIN_HOOD_HASHING="ON" \
 				-DROBIN_HOOD_HASHING_INSTALL_DIR="/usr/include/robin-hood-hashing" \
 				-DBUILD_TESTS="OFF" \
