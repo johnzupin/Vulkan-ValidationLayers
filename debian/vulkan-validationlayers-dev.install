@@ -1,8 +1,0 @@
-usr/include/vulkan/containers
-usr/include/vulkan/error_message
-usr/include/vulkan/external
-usr/include/vulkan/generated
-usr/include/vulkan/utils
-usr/include/vulkan/vk_layer_config.cpp
-usr/include/vulkan/vk_layer_config.h
-usr/lib/x86_64-linux-gnu/libVkLayer_utils.a
