@@ -12,6 +12,7 @@
  */
 
 #include "../framework/layer_validation_tests.h"
+#include "../framework/pipeline_helper.h"
 
 TEST_F(PositiveShaderLimits, ComputeSharedMemoryWorkgroupMemoryExplicitLayout) {
     TEST_DESCRIPTION(
@@ -23,25 +24,19 @@ TEST_F(PositiveShaderLimits, ComputeSharedMemoryWorkgroupMemoryExplicitLayout) {
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    RETURN_IF_SKIP(InitFramework());
 
     // need at least SPIR-V 1.4 for SPV_KHR_workgroup_memory_explicit_layout
-    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
 
-    auto explicit_layout_features = LvlInitStruct<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR>();
+    VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR explicit_layout_features = vku::InitStructHelper();
     auto features2 = GetPhysicalDeviceFeatures2(explicit_layout_features);
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+    RETURN_IF_SKIP(InitState(nullptr, &features2));
 
     if (!explicit_layout_features.workgroupMemoryExplicitLayout) {
         GTEST_SKIP() << "workgroupMemoryExplicitLayout feature not supported.";
     }
 
-    const uint32_t max_shared_memory_size = m_device->phy().properties().limits.maxComputeSharedMemorySize;
+    const uint32_t max_shared_memory_size = m_device->phy().limits_.maxComputeSharedMemorySize;
     const uint32_t max_shared_vec4 = max_shared_memory_size / 16;
 
     std::stringstream csSource;
@@ -63,87 +58,7 @@ TEST_F(PositiveShaderLimits, ComputeSharedMemoryWorkgroupMemoryExplicitLayout) {
     )glsl";
 
     CreateComputePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource.str().c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
-    pipe.InitState();
-    pipe.CreateComputePipeline();
-}
-
-TEST_F(PositiveShaderLimits, ComputeSharedMemoryWorkgroupMemoryExplicitLayoutSpec) {
-    TEST_DESCRIPTION(
-        "Same test as ComputeSharedMemoryLimitWorkgroupMemoryExplicitLayout but making sure the path when using spec constants "
-        "works");
-
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-
-    // need at least SPIR-V 1.4 for SPV_KHR_workgroup_memory_explicit_layout
-    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        GTEST_SKIP() << "At least Vulkan version 1.2 is required";
-    }
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-
-    auto explicit_layout_features = LvlInitStruct<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR>();
-    GetPhysicalDeviceFeatures2(explicit_layout_features);
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &explicit_layout_features));
-
-    if (!explicit_layout_features.workgroupMemoryExplicitLayout) {
-        GTEST_SKIP() << "workgroupMemoryExplicitLayout feature not supported.";
-    }
-
-    const uint32_t max_shared_memory_size = m_device->phy().properties().limits.maxComputeSharedMemorySize;
-    const uint32_t max_shared_ints = max_shared_memory_size / 4;
-    const uint32_t max_shared_vec4 = max_shared_memory_size / 16;
-
-    std::stringstream csSource;
-    csSource << R"glsl(
-        #version 450
-        #extension GL_EXT_shared_memory_block : enable
-
-        // will be over the max if the spec constant uses default value
-        layout(constant_id = 0) const uint value = )glsl";
-    csSource << (max_shared_vec4 + 16);
-    csSource << R"glsl(;
-
-        // Both structs by themselves are 16 bytes less than the max
-        shared X {
-            vec4 x1[value];
-            vec4 x2;
-        };
-
-        shared Y {
-            int y1[)glsl";
-    csSource << (max_shared_ints - 4);
-    csSource << R"glsl(];
-            int y2;
-        };
-
-        void main() {
-            x2.x = 0.0f; // prevent dead-code elimination
-            y2 = 0;
-        }
-    )glsl";
-
-    uint32_t data = max_shared_vec4 - 16;
-
-    VkSpecializationMapEntry entry;
-    entry.constantID = 0;
-    entry.offset = 0;
-    entry.size = sizeof(uint32_t);
-
-    VkSpecializationInfo specialization_info = {};
-    specialization_info.mapEntryCount = 1;
-    specialization_info.pMapEntries = &entry;
-    specialization_info.dataSize = sizeof(uint32_t);
-    specialization_info.pData = &data;
-
-    CreateComputePipelineHelper pipe(*this);
-    pipe.InitInfo();
-    pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource.str().c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2,
-                                             SPV_SOURCE_GLSL, &specialization_info);
     pipe.InitState();
     pipe.CreateComputePipeline();
 }
@@ -151,9 +66,9 @@ TEST_F(PositiveShaderLimits, ComputeSharedMemoryWorkgroupMemoryExplicitLayoutSpe
 TEST_F(PositiveShaderLimits, ComputeSharedMemoryAtLimit) {
     TEST_DESCRIPTION("Validate compute shader shared memory is valid at the exact maxComputeSharedMemorySize");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
+    RETURN_IF_SKIP(Init());
 
-    const uint32_t max_shared_memory_size = m_device->phy().properties().limits.maxComputeSharedMemorySize;
+    const uint32_t max_shared_memory_size = m_device->phy().limits_.maxComputeSharedMemorySize;
     const uint32_t max_shared_ints = max_shared_memory_size / 4;
 
     std::stringstream csSource;
@@ -166,7 +81,6 @@ TEST_F(PositiveShaderLimits, ComputeSharedMemoryAtLimit) {
     )glsl";
 
     CreateComputePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource.str().c_str(), VK_SHADER_STAGE_COMPUTE_BIT);
     pipe.InitState();
     pipe.CreateComputePipeline();
@@ -175,9 +89,9 @@ TEST_F(PositiveShaderLimits, ComputeSharedMemoryAtLimit) {
 TEST_F(PositiveShaderLimits, ComputeSharedMemoryBooleanAtLimit) {
     TEST_DESCRIPTION("Validate compute shader shared memory is valid at the exact maxComputeSharedMemorySize using Booleans");
 
-    ASSERT_NO_FATAL_FAILURE(Init());
+    RETURN_IF_SKIP(Init());
 
-    const uint32_t max_shared_memory_size = m_device->phy().properties().limits.maxComputeSharedMemorySize;
+    const uint32_t max_shared_memory_size = m_device->phy().limits_.maxComputeSharedMemorySize;
     // "Boolean values considered as 32-bit integer values for the purpose of this calculation."
     const uint32_t max_shared_bools = max_shared_memory_size / 4;
 
@@ -191,7 +105,6 @@ TEST_F(PositiveShaderLimits, ComputeSharedMemoryBooleanAtLimit) {
     )glsl";
 
     CreateComputePipelineHelper pipe(*this);
-    pipe.InitInfo();
     pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource.str().c_str(), VK_SHADER_STAGE_COMPUTE_BIT);
     pipe.InitState();
     pipe.CreateComputePipeline();
@@ -202,23 +115,19 @@ TEST_F(PositiveShaderLimits, MeshSharedMemoryAtLimit) {
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_MESH_SHADER_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-    auto mesh_shader_features = LvlInitStruct<VkPhysicalDeviceMeshShaderFeaturesEXT>();
+    RETURN_IF_SKIP(InitFramework());
+    VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features = vku::InitStructHelper();
     GetPhysicalDeviceFeatures2(mesh_shader_features);
     if (!mesh_shader_features.meshShader) {
         GTEST_SKIP() << "Mesh shader not supported";
     }
+    mesh_shader_features.multiviewMeshShader = VK_FALSE;
+    mesh_shader_features.primitiveFragmentShadingRateMeshShader = VK_FALSE;
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &mesh_shader_features));
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        GTEST_SKIP() << "At least Vulkan version 1.2 is required.";
-    }
+    RETURN_IF_SKIP(InitState(nullptr, &mesh_shader_features));
+    InitRenderTarget();
 
-    auto mesh_shader_properties = LvlInitStruct<VkPhysicalDeviceMeshShaderPropertiesEXT>();
+    VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(mesh_shader_properties);
 
     const uint32_t max_shared_memory_size = mesh_shader_properties.maxMeshSharedMemorySize;
@@ -249,23 +158,19 @@ TEST_F(PositiveShaderLimits, TaskSharedMemoryAtLimit) {
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_MESH_SHADER_EXTENSION_NAME);
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    if (!AreRequiredExtensionsEnabled()) {
-        GTEST_SKIP() << RequiredExtensionsNotSupported() << " not supported";
-    }
-    auto mesh_shader_features = LvlInitStruct<VkPhysicalDeviceMeshShaderFeaturesEXT>();
+    RETURN_IF_SKIP(InitFramework());
+    VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features = vku::InitStructHelper();
     GetPhysicalDeviceFeatures2(mesh_shader_features);
     if (!mesh_shader_features.meshShader || !mesh_shader_features.taskShader) {
         GTEST_SKIP() << "Mesh and Task shader not supported";
     }
+    mesh_shader_features.multiviewMeshShader = VK_FALSE;
+    mesh_shader_features.primitiveFragmentShadingRateMeshShader = VK_FALSE;
 
-    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &mesh_shader_features));
-    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
-    if (DeviceValidationVersion() < VK_API_VERSION_1_2) {
-        GTEST_SKIP() << "At least Vulkan version 1.2 is required.";
-    }
+    RETURN_IF_SKIP(InitState(nullptr, &mesh_shader_features));
+    InitRenderTarget();
 
-    auto mesh_shader_properties = LvlInitStruct<VkPhysicalDeviceMeshShaderPropertiesEXT>();
+    VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(mesh_shader_properties);
 
     const uint32_t max_shared_memory_size = mesh_shader_properties.maxMeshSharedMemorySize;

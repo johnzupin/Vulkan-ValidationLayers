@@ -20,7 +20,6 @@ import os
 import sys
 import subprocess
 import platform
-import shutil
 import argparse
 
 # Use Ninja for all platforms for performance/simplicity
@@ -74,7 +73,7 @@ def IsWindows(): return 'windows' == platform.system().lower()
 
 #
 # Prepare the Validation Layers for testing
-def BuildVVL(config, cmake_args, build_tests):
+def BuildVVL(config, cmake_args, build_tests, mock_android):
     print("Log CMake version")
     cmake_ver_cmd = 'cmake --version'
     RunShellCmd(cmake_ver_cmd)
@@ -92,6 +91,9 @@ def BuildVVL(config, cmake_args, build_tests):
     if cmake_args:
          cmake_cmd += f' {cmake_args}'
 
+    if mock_android:
+         cmake_cmd += ' -DVVL_MOCK_ANDROID=ON'
+
     RunShellCmd(cmake_cmd)
 
     print("Build VVL")
@@ -103,38 +105,14 @@ def BuildVVL(config, cmake_args, build_tests):
     RunShellCmd(install_cmd)
 
 #
-# Run VVL scripts
-def CheckVVL():
-    vulkan_registry = f'{CI_EXTERNAL_DIR}/Vulkan-Headers/build/install/share/vulkan/registry'
-    if not os.path.exists(vulkan_registry):
-        print(f'Unable to find Vulkan Registry: {vulkan_registry}')
-        sys.exit(1)
-
-    spirv_unified = f'{CI_EXTERNAL_DIR}/SPIRV-Headers/build/install/include/spirv/unified1/'
-    if not os.path.exists(spirv_unified):
-        print(f'Unable to find Spirv Unified: {spirv_unified}')
-        sys.exit(1)
-
-    print("Check Generated Source Code Consistency")
-    gen_check_cmd = f'python scripts/generate_source.py --verify {vulkan_registry} {spirv_unified}'
-    RunShellCmd(gen_check_cmd)
-
-    print('Run vk_validation_stats.py')
-    valid_usage_json = f'{vulkan_registry}/validusage.json'
-    text_file = f'{CI_BUILD_DIR}/vuid_coverage_database.txt'
-    gen_check_cmd = f'python scripts/vk_validation_stats.py {valid_usage_json} -text {text_file}'
-    RunShellCmd(gen_check_cmd)
-
-#
 # Prepare Loader for executing Layer Validation Tests
 def BuildLoader():
     SRC_DIR = f'{CI_EXTERNAL_DIR}/Vulkan-Loader'
     BUILD_DIR = f'{SRC_DIR}/build'
 
     if not os.path.exists(SRC_DIR):
-        print("Clone Loader Source Code")
-        clone_loader_cmd = 'git clone https://github.com/KhronosGroup/Vulkan-Loader.git'
-        RunShellCmd(clone_loader_cmd, CI_EXTERNAL_DIR)
+        print("Unable to find Vulkan-Loader")
+        sys.exit(1)
 
     print("Run CMake for Loader")
     cmake_cmd = f'cmake -S {SRC_DIR} -B {BUILD_DIR}'
@@ -156,22 +134,23 @@ def BuildLoader():
 
 #
 # Prepare Mock ICD for use with Layer Validation Tests
-def BuildMockICD():
+def BuildMockICD(mockAndroid):
     SRC_DIR = f'{CI_EXTERNAL_DIR}/Vulkan-Tools'
     BUILD_DIR = f'{SRC_DIR}/build'
 
     if not os.path.exists(SRC_DIR):
-        print("Clone Vulkan-Tools Repository")
-        clone_tools_cmd = 'git clone https://github.com/KhronosGroup/Vulkan-Tools.git'
-        RunShellCmd(clone_tools_cmd, CI_EXTERNAL_DIR)
+        print("Unable to find Vulkan-Tools")
+        sys.exit(1)
 
     print("Configure Mock ICD")
     cmake_cmd = f'cmake -S {SRC_DIR} -B {BUILD_DIR} -D CMAKE_BUILD_TYPE=Release '
     cmake_cmd += '-DBUILD_CUBE=NO -DBUILD_VULKANINFO=NO -D INSTALL_ICD=ON -D UPDATE_DEPS=ON'
+    if mockAndroid:
+        cmake_cmd += ' -DBUILD_MOCK_ANDROID_SUPPORT=ON'
     RunShellCmd(cmake_cmd)
 
     print("Build Mock ICD")
-    build_cmd = f'cmake --build {BUILD_DIR}'
+    build_cmd = f'cmake --build {BUILD_DIR} --target VkICD_mock_icd'
     RunShellCmd(build_cmd)
 
     print("Install Mock ICD")
@@ -180,21 +159,22 @@ def BuildMockICD():
 
 #
 # Prepare Profile Layer for use with Layer Validation Tests
-def BuildProfileLayer():
+def BuildProfileLayer(mockAndroid):
     RunShellCmd('pip3 install jsonschema')
 
     SRC_DIR = f'{CI_EXTERNAL_DIR}/Vulkan-Profiles'
     BUILD_DIR = f'{SRC_DIR}/build'
 
     if not os.path.exists(SRC_DIR):
-        print("Clone Vulkan-Profiles Repository")
-        clone_cmd = 'git clone https://github.com/KhronosGroup/Vulkan-Profiles.git'
-        RunShellCmd(clone_cmd, CI_EXTERNAL_DIR)
+        print("Unable to find Vulkan-Profiles")
+        sys.exit(1)
 
     print("Run CMake for Profile Layer")
     cmake_cmd = f'cmake -S {SRC_DIR} -B {BUILD_DIR}'
     cmake_cmd += ' -D CMAKE_BUILD_TYPE=Release'
     cmake_cmd += ' -D UPDATE_DEPS=ON'
+    if mockAndroid:
+        cmake_cmd += ' -DBUILD_MOCK_ANDROID_SUPPORT=ON'
     RunShellCmd(cmake_cmd)
 
     print("Build Profile Layer")
@@ -207,7 +187,7 @@ def BuildProfileLayer():
 
 #
 # Run the Layer Validation Tests
-def RunVVLTests():
+def RunVVLTests(args):
     print("Run VVL Tests using Mock ICD")
 
     lvt_env = dict(os.environ)
@@ -219,6 +199,7 @@ def RunVVLTests():
         lvt_env['VK_DRIVER_FILES'] = os.path.join(CI_INSTALL_DIR, 'bin\\VkICD_mock_icd.json')
     else:
         lvt_env['LD_LIBRARY_PATH'] = os.path.join(CI_INSTALL_DIR, 'lib')
+        lvt_env['DYLD_LIBRARY_PATH'] = os.path.join(CI_INSTALL_DIR, 'lib')
         lvt_env['VK_LAYER_PATH'] = os.path.join(CI_INSTALL_DIR, 'share/vulkan/explicit_layer.d')
         lvt_env['VK_DRIVER_FILES'] = os.path.join(CI_INSTALL_DIR, 'share/vulkan/icd.d/VkICD_mock_icd.json')
 
@@ -244,30 +225,24 @@ def RunVVLTests():
 
     lvt_cmd = os.path.join(CI_INSTALL_DIR, 'bin', 'vk_layer_validation_tests')
 
-    # The following test(s) fail with thread sanitization enabled.
-    failing_tsan_tests = '-VkPositiveLayerTest.QueueThreading'
-    failing_tsan_tests += ':NegativeCommand.SecondaryCommandBufferRerecordedExplicitReset'
-    failing_tsan_tests += ':NegativeCommand.SecondaryCommandBufferRerecordedNoReset'
-    failing_tsan_tests += ':NegativeSyncVal.CopyOptimalImageHazards'
-    failing_tsan_tests += ':NegativeViewportInheritance.BasicUsage'
-    failing_tsan_tests += ':NegativeViewportInheritance.MultiViewport'
-    # NOTE: These test(s) fails sporadically.
-    # These need extra care to prevent a regression in the future.
-    failing_tsan_tests += ':PositiveSyncObject.WaitTimelineSemThreadRace'
-    failing_tsan_tests += ':PositiveQuery.ResetQueryPoolFromDifferentCB'
+    if args.mockAndroid:
+        # TODO - only reason running this subset, is mockAndoid fails any test that does
+        # a manual vkCreateDevice call and need to investigate more why
+        RunShellCmd(lvt_cmd + " --gtest_filter=*AndroidHardwareBuffer.*:*AndroidExternalResolve.*", env=lvt_env)
+        return
 
-    RunShellCmd(lvt_cmd + f" --gtest_filter={failing_tsan_tests}", env=lvt_env)
+    RunShellCmd(lvt_cmd, env=lvt_env)
+
+    print("Re-Running syncval tests with core validation enabled (--syncval-enable-core)")
+    RunShellCmd(lvt_cmd + f' --gtest_filter=*SyncVal* --syncval-enable-core', env=lvt_env)
 
     print("Re-Running multithreaded tests with VK_LAYER_FINE_GRAINED_LOCKING disabled")
     lvt_env['VK_LAYER_FINE_GRAINED_LOCKING'] = '0'
-    RunShellCmd(lvt_cmd + f' --gtest_filter=*Thread*:{failing_tsan_tests}', env=lvt_env)
+    RunShellCmd(lvt_cmd + f' --gtest_filter=*Thread*', env=lvt_env)
 
 def GetArgParser():
     configs = ['release', 'debug']
     default_config = configs[0]
-
-    osx_choices = ['min', 'latest']
-    osx_default = osx_choices[1]
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -286,8 +261,5 @@ def GetArgParser():
     parser.add_argument(
         '--test', dest='test',
         action='store_true', help='Tests the layers')
-    parser.add_argument(
-        '--osx', dest='osx', action='store',
-        choices=osx_choices, default=osx_default,
-        help='Sets MACOSX_DEPLOYMENT_TARGET on Apple platforms.')
+
     return parser

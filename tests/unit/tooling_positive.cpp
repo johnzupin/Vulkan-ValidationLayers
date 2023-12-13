@@ -17,15 +17,15 @@
 TEST_F(PositiveTooling, BasicUsage) {
     TEST_DESCRIPTION("Call Tooling Extension and verify layer results");
 
-    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
-    ASSERT_NO_FATAL_FAILURE(InitState());
+    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(InitState());
 
-    if (IsPlatform(kMockICD)) {
+    if (IsPlatformMockICD()) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
 
-    auto fpGetPhysicalDeviceToolPropertiesEXT =
-        (PFN_vkGetPhysicalDeviceToolPropertiesEXT)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceToolPropertiesEXT");
+    const auto fpGetPhysicalDeviceToolPropertiesEXT =
+        GetInstanceProcAddr<PFN_vkGetPhysicalDeviceToolPropertiesEXT>("vkGetPhysicalDeviceToolPropertiesEXT");
 
     uint32_t tool_count = 0;
     auto result = fpGetPhysicalDeviceToolPropertiesEXT(gpu(), &tool_count, nullptr);
@@ -36,7 +36,7 @@ TEST_F(PositiveTooling, BasicUsage) {
 
     std::vector<VkPhysicalDeviceToolPropertiesEXT> tool_properties(tool_count);
     for (uint32_t i = 0; i < tool_count; i++) {
-        tool_properties[i] = LvlInitStruct<VkPhysicalDeviceToolPropertiesEXT>();
+        tool_properties[i] = vku::InitStructHelper();
     }
 
     bool found_validation_layer = false;

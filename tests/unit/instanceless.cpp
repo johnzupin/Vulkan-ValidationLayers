@@ -179,8 +179,9 @@ TEST_F(NegativeInstanceless, InstanceValidationFlags) {
         validation_flags.disabledValidationCheckCount = 0;
         ici.pNext = &validation_flags;
 
+        // TODO - Currently returns VUID_Undefined
         // VUID-VkValidationFlagsEXT-disabledValidationCheckCount-arraylength
-        Monitor().SetDesiredFailureMsg(kErrorBit, "parameter disabledValidationCheckCount must be greater than 0");
+        Monitor().SetDesiredFailureMsg(kErrorBit, "disabledValidationCheckCount must be greater than 0");
         vk::CreateInstance(&ici, nullptr, &dummy_instance);
         Monitor().VerifyFound();
     }
@@ -222,7 +223,7 @@ TEST_F(NegativeInstanceless, DestroyInstanceAllocationCallbacksCompatibility) {
 
     {
         VkInstance instance;
-        ASSERT_VK_SUCCESS(vk::CreateInstance(&ici, nullptr, &instance));
+        ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&ici, nullptr, &instance));
 
         Monitor().SetDesiredFailureMsg(kErrorBit, "VUID-vkDestroyInstance-instance-00631");
         vk::DestroyInstance(instance, &alloc_callbacks);
@@ -233,36 +234,102 @@ TEST_F(NegativeInstanceless, DestroyInstanceAllocationCallbacksCompatibility) {
 // TODO - Currently can not be ran with Profile layer
 TEST_F(NegativeInstanceless, DISABLED_DestroyInstanceHandleLeak) {
     TEST_DESCRIPTION("Test vkDestroyInstance while leaking a VkDevice object.");
-    ASSERT_NO_FATAL_FAILURE(InitFramework());
-    if (!IsPlatform(kMockICD)) {
+    RETURN_IF_SKIP(InitFramework());
+    if (!IsPlatformMockICD()) {
         // This test leaks a device (on purpose) and should not be run on a real driver
         GTEST_SKIP() << "This test only runs on the mock ICD";
     }
     const auto ici = GetInstanceCreateInfo();
 
     VkInstance instance;
-    ASSERT_VK_SUCCESS(vk::CreateInstance(&ici, nullptr, &instance));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&ici, nullptr, &instance));
     uint32_t physical_device_count = 1;
     VkPhysicalDevice physical_device;
     const VkResult err = vk::EnumeratePhysicalDevices(instance, &physical_device_count, &physical_device);
-    ASSERT_TRUE(err == VK_SUCCESS || err == VK_INCOMPLETE) << vk_result_string(err);
+    ASSERT_TRUE(err == VK_SUCCESS || err == VK_INCOMPLETE) << string_VkResult(err);
     ASSERT_EQ(physical_device_count, 1);
 
     float dqci_priorities[] = {1.0};
-    VkDeviceQueueCreateInfo dqci = LvlInitStruct<VkDeviceQueueCreateInfo>();
+    VkDeviceQueueCreateInfo dqci = vku::InitStructHelper();
     dqci.queueFamilyIndex = 0;
     dqci.queueCount = 1;
     dqci.pQueuePriorities = dqci_priorities;
 
-    VkDeviceCreateInfo dci = LvlInitStruct<VkDeviceCreateInfo>();
+    VkDeviceCreateInfo dci = vku::InitStructHelper();
     dci.queueCreateInfoCount = 1;
     dci.pQueueCreateInfos = &dqci;
 
     VkDevice leaked_device;
-    ASSERT_VK_SUCCESS(vk::CreateDevice(physical_device, &dci, nullptr, &leaked_device));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateDevice(physical_device, &dci, nullptr, &leaked_device));
 
-    // VUID-vkDestroyInstance-instance-00629
-    Monitor().SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-ObjectTracker-ObjectLeak");
+    Monitor().SetDesiredFailureMsg(kErrorBit, "VUID-vkDestroyInstance-instance-00629");
     vk::DestroyInstance(instance, nullptr);
     Monitor().VerifyFound();
 }
+
+VKAPI_ATTR VkBool32 VKAPI_CALL callback(VkDebugReportFlagsEXT, VkDebugReportObjectTypeEXT, uint64_t, size_t, int32_t, const char*,
+                                        const char*, void*) {
+    return VK_FALSE;
+}
+
+VKAPI_ATTR VkBool32 VKAPI_PTR utils_callback(VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT,
+                                             const VkDebugUtilsMessengerCallbackDataEXT*, void*) {
+    return VK_FALSE;
+}
+
+#ifndef VK_USE_PLATFORM_ANDROID_KHR
+TEST_F(NegativeInstanceless, ExtensionStructsWithoutExtensions) {
+    TEST_DESCRIPTION("Create instance with structures in pNext while not including required extensions");
+
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    AddRequiredExtensions(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+#endif
+
+    VkInstanceCreateInfo ici = vku::InitStructHelper();
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+    ici.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
+    ici.pApplicationInfo = &app_info_;
+    ici.enabledLayerCount = size32(instance_layers_);
+    ici.ppEnabledLayerNames = instance_layers_.data();
+    ici.enabledExtensionCount = size32(m_instance_extension_names);
+    ici.ppEnabledExtensionNames = m_instance_extension_names.data();
+
+    VkInstance instance;
+
+    VkDebugReportCallbackCreateInfoEXT debug_report_callback = vku::InitStructHelper();
+    debug_report_callback.pfnCallback = callback;
+    debug_report_callback.pNext = m_errorMonitor->GetDebugCreateInfo();
+    ici.pNext = &debug_report_callback;
+    Monitor().SetDesiredFailureMsg(kErrorBit, "VUID-VkInstanceCreateInfo-pNext-04925");
+    vk::CreateInstance(&ici, nullptr, &instance);
+    Monitor().VerifyFound();
+
+    VkDirectDriverLoadingInfoLUNARG driver = vku::InitStructHelper();
+
+    VkDirectDriverLoadingListLUNARG direct_driver_loading_list = vku::InitStructHelper();
+    direct_driver_loading_list.pNext = const_cast<VkDebugUtilsMessengerCreateInfoEXT*>(m_errorMonitor->GetDebugCreateInfo());
+    direct_driver_loading_list.driverCount = 1u;
+    direct_driver_loading_list.pDrivers = &driver;
+    ici.pNext = &direct_driver_loading_list;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkInstanceCreateInfo-pNext-09400");
+    vk::CreateInstance(&ici, nullptr, &instance);
+    m_errorMonitor->VerifyFound();
+
+    VkDebugUtilsMessengerCreateInfoEXT debug_utils_messenger = vku::InitStructHelper();
+    debug_utils_messenger.pNext = m_errorMonitor->GetDebugCreateInfo();
+    debug_utils_messenger.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    debug_utils_messenger.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT;
+    debug_utils_messenger.pfnUserCallback = utils_callback;
+    ici.pNext = &debug_utils_messenger;
+    // Ignore the first extension which is VK_EXT_debug_utils
+    ici.enabledExtensionCount = size32(m_instance_extension_names) - 1;
+    if (ici.enabledExtensionCount > 0) {
+        ici.ppEnabledExtensionNames = &m_instance_extension_names[1];
+    }
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkInstanceCreateInfo-pNext-04926");
+    vk::CreateInstance(&ici, nullptr, &instance);
+    m_errorMonitor->VerifyFound();
+}
+#endif

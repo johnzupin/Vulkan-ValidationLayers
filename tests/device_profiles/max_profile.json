@@ -101,6 +101,10 @@
                 "VkPhysicalDevicePresentWaitFeaturesKHR": {
                     "presentWait": true
                 },
+                "VkPhysicalDeviceCooperativeMatrixFeaturesKHR": {
+                    "cooperativeMatrix": true,
+                    "cooperativeMatrixRobustBufferAccess": true
+                },
                 "VkPhysicalDevice16BitStorageFeatures": {
                     "storageBuffer16BitAccess": true,
                     "uniformAndStorageBuffer16BitAccess": true,
@@ -776,6 +780,9 @@
                 "VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT": {
                     "dynamicRenderingUnusedAttachments": true
                 },
+                "VkPhysicalDeviceExternalFormatResolveFeaturesANDROID": {
+                    "externalFormatResolve": true
+                },
                 "VkPhysicalDeviceDepthBiasControlFeaturesEXT": {
                     "depthBiasControl": true,
                     "leastRepresentableValueForceUnormRepresentation": true,
@@ -1022,6 +1029,18 @@
                 "VkPhysicalDevicePushDescriptorPropertiesKHR": {
                     "maxPushDescriptors": 4294967000
                 },
+                "VkPhysicalDeviceCooperativeMatrixPropertiesKHR": {
+                    "cooperativeMatrixSupportedStages": [
+                        "VK_SHADER_STAGE_FRAGMENT_BIT",
+                        "VK_SHADER_STAGE_COMPUTE_BIT",
+                        "VK_SHADER_STAGE_RAYGEN_BIT_KHR",
+                        "VK_SHADER_STAGE_ANY_HIT_BIT_KHR",
+                        "VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR",
+                        "VK_SHADER_STAGE_MISS_BIT_KHR",
+                        "VK_SHADER_STAGE_INTERSECTION_BIT_KHR",
+                        "VK_SHADER_STAGE_CALLABLE_BIT_KHR"
+                    ]
+                },
                 "VkPhysicalDeviceDriverProperties": {},
                 "VkPhysicalDeviceIDProperties": {},
                 "VkPhysicalDeviceMultiviewProperties": {
@@ -1121,7 +1140,9 @@
                     "shaderRoundingModeRTZFloat32": true,
                     "shaderRoundingModeRTZFloat64": true
                 },
-                "VkPhysicalDeviceExternalMemoryHostPropertiesEXT": {},
+                "VkPhysicalDeviceExternalMemoryHostPropertiesEXT": {
+                    "minImportedHostPointerAlignment": 4096
+                },
                 "VkPhysicalDeviceConservativeRasterizationPropertiesEXT": {
                     "primitiveUnderestimation": true,
                     "conservativePointAndLineRasterization": true,
@@ -1648,6 +1669,9 @@
                         "height": 64
                     }
                 },
+                "VkPhysicalDeviceExternalFormatResolvePropertiesANDROID": {
+                    "nullColorAttachmentWithExternalFormatResolve": false
+                },
                 "VkPhysicalDeviceOpticalFlowPropertiesNV": {},
                 "VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM": {
                     "shaderCoreCount": 4294967000,
@@ -1678,6 +1702,7 @@
                 "VK_AMD_shader_trinary_minmax": 1,
                 "VK_AMD_texture_gather_bias_lod": 1,
                 "VK_ANDROID_external_memory_android_hardware_buffer": 1,
+                "VK_ANDROID_external_format_resolve": 1,
                 "VK_ARM_rasterization_order_attachment_access": 1,
                 "VK_ARM_shader_core_builtins": 1,
                 "VK_EXT_4444_formats": 1,
@@ -1690,6 +1715,7 @@
                 "VK_EXT_border_color_swizzle": 1,
                 "VK_EXT_buffer_device_address": 1,
                 "VK_EXT_calibrated_timestamps": 1,
+                "VK_KHR_calibrated_timestamps": 1,
                 "VK_EXT_color_write_enable": 1,
                 "VK_EXT_conditional_rendering": 1,
                 "VK_EXT_conservative_rasterization": 1,
@@ -1822,6 +1848,7 @@
                 "VK_KHR_android_surface": 1,
                 "VK_KHR_bind_memory2": 1,
                 "VK_KHR_buffer_device_address": 1,
+                "VK_KHR_cooperative_matrix": 1,
                 "VK_KHR_copy_commands2": 1,
                 "VK_KHR_create_renderpass2": 1,
                 "VK_KHR_dedicated_allocation": 1,
@@ -1979,6 +2006,29 @@
                 "VK_EXT_dynamic_rendering_unused_attachments": 1
             },
             "formats": {
+                "VK_FORMAT_UNDEFINED": {
+                    "VkFormatProperties3": {
+                        "linearTilingFeatures": [
+                            "VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT",
+                            "VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT",
+                            "VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT",
+                            "VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT",
+                            "VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT",
+                            "VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT",
+                            "VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT"
+                        ],
+                        "optimalTilingFeatures": [
+                            "VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT",
+                            "VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT",
+                            "VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT",
+                            "VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT",
+                            "VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT",
+                            "VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT",
+                            "VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT"
+                        ],
+                        "bufferFeatures": []
+                    }
+                },
                 "VK_FORMAT_R4G4_UNORM_PACK8": {
                     "VkFormatProperties3": {
                         "linearTilingFeatures": [

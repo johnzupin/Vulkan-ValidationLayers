@@ -20,16 +20,12 @@
 #include <vulkan/vulkan_core.h>
 #include "containers/custom_containers.h"
 
-namespace core_error {
 struct Location;
-}
-
 struct DeviceExtensions;
 struct SubresourceRangeErrorCodes;
 struct DeviceExtensions;
 
 namespace sync_vuid_maps {
-using core_error::Location;
 
 extern const std::map<VkPipelineStageFlags2KHR, std::string> kFeatureNameMap;
 
@@ -49,6 +45,7 @@ enum class QueueError {
     kSync1ConcurrentDst,
     kExclusiveSrc,
     kExclusiveDst,
+    kHostStage,
 };
 
 extern const std::map<QueueError, std::string> kQueueErrorSummary;
@@ -74,7 +71,8 @@ enum class ImageError {
     kBadAttFeedbackLoopLayout,
     kBadSync2OldLayout,
     kBadSync2NewLayout,
-    kNotColorAspect,
+    kNotColorAspectSinglePlane,
+    kNotColorAspectNonDisjoint,
     kBadMultiplanarAspect,
     kBadPlaneCount,
     kNotDepthOrStencilAspect,

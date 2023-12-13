@@ -15,23 +15,18 @@
 # limitations under the License.
 # ~~~
 
-# NOTE: This can be removed when the minimum API level we support is 28.
-#
 # Our unit tests on Android repeatedly close/open the vulkan validation layers.
-# This causes issues with issues with thread_local variables.
+# This causes issues with issues with thread_local variables and overall performance.
 #
-# To run our tests on more devices without issue we can inform the linker to not unload VVL at runtime.
+# To run our tests without issue we can inform the linker to not unload VVL at runtime.
 # This will prevent VVL from being unloaded by dlclose which will avoid the issue.
-#
+# 
 # https://github.com/android/ndk/issues/360
 # https://github.com/android/ndk/issues/360#issuecomment-339107521
 # https://github.com/android/ndk/releases/tag/r26-beta1
-if ("${CMAKE_ANDROID_STL_TYPE}" MATCHES "static")
-    # nodelete : Marks that vvl shouldn't be unloaded at runtime. 
-    target_link_options(vvl PRIVATE -Wl,-z,nodelete)
-endif()
+target_link_options(vvl PRIVATE -Wl,-z,nodelete)
 
-set_directory_properties(PROPERTIES "COMPILE_OPTIONS" "") # Disable compiler warnings
+set_directory_properties(PROPERTIES "COMPILE_OPTIONS" "") # Disable compiler warnings for android glue
 
 enable_language(C) # NOTE: We need to enable the C language for android_native_app_glue.c
 
@@ -41,7 +36,8 @@ if (NOT EXISTS ${native_app_glue_dir})
     message(FATAL_ERROR "Couldn't find Android Native Glue directory!")
 endif()
 
-add_library(android_glue STATIC)
+# https://stackoverflow.com/questions/57189936/compiling-native-app-glue-c-results-in-an-invalid-library-file/76963564#76963564
+add_library(android_glue OBJECT)
 
 target_include_directories(android_glue PUBLIC ${native_app_glue_dir})
 target_sources(android_glue PRIVATE
@@ -49,11 +45,9 @@ target_sources(android_glue PRIVATE
     ${native_app_glue_dir}/android_native_app_glue.h
 )
 
-# Despite the fact this issue has been fixed "https://github.com/android-ndk/ndk/issues/381".
-# We still need to force export ANativeActivity_onCreate.
-target_link_options(android_glue PUBLIC -u ANativeActivity_onCreate)
-
 target_link_libraries(vk_layer_validation_tests PRIVATE android_glue)
+
+target_link_options(vk_layer_validation_tests PUBLIC LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/android.map)
 
 set_target_properties(vk_layer_validation_tests PROPERTIES OUTPUT_NAME "VulkanLayerValidationTests")
 

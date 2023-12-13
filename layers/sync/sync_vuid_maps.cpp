@@ -16,19 +16,19 @@
  * limitations under the License.
  */
 #include "sync/sync_vuid_maps.h"
-#include "error_message/core_error_location.h"
+#include "error_message/error_location.h"
 #include "core_checks/core_validation.h"
 #include "generated/enum_flag_bits.h"
 
 #include <cassert>
 
 namespace sync_vuid_maps {
-using core_error::Entry;
-using core_error::Field;
-using core_error::FindVUID;
-using core_error::Func;
-using core_error::Key;
-using core_error::Struct;
+using vvl::Entry;
+using vvl::Field;
+using vvl::FindVUID;
+using vvl::Func;
+using vvl::Key;
+using vvl::Struct;
 
 const std::map<VkPipelineStageFlags2KHR, std::string> kFeatureNameMap{
     {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT_KHR, "geometryShader"},
@@ -156,7 +156,7 @@ static const std::map<VkPipelineStageFlags2KHR, std::vector<Entry>> kStageMaskEr
          {Key(Func::vkCmdWaitEvents, Field::dstStageMask), "VUID-vkCmdWaitEvents-dstStageMask-04096"},
          {Key(Func::vkCmdWaitEvents, Field::srcStageMask), "VUID-vkCmdWaitEvents-srcStageMask-04096"},
          {Key(Func::vkCmdWriteTimestamp2, Field::stage), "VUID-vkCmdWriteTimestamp2-stage-03935"},
-         {Key(Func::vkCmdWriteTimestamp, Field::pipelineStage), "VUID-vkCmdWriteTimestamp-pipelineStage-04080"},
+         {Key(Func::vkCmdWriteTimestamp, Field::pipelineStage), "VUID-vkCmdWriteTimestamp-pipelineStage-07077"},
          {Key(Struct::VkImageMemoryBarrier2, Field::dstStageMask), "VUID-VkImageMemoryBarrier2-dstStageMask-03935"},
          {Key(Struct::VkImageMemoryBarrier2, Field::srcStageMask), "VUID-VkImageMemoryBarrier2-srcStageMask-03935"},
          {Key(Struct::VkMemoryBarrier2, Field::dstStageMask), "VUID-VkMemoryBarrier2-dstStageMask-03935"},
@@ -241,6 +241,30 @@ static const std::map<VkPipelineStageFlags2KHR, std::vector<Entry>> kStageMaskEr
          {Key(Struct::VkSubpassDependency, Field::dstStageMask), "VUID-VkSubpassDependency-dstStageMask-04094"},
          {Key(Struct::VkSubpassDependency2, Field::srcStageMask), "VUID-VkSubpassDependency2-srcStageMask-04094"},
          {Key(Struct::VkSubpassDependency2, Field::dstStageMask), "VUID-VkSubpassDependency2-dstStageMask-04094"},
+     }},
+    {VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+     {
+         {Key(Struct::VkSubmitInfo, Field::pWaitDstStageMask), "VUID-VkSubmitInfo-pWaitDstStageMask-07949"},
+         {Key(Func::vkCmdSetEvent, Field::stageMask), "VUID-vkCmdSetEvent-stageMask-07949"},
+         {Key(Func::vkCmdResetEvent, Field::stageMask), "VUID-vkCmdResetEvent-stageMask-07949"},
+         {Key(Func::vkCmdWaitEvents, Field::srcStageMask), "VUID-vkCmdWaitEvents-srcStageMask-07949"},
+         {Key(Func::vkCmdWaitEvents, Field::dstStageMask), "VUID-vkCmdWaitEvents-dstStageMask-07949"},
+         {Key(Func::vkCmdPipelineBarrier, Field::srcStageMask), "VUID-vkCmdPipelineBarrier-srcStageMask-07949"},
+         {Key(Func::vkCmdPipelineBarrier, Field::dstStageMask), "VUID-vkCmdPipelineBarrier-dstStageMask-07949"},
+         {Key(Struct::VkSubpassDependency, Field::srcStageMask), "VUID-VkSubpassDependency-srcStageMask-07949"},
+         {Key(Struct::VkSubpassDependency, Field::dstStageMask), "VUID-VkSubpassDependency-dstStageMask-07949"},
+         {Key(Struct::VkSubpassDependency, Field::srcStageMask), "VUID-VkSubpassDependency2-srcStageMask-07949"},
+         {Key(Struct::VkSubpassDependency, Field::dstStageMask), "VUID-VkSubpassDependency2-dstStageMask-07949"},
+         {Key(Func::vkCmdWriteTimestamp, Field::rayTracingPipeline), "VUID-vkCmdWriteTimestamp-rayTracingPipeline-07943"},
+         {Key(Struct::VkSemaphoreSubmitInfo, Field::stageMask), "VUID-VkSemaphoreSubmitInfo-stageMask-07946"},
+         {Key(Func::vkCmdResetEvent2, Field::stageMask), "VUID-vkCmdResetEvent2-stageMask-07946"},
+         {Key(Struct::VkMemoryBarrier2, Field::srcStageMask), "VUID-VkMemoryBarrier2-srcStageMask-07946"},
+         {Key(Struct::VkMemoryBarrier2, Field::dstStageMask), "VUID-VkMemoryBarrier2-dstStageMask-07946"},
+         {Key(Struct::VkBufferMemoryBarrier2, Field::srcStageMask), "VUID-VkBufferMemoryBarrier2-srcStageMask-07946"},
+         {Key(Struct::VkBufferMemoryBarrier2, Field::dstStageMask), "VUID-VkBufferMemoryBarrier2-dstStageMask-07946"},
+         {Key(Struct::VkImageMemoryBarrier2, Field::srcStageMask), "VUID-VkImageMemoryBarrier2-srcStageMask-07946"},
+         {Key(Struct::VkImageMemoryBarrier2, Field::dstStageMask), "VUID-VkImageMemoryBarrier2-dstStageMask-07946"},
+         {Key(Func::vkCmdWriteTimestamp2, Field::stage), "VUID-vkCmdWriteTimestamp2-stage-07946"},
      }},
 };
 
@@ -666,23 +690,55 @@ const std::string &GetBadAccessFlagsVUID(const Location &loc, VkAccessFlags2KHR 
     return result2;
 }
 
-// commonvalidity/access_mask_2_common.adoc
+// commonvalidity/access_mask_common.adoc/access_mask_2_common.adoc
 static const auto &GetLocation2VUIDMap() {
     static const std::map<Key, std::string> Location2VUID{
+        // Sync2 barriers. This can match different functions that work with VkDependencyInfo
         {Key(Struct::VkMemoryBarrier2, Field::srcAccessMask), "VUID-VkMemoryBarrier2-srcAccessMask-06256"},
         {Key(Struct::VkMemoryBarrier2, Field::dstAccessMask), "VUID-VkMemoryBarrier2-dstAccessMask-06256"},
         {Key(Struct::VkBufferMemoryBarrier2, Field::srcAccessMask), "VUID-VkBufferMemoryBarrier2-srcAccessMask-06256"},
         {Key(Struct::VkBufferMemoryBarrier2, Field::dstAccessMask), "VUID-VkBufferMemoryBarrier2-dstAccessMask-06256"},
         {Key(Struct::VkImageMemoryBarrier2, Field::srcAccessMask), "VUID-VkImageMemoryBarrier2-srcAccessMask-06256"},
         {Key(Struct::VkImageMemoryBarrier2, Field::dstAccessMask), "VUID-VkImageMemoryBarrier2-dstAccessMask-06256"},
+
+        // Sync1 barrier. This matches only vkCmdPipelineBarrier.
+        {Key(Func::vkCmdPipelineBarrier, Struct::VkMemoryBarrier, Field::srcAccessMask),
+         "VUID-vkCmdPipelineBarrier-srcAccessMask-06257"},
+        {Key(Func::vkCmdPipelineBarrier, Struct::VkMemoryBarrier, Field::dstAccessMask),
+         "VUID-vkCmdPipelineBarrier-dstAccessMask-06257"},
+        {Key(Func::vkCmdPipelineBarrier, Struct::VkBufferMemoryBarrier, Field::srcAccessMask),
+         "VUID-vkCmdPipelineBarrier-srcAccessMask-06257"},
+        {Key(Func::vkCmdPipelineBarrier, Struct::VkBufferMemoryBarrier, Field::dstAccessMask),
+         "VUID-vkCmdPipelineBarrier-dstAccessMask-06257"},
+        {Key(Func::vkCmdPipelineBarrier, Struct::VkImageMemoryBarrier, Field::srcAccessMask),
+         "VUID-vkCmdPipelineBarrier-srcAccessMask-06257"},
+        {Key(Func::vkCmdPipelineBarrier, Struct::VkImageMemoryBarrier, Field::dstAccessMask),
+         "VUID-vkCmdPipelineBarrier-dstAccessMask-06257"},
+
+        // Sync1 event wait. This matches only vkCmdWaitEvents.
+        {Key(Func::vkCmdWaitEvents, Struct::VkMemoryBarrier, Field::srcAccessMask), "VUID-vkCmdWaitEvents-srcAccessMask-06257"},
+        {Key(Func::vkCmdWaitEvents, Struct::VkMemoryBarrier, Field::dstAccessMask), "VUID-vkCmdWaitEvents-dstAccessMask-06257"},
+        {Key(Func::vkCmdWaitEvents, Struct::VkBufferMemoryBarrier, Field::srcAccessMask),
+         "VUID-vkCmdWaitEvents-srcAccessMask-06257"},
+        {Key(Func::vkCmdWaitEvents, Struct::VkBufferMemoryBarrier, Field::dstAccessMask),
+         "VUID-vkCmdWaitEvents-dstAccessMask-06257"},
+        {Key(Func::vkCmdWaitEvents, Struct::VkImageMemoryBarrier, Field::srcAccessMask),
+         "VUID-vkCmdWaitEvents-srcAccessMask-06257"},
+        {Key(Func::vkCmdWaitEvents, Struct::VkImageMemoryBarrier, Field::dstAccessMask),
+         "VUID-vkCmdWaitEvents-dstAccessMask-06257"},
     };
-    assert(Location2VUID.size() == 6);
     return Location2VUID;
 }
 
 const std::string &GetAccessMaskRayQueryVUIDSelector(const Location &loc, const DeviceExtensions &device_extensions) {
-    const Key key(loc.structure, loc.field);
-    if (auto it = GetLocation2VUIDMap().find(key); it != GetLocation2VUIDMap().end()) {
+    // At first try exact match: VUID for specific parameter (struct + field) of specific function
+    const Key key_full(loc.function, loc.structure, loc.field);
+    if (auto it = GetLocation2VUIDMap().find(key_full); it != GetLocation2VUIDMap().end()) {
+        return it->second;
+    }
+    // Try to match VUID based on parameter (so can be used by multiple functions)
+    const Key key_struct_field(loc.structure, loc.field);
+    if (auto it = GetLocation2VUIDMap().find(key_struct_field); it != GetLocation2VUIDMap().end()) {
         return it->second;
     }
     static const std::string unhandled("UNASSIGNED-CoreChecks-unhandled-bad-access-flags");
@@ -780,6 +836,11 @@ static const std::map<QueueError, std::vector<Entry>> kBarrierQueueErrors{
          {Key(Struct::VkBufferMemoryBarrier), "VUID-VkBufferMemoryBarrier-buffer-09096"},
          {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-image-09118"},
          {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-image-09118"},
+     }},
+    {QueueError::kHostStage,
+     {
+         {Key(Struct::VkBufferMemoryBarrier2), "VUID-VkBufferMemoryBarrier2-srcStageMask-03851"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcStageMask-03854"},
      }},
 };
 
@@ -967,10 +1028,15 @@ static const std::map<ImageError, std::vector<Entry>> kImageErrors{
          {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-synchronization2-07794"},
          {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-synchronization2-07794"},
      }},
-    {ImageError::kNotColorAspect,
+    {ImageError::kNotColorAspectSinglePlane,
      {
-         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-image-01671"},
-         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-image-01671"},
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-image-09241"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-image-09241"},
+     }},
+    {ImageError::kNotColorAspectNonDisjoint,
+     {
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-image-09242"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-image-09242"},
      }},
     {ImageError::kBadMultiplanarAspect,
      {
@@ -1124,8 +1190,15 @@ static const std::map<SubmitError, std::vector<Entry>> kSubmitErrors{
 
 const std::string &GetQueueSubmitVUID(const Location &loc, SubmitError error) {
     const auto &result = FindVUID(error, loc, kSubmitErrors);
-    assert(!result.empty());
     if (result.empty()) {
+        // TODO - Handle better way then Key::recursive to find certain VUs
+        // Can reproduce with NegativeSyncObject.Sync2QueueSubmitTimelineSemaphoreValue
+        if (loc.structure == Struct::VkSubmitInfo2) {
+            if (loc.prev->field == Field::pWaitSemaphoreInfos || loc.prev->field == Field::pSignalSemaphoreInfos) {
+                return FindVUID(error, *loc.prev, kSubmitErrors);
+            }
+        }
+
         static const std::string unhandled("UNASSIGNED-CoreChecks-unhandled-submit-error");
         return unhandled;
     }
@@ -1155,4 +1228,4 @@ const std::string &GetShaderTileImageVUID(const Location &loc, ShaderTileImageEr
     return result;
 }
 
-};  // namespace sync_vuid_maps
+}  // namespace sync_vuid_maps
