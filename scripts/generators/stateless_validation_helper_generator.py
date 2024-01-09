@@ -1,10 +1,10 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2023 The Khronos Group Inc.
-# Copyright (c) 2015-2023 Valve Corporation
-# Copyright (c) 2015-2023 LunarG, Inc.
-# Copyright (c) 2015-2023 Google Inc.
-# Copyright (c) 2023-2023 RasterGrid Kft.
+# Copyright (c) 2015-2024 The Khronos Group Inc.
+# Copyright (c) 2015-2024 Valve Corporation
+# Copyright (c) 2015-2024 LunarG, Inc.
+# Copyright (c) 2015-2024 Google Inc.
+# Copyright (c) 2023-2024 RasterGrid Kft.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -86,12 +86,14 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
             'vkQueuePresentKHR',
             'vkCreateDescriptorPool',
             'vkCmdPushDescriptorSetKHR',
+            'vkCmdPushDescriptorSet2KHR',
             'vkCmdSetExclusiveScissorNV',
             'vkCmdSetViewportShadingRatePaletteNV',
             'vkCmdSetCoarseSampleOrderNV',
             'vkAllocateMemory',
             'vkCreateAccelerationStructureNV',
             'vkCreateAccelerationStructureKHR',
+            'vkDestroyAccelerationStructureKHR',
             'vkGetAccelerationStructureHandleNV',
             'vkGetPhysicalDeviceImageFormatProperties',
             'vkGetPhysicalDeviceImageFormatProperties2',
@@ -112,6 +114,7 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
             'vkGetSemaphoreFdKHR',
             'vkImportFenceFdKHR',
             'vkGetFenceFdKHR',
+            'vkGetMemoryWin32HandleKHR',
             'vkImportFenceWin32HandleKHR',
             'vkGetFenceWin32HandleKHR',
             'vkImportSemaphoreWin32HandleKHR',
@@ -142,6 +145,7 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
             'vkCreateDisplayModeKHR',
             'vkCmdSetVertexInputEXT',
             'vkCmdPushConstants',
+            'vkCmdPushConstants2KHR',
             'vkMergePipelineCaches',
             'vkCmdClearColorImage',
             'vkCmdBeginRenderPass',
@@ -229,9 +233,9 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
 
             /***************************************************************************
             *
-            * Copyright (c) 2015-2023 The Khronos Group Inc.
-            * Copyright (c) 2015-2023 Valve Corporation
-            * Copyright (c) 2015-2023 LunarG, Inc.
+            * Copyright (c) 2015-2024 The Khronos Group Inc.
+            * Copyright (c) 2015-2024 Valve Corporation
+            * Copyright (c) 2015-2024 LunarG, Inc.
             *
             * Licensed under the Apache License, Version 2.0 (the "License");
             * you may not use this file except in compliance with the License.
@@ -568,6 +572,9 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
                     if member.type != 'char':
                         # A valid VU can't use '->' in the middle so the generated VUID from the spec uses '::' instead
                         count_required_vuid = self.GetVuid(vuid_tag_name, f"{member.length.replace('->', '::')}-arraylength")
+                        if structTypeName == 'VkShaderModuleCreateInfo' and member.name == 'pCode':
+                            count_required_vuid = '"VUID-VkShaderModuleCreateInfo-codeSize-01085"' # exception due to unique lenValue
+
                         # TODO - some length have unhandled symbols
                         count_loc = f'{errorLoc}.dot(Field::{member.length})'
                         if '->' in member.length:

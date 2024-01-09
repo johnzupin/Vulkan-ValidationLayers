@@ -140,6 +140,9 @@
                 "VkPhysicalDeviceMaintenance5FeaturesKHR": {
                     "maintenance5": true
                 },
+                "VkPhysicalDeviceMaintenance6FeaturesKHR": {
+                    "maintenance6": true
+                },
                 "VkPhysicalDeviceShaderDrawParametersFeatures": {
                     "shaderDrawParameters": true
                 },
@@ -228,6 +231,10 @@
                     "sparseImageFloat32AtomicMinMax": true
                 },
                 "VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT": {
+                    "vertexAttributeInstanceRateDivisor": true,
+                    "vertexAttributeInstanceRateZeroDivisor": true
+                },
+                "VkPhysicalDeviceVertexAttributeDivisorFeaturesKHR": {
                     "vertexAttributeInstanceRateDivisor": true,
                     "vertexAttributeInstanceRateZeroDivisor": true
                 },
@@ -1123,6 +1130,11 @@
                 "VkPhysicalDeviceMaintenance4Properties": {
                     "maxBufferSize": 1073741824
                 },
+                "VkPhysicalDeviceMaintenance6PropertiesKHR": {
+                    "blockTexelViewCompatibleMultipleLayers": true,
+                    "maxCombinedImageSamplerDescriptorCount": 1073741824,
+                    "fragmentShadingRateClampCombinerInputs": true
+                },
                 "VkPhysicalDeviceFloatControlsProperties": {
                     "shaderSignedZeroInfNanPreserveFloat16": true,
                     "shaderSignedZeroInfNanPreserveFloat32": true,
@@ -1189,6 +1201,10 @@
                 },
                 "VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT": {
                     "maxVertexAttribDivisor": 4294967000
+                },
+                "VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR": {
+                    "maxVertexAttribDivisor": 4294967000,
+                    "supportsNonZeroFirstInstance": true
                 },
                 "VkPhysicalDevicePCIBusInfoPropertiesEXT": {},
                 "VkPhysicalDeviceDepthStencilResolveProperties": {
@@ -1820,6 +1836,7 @@
                 "VK_EXT_validation_features": 1,
                 "VK_EXT_validation_flags": 1,
                 "VK_EXT_vertex_attribute_divisor": 1,
+                "VK_KHR_vertex_attribute_divisor": 1,
                 "VK_EXT_vertex_input_dynamic_state": 1,
                 "VK_EXT_video_encode_h264": 1,
                 "VK_EXT_video_encode_h265": 1,
@@ -1891,6 +1908,7 @@
                 "VK_KHR_maintenance3": 1,
                 "VK_KHR_maintenance4": 1,
                 "VK_KHR_maintenance5": 1,
+                "VK_KHR_maintenance6": 1,
                 "VK_KHR_multiview": 1,
                 "VK_KHR_performance_query": 1,
                 "VK_KHR_pipeline_executable_properties": 1,
@@ -5740,7 +5758,8 @@
                             "VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT",
                             "VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT",
                             "VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT",
-                            "VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT"
+                            "VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT",
+                            "VK_FORMAT_FEATURE_2_FRAGMENT_DENSITY_MAP_BIT_EXT"
                         ],
                         "bufferFeatures": [
                             "VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT",

@@ -205,16 +205,7 @@ TEST_F(NegativeCommand, SecondaryCommandbufferAsPrimary) {
     secondary.begin();
     secondary.end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.waitSemaphoreCount = 0;
-    submit_info.pWaitSemaphores = NULL;
-    submit_info.pWaitDstStageMask = NULL;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &secondary.handle();
-    submit_info.signalSemaphoreCount = 0;
-    submit_info.pSignalSemaphores = NULL;
-
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->submit(secondary, false);
     m_errorMonitor->VerifyFound();
 }
 
@@ -222,10 +213,8 @@ TEST_F(NegativeCommand, Sync2SecondaryCommandbufferAsPrimary) {
     TEST_DESCRIPTION("Create a secondary command buffer and pass it to QueueSubmit2KHR.");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(sync2_features);
-    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCommandBufferSubmitInfo-commandBuffer-03890");
 
@@ -240,7 +229,7 @@ TEST_F(NegativeCommand, Sync2SecondaryCommandbufferAsPrimary) {
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &cb_info;
 
-    vk::QueueSubmit2KHR(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 }
 
@@ -254,22 +243,13 @@ TEST_F(NegativeCommand, CommandBufferTwoSubmits) {
     m_commandBuffer->end();
 
     // Bypass framework since it does the waits automatically
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.waitSemaphoreCount = 0;
-    submit_info.pWaitSemaphores = NULL;
-    submit_info.pWaitDstStageMask = NULL;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    submit_info.signalSemaphoreCount = 0;
-    submit_info.pSignalSemaphores = NULL;
-
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 
     // Cause validation error by re-submitting cmd buffer that should only be
     // submitted once
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer, false);
+    m_default_queue->wait();
 
     m_errorMonitor->VerifyFound();
 }
@@ -277,10 +257,8 @@ TEST_F(NegativeCommand, CommandBufferTwoSubmits) {
 TEST_F(NegativeCommand, Sync2CommandBufferTwoSubmits) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(sync2_features);
-    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-DrawState-CommandBufferSingleSubmitViolation");
     InitRenderTarget();
@@ -296,13 +274,13 @@ TEST_F(NegativeCommand, Sync2CommandBufferTwoSubmits) {
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &cb_info;
 
-    vk::QueueSubmit2KHR(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->wait();
 
     // Cause validation error by re-submitting cmd buffer that should only be
     // submitted once
-    vk::QueueSubmit2KHR(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->wait();
 
     m_errorMonitor->VerifyFound();
 }
@@ -864,13 +842,8 @@ TEST_F(NegativeCommand, DrawOutsideRenderPass) {
 
 TEST_F(NegativeCommand, MultiDrawDrawOutsideRenderPass) {
     AddRequiredExtensions(VK_EXT_MULTI_DRAW_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(multi_draw_features);
-    if (!multi_draw_features.multiDraw) {
-        GTEST_SKIP() << "Test requires (unsupported) multiDraw";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &multi_draw_features));
+    AddRequiredFeature(vkt::Feature::multiDraw);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkMultiDrawInfoEXT multi_draws[3] = {};
@@ -998,9 +971,9 @@ TEST_F(NegativeCommand, SimultaneousUseOneShot) {
     submit_info.commandBufferCount = 2;
     submit_info.pCommandBuffers = duplicates;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, simultaneous_use_message);
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
 
     // Set one time use and now look for one time submit
     duplicates[0] = duplicates[1] = cmd_bufs[1];
@@ -1010,9 +983,9 @@ TEST_F(NegativeCommand, SimultaneousUseOneShot) {
     vk::EndCommandBuffer(cmd_bufs[1]);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueSubmit-pCommandBuffers-00071");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-DrawState-CommandBufferSingleSubmitViolation");
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
 }
 
 TEST_F(NegativeCommand, DrawTimeImageViewTypeMismatchWithPipeline) {
@@ -1177,10 +1150,9 @@ TEST_F(NegativeCommand, CopyImageLayerCountMismatch) {
         "Try to copy between images with the source subresource having a different layerCount than the destination subresource");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddOptionalExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(Init());
     const bool maintenance1 =
         IsExtensionsEnabled(VK_KHR_MAINTENANCE_1_EXTENSION_NAME) || DeviceValidationVersion() >= VK_API_VERSION_1_1;
-    RETURN_IF_SKIP(InitState());
 
     VkFormat image_format = VK_FORMAT_B8G8R8A8_UNORM;
     VkFormatProperties format_props;
@@ -2460,9 +2432,7 @@ TEST_F(NegativeCommand, CopyImageTypeExtentMismatch) {
 
 TEST_F(NegativeCommand, CopyImageTypeExtentMismatchMaintenance1) {
     AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
 
@@ -4657,14 +4627,11 @@ TEST_F(NegativeCommand, MultiDraw) {
     TEST_DESCRIPTION("Test validation of multi_draw extension");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_MULTI_DRAW_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(multi_draw_features);
+    AddRequiredFeature(vkt::Feature::multiDraw);
+    RETURN_IF_SKIP(Init());
 
     VkPhysicalDeviceMultiDrawPropertiesEXT multi_draw_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(multi_draw_properties);
-
-    RETURN_IF_SKIP(InitState(nullptr, &multi_draw_features));
     InitRenderTarget();
 
     VkMultiDrawInfoEXT multi_draws[3] = {};
@@ -4746,11 +4713,9 @@ TEST_F(NegativeCommand, MultiDrawMaintenance5) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_MULTI_DRAW_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw_features = vku::InitStructHelper(&maintenance5_features);
-    GetPhysicalDeviceFeatures2(multi_draw_features);
-    RETURN_IF_SKIP(InitState(nullptr, &multi_draw_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    AddRequiredFeature(vkt::Feature::multiDraw);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -4788,11 +4753,9 @@ TEST_F(NegativeCommand, MultiDrawWholeSizeMaintenance5) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_MULTI_DRAW_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw_features = vku::InitStructHelper(&maintenance5_features);
-    GetPhysicalDeviceFeatures2(multi_draw_features);
-    RETURN_IF_SKIP(InitState(nullptr, &multi_draw_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    AddRequiredFeature(vkt::Feature::multiDraw);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -4824,11 +4787,9 @@ TEST_F(NegativeCommand, MultiDrawMaintenance5Mixed) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_MULTI_DRAW_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw_features = vku::InitStructHelper(&maintenance5_features);
-    GetPhysicalDeviceFeatures2(multi_draw_features);
-    RETURN_IF_SKIP(InitState(nullptr, &multi_draw_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    AddRequiredFeature(vkt::Feature::multiDraw);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -4889,11 +4850,8 @@ TEST_F(NegativeCommand, MultiDrawFeatures) {
 TEST_F(NegativeCommand, IndirectDraw) {
     TEST_DESCRIPTION("Test covered valid usage for vkCmdDrawIndirect and vkCmdDrawIndexedIndirect");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::multiDrawIndirect);
     RETURN_IF_SKIP(Init());
-    if (m_device->phy().features().multiDrawIndirect == VK_FALSE) {
-        GTEST_SKIP() << "multiDrawIndirect feature is disabled";
-    }
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -4977,12 +4935,72 @@ TEST_F(NegativeCommand, MultiDrawIndirectFeature) {
     m_commandBuffer->end();
 }
 
+TEST_F(NegativeCommand, StrideMultiDrawIndirect) {
+    TEST_DESCRIPTION("Validate Stride parameter.");
+    AddRequiredFeature(vkt::Feature::multiDrawIndirect);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    const uint32_t buffer_size = 128;
+    vkt::Buffer buffer(*m_device, buffer_size,
+                       VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+
+    CreatePipelineHelper helper(*this);
+    helper.InitState();
+    helper.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+
+    auto buffer_memory_barrier = buffer.buffer_memory_barrier(
+        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT, 0, VK_WHOLE_SIZE);
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr, 1,
+                           &buffer_memory_barrier, 0, nullptr);
+
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, helper.pipeline_);
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirect-drawCount-00476");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirect-drawCount-00488");
+    vk::CmdDrawIndirect(m_commandBuffer->handle(), buffer.handle(), 0, 100, 2);
+    m_errorMonitor->VerifyFound();
+
+    vk::CmdDrawIndirect(m_commandBuffer->handle(), buffer.handle(), 0, 2, 24);
+
+    vk::CmdBindIndexBuffer(m_commandBuffer->handle(), buffer.handle(), 0, VK_INDEX_TYPE_UINT16);
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexedIndirect-drawCount-00528");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexedIndirect-drawCount-00540");
+    vk::CmdDrawIndexedIndirect(m_commandBuffer->handle(), buffer.handle(), 0, 100, 2);
+    m_errorMonitor->VerifyFound();
+
+    auto draw_count = m_device->phy().limits_.maxDrawIndirectCount;
+    if (draw_count != vvl::kU32Max) {
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirect-drawCount-02719");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirect-drawCount-00476");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirect-drawCount-00488");
+        vk::CmdDrawIndirect(m_commandBuffer->handle(), buffer.handle(), 0, draw_count + 1, 2);
+        m_errorMonitor->VerifyFound();
+    }
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirect-drawCount-00487");
+    vk::CmdDrawIndirect(m_commandBuffer->handle(), buffer.handle(), buffer_size, 1, 2);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndexedIndirect-drawCount-00539");
+    vk::CmdDrawIndexedIndirect(m_commandBuffer->handle(), buffer.handle(), buffer_size, 1, 2);
+    m_errorMonitor->VerifyFound();
+
+    vk::CmdDrawIndexedIndirect(m_commandBuffer->handle(), buffer.handle(), 0, 2, 24);
+
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+}
+
 TEST_F(NegativeCommand, DrawIndirectCountKHR) {
     TEST_DESCRIPTION("Test covered valid usage for vkCmdDrawIndirectCountKHR");
 
     AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -5061,8 +5079,7 @@ TEST_F(NegativeCommand, DrawIndexedIndirectCountKHR) {
     TEST_DESCRIPTION("Test covered valid usage for vkCmdDrawIndexedIndirectCountKHR");
 
     AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -5331,10 +5348,8 @@ TEST_F(NegativeCommand, ViewportWScalingNV) {
     TEST_DESCRIPTION("Verify VK_NV_clip_space_w_scaling");
 
     AddRequiredExtensions(VK_NV_CLIP_SPACE_W_SCALING_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::multiViewport);
     RETURN_IF_SKIP(Init());
-    if (m_device->phy().features().multiViewport == VK_FALSE) {
-        GTEST_SKIP() << "multiViewport feature is not supported";
-    }
     InitRenderTarget();
 
     const char vs_src[] = R"glsl(
@@ -5640,56 +5655,60 @@ TEST_F(NegativeCommand, DescriptorSetPipelineBindPoint) {
         GTEST_SKIP() << "No compute and transfer only queue family, skipping bindpoint and queue tests.";
     }
 
+    OneOffDescriptorSet descriptor_set(m_device, {
+                                                     {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                 });
+
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
     vkt::CommandPool command_pool(*m_device, no_gfx_qfi.value());
-    ASSERT_TRUE(command_pool.initialized());
     vkt::CommandBuffer command_buffer(m_device, &command_pool);
-
-    VkDescriptorPoolSize ds_type_count = {};
-    ds_type_count.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    ds_type_count.descriptorCount = 1;
-
-    VkDescriptorPoolCreateInfo ds_pool_ci = vku::InitStructHelper();
-    ds_pool_ci.maxSets = 1;
-    ds_pool_ci.poolSizeCount = 1;
-    ds_pool_ci.flags = 0;
-    ds_pool_ci.pPoolSizes = &ds_type_count;
-
-    vkt::DescriptorPool ds_pool(*m_device, ds_pool_ci);
-    ASSERT_TRUE(ds_pool.initialized());
-
-    VkDescriptorSetLayoutBinding dsl_binding = {};
-    dsl_binding.binding = 0;
-    dsl_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    dsl_binding.descriptorCount = 1;
-    dsl_binding.stageFlags = VK_SHADER_STAGE_ALL;
-    dsl_binding.pImmutableSamplers = nullptr;
-
-    const vkt::DescriptorSetLayout ds_layout(*m_device, {dsl_binding});
-
-    VkDescriptorSet descriptorSet;
-    VkDescriptorSetAllocateInfo alloc_info = vku::InitStructHelper();
-    alloc_info.descriptorSetCount = 1;
-    alloc_info.descriptorPool = ds_pool.handle();
-    alloc_info.pSetLayouts = &ds_layout.handle();
-    vk::AllocateDescriptorSets(m_device->device(), &alloc_info, &descriptorSet);
-
-    const vkt::DescriptorSetLayout descriptor_set_layout(*m_device, {dsl_binding});
-    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set_layout});
-
     command_buffer.begin();
-    // Set invalid set
+
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBindDescriptorSets-pipelineBindPoint-00361");
     vk::CmdBindDescriptorSets(command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
-                              &descriptorSet, 0, nullptr);
+                              &descriptor_set.set_, 0, nullptr);
     m_errorMonitor->VerifyFound();
-    command_buffer.end();
+}
+
+TEST_F(NegativeCommand, DescriptorSetPipelineBindPointMaintenance6) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_6_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::maintenance6);
+    RETURN_IF_SKIP(Init());
+
+    const std::optional<uint32_t> no_gfx_qfi = m_device->QueueFamilyMatching(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
+    if (!no_gfx_qfi) {
+        GTEST_SKIP() << "No compute and transfer only queue family, skipping bindpoint and queue tests.";
+    }
+
+    OneOffDescriptorSet descriptor_set(m_device, {
+                                                     {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                 });
+
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
+    vkt::CommandPool command_pool(*m_device, no_gfx_qfi.value());
+    vkt::CommandBuffer command_buffer(m_device, &command_pool);
+    command_buffer.begin();
+
+    VkBindDescriptorSetsInfoKHR bind_ds_info = vku::InitStructHelper();
+    bind_ds_info.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bind_ds_info.layout = pipeline_layout.handle();
+    bind_ds_info.firstSet = 0;
+    bind_ds_info.descriptorSetCount = 1;
+    bind_ds_info.pDescriptorSets = &descriptor_set.set_;
+    bind_ds_info.dynamicOffsetCount = 0;
+    bind_ds_info.pDynamicOffsets = nullptr;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBindDescriptorSets2KHR-pBindDescriptorSetsInfo-09467");
+    vk::CmdBindDescriptorSets2KHR(command_buffer.handle(), &bind_ds_info);
+    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeCommand, CmdClearColorImageNullColor) {
     TEST_DESCRIPTION("Test invalid null entries for clear color");
-
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     VkImageObj image(m_device);
     image.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -5712,8 +5731,7 @@ TEST_F(NegativeCommand, EndCommandBufferWithConditionalRendering) {
     TEST_DESCRIPTION("Call EndCommandBuffer when conditional rendering is active");
 
     AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     auto buffer_ci =
         vkt::Buffer::create_info(32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT);
@@ -5780,8 +5798,7 @@ TEST_F(NegativeCommand, EndConditionalRendering) {
     TEST_DESCRIPTION("Invalid calls to vkCmdEndConditionalRenderingEXT.");
 
     AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     VkAttachmentDescription attach[] = {
         {0, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -5899,9 +5916,7 @@ TEST_F(NegativeCommand, RenderPassContentsWhenCallingCmdExecuteCommandsWithBegin
 
 TEST_F(NegativeCommand, ExecuteCommandsSubpassIndices) {
     TEST_DESCRIPTION("Test invalid subpass when calling CmdExecuteCommands");
-
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     // A renderpass with two subpasses, both writing the same attachment.
     VkAttachmentDescription attach[] = {
@@ -5969,9 +5984,7 @@ TEST_F(NegativeCommand, ExecuteCommandsSubpassIndices) {
 
 TEST_F(NegativeCommand, IncompatibleRenderPassesInExecuteCommands) {
     TEST_DESCRIPTION("Test invalid subpass when calling CmdExecuteCommands");
-
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     // A renderpass with two subpasses, both writing the same attachment.
     VkAttachmentDescription attach[] = {
@@ -6152,9 +6165,7 @@ TEST_F(NegativeCommand, CopyCommands2V13) {
 TEST_F(NegativeCommand, DISABLED_CopyImageOverlappingMemory) {
     TEST_DESCRIPTION("Validate Copy Image from/to Buffer with overlapping memory");
     SetTargetApiVersion(VK_API_VERSION_1_3);
-
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     auto image_ci =
         VkImageObj::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_R8G8B8A8_UNORM,
                                       VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_TILING_LINEAR);
@@ -6369,9 +6380,7 @@ TEST_F(NegativeCommand, ResolveUsage) {
 
 TEST_F(NegativeCommand, CopyImageRemainingLayers) {
     TEST_DESCRIPTION("Test copying an image with VkImageSubresourceLayers.layerCount = VK_REMAINING_ARRAY_LAYERS");
-
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
 
@@ -6630,11 +6639,9 @@ TEST_F(NegativeCommand, ClearDepthStencilWithAspect) {
     TEST_DESCRIPTION("Verify ClearDepth with an invalid VkImageAspectFlags.");
 
     AddOptionalExtensions(VK_EXT_SEPARATE_STENCIL_USAGE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(Init());
     const bool separate_stencil_usage_supported = IsExtensionsEnabled(VK_EXT_SEPARATE_STENCIL_USAGE_EXTENSION_NAME);
-
     const auto depth_format = FindSupportedDepthStencilFormat(gpu());
-    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
@@ -6940,9 +6947,7 @@ TEST_F(NegativeCommand, ClearColorImageImageLayout) {
     TEST_DESCRIPTION("Check ClearImage layouts with SHARED_PRESENTABLE_IMAGE extension active.");
 
     AddRequiredExtensions(VK_KHR_SHARED_PRESENTABLE_IMAGE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     VkImageObj dst_image(m_device);
     const VkFormat tex_format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -7160,8 +7165,7 @@ TEST_F(NegativeCommand, ClearImageAspectMask) {
 
 TEST_F(NegativeCommand, DebugLabelSecondaryCommandBuffer) {
     AddRequiredExtensions(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     vkt::CommandBuffer cb(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     cb.begin();
@@ -7354,11 +7358,8 @@ TEST_F(NegativeCommand, ClearDsImageWithInvalidAspect) {
 
 TEST_F(NegativeCommand, CommandBufferInheritanceInfo) {
     TEST_DESCRIPTION("Test invalid command buffer begin inheritance info.");
-
+    AddRequiredFeature(vkt::Feature::inheritedQueries);
     RETURN_IF_SKIP(Init());
-    if (m_device->phy().features().inheritedQueries == VK_FALSE) {
-        GTEST_SKIP() << "inheritedQueries feature is disabled";
-    }
 
     vkt::CommandBuffer secondary(m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 

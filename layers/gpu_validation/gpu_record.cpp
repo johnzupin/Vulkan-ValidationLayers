@@ -469,6 +469,21 @@ void gpuav::Validator::PostCallRecordCmdBindDescriptorSets(VkCommandBuffer comma
                                                    pDescriptorSets, dynamicOffsetCount, pDynamicOffsets, record_obj);
     UpdateBoundDescriptors(commandBuffer, pipelineBindPoint);
 }
+void gpuav::Validator::PostCallRecordCmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer,
+                                                               const VkBindDescriptorSetsInfoKHR *pBindDescriptorSetsInfo,
+                                                               const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdBindDescriptorSets2KHR(commandBuffer, pBindDescriptorSetsInfo, record_obj);
+
+    if (IsStageInPipelineBindPoint(pBindDescriptorSetsInfo->stageFlags, VK_PIPELINE_BIND_POINT_GRAPHICS)) {
+        UpdateBoundDescriptors(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    }
+    if (IsStageInPipelineBindPoint(pBindDescriptorSetsInfo->stageFlags, VK_PIPELINE_BIND_POINT_COMPUTE)) {
+        UpdateBoundDescriptors(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE);
+    }
+    if (IsStageInPipelineBindPoint(pBindDescriptorSetsInfo->stageFlags, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)) {
+        UpdateBoundDescriptors(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+    }
+}
 
 void gpuav::Validator::PreCallRecordCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
                                                             VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount,
@@ -479,89 +494,19 @@ void gpuav::Validator::PreCallRecordCmdPushDescriptorSetKHR(VkCommandBuffer comm
     UpdateBoundDescriptors(commandBuffer, pipelineBindPoint);
 }
 
-void gpuav::Validator::PreRecordCommandBuffer(VkCommandBuffer command_buffer) {
-    auto cb_state = GetWrite<CommandBuffer>(command_buffer);
-    UpdateInstrumentationBuffer(cb_state.get());
-    for (auto *secondary_cmd_buffer : cb_state->linkedCommandBuffers) {
-        auto guard = secondary_cmd_buffer->WriteLock();
-        UpdateInstrumentationBuffer(static_cast<CommandBuffer *>(secondary_cmd_buffer));
+void gpuav::Validator::PreCallRecordCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
+                                                             const VkPushDescriptorSetInfoKHR *pPushDescriptorSetInfo,
+                                                             const RecordObject &record_obj) {
+    BaseClass::PreCallRecordCmdPushDescriptorSet2KHR(commandBuffer, pPushDescriptorSetInfo, record_obj);
+
+    if (IsStageInPipelineBindPoint(pPushDescriptorSetInfo->stageFlags, VK_PIPELINE_BIND_POINT_GRAPHICS)) {
+        UpdateBoundDescriptors(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
     }
-}
-
-void gpuav::Validator::PreCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence,
-                                                const RecordObject &record_obj) {
-    BaseClass::PreCallRecordQueueSubmit(queue, submitCount, pSubmits, fence, record_obj);
-    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
-        const VkSubmitInfo *submit = &pSubmits[submit_idx];
-        for (uint32_t i = 0; i < submit->commandBufferCount; i++) {
-            PreRecordCommandBuffer(submit->pCommandBuffers[i]);
-        }
+    if (IsStageInPipelineBindPoint(pPushDescriptorSetInfo->stageFlags, VK_PIPELINE_BIND_POINT_COMPUTE)) {
+        UpdateBoundDescriptors(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE);
     }
-    UpdateBDABuffer(app_buffer_device_addresses);
-}
-
-void gpuav::Validator::PreCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
-                                                    VkFence fence, const RecordObject &record_obj) {
-    PreCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
-}
-
-void gpuav::Validator::PreCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence,
-                                                 const RecordObject &record_obj) {
-    BaseClass::PreCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
-    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
-        const VkSubmitInfo2 *submit = &pSubmits[submit_idx];
-        for (uint32_t i = 0; i < submit->commandBufferInfoCount; i++) {
-            PreRecordCommandBuffer(submit->pCommandBufferInfos[i].commandBuffer);
-        }
-    }
-    UpdateBDABuffer(app_buffer_device_addresses);
-}
-
-void gpuav::Validator::PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence,
-                                                 const RecordObject &record_obj) {
-    BaseClass::PostCallRecordQueueSubmit(queue, submitCount, pSubmits, fence, record_obj);
-
-    if (record_obj.result != VK_SUCCESS) return;
-
-    GlobalImageLayoutMap overlay_image_layout_map;
-    // The triply nested for duplicates that in the StateTracker, but avoids the need for two additional callbacks.
-    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
-        const VkSubmitInfo *submit = &pSubmits[submit_idx];
-        for (uint32_t i = 0; i < submit->commandBufferCount; i++) {
-            auto cb_state = GetWrite<vvl::CommandBuffer>(submit->pCommandBuffers[i]);
-            if (cb_state) {
-                for (auto *secondary_cmd_buffer : cb_state->linkedCommandBuffers) {
-                    UpdateCmdBufImageLayouts(*secondary_cmd_buffer);
-                }
-                UpdateCmdBufImageLayouts(*cb_state);
-            }
-        }
-    }
-}
-
-void gpuav::Validator::PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
-                                                     VkFence fence, const RecordObject &record_obj) {
-    PostCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
-}
-
-void gpuav::Validator::PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence,
-                                                  const RecordObject &record_obj) {
-    BaseClass::PostCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
-    if (record_obj.result != VK_SUCCESS) return;
-
-    GlobalImageLayoutMap overlay_image_layout_map;
-    // The triply nested for duplicates that in the StateTracker, but avoids the need for two additional callbacks.
-    for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
-        const VkSubmitInfo2KHR *submit = &pSubmits[submit_idx];
-        for (uint32_t i = 0; i < submit->commandBufferInfoCount; i++) {
-            auto cb_state = GetWrite<vvl::CommandBuffer>(submit->pCommandBufferInfos[i].commandBuffer);
-            if (cb_state) {
-                for (auto *secondary_cmd_buffer : cb_state->linkedCommandBuffers) {
-                    UpdateCmdBufImageLayouts(*secondary_cmd_buffer);
-                }
-                UpdateCmdBufImageLayouts(*cb_state);
-            }
-        }
+    if (IsStageInPipelineBindPoint(pPushDescriptorSetInfo->stageFlags, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)) {
+        UpdateBoundDescriptors(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
     }
 }
 
@@ -577,6 +522,14 @@ void gpuav::Validator::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplersEXT(V
                                                                                VkPipelineLayout layout, uint32_t set,
                                                                                const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplersEXT(commandBuffer, pipelineBindPoint, layout, set, record_obj);
+    gpuav_settings.validate_descriptors = false;
+}
+
+void gpuav::Validator::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT(
+    VkCommandBuffer commandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT *pBindDescriptorBufferEmbeddedSamplersInfo,
+    const RecordObject &record_obj) {
+    BaseClass::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT(commandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo,
+                                                                        record_obj);
     gpuav_settings.validate_descriptors = false;
 }
 

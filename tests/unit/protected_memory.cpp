@@ -78,10 +78,8 @@ TEST_F(NegativeProtectedMemory, Submit) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
     // creates a queue without VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     VkCommandPool command_pool;
     VkCommandPoolCreateInfo pool_create_info = vku::InitStructHelper();
@@ -143,7 +141,7 @@ TEST_F(NegativeProtectedMemory, Submit) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueSubmit-queue-06448");
     m_errorMonitor->SetUnexpectedError("VUID-VkSubmitInfo-pNext-04148");
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 }
 
@@ -587,7 +585,7 @@ TEST_F(NegativeProtectedMemory, PipelineProtectedAccess) {
     // Create device without protected access features
     vkt::Device test_device(gpu());
     VkShaderObj vs2(this, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL_TRY);
-    vs2.InitFromGLSLTry(false, &test_device);
+    vs2.InitFromGLSLTry(&test_device);
 
     const vkt::PipelineLayout test_pipeline_layout(test_device);
 
@@ -1060,18 +1058,18 @@ TEST_F(NegativeProtectedMemory, MixingProtectedResources) {
     protected_submit_info.protectedSubmit = VK_TRUE;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkQueueSubmit-queue-06448");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pNext-04148");
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
     protected_submit_info.protectedSubmit = VK_FALSE;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pNext-04120");
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
     // If the VkSubmitInfo::pNext chain does not include this structure, the batch is unprotected.
     submit_info.pNext = nullptr;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSubmitInfo-pNext-04120");
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 }
 

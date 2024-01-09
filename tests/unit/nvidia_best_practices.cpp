@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
  * Copyright (c) 2022 NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -287,7 +287,7 @@ TEST_F(VkNvidiaBestPracticesLayerTest, AccelerationStructure_NotAsync) {
         m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-AllocateMemory-SetPriority");
 
         m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "UNASSIGNED-BestPractices-AccelerationStructure-NotAsync");
-        build_geometry_info.BuildCmdBuffer(*m_device, cmd_buffer.handle());
+        build_geometry_info.BuildCmdBuffer(cmd_buffer.handle());
 
         if (queue == compute_queue) {
             m_errorMonitor->Finish();
@@ -1100,21 +1100,16 @@ TEST_F(VkNvidiaBestPracticesLayerTest, BeginCommandBuffer_OneTimeSubmit) {
     vkt::CommandBuffer command_buffer1(*m_device, allocate_info);
     vkt::CommandBuffer command_buffer2(*m_device, allocate_info);
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-
     VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
 
     {
         m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
                                              "UNASSIGNED-BestPractices-vkBeginCommandBuffer-one-time-submit");
 
-        submit_info.pCommandBuffers = &command_buffer0.handle();
-
         command_buffer0.begin(&begin_info);
         command_buffer0.end();
 
-        vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+        m_default_queue->submit(command_buffer0, false);
         m_device->wait();
 
         vk::BeginCommandBuffer(command_buffer0.handle(), &begin_info);
@@ -1124,13 +1119,11 @@ TEST_F(VkNvidiaBestPracticesLayerTest, BeginCommandBuffer_OneTimeSubmit) {
         m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
                                              "UNASSIGNED-BestPractices-vkBeginCommandBuffer-one-time-submit");
 
-        submit_info.pCommandBuffers = &command_buffer1.handle();
-
         command_buffer1.begin(&begin_info);
         command_buffer1.end();
 
         for (int i = 0; i < 2; ++i) {
-            vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+            m_default_queue->submit(command_buffer1, false);
             m_device->wait();
         }
 
@@ -1142,12 +1135,10 @@ TEST_F(VkNvidiaBestPracticesLayerTest, BeginCommandBuffer_OneTimeSubmit) {
         m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
                                              "UNASSIGNED-BestPractices-vkBeginCommandBuffer-one-time-submit");
 
-        submit_info.pCommandBuffers = &command_buffer2.handle();
-
         command_buffer2.begin(&begin_info);
         command_buffer2.end();
 
-        vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+        m_default_queue->submit(command_buffer2, false);
         m_device->wait();
 
         vk::BeginCommandBuffer(command_buffer2.handle(), &begin_info);

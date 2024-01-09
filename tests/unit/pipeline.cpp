@@ -174,7 +174,7 @@ TEST_F(NegativePipeline, BlendingOnFormatWithoutBlendingSupport) {
 }
 
 // Is the Pipeline compatible with the expectations of the Renderpass/subpasses?
-TEST_F(VkLayerTest, PipelineRenderpassCompatibility) {
+TEST_F(NegativePipeline, PipelineRenderpassCompatibility) {
     TEST_DESCRIPTION(
         "Create a graphics pipeline that is incompatible with the requirements of its contained Renderpass/subpasses.");
     RETURN_IF_SKIP(Init());
@@ -191,7 +191,7 @@ TEST_F(VkLayerTest, PipelineRenderpassCompatibility) {
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-09030");
 }
 
-TEST_F(VkLayerTest, CmdBufferPipelineDestroyed) {
+TEST_F(NegativePipeline, CmdBufferPipelineDestroyed) {
     TEST_DESCRIPTION("Attempt to draw with a command buffer that is invalid due to a pipeline dependency being destroyed.");
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
@@ -363,10 +363,8 @@ TEST_F(NegativePipeline, ShaderStageBit) {
 TEST_F(NegativePipeline, SampleRateFeatureDisable) {
     // Enable sample shading in pipeline when the feature is disabled.
     // Disable sampleRateShading here
-    VkPhysicalDeviceFeatures device_features = {};
-    device_features.sampleRateShading = VK_FALSE;
-
-    RETURN_IF_SKIP(Init(&device_features));
+    AddDisabledFeature(vkt::Feature::sampleRateShading);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // Cause the error by enabling sample shading...
@@ -377,11 +375,8 @@ TEST_F(NegativePipeline, SampleRateFeatureDisable) {
 
 TEST_F(NegativePipeline, SampleRateFeatureEnable) {
     // Enable sample shading in pipeline when the feature is disabled.
+    AddRequiredFeature(vkt::Feature::sampleRateShading);
     RETURN_IF_SKIP(Init());
-    if (m_device->phy().features().sampleRateShading == VK_FALSE) {
-        GTEST_SKIP() << "SampleRateShading feature is disabled";
-    }
-
     InitRenderTarget();
 
     auto range_test = [this](float value, bool positive_test) {
@@ -449,12 +444,8 @@ TEST_F(NegativePipeline, DISABLED_SamplePNextDisabled) {
 TEST_F(NegativePipeline, SubpassRasterizationSamples) {
     TEST_DESCRIPTION("Test creating two pipelines referring to the same subpass but with different rasterization samples count");
 
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceFeatures device_features = {};
-    device_features.variableMultisampleRate = VK_FALSE;
-
-    RETURN_IF_SKIP(InitState(&device_features));
+    AddDisabledFeature(vkt::Feature::variableMultisampleRate);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // Create a render pass with 1 subpass. This subpass uses no attachment.
@@ -520,11 +511,8 @@ TEST_F(NegativePipeline, SubpassRasterizationSamples) {
 TEST_F(NegativePipeline, RenderPassShaderResolveQCOM) {
     TEST_DESCRIPTION("Test pipeline creation VUIDs added with VK_QCOM_render_pass_shader_resolve extension.");
     AddRequiredExtensions(VK_QCOM_RENDER_PASS_SHADER_RESOLVE_EXTENSION_NAME);
-
+    AddRequiredFeature(vkt::Feature::sampleRateShading);
     RETURN_IF_SKIP(Init());
-    if (m_device->phy().features().sampleRateShading == VK_FALSE) {
-        GTEST_SKIP() << "sampleRateShading feature is not supported";
-    }
     InitRenderTarget();
 
     // Create a renderPass with two attachments (0=Color, 1=Input)
@@ -868,12 +856,9 @@ TEST_F(NegativePipeline, NumBlendAttachMismatch) {
 TEST_F(NegativePipeline, ColorBlendInvalidLogicOp) {
     TEST_DESCRIPTION("Attempt to use invalid VkPipelineColorBlendStateCreateInfo::logicOp value.");
 
+    AddRequiredFeature(vkt::Feature::logicOp);
     RETURN_IF_SKIP(Init());  // enables all supported features
     InitRenderTarget();
-
-    if (!m_device->phy().features().logicOp) {
-        GTEST_SKIP() << "Device does not support logicOp feature";
-    }
 
     const auto set_shading_enable = [](CreatePipelineHelper &helper) {
         helper.cb_ci_.logicOpEnable = VK_TRUE;
@@ -1044,9 +1029,7 @@ TEST_F(NegativePipeline, AMDMixedAttachmentSamplesValidateGraphicsPipeline) {
     TEST_DESCRIPTION("Verify an error message for an incorrect graphics pipeline rasterization sample count.");
 
     AddRequiredExtensions(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // Set a mismatched sample count
@@ -1060,15 +1043,8 @@ TEST_F(NegativePipeline, AMDMixedAttachmentSamplesValidateGraphicsPipeline) {
 TEST_F(NegativePipeline, FramebufferMixedSamplesNV) {
     TEST_DESCRIPTION("Verify VK_NV_framebuffer_mixed_samples.");
     AddRequiredExtensions(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceFeatures device_features = {};
-    GetPhysicalDeviceFeatures(&device_features);
-    if (VK_TRUE != device_features.sampleRateShading) {
-        GTEST_SKIP() << "Test requires unsupported sampleRateShading feature";
-    }
-
-    RETURN_IF_SKIP(InitState());
+    AddRequiredFeature(vkt::Feature::sampleRateShading);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     struct TestCase {
@@ -1152,8 +1128,7 @@ TEST_F(NegativePipeline, FramebufferMixedSamplesNV) {
 TEST_F(NegativePipeline, FramebufferMixedSamples) {
     TEST_DESCRIPTION("Verify that the expected VUIds are hits when VK_NV_framebuffer_mixed_samples is disabled.");
 
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     const VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
@@ -1217,14 +1192,12 @@ TEST_F(NegativePipeline, FramebufferMixedSamplesCoverageReduction) {
     AddRequiredExtensions(VK_NV_COVERAGE_REDUCTION_MODE_EXTENSION_NAME);
     AddOptionalExtensions(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
     AddOptionalExtensions(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(Init());
 
     if (!IsExtensionsEnabled(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME) &&
         !IsExtensionsEnabled(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME)) {
         GTEST_SKIP() << "Extensions not supported";
     }
-
-    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     struct TestCase {
@@ -1329,9 +1302,7 @@ TEST_F(NegativePipeline, FragmentCoverageToColorNV) {
     TEST_DESCRIPTION("Verify VK_NV_fragment_coverage_to_color.");
 
     AddRequiredExtensions(VK_NV_FRAGMENT_COVERAGE_TO_COLOR_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     struct TestCase {
@@ -1419,9 +1390,7 @@ TEST_F(NegativePipeline, FragmentCoverageToColorNV) {
 
 TEST_F(NegativePipeline, ViewportSwizzleNV) {
     AddRequiredExtensions(VK_NV_VIEWPORT_SWIZZLE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPipelineViewportSwizzleStateCreateInfoNV vp_swizzle_state = vku::InitStructHelper();
@@ -1481,8 +1450,7 @@ TEST_F(NegativePipeline, CreationFeedbackCount) {
     TEST_DESCRIPTION("Test graphics pipeline feedback stage count check.");
 
     AddRequiredExtensions(VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
     if (IsPlatformMockICD()) {
         GTEST_SKIP() << "Driver data writeback check not supported by MockICD";
@@ -1514,9 +1482,7 @@ TEST_F(NegativePipeline, CreationFeedbackCountCompute) {
     TEST_DESCRIPTION("Test compute pipeline feedback stage count check.");
 
     AddRequiredExtensions(VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPipelineCreationFeedbackCreateInfoEXT feedback_info = vku::InitStructHelper();
@@ -1715,7 +1681,7 @@ TEST_F(NegativePipeline, NotCompatibleForSet) {
     vk::DestroyPipeline(device(), c_pipeline, nullptr);
 }
 
-TEST_F(VkLayerTest, PipelineMaxPerStageResources) {
+TEST_F(NegativePipeline, MaxPerStageResources) {
     TEST_DESCRIPTION("Check case where pipeline is created that exceeds maxPerStageResources");
 
     RETURN_IF_SKIP(InitFramework());
@@ -2154,6 +2120,8 @@ TEST_F(NegativePipeline, CreateFlags) {
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-flags-07401");
     flags = VK_PIPELINE_CREATE_RAY_TRACING_DISPLACEMENT_MICROMAP_BIT_NV;
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-flags-07997");
+    flags = 0x80000000;
+    CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-None-09497");
 }
 
 TEST_F(NegativePipeline, CreateFlagsCompute) {
@@ -2188,6 +2156,8 @@ TEST_F(NegativePipeline, CreateFlagsCompute) {
     CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-VkComputePipelineCreateInfo-flags-07996");
     flags = VK_PIPELINE_CREATE_INDIRECT_BINDABLE_BIT_NV;
     CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-VkComputePipelineCreateInfo-flags-09007");
+    flags = 0x80000000;
+    CreateComputePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-VkComputePipelineCreateInfo-None-09497");
 }
 
 TEST_F(NegativePipeline, MergePipelineCachesInvalidDst) {
@@ -2293,9 +2263,7 @@ TEST_F(NegativePipeline, DiscardRectangle) {
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_DISCARD_RECTANGLES_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPhysicalDeviceDiscardRectanglePropertiesEXT discard_rectangle_properties = vku::InitStructHelper();
@@ -2322,8 +2290,7 @@ TEST_F(NegativePipeline, ColorWriteCreateInfoEXT) {
     TEST_DESCRIPTION("Test VkPipelineColorWriteCreateInfoEXT in color blend state pNext");
 
     AddRequiredExtensions(VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPipelineColorWriteCreateInfoEXT color_write = vku::InitStructHelper();
@@ -2347,8 +2314,7 @@ TEST_F(NegativePipeline, ColorWriteCreateInfoEXTMaxAttachments) {
     TEST_DESCRIPTION("Test VkPipelineColorWriteCreateInfoEXT in color blend state pNext with too many attachments");
 
     AddRequiredExtensions(VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     uint32_t max_color_attachments = m_device->phy().limits_.maxColorAttachments + 1;
@@ -2371,13 +2337,12 @@ TEST_F(NegativePipeline, ColorWriteCreateInfoEXTMaxAttachments) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, ValidateVariableSampleLocations) {
+TEST_F(NegativePipeline, VariableSampleLocations) {
     TEST_DESCRIPTION("Validate using VkPhysicalDeviceSampleLocationsPropertiesEXT");
 
     AddRequiredExtensions(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     VkPhysicalDeviceSampleLocationsPropertiesEXT sample_locations = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(sample_locations);
@@ -2521,8 +2486,7 @@ TEST_F(NegativePipeline, RasterizationConservativeStateCreateInfo) {
     TEST_DESCRIPTION("Test PipelineRasterizationConservativeStateCreateInfo.");
 
     AddRequiredExtensions(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPhysicalDeviceConservativeRasterizationPropertiesEXT conservative_rasterization_props = vku::InitStructHelper();
@@ -2549,7 +2513,7 @@ TEST_F(NegativePipeline, RasterizationConservativeStateCreateInfo) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, CreateGraphicsPipelineNullRenderPass) {
+TEST_F(NegativePipeline, NullRenderPass) {
     TEST_DESCRIPTION("Test for a creating a pipeline with a null renderpass but VK_KHR_dynamic_rendering is not enabled");
 
     RETURN_IF_SKIP(Init());
@@ -2572,16 +2536,7 @@ TEST_F(NegativePipeline, RasterizationOrderAttachmentAccessWithoutFeature) {
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM rasterization_order_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(rasterization_order_features);
-
-    rasterization_order_features.rasterizationOrderColorAttachmentAccess = 0;
-    rasterization_order_features.rasterizationOrderDepthAttachmentAccess = 0;
-    rasterization_order_features.rasterizationOrderStencilAttachmentAccess = 0;
-
-    RETURN_IF_SKIP(InitState(nullptr, &rasterization_order_features));
+    RETURN_IF_SKIP(Init());
 
     VkPipelineDepthStencilStateCreateInfo ds_ci = vku::InitStructHelper();
     VkPipelineColorBlendAttachmentState cb_as = {};
@@ -2850,9 +2805,7 @@ TEST_F(NegativePipeline, IncompatibleScissorCountAndViewportCount) {
     TEST_DESCRIPTION("Validate creating a pipeline with incompatible scissor and viewport count, without dynamic states.");
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPhysicalDeviceFeatures features{};
@@ -3076,10 +3029,8 @@ TEST_F(NegativePipeline, PipelineRenderingInfoInvalidFormats) {
     TEST_DESCRIPTION("Create pipeline with invalid pipeline rendering formats");
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(Init());
 
     VkPipelineRenderingCreateInfo pipeline_rendering_ci = vku::InitStructHelper();
     pipeline_rendering_ci.depthAttachmentFormat = VK_FORMAT_ASTC_12x12_SFLOAT_BLOCK_EXT;
@@ -3176,19 +3127,9 @@ TEST_F(NegativePipeline, MismatchedRasterizationSamples) {
 
     AddRequiredExtensions(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT msrtss_features = vku::InitStructHelper();
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = vku::InitStructHelper(&msrtss_features);
-    GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!msrtss_features.multisampledRenderToSingleSampled) {
-        GTEST_SKIP() << "Test requires (unsupported) multisampledRenderToSingleSampled";
-    }
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    AddRequiredFeature(vkt::Feature::multisampledRenderToSingleSampled);
+    RETURN_IF_SKIP(Init());
 
     VkImageObj image(m_device);
     VkImageCreateInfo image_ci = vku::InitStructHelper();
@@ -3289,18 +3230,9 @@ TEST_F(NegativePipeline, MissingPipelineFormat) {
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = vku::InitStructHelper();
-    VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT unusued_attachment_features =
-        vku::InitStructHelper(&dynamic_rendering_features);
-    GetPhysicalDeviceFeatures2(unusued_attachment_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "dynamicRendering not supported";
-    }
-    if (!unusued_attachment_features.dynamicRenderingUnusedAttachments) {
-        GTEST_SKIP() << "dynamicRenderingUnusedAttachments not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &unusued_attachment_features));
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    AddRequiredFeature(vkt::Feature::dynamicRenderingUnusedAttachments);
+    RETURN_IF_SKIP(Init());
 
     VkFormat undefined = VK_FORMAT_UNDEFINED;
     VkFormat color_format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -3426,18 +3358,10 @@ TEST_F(NegativePipeline, MissingPipelineViewportState) {
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds_features = vku::InitStructHelper();
-    VkPhysicalDeviceExtendedDynamicState2FeaturesEXT eds2_features = vku::InitStructHelper(&eds_features);
-    GetPhysicalDeviceFeatures2(eds2_features);
-    if (!eds_features.extendedDynamicState) {
-        GTEST_SKIP() << "extendedDynamicState not supported";
-    }
-    if (!eds2_features.extendedDynamicState2) {
-        GTEST_SKIP() << "extendedDynamicState2 not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &eds2_features));
-    RETURN_IF_SKIP(InitRenderTarget());
+    AddRequiredFeature(vkt::Feature::extendedDynamicState);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     {
         CreatePipelineHelper pipe(*this);
@@ -3477,10 +3401,8 @@ TEST_F(NegativePipeline, PipelineRenderingInfoInvalidFormatWithoutFragmentState)
     TEST_DESCRIPTION("Create pipeline with invalid pipeline rendering formats");
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(Init());
 
     VkPipelineRenderingCreateInfo pipeline_rendering_ci = vku::InitStructHelper();
     pipeline_rendering_ci.stencilAttachmentFormat = VK_FORMAT_D16_UNORM;
@@ -3631,4 +3553,78 @@ TEST_F(NegativePipeline, PipelineCreationFlags2CacheControl) {
     };
     CreateComputePipelineHelper::OneshotTest(*this, set_compute_flags, kErrorBit,
                                              "VUID-VkComputePipelineCreateInfo-pipelineCreationCacheControl-02875");
+}
+
+TEST_F(NegativePipeline, ViewportStateScissorOverflow) {
+    TEST_DESCRIPTION("Validate sum of offset and width of viewport state scissor");
+
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkViewport viewport = {0.0f, 0.0f, 64.0f, 64.0f, 0.0f, 1.0f};
+    VkRect2D scissor_x = {{vvl::kI32Max / 2, 0}, {vvl::kI32Max / 2 + 64, 64}};
+    VkRect2D scissor_y = {{0, vvl::kI32Max / 2}, {64, vvl::kI32Max / 2 + 64}};
+
+    const auto break_vp_x = [&](CreatePipelineHelper &helper) {
+        helper.vp_state_ci_.viewportCount = 1;
+        helper.vp_state_ci_.pViewports = &viewport;
+        helper.vp_state_ci_.scissorCount = 1;
+        helper.vp_state_ci_.pScissors = &scissor_x;
+    };
+    CreatePipelineHelper::OneshotTest(*this, break_vp_x, kErrorBit,
+                                      vector<std::string>({"VUID-VkPipelineViewportStateCreateInfo-offset-02822"}));
+
+    const auto break_vp_y = [&](CreatePipelineHelper &helper) {
+        helper.vp_state_ci_.viewportCount = 1;
+        helper.vp_state_ci_.pViewports = &viewport;
+        helper.vp_state_ci_.scissorCount = 1;
+        helper.vp_state_ci_.pScissors = &scissor_y;
+    };
+    CreatePipelineHelper::OneshotTest(*this, break_vp_y, kErrorBit,
+                                      vector<std::string>({"VUID-VkPipelineViewportStateCreateInfo-offset-02823"}));
+}
+
+TEST_F(NegativePipeline, ViewportStateScissorNegative) {
+    TEST_DESCRIPTION("Validate offset of viewport state scissor");
+
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkViewport viewport = {0.0f, 0.0f, 64.0f, 64.0f, 0.0f, 1.0f};
+    VkRect2D scissor_x = {{-64, 0}, {256, 256}};
+    VkRect2D scissor_y = {{0, -64}, {256, 256}};
+
+    const auto break_vp_x = [&](CreatePipelineHelper &helper) {
+        helper.vp_state_ci_.viewportCount = 1;
+        helper.vp_state_ci_.pViewports = &viewport;
+        helper.vp_state_ci_.scissorCount = 1;
+        helper.vp_state_ci_.pScissors = &scissor_x;
+    };
+    CreatePipelineHelper::OneshotTest(*this, break_vp_x, kErrorBit, "VUID-VkPipelineViewportStateCreateInfo-x-02821");
+
+    const auto break_vp_y = [&](CreatePipelineHelper &helper) {
+        helper.vp_state_ci_.viewportCount = 1;
+        helper.vp_state_ci_.pViewports = &viewport;
+        helper.vp_state_ci_.scissorCount = 1;
+        helper.vp_state_ci_.pScissors = &scissor_y;
+    };
+    CreatePipelineHelper::OneshotTest(*this, break_vp_y, kErrorBit, "VUID-VkPipelineViewportStateCreateInfo-x-02821");
+}
+
+TEST_F(NegativePipeline, PipelineCreateFlags2) {
+    TEST_DESCRIPTION("Test using VkPipelineCreateFlags2CreateInfoKHR");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    flags2.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitState();
+    pipe.gp_ci_.pNext = &flags2;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-graphicsPipelineLibrary-06606");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
 }

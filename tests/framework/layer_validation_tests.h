@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -265,15 +265,31 @@ class GpuAVTest : public virtual VkLayerTest {
 class NegativeGpuAV : public GpuAVTest {};
 class PositiveGpuAV : public GpuAVTest {};
 
-class NegativeGpuAVBufferDeviceAddress : public GpuAVTest {};
-class NegativeGpuAVDescriptorIndexing : public GpuAVTest {};
+class GpuAVBufferDeviceAddressTest : public GpuAVTest {
+  public:
+    void InitGpuVUBufferDeviceAddress(void *p_next = nullptr);
+};
+class NegativeGpuAVBufferDeviceAddress : public GpuAVBufferDeviceAddressTest {};
+class PositiveGpuAVBufferDeviceAddress : public GpuAVBufferDeviceAddressTest {};
+
+class GpuAVDescriptorIndexingTest : public GpuAVTest {
+  public:
+    void InitGpuVUDescriptorIndexing();
+};
+class NegativeGpuAVDescriptorIndexing : public GpuAVDescriptorIndexingTest {};
+class PositiveGpuAVDescriptorIndexing : public GpuAVDescriptorIndexingTest {};
+
 class NegativeGpuAVIndirectBuffer : public GpuAVTest {};
-class NegativeGpuAVOOB : public GpuAVTest {
+
+class GpuAVOOBTest : public GpuAVTest {};
+class NegativeGpuAVOOB : public GpuAVOOBTest {
   public:
     void ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSize binding_offset, VkDeviceSize binding_range,
                               VkDescriptorType descriptor_type, const char *fragment_shader, const char *expected_error,
                               bool shader_objects = false);
+    void ComputeStorageBufferTest(const char *expected_error, const char *shader, VkDeviceSize buffer_size);
 };
+class PositiveGpuAVOOB : public GpuAVOOBTest {};
 
 class NegativeDebugPrintf : public VkLayerTest {
   public:
@@ -284,7 +300,7 @@ class NegativeDebugPrintf : public VkLayerTest {
 
 class VkSyncValTest : public VkLayerTest {
   public:
-    void InitSyncValFramework(bool enable_queue_submit_validation = false);
+    void InitSyncValFramework(bool disable_queue_submit_validation = false);
 
   protected:
     const VkValidationFeatureEnableEXT enables_[1] = {VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
@@ -300,7 +316,7 @@ class PositiveAndroidHardwareBuffer : public AndroidHardwareBufferTest {};
 
 class AndroidExternalResolveTest : public VkLayerTest {
   public:
-    void InitBasicAndroidExternalResolve(void *pNextFeatures = nullptr);
+    void InitBasicAndroidExternalResolve();
     bool nullColorAttachmentWithExternalFormatResolve;
 };
 class NegativeAndroidExternalResolve : public AndroidExternalResolveTest {};
@@ -326,6 +342,10 @@ class PushDescriptorTest : public VkLayerTest {};
 class NegativePushDescriptor : public PushDescriptorTest {};
 class PositivePushDescriptor : public PushDescriptorTest {};
 
+class DebugExtensionsTest : public VkLayerTest {};
+class NegativeDebugExtensions : public DebugExtensionsTest {};
+class PositiveDebugExtensions : public DebugExtensionsTest {};
+
 class DescriptorBufferTest : public VkLayerTest {
   public:
     void InitBasicDescriptorBuffer(void *pNextFeatures = nullptr);
@@ -335,8 +355,6 @@ class PositiveDescriptorBuffer : public DescriptorBufferTest {};
 
 class DescriptorIndexingTest : public VkLayerTest {
   public:
-    void InitBasicDescriptorIndexing(void *pNextFeatures = nullptr);
-    VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features;
     void ComputePipelineShaderTest(const char *shader, std::vector<VkDescriptorSetLayoutBinding> &bindings);
 };
 class NegativeDescriptorIndexing : public DescriptorIndexingTest {};
@@ -346,7 +364,7 @@ class NegativeDeviceQueue : public VkLayerTest {};
 
 class DynamicRenderingTest : public VkLayerTest {
   public:
-    void InitBasicDynamicRendering(void *pNextFeatures = nullptr);
+    void InitBasicDynamicRendering();
 };
 class NegativeDynamicRendering : public DynamicRenderingTest {};
 class PositiveDynamicRendering : public DynamicRenderingTest {};
@@ -354,7 +372,6 @@ class PositiveDynamicRendering : public DynamicRenderingTest {};
 class DynamicStateTest : public VkLayerTest {
   public:
     void InitBasicExtendedDynamicState();  // enables VK_EXT_extended_dynamic_state
-    void InitBasicExtendedDynamicState3(VkPhysicalDeviceExtendedDynamicState3FeaturesEXT &features);
 };
 class NegativeDynamicState : public DynamicStateTest {
     // helper functions for tests in this file
@@ -388,7 +405,7 @@ class PositiveGeometryTessellation : public VkLayerTest {};
 
 class GraphicsLibraryTest : public VkLayerTest {
   public:
-    void InitBasicGraphicsLibrary(void *pNextFeatures = nullptr);
+    void InitBasicGraphicsLibrary();
 };
 class NegativeGraphicsLibrary : public GraphicsLibraryTest {};
 class PositiveGraphicsLibrary : public GraphicsLibraryTest {};
@@ -415,7 +432,7 @@ class PositiveImage : public ImageTest {};
 
 class ImageDrmTest : public VkLayerTest {
   public:
-    void InitBasicImageDrm(void *pNextFeatures = nullptr);
+    void InitBasicImageDrm();
     std::vector<uint64_t> GetFormatModifier(VkFormat format, VkFormatFeatureFlags2 features, uint32_t plane_count = 1);
 };
 class NegativeImageDrm : public ImageDrmTest {};
@@ -439,7 +456,9 @@ class PositiveMesh : public MeshTest {};
 
 class NegativeMultiview : public VkLayerTest {};
 
-class NegativeObjectLifetime : public VkLayerTest {};
+class ObjectLifetimeTest : public VkLayerTest {};
+class NegativeObjectLifetime : public ObjectLifetimeTest {};
+class PositiveObjectLifetime : public ObjectLifetimeTest {};
 
 class NegativePipelineAdvancedBlend : public VkLayerTest {};
 
@@ -470,15 +489,18 @@ class PositiveQuery : public QueryTest {};
 
 class RayTracingTest : public virtual VkLayerTest {
   public:
-    void InitFrameworkForRayTracingTest(bool is_khr, VkPhysicalDeviceFeatures2KHR *features2 = nullptr,
-                                        VkValidationFeaturesEXT *enabled_features = nullptr);
+    void InitFrameworkForRayTracingTest(VkValidationFeaturesEXT *enabled_features = nullptr);
 
-    void OOBRayTracingShadersTestBody(bool gpu_assisted);
+    void NvInitFrameworkForRayTracingTest(VkPhysicalDeviceFeatures2KHR *features2 = nullptr,
+                                          VkValidationFeaturesEXT *enabled_features = nullptr);
 };
 class NegativeRayTracing : public RayTracingTest {};
 class PositiveRayTracing : public RayTracingTest {};
-class NegativeRayTracingNV : public NegativeRayTracing {};
-class PositiveRayTracingNV : public PositiveRayTracing {};
+
+class NegativeRayTracingNV : public RayTracingTest {
+  public:
+    void OOBRayTracingShadersTestBodyNV(bool gpu_assisted);
+};
 
 class RayTracingPipelineTest : public RayTracingTest {};
 class NegativeRayTracingPipeline : public RayTracingPipelineTest {};
@@ -510,8 +532,7 @@ class ShaderObjectTest : public virtual VkLayerTest {
     vkt::Buffer vertexBuffer;
 
   public:
-    void InitBasicShaderObject(void *pNextFeatures = nullptr, APIVersion targetApiVersion = VK_API_VERSION_1_1,
-                               bool coreFeatures = true);
+    void InitBasicShaderObject();
     void InitBasicMeshShaderObject(void *pNextFeatures = nullptr, APIVersion targetApiVersion = VK_API_VERSION_1_1,
                                    bool taskShader = true, bool meshShader = true);
     void BindVertFragShader(const vkt::Shader &vertShader, const vkt::Shader &fragShader);
@@ -576,10 +597,12 @@ class PositiveSyncObject : public SyncObjectTest {};
 
 class NegativeTransformFeedback : public VkLayerTest {
   public:
-    void InitBasicTransformFeedback(void *pNextFeatures = nullptr);
+    void InitBasicTransformFeedback();
 };
 
-class PositiveTooling : public VkLayerTest {};
+class ToolingTest : public VkLayerTest {};
+class NegativeTooling : public ToolingTest {};
+class PositiveTooling : public ToolingTest {};
 
 class VertexInputTest : public VkLayerTest {};
 class NegativeVertexInput : public VertexInputTest {};

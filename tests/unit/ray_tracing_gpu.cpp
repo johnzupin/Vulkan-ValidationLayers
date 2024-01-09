@@ -17,30 +17,19 @@
 #include "../framework/shader_helper.h"
 #include "../framework/gpu_av_helper.h"
 
-TEST_F(NegativeGpuAVRayTracing, ArrayOOBRayTracingShaders) {
-    TEST_DESCRIPTION(
-        "GPU validation: Verify detection of out-of-bounds descriptor array indexing and use of uninitialized descriptors for "
-        "ray tracing shaders using gpu assited validation.");
-    OOBRayTracingShadersTestBody(true);
-}
-
 TEST_F(NegativeGpuAVRayTracing, CmdTraceRaysIndirectKHR) {
     TEST_DESCRIPTION("Invalid parameters used in vkCmdTraceRaysIndirectKHR");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
 
-    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bda_features = vku::InitStructHelper();
-    bda_features.bufferDeviceAddress = VK_TRUE;
-    VkPhysicalDeviceRayTracingPipelineFeaturesKHR ray_tracing_features = vku::InitStructHelper(&bda_features);
-    VkPhysicalDeviceFeatures2KHR features2 = vku::InitStructHelper(&ray_tracing_features);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredFeature(vkt::Feature::rayTracingPipeline);
     VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
-    RETURN_IF_SKIP(InitFrameworkForRayTracingTest(true, &features2, &validation_features))
-
+    RETURN_IF_SKIP(InitFrameworkForRayTracingTest(&validation_features));
     if (IsPlatformMockICD()) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2))
+    RETURN_IF_SKIP(InitState());
 
     // Create ray tracing pipeline
     std::vector<VkDescriptorSetLayoutBinding> bindings(1);
@@ -184,7 +173,7 @@ TEST_F(NegativeGpuAVRayTracing, CmdTraceRaysIndirectKHR) {
     m_commandBuffer->QueueCommandBuffer(true);
     m_errorMonitor->VerifyFound();
 
-    vk::DeviceWaitIdle(m_device->handle());
+    m_device->wait();
 
     vk::DestroyPipeline(device(), raytracing_pipeline, nullptr);
 }

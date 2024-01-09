@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,43 +49,48 @@ void vvl::QueueSubmission::EndUse() {
     }
 }
 
-uint64_t vvl::Queue::Submit(vvl::QueueSubmission &&submission) {
-    for (auto &cb_state : submission.cbs) {
-        auto cb_guard = cb_state->WriteLock();
-        for (auto *secondary_cmd_buffer : cb_state->linkedCommandBuffers) {
-            auto secondary_guard = secondary_cmd_buffer->WriteLock();
-            secondary_cmd_buffer->IncrementResources();
+uint64_t vvl::Queue::PreSubmit(std::vector<vvl::QueueSubmission> &&submissions) {
+    if (!submissions.empty()) {
+        submissions.back().end_batch = true;
+    }
+    uint64_t retire_early_seq = 0;
+    for (auto &submission : submissions) {
+        for (auto &cb_state : submission.cbs) {
+            auto cb_guard = cb_state->WriteLock();
+            for (auto *secondary_cmd_buffer : cb_state->linkedCommandBuffers) {
+                auto secondary_guard = secondary_cmd_buffer->WriteLock();
+                secondary_cmd_buffer->IncrementResources();
+            }
+            cb_state->IncrementResources();
+            cb_state->Submit(VkHandle(), submission.perf_submit_pass, submission.loc.Get());
         }
-        cb_state->IncrementResources();
-        cb_state->Submit(VkHandle(), submission.perf_submit_pass, submission.loc.Get());
-    }
-    // seq_ is atomic so we don't need a lock until updating the deque below.
-    // Note that this relies on the external synchonization requirements for the
-    // VkQueue
-    submission.seq = ++seq_;
-    submission.BeginUse();
-    bool retire_early = false;
-    for (auto &wait : submission.wait_semaphores) {
-        wait.semaphore->EnqueueWait(this, submission.seq, wait.payload);
-    }
+        // seq_ is atomic so we don't need a lock until updating the deque below.
+        // Note that this relies on the external synchonization requirements for the
+        // VkQueue
+        submission.seq = ++seq_;
+        submission.BeginUse();
+        for (auto &wait : submission.wait_semaphores) {
+            wait.semaphore->EnqueueWait(this, submission.seq, wait.payload);
+        }
 
-    for (auto &signal : submission.signal_semaphores) {
-        signal.semaphore->EnqueueSignal(this, submission.seq, signal.payload);
-    }
+        for (auto &signal : submission.signal_semaphores) {
+            signal.semaphore->EnqueueSignal(this, submission.seq, signal.payload);
+        }
 
-    if (submission.fence) {
-        if (submission.fence->EnqueueSignal(this, submission.seq)) {
-            retire_early = true;
+        if (submission.fence) {
+            if (submission.fence->EnqueueSignal(this, submission.seq)) {
+                retire_early_seq = submission.seq;
+            }
+        }
+        {
+            auto guard = Lock();
+            submissions_.emplace_back(std::move(submission));
+            if (!thread_) {
+                thread_ = std::make_unique<std::thread>(&Queue::ThreadFunc, this);
+            }
         }
     }
-    {
-        auto guard = Lock();
-        submissions_.emplace_back(std::move(submission));
-        if (!thread_) {
-            thread_ = std::make_unique<std::thread>(&Queue::ThreadFunc, this);
-        }
-    }
-    return retire_early ? submission.seq : 0;
+    return retire_early_seq;
 }
 
 std::shared_future<void> vvl::Queue::Wait(uint64_t until_seq) {
@@ -143,7 +148,14 @@ void vvl::Queue::Destroy() {
         dead_thread->join();
         dead_thread.reset();
     }
-    BASE_NODE::Destroy();
+    StateObject::Destroy();
+}
+
+void vvl::Queue::PostSubmit() {
+    auto guard = Lock();
+    if (!submissions_.empty()) {
+        PostSubmit(submissions_.back());
+    }
 }
 
 vvl::QueueSubmission *vvl::Queue::NextSubmission() {
@@ -163,9 +175,7 @@ vvl::QueueSubmission *vvl::Queue::NextSubmission() {
     return result;
 }
 
-void vvl::Queue::ThreadFunc() {
-    QueueSubmission *submission = nullptr;
-
+void vvl::Queue::Retire(QueueSubmission &submission) {
     auto is_query_updated_after = [this](const QueryObject &query_object) {
         auto guard = this->Lock();
         bool first = true;
@@ -186,6 +196,28 @@ void vvl::Queue::ThreadFunc() {
         }
         return false;
     };
+    submission.EndUse();
+    for (auto &wait : submission.wait_semaphores) {
+        wait.semaphore->Retire(this, submission.loc.Get(), wait.payload);
+    }
+    for (auto &cb_state : submission.cbs) {
+        auto cb_guard = cb_state->WriteLock();
+        for (auto *secondary_cmd_buffer : cb_state->linkedCommandBuffers) {
+            auto secondary_guard = secondary_cmd_buffer->WriteLock();
+            secondary_cmd_buffer->Retire(submission.perf_submit_pass, is_query_updated_after);
+        }
+        cb_state->Retire(submission.perf_submit_pass, is_query_updated_after);
+    }
+    for (auto &signal : submission.signal_semaphores) {
+        signal.semaphore->Retire(this, submission.loc.Get(), signal.payload);
+    }
+    if (submission.fence) {
+        submission.fence->Retire();
+    }
+}
+
+void vvl::Queue::ThreadFunc() {
+    QueueSubmission *submission = nullptr;
 
     // Roll this queue forward, one submission at a time.
     while (true) {
@@ -193,25 +225,7 @@ void vvl::Queue::ThreadFunc() {
         if (submission == nullptr) {
             break;
         }
-
-        submission->EndUse();
-        for (auto &wait : submission->wait_semaphores) {
-            wait.semaphore->Retire(this, submission->loc.Get(), wait.payload);
-        }
-        for (auto &cb_state : submission->cbs) {
-            auto cb_guard = cb_state->WriteLock();
-            for (auto *secondary_cmd_buffer : cb_state->linkedCommandBuffers) {
-                auto secondary_guard = secondary_cmd_buffer->WriteLock();
-                secondary_cmd_buffer->Retire(submission->perf_submit_pass, is_query_updated_after);
-            }
-            cb_state->Retire(submission->perf_submit_pass, is_query_updated_after);
-        }
-        for (auto &signal : submission->signal_semaphores) {
-            signal.semaphore->Retire(this, submission->loc.Get(), signal.payload);
-        }
-        if (submission->fence) {
-            submission->fence->Retire();
-        }
+        Retire(*submission);
         // wake up anyone waiting for this submission to be retired
         {
             std::promise<void> completed;
@@ -224,4 +238,3 @@ void vvl::Queue::ThreadFunc() {
         }
     }
 }
-

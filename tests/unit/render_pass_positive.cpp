@@ -246,19 +246,8 @@ TEST_F(PositiveRenderPass, BeginStencilLoadOp) {
     vk::CmdCopyImage(cmdbuf.handle(), m_depthStencil->handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage.handle(),
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cregion);
     cmdbuf.end();
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.waitSemaphoreCount = 0;
-    submit_info.pWaitSemaphores = NULL;
-    submit_info.pWaitDstStageMask = NULL;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmdbuf.handle();
-    submit_info.signalSemaphoreCount = 0;
-    submit_info.pSignalSemaphores = NULL;
-
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(cmdbuf);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveRenderPass, BeginInlineAndSecondaryCommandBuffers) {
@@ -353,11 +342,8 @@ TEST_F(PositiveRenderPass, DestroyPipeline) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveRenderPass, ImagelessFramebufferNonZeroBaseMip) {
@@ -456,9 +442,8 @@ TEST_F(PositiveRenderPass, ValidStages) {
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(Init());
     const bool rp2_supported = IsExtensionsEnabled(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitState());
 
     VkSubpassDescription sci[2] = {};
     sci[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -783,44 +768,21 @@ TEST_F(PositiveRenderPass, BeginDedicatedStencilLayout) {
 
     vkt::ImageView ds_view = ds_image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
 
-    // Create depth stencil attachment
-    VkAttachmentDescriptionStencilLayoutKHR attachment_desc_stencil_layout = vku::InitStructHelper();
+    VkAttachmentDescriptionStencilLayout attachment_desc_stencil_layout = vku::InitStructHelper();
     attachment_desc_stencil_layout.stencilInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachment_desc_stencil_layout.stencilFinalLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-    VkAttachmentDescription2 ds_attachment_desc = vku::InitStructHelper(&attachment_desc_stencil_layout);
-    ds_attachment_desc.format = ds_format;
-    ds_attachment_desc.samples = VK_SAMPLE_COUNT_1_BIT;
-    ds_attachment_desc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    ds_attachment_desc.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    ds_attachment_desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    ds_attachment_desc.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    VkAttachmentReferenceStencilLayoutKHR attachment_ref_stencil_layout = vku::InitStructHelper();
+
+    VkAttachmentReferenceStencilLayout attachment_ref_stencil_layout = vku::InitStructHelper();
     attachment_ref_stencil_layout.stencilLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-    VkAttachmentReference2 ds_attachment_ref = vku::InitStructHelper(&attachment_ref_stencil_layout);
-    ds_attachment_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-    // Create render pass
-    VkSubpassDescription2 subpass = vku::InitStructHelper();
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.pDepthStencilAttachment = &ds_attachment_ref;
+    RenderPass2SingleSubpass rp(*this);
+    rp.AddAttachmentDescription(ds_format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    rp.SetAttachmentDescriptionPNext(0, &attachment_desc_stencil_layout);
+    rp.AddAttachmentReference(0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, 0, &attachment_ref_stencil_layout);
+    rp.AddDepthStencilAttachment(0);
+    rp.CreateRenderPass();
 
-    VkRenderPassCreateInfo2 render_pass_ci = vku::InitStructHelper();
-    render_pass_ci.subpassCount = 1;
-    render_pass_ci.pSubpasses = &subpass;
-    render_pass_ci.attachmentCount = 1;
-    render_pass_ci.pAttachments = &ds_attachment_desc;
-
-    vkt::RenderPass render_pass(*m_device, render_pass_ci);
-
-    // Create framebuffer
-    VkFramebufferCreateInfo fci = vku::InitStructHelper();
-    fci.renderPass = render_pass.handle();
-    fci.attachmentCount = 1;
-    fci.pAttachments = &ds_view.handle();
-    fci.width = ds_image.width();
-    fci.height = ds_image.height();
-    fci.layers = 1;
-    vkt::Framebuffer fb(*m_device, fci);
+    vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &ds_view.handle(), ds_image.width(), ds_image.height());
 
     // Use helper to create graphics pipeline
     VkPipelineDepthStencilStateCreateInfo ds_state = vku::InitStructHelper();
@@ -831,11 +793,11 @@ TEST_F(PositiveRenderPass, BeginDedicatedStencilLayout) {
     CreatePipelineHelper helper(*this);
     helper.InitState();
     helper.gp_ci_.pDepthStencilState = &ds_state;
-    helper.gp_ci_.renderPass = render_pass.handle();
+    helper.gp_ci_.renderPass = rp.Handle();
     helper.CreateGraphicsPipeline();
 
     m_commandBuffer->begin();
-    m_commandBuffer->BeginRenderPass(render_pass.handle(), fb.handle(), fci.width, fci.height);
+    m_commandBuffer->BeginRenderPass(rp.Handle(), fb.handle(), ds_image.width(), ds_image.height());
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, helper.pipeline_);
     // If the stencil layout was not specified separately using the separateDepthStencilLayouts feature,
     // and used in the validation code, 06887 would trigger with the following draw call
@@ -910,22 +872,11 @@ TEST_F(PositiveRenderPass, QueriesInMultiview) {
     vk::CmdEndQuery(m_commandBuffer->handle(), query_pool.handle(), 0);
     m_commandBuffer->EndRenderPass();
 
-    vk::CmdCopyQueryPoolResults(m_commandBuffer->handle(), query_pool.handle(), 0, 2, buffer.handle(), 0, 0, 0);
+    vk::CmdCopyQueryPoolResults(m_commandBuffer->handle(), query_pool.handle(), 0, 2, buffer.handle(), 0, 4, 0);
     m_commandBuffer->end();
 
-    VkCommandBuffer handle = m_commandBuffer->handle();
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.waitSemaphoreCount = 0;
-    submit_info.pWaitSemaphores = nullptr;
-    submit_info.pWaitDstStageMask = nullptr;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &handle;
-    submit_info.signalSemaphoreCount = 0;
-    submit_info.pSignalSemaphores = nullptr;
-
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveRenderPass, StoreOpNoneExt) {
@@ -1224,11 +1175,8 @@ TEST_F(PositiveRenderPass, SeparateDepthStencilSubresourceLayout) {
 
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures separate_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(separate_features);
-    RETURN_IF_SKIP(InitState(nullptr, &separate_features));
+    AddRequiredFeature(vkt::Feature::separateDepthStencilLayouts);
+    RETURN_IF_SKIP(Init());
 
     VkFormat ds_format = VK_FORMAT_D24_UNORM_S8_UINT;
     VkFormatProperties props;
@@ -1371,9 +1319,8 @@ TEST_F(PositiveRenderPass, InputResolve) {
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(Init());
     const bool rp2Supported = IsExtensionsEnabled(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitState());
 
     RenderPassSingleSubpass rp(*this);
     // input attachments
@@ -1442,11 +1389,7 @@ TEST_F(PositiveRenderPass, TestDepthStencilRenderPassTransition) {
                                VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &img_barrier);
         m_commandBuffer->end();
 
-        VkSubmitInfo submit_info = vku::InitStructHelper();
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &m_commandBuffer->handle();
-
-        vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-        vk::QueueWaitIdle(m_default_queue);
+        m_default_queue->submit(*m_commandBuffer);
+        m_default_queue->wait();
     }
 }

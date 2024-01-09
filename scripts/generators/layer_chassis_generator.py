@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2023 Valve Corporation
-# Copyright (c) 2015-2023 LunarG, Inc.
-# Copyright (c) 2015-2023 Google Inc.
-# Copyright (c) 2023-2023 RasterGrid Kft.
+# Copyright (c) 2015-2024 Valve Corporation
+# Copyright (c) 2015-2024 LunarG, Inc.
+# Copyright (c) 2015-2024 Google Inc.
+# Copyright (c) 2023-2024 RasterGrid Kft.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -94,7 +94,8 @@ class APISpecific:
                 return [
                     'VK_EXT_debug_report',
                     'VK_EXT_debug_utils',
-                    'VK_EXT_validation_features'
+                    'VK_EXT_validation_features',
+                    'VK_EXT_layer_settings'
                 ]
 
 
@@ -221,6 +222,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
         'vkDestroyValidationCacheEXT',
         'vkMergeValidationCachesEXT',
         'vkGetValidationCacheDataEXT',
+        'vkGetPhysicalDeviceToolProperties',
         'vkGetPhysicalDeviceToolPropertiesEXT',
     ]
 
@@ -248,11 +250,11 @@ class LayerChassisOutputGenerator(BaseGenerator):
 
             /***************************************************************************
             *
-            * Copyright (c) 2015-2023 The Khronos Group Inc.
-            * Copyright (c) 2015-2023 Valve Corporation
-            * Copyright (c) 2015-2023 LunarG, Inc.
-            * Copyright (c) 2015-2023 Google Inc.
-            * Copyright (c) 2023-2023 RasterGrid Kft.
+            * Copyright (c) 2015-2024 The Khronos Group Inc.
+            * Copyright (c) 2015-2024 Valve Corporation
+            * Copyright (c) 2015-2024 LunarG, Inc.
+            * Copyright (c) 2015-2024 Google Inc.
+            * Copyright (c) 2023-2024 RasterGrid Kft.
             *
             * Licensed under the Apache License, Version 2.0 (the "License");
             * you may not use this file except in compliance with the License.
@@ -374,6 +376,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 VALIDATION_CHECK_DISABLE_OBJECT_IN_USE,
                 VALIDATION_CHECK_DISABLE_QUERY_VALIDATION,
                 VALIDATION_CHECK_DISABLE_IMAGE_LAYOUT_VALIDATION,
+                VALIDATION_CHECK_DISABLE_SYNCHRONIZATION_VALIDATION_QUEUE_SUBMIT,
             } ValidationCheckDisables;
 
             typedef enum ValidationCheckEnables {
@@ -382,7 +385,6 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_IMG,
                 VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_NVIDIA,
                 VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ALL,
-                VALIDATION_CHECK_ENABLE_SYNCHRONIZATION_VALIDATION_QUEUE_SUBMIT,
             } ValidationCheckEnables;
 
             typedef enum VkValidationFeatureEnable {
@@ -404,6 +406,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 handle_wrapping,
                 shader_validation,
                 shader_validation_caching,
+                sync_validation_queue_submit,
                 // Insert new disables above this line
                 kMaxDisableFlags,
             } DisableFlags;
@@ -418,7 +421,6 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 vendor_specific_nvidia,
                 debug_printf_validation,
                 sync_validation,
-                sync_validation_queue_submit,
                 // Insert new enables above this line
                 kMaxEnableFlags,
             } EnableFlags;
@@ -1706,6 +1708,15 @@ class LayerChassisOutputGenerator(BaseGenerator):
             }
 
             // Handle tooling queries manually as this is a request for layer information
+            static const VkPhysicalDeviceToolPropertiesEXT khronos_layer_tool_props = {
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES_EXT,
+                nullptr,
+                "Khronos Validation Layer",
+                STRINGIFY(VK_HEADER_VERSION),
+                VK_TOOL_PURPOSE_VALIDATION_BIT_EXT | VK_TOOL_PURPOSE_ADDITIONAL_FEATURES_BIT_EXT | VK_TOOL_PURPOSE_DEBUG_REPORTING_BIT_EXT | VK_TOOL_PURPOSE_DEBUG_MARKERS_BIT_EXT,
+                "Khronos Validation Layer",
+                OBJECT_LAYER_NAME
+            };
 
             VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceToolPropertiesEXT(VkPhysicalDevice physicalDevice, uint32_t* pToolCount,
                                                                             VkPhysicalDeviceToolPropertiesEXT* pToolProperties) {
@@ -1714,19 +1725,9 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 ErrorObject error_obj(vvl::Func::vkGetPhysicalDeviceToolPropertiesEXT,
                                     VulkanTypedHandle(physicalDevice, kVulkanObjectTypePhysicalDevice));
 
-                static const VkPhysicalDeviceToolPropertiesEXT khronos_layer_tool_props = {
-                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES_EXT,
-                    nullptr,
-                    "Khronos Validation Layer",
-                    STRINGIFY(VK_HEADER_VERSION),
-                    VK_TOOL_PURPOSE_VALIDATION_BIT_EXT | VK_TOOL_PURPOSE_ADDITIONAL_FEATURES_BIT_EXT | VK_TOOL_PURPOSE_DEBUG_REPORTING_BIT_EXT |
-                        VK_TOOL_PURPOSE_DEBUG_MARKERS_BIT_EXT,
-                    "Khronos Validation Layer",
-                    OBJECT_LAYER_NAME};
-
                 auto original_pToolProperties = pToolProperties;
 
-                if (pToolProperties != nullptr) {
+                if (pToolProperties != nullptr && *pToolCount > 0) {
                     *pToolProperties = khronos_layer_tool_props;
                     pToolProperties = ((*pToolCount > 1) ? &pToolProperties[1] : nullptr);
                     (*pToolCount)--;
@@ -1751,11 +1752,56 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 if (original_pToolProperties != nullptr) {
                     pToolProperties = original_pToolProperties;
                 }
+                assert(*pToolCount != std::numeric_limits<uint32_t>::max());
                 (*pToolCount)++;
 
                 for (ValidationObject* intercept : layer_data->object_dispatch) {
                     auto lock = intercept->WriteLock();
                     intercept->PostCallRecordGetPhysicalDeviceToolPropertiesEXT(physicalDevice, pToolCount, pToolProperties, record_obj);
+                }
+                return result;
+            }
+
+            VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceToolProperties(VkPhysicalDevice physicalDevice, uint32_t* pToolCount,
+                                                                            VkPhysicalDeviceToolProperties* pToolProperties) {
+                auto layer_data = GetLayerDataPtr(get_dispatch_key(physicalDevice), layer_data_map);
+                bool skip = false;
+                ErrorObject error_obj(vvl::Func::vkGetPhysicalDeviceToolProperties,
+                                    VulkanTypedHandle(physicalDevice, kVulkanObjectTypePhysicalDevice));
+
+                auto original_pToolProperties = pToolProperties;
+
+                if (pToolProperties != nullptr && *pToolCount > 0) {
+                    *pToolProperties = khronos_layer_tool_props;
+                    pToolProperties = ((*pToolCount > 1) ? &pToolProperties[1] : nullptr);
+                    (*pToolCount)--;
+                }
+
+                for (const ValidationObject* intercept : layer_data->object_dispatch) {
+                    auto lock = intercept->ReadLock();
+                    skip |=
+                        intercept->PreCallValidateGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, error_obj);
+                    if (skip) return VK_ERROR_VALIDATION_FAILED_EXT;
+                }
+
+                RecordObject record_obj(vvl::Func::vkGetPhysicalDeviceToolProperties);
+                for (ValidationObject* intercept : layer_data->object_dispatch) {
+                    auto lock = intercept->WriteLock();
+                    intercept->PreCallRecordGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, record_obj);
+                }
+
+                VkResult result = DispatchGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties);
+                record_obj.result = result;
+
+                if (original_pToolProperties != nullptr) {
+                    pToolProperties = original_pToolProperties;
+                }
+                assert(*pToolCount != std::numeric_limits<uint32_t>::max());
+                (*pToolCount)++;
+
+                for (ValidationObject* intercept : layer_data->object_dispatch) {
+                    auto lock = intercept->WriteLock();
+                    intercept->PostCallRecordGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, record_obj);
                 }
                 return result;
             }

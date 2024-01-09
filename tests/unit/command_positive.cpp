@@ -71,11 +71,8 @@ TEST_F(PositiveCommand, SecondaryCommandBufferBarrier) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveCommand, ClearAttachmentsCalledInSecondaryCB) {
@@ -311,8 +308,8 @@ TEST_F(PositiveCommand, SecondaryCommandBufferImageLayoutTransitions) {
     VkSubmitInfo submit_info = vku::InitStructHelper();
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &primary_command_buffer;
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::DeviceWaitIdle(m_device->device());
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_device->wait();
     vk::FreeCommandBuffers(m_device->device(), m_commandPool->handle(), 1, &secondary_command_buffer);
     vk::FreeCommandBuffers(m_device->device(), m_commandPool->handle(), 1, &primary_command_buffer);
 }
@@ -458,11 +455,11 @@ TEST_F(PositiveCommand, CommandBufferSimultaneousUseSync) {
 
     // Submit CB once signaling s1, with fence so we can roll forward to its retirement.
     VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, 0, nullptr, nullptr, 1, &m_commandBuffer->handle(), 1, &s1};
-    vk::QueueSubmit(m_default_queue, 1, &si, fence);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &si, fence);
 
     // Submit CB again, signaling s2.
     si.pSignalSemaphores = &s2;
-    vk::QueueSubmit(m_default_queue, 1, &si, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &si, VK_NULL_HANDLE);
 
     // Wait for fence.
     vk::WaitForFences(m_device->device(), 1, &fence, VK_TRUE, kWaitTimeout);
@@ -472,7 +469,7 @@ TEST_F(PositiveCommand, CommandBufferSimultaneousUseSync) {
     vk::DestroySemaphore(m_device->device(), s1, nullptr);
 
     // Force device idle and clean up remaining objects
-    vk::DeviceWaitIdle(m_device->device());
+    m_device->wait();
     vk::DestroySemaphore(m_device->device(), s2, nullptr);
     vk::DestroyFence(m_device->device(), fence, nullptr);
 }
@@ -620,12 +617,8 @@ TEST_F(PositiveCommand, EventStageMaskSecondaryCommandBuffer) {
                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
     commandBuffer.end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    VkCommandBuffer handles[] = {commandBuffer.handle()};
-    submit_info.pCommandBuffers = handles;
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveCommand, EventsInSecondaryCommandBuffers) {
@@ -648,12 +641,9 @@ TEST_F(PositiveCommand, EventsInSecondaryCommandBuffers) {
     m_commandBuffer->begin();
     vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &scb);
     m_commandBuffer->end();
-    VkCommandBuffer cmdBuffer = m_commandBuffer->handle();
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmdBuffer;
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveCommand, ThreadedCommandBuffersWithLabels) {
@@ -833,14 +823,8 @@ TEST_F(PositiveCommand, DebugLabelPrimaryCommandBuffer) {
 
     m_commandBuffer->end();
 
-    const std::array command_buffers = {m_commandBuffer->handle()};
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = size32(command_buffers);
-    submit_info.pCommandBuffers = command_buffers.data();
-
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveCommand, DebugLabelPrimaryCommandBuffers) {
@@ -868,14 +852,10 @@ TEST_F(PositiveCommand, DebugLabelPrimaryCommandBuffers) {
         command_buffer_end.end();
     }
 
-    const std::array command_buffers = {command_buffer_start.handle(), command_buffer_end.handle()};
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = size32(command_buffers);
-    submit_info.pCommandBuffers = command_buffers.data();
-
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    vkt::Fence fence;
+    std::vector<const vkt::CommandBuffer *> command_buffers = {&command_buffer_start, &command_buffer_end};
+    m_default_queue->submit(command_buffers, fence);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveCommand, DebugLabelSecondaryCommandBuffer) {
@@ -897,11 +877,8 @@ TEST_F(PositiveCommand, CopyImageRemainingLayersMaintenance5) {
         "Test copying an image with VkImageSubresourceLayers.layerCount = VK_REMAINING_ARRAY_LAYERS using VK_KHR_maintenance5");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(maintenance5_features);
-    RETURN_IF_SKIP(InitState(nullptr, &maintenance5_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(Init());
 
     VkImageCreateInfo ci = vku::InitStructHelper();
     ci.flags = 0;
@@ -952,11 +929,8 @@ TEST_F(PositiveCommand, CopyImageTypeExtentMismatchMaintenance5) {
     TEST_DESCRIPTION("Test copying an image with extent mistmatch using VK_KHR_maintenance5");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(maintenance5_features);
-    RETURN_IF_SKIP(InitState(nullptr, &maintenance5_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(Init());
 
     VkImageCreateInfo ci = vku::InitStructHelper();
     ci.flags = 0;
@@ -1006,11 +980,10 @@ TEST_F(PositiveCommand, MultiDrawMaintenance5) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_MULTI_DRAW_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw_features = vku::InitStructHelper(&maintenance5_features);
-    GetPhysicalDeviceFeatures2(multi_draw_features);
-    RETURN_IF_SKIP(InitState(nullptr, &multi_draw_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    AddRequiredFeature(vkt::Feature::multiDraw);
+    RETURN_IF_SKIP(Init());
+
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -1050,11 +1023,9 @@ TEST_F(PositiveCommand, MultiDrawMaintenance5Mixed) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_MULTI_DRAW_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw_features = vku::InitStructHelper(&maintenance5_features);
-    GetPhysicalDeviceFeatures2(multi_draw_features);
-    RETURN_IF_SKIP(InitState(nullptr, &multi_draw_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    AddRequiredFeature(vkt::Feature::multiDraw);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -1085,10 +1056,8 @@ TEST_F(PositiveCommand, CopyImageLayerCount) {
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(maintenance5_features);
-    RETURN_IF_SKIP(InitState(nullptr, &maintenance5_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(Init());
 
     VkImageCreateInfo ci = vku::InitStructHelper();
     ci.imageType = VK_IMAGE_TYPE_2D;
@@ -1264,13 +1233,8 @@ TEST_F(PositiveCommand, CopyBufferToRemaingImageLayers) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    if (DeviceValidationVersion() < VK_API_VERSION_1_1) {
-        GTEST_SKIP() << "At least Vulkan version 1.1 is required";
-    }
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance_5_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(maintenance_5_features);
-    RETURN_IF_SKIP(InitState(nullptr, &maintenance_5_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(Init());
 
     vkt::Buffer buffer(*m_device, 32u * 32u * 4u, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
@@ -1322,9 +1286,7 @@ TEST_F(PositiveCommand, DISABLED_ClearAttachmentBasicUsage) {
 TEST_F(PositiveCommand, CopyImageOverlappingMemory) {
     TEST_DESCRIPTION("Validate Copy Image from/to Buffer with overlapping memory");
     SetTargetApiVersion(VK_API_VERSION_1_3);
-
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     auto image_ci =
         VkImageObj::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_R8G8B8A8_UNORM,

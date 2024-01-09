@@ -16,17 +16,10 @@
 #include "../framework/descriptor_helper.h"
 #include "generated/vk_extension_helper.h"
 
-void GraphicsLibraryTest::InitBasicGraphicsLibrary(void *pNextFeatures) {
+void GraphicsLibraryTest::InitBasicGraphicsLibrary() {
     AddRequiredExtensions(VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT gpl_features = vku::InitStructHelper(pNextFeatures);
-    GetPhysicalDeviceFeatures2(gpl_features);
-    if (!gpl_features.graphicsPipelineLibrary) {
-        GTEST_SKIP() << "VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT::graphicsPipelineLibrary not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &gpl_features));
+    AddRequiredFeature(vkt::Feature::graphicsPipelineLibrary);
+    RETURN_IF_SKIP(Init());
 }
 
 TEST_F(PositiveGraphicsLibrary, VertexInput) {
@@ -177,19 +170,16 @@ TEST_F(PositiveGraphicsLibrary, DrawWithNullDSLs) {
                                       });
 
     // We _vs and _fs layouts are identical, but we want them to be separate handles handles for the sake layout merging
-    vkt::PipelineLayout pipeline_layout_vs(*m_device, {&ds.layout_, nullptr, &ds2.layout_}, {},
+    vkt::PipelineLayout pipeline_layout_vs(*m_device, {&ds.layout_, &ds.layout_, nullptr}, {},
                                            VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT);
     vkt::PipelineLayout pipeline_layout_fs(*m_device, {&ds.layout_, nullptr, &ds2.layout_}, {},
                                            VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT);
-    vkt::PipelineLayout pipeline_layout_null(*m_device, {&ds.layout_, nullptr, &ds2.layout_}, {},
+    vkt::PipelineLayout pipeline_layout_null(*m_device, {&ds.layout_, nullptr, nullptr}, {},
                                              VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT);
 
-    const std::array<VkDescriptorSet, 3> desc_sets = {ds.set_, VK_NULL_HANDLE, ds2.set_};
+    const std::array<VkDescriptorSet, 3> desc_sets = {ds.set_, VK_NULL_HANDLE, VK_NULL_HANDLE};
 
-    VkBufferCreateInfo ub_ci = vku::InitStructHelper();
-    ub_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    ub_ci.size = 1024;
-    vkt::Buffer uniform_buffer(*m_device, ub_ci);
+    vkt::Buffer uniform_buffer(*m_device, 1024, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     ds.WriteDescriptorBufferInfo(0, uniform_buffer.handle(), 0, 1024);
     ds.UpdateDescriptorSets();
     ds2.WriteDescriptorBufferInfo(0, uniform_buffer.handle(), 0, 1024);
@@ -339,20 +329,12 @@ TEST_F(PositiveGraphicsLibrary, NotAttachmentDynamicBlendEnable) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state3_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&extended_dynamic_state3_features));
-
-    if (!m_device->phy().features().dualSrcBlend) {
-        GTEST_SKIP() << "dualSrcBlend feature is not available";
-    }
-
-    if (!extended_dynamic_state3_features.extendedDynamicState3ColorBlendEnable ||
-        !extended_dynamic_state3_features.extendedDynamicState3ColorBlendEquation ||
-        !extended_dynamic_state3_features.extendedDynamicState3ColorWriteMask ||
-        !extended_dynamic_state3_features.extendedDynamicState3ColorBlendAdvanced) {
-        GTEST_SKIP() << "DynamicState3 features not supported";
-    }
-
+    AddRequiredFeature(vkt::Feature::dualSrcBlend);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEnable);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEquation);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorWriteMask);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendAdvanced);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -627,14 +609,9 @@ TEST_F(PositiveGraphicsLibrary, DynamicAlphaToOneEnableFragmentOutput) {
     TEST_DESCRIPTION("set VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT in Fragment Output");
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-
-    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dyn_state3_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&dyn_state3_features));
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3AlphaToOneEnable);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
     InitRenderTarget();
-
-    if (!dyn_state3_features.extendedDynamicState3AlphaToOneEnable) {
-        GTEST_SKIP() << "Test requires (unsupported) extendedDynamicState3AlphaToOneEnable";
-    }
 
     // Layout, renderPass, and subpass all need to be shared across libraries in the same executable pipeline
     VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -707,14 +684,9 @@ TEST_F(PositiveGraphicsLibrary, DynamicAlphaToOneEnableFragmentShader) {
     TEST_DESCRIPTION("set VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT in Fragment Shader");
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-
-    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dyn_state3_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&dyn_state3_features));
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3AlphaToOneEnable);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
     InitRenderTarget();
-
-    if (!dyn_state3_features.extendedDynamicState3AlphaToOneEnable) {
-        GTEST_SKIP() << "Test requires (unsupported) extendedDynamicState3AlphaToOneEnable";
-    }
 
     // Layout, renderPass, and subpass all need to be shared across libraries in the same executable pipeline
     VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -863,11 +835,8 @@ TEST_F(PositiveGraphicsLibrary, TessellationWithoutPreRasterization) {
     TEST_DESCRIPTION("have Tessellation stages with null pTessellationState but not Pre-Rasterization");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredFeature(vkt::Feature::tessellationShader);
     RETURN_IF_SKIP(InitBasicGraphicsLibrary());
-
-    if (!m_device->phy().features().tessellationShader) {
-        GTEST_SKIP() << "Device does not support tessellation shaders";
-    }
 
     CreatePipelineHelper pipe(*this);
     pipe.InitVertexInputLibInfo();
@@ -902,12 +871,8 @@ TEST_F(PositiveGraphicsLibrary, FSIgnoredPointerGPLDynamicRendering) {
     TEST_DESCRIPTION("Check ignored pointers with dynamics rendering and GPL");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&dynamic_rendering_features));
-
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
     m_depthStencil->Init(m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -980,12 +945,8 @@ TEST_F(PositiveGraphicsLibrary, GPLDynamicRenderingWithDepthDraw) {
     TEST_DESCRIPTION("Check ignored pointers with dynamics rendering and GPL");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&dynamic_rendering_features));
-
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
     m_depthStencil->Init(m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -1089,12 +1050,8 @@ TEST_F(PositiveGraphicsLibrary, DepthState) {
     TEST_DESCRIPTION("Create a GPL with depth state");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
-    VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dyn_state2_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&dyn_state2_features));
-
-    if (!dyn_state2_features.extendedDynamicState2) {
-        GTEST_SKIP() << "Test requires (unsupported) extendedDynamicState2";
-    }
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
     m_depthStencil->Init(m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -1199,12 +1156,8 @@ TEST_F(PositiveGraphicsLibrary, FOIgnoredDynamicRendering) {
     TEST_DESCRIPTION("Check ignored pointers with dynamics rendering and no fragment output state");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&dynamic_rendering_features));
-
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
     m_depthStencil->Init(m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -1361,11 +1314,9 @@ TEST_F(PositiveGraphicsLibrary, DepthStencilStateIgnored) {
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extended_dynamic_state_features = vku::InitStructHelper();
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features =
-        vku::InitStructHelper(&extended_dynamic_state_features);
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&dynamic_rendering_features));
-
+    AddRequiredFeature(vkt::Feature::extendedDynamicState);
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
     InitRenderTarget();
 
     CreatePipelineHelper frag_shader_lib(*this);
@@ -1393,26 +1344,14 @@ TEST_F(PositiveGraphicsLibrary, ColorBlendStateIgnored) {
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extended_dynamic_state2_features = vku::InitStructHelper();
-    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state3_features =
-        vku::InitStructHelper(&extended_dynamic_state2_features);
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features =
-        vku::InitStructHelper(&extended_dynamic_state3_features);
-    RETURN_IF_SKIP(InitBasicGraphicsLibrary(&dynamic_rendering_features));
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2LogicOp);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3LogicOpEnable);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEnable);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEquation);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorWriteMask);
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
     InitRenderTarget();
-
-    if (!extended_dynamic_state3_features.extendedDynamicState3LogicOpEnable) {
-        GTEST_SKIP() << "extendedDynamicState3LogicOpEnable not supported";
-    }
-    if (!extended_dynamic_state3_features.extendedDynamicState3ColorBlendEnable) {
-        GTEST_SKIP() << "extendedDynamicState3ColorBlendEnable not supported";
-    }
-    if (!extended_dynamic_state3_features.extendedDynamicState3ColorBlendEquation) {
-        GTEST_SKIP() << "extendedDynamicState3ColorBlendEquation not supported";
-    }
-    if (!extended_dynamic_state3_features.extendedDynamicState3ColorWriteMask) {
-        GTEST_SKIP() << "extendedDynamicState3ColorWriteMask not supported";
-    }
 
     VkPipelineRenderingCreateInfo pipeline_rendering_info = vku::InitStructHelper();
     VkFormat color_format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -1512,6 +1451,9 @@ TEST_F(PositiveGraphicsLibrary, IgnoredTessellationState) {
     TEST_DESCRIPTION("Create a pipeline library with tessellation shader but no tessellation state");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2);
     RETURN_IF_SKIP(InitBasicGraphicsLibrary());
     InitRenderTarget();
 
@@ -1549,7 +1491,10 @@ TEST_F(PositiveGraphicsLibrary, IgnoredTessellationState) {
         vkt::GraphicsPipelineLibraryStage vs_stage(vs_spv, VK_SHADER_STAGE_VERTEX_BIT);
         pre_raster_lib.InitPreRasterLibInfo(&vs_stage.stage_ci);
         pre_raster_lib.InitState();
-        pre_raster_lib.shader_stages_ = {stages[0], stages[1]};
+        pre_raster_lib.AddDynamicState(VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT);
+        pre_raster_lib.shader_stages_ = {pre_raster_lib.vs_->GetStageCreateInfo(), stages[0], stages[1]};
+        pre_raster_lib.gp_ci_.stageCount = pre_raster_lib.shader_stages_.size();
+        pre_raster_lib.gp_ci_.pStages = pre_raster_lib.shader_stages_.data();
         pre_raster_lib.CreateGraphicsPipeline();
     }
 
@@ -1585,4 +1530,126 @@ TEST_F(PositiveGraphicsLibrary, IgnoredTessellationState) {
     exe_pipe_ci.pStages = stages;
     vkt::Pipeline exe_pipe(*m_device, exe_pipe_ci);
     ASSERT_TRUE(exe_pipe.initialized());
+}
+
+TEST_F(PositiveGraphicsLibrary, PushConstant) {
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
+    InitRenderTarget();
+
+    VkPushConstantRange pc_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 4};
+
+    CreatePipelineHelper pre_raster_lib(*this);
+    {
+        const auto vs_spv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
+        vkt::GraphicsPipelineLibraryStage vs_stage(vs_spv, VK_SHADER_STAGE_VERTEX_BIT);
+        pre_raster_lib.InitPreRasterLibInfo(&vs_stage.stage_ci);
+        pre_raster_lib.pipeline_layout_ci_.pushConstantRangeCount = 1;
+        pre_raster_lib.pipeline_layout_ci_.pPushConstantRanges = &pc_range;
+        pre_raster_lib.InitState();
+        pre_raster_lib.CreateGraphicsPipeline();
+    }
+
+    CreatePipelineHelper frag_shader_lib(*this);
+    {
+        const auto fs_spv = GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl);
+        vkt::GraphicsPipelineLibraryStage fs_stage(fs_spv, VK_SHADER_STAGE_FRAGMENT_BIT);
+        frag_shader_lib.InitFragmentLibInfo(&fs_stage.stage_ci);
+        frag_shader_lib.pipeline_layout_ci_.pushConstantRangeCount = 0;
+        frag_shader_lib.pipeline_layout_ci_.pPushConstantRanges = &pc_range;
+        frag_shader_lib.InitState();
+        frag_shader_lib.CreateGraphicsPipeline();
+    }
+
+    VkPipeline libraries[2] = {
+        pre_raster_lib.pipeline_,
+        frag_shader_lib.pipeline_,
+    };
+    VkPipelineLibraryCreateInfoKHR link_info = vku::InitStructHelper();
+    link_info.libraryCount = size(libraries);
+    link_info.pLibraries = libraries;
+
+    VkGraphicsPipelineCreateInfo lib_ci = vku::InitStructHelper(&link_info);
+    vkt::Pipeline lib(*m_device, lib_ci);
+}
+
+TEST_F(PositiveGraphicsLibrary, PushConstantOneLibrary) {
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
+    InitRenderTarget();
+
+    CreatePipelineHelper pre_raster_lib(*this);
+    {
+        const auto vs_spv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
+        vkt::GraphicsPipelineLibraryStage vs_stage(vs_spv, VK_SHADER_STAGE_VERTEX_BIT);
+        pre_raster_lib.InitPreRasterLibInfo(&vs_stage.stage_ci);
+        VkPushConstantRange pc_range = {VK_SHADER_STAGE_ALL, 0, 4};
+        pre_raster_lib.pipeline_layout_ci_.pushConstantRangeCount = 1;
+        pre_raster_lib.pipeline_layout_ci_.pPushConstantRanges = &pc_range;
+        pre_raster_lib.InitState();
+        pre_raster_lib.CreateGraphicsPipeline();
+    }
+
+    CreatePipelineHelper frag_shader_lib(*this);
+    {
+        const auto fs_spv = GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl);
+        vkt::GraphicsPipelineLibraryStage fs_stage(fs_spv, VK_SHADER_STAGE_FRAGMENT_BIT);
+        frag_shader_lib.InitFragmentLibInfo(&fs_stage.stage_ci);
+        frag_shader_lib.pipeline_layout_ci_.pushConstantRangeCount = 0;
+        frag_shader_lib.InitState();
+        frag_shader_lib.CreateGraphicsPipeline();
+    }
+
+    VkPipeline libraries[2] = {
+        pre_raster_lib.pipeline_,
+        frag_shader_lib.pipeline_,
+    };
+    VkPipelineLibraryCreateInfoKHR link_info = vku::InitStructHelper();
+    link_info.libraryCount = size(libraries);
+    link_info.pLibraries = libraries;
+
+    VkGraphicsPipelineCreateInfo lib_ci = vku::InitStructHelper(&link_info);
+    vkt::Pipeline lib(*m_device, lib_ci);
+}
+
+TEST_F(PositiveGraphicsLibrary, SetLayoutCount) {
+    TEST_DESCRIPTION("Have setLayoutCount not be the same between pipeline layouts");
+    RETURN_IF_SKIP(InitBasicGraphicsLibrary());
+    InitRenderTarget();
+
+    OneOffDescriptorSet ds(m_device, {
+                                         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_GEOMETRY_BIT, nullptr},
+                                     });
+    OneOffDescriptorSet ds2(m_device, {
+                                          {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_GEOMETRY_BIT, nullptr},
+                                      });
+
+    // with VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT, we can have different setLayoutCount
+    vkt::PipelineLayout pipeline_layout_vs(*m_device, {&ds.layout_, &ds2.layout_}, {},
+                                           VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT);
+    vkt::PipelineLayout pipeline_layout_fs(*m_device, {&ds.layout_}, {}, VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT);
+
+    CreatePipelineHelper pre_raster_lib(*this);
+    {
+        const auto vs_spv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
+        vkt::GraphicsPipelineLibraryStage vs_stage(vs_spv, VK_SHADER_STAGE_VERTEX_BIT);
+        pre_raster_lib.InitPreRasterLibInfo(&vs_stage.stage_ci);
+        pre_raster_lib.InitState();
+        pre_raster_lib.gp_ci_.layout = pipeline_layout_vs.handle();
+        pre_raster_lib.CreateGraphicsPipeline(false);
+    }
+
+    CreatePipelineHelper frag_shader_lib(*this);
+    {
+        const auto fs_spv = GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl);
+        vkt::GraphicsPipelineLibraryStage fs_stage(fs_spv, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+        VkPipelineLibraryCreateInfoKHR link_info = vku::InitStructHelper();
+        link_info.libraryCount = 1;
+        link_info.pLibraries = &pre_raster_lib.pipeline_;
+
+        frag_shader_lib.InitFragmentLibInfo(&fs_stage.stage_ci, &link_info);
+        frag_shader_lib.InitState();
+
+        frag_shader_lib.gp_ci_.layout = pipeline_layout_fs.handle();
+        frag_shader_lib.CreateGraphicsPipeline(false);
+    }
 }

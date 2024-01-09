@@ -799,7 +799,7 @@ TEST_F(VkBestPracticesLayerTest, ClearAttachmentsAfterLoadSecondary) {
     auto image_view = image.CreateView();
 
     RenderPassSingleSubpass rp(*this);
-    rp.AddAttachmentDescription(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_UNDEFINED,
+    rp.AddAttachmentDescription(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
                                 VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE);
     rp.AddAttachmentReference({0, VK_IMAGE_LAYOUT_GENERAL});
     rp.AddColorAttachment(0);
@@ -1462,21 +1462,21 @@ TEST_F(VkBestPracticesLayerTest, SemaphoreSetWhenCountIsZero) {
     signal_submit_info.pSignalSemaphores = &semaphore_handle;
 
     m_errorMonitor->SetDesiredFailureMsg(kInformationBit, "UNASSIGNED-BestPractices-SemaphoreCount");
-    vk::QueueSubmit(m_default_queue, 1, &signal_submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &signal_submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
     signal_submit_info.signalSemaphoreCount = 1;
-    vk::QueueSubmit(m_default_queue, 1, &signal_submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &signal_submit_info, VK_NULL_HANDLE);
 
     VkSubmitInfo wait_submit_info = vku::InitStructHelper();
     wait_submit_info.waitSemaphoreCount = 0;
     wait_submit_info.pWaitSemaphores = &semaphore_handle;
 
     m_errorMonitor->SetDesiredFailureMsg(kInformationBit, "UNASSIGNED-BestPractices-SemaphoreCount");
-    vk::QueueSubmit(m_default_queue, 1, &wait_submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &wait_submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
 }
 
 TEST_F(VkBestPracticesLayerTest, OverAllocateFromDescriptorPool) {
@@ -1777,21 +1777,15 @@ TEST_F(VkBestPracticesLayerTest, DontCareThenLoad) {
 
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-
-    // Setup finished
-
     // TEST :
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, kVUID_BestPractices_StoreOpDontCareThenLoadOpLoad);
 
     // This should give a warning
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->submit(*m_commandBuffer, false);
 
     m_errorMonitor->VerifyFound();
 
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
 }
 
 TEST_F(VkBestPracticesLayerTest, LoadDeprecatedExtension) {
@@ -2191,14 +2185,9 @@ TEST_F(VkBestPracticesLayerTest, PipelineWithoutRenderPassOrRenderingInfo) {
     TEST_DESCRIPTION("Create pipeline with VK_NULL_HANDLE render pass and no VkPipelineRenderingCreateInfo in pNext chain");
 
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
     RETURN_IF_SKIP(InitBestPracticesFramework());
-    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
+    RETURN_IF_SKIP(InitState());
 
     CreatePipelineHelper pipe(*this);
     pipe.InitState();
@@ -2222,12 +2211,8 @@ TEST_F(VkBestPracticesLayerTest, GetQueryPoolResultsWithoutBegin) {
     vk::CmdResetQueryPool(m_commandBuffer->handle(), query_pool.handle(), 0u, 1u);
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1u;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-
-    vk::QueueSubmit(m_default_queue, 1u, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 
     uint32_t data = 0u;
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-QueryPool-Unavailable");
@@ -2345,17 +2330,10 @@ TEST_F(VkBestPracticesLayerTest, PartialPushConstantSetMiddle) {
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderInt8);
+    AddRequiredFeature(vkt::Feature::storagePushConstant8);
     RETURN_IF_SKIP(InitBestPracticesFramework());
-    VkPhysicalDevice8BitStorageFeatures storage_8_bit_features = vku::InitStructHelper();
-    VkPhysicalDeviceFloat16Int8FeaturesKHR float16int8_features = vku::InitStructHelper(&storage_8_bit_features);
-    GetPhysicalDeviceFeatures2(float16int8_features);
-    if (!float16int8_features.shaderInt8) {
-        GTEST_SKIP() << "shaderInt8 not supported";
-    }
-    if (!storage_8_bit_features.storagePushConstant8) {
-        GTEST_SKIP() << "storagePushConstant8 not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &float16int8_features));
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     char const *const vsSource = R"glsl(

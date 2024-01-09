@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 #pragma once
-#include "state_tracker/base_node.h"
+#include "state_tracker/state_object.h"
 #include "state_tracker/fence_state.h"
 #include "state_tracker/semaphore_state.h"
 #include <condition_variable>
@@ -42,6 +42,7 @@ struct QueueSubmission {
     };
     QueueSubmission(const Location &loc_) : loc(loc_), completed(), waiter(completed.get_future()) {}
 
+    bool end_batch{false};
     std::vector<std::shared_ptr<vvl::CommandBuffer>> cbs;
     std::vector<SemaphoreInfo> wait_semaphores;
     std::vector<SemaphoreInfo> signal_semaphores;
@@ -75,11 +76,11 @@ static inline std::chrono::time_point<std::chrono::steady_clock> GetCondWaitTime
     return std::chrono::steady_clock::now() + std::chrono::seconds(10);
 }
 
-class Queue: public BASE_NODE {
+class Queue: public StateObject {
   public:
     Queue(ValidationStateTracker &dev_data, VkQueue q, uint32_t index, VkDeviceQueueCreateFlags flags,
                 const VkQueueFamilyProperties &queueFamilyProperties)
-        : BASE_NODE(q, kVulkanObjectTypeQueue),
+        : StateObject(q, kVulkanObjectTypeQueue),
           queueFamilyIndex(index),
           flags(flags),
           queueFamilyProperties(queueFamilyProperties),
@@ -90,7 +91,10 @@ class Queue: public BASE_NODE {
 
     VkQueue VkHandle() const { return handle_.Cast<VkQueue>(); }
 
-    uint64_t Submit(QueueSubmission &&submission);
+    // called from the various PreCallRecordQueueSubmit() methods
+    virtual uint64_t PreSubmit(std::vector<QueueSubmission> &&submissions);
+    // called from the various PostCallRecordQueueSubmit() methods
+    void PostSubmit();
 
     // Tell the queue thread that submissions up to the submission with sequence number until_seq have finished
     uint64_t Notify(uint64_t until_seq = kU64Max);
@@ -103,6 +107,12 @@ class Queue: public BASE_NODE {
     const uint32_t queueFamilyIndex;
     const VkDeviceQueueCreateFlags flags;
     const VkQueueFamilyProperties queueFamilyProperties;
+
+  protected:
+    // called from the various PostCallRecordQueueSubmit() methods
+    virtual void PostSubmit(QueueSubmission &submission) {}
+    // called when the worker thread decides a submissions has finished executing
+    virtual void Retire(QueueSubmission &submission);
 
   private:
     using LockGuard = std::unique_lock<std::mutex>;

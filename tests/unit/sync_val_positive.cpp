@@ -15,10 +15,11 @@
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
 #include "../framework/thread_helper.h"
+#include "../framework/queue_submit_context.h"
 
 class PositiveSyncVal : public VkSyncValTest {};
 
-void VkSyncValTest::InitSyncValFramework(bool enable_queue_submit_validation) {
+void VkSyncValTest::InitSyncValFramework(bool disable_queue_submit_validation) {
     // Enable synchronization validation
     features_ = {VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT, nullptr, 1u, enables_, 4, disables_};
 
@@ -27,16 +28,16 @@ void VkSyncValTest::InitSyncValFramework(bool enable_queue_submit_validation) {
         features_.disabledValidationFeatureCount = 0;
     }
 
-    // Optionally enable syncval submit validation
-    static const char *kEnableQueuSubmitSyncValidation[] = {"VALIDATION_CHECK_ENABLE_SYNCHRONIZATION_VALIDATION_QUEUE_SUBMIT"};
+    // Optionally disable syncval submit validation
+    static const char *kDisableQueuSubmitSyncValidation[] = {"VALIDATION_CHECK_DISABLE_SYNCHRONIZATION_VALIDATION_QUEUE_SUBMIT"};
     static const VkLayerSettingEXT settings[] = {
-        {OBJECT_LAYER_NAME, "enables", VK_LAYER_SETTING_TYPE_STRING_EXT, 1, kEnableQueuSubmitSyncValidation}};
+        {OBJECT_LAYER_NAME, "disables", VK_LAYER_SETTING_TYPE_STRING_EXT, 1, kDisableQueuSubmitSyncValidation}};
     // The pNext of qs_settings is modified by InitFramework that's why it can't
     // be static (should be separate instance per stack frame). Also we show
     // explicitly that it's not const (InitFramework casts const pNext to non-const).
     VkLayerSettingsCreateInfoEXT qs_settings{VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr,
                                              static_cast<uint32_t>(std::size(settings)), settings};
-    if (enable_queue_submit_validation) {
+    if (disable_queue_submit_validation) {
         features_.pNext = &qs_settings;
     }
     InitFramework(&features_);
@@ -136,7 +137,7 @@ TEST_F(PositiveSyncVal, CmdClearAttachmentLayer) {
     vk::CmdEndRenderPass(*m_commandBuffer);
     m_commandBuffer->end();
     m_commandBuffer->QueueCommandBuffer();
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
 }
 
 // Image transition ensures that image data is made visible and available when necessary.
@@ -188,13 +189,12 @@ TEST_F(PositiveSyncVal, SignalAndWaitSemaphoreOnHost) {
     TEST_DESCRIPTION("Signal semaphore on the host and wait on the host");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     RETURN_IF_SKIP(InitSyncValFramework());
+    AddRequiredFeature(vkt::Feature::timelineSemaphore);
+    RETURN_IF_SKIP(InitState());
     if (IsPlatformMockICD()) {
         // Mock does not support proper ordering of events, e.g. wait can return before signal
         GTEST_SKIP() << "Test not supported by MockICD";
     }
-    VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
-    RETURN_IF_SKIP(InitState(nullptr, &timeline_semaphore_features));
 
     constexpr uint64_t max_signal_value = 10'000;
 
@@ -243,13 +243,12 @@ TEST_F(PositiveSyncVal, SignalAndGetSemaphoreCounter) {
     TEST_DESCRIPTION("Singal semaphore on the host and regularly read semaphore payload value");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     RETURN_IF_SKIP(InitSyncValFramework());
+    AddRequiredFeature(vkt::Feature::timelineSemaphore);
+    RETURN_IF_SKIP(InitState());
     if (IsPlatformMockICD()) {
         // Mock does not support precise semaphore counter reporting
         GTEST_SKIP() << "Test not supported by MockICD";
     }
-    VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
-    RETURN_IF_SKIP(InitState(nullptr, &timeline_semaphore_features));
 
     constexpr uint64_t max_signal_value = 1'000;
 
@@ -289,13 +288,12 @@ TEST_F(PositiveSyncVal, GetSemaphoreCounterFromMultipleThreads) {
     TEST_DESCRIPTION("Read semaphore counter value from multiple threads");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     RETURN_IF_SKIP(InitSyncValFramework());
+    AddRequiredFeature(vkt::Feature::timelineSemaphore);
+    RETURN_IF_SKIP(InitState());
     if (IsPlatformMockICD()) {
         // Mock does not support precise semaphore counter reporting
         GTEST_SKIP() << "Test not supported by MockICD";
     }
-    VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(timeline_semaphore_features);
-    RETURN_IF_SKIP(InitState(nullptr, &timeline_semaphore_features));
 
     constexpr uint64_t max_signal_value = 15'000;
 
@@ -409,10 +407,9 @@ TEST_F(PositiveSyncVal, PresentAfterSubmit2AutomaticVisibility) {
     TEST_DESCRIPTION("Waiting on the semaphore makes available image accesses visible to the presentation engine.");
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddSurfaceExtension();
-    RETURN_IF_SKIP(InitSyncValFramework(true));
-    VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = vku::InitStructHelper();
-    sync2_features.synchronization2 = VK_TRUE;
-    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState());
     if (!InitSwapchain()) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
     }
@@ -475,7 +472,7 @@ TEST_F(PositiveSyncVal, PresentAfterSubmit2AutomaticVisibility) {
     submit.pCommandBufferInfos = &command_buffer_info;
     submit.signalSemaphoreInfoCount = 1;
     submit.pSignalSemaphoreInfos = &signal_info;
-    ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit2(m_default_queue, 1, &submit, VK_NULL_HANDLE));
+    ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit2(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE));
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 1;
@@ -483,14 +480,14 @@ TEST_F(PositiveSyncVal, PresentAfterSubmit2AutomaticVisibility) {
     present.swapchainCount = 1;
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
-    ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue, &present));
-    ASSERT_EQ(VK_SUCCESS, vk::QueueWaitIdle(m_default_queue));
+    ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue->handle(), &present));
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
     TEST_DESCRIPTION("Waiting on the semaphore makes available image accesses visible to the presentation engine.");
     AddSurfaceExtension();
-    RETURN_IF_SKIP(InitSyncValFramework(true));
+    RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState());
     if (!InitSwapchain()) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
@@ -535,7 +532,7 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
     submit.pCommandBuffers = &m_commandBuffer->handle();
     submit.signalSemaphoreCount = 1;
     submit.pSignalSemaphores = &submit_semaphore.handle();
-    ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit(m_default_queue, 1, &submit, VK_NULL_HANDLE));
+    ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE));
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 1;
@@ -543,8 +540,8 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
     present.swapchainCount = 1;
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
-    ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue, &present));
-    ASSERT_EQ(VK_SUCCESS, vk::QueueWaitIdle(m_default_queue));
+    ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue->handle(), &present));
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveSyncVal, SeparateAvailabilityAndVisibilityForBuffer) {
@@ -716,11 +713,8 @@ TEST_F(PositiveSyncVal, ImageArrayDynamicIndexing) {
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveSyncVal, ImageArrayConstantIndexing) {
@@ -792,11 +786,8 @@ TEST_F(PositiveSyncVal, ImageArrayConstantIndexing) {
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveSyncVal, TexelBufferArrayConstantIndexing) {
@@ -870,9 +861,29 @@ TEST_F(PositiveSyncVal, TexelBufferArrayConstantIndexing) {
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
+}
+
+TEST_F(PositiveSyncVal, QSBufferCopyHazardsDisabled) {
+    RETURN_IF_SKIP(InitSyncValFramework(true));  // Disable QueueSubmit validation
+    RETURN_IF_SKIP(InitState());
+
+    QSTestContext test(m_device, m_device->graphics_queues()[0]);
+    if (!test.Valid()) {
+        GTEST_SKIP() << "Test requires a valid queue object.";
+    }
+
+    test.RecordCopy(test.cba, test.buffer_a, test.buffer_b);
+    test.RecordCopy(test.cbb, test.buffer_c, test.buffer_a);
+
+    VkSubmitInfo submit1 = vku::InitStructHelper();
+    submit1.commandBufferCount = 2;
+    VkCommandBuffer two_cbs[2] = {test.h_cba, test.h_cbb};
+    submit1.pCommandBuffers = two_cbs;
+
+    // This should be a hazard if we didn't disable it at InitSyncValFramework time
+    vk::QueueSubmit(test.q0, 1, &submit1, VK_NULL_HANDLE);
+
+    test.DeviceWait();
 }

@@ -25,7 +25,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationInvalidHan
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
-    RETURN_IF_SKIP(InitFrameworkForRayTracingTest(false, nullptr, &validation_features));
+    RETURN_IF_SKIP(NvInitFrameworkForRayTracingTest(nullptr, &validation_features));
 
     if (!CanEnableGpuAV(*this)) {
         GTEST_SKIP() << "Requirements for GPU-AV are not met";
@@ -77,7 +77,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationInvalidHan
     std::memcpy(mapped_instance_buffer_data, (uint8_t *)&instance, static_cast<std::size_t>(instance_buffer_size));
     instance_buffer.memory().unmap();
 
-    vkt::AccelerationStructure top_level_as(*m_device, top_level_as_create_info);
+    vkt::AccelerationStructureNV top_level_as(*m_device, top_level_as_create_info);
 
     const vkt::Buffer top_level_as_scratch = top_level_as.create_scratch_buffer(*m_device);
 
@@ -89,12 +89,8 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationInvalidHan
 
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "Attempted to build top level acceleration structure using invalid bottom level acceleration structure handle");
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer.handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(command_buffer, false);
+    m_default_queue->wait();
     m_errorMonitor->VerifyFound();
 }
 
@@ -105,7 +101,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
-    RETURN_IF_SKIP(InitFrameworkForRayTracingTest(false, nullptr, &validation_features));
+    RETURN_IF_SKIP(NvInitFrameworkForRayTracingTest(nullptr, &validation_features));
 
     if (!CanEnableGpuAV(*this)) {
         GTEST_SKIP() << "Requirements for GPU-AV are not met";
@@ -141,7 +137,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
         uint64_t accelerationStructureHandle;
     };
 
-    vkt::AccelerationStructure bot_level_as_never_built(*m_device, bot_level_as_create_info);
+    vkt::AccelerationStructureNV bot_level_as_never_built(*m_device, bot_level_as_create_info);
 
     VkGeometryInstanceNV instance = {
         {
@@ -166,7 +162,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
     std::memcpy(mapped_instance_buffer_data, (uint8_t *)&instance, static_cast<std::size_t>(instance_buffer_size));
     instance_buffer.memory().unmap();
 
-    vkt::AccelerationStructure top_level_as(*m_device, top_level_as_create_info);
+    vkt::AccelerationStructureNV top_level_as(*m_device, top_level_as_create_info);
 
     const vkt::Buffer top_level_as_scratch = top_level_as.create_scratch_buffer(*m_device);
 
@@ -178,12 +174,8 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
 
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "Attempted to build top level acceleration structure using invalid bottom level acceleration structure handle");
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer.handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(command_buffer, false);
+    m_default_queue->wait();
     m_errorMonitor->VerifyFound();
 }
 
@@ -194,7 +186,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
-    RETURN_IF_SKIP(InitFrameworkForRayTracingTest(false, nullptr, &validation_features));
+    RETURN_IF_SKIP(NvInitFrameworkForRayTracingTest(nullptr, &validation_features));
 
     if (!CanEnableGpuAV(*this)) {
         GTEST_SKIP() << "Requirements for GPU-AV are not met";
@@ -232,7 +224,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
 
     uint64_t destroyed_bot_level_as_handle = 0;
     {
-        vkt::AccelerationStructure destroyed_bot_level_as(*m_device, bot_level_as_create_info);
+        vkt::AccelerationStructureNV destroyed_bot_level_as(*m_device, bot_level_as_create_info);
 
         destroyed_bot_level_as_handle = destroyed_bot_level_as.opaque_handle();
 
@@ -243,12 +235,8 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
         vk::CmdBuildAccelerationStructureNV(command_buffer.handle(), &bot_level_as_create_info.info, VK_NULL_HANDLE, 0, VK_FALSE,
                                             destroyed_bot_level_as.handle(), VK_NULL_HANDLE, bot_level_as_scratch.handle(), 0);
         command_buffer.end();
-
-        VkSubmitInfo submit_info = vku::InitStructHelper();
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &command_buffer.handle();
-        vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-        vk::QueueWaitIdle(m_default_queue);
+        m_default_queue->submit(command_buffer);
+        m_default_queue->wait();
 
         // vk::DestroyAccelerationStructureNV called on destroyed_bot_level_as during destruction.
     }
@@ -276,7 +264,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
     std::memcpy(mapped_instance_buffer_data, (uint8_t *)&instance, static_cast<std::size_t>(instance_buffer_size));
     instance_buffer.memory().unmap();
 
-    vkt::AccelerationStructure top_level_as(*m_device, top_level_as_create_info);
+    vkt::AccelerationStructureNV top_level_as(*m_device, top_level_as_create_info);
 
     const vkt::Buffer top_level_as_scratch = top_level_as.create_scratch_buffer(*m_device);
 
@@ -288,12 +276,8 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationBottomLeve
 
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "Attempted to build top level acceleration structure using invalid bottom level acceleration structure handle");
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer.handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(command_buffer, false);
+    m_default_queue->wait();
     m_errorMonitor->VerifyFound();
 }
 
@@ -303,7 +287,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationRestoresSt
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
     VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
-    RETURN_IF_SKIP(InitFrameworkForRayTracingTest(false, nullptr, &validation_features));
+    RETURN_IF_SKIP(NvInitFrameworkForRayTracingTest(nullptr, &validation_features));
 
     if (!CanEnableGpuAV(*this)) {
         GTEST_SKIP() << "Requirements for GPU-AV are not met";
@@ -355,7 +339,7 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationRestoresSt
     std::memcpy(mapped_instance_buffer_data, (uint8_t *)&instance, static_cast<std::size_t>(instance_buffer_size));
     instance_buffer.memory().unmap();
 
-    vkt::AccelerationStructure top_level_as(*m_device, top_level_as_create_info);
+    vkt::AccelerationStructureNV top_level_as(*m_device, top_level_as_create_info);
 
     const vkt::Buffer top_level_as_scratch = top_level_as.create_scratch_buffer(*m_device);
 
@@ -488,12 +472,8 @@ TEST_F(NegativeGpuAVRayTracingNV, BuildAccelerationStructureValidationRestoresSt
 
     m_errorMonitor->SetDesiredFailureMsg(
         kErrorBit, "Attempted to build top level acceleration structure using invalid bottom level acceleration structure handle");
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer.handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(command_buffer, false);
+    m_default_queue->wait();
 
     m_errorMonitor->VerifyFound();
 

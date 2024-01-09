@@ -189,7 +189,7 @@ TEST_F(PositiveImage, AliasedMemoryTracking) {
     // memory. In fact, it was never used by the GPU.
     // Just be sure, wait for idle.
     buffer.reset(nullptr);
-    vk::DeviceWaitIdle(m_device->device());
+    m_device->wait();
 
     // VALIDATION FAILURE:
     image.bind_memory(mem, 0);
@@ -405,8 +405,7 @@ TEST_F(PositiveImage, FramebufferFrom3DImage) {
     TEST_DESCRIPTION("Validate creating a framebuffer from a 3D image.");
 
     AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkImageCreateInfo image_ci = vku::InitStructHelper();
@@ -624,8 +623,8 @@ TEST_F(PositiveImage, ImagelessLayoutTracking) {
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &current_buffer;
     present.swapchainCount = 1;
-    vk::QueuePresentKHR(m_default_queue, &present);
-    vk::QueueWaitIdle(m_default_queue);
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveImage, ExtendedUsageWithDifferentFormatViews) {
@@ -694,14 +693,8 @@ TEST_F(PositiveImage, ImageCompressionControl) {
 
     AddRequiredExtensions(VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceImageCompressionControlFeaturesEXT image_compression_control = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(image_compression_control);
-    if (!image_compression_control.imageCompressionControl) {
-        GTEST_SKIP() << "Test requires (unsupported) imageCompressionControl, skipping";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &image_compression_control));
+    AddRequiredFeature(vkt::Feature::imageCompressionControl);
+    RETURN_IF_SKIP(Init());
 
     // Query possible image format with vkGetPhysicalDeviceImageFormatProperties2KHR
     VkPhysicalDeviceImageFormatInfo2 image_format_info = vku::InitStructHelper();
@@ -808,16 +801,8 @@ TEST_F(PositiveImage, SlicedCreateInfo) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_EXT_IMAGE_SLICED_VIEW_OF_3D_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    {
-        VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT slice_feature = vku::InitStructHelper();
-        GetPhysicalDeviceFeatures2(slice_feature);
-        if (slice_feature.imageSlicedViewOf3D == VK_FALSE) {
-            GTEST_SKIP() << "Test requires (unsupported) imageSlicedViewOf3D";
-        }
-        InitState(nullptr, &slice_feature);
-    }
+    AddRequiredFeature(vkt::Feature::imageSlicedViewOf3D);
+    RETURN_IF_SKIP(Init());
 
     VkImageObj image(m_device);
     VkImageCreateInfo ci = vku::InitStructHelper();
@@ -963,12 +948,8 @@ TEST_F(PositiveImage, CopyImageSubresource) {
     vk::CmdClearColorImage(cb, image.handle(), dst_layout, &clear_color, 1, &src_range);
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 
     m_commandBuffer->begin();
 
@@ -997,8 +978,8 @@ TEST_F(PositiveImage, CopyImageSubresource) {
                            image_barriers);
     m_commandBuffer->end();
 
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveImage, DescriptorSubresourceLayout) {
@@ -1058,10 +1039,6 @@ TEST_F(PositiveImage, DescriptorSubresourceLayout) {
 
     vkt::CommandBuffer cmd_buf(m_device, m_commandPool);
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmd_buf.handle();
-
     enum TestType {
         kInternal,  // Image layout mismatch is *within* a given command buffer
         kExternal   // Image layout mismatch is with the current state of the image, found at QueueSubmit
@@ -1104,8 +1081,8 @@ TEST_F(PositiveImage, DescriptorSubresourceLayout) {
             if (test_type == kExternal) {
                 // The image layout is external to the command buffer we are recording to test.  Submit to push to instance scope.
                 cmd_buf.end();
-                vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-                vk::QueueWaitIdle(m_default_queue);
+                m_default_queue->submit(cmd_buf);
+                m_default_queue->wait();
                 cmd_buf.begin();
             }
 
@@ -1120,14 +1097,14 @@ TEST_F(PositiveImage, DescriptorSubresourceLayout) {
             cmd_buf.end();
 
             // Submit cmd buffer
-            vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-            vk::QueueWaitIdle(m_default_queue);
+            m_default_queue->submit(cmd_buf);
+            m_default_queue->wait();
         }
     };
     do_test(&image, &view, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
-TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
+TEST_F(PositiveImage, Descriptor3D2DSubresourceLayout) {
     TEST_DESCRIPTION("Verify renderpass layout transitions for a 2d ImageView created from a 3d Image.");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
@@ -1258,10 +1235,6 @@ TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
 
     vkt::CommandBuffer cmd_buf(m_device, m_commandPool);
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmd_buf.handle();
-
     enum TestType {
         kInternal,  // Image layout mismatch is *within* a given command buffer
         kExternal   // Image layout mismatch is with the current state of the image, found at QueueSubmit
@@ -1297,8 +1270,8 @@ TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
             if (test_type == kExternal) {
                 // The image layout is external to the command buffer we are recording to test.  Submit to push to instance scope.
                 cmd_buf.end();
-                vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-                vk::QueueWaitIdle(m_default_queue);
+                m_default_queue->submit(cmd_buf);
+                m_default_queue->wait();
                 cmd_buf.begin();
             }
 
@@ -1317,8 +1290,8 @@ TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
             cmd_buf.end();
 
             // Submit cmd buffer
-            vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-            vk::QueueWaitIdle(m_default_queue);
+            m_default_queue->submit(cmd_buf);
+            m_default_queue->wait();
         }
     };
     do_test(&image_3d, &view_2d, &other_image, &other_view, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -1327,10 +1300,9 @@ TEST_F(VkPositiveLayerTest, ImageDescriptor3D2DSubresourceLayout) {
 TEST_F(PositiveImage, BlitRemainingArrayLayers) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(maintenance5_features);
-    RETURN_IF_SKIP(InitState(nullptr, &maintenance5_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(Init());
+    ;
 
     VkFormat f_color = VK_FORMAT_R32_SFLOAT;  // Need features ..BLIT_SRC_BIT & ..BLIT_DST_BIT
     if (!FormatFeaturesAreSupported(gpu(), f_color, VK_IMAGE_TILING_OPTIMAL,
@@ -1373,4 +1345,50 @@ TEST_F(PositiveImage, BlitRemainingArrayLayers) {
     blitRegion.dstSubresource.layerCount = 2;  // same as VK_REMAINING_ARRAY_LAYERS
     vk::CmdBlitImage(m_commandBuffer->handle(), image.image(), image.Layout(), image.image(), image.Layout(), 1, &blitRegion,
                      VK_FILTER_NEAREST);
+}
+
+TEST_F(PositiveImage, BlockTexelViewCompatibleMultipleLayers) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_6_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::maintenance6);
+    RETURN_IF_SKIP(Init());
+
+    VkPhysicalDeviceMaintenance6PropertiesKHR maintenance6_props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(maintenance6_props);
+    if (!maintenance6_props.blockTexelViewCompatibleMultipleLayers) {
+        GTEST_SKIP() << "blockTexelViewCompatibleMultipleLayers is not enabled";
+    }
+
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.flags = VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+    image_create_info.extent.width = 32;
+    image_create_info.extent.height = 32;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 4;
+    image_create_info.arrayLayers = 2;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+
+    VkImageObj image(m_device);
+    VkFormatProperties image_fmt;
+    vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), image_create_info.format, &image_fmt);
+    if (!image.IsCompatible(image_create_info.usage, image_fmt.optimalTilingFeatures)) {
+        GTEST_SKIP() << "Image usage and format not compatible on device";
+    }
+    image.Init(image_create_info, 0);
+
+    VkImageViewCreateInfo ivci = vku::InitStructHelper();
+    ivci.image = image.handle();
+    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    ivci.format = VK_FORMAT_R16G16B16A16_UNORM;
+    ivci.subresourceRange.baseMipLevel = 0;
+    ivci.subresourceRange.baseArrayLayer = 0;
+    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    ivci.subresourceRange.levelCount = 1;
+    ivci.subresourceRange.layerCount = 2;
+    vkt::ImageView view(*m_device, ivci);
 }

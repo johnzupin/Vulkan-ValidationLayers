@@ -32,10 +32,18 @@ SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType de
         return stage_accesses.uniform_read;
     }
 
+    // Detect if variable is nonreadable (writeonly in glsl).
+    // NOTE: is_written_to can be used as a more general case instead of adding is_writeonly logic.
+    // At first we need to fix is_written_to support for buffers.
+    bool is_writeonly = variable.decorations.Has(spirv::DecorationBase::nonreadable_bit);
+    if (variable.type_struct_info) {
+        is_writeonly |= variable.type_struct_info->decorations.AllMemberHave(spirv::DecorationBase::nonreadable_bit);
+    }
+
     // If the desriptorSet is writable, we don't need to care SHADER_READ. SHADER_WRITE is enough.
     // Because if write hazard happens, read hazard might or might not happen.
     // But if write hazard doesn't happen, read hazard is impossible to happen.
-    if (variable.is_written_to) {
+    if (variable.is_written_to || is_writeonly) {
         return stage_accesses.storage_write;
     } else if (descriptor_type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
                descriptor_type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
@@ -1120,8 +1128,8 @@ SyncNodeFormatter::SyncNodeFormatter(const SyncValidator &sync_state, const vvl:
 SyncNodeFormatter::SyncNodeFormatter(const SyncValidator &sync_state, const vvl::Queue *q_state)
     : report_data(sync_state.report_data), node(q_state), label("queue") {}
 
-SyncNodeFormatter::SyncNodeFormatter(const SyncValidator &sync_state, const BASE_NODE *base_node, const char *label_)
-    : report_data(sync_state.report_data), node(base_node), label(label_) {}
+SyncNodeFormatter::SyncNodeFormatter(const SyncValidator &sync_state, const vvl::StateObject *state_object, const char *label_)
+    : report_data(sync_state.report_data), node(state_object), label(label_) {}
 
 std::string SyncValidationInfo::FormatHazard(const HazardResult &hazard) const {
     std::stringstream out;
@@ -1145,7 +1153,7 @@ void syncval_state::CommandBuffer::Reset() {
     access_context.Reset();
 }
 
-void syncval_state::CommandBuffer::NotifyInvalidate(const BASE_NODE::NodeList &invalid_nodes, bool unlink) {
+void syncval_state::CommandBuffer::NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) {
     for (auto &obj : invalid_nodes) {
         switch (obj->Type()) {
             case kVulkanObjectTypeEvent:

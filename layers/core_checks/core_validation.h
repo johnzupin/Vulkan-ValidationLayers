@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
@@ -49,15 +49,15 @@ struct ValidateBeginQueryVuids {
     const char* vuid_compute_support = kVUIDUndefined;
     const char* vuid_primitives_generated = kVUIDUndefined;
     const char* vuid_result_status_support = kVUIDUndefined;
+    const char* vuid_performance_queue_index_07289 = kVUIDUndefined;
     const char* vuid_no_active_in_vc_scope = kVUIDUndefined;
-    const char* vuid_result_status_profile_in_vc_scope = kVUIDUndefined;
-    const char* vuid_vc_scope_query_type = kVUIDUndefined;
 };
 
 struct ValidateEndQueryVuids {
     const char* vuid_active_queries = kVUIDUndefined;
     const char* vuid_protected_cb = kVUIDUndefined;
     const char* vuid_multiview_query = kVUIDUndefined;
+    const char* vuid_inside_renderpass_07007 = kVUIDUndefined;
 };
 
 struct SubresourceRangeErrorCodes {
@@ -239,7 +239,7 @@ class CoreChecks : public ValidationStateTracker {
     ReadLockGuard ReadLock() const override;
     WriteLockGuard WriteLock() override;
 
-    bool ValidateSetMemBinding(VkDeviceMemory memory, const BINDABLE& mem_binding, const Location& loc) const;
+    bool ValidateSetMemBinding(VkDeviceMemory memory, const vvl::Bindable& mem_binding, const Location& loc) const;
     bool ValidateDeviceQueueFamily(uint32_t queue_family, const Location& loc, const char* vuid, bool optional) const;
     bool ValidateIdleDescriptorSet(VkDescriptorSet set, const Location& loc) const;
     bool ValidatePipelineLibraryFlags(const VkGraphicsPipelineLibraryFlagsEXT lib_flags,
@@ -425,8 +425,8 @@ class CoreChecks : public ValidationStateTracker {
                                          VkQueryPool& firstPerfQueryPool, uint32_t perfPass, QueryMap* localQueryToStateMap);
     bool ValidateBeginQuery(const vvl::CommandBuffer& cb_state, const QueryObject& query_obj, VkQueryControlFlags flags,
                             uint32_t index, const Location& loc, const ValidateBeginQueryVuids* vuids) const;
-    bool ValidateCmdEndQuery(const vvl::CommandBuffer& cb_state, const QueryObject& query_obj, uint32_t index, const Location& loc,
-                             const ValidateEndQueryVuids* vuids) const;
+    bool ValidateCmdEndQuery(const vvl::CommandBuffer& cb_state, VkQueryPool queryPool, uint32_t slot, uint32_t index,
+                             const Location& loc, const ValidateEndQueryVuids* vuids) const;
 
     bool ValidateCmdDrawInstance(const vvl::CommandBuffer& cb_state, uint32_t instanceCount, uint32_t firstInstance,
                                  const Location& loc) const;
@@ -482,7 +482,7 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateMemoryIsBoundToImage(const LogObjectList& objlist, const vvl::Image& image_state, const Location& loc,
                                       const char* vuid) const;
 
-    bool ValidateObjectNotInUse(const BASE_NODE* obj_node, const Location& loc, const char* error_code) const;
+    bool ValidateObjectNotInUse(const vvl::StateObject* obj_node, const Location& loc, const char* error_code) const;
     bool ValidateCmdQueueFlags(const vvl::CommandBuffer& cb_state, const Location& loc, VkQueueFlags flags, const char* vuid,
                                const char* extra_message = "") const;
     bool ValidateSampleLocationsInfo(const VkSampleLocationsInfoEXT* pSampleLocationsInfo, const Location& loc) const;
@@ -497,28 +497,84 @@ class CoreChecks : public ValidationStateTracker {
     std::vector<VkVideoFormatPropertiesKHR> GetVideoFormatProperties(VkImageUsageFlags image_usage,
                                                                      const VkVideoProfileInfoKHR* profile) const;
     bool IsVideoFormatSupported(VkFormat format, VkImageUsageFlags image_usage, const VkVideoProfileInfoKHR* profile) const;
-    bool ValidateVideoPictureResource(const VideoPictureResource& picture_resource, VkCommandBuffer cmdbuf,
-                                      const VIDEO_SESSION_STATE& vs_state, const char* api_name, const char* where,
+    bool IsBufferCompatibleWithVideoProfile(const vvl::Buffer& buffer_state,
+                                            const std::shared_ptr<const vvl::VideoProfileDesc>& video_profile) const;
+    bool IsImageCompatibleWithVideoProfile(const vvl::Image& image_state,
+                                           const std::shared_ptr<const vvl::VideoProfileDesc>& video_profile) const;
+    void EnqueueVerifyVideoSessionInitialized(vvl::CommandBuffer& cb_state, vvl::VideoSession& vs_state, const char* vuid);
+    void EnqueueVerifyVideoInlineQueryUnavailable(vvl::CommandBuffer& cb_state, const VkVideoInlineQueryInfoKHR& query_info,
+                                                  Func command);
+    bool ValidateVideoInlineQueryInfo(const vvl::QueryPool& query_pool_state, const VkVideoInlineQueryInfoKHR& query_info,
+                                      const Location& loc) const;
+    bool ValidateVideoEncodeRateControlInfo(const VkVideoEncodeRateControlInfoKHR& rc_info, const void* pNext,
+                                            VkCommandBuffer cmdbuf, const vvl::VideoSession& vs_state, const Location& loc) const;
+    bool ValidateVideoEncodeRateControlInfoH264(const VkVideoEncodeRateControlInfoKHR& rc_info, const void* pNext,
+                                                VkCommandBuffer cmdbuf, const vvl::VideoSession& vs_state,
+                                                const Location& loc) const;
+    bool ValidateVideoEncodeRateControlInfoH265(const VkVideoEncodeRateControlInfoKHR& rc_info, const void* pNext,
+                                                VkCommandBuffer cmdbuf, const vvl::VideoSession& vs_state,
+                                                const Location& loc) const;
+    bool ValidateVideoEncodeRateControlLayerInfo(uint32_t layer_index, const VkVideoEncodeRateControlInfoKHR& rc_info,
+                                                 const void* pNext, VkCommandBuffer cmdbuf, const vvl::VideoSession& vs_state,
+                                                 const Location& rc_info_loc) const;
+    template <typename RateControlLayerInfo>
+    bool ValidateVideoEncodeRateControlH26xQp(VkCommandBuffer cmdbuf, const vvl::VideoSession& vs_state,
+                                              const RateControlLayerInfo& rc_layer_info, const char* min_qp_range_vuid,
+                                              const char* max_qp_range_vuid, int32_t min_qp, int32_t max_qp,
+                                              const char* min_qp_per_pic_type_vuid, const char* max_qp_per_pic_type_vuid,
+                                              bool qp_per_picture_type, const char* min_max_qp_compare_vuid,
+                                              const Location& loc) const;
+    bool ValidateVideoEncodeRateControlLayerInfoH264(uint32_t layer_index, const VkVideoEncodeRateControlInfoKHR& rc_info,
+                                                     const void* pNext, VkCommandBuffer cmdbuf, const vvl::VideoSession& vs_state,
+                                                     const Location& rc_layer_info_loc) const;
+    bool ValidateVideoEncodeRateControlLayerInfoH265(uint32_t layer_index, const VkVideoEncodeRateControlInfoKHR& rc_info,
+                                                     const void* pNext, VkCommandBuffer cmdbuf, const vvl::VideoSession& vs_state,
+                                                     const Location& rc_layer_info_loc) const;
+    bool ValidateVideoPictureResource(const vvl::VideoPictureResource& picture_resource, VkCommandBuffer cmdbuf,
+                                      const vvl::VideoSession& vs_state, const Location& loc,
                                       const char* coded_offset_vuid = nullptr, const char* coded_extent_vuid = nullptr) const;
-    template <typename T1>
-    bool ValidateVideoProfileInfo(const VkVideoProfileInfoKHR* profile, const T1 object, const char* api_name,
-                                  const char* where) const;
-    template <typename T1>
-    bool ValidateVideoProfileListInfo(const VkVideoProfileListInfoKHR* profile_list, const T1 object, const char* api_name,
+    template <typename HandleT>
+    bool ValidateVideoProfileInfo(const VkVideoProfileInfoKHR* profile, const HandleT object, const Location& loc) const;
+    template <typename HandleT>
+    bool ValidateVideoProfileListInfo(const VkVideoProfileListInfoKHR* profile_list, const HandleT object, const Location& loc,
                                       bool expect_decode_profile, const char* missing_decode_profile_msg_code,
                                       bool expect_encode_profile, const char* missing_encode_profile_msg_code) const;
-    bool ValidateDecodeH264ParametersAddInfo(const VkVideoDecodeH264SessionParametersAddInfoKHR* add_info, VkDevice device,
-                                             const char* api_name, const char* where,
+    bool ValidateDecodeH264ParametersAddInfo(const vvl::VideoSession& vs_state,
+                                             const VkVideoDecodeH264SessionParametersAddInfoKHR* add_info, VkDevice device,
+                                             const Location& loc,
                                              const VkVideoDecodeH264SessionParametersCreateInfoKHR* create_info = nullptr,
-                                             const VIDEO_SESSION_PARAMETERS_STATE* template_state = nullptr) const;
-    bool ValidateDecodeH265ParametersAddInfo(const VkVideoDecodeH265SessionParametersAddInfoKHR* add_info, VkDevice device,
-                                             const char* api_name, const char* where,
+                                             const vvl::VideoSessionParameters* template_state = nullptr) const;
+    bool ValidateDecodeH265ParametersAddInfo(const vvl::VideoSession& vs_state,
+                                             const VkVideoDecodeH265SessionParametersAddInfoKHR* add_info, VkDevice device,
+                                             const Location& loc,
                                              const VkVideoDecodeH265SessionParametersCreateInfoKHR* create_info = nullptr,
-                                             const VIDEO_SESSION_PARAMETERS_STATE* template_state = nullptr) const;
-    bool ValidateVideoDecodeInfoH264(const vvl::CommandBuffer& cb_state, const VkVideoDecodeInfoKHR& decode_info) const;
-    bool ValidateVideoDecodeInfoH265(const vvl::CommandBuffer& cb_state, const VkVideoDecodeInfoKHR& decode_info) const;
+                                             const vvl::VideoSessionParameters* template_state = nullptr) const;
+    bool ValidateEncodeH264ParametersAddInfo(const vvl::VideoSession& vs_state,
+                                             const VkVideoEncodeH264SessionParametersAddInfoKHR* add_info, VkDevice device,
+                                             const Location& loc,
+                                             const VkVideoEncodeH264SessionParametersCreateInfoKHR* create_info = nullptr,
+                                             const vvl::VideoSessionParameters* template_state = nullptr) const;
+    bool ValidateEncodeH265ParametersAddInfo(const vvl::VideoSession& vs_state,
+                                             const VkVideoEncodeH265SessionParametersAddInfoKHR* add_info, VkDevice device,
+                                             const Location& loc,
+                                             const VkVideoEncodeH265SessionParametersCreateInfoKHR* create_info = nullptr,
+                                             const vvl::VideoSessionParameters* template_state = nullptr) const;
+    bool ValidateVideoDecodeInfoH264(const vvl::CommandBuffer& cb_state, const VkVideoDecodeInfoKHR& decode_info,
+                                     const Location& loc) const;
+    bool ValidateVideoDecodeInfoH265(const vvl::CommandBuffer& cb_state, const VkVideoDecodeInfoKHR& decode_info,
+                                     const Location& loc) const;
+    bool ValidateVideoEncodeH264PicType(const vvl::VideoSession& vs_state, StdVideoH264PictureType pic_type,
+                                        const char* where) const;
+    bool ValidateVideoEncodeInfoH264(const vvl::CommandBuffer& cb_state, const VkVideoEncodeInfoKHR& encode_info,
+                                     const Location& loc) const;
+    bool ValidateVideoEncodeH265PicType(const vvl::VideoSession& vs_state, StdVideoH265PictureType pic_type,
+                                        const char* where) const;
+    bool ValidateVideoEncodeInfoH265(const vvl::CommandBuffer& cb_state, const VkVideoEncodeInfoKHR& encode_info,
+                                     const Location& loc) const;
     bool ValidateActiveReferencePictureCount(const vvl::CommandBuffer& cb_state, const VkVideoDecodeInfoKHR& decode_info) const;
+    bool ValidateActiveReferencePictureCount(const vvl::CommandBuffer& cb_state, const VkVideoEncodeInfoKHR& encode_info) const;
     bool ValidateReferencePictureUseCount(const vvl::CommandBuffer& cb_state, const VkVideoDecodeInfoKHR& decode_info) const;
+    bool ValidateReferencePictureUseCount(const vvl::CommandBuffer& cb_state, const VkVideoEncodeInfoKHR& encode_info) const;
     template <typename HandleT>
     bool ValidateImageSampleCount(const HandleT handle, const vvl::Image& image_state, VkSampleCountFlagBits sample_count,
                                   const Location& loc, const std::string& vuid) const;
@@ -551,6 +607,9 @@ class CoreChecks : public ValidationStateTracker {
     const VkPhysicalDeviceMemoryProperties* GetPhysicalDeviceMemoryProperties();
 
     bool FormatRequiresYcbcrConversionExplicitly(const VkFormat format) const;
+
+    // Checks conformance version if VK_KHR_driver_properties is enabled
+    bool IsBeforeCtsVersion(uint32_t major, uint32_t minor, uint32_t subminor) const;
 
     template <typename TransferBarrier>
     bool ValidateQueuedQFOTransferBarriers(const vvl::CommandBuffer& cb_state,
@@ -645,6 +704,8 @@ class CoreChecks : public ValidationStateTracker {
     // Stuff from shader_validation
     bool ValidateGraphicsPipelineShaderState(const vvl::Pipeline& pipeline, const Location& create_info_loc) const;
     bool ValidateGraphicsPipelinePortability(const vvl::Pipeline& pipeline, const Location& create_info_loc) const;
+    bool ValidatePipelineLibraryCreateInfo(const vvl::Pipeline& pipeline, const VkPipelineLibraryCreateInfoKHR& library_create_info,
+                                           const Location& create_info_loc) const;
     bool ValidateGraphicsPipelineLibrary(const vvl::Pipeline& pipeline, const Location& create_info_loc) const;
     bool ValidateGraphicsPipelineShaderDynamicState(const vvl::Pipeline& pipeline, const vvl::CommandBuffer& cb_state,
                                                     const Location& loc, const vvl::DrawDispatchVuid& vuids) const;
@@ -684,6 +745,7 @@ class CoreChecks : public ValidationStateTracker {
     void PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT* pCreateInfos,
                                        const VkAllocationCallbacks* pAllocator, VkShaderEXT* pShaders,
                                        const RecordObject& record_obj, void* csm_state_data) override;
+    bool RunSpirvValidation(spv_const_binary_t& binary, const Location& loc) const;
     bool PreCallValidateCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo,
                                            const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule,
                                            const ErrorObject& error_obj) const override;
@@ -1271,6 +1333,8 @@ class CoreChecks : public ValidationStateTracker {
                                                 VkDeviceAddress indirectDeviceAddress, const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress,
                                                  const ErrorObject& error_obj) const override;
+    bool ValidateDeferredOperation(VkDevice device, VkDeferredOperationKHR deferred_operation, const Location& loc,
+                                   const char* vuid) const;
     bool PreCallValidateCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo* pCreateInfo,
                                      const VkAllocationCallbacks* pAllocator, VkDevice* pDevice,
                                      const ErrorObject& error_obj) const override;
@@ -1313,6 +1377,8 @@ class CoreChecks : public ValidationStateTracker {
     void PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence,
                                     const RecordObject& record_obj) override;
     bool IsZeroAllocationSizeAllowed(const VkMemoryAllocateInfo* pAllocateInfo) const;
+    bool HasExternalMemoryImportSupport(const vvl::Buffer& buffer, VkExternalMemoryHandleTypeFlagBits handle_type) const;
+    bool HasExternalMemoryImportSupport(const vvl::Image& image, VkExternalMemoryHandleTypeFlagBits handle_type) const;
     bool PreCallValidateAllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo,
                                        const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory,
                                        const ErrorObject& error_obj) const override;
@@ -1412,6 +1478,15 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateRenderingInfoAttachment(const std::shared_ptr<const vvl::ImageView>& image_view,
                                          const VkRenderingInfo* pRenderingInfo, const LogObjectList& objlist,
                                          const Location& loc) const;
+    bool ValidateBeginRenderingFragmentDensityMap(VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo,
+                                                  const Location& rendering_info) const;
+    bool ValidateBeginRenderingFragmentShadingRate(VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo,
+                                                   const Location& rendering_info) const;
+    bool ValidateBeginRenderingDeviceGroup(VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo,
+                                           const Location& rendering_info) const;
+    bool ValidateBeginRenderingMultisampledRenderToSingleSampled(VkCommandBuffer commandBuffer,
+                                                                 const VkRenderingInfo* pRenderingInfo,
+                                                                 const Location& rendering_info) const;
     bool PreCallValidateCmdBeginRenderingKHR(VkCommandBuffer commandBuffer, const VkRenderingInfoKHR* pRenderingInfo,
                                              const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo,
@@ -1470,7 +1545,9 @@ class CoreChecks : public ValidationStateTracker {
     bool PreCallValidateGetAccelerationStructureHandleNV(VkDevice device, VkAccelerationStructureNV accelerationStructure,
                                                          size_t dataSize, void* pData, const ErrorObject& error_obj) const override;
     // Validate buffers accessed using a device address
-    bool ValidateAccelerationBuffers(uint32_t info_index, const VkAccelerationStructureBuildGeometryInfoKHR& info,
+    bool ValidateAccelerationBuffers(VkCommandBuffer cmd_buffer, uint32_t info_i,
+                                     const VkAccelerationStructureBuildGeometryInfoKHR& info,
+                                     const VkAccelerationStructureBuildRangeInfoKHR* geometry_build_ranges,
                                      const Location& loc) const;
     bool ValidateAccelerationStructuresMemoryAlisasing(VkCommandBuffer commandBuffer, uint32_t infoCount,
                                                        const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, uint32_t info_i,
@@ -1519,16 +1596,28 @@ class CoreChecks : public ValidationStateTracker {
                                                const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdSetStencilReference(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t reference,
                                                const ErrorObject& error_obj) const override;
+    bool ValidateCmdBindDescriptorSets(const vvl::CommandBuffer&, VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount,
+                                       const VkDescriptorSet* pDescriptorSets, uint32_t dynamicOffsetCount,
+                                       const uint32_t* pDynamicOffsets, const Location& loc) const;
     bool PreCallValidateCmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
                                               VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount,
                                               const VkDescriptorSet* pDescriptorSets, uint32_t dynamicOffsetCount,
                                               const uint32_t* pDynamicOffsets, const ErrorObject& error_obj) const override;
+    bool PreCallValidateCmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer,
+                                                  const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo,
+                                                  const ErrorObject& error_obj) const override;
+    bool ValidateCmdPushDescriptorSet(const vvl::CommandBuffer& cb_state, VkPipelineLayout layout, uint32_t set,
+                                      uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites,
+                                      const Location& loc) const;
     bool PreCallValidateCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
                                                 VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount,
                                                 const VkWriteDescriptorSet* pDescriptorWrites,
                                                 const ErrorObject& error_obj) const override;
-    bool ValidateCmdBindIndexBuffer(const vvl::CommandBuffer& cb_state, const vvl::Buffer& buffer_state, VkDeviceSize offset,
-                                    VkIndexType indexType, const Location& loc) const;
+    bool PreCallValidateCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
+                                                 const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo,
+                                                 const ErrorObject& error_obj) const override;
+    bool ValidateCmdBindIndexBuffer(const vvl::CommandBuffer& cb_state, VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType,
+                                    const Location& loc) const;
     bool PreCallValidateCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                            VkIndexType indexType, const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdBindIndexBuffer2KHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -1663,6 +1752,10 @@ class CoreChecks : public ValidationStateTracker {
     void PreCallRecordCmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery,
                                               uint32_t queryCount, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize stride,
                                               VkQueryResultFlags flags, const RecordObject& record_obj) override;
+    bool ValidateCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags,
+                                  uint32_t offset, uint32_t size, const Location& loc) const;
+    bool PreCallValidateCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfoKHR* pPushConstantsInfo,
+                                             const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags,
                                          uint32_t offset, uint32_t size, const void* pValues,
                                          const ErrorObject& error_obj) const override;
@@ -1799,6 +1892,8 @@ class CoreChecks : public ValidationStateTracker {
                                                        zx_handle_t* pZirconHandle, const RecordObject& record_obj) override;
 #endif
 #ifdef VK_USE_PLATFORM_WIN32_KHR
+    bool PreCallValidateGetMemoryWin32HandleKHR(VkDevice device, const VkMemoryGetWin32HandleInfoKHR* pGetWin32HandleInfo,
+                                                HANDLE* pHandle, const ErrorObject& error_obj) const override;
     bool PreCallValidateImportSemaphoreWin32HandleKHR(VkDevice device,
                                                       const VkImportSemaphoreWin32HandleInfoKHR* pImportSemaphoreWin32HandleInfo,
                                                       const ErrorObject& error_obj) const override;
@@ -1859,7 +1954,12 @@ class CoreChecks : public ValidationStateTracker {
     bool PreCallValidateUpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet,
                                                            VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData,
                                                            const ErrorObject& error_obj) const override;
-
+    bool ValidateCmdPushDescriptorSetWithTemplate(VkCommandBuffer commandBuffer,
+                                                  VkDescriptorUpdateTemplate descriptorUpdateTemplate, VkPipelineLayout layout,
+                                                  uint32_t set, const void* pData, const Location& loc) const;
+    bool PreCallValidateCmdPushDescriptorSetWithTemplate2KHR(
+        VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo,
+        const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,
                                                             VkDescriptorUpdateTemplate descriptorUpdateTemplate,
                                                             VkPipelineLayout layout, uint32_t set, const void* pData,
@@ -1898,6 +1998,9 @@ class CoreChecks : public ValidationStateTracker {
                                                                   uint32_t* pVideoFormatPropertyCount,
                                                                   VkVideoFormatPropertiesKHR* pVideoFormatProperties,
                                                                   const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(
+        VkPhysicalDevice physicalDevice, const VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR* pQualityLevelInfo,
+        VkVideoEncodeQualityLevelPropertiesKHR* pQualityLevelProperties, const ErrorObject& error_obj) const override;
     bool PreCallValidateCreateVideoSessionKHR(VkDevice device, const VkVideoSessionCreateInfoKHR* pCreateInfo,
                                               const VkAllocationCallbacks* pAllocator, VkVideoSessionKHR* pVideoSession,
                                               const ErrorObject& error_obj) const override;
@@ -1918,16 +2021,29 @@ class CoreChecks : public ValidationStateTracker {
     bool PreCallValidateDestroyVideoSessionParametersKHR(VkDevice device, VkVideoSessionParametersKHR videoSessionParameters,
                                                          const VkAllocationCallbacks* pAllocator,
                                                          const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetEncodedVideoSessionParametersKHR(
+        VkDevice device, const VkVideoEncodeSessionParametersGetInfoKHR* pVideoSessionParametersInfo,
+        VkVideoEncodeSessionParametersFeedbackInfoKHR* pFeedbackInfo, size_t* pDataSize, void* pData,
+        const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdBeginVideoCodingKHR(VkCommandBuffer commandBuffer, const VkVideoBeginCodingInfoKHR* pBeginInfo,
                                                const ErrorObject& error_obj) const override;
+    void PreCallRecordCmdBeginVideoCodingKHR(VkCommandBuffer commandBuffer, const VkVideoBeginCodingInfoKHR* pBeginInfo,
+                                             const RecordObject& record_obj) override;
     bool PreCallValidateCmdEndVideoCodingKHR(VkCommandBuffer commandBuffer, const VkVideoEndCodingInfoKHR* pEndCodingInfo,
                                              const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdControlVideoCodingKHR(VkCommandBuffer commandBuffer,
                                                  const VkVideoCodingControlInfoKHR* pCodingControlInfo,
                                                  const ErrorObject& error_obj) const override;
+    void PreCallRecordCmdControlVideoCodingKHR(VkCommandBuffer commandBuffer, const VkVideoCodingControlInfoKHR* pCodingControlInfo,
+                                               const RecordObject& record_obj) override;
     bool PreCallValidateCmdDecodeVideoKHR(VkCommandBuffer commandBuffer, const VkVideoDecodeInfoKHR* pDecodeInfo,
                                           const ErrorObject& error_obj) const override;
-
+    void PreCallRecordCmdDecodeVideoKHR(VkCommandBuffer commandBuffer, const VkVideoDecodeInfoKHR* pDecodeInfo,
+                                        const RecordObject& record_obj) override;
+    bool PreCallValidateCmdEncodeVideoKHR(VkCommandBuffer commandBuffer, const VkVideoEncodeInfoKHR* pEncodeInfo,
+                                          const ErrorObject& error_obj) const override;
+    void PreCallRecordCmdEncodeVideoKHR(VkCommandBuffer commandBuffer, const VkVideoEncodeInfoKHR* pEncodeInfo,
+                                        const RecordObject& record_obj) override;
     bool PreCallValidateCmdSetDiscardRectangleEXT(VkCommandBuffer commandBuffer, uint32_t firstDiscardRectangle,
                                                   uint32_t discardRectangleCount, const VkRect2D* pDiscardRectangles,
                                                   const ErrorObject& error_obj) const override;
@@ -2076,9 +2192,15 @@ class CoreChecks : public ValidationStateTracker {
     bool PreCallValidateCmdCopyAccelerationStructureKHR(VkCommandBuffer commandBuffer,
                                                         const VkCopyAccelerationStructureInfoKHR* pInfo,
                                                         const ErrorObject& error_obj) const override;
+    bool PreCallValidateDestroyDeferredOperationKHR(VkDevice device, VkDeferredOperationKHR operation,
+                                                    const VkAllocationCallbacks* pAllocator,
+                                                    const ErrorObject& error_obj) const override;
     bool PreCallValidateCopyAccelerationStructureKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
                                                      const VkCopyAccelerationStructureInfoKHR* pInfo,
                                                      const ErrorObject& error_obj) const override;
+    bool PreCallValidateCopyAccelerationStructureToMemoryKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
+                                                             const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo,
+                                                             const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdCopyAccelerationStructureToMemoryKHR(VkCommandBuffer commandBuffer,
                                                                 const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo,
                                                                 const ErrorObject& error_obj) const override;
@@ -2354,13 +2476,27 @@ class CoreChecks : public ValidationStateTracker {
                                                          VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount,
                                                          const uint32_t* pBufferIndices, const VkDeviceSize* pOffsets,
                                                          const ErrorObject& error_obj) const override;
+    bool ValidateCmdSetDescriptorBufferOffsets(const vvl::CommandBuffer& cb_state, VkPipelineLayout layout, uint32_t firstSet,
+                                               uint32_t setCount, const uint32_t* pBufferIndices, const VkDeviceSize* pOffsets,
+                                               const Location& loc) const;
+    bool PreCallValidateCmdSetDescriptorBufferOffsets2EXT(
+        VkCommandBuffer commandBuffer, const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo,
+        const ErrorObject& error_obj) const override;
+    bool ValidateCmdBindDescriptorBufferEmbeddedSamplers(const vvl::CommandBuffer& cb_state, VkPipelineLayout layout, uint32_t set,
+                                                         const Location& loc) const;
     bool PreCallValidateCmdBindDescriptorBufferEmbeddedSamplersEXT(VkCommandBuffer commandBuffer,
                                                                    VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout,
                                                                    uint32_t set, const ErrorObject& error_obj) const override;
+    bool PreCallValidateCmdBindDescriptorBufferEmbeddedSamplers2EXT(
+        VkCommandBuffer commandBuffer,
+        const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo,
+        const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount,
                                                     const VkDescriptorBufferBindingInfoEXT* pBindingInfos,
                                                     const ErrorObject& error_obj) const override;
     bool ValidateDescriptorAddressInfoEXT(const VkDescriptorAddressInfoEXT* address_info, const Location& address_loc) const;
+    bool ValidateGetDescriptorDataSize(const VkDescriptorGetInfoEXT& descriptor_info, const size_t data_size,
+                                       const Location& descriptor_info_loc) const;
     bool PreCallValidateGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT* pDescriptorInfo, size_t dataSize,
                                          void* pDescriptor, const ErrorObject& error_obj) const override;
     bool PreCallValidateGetCalibratedTimestampsEXT(VkDevice device, uint32_t timestampCount,

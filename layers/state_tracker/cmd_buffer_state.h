@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 #pragma once
-#include "state_tracker/base_node.h"
+#include "state_tracker/state_object.h"
 #include "state_tracker/query_state.h"
 #include "state_tracker/video_session_state.h"
 #include "generated/dynamic_state_helper.h"
@@ -32,14 +32,14 @@
 #include "containers/custom_containers.h"
 
 struct SubpassInfo;
-class VIDEO_SESSION_STATE;
-class VIDEO_SESSION_PARAMETERS_STATE;
 class CoreChecks;
 class ValidationStateTracker;
 
 namespace vvl {
 class Framebuffer;
 class RenderPass;
+class VideoSession;
+class VideoSessionParameters;
 }  // namespace vvl
 
 #ifdef VK_USE_PLATFORM_METAL_EXT
@@ -59,7 +59,7 @@ static bool GetMetalExport(const VkEventCreateInfo *info) {
 
 namespace vvl {
 
-class Event : public BASE_NODE {
+class Event : public StateObject {
   public:
     int write_in_use;
 #ifdef VK_USE_PLATFORM_METAL_EXT
@@ -74,7 +74,7 @@ class Event : public BASE_NODE {
     VkQueue signaling_queue = VK_NULL_HANDLE;
 
     Event(VkEvent event_, const VkEventCreateInfo *pCreateInfo)
-        : BASE_NODE(event_, kVulkanObjectTypeEvent),
+        : StateObject(event_, kVulkanObjectTypeEvent),
           write_in_use(0),
 #ifdef VK_USE_PLATFORM_METAL_EXT
           metal_event_export(GetMetalExport(pCreateInfo)),
@@ -94,7 +94,7 @@ typedef vvl::unordered_map<VkEvent, VkPipelineStageFlags2KHR> EventToStageMap;
 
 namespace vvl {
 // Track command pools and their command buffers
-class CommandPool : public BASE_NODE {
+class CommandPool : public StateObject {
   public:
     ValidationStateTracker *dev_data;
     const VkCommandPoolCreateFlags createFlags;
@@ -162,14 +162,14 @@ struct CBVertexBufferBindingInfo {
     std::vector<BufferBinding> vertex_buffer_bindings;
 };
 
-typedef vvl::unordered_map<const vvl::Image *, std::shared_ptr<ImageSubresourceLayoutMap>> CommandBufferImageLayoutMap;
+typedef vvl::unordered_map<VkImage, std::shared_ptr<ImageSubresourceLayoutMap>> CommandBufferImageLayoutMap;
 
 typedef vvl::unordered_map<const GlobalImageLayoutRangeMap *, std::shared_ptr<ImageSubresourceLayoutMap>>
     CommandBufferAliasedLayoutMap;
 
 namespace vvl {
 
-class CommandBuffer : public REFCOUNTED_NODE {
+class CommandBuffer : public RefcountedStateObject {
     using Func = vvl::Func;
 
   public:
@@ -280,6 +280,7 @@ class CommandBuffer : public REFCOUNTED_NODE {
         std::vector<VkColorComponentFlags> color_write_masks;        // VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT
 
         // VK_DYNAMIC_STATE_VERTEX_INPUT_EXT
+        std::vector<VkVertexInputBindingDescription2EXT> vertex_binding_descriptions;
         std::vector<VkVertexInputAttributeDescription2EXT> vertex_attribute_descriptions;
 
         // VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT
@@ -331,6 +332,7 @@ class CommandBuffer : public REFCOUNTED_NODE {
             color_blend_advanced_attachments.reset();
             color_blend_equations.clear();
             color_write_masks.clear();
+            vertex_binding_descriptions.clear();
             vertex_attribute_descriptions.clear();
             viewport_w_scalings.clear();
             exclusive_scissor_enables.clear();
@@ -346,7 +348,7 @@ class CommandBuffer : public REFCOUNTED_NODE {
     // Store last bound state for Gfx & Compute pipeline bind points
     std::array<LastBound, BindPoint_Count> lastBound;  // index is LvlBindPoint.
 
-    // Use the casting boilerplate from BASE_NODE to implement the derived shared_from_this
+    // Use the casting boilerplate from StateObject to implement the derived shared_from_this
     std::shared_ptr<const CommandBuffer> shared_from_this() const { return SharedFromThisImpl(this); }
     std::shared_ptr<CommandBuffer> shared_from_this() { return SharedFromThisImpl(this); }
 
@@ -375,9 +377,12 @@ class CommandBuffer : public REFCOUNTED_NODE {
     bool trashedViewportCount;
     bool trashedScissorCount;
 
-    // True iff any draw command recorded to this command buffer consumes dynamic viewport/scissor with count state.
+    // True if any draw command recorded to this command buffer consumes dynamic viewport/scissor with count state.
     bool usedDynamicViewportCount;
     bool usedDynamicScissorCount;
+
+    // Track if any dynamic state is set that is static in the currently bound pipeline
+    bool dirtyStaticState;
 
     uint32_t initial_device_mask;
 
@@ -402,7 +407,7 @@ class CommandBuffer : public REFCOUNTED_NODE {
     std::shared_ptr<vvl::Framebuffer> activeFramebuffer;
     // Unified data structs to track objects bound to this command buffer as well as object
     //  dependencies that have been broken : either destroyed objects, or updated descriptor sets
-    vvl::unordered_set<std::shared_ptr<BASE_NODE>> object_bindings;
+    vvl::unordered_set<std::shared_ptr<StateObject>> object_bindings;
     vvl::unordered_map<VulkanTypedHandle, LogObjectList> broken_bindings;
 
     QFOTransferBarrierSets<QFOBufferTransferBarrier> qfo_transfer_buffer_barriers;
@@ -413,8 +418,8 @@ class CommandBuffer : public REFCOUNTED_NODE {
     std::vector<VkEvent> events;
     vvl::unordered_set<QueryObject> activeQueries;
     vvl::unordered_set<QueryObject> startedQueries;
-    vvl::unordered_set<QueryObject> resetQueries;
     vvl::unordered_set<QueryObject> updatedQueries;
+    vvl::unordered_set<QueryObject> renderPassQueries;
     CommandBufferImageLayoutMap image_layout_map;
     CommandBufferAliasedLayoutMap aliased_image_layout_map;  // storage for potentially aliased images
 
@@ -455,9 +460,11 @@ class CommandBuffer : public REFCOUNTED_NODE {
     uint32_t small_indexed_draw_call_count;
 
     // Video coding related state tracking
-    std::shared_ptr<VIDEO_SESSION_STATE> bound_video_session;
-    std::shared_ptr<VIDEO_SESSION_PARAMETERS_STATE> bound_video_session_parameters;
+    std::shared_ptr<vvl::VideoSession> bound_video_session;
+    std::shared_ptr<vvl::VideoSessionParameters> bound_video_session_parameters;
     BoundVideoPictureResources bound_video_picture_resources;
+    VideoEncodeRateControlState video_encode_rate_control_state{};
+    std::optional<uint32_t> video_encode_quality_level{};
     VideoSessionUpdateMap video_session_updates;
 
     bool transform_feedback_active{false};
@@ -482,17 +489,17 @@ class CommandBuffer : public REFCOUNTED_NODE {
     vvl::ImageView *GetActiveAttachmentImageViewState(uint32_t index);
     const vvl::ImageView *GetActiveAttachmentImageViewState(uint32_t index) const;
 
-    void AddChild(std::shared_ptr<BASE_NODE> &base_node);
-    template <typename StateObject>
-    void AddChild(std::shared_ptr<StateObject> &child_node) {
-        auto base = std::static_pointer_cast<BASE_NODE>(child_node);
+    void AddChild(std::shared_ptr<StateObject> &state_object);
+    template <typename T>
+    void AddChild(std::shared_ptr<T> &child_node) {
+        auto base = std::static_pointer_cast<StateObject>(child_node);
         AddChild(base);
     }
 
-    void RemoveChild(std::shared_ptr<BASE_NODE> &base_node);
-    template <typename StateObject>
-    void RemoveChild(std::shared_ptr<StateObject> &child_node) {
-        auto base = std::static_pointer_cast<BASE_NODE>(child_node);
+    void RemoveChild(std::shared_ptr<StateObject> &state_object);
+    template <typename T>
+    void RemoveChild(std::shared_ptr<T> &child_node) {
+        auto base = std::static_pointer_cast<StateObject>(child_node);
         RemoveChild(base);
     }
 
@@ -502,7 +509,7 @@ class CommandBuffer : public REFCOUNTED_NODE {
 
     void ResetPushConstantDataIfIncompatible(const vvl::PipelineLayout *pipeline_layout_state);
 
-    const ImageSubresourceLayoutMap *GetImageSubresourceLayoutMap(const vvl::Image &image_state) const;
+    const ImageSubresourceLayoutMap *GetImageSubresourceLayoutMap(VkImage image) const;
     ImageSubresourceLayoutMap *GetImageSubresourceLayoutMap(const vvl::Image &image_state);
     const CommandBufferImageLayoutMap &GetImageSubresourceLayoutMap() const;
 
@@ -554,6 +561,7 @@ class CommandBuffer : public REFCOUNTED_NODE {
     void EndVideoCoding(const VkVideoEndCodingInfoKHR *pEndCodingInfo);
     void ControlVideoCoding(const VkVideoCodingControlInfoKHR *pControlInfo);
     void DecodeVideo(const VkVideoDecodeInfoKHR *pDecodeInfo);
+    void EncodeVideo(const VkVideoEncodeInfoKHR *pEncodeInfo);
 
     void ExecuteCommands(vvl::span<const VkCommandBuffer> secondary_command_buffers);
 
@@ -577,7 +585,7 @@ class CommandBuffer : public REFCOUNTED_NODE {
     virtual void RecordCmd(Func command);
     void RecordStateCmd(Func command, CBDynamicState dynamic_state);
     void RecordStateCmd(Func command, CBDynamicFlags const &state_bits);
-    void RecordTransferCmd(Func command, std::shared_ptr<BINDABLE> &&buf1, std::shared_ptr<BINDABLE> &&buf2 = nullptr);
+    void RecordTransferCmd(Func command, std::shared_ptr<Bindable> &&buf1, std::shared_ptr<Bindable> &&buf2 = nullptr);
     void RecordSetEvent(Func command, VkEvent event, VkPipelineStageFlags2KHR stageMask);
     void RecordResetEvent(Func command, VkEvent event, VkPipelineStageFlags2KHR stageMask);
     virtual void RecordWaitEvents(Func command, uint32_t eventCount, const VkEvent *pEvents,
@@ -694,8 +702,9 @@ class CommandBuffer : public REFCOUNTED_NODE {
     std::optional<VkSampleCountFlagBits> active_subpass_sample_count_;
 
   protected:
-    void NotifyInvalidate(const BASE_NODE::NodeList &invalid_nodes, bool unlink) override;
+    void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) override;
     void UpdateAttachmentsView(const VkRenderPassBeginInfo *pRenderPassBegin);
+    void EnqueueUpdateVideoInlineQueries(const VkVideoInlineQueryInfoKHR &query_info);
     void UnbindResources();
 };
 

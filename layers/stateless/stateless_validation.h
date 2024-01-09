@@ -64,7 +64,7 @@ class StatelessValidation : public ValidationObject {
         VkPhysicalDeviceRayTracingPipelinePropertiesKHR ray_tracing_props_khr;
         VkPhysicalDeviceAccelerationStructurePropertiesKHR acc_structure_props;
         VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback_props;
-        VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT vertex_attribute_divisor_props;
+        VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR vertex_attribute_divisor_props;
         VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT blend_operation_advanced_props;
         VkPhysicalDeviceMaintenance4PropertiesKHR maintenance4_props;
         VkPhysicalDeviceFragmentShadingRatePropertiesKHR fragment_shading_rate_props;
@@ -630,7 +630,7 @@ class StatelessValidation : public ValidationObject {
 #endif  // VK_USE_PLATFORM_METAL_EXT
 
     bool ValidateWriteDescriptorSet(const Location &loc, const uint32_t descriptorWriteCount,
-                                    const VkWriteDescriptorSet *pDescriptorWrites, const bool isPushDescriptor) const;
+                                    const VkWriteDescriptorSet *pDescriptorWrites) const;
     bool manual_PreCallValidateUpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount,
                                                     const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount,
                                                     const VkCopyDescriptorSet *pDescriptorCopies,
@@ -732,6 +732,9 @@ class StatelessValidation : public ValidationObject {
                                                        VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount,
                                                        const VkWriteDescriptorSet *pDescriptorWrites,
                                                        const ErrorObject &error_obj) const;
+    bool manual_PreCallValidateCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
+                                                        const VkPushDescriptorSetInfoKHR *pPushDescriptorSetInfo,
+                                                        const ErrorObject &error_obj) const;
     bool manual_PreCallValidateCmdSetExclusiveScissorNV(VkCommandBuffer commandBuffer, uint32_t firstExclusiveScissor,
                                                         uint32_t exclusiveScissorCount, const VkRect2D *pExclusiveScissors,
                                                         const ErrorObject &error_obj) const;
@@ -759,6 +762,9 @@ class StatelessValidation : public ValidationObject {
                                                               const VkAllocationCallbacks *pAllocator,
                                                               VkAccelerationStructureKHR *pAccelerationStructure,
                                                               const ErrorObject &error_obj) const;
+    bool manual_PreCallValidateDestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure,
+                                                               const VkAllocationCallbacks *pAllocator,
+                                                               const ErrorObject &error_obj) const;
     bool manual_PreCallValidateCmdBuildAccelerationStructureNV(VkCommandBuffer commandBuffer,
                                                                const VkAccelerationStructureInfoNV *pInfo, VkBuffer instanceData,
                                                                VkDeviceSize instanceOffset, VkBool32 update,
@@ -878,6 +884,8 @@ class StatelessValidation : public ValidationObject {
                                                                  const ErrorObject &error_obj) const;
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
+    bool manual_PreCallValidateGetMemoryWin32HandleKHR(VkDevice device, const VkMemoryGetWin32HandleInfoKHR *pGetWin32HandleInfo,
+                                                       HANDLE *pHandle, const ErrorObject &error_obj) const;
     bool manual_PreCallValidateGetMemoryWin32HandlePropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType,
                                                                  HANDLE handle,
                                                                  VkMemoryWin32HandlePropertiesKHR *pMemoryWin32HandleProperties,
@@ -979,6 +987,9 @@ class StatelessValidation : public ValidationObject {
                                                     const VkVertexInputAttributeDescription2EXT *pVertexAttributeDescriptions,
                                                     const ErrorObject &error_obj) const;
 
+    bool ValidateCmdPushConstants(VkCommandBuffer commandBuffer, uint32_t offset, uint32_t size, const Location &loc) const;
+    bool manual_PreCallValidateCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfoKHR *pPushConstantsInfo,
+                                                    const ErrorObject &error_obj) const;
     bool manual_PreCallValidateCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
                                                 VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size, const void *pValues,
                                                 const ErrorObject &error_obj) const;

@@ -16,18 +16,11 @@
 #include "../framework/render_pass_helper.h"
 #include "generated/vk_extension_helper.h"
 
-void DynamicRenderingTest::InitBasicDynamicRendering(void* pNextFeatures) {
+void DynamicRenderingTest::InitBasicDynamicRendering() {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = vku::InitStructHelper(pNextFeatures);
-    GetPhysicalDeviceFeatures2(dynamic_rendering_features);
-    if (!dynamic_rendering_features.dynamicRendering) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRendering , skipping.";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(Init());
 }
 
 TEST_F(PositiveDynamicRendering, BasicUsage) {
@@ -147,8 +140,8 @@ TEST_F(PositiveDynamicRendering, DrawMultiBind) {
 TEST_F(PositiveDynamicRendering, BeginQuery) {
     TEST_DESCRIPTION("Test calling vkCmdBeginQuery with a dynamic render pass.");
     SetTargetApiVersion(VK_API_VERSION_1_3);
-    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicDynamicRendering(&sync2_features));
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
 
     InitRenderTarget();
 
@@ -354,13 +347,10 @@ TEST_F(PositiveDynamicRendering, SuspendResumeDraw) {
     cb2.EndRendering();
     cb2.end();
 
-    std::array<VkCommandBuffer, 3> cbs = {m_commandBuffer->handle(), cb1.handle(), cb2.handle()};
-    VkSubmitInfo submit = vku::InitStructHelper();
-    submit.commandBufferCount = static_cast<uint32_t>(cbs.size());
-    submit.pCommandBuffers = cbs.data();
-    vk::QueueSubmit(m_default_queue, 1, &submit, VK_NULL_HANDLE);
-
-    vk::QueueWaitIdle(m_default_queue);
+    vkt::Fence fence;
+    std::vector<const vkt::CommandBuffer*> cbs = {m_commandBuffer, &cb1, &cb2};
+    m_default_queue->submit(cbs, fence);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveDynamicRendering, CreateGraphicsPipeline) {
@@ -439,14 +429,9 @@ TEST_F(PositiveDynamicRendering, CommandDrawWithShaderTileImageRead) {
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredExtensions(VK_EXT_SHADER_TILE_IMAGE_EXTENSION_NAME);
-    VkPhysicalDeviceShaderTileImageFeaturesEXT shader_tile_image_features = vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicDynamicRendering(&shader_tile_image_features));
-
-    // shader tile image read features not supported skip the test.
-    if (!shader_tile_image_features.shaderTileImageDepthReadAccess &&
-        !shader_tile_image_features.shaderTileImageStencilReadAccess) {
-        GTEST_SKIP() << "Test requires (unsupported) shader tile image extension.";
-    }
+    AddRequiredFeature(vkt::Feature::shaderTileImageDepthReadAccess);
+    AddRequiredFeature(vkt::Feature::shaderTileImageStencilReadAccess);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
 
     VkShaderObj vs(this, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT);
     auto fs = VkShaderObj::CreateFromASM(this, kShaderTileImageDepthStencilReadSpv, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -544,11 +529,8 @@ TEST_F(PositiveDynamicRendering, CommandDrawWithShaderTileImageRead) {
 
 TEST_F(PositiveDynamicRendering, DualSourceBlending) {
     TEST_DESCRIPTION("Test drawing with dynamic rendering and dual source blending.");
+    AddRequiredFeature(vkt::Feature::dualSrcBlend);
     RETURN_IF_SKIP(InitBasicDynamicRendering());
-
-    if (!m_device->phy().features().dualSrcBlend) {
-        GTEST_SKIP() << "Test requires (unsupported) dualSrcBlend";
-    }
 
     char const* fsSource = R"glsl(
         #version 450
@@ -699,14 +681,8 @@ TEST_F(PositiveDynamicRendering, SuspendPrimaryResumeInSecondary) {
     vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
 
     m_commandBuffer->end();
-
-    // Submit
-    VkSubmitInfo submit = vku::InitStructHelper();
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &m_commandBuffer->handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit, VK_NULL_HANDLE);
-
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveDynamicRendering, SuspendSecondaryResumeInPrimary) {
@@ -780,27 +756,21 @@ TEST_F(PositiveDynamicRendering, SuspendSecondaryResumeInPrimary) {
     cb.EndRendering();
     cb.end();
 
-    // Submit
-    std::array<VkCommandBuffer, 2> cbs = {m_commandBuffer->handle(), cb.handle()};
-    VkSubmitInfo submit = vku::InitStructHelper();
-    submit.commandBufferCount = static_cast<uint32_t>(cbs.size());
-    submit.pCommandBuffers = cbs.data();
-    vk::QueueSubmit(m_default_queue, 1, &submit, VK_NULL_HANDLE);
-
-    vk::QueueWaitIdle(m_default_queue);
+    vkt::Fence fence;
+    std::vector<const vkt::CommandBuffer*> cbs = {m_commandBuffer, &cb};
+    m_default_queue->submit(cbs, fence);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveDynamicRendering, WithShaderTileImageAndBarrier) {
     TEST_DESCRIPTION("Test setting memory barrier with shader tile image features are enabled.");
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredExtensions(VK_EXT_SHADER_TILE_IMAGE_EXTENSION_NAME);
-    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
-    VkPhysicalDeviceShaderTileImageFeaturesEXT shader_tile_image_features = vku::InitStructHelper(&sync2_features);
-    RETURN_IF_SKIP(InitBasicDynamicRendering(&shader_tile_image_features));
-    if (!shader_tile_image_features.shaderTileImageColorReadAccess && !shader_tile_image_features.shaderTileImageDepthReadAccess &&
-        !shader_tile_image_features.shaderTileImageStencilReadAccess) {
-        GTEST_SKIP() << "Test requires (unsupported) shader tile image extension.";
-    }
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    AddRequiredFeature(vkt::Feature::shaderTileImageColorReadAccess);
+    AddRequiredFeature(vkt::Feature::shaderTileImageDepthReadAccess);
+    AddRequiredFeature(vkt::Feature::shaderTileImageStencilReadAccess);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
 
     InitRenderTarget();
 
@@ -950,13 +920,8 @@ TEST_F(PositiveDynamicRendering, MatchingAttachmentFormats) {
 TEST_F(PositiveDynamicRendering, MatchingAttachmentFormats2) {
     TEST_DESCRIPTION("Draw with Dynamic Rendering with dynamicRenderingUnusedAttachments enabled and matching formats");
     AddRequiredExtensions(VK_EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_EXTENSION_NAME);
-    VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT dynamic_rendering_unused_attachments_features =
-        vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicDynamicRendering(&dynamic_rendering_unused_attachments_features));
-
-    if (!dynamic_rendering_unused_attachments_features.dynamicRenderingUnusedAttachments) {
-        GTEST_SKIP() << "Test requires (unsupported) dynamicRenderingUnusedAttachments , skipping.";
-    }
+    AddRequiredFeature(vkt::Feature::dynamicRenderingUnusedAttachments);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
 
     VkShaderObj fs(this, kFragmentColorOutputGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
@@ -1132,27 +1097,14 @@ TEST_F(PositiveDynamicRendering, ColorAttachmentMismatch) {
     TEST_DESCRIPTION("colorAttachmentCount and attachmentCount don't match but it is dynamically ignored");
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extended_dynamic_state2_features = vku::InitStructHelper();
-    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state3_features =
-        vku::InitStructHelper(&extended_dynamic_state2_features);
-    RETURN_IF_SKIP(InitBasicDynamicRendering(&extended_dynamic_state3_features));
-    InitRenderTarget();
-
-    if (!extended_dynamic_state2_features.extendedDynamicState2LogicOp) {
-        GTEST_SKIP() << "extendedDynamicState2LogicOp not supported";
-    }
-    if (!extended_dynamic_state3_features.extendedDynamicState3LogicOpEnable) {
-        GTEST_SKIP() << "extendedDynamicState3LogicOpEnable not supported";
-    }
-    if (!extended_dynamic_state3_features.extendedDynamicState3ColorBlendEnable) {
-        GTEST_SKIP() << "extendedDynamicState3ColorBlendEnable not supported";
-    }
-    if (!extended_dynamic_state3_features.extendedDynamicState3ColorBlendEquation) {
-        GTEST_SKIP() << "extendedDynamicState3ColorBlendEquation not supported";
-    }
-    if (!extended_dynamic_state3_features.extendedDynamicState3ColorWriteMask) {
-        GTEST_SKIP() << "extendedDynamicState3ColorWriteMask not supported";
-    }
+    AddRequiredFeature(vkt::Feature::extendedDynamicState);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2LogicOp);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3LogicOpEnable);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEnable);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEquation);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorWriteMask);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
 
     VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();
     pipeline_rendering_info.colorAttachmentCount = 0;
@@ -1173,12 +1125,8 @@ TEST_F(PositiveDynamicRendering, ColorAttachmentMismatch) {
 TEST_F(PositiveDynamicRendering, PipelineUnusedAttachments) {
     TEST_DESCRIPTION("Draw with Dynamic Rendering with mismatching color attachment counts and depth/stencil formats");
     AddRequiredExtensions(VK_EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_EXTENSION_NAME);
-    VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT dynamic_rendering_unused_attachments_features =
-        vku::InitStructHelper();
-    RETURN_IF_SKIP(InitBasicDynamicRendering(&dynamic_rendering_unused_attachments_features));
-    if (!dynamic_rendering_unused_attachments_features.dynamicRenderingUnusedAttachments) {
-        GTEST_SKIP() << "dynamicRenderingUnusedAttachments not supported";
-    }
+    AddRequiredFeature(vkt::Feature::dynamicRenderingUnusedAttachments);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
 
     VkFormat color_formats[] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};
     VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();

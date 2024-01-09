@@ -51,28 +51,18 @@ static const char *kXfbVsSource = R"asm(
                OpFunctionEnd
         )asm";
 
-void NegativeTransformFeedback::InitBasicTransformFeedback(void *pNextFeatures) {
+void NegativeTransformFeedback::InitBasicTransformFeedback() {
     AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceTransformFeedbackFeaturesEXT tf_features = vku::InitStructHelper(pNextFeatures);
-    GetPhysicalDeviceFeatures2(tf_features);
-    if (tf_features.transformFeedback == VK_FALSE) {
-        GTEST_SKIP() << "transformFeedback not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &tf_features));
+    AddRequiredFeature(vkt::Feature::transformFeedback);
+    RETURN_IF_SKIP(Init());
 }
 
 TEST_F(NegativeTransformFeedback, FeatureEnabled) {
     TEST_DESCRIPTION("VkPhysicalDeviceTransformFeedbackFeaturesEXT::transformFeedback must be enabled");
 
     AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-
-    RETURN_IF_SKIP(InitFramework());
-
     // transformFeedback not enabled
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -556,6 +546,9 @@ TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
 
     VkPhysicalDeviceTransformFeedbackPropertiesEXT tf_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(tf_properties);
+    if (!tf_properties.transformFeedbackDraw) {
+        GTEST_SKIP() << "transformFeedbackDraw is not supported";
+    }
 
     VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
     buffer_create_info.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
@@ -571,21 +564,24 @@ TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
         m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
         vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline_);
 
-        // Greater stride than maxTransformFeedbackBufferDataStride
-        if (!tf_properties.transformFeedbackDraw) {
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-transformFeedbackDraw-02288");
-        }
+        // if property is not multiple of 4
+        m_errorMonitor->SetUnexpectedError("VUID-vkCmdDrawIndirectByteCountEXT-vertexStride-09475");
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-vertexStride-02289");
         vk::CmdDrawIndirectByteCountEXT(m_commandBuffer->handle(), 1, 0, counter_buffer.handle(), 0, 0,
                                         tf_properties.maxTransformFeedbackBufferDataStride + 4);
         m_errorMonitor->VerifyFound();
 
         // non-4 multiple stride
-        if (!tf_properties.transformFeedbackDraw) {
-            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-transformFeedbackDraw-02288");
-        }
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-counterBufferOffset-04568");
+        vk::CmdDrawIndirectByteCountEXT(m_commandBuffer->handle(), 1, 0, counter_buffer.handle(), 1, 0, 4);
+        m_errorMonitor->VerifyFound();
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-counterOffset-09474");
         vk::CmdDrawIndirectByteCountEXT(m_commandBuffer->handle(), 1, 0, counter_buffer.handle(), 0, 1, 4);
+        m_errorMonitor->VerifyFound();
+
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-vertexStride-09475");
+        vk::CmdDrawIndirectByteCountEXT(m_commandBuffer->handle(), 1, 0, counter_buffer.handle(), 0, 0, 1);
         m_errorMonitor->VerifyFound();
 
         m_commandBuffer->EndRenderPass();
@@ -611,8 +607,8 @@ TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
 
     VkShaderObj vs(this, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL_TRY);
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL_TRY);
-    vs.InitFromGLSLTry(false, &test_device);
-    fs.InitFromGLSLTry(false, &test_device);
+    vs.InitFromGLSLTry(&test_device);
+    fs.InitFromGLSLTry(&test_device);
 
     CreatePipelineHelper pipeline(*this);
     pipeline.device_ = &test_device;
@@ -630,11 +626,9 @@ TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
     commandBuffer.begin();
     vk::CmdBindPipeline(commandBuffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Handle());
     commandBuffer.BeginRenderPass(m_renderPassBeginInfo);
-    if (!tf_properties.transformFeedbackDraw) {
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-transformFeedbackDraw-02288");
-    }
+
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDrawIndirectByteCountEXT-transformFeedback-02287");
-    vk::CmdDrawIndirectByteCountEXT(commandBuffer.handle(), 1, 0, counter_buffer2.handle(), 0, 0, 1);
+    vk::CmdDrawIndirectByteCountEXT(commandBuffer.handle(), 1, 0, counter_buffer2.handle(), 0, 0, 4);
     m_errorMonitor->VerifyFound();
 }
 
@@ -1044,15 +1038,9 @@ TEST_F(NegativeTransformFeedback, PipelineRasterizationStateStreamCreateInfoEXT)
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceTransformFeedbackFeaturesEXT transform_feedback_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(transform_feedback_features);
-    if (!transform_feedback_features.geometryStreams) {
-        GTEST_SKIP() << "geometryStreams not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &transform_feedback_features));
+    AddRequiredFeature(vkt::Feature::transformFeedback);
+    AddRequiredFeature(vkt::Feature::geometryStreams);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPhysicalDeviceTransformFeedbackPropertiesEXT transfer_feedback_props = vku::InitStructHelper();

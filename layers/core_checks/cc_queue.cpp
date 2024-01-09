@@ -38,7 +38,7 @@ struct CommandBufferSubmitState {
     // tracking state accross *all* submissions to the same queue.
     QueryMap local_query_to_state_map;
     EventToStageMap local_event_signal_info;
-    vvl::unordered_map<VkVideoSessionKHR, VideoSessionDeviceState> local_video_session_state{};
+    vvl::unordered_map<VkVideoSessionKHR, vvl::VideoSessionDeviceState> local_video_session_state{};
 
     CommandBufferSubmitState(const CoreChecks *c, const vvl::Queue *q) : core(c), queue_state(q) {}
 
@@ -72,7 +72,7 @@ struct CommandBufferSubmitState {
         }
 
         for (const auto &it : cb_state.video_session_updates) {
-            auto video_session_state = core->Get<VIDEO_SESSION_STATE>(it.first);
+            auto video_session_state = core->Get<vvl::VideoSession>(it.first);
             auto local_state_it = local_video_session_state.find(it.first);
             if (local_state_it == local_video_session_state.end()) {
                 local_state_it = local_video_session_state.insert({it.first, video_session_state->DeviceStateCopy()}).first;
@@ -414,10 +414,10 @@ bool CoreChecks::ValidateQueueFamilyIndices(const Location &loc, const vvl::Comm
         }
 
         // Ensure that any bound images or buffers created with SHARING_MODE_CONCURRENT have access to the current queue family
-        for (const auto &base_node : cb_state.object_bindings) {
-            switch (base_node->Type()) {
+        for (const auto &state_object : cb_state.object_bindings) {
+            switch (state_object->Type()) {
                 case kVulkanObjectTypeImage: {
-                    auto image_state = static_cast<const vvl::Image *>(base_node.get());
+                    auto image_state = static_cast<const vvl::Image *>(state_object.get());
                     if (image_state && image_state->createInfo.sharingMode == VK_SHARING_MODE_CONCURRENT) {
                         skip |= ValidImageBufferQueue(cb_state, image_state->Handle(), queue_state->queueFamilyIndex,
                                                       image_state->createInfo.queueFamilyIndexCount,
@@ -426,7 +426,7 @@ bool CoreChecks::ValidateQueueFamilyIndices(const Location &loc, const vvl::Comm
                     break;
                 }
                 case kVulkanObjectTypeBuffer: {
-                    auto buffer_state = static_cast<const vvl::Buffer *>(base_node.get());
+                    auto buffer_state = static_cast<const vvl::Buffer *>(state_object.get());
                     if (buffer_state && buffer_state->createInfo.sharingMode == VK_SHARING_MODE_CONCURRENT) {
                         skip |= ValidImageBufferQueue(cb_state, buffer_state->Handle(), queue_state->queueFamilyIndex,
                                                       buffer_state->createInfo.queueFamilyIndexCount,
@@ -623,18 +623,19 @@ bool CoreChecks::PreCallValidateQueueBindSparse(VkQueue queue, uint32_t bindInfo
                 const Location bind_loc = bind_info_loc.dot(Field::pImageBinds, image_idx);
                 const VkSparseImageMemoryBindInfo &image_bind = bind_info.pImageBinds[image_idx];
                 auto image_state = Get<vvl::Image>(image_bind.image);
+                if (!image_state) {
+                    continue;
+                }
 
-                if (image_state && !(image_state->sparse_residency)) {
+                if (!image_state->sparse_residency) {
                     skip |= LogError("VUID-VkSparseImageMemoryBindInfo-image-02901", image_bind.image, bind_loc.dot(Field::image),
                                      "must have been created with VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT set.");
                 }
 
-                if (image_bind.pBinds) {
-                    for (uint32_t image_bind_idx = 0; image_bind_idx < image_bind.bindCount; ++image_bind_idx) {
-                        const VkSparseImageMemoryBind &memory_bind = image_bind.pBinds[image_bind_idx];
-                        skip |= ValidateSparseImageMemoryBind(image_state.get(), memory_bind, bind_loc,
-                                                              bind_loc.dot(Field::pBinds, image_bind_idx));
-                    }
+                for (uint32_t image_bind_idx = 0; image_bind_idx < image_bind.bindCount; ++image_bind_idx) {
+                    const Location image_bind_loc = bind_loc.dot(Field::pBinds, image_bind_idx);
+                    const VkSparseImageMemoryBind &memory_bind = image_bind.pBinds[image_bind_idx];
+                    skip |= ValidateSparseImageMemoryBind(image_state.get(), memory_bind, bind_loc, image_bind_loc);
                 }
             }
         }
