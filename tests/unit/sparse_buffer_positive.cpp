@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2023 The Khronos Group Inc.
- * Copyright (c) 2023 Valve Corporation
- * Copyright (c) 2023 LunarG, Inc.
- * Copyright (c) 2023 Collabora, Inc.
+ * Copyright (c) 2024 The Khronos Group Inc.
+ * Copyright (c) 2024 Valve Corporation
+ * Copyright (c) 2024 LunarG, Inc.
+ * Copyright (c) 2024 Collabora, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,8 @@
 
 TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy) {
     TEST_DESCRIPTION("Test correct non overlapping sparse buffers' copy");
-
+    AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
-
-    if (!m_device->phy().features().sparseBinding) {
-        GTEST_SKIP() << "Requires unsupported sparseBinding feature.";
-    }
 
     const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
     if (!sparse_index) {
@@ -99,20 +95,16 @@ TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy) {
     submit_info.pWaitDstStageMask = &mask;
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
 
     // Wait for operations to finish before destroying anything
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy2) {
     TEST_DESCRIPTION("Non overlapping ranges copies should not trigger errors");
-
+    AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
-
-    if (!m_device->phy().features().sparseBinding) {
-        GTEST_SKIP() << "Requires unsupported sparseBinding feature.";
-    }
 
     const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
     if (!sparse_index) {
@@ -184,20 +176,16 @@ TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy2) {
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
 
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
 
     // Wait for operations to finish before destroying anything
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy3) {
     TEST_DESCRIPTION("Test that overlaps are computed in buffer space, not memory space");
-
+    AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
-
-    if (!m_device->phy().features().sparseBinding) {
-        GTEST_SKIP() << "Requires unsupported sparseBinding feature.";
-    }
 
     const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
     if (!sparse_index) {
@@ -247,9 +235,9 @@ TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy3) {
     bind_info.signalSemaphoreCount = 1;
     bind_info.pSignalSemaphores = &semaphore.handle();
 
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    vkt::Queue* sparse_queue = m_device->graphics_queues()[sparse_index.value()];
     vkt::Fence sparse_queue_fence(*m_device);
-    vk::QueueBindSparse(sparse_queue, 1, &bind_info, sparse_queue_fence);
+    vk::QueueBindSparse(sparse_queue->handle(), 1, &bind_info, sparse_queue_fence);
     ASSERT_EQ(VK_SUCCESS, sparse_queue_fence.wait(kWaitTimeout));
     // Set up complete
 
@@ -266,21 +254,17 @@ TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy3) {
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
 
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
 
     // Wait for operations to finish before destroying anything
-    vk::QueueWaitIdle(m_default_queue);
-    vk::QueueWaitIdle(sparse_queue);
+    m_default_queue->wait();
+    sparse_queue->wait();
 }
 
 TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy4) {
-    TEST_DESCRIPTION("Test coyping from a range that spans two different memory chunks");
-
+    TEST_DESCRIPTION("Test copying from a range that spans two different memory chunks");
+    AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
-
-    if (!m_device->phy().features().sparseBinding) {
-        GTEST_SKIP() << "Requires unsupported sparseBinding feature.";
-    }
 
     const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
     if (!sparse_index) {
@@ -327,9 +311,9 @@ TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy4) {
     bind_info.signalSemaphoreCount = 1;
     bind_info.pSignalSemaphores = &semaphore.handle();
 
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    vkt::Queue* sparse_queue = m_device->graphics_queues()[sparse_index.value()];
     vkt::Fence sparse_queue_fence(*m_device);
-    vk::QueueBindSparse(sparse_queue, 1, &bind_info, sparse_queue_fence);
+    vk::QueueBindSparse(sparse_queue->handle(), 1, &bind_info, sparse_queue_fence);
     ASSERT_EQ(VK_SUCCESS, sparse_queue_fence.wait(kWaitTimeout));
     // Set up complete
 
@@ -351,9 +335,23 @@ TEST_F(PositiveSparseBuffer, NonOverlappingBufferCopy4) {
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
 
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
 
     // Wait for operations to finish before destroying anything
-    vk::QueueWaitIdle(m_default_queue);
-    vk::QueueWaitIdle(sparse_queue);
+    m_default_queue->wait();
+    sparse_queue->wait();
+}
+
+TEST_F(PositiveSparseBuffer, BindSparseEmpty) {
+    TEST_DESCRIPTION("Test submitting empty queue bind sparse");
+    AddRequiredFeature(vkt::Feature::sparseBinding);
+    RETURN_IF_SKIP(Init());
+
+    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
+    if (!sparse_index) {
+        GTEST_SKIP() << "Required queue families not present";
+    }
+
+    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    vk::QueueBindSparse(sparse_queue, 0u, nullptr, VK_NULL_HANDLE);
 }

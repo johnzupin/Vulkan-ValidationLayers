@@ -601,14 +601,8 @@ TEST_F(VkPortabilitySubsetTest, PortabilitySubsetColorBlendFactor) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state3_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(extended_dynamic_state3_features);
-    if (!extended_dynamic_state3_features.extendedDynamicState3ColorBlendEquation) {
-        GTEST_SKIP() << "extendedDynamicState3ColorBlendEquation not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &extended_dynamic_state3_features));
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEquation);
+    RETURN_IF_SKIP(Init());
 
     VkColorBlendEquationEXT color_blend_equation = {
         VK_BLEND_FACTOR_CONSTANT_ALPHA, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE,
@@ -628,4 +622,28 @@ TEST_F(VkPortabilitySubsetTest, PortabilitySubsetColorBlendFactor) {
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->end();
+}
+
+TEST_F(VkPortabilitySubsetTest, InstanceCreateEnumerate) {
+    TEST_DESCRIPTION("Validate creating instances with VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR.");
+
+    auto ici = GetInstanceCreateInfo();
+    ici.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    ici.enabledExtensionCount = 1;
+
+    VkInstance local_instance;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkInstanceCreateInfo-flags-06559");
+    vk::CreateInstance(&ici, nullptr, &local_instance);
+    m_errorMonitor->VerifyFound();
+
+    if (InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+        std::vector<const char *> enabled_extensions = {VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+                                                        VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+        ici.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions.size());
+        ici.ppEnabledExtensionNames = enabled_extensions.data();
+
+        ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&ici, nullptr, &local_instance));
+        vk::DestroyInstance(local_instance, nullptr);
+    }
 }

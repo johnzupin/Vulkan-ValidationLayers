@@ -16,7 +16,7 @@
 #include "../framework/descriptor_helper.h"
 #include "../framework/render_pass_helper.h"
 
-TEST_F(VkPositiveLayerTest, TestShaderInputAndOutputComponents) {
+TEST_F(PositiveShaderInterface, InputAndOutputComponents) {
     TEST_DESCRIPTION("Test shader layout in and out with different components.");
 
     RETURN_IF_SKIP(Init());
@@ -123,7 +123,7 @@ TEST_F(VkPositiveLayerTest, TestShaderInputAndOutputComponents) {
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 }
 
-TEST_F(VkPositiveLayerTest, TestShaderInputAndOutputStructComponents) {
+TEST_F(PositiveShaderInterface, InputAndOutputStructComponents) {
     TEST_DESCRIPTION("Test shader interface with structs.");
 
     RETURN_IF_SKIP(Init());
@@ -175,8 +175,7 @@ TEST_F(PositiveShaderInterface, RelaxedBlockLayout) {
     TEST_DESCRIPTION("Create a shader that requires relaxed block layout.");
 
     AddRequiredExtensions(VK_KHR_RELAXED_BLOCK_LAYOUT_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // Vertex shader requiring relaxed layout.
@@ -335,10 +334,9 @@ TEST_F(PositiveShaderInterface, RelaxedTypeMatch) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1); // At least 1.1 is required for maintenance4
     AddRequiredExtensions(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance4FeaturesKHR maintenance_4_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(maintenance_4_features);
-    RETURN_IF_SKIP(InitState(nullptr, &maintenance_4_features));
+    AddRequiredFeature(vkt::Feature::maintenance4);
+    RETURN_IF_SKIP(Init());
+
     InitRenderTarget();
 
     char const *vsSource = R"glsl(
@@ -374,12 +372,9 @@ TEST_F(PositiveShaderInterface, RelaxedTypeMatch) {
 TEST_F(PositiveShaderInterface, TessPerVertex) {
     TEST_DESCRIPTION("Test that pipeline validation accepts per-vertex variables passed between the TCS and TES stages");
 
+    AddRequiredFeature(vkt::Feature::tessellationShader);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-
-    if (!m_device->phy().features().tessellationShader) {
-        GTEST_SKIP() << "Device does not support tessellation shaders";
-    }
 
     char const *tcsSource = R"glsl(
         #version 450
@@ -424,12 +419,9 @@ TEST_F(PositiveShaderInterface, GeometryInputBlockPositive) {
         "Test that pipeline validation accepts a user-defined interface block passed into the geometry shader. This is interesting "
         "because the 'extra' array level is not present on the member type, but on the block instance.");
 
+    AddRequiredFeature(vkt::Feature::geometryShader);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-
-    if (!m_device->phy().features().geometryShader) {
-        GTEST_SKIP() << "Device does not support geometry shaders";
-    }
 
     char const *vsSource = R"glsl(
         #version 450
@@ -734,7 +726,7 @@ TEST_F(PositiveShaderInterface, InputAttachmentDepthStencil) {
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 }
 
-TEST_F(VkPositiveLayerTest, FragmentOutputNotConsumedButAlphaToCoverageEnabled) {
+TEST_F(PositiveShaderInterface, FragmentOutputNotConsumedButAlphaToCoverageEnabled) {
     TEST_DESCRIPTION(
         "Test that no warning is produced when writing to non-existing color attachment if alpha to coverage is enabled.");
 
@@ -789,7 +781,7 @@ TEST_F(PositiveShaderInterface, DISABLED_InputOutputMatch2) {
     pipe.CreateGraphicsPipeline();
 }
 
-TEST_F(VkPositiveLayerTest, TestShaderInputOutputMatch) {
+TEST_F(PositiveShaderInterface, InputOutputMatch) {
     TEST_DESCRIPTION("Test matching vertex shader output with fragment shader input.");
 
     RETURN_IF_SKIP(Init());
@@ -1288,11 +1280,9 @@ TEST_F(PositiveShaderInterface, MultidimensionalArrayDims2) {
 TEST_F(PositiveShaderInterface, MultidimensionalArray64bit) {
     TEST_DESCRIPTION("Make sure multidimensional arrays are handled for 64bits");
 
+    AddRequiredFeature(vkt::Feature::shaderFloat64);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-    if (!m_device->phy().features().shaderFloat64) {
-        GTEST_SKIP() << "Device does not support 64bit floats";
-    }
 
     char const *vsSource = R"glsl(
         #version 450

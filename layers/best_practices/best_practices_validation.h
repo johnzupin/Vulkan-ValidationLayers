@@ -241,7 +241,7 @@ class DeviceMemory : public vvl::DeviceMemory {
   public:
     DeviceMemory(VkDeviceMemory mem, const VkMemoryAllocateInfo* p_alloc_info, uint64_t fake_address,
                  const VkMemoryType& memory_type, const VkMemoryHeap& memory_heap,
-                 std::optional<DedicatedBinding>&& dedicated_binding, uint32_t physical_device_count)
+                 std::optional<vvl::DedicatedBinding>&& dedicated_binding, uint32_t physical_device_count)
         : vvl::DeviceMemory(mem, p_alloc_info, fake_address, memory_type, memory_heap, std::move(dedicated_binding),
                             physical_device_count) {}
 
@@ -331,7 +331,6 @@ class CommandBuffer : public vvl::CommandBuffer {
     RenderPassState render_pass_state;
     CommandBufferStateNV nv;
     uint64_t num_submits = 0;
-    bool is_one_time_submit = false;
 
     std::vector<uint8_t> push_constant_data_set;
     void UnbindResources() { push_constant_data_set.clear(); }
@@ -580,9 +579,12 @@ class BestPractices : public ValidationStateTracker {
                                        const VkSubpassEndInfo* pSubpassEndInfo, const RecordObject& record_obj) override;
     void RecordCmdNextSubpass(VkCommandBuffer commandBuffer);
 
+    void RecordCmdPushConstants(VkCommandBuffer commandBuffer, uint32_t offset, uint32_t size);
     void PostCallRecordCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags,
                                         uint32_t offset, uint32_t size, const void* pValues,
                                         const RecordObject& record_obj) override;
+    void PostCallRecordCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfoKHR* pPushConstantsInfo,
+                                            const RecordObject& record_obj) override;
 
     void PreCallRecordCmdEndRenderPass(VkCommandBuffer commandBuffer, const RecordObject& record_obj) override;
     void PreCallRecordCmdEndRenderPass2(VkCommandBuffer commandBuffer, const VkSubpassEndInfo* pSubpassEndInfo,
@@ -1022,7 +1024,7 @@ class BestPractices : public ValidationStateTracker {
     std::shared_ptr<vvl::DeviceMemory> CreateDeviceMemoryState(VkDeviceMemory mem, const VkMemoryAllocateInfo* p_alloc_info,
                                                                uint64_t fake_address, const VkMemoryType& memory_type,
                                                                const VkMemoryHeap& memory_heap,
-                                                               std::optional<DedicatedBinding>&& dedicated_binding,
+                                                               std::optional<vvl::DedicatedBinding>&& dedicated_binding,
                                                                uint32_t physical_device_count) final {
         return std::static_pointer_cast<vvl::DeviceMemory>(std::make_shared<bp_state::DeviceMemory>(
             mem, p_alloc_info, fake_address, memory_type, memory_heap, std::move(dedicated_binding), physical_device_count));
@@ -1058,10 +1060,8 @@ class BestPractices : public ValidationStateTracker {
     bool VendorCheckEnabled(BPVendorFlags vendors) const;
     const char* VendorSpecificTag(BPVendorFlags vendors) const;
 
-    void RecordCmdDrawTypeArm(bp_state::CommandBuffer& cmd_state, uint32_t draw_count);
-    void RecordCmdDrawTypeNVIDIA(bp_state::CommandBuffer& cmd_state);
-
-    void AddDeferredQueueOperations(bp_state::CommandBuffer& cb);
+    void RecordCmdDrawTypeArm(bp_state::CommandBuffer& cb_state, uint32_t draw_count);
+    void RecordCmdDrawTypeNVIDIA(bp_state::CommandBuffer& cb_state);
 
     // Get BestPractices-specific for the current instance
     bp_state::PhysicalDevice* GetPhysicalDeviceState() { return static_cast<bp_state::PhysicalDevice*>(physical_device_state); }
@@ -1069,11 +1069,11 @@ class BestPractices : public ValidationStateTracker {
         return static_cast<const bp_state::PhysicalDevice*>(physical_device_state);
     }
 
-    void RecordAttachmentClearAttachments(bp_state::CommandBuffer& cmd_state, uint32_t fb_attachment, uint32_t color_attachment,
+    void RecordAttachmentClearAttachments(bp_state::CommandBuffer& cb_state, uint32_t fb_attachment, uint32_t color_attachment,
                                           VkImageAspectFlags aspects, uint32_t rectCount, const VkClearRect* pRects);
-    void RecordAttachmentAccess(bp_state::CommandBuffer& cmd_state, uint32_t attachment, VkImageAspectFlags aspects);
-    bool ClearAttachmentsIsFullClear(const bp_state::CommandBuffer& cmd, uint32_t rectCount, const VkClearRect* pRects) const;
-    bool ValidateClearAttachment(const bp_state::CommandBuffer& cmd, uint32_t fb_attachment, uint32_t color_attachment,
+    void RecordAttachmentAccess(bp_state::CommandBuffer& cb_state, uint32_t attachment, VkImageAspectFlags aspects);
+    bool ClearAttachmentsIsFullClear(const bp_state::CommandBuffer& cb_state, uint32_t rectCount, const VkClearRect* pRects) const;
+    bool ValidateClearAttachment(const bp_state::CommandBuffer& cb_state, uint32_t fb_attachment, uint32_t color_attachment,
                                  VkImageAspectFlags aspects, const Location& loc) const;
 
     bool ValidateCmdEndRenderPass(VkCommandBuffer commandBuffer, const Location& loc) const;
@@ -1083,27 +1083,27 @@ class BestPractices : public ValidationStateTracker {
 
     bool ValidateBindMemory(VkDevice device, VkDeviceMemory memory, const Location& loc) const;
 
-    void RecordSetDepthTestState(bp_state::CommandBuffer& cmd_state, VkCompareOp new_depth_compare_op, bool new_depth_test_enable);
+    void RecordSetDepthTestState(bp_state::CommandBuffer& cb_state, VkCompareOp new_depth_compare_op, bool new_depth_test_enable);
 
     void RecordCmdBeginRenderingCommon(VkCommandBuffer commandBuffer);
     void RecordCmdEndRenderingCommon(VkCommandBuffer commandBuffer);
 
-    void RecordBindZcullScope(bp_state::CommandBuffer& cmd_state, VkImage depth_attachment,
+    void RecordBindZcullScope(bp_state::CommandBuffer& cb_state, VkImage depth_attachment,
                               const VkImageSubresourceRange& subresource_range);
-    void RecordUnbindZcullScope(bp_state::CommandBuffer& cmd_state);
-    void RecordResetScopeZcullDirection(bp_state::CommandBuffer& cmd_state);
-    void RecordResetZcullDirection(bp_state::CommandBuffer& cmd_state, VkImage depth_image,
+    void RecordUnbindZcullScope(bp_state::CommandBuffer& cb_state);
+    void RecordResetScopeZcullDirection(bp_state::CommandBuffer& cb_state);
+    void RecordResetZcullDirection(bp_state::CommandBuffer& cb_state, VkImage depth_image,
                                    const VkImageSubresourceRange& subresource_range);
 
-    void RecordSetScopeZcullDirection(bp_state::CommandBuffer& cmd_state, bp_state::CommandBufferStateNV::ZcullDirection mode);
-    void RecordSetZcullDirection(bp_state::CommandBuffer& cmd_state, VkImage depth_image,
+    void RecordSetScopeZcullDirection(bp_state::CommandBuffer& cb_state, bp_state::CommandBufferStateNV::ZcullDirection mode);
+    void RecordSetZcullDirection(bp_state::CommandBuffer& cb_state, VkImage depth_image,
                                  const VkImageSubresourceRange& subresource_range,
                                  bp_state::CommandBufferStateNV::ZcullDirection mode);
 
-    void RecordZcullDraw(bp_state::CommandBuffer& cmd_state);
+    void RecordZcullDraw(bp_state::CommandBuffer& cb_state);
 
-    bool ValidateZcullScope(const bp_state::CommandBuffer& cmd_state, const Location& loc) const;
-    bool ValidateZcull(const bp_state::CommandBuffer& cmd_state, VkImage image, const VkImageSubresourceRange& subresource_range,
+    bool ValidateZcullScope(const bp_state::CommandBuffer& cb_state, const Location& loc) const;
+    bool ValidateZcull(const bp_state::CommandBuffer& cb_state, VkImage image, const VkImageSubresourceRange& subresource_range,
                        const Location& loc) const;
 
     void RecordClearColor(VkFormat format, const VkClearColorValue& clear_value);

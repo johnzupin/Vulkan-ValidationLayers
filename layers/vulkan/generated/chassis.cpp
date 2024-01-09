@@ -3,11 +3,11 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google Inc.
- * Copyright (c) 2023-2023 RasterGrid Kft.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google Inc.
+ * Copyright (c) 2023-2024 RasterGrid Kft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,10 +60,11 @@ bool wrap_handles = true;
 #include "chassis_dispatch_helper.h"
 
 // Extension exposed by the validation layer
-static constexpr std::array<VkExtensionProperties, 3> kInstanceExtensions = {
+static constexpr std::array<VkExtensionProperties, 4> kInstanceExtensions = {
     VkExtensionProperties{VK_EXT_DEBUG_REPORT_EXTENSION_NAME, VK_EXT_DEBUG_REPORT_SPEC_VERSION},
     VkExtensionProperties{VK_EXT_DEBUG_UTILS_EXTENSION_NAME, VK_EXT_DEBUG_UTILS_SPEC_VERSION},
     VkExtensionProperties{VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME, VK_EXT_VALIDATION_FEATURES_SPEC_VERSION},
+    VkExtensionProperties{VK_EXT_LAYER_SETTINGS_EXTENSION_NAME, VK_EXT_LAYER_SETTINGS_SPEC_VERSION},
 };
 static constexpr std::array<VkExtensionProperties, 3> kDeviceExtensions = {
     VkExtensionProperties{VK_EXT_VALIDATION_CACHE_EXTENSION_NAME, VK_EXT_VALIDATION_CACHE_SPEC_VERSION},
@@ -983,6 +984,15 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateBuffer(VkDevice device, const VkBufferCreat
 }
 
 // Handle tooling queries manually as this is a request for layer information
+static const VkPhysicalDeviceToolPropertiesEXT khronos_layer_tool_props = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES_EXT,
+    nullptr,
+    "Khronos Validation Layer",
+    STRINGIFY(VK_HEADER_VERSION),
+    VK_TOOL_PURPOSE_VALIDATION_BIT_EXT | VK_TOOL_PURPOSE_ADDITIONAL_FEATURES_BIT_EXT | VK_TOOL_PURPOSE_DEBUG_REPORTING_BIT_EXT |
+        VK_TOOL_PURPOSE_DEBUG_MARKERS_BIT_EXT,
+    "Khronos Validation Layer",
+    OBJECT_LAYER_NAME};
 
 VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceToolPropertiesEXT(VkPhysicalDevice physicalDevice, uint32_t* pToolCount,
                                                                   VkPhysicalDeviceToolPropertiesEXT* pToolProperties) {
@@ -991,19 +1001,9 @@ VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceToolPropertiesEXT(VkPhysicalDevi
     ErrorObject error_obj(vvl::Func::vkGetPhysicalDeviceToolPropertiesEXT,
                           VulkanTypedHandle(physicalDevice, kVulkanObjectTypePhysicalDevice));
 
-    static const VkPhysicalDeviceToolPropertiesEXT khronos_layer_tool_props = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES_EXT,
-        nullptr,
-        "Khronos Validation Layer",
-        STRINGIFY(VK_HEADER_VERSION),
-        VK_TOOL_PURPOSE_VALIDATION_BIT_EXT | VK_TOOL_PURPOSE_ADDITIONAL_FEATURES_BIT_EXT | VK_TOOL_PURPOSE_DEBUG_REPORTING_BIT_EXT |
-            VK_TOOL_PURPOSE_DEBUG_MARKERS_BIT_EXT,
-        "Khronos Validation Layer",
-        OBJECT_LAYER_NAME};
-
     auto original_pToolProperties = pToolProperties;
 
-    if (pToolProperties != nullptr) {
+    if (pToolProperties != nullptr && *pToolCount > 0) {
         *pToolProperties = khronos_layer_tool_props;
         pToolProperties = ((*pToolCount > 1) ? &pToolProperties[1] : nullptr);
         (*pToolCount)--;
@@ -1028,11 +1028,55 @@ VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceToolPropertiesEXT(VkPhysicalDevi
     if (original_pToolProperties != nullptr) {
         pToolProperties = original_pToolProperties;
     }
+    assert(*pToolCount != std::numeric_limits<uint32_t>::max());
     (*pToolCount)++;
 
     for (ValidationObject* intercept : layer_data->object_dispatch) {
         auto lock = intercept->WriteLock();
         intercept->PostCallRecordGetPhysicalDeviceToolPropertiesEXT(physicalDevice, pToolCount, pToolProperties, record_obj);
+    }
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceToolProperties(VkPhysicalDevice physicalDevice, uint32_t* pToolCount,
+                                                               VkPhysicalDeviceToolProperties* pToolProperties) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(physicalDevice), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkGetPhysicalDeviceToolProperties,
+                          VulkanTypedHandle(physicalDevice, kVulkanObjectTypePhysicalDevice));
+
+    auto original_pToolProperties = pToolProperties;
+
+    if (pToolProperties != nullptr && *pToolCount > 0) {
+        *pToolProperties = khronos_layer_tool_props;
+        pToolProperties = ((*pToolCount > 1) ? &pToolProperties[1] : nullptr);
+        (*pToolCount)--;
+    }
+
+    for (const ValidationObject* intercept : layer_data->object_dispatch) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, error_obj);
+        if (skip) return VK_ERROR_VALIDATION_FAILED_EXT;
+    }
+
+    RecordObject record_obj(vvl::Func::vkGetPhysicalDeviceToolProperties);
+    for (ValidationObject* intercept : layer_data->object_dispatch) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, record_obj);
+    }
+
+    VkResult result = DispatchGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties);
+    record_obj.result = result;
+
+    if (original_pToolProperties != nullptr) {
+        pToolProperties = original_pToolProperties;
+    }
+    assert(*pToolCount != std::numeric_limits<uint32_t>::max());
+    (*pToolCount)++;
+
+    for (ValidationObject* intercept : layer_data->object_dispatch) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, record_obj);
     }
     return result;
 }
@@ -4849,31 +4893,6 @@ VKAPI_ATTR uint64_t VKAPI_CALL GetDeviceMemoryOpaqueCaptureAddress(VkDevice devi
          layer_data->intercept_vectors[InterceptIdPostCallRecordGetDeviceMemoryOpaqueCaptureAddress]) {
         auto lock = intercept->WriteLock();
         intercept->PostCallRecordGetDeviceMemoryOpaqueCaptureAddress(device, pInfo, record_obj);
-    }
-    return result;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceToolProperties(VkPhysicalDevice physicalDevice, uint32_t* pToolCount,
-                                                               VkPhysicalDeviceToolProperties* pToolProperties) {
-    auto layer_data = GetLayerDataPtr(get_dispatch_key(physicalDevice), layer_data_map);
-    bool skip = false;
-    ErrorObject error_obj(vvl::Func::vkGetPhysicalDeviceToolProperties,
-                          VulkanTypedHandle(physicalDevice, kVulkanObjectTypePhysicalDevice));
-    for (const ValidationObject* intercept : layer_data->object_dispatch) {
-        auto lock = intercept->ReadLock();
-        skip |= intercept->PreCallValidateGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, error_obj);
-        if (skip) return VK_ERROR_VALIDATION_FAILED_EXT;
-    }
-    RecordObject record_obj(vvl::Func::vkGetPhysicalDeviceToolProperties);
-    for (ValidationObject* intercept : layer_data->object_dispatch) {
-        auto lock = intercept->WriteLock();
-        intercept->PreCallRecordGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, record_obj);
-    }
-    VkResult result = DispatchGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties);
-    record_obj.result = result;
-    for (ValidationObject* intercept : layer_data->object_dispatch) {
-        auto lock = intercept->WriteLock();
-        intercept->PostCallRecordGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties, record_obj);
     }
     return result;
 }
@@ -8760,7 +8779,6 @@ VKAPI_ATTR VkResult VKAPI_CALL UnmapMemory2KHR(VkDevice device, const VkMemoryUn
     return result;
 }
 
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(
     VkPhysicalDevice physicalDevice, const VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR* pQualityLevelInfo,
     VkVideoEncodeQualityLevelPropertiesKHR* pQualityLevelProperties) {
@@ -8843,7 +8861,6 @@ VKAPI_ATTR void VKAPI_CALL CmdEncodeVideoKHR(VkCommandBuffer commandBuffer, cons
     }
 }
 
-#endif  // VK_ENABLE_BETA_EXTENSIONS
 VKAPI_ATTR void VKAPI_CALL CmdSetEvent2KHR(VkCommandBuffer commandBuffer, VkEvent event, const VkDependencyInfo* pDependencyInfo) {
     auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
     bool skip = false;
@@ -9421,6 +9438,153 @@ VKAPI_ATTR VkResult VKAPI_CALL GetCalibratedTimestampsKHR(VkDevice device, uint3
                                                             record_obj);
     }
     return result;
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer,
+                                                     const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdBindDescriptorSets2KHR, VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallValidateCmdBindDescriptorSets2KHR]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdBindDescriptorSets2KHR(commandBuffer, pBindDescriptorSetsInfo, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdBindDescriptorSets2KHR);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdBindDescriptorSets2KHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdBindDescriptorSets2KHR(commandBuffer, pBindDescriptorSetsInfo, record_obj);
+    }
+    DispatchCmdBindDescriptorSets2KHR(commandBuffer, pBindDescriptorSetsInfo);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdBindDescriptorSets2KHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdBindDescriptorSets2KHR(commandBuffer, pBindDescriptorSetsInfo, record_obj);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfoKHR* pPushConstantsInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdPushConstants2KHR, VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallValidateCmdPushConstants2KHR]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdPushConstants2KHR(commandBuffer, pPushConstantsInfo, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdPushConstants2KHR);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdPushConstants2KHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdPushConstants2KHR(commandBuffer, pPushConstantsInfo, record_obj);
+    }
+    DispatchCmdPushConstants2KHR(commandBuffer, pPushConstantsInfo);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdPushConstants2KHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdPushConstants2KHR(commandBuffer, pPushConstantsInfo, record_obj);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
+                                                    const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdPushDescriptorSet2KHR, VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallValidateCmdPushDescriptorSet2KHR]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdPushDescriptorSet2KHR(commandBuffer, pPushDescriptorSetInfo, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdPushDescriptorSet2KHR);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdPushDescriptorSet2KHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdPushDescriptorSet2KHR(commandBuffer, pPushDescriptorSetInfo, record_obj);
+    }
+    DispatchCmdPushDescriptorSet2KHR(commandBuffer, pPushDescriptorSetInfo);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdPushDescriptorSet2KHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdPushDescriptorSet2KHR(commandBuffer, pPushDescriptorSetInfo, record_obj);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate2KHR(
+    VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdPushDescriptorSetWithTemplate2KHR,
+                          VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallValidateCmdPushDescriptorSetWithTemplate2KHR]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdPushDescriptorSetWithTemplate2KHR(commandBuffer, pPushDescriptorSetWithTemplateInfo,
+                                                                               error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdPushDescriptorSetWithTemplate2KHR);
+    for (ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallRecordCmdPushDescriptorSetWithTemplate2KHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdPushDescriptorSetWithTemplate2KHR(commandBuffer, pPushDescriptorSetWithTemplateInfo, record_obj);
+    }
+    DispatchCmdPushDescriptorSetWithTemplate2KHR(commandBuffer, pPushDescriptorSetWithTemplateInfo);
+    for (ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPostCallRecordCmdPushDescriptorSetWithTemplate2KHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdPushDescriptorSetWithTemplate2KHR(commandBuffer, pPushDescriptorSetWithTemplateInfo,
+                                                                      record_obj);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetDescriptorBufferOffsets2EXT(
+    VkCommandBuffer commandBuffer, const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdSetDescriptorBufferOffsets2EXT,
+                          VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallValidateCmdSetDescriptorBufferOffsets2EXT]) {
+        auto lock = intercept->ReadLock();
+        skip |=
+            intercept->PreCallValidateCmdSetDescriptorBufferOffsets2EXT(commandBuffer, pSetDescriptorBufferOffsetsInfo, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdSetDescriptorBufferOffsets2EXT);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdSetDescriptorBufferOffsets2EXT]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdSetDescriptorBufferOffsets2EXT(commandBuffer, pSetDescriptorBufferOffsetsInfo, record_obj);
+    }
+    DispatchCmdSetDescriptorBufferOffsets2EXT(commandBuffer, pSetDescriptorBufferOffsetsInfo);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdSetDescriptorBufferOffsets2EXT]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdSetDescriptorBufferOffsets2EXT(commandBuffer, pSetDescriptorBufferOffsetsInfo, record_obj);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorBufferEmbeddedSamplers2EXT(
+    VkCommandBuffer commandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdBindDescriptorBufferEmbeddedSamplers2EXT,
+                          VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallValidateCmdBindDescriptorBufferEmbeddedSamplers2EXT]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdBindDescriptorBufferEmbeddedSamplers2EXT(
+            commandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdBindDescriptorBufferEmbeddedSamplers2EXT);
+    for (ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT(commandBuffer,
+                                                                            pBindDescriptorBufferEmbeddedSamplersInfo, record_obj);
+    }
+    DispatchCmdBindDescriptorBufferEmbeddedSamplers2EXT(commandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo);
+    for (ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPostCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT(commandBuffer,
+                                                                             pBindDescriptorBufferEmbeddedSamplersInfo, record_obj);
+    }
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateDebugReportCallbackEXT(VkInstance instance,
@@ -17215,11 +17379,9 @@ const vvl::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkGetPipelineExecutableInternalRepresentationsKHR", {kFuncTypeDev, (void*)GetPipelineExecutableInternalRepresentationsKHR}},
     {"vkMapMemory2KHR", {kFuncTypeDev, (void*)MapMemory2KHR}},
     {"vkUnmapMemory2KHR", {kFuncTypeDev, (void*)UnmapMemory2KHR}},
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     {"vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR", {kFuncTypePdev, (void*)GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR}},
     {"vkGetEncodedVideoSessionParametersKHR", {kFuncTypeDev, (void*)GetEncodedVideoSessionParametersKHR}},
     {"vkCmdEncodeVideoKHR", {kFuncTypeDev, (void*)CmdEncodeVideoKHR}},
-#endif  // VK_ENABLE_BETA_EXTENSIONS
     {"vkCmdSetEvent2KHR", {kFuncTypeDev, (void*)CmdSetEvent2KHR}},
     {"vkCmdResetEvent2KHR", {kFuncTypeDev, (void*)CmdResetEvent2KHR}},
     {"vkCmdWaitEvents2KHR", {kFuncTypeDev, (void*)CmdWaitEvents2KHR}},
@@ -17245,6 +17407,12 @@ const vvl::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR", {kFuncTypePdev, (void*)GetPhysicalDeviceCooperativeMatrixPropertiesKHR}},
     {"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR", {kFuncTypePdev, (void*)GetPhysicalDeviceCalibrateableTimeDomainsKHR}},
     {"vkGetCalibratedTimestampsKHR", {kFuncTypeDev, (void*)GetCalibratedTimestampsKHR}},
+    {"vkCmdBindDescriptorSets2KHR", {kFuncTypeDev, (void*)CmdBindDescriptorSets2KHR}},
+    {"vkCmdPushConstants2KHR", {kFuncTypeDev, (void*)CmdPushConstants2KHR}},
+    {"vkCmdPushDescriptorSet2KHR", {kFuncTypeDev, (void*)CmdPushDescriptorSet2KHR}},
+    {"vkCmdPushDescriptorSetWithTemplate2KHR", {kFuncTypeDev, (void*)CmdPushDescriptorSetWithTemplate2KHR}},
+    {"vkCmdSetDescriptorBufferOffsets2EXT", {kFuncTypeDev, (void*)CmdSetDescriptorBufferOffsets2EXT}},
+    {"vkCmdBindDescriptorBufferEmbeddedSamplers2EXT", {kFuncTypeDev, (void*)CmdBindDescriptorBufferEmbeddedSamplers2EXT}},
     {"vkCreateDebugReportCallbackEXT", {kFuncTypeInst, (void*)CreateDebugReportCallbackEXT}},
     {"vkDestroyDebugReportCallbackEXT", {kFuncTypeInst, (void*)DestroyDebugReportCallbackEXT}},
     {"vkDebugReportMessageEXT", {kFuncTypeInst, (void*)DebugReportMessageEXT}},

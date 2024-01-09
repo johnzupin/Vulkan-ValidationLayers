@@ -19,9 +19,7 @@ TEST_F(PositiveShaderSpirv, NonSemanticInfo) {
     // Verifies the ability to use non-semantic extended instruction sets when the extension is enabled
     TEST_DESCRIPTION("Create a shader that uses SPV_KHR_non_semantic_info.");
     AddRequiredExtensions(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // compute shader using a non-semantic extended instruction set.
@@ -47,8 +45,7 @@ TEST_F(PositiveShaderSpirv, NonSemanticInfo) {
 
 TEST_F(PositiveShaderSpirv, GroupDecorations) {
     TEST_DESCRIPTION("Test shader validation support for group decorations.");
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     const std::string spv_source = R"(
@@ -178,13 +175,8 @@ TEST_F(PositiveShaderSpirv, CapabilityExtension1of2) {
     TEST_DESCRIPTION("Create a shader in which uses a non-unique capability ID extension, 1 of 2");
 
     AddRequiredExtensions(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
-
-    // These tests require that the device support multiViewport
-    if (!m_device->phy().features().multiViewport) {
-        GTEST_SKIP() << "Device does not support multiViewport, test skipped.";
-    }
+    AddRequiredFeature(vkt::Feature::multiViewport);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // Vertex shader using viewport array capability
@@ -209,15 +201,9 @@ TEST_F(PositiveShaderSpirv, CapabilityExtension2of2) {
     // Verifies the ability to deal with a shader that declares a non-unique SPIRV capability ID
     TEST_DESCRIPTION("Create a shader in which uses a non-unique capability ID extension, 2 of 2");
 
-    // Need to use SPV_EXT_shader_viewport_index_layer
     AddRequiredExtensions(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
-
-    // These tests require that the device support multiViewport
-    if (!m_device->phy().features().multiViewport) {
-        GTEST_SKIP() << "Device does not support multiViewport, test skipped.";
-    }
+    AddRequiredFeature(vkt::Feature::multiViewport);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // Vertex shader using viewport array capability
@@ -242,8 +228,7 @@ TEST_F(PositiveShaderSpirv, ShaderDrawParametersWithoutFeature) {
 
     SetTargetApiVersion(VK_API_VERSION_1_0);
     AddRequiredExtensions(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
     if (DeviceValidationVersion() != VK_API_VERSION_1_0) {
         GTEST_SKIP() << "requires Vulkan 1.0 exactly";
@@ -273,9 +258,7 @@ TEST_F(PositiveShaderSpirv, ShaderDrawParametersWithoutFeature11) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     char const *vsSource = R"glsl(
@@ -287,7 +270,7 @@ TEST_F(PositiveShaderSpirv, ShaderDrawParametersWithoutFeature11) {
     VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_GLSL_TRY);
 
     // make sure using SPIR-V 1.3 as extension is core and not needed in Vulkan then
-    if (VK_SUCCESS == vs.InitFromGLSLTry(false)) {
+    if (VK_SUCCESS == vs.InitFromGLSLTry()) {
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
         };
@@ -326,7 +309,7 @@ TEST_F(PositiveShaderSpirv, ShaderDrawParametersWithFeature) {
     VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_GLSL_TRY);
 
     // make sure using SPIR-V 1.3 as extension is core and not needed in Vulkan then
-    if (VK_SUCCESS == vs.InitFromGLSLTry(false)) {
+    if (VK_SUCCESS == vs.InitFromGLSLTry()) {
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {vs.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
         };
@@ -611,11 +594,8 @@ TEST_F(PositiveShaderSpirv, SpecializationWordBoundryOffset) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 
     // Make sure spec constants were updated correctly
     void *pData;
@@ -637,7 +617,7 @@ TEST_F(PositiveShaderSpirv, Spirv16Vulkan13) {
     VkShaderObj vs(this, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_3);
 }
 
-TEST_F(VkPositiveLayerTest, OpTypeArraySpecConstant) {
+TEST_F(PositiveShaderInterface, OpTypeArraySpecConstant) {
     TEST_DESCRIPTION("Make sure spec constants for a OpTypeArray doesn't assert");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
@@ -858,16 +838,8 @@ TEST_F(PositiveShaderSpirv, GeometryShaderPassthroughNV) {
     TEST_DESCRIPTION("Test to validate VK_NV_geometry_shader_passthrough");
 
     AddRequiredExtensions(VK_NV_GEOMETRY_SHADER_PASSTHROUGH_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceFeatures available_features = {};
-    GetPhysicalDeviceFeatures(&available_features);
-
-    if (!available_features.geometryShader) {
-        GTEST_SKIP() << "VkPhysicalDeviceFeatures::geometryShader is not supported";
-    }
-
-    RETURN_IF_SKIP(InitState());
+    AddRequiredFeature(vkt::Feature::geometryShader);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     const char vs_src[] = R"glsl(
@@ -1222,9 +1194,7 @@ TEST_F(PositiveShaderSpirv, ShaderFloatControl) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPhysicalDeviceFloatControlsProperties shader_float_control = vku::InitStructHelper();

@@ -21,6 +21,7 @@
 #include "generated/vk_function_pointers.h"
 #include "error_monitor.h"
 #include "test_framework.h"
+#include "feature_requirements.h"
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
 #include <android/log.h>
@@ -74,6 +75,7 @@ class VkRenderFramework : public VkTestFramework {
     VkPhysicalDevice gpu() const;
     VkRenderPass renderPass() const { return m_renderPass; }
     VkFramebuffer framebuffer() const { return m_framebuffer->handle(); }
+    VkQueue DefaultQueue() const { return m_default_queue->handle(); }
     ErrorMonitor &Monitor();
     const VkPhysicalDeviceProperties &physDevProps() const;
 
@@ -115,7 +117,7 @@ class VkRenderFramework : public VkTestFramework {
     // default to CommandPool Reset flag to allow recording multiple command buffers simpler
     void InitState(VkPhysicalDeviceFeatures *features = nullptr, void *create_device_pnext = nullptr,
                    const VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-
+    void InitStateWithRequirements(vkt::FeatureRequirements &feature_requirements);
     bool DeviceExtensionSupported(const char *extension_name, uint32_t spec_version = 0) const;
     bool DeviceExtensionSupported(VkPhysicalDevice, const char *, const char *name,
                                   uint32_t spec_version = 0) const {  // deprecated
@@ -139,19 +141,22 @@ class VkRenderFramework : public VkTestFramework {
     // are not enabled, but this can be overridden for individual test cases that explicitly test such use cases.
     void AllowPromotedExtensions() { allow_promoted_extensions_ = true; }
 
+    // Add a feature required for the test to be executed. The currently targeted API version is used to add the correct struct, so
+    // be sure to call SetTargetApiVersion before
+    void AddRequiredFeature(vkt::Feature feature);
+    // Add a feature that will be disabled when creating the device. The currently targeted API version is used to add the correct
+    // struct, so be sure to call SetTargetApiVersion before
+    void AddDisabledFeature(vkt::Feature feature);
+
     void *SetupValidationSettings(void *first_pnext);
 
     template <typename GLSLContainer>
-    std::vector<uint32_t> GLSLToSPV(VkShaderStageFlagBits stage, const GLSLContainer &code, const char *entry_point = "main",
-                                    const VkSpecializationInfo *spec_info = nullptr, const spv_target_env env = SPV_ENV_VULKAN_1_0,
-                                    bool debug = false) {
+    std::vector<uint32_t> GLSLToSPV(VkShaderStageFlagBits stage, const GLSLContainer &code,
+                                    const spv_target_env env = SPV_ENV_VULKAN_1_0) {
         std::vector<uint32_t> spv;
-        GLSLtoSPV(&m_device->phy().limits_, stage, code, spv, debug, env);
+        GLSLtoSPV(&m_device->phy().limits_, stage, code, spv, env);
         return spv;
     }
-
-    void DeviceWaitIdle() { m_device->wait(); }
-    void QueueWaitIdle() { vk::QueueWaitIdle(m_default_queue); }
 
     void SetDesiredFailureMsg(const VkFlags msgFlags, const std::string &msg) {
         m_errorMonitor->SetDesiredFailureMsg(msgFlags, msg);
@@ -183,6 +188,7 @@ class VkRenderFramework : public VkTestFramework {
     VkInstance instance_;
     VkPhysicalDevice gpu_ = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties physDevProps_;
+    vkt::FeatureRequirements feature_requirements_;
 
     uint32_t m_gpu_index;
     vkt::Device *m_device;
@@ -209,7 +215,7 @@ class VkRenderFramework : public VkTestFramework {
     VkClearColorValue m_clear_color;
     VkImageObj *m_depthStencil;
     // first graphics queue, used must often, don't overwrite, use Device class
-    VkQueue m_default_queue;
+    vkt::Queue *m_default_queue;
 
     // Requested extensions to enable at device creation time
     std::vector<const char *> m_required_extensions;
@@ -283,29 +289,13 @@ class VkImageObj : public vkt::Image {
 
     void InitNoLayout(const VkImageCreateInfo &create_info, VkMemoryPropertyFlags reqs = 0, bool memory = true);
 
-    //    void clear( CommandBuffer*, uint32_t[4] );
-
     void Layout(VkImageLayout const layout) { m_descriptorImageInfo.imageLayout = layout; }
-
-    VkDeviceMemory Memory() const { return Image::memory().handle(); }
-
-    void *MapMemory() { return Image::memory().map(); }
-
-    void UnmapMemory() { Image::memory().unmap(); }
 
     void ImageMemoryBarrier(vkt::CommandBuffer *cmd, VkImageAspectFlags aspect, VkFlags output_mask, VkFlags input_mask,
                             VkImageLayout image_layout, VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                             uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-
-    VkResult CopyImage(VkImageObj &src_image);
-
-    VkResult CopyImageOut(VkImageObj &dst_image);
-
-    std::array<std::array<uint32_t, 16>, 16> Read();
-
-    VkImage image() const { return handle(); }
 
     VkImageViewCreateInfo BasicViewCreatInfo(VkImageAspectFlags aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT) const {
         VkImageViewCreateInfo ci = vku::InitStructHelper();
@@ -338,17 +328,12 @@ class VkImageObj : public vkt::Image {
 
     void SetLayout(vkt::CommandBuffer *cmd_buf, VkImageAspectFlags aspect, VkImageLayout image_layout);
     void SetLayout(VkImageAspectFlags aspect, VkImageLayout image_layout);
-    void SetLayout(VkImageLayout image_layout) { SetLayout(aspect_mask(), image_layout); };
+    void SetLayout(VkImageLayout image_layout) { SetLayout(aspect_mask(format()), image_layout); };
 
     VkImageLayout Layout() const { return m_descriptorImageInfo.imageLayout; }
-    uint32_t width() const { return extent().width; }
-    uint32_t height() const { return extent().height; }
     vkt::Device *device() const { return m_device; }
 
   protected:
     vkt::Device *m_device = nullptr;
-    VkFormat m_format = VK_FORMAT_UNDEFINED;
-    uint32_t m_mipLevels = 0;
-    uint32_t m_arrayLayers = 0;
     VkDescriptorImageInfo m_descriptorImageInfo = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL};
 };

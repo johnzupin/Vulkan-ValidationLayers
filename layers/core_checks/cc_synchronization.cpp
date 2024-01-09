@@ -792,11 +792,10 @@ bool CoreChecks::ValidateRenderPassPipelineBarriers(const Location &outer_loc, c
         const Location barrier_loc = outer_loc.dot(Struct::VkImageMemoryBarrier, Field::pImageMemoryBarriers, i);
         skip |= state.ValidateAccess(barrier_loc, img_barrier.srcAccessMask, img_barrier.dstAccessMask);
 
-        if (VK_QUEUE_FAMILY_IGNORED != img_barrier.srcQueueFamilyIndex ||
-            VK_QUEUE_FAMILY_IGNORED != img_barrier.dstQueueFamilyIndex) {
+        if (img_barrier.srcQueueFamilyIndex != img_barrier.dstQueueFamilyIndex) {
             skip |= LogError("VUID-vkCmdPipelineBarrier-srcQueueFamilyIndex-01182", state.rp_handle,
                              barrier_loc.dot(Field::srcQueueFamilyIndex),
-                             "is %" PRIu32 " and dstQueueFamilyIndex is %" PRIu32 " but both must be VK_QUEUE_FAMILY_IGNORED.",
+                             "is %" PRIu32 " and dstQueueFamilyIndex is %" PRIu32 " but they must be equal.",
                              img_barrier.srcQueueFamilyIndex, img_barrier.dstQueueFamilyIndex);
         }
         // Secondary CBs can have null framebuffer so record will queue up validation in that case 'til FB is known
@@ -846,11 +845,10 @@ bool CoreChecks::ValidateRenderPassPipelineBarriers(const Location &outer_loc, c
         skip |= state.ValidateStage(barrier_loc, img_barrier.srcStageMask, img_barrier.dstStageMask);
         skip |= state.ValidateAccess(barrier_loc, img_barrier.srcAccessMask, img_barrier.dstAccessMask);
 
-        if (VK_QUEUE_FAMILY_IGNORED != img_barrier.srcQueueFamilyIndex ||
-            VK_QUEUE_FAMILY_IGNORED != img_barrier.dstQueueFamilyIndex) {
+        if (img_barrier.srcQueueFamilyIndex != img_barrier.dstQueueFamilyIndex) {
             skip |= LogError("VUID-vkCmdPipelineBarrier2-srcQueueFamilyIndex-01182", state.rp_handle,
                              barrier_loc.dot(Field::srcQueueFamilyIndex),
-                             "is %" PRIu32 " and dstQueueFamilyIndex is %" PRIu32 " but both must be VK_QUEUE_FAMILY_IGNORED.",
+                             "is %" PRIu32 " and dstQueueFamilyIndex is %" PRIu32 " but they must be equal.",
                              img_barrier.srcQueueFamilyIndex, img_barrier.dstQueueFamilyIndex);
         }
         // Secondary CBs can have null framebuffer so record will queue up validation in that case 'til FB is known
@@ -950,7 +948,7 @@ bool CoreChecks::ValidateAccessMask(const LogObjectList &objlist, const Location
     const auto expanded_pipeline_stages = sync_utils::ExpandPipelineStages(stage_mask, queue_flags);
 
     if (!enabled_features.rayQuery && (access_mask & VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR)) {
-        const auto illegal_pipeline_stages = allVkPipelineShaderStageBits2 & ~VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
+        const auto illegal_pipeline_stages = AllVkPipelineShaderStageBits2 & ~VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
         if (stage_mask & illegal_pipeline_stages) {
             // Select right vuid based on enabled extensions
             const auto &vuid = sync_vuid_maps::GetAccessMaskRayQueryVUIDSelector(access_mask_loc, device_extensions);
@@ -1673,14 +1671,23 @@ bool CoreChecks::ValidateImageBarrierAttachment(const Location &barrier_loc, vvl
                     sub_image_found = true;
                     break;
                 }
+                // Will also catch a "color resolve" attachment
                 if (!sub_image_found && sub_desc.pResolveAttachments &&
                     sub_desc.pResolveAttachments[j].attachment == attach_index) {
                     sub_image_layout = sub_desc.pResolveAttachments[j].layout;
                     sub_image_found = true;
                     if (image_ahb_format == 0) {
-                        skip |= LogError("VUID-vkCmdPipelineBarrier2-image-09374", rp_handle, image_loc,
+                        const auto &vuid = GetImageBarrierVUID(barrier_loc, ImageError::kRenderPassMismatchAhbZero);
+                        skip |= LogError(vuid, rp_handle, image_loc,
                                          "(%s) for subpass %" PRIu32 " was not created with an externalFormat.",
                                          FormatHandle(img_bar_image).c_str(), active_subpass);
+                    } else if (sub_desc.pColorAttachments && sub_desc.pColorAttachments[0].attachment != VK_ATTACHMENT_UNUSED) {
+                        const auto &vuid = GetImageBarrierVUID(barrier_loc, ImageError::kRenderPassMismatchColorUnused);
+                        skip |=
+                            LogError(vuid, rp_handle, image_loc,
+                                     "(%s) for subpass %" PRIu32 " the pColorAttachments[0].attachment is %" PRIu32
+                                     " instead of VK_ATTACHMENT_UNUSED.",
+                                     FormatHandle(img_bar_image).c_str(), active_subpass, sub_desc.pColorAttachments[0].attachment);
                     }
                     break;
                 }

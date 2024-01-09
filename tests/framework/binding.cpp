@@ -359,7 +359,7 @@ VkFormatProperties Device::format_properties(VkFormat format) {
     return data;
 }
 
-void Device::wait() { ASSERT_EQ(VK_SUCCESS, vk::DeviceWaitIdle(handle())); }
+void Device::wait() const { ASSERT_EQ(VK_SUCCESS, vk::DeviceWaitIdle(handle())); }
 
 VkResult Device::wait(const std::vector<const Fence *> &fences, bool wait_all, uint64_t timeout) {
     const std::vector<VkFence> fence_handles = MakeVkHandles<VkFence>(fences);
@@ -750,11 +750,6 @@ VkSubresourceLayout Image::subresource_layout(const VkImageSubresourceLayers &su
     return data;
 }
 
-bool Image::transparent() const {
-    return (create_info_.tiling == VK_IMAGE_TILING_LINEAR && create_info_.samples == VK_SAMPLE_COUNT_1_BIT &&
-            !(create_info_.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)));
-}
-
 VkImageAspectFlags Image::aspect_mask(VkFormat format) {
     VkImageAspectFlags image_aspect;
     if (vkuFormatIsDepthAndStencil(format)) {
@@ -821,7 +816,7 @@ void ImageView::init(const Device &dev, const VkImageViewCreateInfo &info) {
     NON_DISPATCHABLE_HANDLE_INIT(vk::CreateImageView, dev, &info);
 }
 
-void AccelerationStructure::destroy() noexcept {
+void AccelerationStructureNV::destroy() noexcept {
     if (!initialized()) {
         return;
     }
@@ -832,9 +827,9 @@ void AccelerationStructure::destroy() noexcept {
     vkDestroyAccelerationStructureNV(device(), handle(), nullptr);
     handle_ = VK_NULL_HANDLE;
 }
-AccelerationStructure::~AccelerationStructure() noexcept { destroy(); }
+AccelerationStructureNV::~AccelerationStructureNV() noexcept { destroy(); }
 
-VkMemoryRequirements2 AccelerationStructure::memory_requirements() const {
+VkMemoryRequirements2 AccelerationStructureNV::memory_requirements() const {
     PFN_vkGetAccelerationStructureMemoryRequirementsNV vkGetAccelerationStructureMemoryRequirementsNV =
         (PFN_vkGetAccelerationStructureMemoryRequirementsNV)vk::GetDeviceProcAddr(device(),
                                                                                   "vkGetAccelerationStructureMemoryRequirementsNV");
@@ -847,7 +842,7 @@ VkMemoryRequirements2 AccelerationStructure::memory_requirements() const {
     return memoryRequirements;
 }
 
-VkMemoryRequirements2 AccelerationStructure::build_scratch_memory_requirements() const {
+VkMemoryRequirements2 AccelerationStructureNV::build_scratch_memory_requirements() const {
     PFN_vkGetAccelerationStructureMemoryRequirementsNV vkGetAccelerationStructureMemoryRequirementsNV =
         (PFN_vkGetAccelerationStructureMemoryRequirementsNV)vk::GetDeviceProcAddr(device(),
                                                                                   "vkGetAccelerationStructureMemoryRequirementsNV");
@@ -862,7 +857,7 @@ VkMemoryRequirements2 AccelerationStructure::build_scratch_memory_requirements()
     return memoryRequirements;
 }
 
-void AccelerationStructure::init(const Device &dev, const VkAccelerationStructureCreateInfoNV &info, bool init_memory) {
+void AccelerationStructureNV::init(const Device &dev, const VkAccelerationStructureCreateInfoNV &info, bool init_memory) {
     PFN_vkCreateAccelerationStructureNV vkCreateAccelerationStructureNV =
         (PFN_vkCreateAccelerationStructureNV)vk::GetDeviceProcAddr(dev.handle(), "vkCreateAccelerationStructureNV");
     assert(vkCreateAccelerationStructureNV != nullptr);
@@ -890,8 +885,8 @@ void AccelerationStructure::init(const Device &dev, const VkAccelerationStructur
         ASSERT_EQ(VK_SUCCESS, vkGetAccelerationStructureHandleNV(dev.handle(), handle(), sizeof(uint64_t), &opaque_handle_));
     }
 }
-vkt::Buffer AccelerationStructure::create_scratch_buffer(const Device &device, VkBufferCreateInfo *pCreateInfo /*= nullptr*/,
-                                                         bool buffer_device_address /*= false*/) const {
+vkt::Buffer AccelerationStructureNV::create_scratch_buffer(const Device &device, VkBufferCreateInfo *pCreateInfo /*= nullptr*/,
+                                                           bool buffer_device_address /*= false*/) const {
     VkMemoryRequirements scratch_buffer_memory_requirements = build_scratch_memory_requirements().memoryRequirements;
     VkBufferCreateInfo create_info = {};
     create_info.size = scratch_buffer_memory_requirements.size;
@@ -1258,6 +1253,14 @@ void CommandBuffer::DecodeVideo(const VkVideoDecodeInfoKHR &decodeInfo) {
     assert(vkCmdDecodeVideoKHR);
 
     vkCmdDecodeVideoKHR(handle(), &decodeInfo);
+}
+
+void CommandBuffer::EncodeVideo(const VkVideoEncodeInfoKHR &encodeInfo) {
+    PFN_vkCmdEncodeVideoKHR vkCmdEncodeVideoKHR =
+        (PFN_vkCmdEncodeVideoKHR)vk::GetDeviceProcAddr(dev_handle_, "vkCmdEncodeVideoKHR");
+    assert(vkCmdEncodeVideoKHR);
+
+    vkCmdEncodeVideoKHR(handle(), &encodeInfo);
 }
 
 void CommandBuffer::EndVideoCoding(const VkVideoEndCodingInfoKHR &endInfo) {

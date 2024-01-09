@@ -45,12 +45,8 @@ TEST_F(PositiveWsi, CreateWaylandSurface) {
     GTEST_SKIP() << "test not supported on platform";
 #else
     AddSurfaceExtension();
-
+    AddRequiredExtensions(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-
-    if (!IsExtensionsEnabled(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME)) {
-        GTEST_SKIP() << VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME << " extension not supported.";
-    }
 
     wl_display *display = nullptr;
     wl_registry *registry = nullptr;
@@ -116,12 +112,8 @@ TEST_F(PositiveWsi, CreateXcbSurface) {
     GTEST_SKIP() << "test not supported on platform";
 #else
     AddSurfaceExtension();
-
+    AddRequiredExtensions(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-
-    if (!IsExtensionsEnabled(VK_KHR_XCB_SURFACE_EXTENSION_NAME)) {
-        GTEST_SKIP() << VK_KHR_XCB_SURFACE_EXTENSION_NAME << " not supported.";
-    }
 
     xcb_connection_t *xcb_connection = xcb_connect(nullptr, nullptr);
     ASSERT_TRUE(xcb_connection);
@@ -151,12 +143,8 @@ TEST_F(PositiveWsi, CreateX11Surface) {
     GTEST_SKIP() << "test not supported on platform";
 #else
     AddSurfaceExtension();
-
+    AddRequiredExtensions(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-
-    if (!IsExtensionsEnabled(VK_KHR_XLIB_SURFACE_EXTENSION_NAME)) {
-        GTEST_SKIP() << VK_KHR_XLIB_SURFACE_EXTENSION_NAME << " not supported.";
-    }
 
     if (std::getenv("DISPLAY") == nullptr) {
         GTEST_SKIP() << "Test requires working display\n";
@@ -192,13 +180,12 @@ TEST_F(PositiveWsi, GetPhysicalDeviceSurfaceCapabilities2KHRWithFullScreenEXT) {
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(Init());
 
     if (!IsPlatformMockICD()) {
         GTEST_SKIP() << "Only run test MockICD due to CI stability";
     }
 
-    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
     if (!InitSwapchain()) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
@@ -231,9 +218,7 @@ TEST_F(PositiveWsi, CmdCopySwapchainImage) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
 
     AddSurfaceExtension();
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
     if (!InitSwapchain(VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
@@ -449,7 +434,7 @@ TEST_F(PositiveWsi, SwapchainAcquireImageAndPresent) {
     submit_info.pWaitDstStageMask = &stage_mask;
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = &submit_semaphore.handle();
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 1;
@@ -457,8 +442,8 @@ TEST_F(PositiveWsi, SwapchainAcquireImageAndPresent) {
     present.swapchainCount = 1;
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
-    vk::QueuePresentKHR(m_default_queue, &present);
-    vk::QueueWaitIdle(m_default_queue);
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveWsi, SwapchainAcquireImageAndWaitForFence) {
@@ -483,8 +468,8 @@ TEST_F(PositiveWsi, SwapchainAcquireImageAndWaitForFence) {
     present.swapchainCount = 1;
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
-    vk::QueuePresentKHR(m_default_queue, &present);
-    vk::QueueWaitIdle(m_default_queue);
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveWsi, WaitForAcquireFenceAndIgnoreSemaphore) {
@@ -514,9 +499,9 @@ TEST_F(PositiveWsi, WaitForAcquireFenceAndIgnoreSemaphore) {
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
 
-    vk::QueuePresentKHR(m_default_queue, &present);
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
 
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveWsi, WaitForAcquireSemaphoreAndIgnoreFence) {
@@ -545,21 +530,148 @@ TEST_F(PositiveWsi, WaitForAcquireSemaphoreAndIgnoreFence) {
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
 
-    vk::QueuePresentKHR(m_default_queue, &present);
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
 
     // NOTE: this test validates vkQueuePresentKHR.
     // At this point it's fine to wait for the fence to avoid in-use errors during test exit
     // (QueueWaitIdle does not wait for the fence signaled by the non-queue operation - AcquireNextImageKHR).
     vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-    vk::QueueWaitIdle(m_default_queue);
+    m_default_queue->wait();
+}
+
+TEST_F(PositiveWsi, RetireSubmissionUsingAcquireFence) {
+    TEST_DESCRIPTION("Acquire fence can be used to determine that submission from previous frame finished.");
+    AddSurfaceExtension();
+    RETURN_IF_SKIP(Init());
+    if (!InitSwapchain()) {
+        GTEST_SKIP() << "Cannot create surface or swapchain";
+    }
+    const auto swapchain_images = GetSwapchainImages(m_swapchain);
+    for (auto image : swapchain_images) {
+        SetImageLayoutPresentSrc(image);
+    }
+
+    std::vector<vkt::CommandBuffer> command_buffers;
+    std::vector<vkt::Semaphore> submit_semaphores;
+    for (size_t i = 0; i < swapchain_images.size(); i++) {
+        command_buffers.emplace_back(m_device, m_commandPool);
+        submit_semaphores.emplace_back(*m_device);
+    }
+    const vkt::Fence acquire_fence(*m_device);
+
+    const int frame_count = 10;
+    for (int i = 0; i < frame_count; i++) {
+        uint32_t image_index = 0;
+        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, acquire_fence, &image_index);
+
+        // 1) wait on the fence -> image was acquired
+        // 2) image was acquired -> image was presented in one of the previous frames
+        //    (except for the first few frames, where the image is presented for the first time)
+        // 3) image was presented -> corresponding present waited on the submit semaphore
+        // 4) submit semaphore was waited -> corresponding submit finished execution and signaled semaphore
+        //
+        // In summary: waiting on the acquire fence (with specific frame setup) means that one of the
+        // previous submission has finished execution and it should be safe to re-use corresponding command buffer.
+        vk::WaitForFences(device(), 1, &acquire_fence.handle(), VK_TRUE, kWaitTimeout);
+        vk::ResetFences(device(), 1, &acquire_fence.handle());
+
+        // There should not be in-use errors when we re-use command buffer that corresponds to the acquired image index.
+        command_buffers[image_index].begin();
+        command_buffers[image_index].end();
+
+        VkSubmitInfo submit = vku::InitStructHelper();
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &command_buffers[image_index].handle();
+        submit.signalSemaphoreCount = 1;
+        submit.pSignalSemaphores = &submit_semaphores[image_index].handle();
+        vk::QueueSubmit(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE);
+
+        VkPresentInfoKHR present = vku::InitStructHelper();
+        present.waitSemaphoreCount = 1;
+        present.pWaitSemaphores = &submit_semaphores[image_index].handle();
+        present.swapchainCount = 1;
+        present.pSwapchains = &m_swapchain;
+        present.pImageIndices = &image_index;
+        vk::QueuePresentKHR(m_default_queue->handle(), &present);
+    }
+    vk::QueueWaitIdle(m_default_queue->handle());
+}
+
+TEST_F(PositiveWsi, RetireSubmissionUsingAcquireFence2) {
+    TEST_DESCRIPTION("Test that retiring submission using acquire fence works correctly after swapchain was changed.");
+    AddSurfaceExtension();
+    RETURN_IF_SKIP(Init());
+    if (!InitSwapchain()) {
+        GTEST_SKIP() << "Cannot create surface or swapchain";
+    }
+    auto swapchain_images = GetSwapchainImages(m_swapchain);
+    for (auto image : swapchain_images) {
+        SetImageLayoutPresentSrc(image);
+    }
+
+    std::vector<vkt::CommandBuffer> command_buffers;
+    std::vector<vkt::Semaphore> submit_semaphores;
+    for (size_t i = 0; i < swapchain_images.size(); i++) {
+        command_buffers.emplace_back(m_device, m_commandPool);
+        submit_semaphores.emplace_back(*m_device);
+    }
+    const vkt::Fence acquire_fence(*m_device);
+
+    uint32_t image_index = 0;
+    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, acquire_fence, &image_index);
+    vk::WaitForFences(device(), 1, &acquire_fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::ResetFences(device(), 1, &acquire_fence.handle());
+    command_buffers[image_index].begin();
+    command_buffers[image_index].end();
+
+    VkSubmitInfo submit = vku::InitStructHelper();
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &command_buffers[image_index].handle();
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores = &submit_semaphores[image_index].handle();
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE);
+
+    VkPresentInfoKHR present = vku::InitStructHelper();
+    present.waitSemaphoreCount = 1;
+    present.pWaitSemaphores = &submit_semaphores[image_index].handle();
+    present.swapchainCount = 1;
+    present.pSwapchains = &m_swapchain;
+    present.pImageIndices = &image_index;
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
+
+    // Here the application decides to destroy swapchain (e.g. resize event)
+    vk::DestroySwapchainKHR(device(), m_swapchain, nullptr);
+    m_swapchain = VK_NULL_HANDLE;
+
+    // At this point there's a pending frame we need to sync with.
+    // WaitForFences(acquire_fence) logic can't be used, because swapchain was destroyed and its acquire
+    // fence can't be waited on. Application can use arbitrary logic to sync with the previous frames.
+    // After swapchain is re-created we can continue to use WaitForFences(acquire_fence) sync model.
+    //
+    // Here we just wait on the queue.
+    // If this line is removed we can get in-use error when begin command buffer.
+    m_default_queue->wait();
+
+    // Create new swapchain.
+    CreateSwapchain(m_surface, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, m_swapchain);
+
+    // The following Acquire will detect that fence's PresentSync belongs to the old swapchain and will invalidate it.
+    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, acquire_fence, &image_index);
+
+    vk::WaitForFences(device(), 1, &acquire_fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::ResetFences(device(), 1, &acquire_fence.handle());
+
+    command_buffers[image_index].begin();
+    command_buffers[image_index].end();
+
+    vk::QueueWaitIdle(m_default_queue->handle());
 }
 
 TEST_F(PositiveWsi, SwapchainImageLayout) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     if (!InitSwapchain()) {
         GTEST_SKIP() << "Cannot create surface or swapchain, skipping CmdCopySwapchainImage test";
     }
@@ -625,7 +737,7 @@ TEST_F(PositiveWsi, SwapchainImageLayout) {
     submit_info.pSignalSemaphores = NULL;
     vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
     vk::ResetFences(m_device->device(), 1, &fence.handle());
-    vk::QueueSubmit(m_default_queue, 1, &submit_info, fence.handle());
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence.handle());
     vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 }
 
@@ -636,10 +748,7 @@ TEST_F(PositiveWsi, SwapchainPresentShared) {
     AddRequiredExtensions(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SHARED_PRESENTABLE_IMAGE_EXTENSION_NAME);
     AddSurfaceExtension();
-
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     if (!InitSurface()) {
         GTEST_SKIP() << "Cannot create surface";
     }
@@ -706,7 +815,7 @@ TEST_F(PositiveWsi, SwapchainPresentShared) {
     present.swapchainCount = 1;
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
-    vk::QueuePresentKHR(m_default_queue, &present);
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
 
     // Presenting image multiple times is valid in the shared present mode.
     //
@@ -719,7 +828,7 @@ TEST_F(PositiveWsi, SwapchainPresentShared) {
     // of a shared presentable image after a present. The application must call vkQueuePresentKHR to guarantee an update. However,
     // the presentation engine may update from it at any time.
     for (uint32_t i = 0; i < 5; ++i) {
-        vk::QueuePresentKHR(m_default_queue, &present);
+        vk::QueuePresentKHR(m_default_queue->handle(), &present);
     }
 }
 
@@ -727,10 +836,7 @@ TEST_F(PositiveWsi, CreateSurface) {
     TEST_DESCRIPTION("Create and destroy a surface without ever creating a swapchain");
 
     AddSurfaceExtension();
-
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     if (!InitSurface()) {
         GTEST_SKIP() << "Cannot create surface";
@@ -747,14 +853,12 @@ TEST_F(PositiveWsi, CreateSwapchainFullscreenExclusive) {
 
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME);
-
-    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(Init());
 
     if (!IsPlatformMockICD()) {
         GTEST_SKIP() << "Only run test MockICD due to CI stability";
     }
 
-    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
     if (!InitSwapchain()) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
@@ -795,14 +899,12 @@ TEST_F(PositiveWsi, CreateSwapchainFullscreenExclusive2) {
 
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME);
-
-    RETURN_IF_SKIP(InitFramework());
+    RETURN_IF_SKIP(Init());
 
     if (!IsPlatformMockICD()) {
         GTEST_SKIP() << "Only run test MockICD due to CI stability";
     }
 
-    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
     if (!InitSwapchain()) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
@@ -841,9 +943,7 @@ TEST_F(PositiveWsi, SwapchainImageFormatProps) {
     TEST_DESCRIPTION("Try using special format props on a swapchain image");
 
     AddSurfaceExtension();
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     if (!InitSwapchain()) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
@@ -927,10 +1027,7 @@ TEST_F(PositiveWsi, SwapchainExclusiveModeQueueFamilyPropertiesReferences) {
     TEST_DESCRIPTION("Try using special format props on a swapchain image");
 
     AddSurfaceExtension();
-
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     if (!InitSurface()) {
         GTEST_SKIP() << "Cannot create surface";
     }
@@ -968,28 +1065,22 @@ TEST_F(PositiveWsi, SwapchainExclusiveModeQueueFamilyPropertiesReferences) {
     vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
 }
 
-TEST_F(VkPositiveLayerTest, InitSwapchain) {
+TEST_F(PositiveWsi, InitSwapchain) {
     TEST_DESCRIPTION("Make sure InitSwapchain is not producing anying invalid usage");
-
     AddSurfaceExtension();
-
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     if (InitSwapchain()) {
         DestroySwapchain();
     }
 }
 
-TEST_F(VkPositiveLayerTest, DestroySwapchainWithBoundImages) {
+TEST_F(PositiveWsi, DestroySwapchainWithBoundImages) {
     TEST_DESCRIPTION("Try destroying a swapchain which has multiple images");
 
     AddSurfaceExtension();
     AddRequiredExtensions(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     if (!InitSwapchain()) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
     }
@@ -1166,9 +1257,7 @@ TEST_F(PositiveWsi, CreateSwapchainWithPresentModeInfo) {
 
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     if (!InitSurface()) {
         GTEST_SKIP() << "Cannot create surface or swapchain";
     }
@@ -1207,4 +1296,68 @@ TEST_F(PositiveWsi, CreateSwapchainWithPresentModeInfo) {
     swapchain_create_info.oldSwapchain = 0;
 
     vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+}
+
+TEST_F(PositiveWsi, RegisterDisplayEvent) {
+    TEST_DESCRIPTION("Call vkRegisterDisplayEventEXT");
+    AddRequiredExtensions(VK_EXT_DISPLAY_CONTROL_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    uint32_t prop_count = 0;
+    vk::GetPhysicalDeviceDisplayPropertiesKHR(gpu(), &prop_count, nullptr);
+    if (prop_count == 0) {
+        GTEST_SKIP() << "No VkDisplayKHR properties to query";
+    }
+
+    std::vector<VkDisplayPropertiesKHR> display_props{prop_count};
+    vk::GetPhysicalDeviceDisplayPropertiesKHR(gpu(), &prop_count, display_props.data());
+    VkDisplayKHR display = display_props[0].display;
+
+    VkDisplayEventInfoEXT event_info = vku::InitStructHelper();
+    event_info.displayEvent = VK_DISPLAY_EVENT_TYPE_FIRST_PIXEL_OUT_EXT;
+    VkFence fence;
+
+    vk::RegisterDisplayEventEXT(device(), display, &event_info, nullptr, &fence);
+
+    vk::DestroyFence(device(), fence, nullptr);
+}
+
+TEST_F(PositiveWsi, SurfacelessQueryTest) {
+    TEST_DESCRIPTION("Ensure affected API calls can be made with surfacless query extension");
+
+    AddRequiredExtensions(VK_GOOGLE_SURFACELESS_QUERY_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitFramework());
+
+    if (IsPlatformMockICD()) {
+        GTEST_SKIP() << "VK_GOOGLE_surfaceless_query not supported on desktop";
+    }
+
+    // Use the VK_GOOGLE_surfaceless_query extension to query the available formats and
+    // colorspaces by using a VK_NULL_HANDLE for the VkSurfaceKHR handle.
+    uint32_t count;
+    vk::GetPhysicalDeviceSurfaceFormatsKHR(gpu(), VK_NULL_HANDLE, &count, nullptr);
+    std::vector<VkSurfaceFormatKHR> surface_formats(count);
+    vk::GetPhysicalDeviceSurfaceFormatsKHR(gpu(), VK_NULL_HANDLE, &count, surface_formats.data());
+
+    vk::GetPhysicalDeviceSurfacePresentModesKHR(gpu(), VK_NULL_HANDLE, &count, nullptr);
+    std::vector<VkPresentModeKHR> present_modes(count);
+    vk::GetPhysicalDeviceSurfacePresentModesKHR(gpu(), VK_NULL_HANDLE, &count, present_modes.data());
+}
+
+TEST_F(PositiveWsi, PhysicalDeviceSurfaceSupport) {
+    TEST_DESCRIPTION("Test if physical device supports surface.");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddSurfaceExtension();
+    RETURN_IF_SKIP(Init());
+    if (!InitSurface()) {
+        GTEST_SKIP() << "Cannot create surface";
+    }
+
+    VkBool32 supported;
+    vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), 0, m_surface, &supported);
+
+    if (supported) {
+        uint32_t count;
+        vk::GetPhysicalDeviceSurfaceFormatsKHR(gpu(), m_surface, &count, nullptr);
+    }
 }

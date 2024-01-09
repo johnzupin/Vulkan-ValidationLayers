@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -379,10 +379,8 @@ TEST_F(PositiveDescriptors, CopyMutableDescriptors) {
     TEST_DESCRIPTION("Copy mutable descriptors.");
 
     AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutable_descriptor_type_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(mutable_descriptor_type_features);
-    RETURN_IF_SKIP(InitState(nullptr, &mutable_descriptor_type_features));
+    AddRequiredFeature(vkt::Feature::mutableDescriptorType);
+    RETURN_IF_SKIP(Init());
 
     VkDescriptorType descriptor_types[] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER};
 
@@ -537,8 +535,8 @@ TEST_F(PositiveDescriptors, CopyAccelerationStructureMutableDescriptors) {
     std::array<VkDescriptorSet, layouts.size()> descriptor_sets;
     vk::AllocateDescriptorSets(device(), &allocate_info, descriptor_sets.data());
 
-    auto tlas = vkt::as::blueprint::AccelStructSimpleOnDeviceTopLevel(4096);
-    tlas->Build(*m_device);
+    auto tlas = vkt::as::blueprint::AccelStructSimpleOnDeviceTopLevel(*m_device, 4096);
+    tlas->Build();
 
     VkWriteDescriptorSetAccelerationStructureKHR blas_descriptor = vku::InitStructHelper();
     blas_descriptor.accelerationStructureCount = 1;
@@ -718,11 +716,8 @@ TEST_F(PositiveDescriptors, MultipleThreadsUsingHostOnlyDescriptorSet) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutable_descriptor = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(mutable_descriptor);
-    RETURN_IF_SKIP(InitState(nullptr, &mutable_descriptor));
+    AddRequiredFeature(vkt::Feature::mutableDescriptorType);
+    RETURN_IF_SKIP(Init());
 
     VkImageObj image1(m_device);
     VkImageObj image2(m_device);
@@ -942,14 +937,11 @@ TEST_F(PositiveDescriptors, UpdateDescritorSetsNoLongerInUse) {
             vk::CmdDraw(cb, 0, 0, 0, 0);
             vk::CmdEndRenderPass(cb);
             cb.end();
-            VkSubmitInfo submit_info = vku::InitStructHelper();
-            submit_info.commandBufferCount = 1;
-            submit_info.pCommandBuffers = &cb.handle();
-            ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE));
+            m_default_queue->submit(cb);
         }
 
         // Wait for the queue. After this set A should be no longer in use.
-        ASSERT_EQ(VK_SUCCESS, vk::QueueWaitIdle(m_default_queue));
+        m_default_queue->wait();
 
         // Bind set B to a command buffer and submit the command buffer;
         {
@@ -961,17 +953,14 @@ TEST_F(PositiveDescriptors, UpdateDescritorSetsNoLongerInUse) {
             vk::CmdDraw(cb, 0, 0, 0, 0);
             vk::CmdEndRenderPass(cb);
             cb.end();
-            VkSubmitInfo submit_info = vku::InitStructHelper();
-            submit_info.commandBufferCount = 1;
-            submit_info.pCommandBuffers = &cb.handle();
-            ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit(m_default_queue, 1, &submit_info, VK_NULL_HANDLE));
+            m_default_queue->submit(cb);
         }
 
         // Update set A. It should not cause VU 03047 error.
         vkt::Buffer buffer2(*m_device, buffer_ci, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         update_set(set_A, buffer2);
 
-        ASSERT_EQ(VK_SUCCESS, vk::QueueWaitIdle(m_default_queue));
+        m_default_queue->wait();
     }
 }
 
@@ -980,10 +969,8 @@ TEST_F(PositiveDescriptors, DSUsageBitsFlags2) {
         "Attempt to update descriptor sets for buffers that do not have correct usage bits sets with VkBufferUsageFlagBits2KHR.");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(maintenance5_features);
-    RETURN_IF_SKIP(InitState(nullptr, &maintenance5_features));
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(Init());
 
     const VkFormat buffer_format = VK_FORMAT_R8_UNORM;
     VkFormatProperties format_properties;
@@ -1159,4 +1146,22 @@ TEST_F(PositiveDescriptors, VariableDescriptorCount) {
 
     VkDescriptorSet descriptor_set;
     vk::AllocateDescriptorSets(m_device->device(), &alloc_info, &descriptor_set);
+}
+
+TEST_F(PositiveDescriptors, ShaderStageAll) {
+    TEST_DESCRIPTION("VkDescriptorSetLayout stageFlags can be VK_SHADER_STAGE_ALL");
+
+    RETURN_IF_SKIP(Init());
+
+    VkDescriptorSetLayoutBinding dsl_binding = {};
+    dsl_binding.binding = 1;
+    dsl_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    dsl_binding.descriptorCount = 1;
+    dsl_binding.stageFlags = VK_SHADER_STAGE_ALL;
+    dsl_binding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo ds_layout_ci = vku::InitStructHelper();
+    ds_layout_ci.bindingCount = 1;
+    ds_layout_ci.pBindings = &dsl_binding;
+    vkt::DescriptorSetLayout(*m_device, ds_layout_ci);
 }

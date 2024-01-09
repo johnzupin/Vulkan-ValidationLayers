@@ -31,6 +31,8 @@ target_sources(VkLayer_utils PRIVATE
     external/xxhash.h
     ${API_TYPE}/generated/error_location_helper.cpp
     ${API_TYPE}/generated/error_location_helper.h
+    ${API_TYPE}/generated/feature_requirements_helper.cpp
+    ${API_TYPE}/generated/feature_requirements_helper.h
     ${API_TYPE}/generated/pnext_chain_extraction.cpp
     ${API_TYPE}/generated/pnext_chain_extraction.h
     ${API_TYPE}/generated/vk_function_pointers.cpp
@@ -115,6 +117,7 @@ target_sources(vvl PRIVATE
     best_practices/best_practices_utils.cpp
     best_practices/bp_buffer.cpp
     best_practices/bp_cmd_buffer.cpp
+    best_practices/bp_cmd_buffer_nv.cpp
     best_practices/bp_copy_blit_resolve.cpp
     best_practices/bp_descriptor.cpp
     best_practices/bp_device_memory.cpp
@@ -218,8 +221,6 @@ target_sources(vvl PRIVATE
     gpu_shaders/gpu_shaders_constants.h
     object_tracker/object_lifetime_validation.h
     object_tracker/object_tracker_utils.cpp
-    state_tracker/base_node.cpp
-    state_tracker/base_node.h
     state_tracker/buffer_state.cpp
     state_tracker/buffer_state.h
     state_tracker/cmd_buffer_state.cpp
@@ -244,6 +245,8 @@ target_sources(vvl PRIVATE
     state_tracker/query_state.h
     state_tracker/semaphore_state.cpp
     state_tracker/semaphore_state.h
+    state_tracker/state_object.cpp
+    state_tracker/state_object.h
     state_tracker/queue_state.cpp
     state_tracker/queue_state.h
     state_tracker/ray_tracing_state.h
@@ -315,6 +318,7 @@ if(MSVC)
 elseif(MINGW)
     target_sources(vvl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}.def)
     target_compile_options(vvl PRIVATE -Wa,-mbig-obj)
+    set_target_properties(vvl PROPERTIES PREFIX "") # remove the prefix "lib" so the manifest json "library_path" matches
 elseif(APPLE)
     set_target_properties(vvl PROPERTIES SUFFIX ".dylib")
     target_link_options(vvl PRIVATE -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}.exp)

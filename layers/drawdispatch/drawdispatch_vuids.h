@@ -185,6 +185,10 @@ struct DrawDispatchVuid {
     const char* external_format_resolve_09368 = kVUIDUndefined;
     const char* external_format_resolve_09369 = kVUIDUndefined;
     const char* external_format_resolve_09372 = kVUIDUndefined;
+    const char* external_format_resolve_09366 = kVUIDUndefined;
+    const char* external_format_resolve_09367 = kVUIDUndefined;
+    const char* external_format_resolve_09370 = kVUIDUndefined;
+    const char* external_format_resolve_09371 = kVUIDUndefined;
     const char* set_rasterizer_discard_enable_08639 = kVUIDUndefined;
     const char* set_depth_bias_enable_08640 = kVUIDUndefined;
     const char* set_logic_op_08641 = kVUIDUndefined;
@@ -312,6 +316,12 @@ struct DrawDispatchVuid {
     const char* rasterization_samples_09211 = kVUIDUndefined;
     const char* dynamic_rendering_undefined_depth_format_08913 = kVUIDUndefined;
     const char* primitives_generated_query_07481 = kVUIDUndefined;
+    const char* vertex_input_09461 = kVUIDUndefined;
+    const char* vertex_input_09462 = kVUIDUndefined;
+    const char* color_blend_enable_07627 = kVUIDUndefined;
+    const char* color_blend_equation_07628 = kVUIDUndefined;
+    const char* color_write_mask_07629 = kVUIDUndefined;
+    const char* color_blend_advanced_07635 = kVUIDUndefined;
     // Ray tracing
     const char* ray_tracing_pipeline_stack_size_09458 = kVUIDUndefined;
 };

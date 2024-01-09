@@ -1,8 +1,8 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
- * Modifications Copyright (C) 2020-2023 Advanced Micro Devices, Inc. All rights reserved.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
+ * Modifications Copyright (C) 2020-2024 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ using vvl::GetDrawDispatchVuid;
 bool CoreChecks::ValidateGraphicsIndexedCmd(const vvl::CommandBuffer &cb_state, const Location &loc) const {
     bool skip = false;
     const DrawDispatchVuid &vuid = GetDrawDispatchVuid(loc.function);
-    if (!cb_state.index_buffer_binding.bound()) {
+    if (!cb_state.index_buffer_binding.bound() && !enabled_features.maintenance6) {
         skip |= LogError(vuid.index_binding_07312, cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), loc,
                          "Index buffer object has not been bound to this command buffer.");
     }
@@ -38,6 +38,7 @@ bool CoreChecks::ValidateCmdDrawInstance(const vvl::CommandBuffer &cb_state, uin
                                          const Location &loc) const {
     bool skip = false;
     const DrawDispatchVuid &vuid = GetDrawDispatchVuid(loc.function);
+    const auto *pipeline_state = cb_state.lastBound[VK_PIPELINE_BIND_POINT_GRAPHICS].pipeline_state;
 
     // Verify maxMultiviewInstanceIndex
     if (cb_state.activeRenderPass && enabled_features.multiview &&
@@ -50,6 +51,56 @@ bool CoreChecks::ValidateCmdDrawInstance(const vvl::CommandBuffer &cb_state, uin
                          ", but instanceCount: %" PRIu32 "and firstInstance: %" PRIu32 ".",
                          phys_dev_props_core11.maxMultiviewInstanceIndex, instanceCount, firstInstance);
     }
+
+    if (pipeline_state && pipeline_state->GetCreateInfo<VkGraphicsPipelineCreateInfo>().pVertexInputState) {
+        const auto *vertex_input_divisor_state = vku::FindStructInPNextChain<VkPipelineVertexInputDivisorStateCreateInfoKHR>(
+            pipeline_state->GetCreateInfo<VkGraphicsPipelineCreateInfo>().pVertexInputState->pNext);
+        if (vertex_input_divisor_state && phys_dev_ext_props.vtx_attrib_divisor_props.supportsNonZeroFirstInstance == VK_FALSE &&
+            firstInstance != 0u) {
+            bool non_1_divisor = false;
+            uint32_t i = 0;
+            for (; i < vertex_input_divisor_state->vertexBindingDivisorCount; ++i) {
+                if (vertex_input_divisor_state->pVertexBindingDivisors[i].divisor != 1u) {
+                    non_1_divisor = true;
+                    break;
+                }
+            }
+            if (non_1_divisor) {
+                const LogObjectList objlist(cb_state.Handle(), pipeline_state->Handle());
+                skip |= LogError(vuid.vertex_input_09461, objlist, loc,
+                                 "VkPipelineVertexInputDivisorStateCreateInfoKHR::pVertexBindingDivisors[%" PRIu32
+                                 "].divisor is %" PRIu32 " and firstInstance is %" PRIu32
+                                 ", but supportsNonZeroFirstInstance is VK_FALSE.",
+                                 i, vertex_input_divisor_state->pVertexBindingDivisors[i].divisor, firstInstance);
+            }
+        }
+    }
+
+    if (!pipeline_state || pipeline_state->IsDynamic(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT)) {
+        if (cb_state.dynamic_state_status.cb[CB_DYNAMIC_STATE_VERTEX_INPUT_EXT] &&
+            phys_dev_ext_props.vtx_attrib_divisor_props.supportsNonZeroFirstInstance == VK_FALSE && firstInstance != 0u) {
+            bool non_1_divisor = false;
+            uint32_t i = 0;
+            for (; i < (uint32_t)cb_state.dynamic_state_value.vertex_binding_descriptions.size(); ++i) {
+                if (cb_state.dynamic_state_value.vertex_binding_descriptions[i].divisor != 1u) {
+                    non_1_divisor = true;
+                    break;
+                }
+            }
+            if (non_1_divisor) {
+                LogObjectList objlist(cb_state.Handle());
+                if (pipeline_state) {
+                    objlist.add(pipeline_state->Handle());
+                }
+                skip |= LogError(vuid.vertex_input_09462, objlist, loc,
+                                 "VkPipelineVertexInputDivisorStateCreateInfoKHR::pVertexBindingDivisors[%" PRIu32
+                                 "].divisor is %" PRIu32 " and firstInstance is %" PRIu32
+                                 ", but supportsNonZeroFirstInstance is VK_FALSE.",
+                                 i, cb_state.dynamic_state_value.vertex_binding_descriptions[i].divisor, firstInstance);
+            }
+        }
+    }
+
     return skip;
 }
 
@@ -594,10 +645,21 @@ bool CoreChecks::PreCallValidateCmdDrawIndirectByteCountEXT(VkCommandBuffer comm
                          phys_dev_ext_props.transform_feedback_props.maxTransformFeedbackBufferDataStride);
     }
 
-    if ((counterOffset % 4) != 0) {
-        skip |= LogError("VUID-vkCmdDrawIndirectByteCountEXT-counterBufferOffset-04568",
-                         cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), error_obj.location.dot(Field::offset),
+    if (SafeModulo(counterBufferOffset, 4) != 0) {
+        skip |= LogError(
+            "VUID-vkCmdDrawIndirectByteCountEXT-counterBufferOffset-04568", cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS),
+            error_obj.location.dot(Field::counterBufferOffset), "(%" PRIu64 ") must be a multiple of 4.", counterBufferOffset);
+    }
+    // VUs being added in https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/6310
+    if (SafeModulo(counterOffset, 4) != 0) {
+        skip |= LogError("VUID-vkCmdDrawIndirectByteCountEXT-counterOffset-09474",
+                         cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), error_obj.location.dot(Field::counterOffset),
                          "(%" PRIu32 ") must be a multiple of 4.", counterOffset);
+    }
+    if (SafeModulo(vertexStride, 4) != 0) {
+        skip |= LogError("VUID-vkCmdDrawIndirectByteCountEXT-vertexStride-09475",
+                         cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), error_obj.location.dot(Field::vertexStride),
+                         "(%" PRIu32 ") must be a multiple of 4.", vertexStride);
     }
 
     skip |= ValidateCmdDrawInstance(cb_state, instanceCount, firstInstance, error_obj.location);
@@ -1476,7 +1538,7 @@ bool CoreChecks::ValidateActionState(const vvl::CommandBuffer &cb_state, const V
                 if (ds.bound_descriptor_set && !ds.bound_descriptor_set->IsPushDescriptor()) {
                     const LogObjectList objlist(cb_state.Handle(), pipeline->Handle(), ds.bound_descriptor_set->Handle());
                     skip |=
-                        LogError(vuid.descriptor_buffer_set_offset_missing_08117, objlist, loc,
+                        LogError(vuid.descriptor_buffer_bit_not_set_08115, objlist, loc,
                                  "pipeline bound to %s requires a descriptor buffer but has a bound descriptor set (%s)",
                                  string_VkPipelineBindPoint(bind_point), FormatHandle(ds.bound_descriptor_set->Handle()).c_str());
                     break;
@@ -1485,7 +1547,7 @@ bool CoreChecks::ValidateActionState(const vvl::CommandBuffer &cb_state, const V
             } else {
                 if (ds.bound_descriptor_buffer.has_value()) {
                     const LogObjectList objlist(cb_state.Handle(), pipeline->Handle());
-                    skip |= LogError(vuid.descriptor_buffer_bit_not_set_08115, objlist, loc,
+                    skip |= LogError(vuid.descriptor_buffer_set_offset_missing_08117, objlist, loc,
                                      "pipeline bound to %s requires a descriptor set but has a bound descriptor buffer"
                                      " (index=%" PRIu32 " offset=%" PRIu64 ")",
                                      string_VkPipelineBindPoint(bind_point), ds.bound_descriptor_buffer->index,
@@ -1567,7 +1629,11 @@ bool CoreChecks::ValidateActionState(const vvl::CommandBuffer &cb_state, const V
                 }
             }
         }
-    } else {
+    } else if (last_bound_state.cb_state.descriptor_buffer_binding_info.empty()) {
+        // TODO - VkPipeline have VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT (descriptor_buffer_mode) to know if using descriptor
+        // buffers, but VK_EXT_shader_object has no flag. For now, if the command buffer ever calls vkCmdBindDescriptorBuffersEXT,
+        // we just assume things are bound until we add some form of GPU side tracking for descriptor buffers
+
         std::string error_string;
 
         const auto are_bound_sets_compat = [](uint32_t set, const LastBound &last_bound,
@@ -1583,6 +1649,7 @@ bool CoreChecks::ValidateActionState(const vvl::CommandBuffer &cb_state, const V
             if (!shader_state) {
                 continue;
             }
+
             if (shader_state && !shader_state->active_slots.empty() &&
                 !are_bound_sets_compat(shader_state->max_active_slot, last_bound_state, *shader_state)) {
                 LogObjectList objlist(cb_state.commandBuffer(), shader_state->shader());

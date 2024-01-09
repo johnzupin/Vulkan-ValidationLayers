@@ -19,12 +19,9 @@
 
 TEST_F(PositivePipeline, ComplexTypes) {
     TEST_DESCRIPTION("Smoke test for complex types across VS/FS boundary");
+    AddRequiredFeature(vkt::Feature::tessellationShader);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-
-    if (!m_device->phy().features().tessellationShader) {
-        GTEST_SKIP() << "Device does not support tessellation shaders";
-    }
 
     VkShaderObj vs(this, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT);
     VkShaderObj tcs(this, kTessellationControlMinimalGlsl, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
@@ -195,7 +192,7 @@ TEST_F(PositivePipeline, CombinedImageSamplerConsumedAsBoth) {
     pipe.CreateComputePipeline();
 }
 
-TEST_F(VkPositiveLayerTest, CreateGraphicsPipelineWithIgnoredPointers) {
+TEST_F(PositivePipeline, CreateGraphicsPipelineWithIgnoredPointers) {
     TEST_DESCRIPTION("Create Graphics Pipeline with pointers that must be ignored by layers");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
@@ -465,12 +462,9 @@ TEST_F(PositivePipeline, TessellationDomainOrigin) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
 
     AddRequiredExtensions(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::tessellationShader);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-
-    if (!m_device->phy().features().tessellationShader) {
-        GTEST_SKIP() << "Device does not support tessellation shaders";
-    }
 
     VkShaderObj vs(this, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT);
     VkShaderObj tcs(this, kTessellationControlMinimalGlsl, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
@@ -499,22 +493,10 @@ TEST_F(PositivePipeline, ViewportArray2NV) {
     TEST_DESCRIPTION("Test to validate VK_NV_viewport_array2");
 
     AddRequiredExtensions(VK_NV_VIEWPORT_ARRAY_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceFeatures available_features = {};
-    GetPhysicalDeviceFeatures(&available_features);
-
-    if (!available_features.multiViewport) {
-        GTEST_SKIP() << "VkPhysicalDeviceFeatures::multiViewport is not supported";
-    }
-    if (!available_features.tessellationShader) {
-        GTEST_SKIP() << "VkPhysicalDeviceFeatures::tessellationShader is not supported";
-    }
-    if (!available_features.geometryShader) {
-        GTEST_SKIP() << "VkPhysicalDeviceFeatures::geometryShader is not supported";
-    }
-
-    RETURN_IF_SKIP(InitState());
+    AddRequiredFeature(vkt::Feature::multiViewport);
+    AddRequiredFeature(vkt::Feature::tessellationShader);
+    AddRequiredFeature(vkt::Feature::geometryShader);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     const char tcs_src[] = R"glsl(
@@ -666,9 +648,7 @@ TEST_F(PositivePipeline, SampleMaskOverrideCoverageNV) {
     TEST_DESCRIPTION("Test to validate VK_NV_sample_mask_override_coverage");
 
     AddRequiredExtensions(VK_NV_SAMPLE_MASK_OVERRIDE_COVERAGE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
 
     const char vs_src[] = R"glsl(
         #version 450
@@ -973,7 +953,7 @@ TEST_F(PositivePipeline, ShaderTileImage) {
     }
 }
 
-TEST_F(VkPositiveLayerTest, TestPervertexNVShaderAttributes) {
+TEST_F(PositivePipeline, PervertexNVShaderAttributes) {
     TEST_DESCRIPTION("Test using TestRasterizationStateStreamCreateInfoEXT with invalid rasterizationStream.");
 
     AddRequiredExtensions(VK_NV_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
@@ -1426,9 +1406,7 @@ TEST_F(PositivePipeline, ShaderModuleIdentifier) {
 
 TEST_F(PositivePipeline, ViewportSwizzleNV) {
     AddRequiredExtensions(VK_NV_VIEWPORT_SWIZZLE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     std::array<VkViewportSwizzleNV, 2> swizzle = {};
@@ -1533,14 +1511,9 @@ TEST_F(PositivePipeline, DeviceGeneratedCommands) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_NV_DEVICE_GENERATED_COMMANDS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV dgc_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(dgc_features);
-    if (!dgc_features.deviceGeneratedCommands) {
-        GTEST_SKIP() << "deviceGeneratedCommands not supported";
-    }
-    RETURN_IF_SKIP(InitState());
-    RETURN_IF_SKIP(InitRenderTarget());
+    AddRequiredFeature(vkt::Feature::deviceGeneratedCommands);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkShaderObj vs(this, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT);
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1573,13 +1546,8 @@ TEST_F(PositivePipeline, DepthStencilStateIgnored) {
 
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extended_dynamic_state_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(extended_dynamic_state_features);
-    if (!extended_dynamic_state_features.extendedDynamicState) {
-        GTEST_SKIP() << "Test requires (unsupported) extendedDynamicState";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &extended_dynamic_state_features));
+    AddRequiredFeature(vkt::Feature::extendedDynamicState);
+    RETURN_IF_SKIP(Init());
 
     RenderPassSingleSubpass rp(*this);
     rp.AddAttachmentDescription(VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1622,18 +1590,10 @@ TEST_F(PositivePipeline, ViewportStateNotSet) {
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds_features = vku::InitStructHelper();
-    VkPhysicalDeviceExtendedDynamicState2FeaturesEXT eds2_features = vku::InitStructHelper(&eds_features);
-    GetPhysicalDeviceFeatures2(eds2_features);
-    if (!eds_features.extendedDynamicState) {
-        GTEST_SKIP() << "extendedDynamicState not supported";
-    }
-    if (!eds2_features.extendedDynamicState2) {
-        GTEST_SKIP() << "extendedDynamicState2 not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &eds2_features));
-    RETURN_IF_SKIP(InitRenderTarget());
+    AddRequiredFeature(vkt::Feature::extendedDynamicState);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
     pipe.AddDynamicState(VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT);
@@ -1650,18 +1610,10 @@ TEST_F(PositivePipeline, ViewportStateNotSetRasterizerDiscardEnabled) {
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds_features = vku::InitStructHelper();
-    VkPhysicalDeviceExtendedDynamicState2FeaturesEXT eds2_features = vku::InitStructHelper(&eds_features);
-    GetPhysicalDeviceFeatures2(eds2_features);
-    if (!eds_features.extendedDynamicState) {
-        GTEST_SKIP() << "extendedDynamicState not supported";
-    }
-    if (!eds2_features.extendedDynamicState2) {
-        GTEST_SKIP() << "extendedDynamicState2 not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &eds2_features));
-    RETURN_IF_SKIP(InitRenderTarget());
+    AddRequiredFeature(vkt::Feature::extendedDynamicState);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkPipelineRasterizationStateCreateInfo rasterization_state = vku::InitStructHelper();
     rasterization_state.rasterizerDiscardEnable = VK_TRUE;
@@ -1745,5 +1697,21 @@ TEST_F(PositivePipeline, ShaderModuleIdentifierZeroLength) {
     CreatePipelineHelper pipe(*this);
     pipe.InitState();
     pipe.shader_stages_[0].pNext = &moduleIdentifier;
+    pipe.CreateGraphicsPipeline();
+}
+
+TEST_F(PositivePipeline, IgnoredPipelineCreateFlags) {
+    TEST_DESCRIPTION("Create pipeline with invalid flags when allowed");
+
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkPipelineCreateFlags2CreateInfoKHR pipelineCreateFlags2 = vku::InitStructHelper();
+    pipelineCreateFlags2.flags = VK_PIPELINE_CREATE_2_DISABLE_OPTIMIZATION_BIT_KHR;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitState();
+    pipe.gp_ci_.pNext = &pipelineCreateFlags2;
+    pipe.gp_ci_.flags = 0x80000000;
     pipe.CreateGraphicsPipeline();
 }

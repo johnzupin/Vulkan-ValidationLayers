@@ -562,11 +562,9 @@ TEST_F(NegativeShaderInterface, VsFsTypeMismatchBlockStruct) {
 TEST_F(NegativeShaderInterface, VsFsTypeMismatchBlockStruct64bit) {
     TEST_DESCRIPTION("Have a struct inside a block between shaders");
 
+    AddRequiredFeature(vkt::Feature::shaderFloat64);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-    if (!m_device->phy().features().shaderFloat64) {
-        GTEST_SKIP() << "Device does not support 64bit floats";
-    }
 
     char const *vsSource = R"glsl(
         #version 450
@@ -903,11 +901,9 @@ TEST_F(NegativeShaderInterface, VsFsTypeMismatchBlockStructOuter2DArraySize) {
 TEST_F(NegativeShaderInterface, VsFsTypeMismatchBlockNestedStructType64bit) {
     TEST_DESCRIPTION("Have nested struct inside a block between shaders");
 
+    AddRequiredFeature(vkt::Feature::shaderFloat64);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-    if (!m_device->phy().features().shaderFloat64) {
-        GTEST_SKIP() << "Device does not support 64bit floats";
-    }
 
     char const *vsSource = R"glsl(
         #version 450
@@ -1487,11 +1483,9 @@ TEST_F(NegativeShaderInterface, MultidimensionalArrayDim) {
 TEST_F(NegativeShaderInterface, MultidimensionalArray64bit) {
     TEST_DESCRIPTION("Make sure multidimensional arrays are handled for 64bits");
 
+    AddRequiredFeature(vkt::Feature::shaderFloat64);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-    if (!m_device->phy().features().shaderFloat64) {
-        GTEST_SKIP() << "Device does not support 64bit floats";
-    }
 
     char const *vsSource = R"glsl(
         #version 450
@@ -1610,4 +1604,41 @@ TEST_F(NegativeShaderInterface, CreatePipelineFragmentOutputNotConsumed) {
         helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     };
     CreatePipelineHelper::OneshotTest(*this, set_info, kWarningBit, "Undefined-Value-ShaderOutputNotConsumed");
+}
+
+TEST_F(NegativeShaderInterface, InvalidStaticSpirv) {
+    TEST_DESCRIPTION(
+        "Test that a warning is produced for a fragment shader which provides a spurious output with no matching attachment");
+
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    const char *spv_source = R"(
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %fragCoord %block_var
+               OpExecutionMode %main OriginUpperLeft
+               OpSource GLSL 450
+               OpDecorate %fragCoord Location 0
+               OpDecorate %block Block
+               OpMemberDecorate %block 0 Location 1
+       %void = OpTypeVoid
+      %voidfn = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%ptr_v4float = OpTypePointer Output %v4float
+  %fragCoord = OpVariable %ptr_v4float Output
+      %block = OpTypeStruct %v4float %v4float
+  %block_ptr = OpTypePointer Output %block
+  %block_var = OpVariable %block_ptr Output
+       %main = OpFunction %void None %voidfn
+       %label = OpLabel
+               OpReturn
+               OpFunctionEnd
+        )";
+
+    // VUID-StandaloneSpirv-Location-04919
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkShaderModuleCreateInfo-pCode-08737");
+    auto fs = VkShaderObj::CreateFromASM(this, spv_source, VK_SHADER_STAGE_FRAGMENT_BIT);
+    m_errorMonitor->VerifyFound();
 }
