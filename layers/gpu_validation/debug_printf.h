@@ -1,6 +1,6 @@
-/* Copyright (c) 2020-2023 The Khronos Group Inc.
- * Copyright (c) 2020-2023 Valve Corporation
- * Copyright (c) 2020-2023 LunarG, Inc.
+/* Copyright (c) 2020-2024 The Khronos Group Inc.
+ * Copyright (c) 2020-2024 Valve Corporation
+ * Copyright (c) 2020-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,8 +62,8 @@ class CommandBuffer : public gpu_tracker::CommandBuffer {
     CommandBuffer(Validator* dp, VkCommandBuffer cb, const VkCommandBufferAllocateInfo* create_info, const vvl::CommandPool* pool);
     ~CommandBuffer();
 
-    bool PreProcess() final { return !buffer_infos.empty(); }
-    void PostProcess(VkQueue queue, const Location& loc) final;
+    bool NeedsProcessing() const final { return !buffer_infos.empty(); }
+    void Process(VkQueue queue, const Location &loc) final;
 
     void Destroy() final;
     void Reset() final;
@@ -86,7 +86,7 @@ class Validator : public gpu_tracker::Validator {
         desired_features.fragmentStoresAndAtomics = true;
     }
 
-    void CreateDevice(const VkDeviceCreateInfo* pCreateInfo) override;
+    void CreateDevice(const VkDeviceCreateInfo* pCreateInfo, const Location& loc) override;
     bool InstrumentShader(const vvl::span<const uint32_t>& input, std::vector<uint32_t>& new_pgm, uint32_t unique_shader_id,
                           const Location& loc) override;
     void PreCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo,
@@ -175,7 +175,7 @@ class Validator : public gpu_tracker::Validator {
                                               VkDeviceAddress indirectDeviceAddress, const RecordObject& record_obj) override;
     void PreCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress,
                                                const RecordObject& record_obj) override;
-    void AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer, const VkPipelineBindPoint bind_point);
+    void AllocateDebugPrintfResources(const VkCommandBuffer cmd_buffer, const VkPipelineBindPoint bind_point, const Location& loc);
 
     std::shared_ptr<vvl::CommandBuffer> CreateCmdBufferState(VkCommandBuffer cb, const VkCommandBufferAllocateInfo* create_info,
                                                              const vvl::CommandPool* pool) final;

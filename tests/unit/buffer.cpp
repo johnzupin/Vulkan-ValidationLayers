@@ -203,7 +203,7 @@ TEST_F(NegativeBuffer, BufferViewObject) {
         bvci.format = VK_FORMAT_R32_SFLOAT;
         bvci.range = VK_WHOLE_SIZE;
 
-        err = vk::CreateBufferView(m_device->device(), &bvci, NULL, &view);
+        err = vk::CreateBufferView(device(), &bvci, NULL, &view);
         ASSERT_EQ(VK_SUCCESS, err);
     }
     // First Destroy buffer underlying view which should hit error in CV
@@ -215,22 +215,20 @@ TEST_F(NegativeBuffer, BufferViewObject) {
     descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
     descriptor_write.pTexelBufferView = &view;
 
-    vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, NULL);
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
     m_errorMonitor->VerifyFound();
 
     // Now destroy view itself and verify same error, which is hit in PV this time
-    vk::DestroyBufferView(m_device->device(), view, NULL);
+    vk::DestroyBufferView(device(), view, NULL);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkWriteDescriptorSet-descriptorType-02994");
-    vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, NULL);
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeBuffer, CreateBufferViewNoMemoryBoundToBuffer) {
     TEST_DESCRIPTION("Attempt to create a buffer view with a buffer that has no memory bound to it.");
 
-    VkResult err;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         " used with no memory bound. Memory should be bound by calling vkBindBufferMemory().");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkBufferViewCreateInfo-buffer-00935");
 
     RETURN_IF_SKIP(Init());
 
@@ -239,10 +237,7 @@ TEST_F(NegativeBuffer, CreateBufferViewNoMemoryBoundToBuffer) {
     VkBufferCreateInfo buff_ci = vku::InitStructHelper();
     buff_ci.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
     buff_ci.size = 256;
-    buff_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    VkBuffer buffer;
-    err = vk::CreateBuffer(m_device->device(), &buff_ci, NULL, &buffer);
-    ASSERT_EQ(VK_SUCCESS, err);
+    vkt::Buffer buffer(*m_device, buff_ci, vkt::no_mem);
 
     VkBufferViewCreateInfo buff_view_ci = vku::InitStructHelper();
     buff_view_ci.buffer = buffer;
@@ -250,7 +245,6 @@ TEST_F(NegativeBuffer, CreateBufferViewNoMemoryBoundToBuffer) {
     buff_view_ci.range = VK_WHOLE_SIZE;
     vkt::BufferView buffer_view(*m_device, buff_view_ci);
     m_errorMonitor->VerifyFound();
-    vk::DestroyBuffer(m_device->device(), buffer, NULL);
 }
 
 TEST_F(NegativeBuffer, BufferViewCreateInfoEntries) {
@@ -615,7 +609,7 @@ TEST_F(NegativeBuffer, IndexBufferOffset) {
 
     // Test for missing pNext struct for index buffer UINT8 type
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBindIndexBuffer-indexType-08787");
-    vk::CmdBindIndexBuffer(m_commandBuffer->handle(), buffer.handle(), 1, VK_INDEX_TYPE_UINT8_EXT);
+    vk::CmdBindIndexBuffer(m_commandBuffer->handle(), buffer.handle(), 1, VK_INDEX_TYPE_UINT8_KHR);
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->EndRenderPass();
@@ -648,7 +642,7 @@ TEST_F(NegativeBuffer, IndexBuffer2Offset) {
 
     // Test for missing pNext struct for index buffer UINT8 type
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBindIndexBuffer2KHR-indexType-08787");
-    vk::CmdBindIndexBuffer2KHR(m_commandBuffer->handle(), buffer.handle(), 1, VK_WHOLE_SIZE, VK_INDEX_TYPE_UINT8_EXT);
+    vk::CmdBindIndexBuffer2KHR(m_commandBuffer->handle(), buffer.handle(), 1, VK_WHOLE_SIZE, VK_INDEX_TYPE_UINT8_KHR);
     m_errorMonitor->VerifyFound();
 
     m_commandBuffer->EndRenderPass();
@@ -666,7 +660,7 @@ TEST_F(NegativeBuffer, IndexBuffer2Size) {
     const uint32_t buffer_size = 32;
     vkt::Buffer buffer(*m_device, buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     VkMemoryRequirements mem_reqs;
-    vk::GetBufferMemoryRequirements(m_device->device(), buffer.handle(), &mem_reqs);
+    vk::GetBufferMemoryRequirements(device(), buffer.handle(), &mem_reqs);
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
 
@@ -810,7 +804,7 @@ TEST_F(NegativeBuffer, FillBufferCmdPoolUnsupported) {
     vkt::Queue *queue = m_device->queue_family_queues(transfer.value())[0].get();
 
     vkt::CommandPool pool(*m_device, transfer.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer cb(m_device, &pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, queue);
+    vkt::CommandBuffer cb(*m_device, &pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, queue);
     vkt::Buffer buffer(*m_device, 20, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     cb.begin();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdFillBuffer-apiVersion-07894");
@@ -902,8 +896,7 @@ TEST_F(NegativeBuffer, CompletelyOverlappingBufferCopy) {
     copy_info.size = 256;
     vkt::Buffer buffer(*m_device, copy_info.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
 
-    vkt::Buffer buffer_shared_memory;
-    buffer_shared_memory.init_no_mem(*m_device, buffer.create_info());
+    vkt::Buffer buffer_shared_memory(*m_device, buffer.create_info(), vkt::no_mem);
     buffer_shared_memory.bind_memory(buffer.memory(), 0u);
 
     m_commandBuffer->begin();
@@ -939,8 +932,7 @@ TEST_F(NegativeBuffer, CopyingInterleavedRegions) {
 
     vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
 
-    vkt::Buffer buffer_shared_memory;
-    buffer_shared_memory.init_no_mem(*m_device, buffer.create_info());
+    vkt::Buffer buffer_shared_memory(*m_device, buffer.create_info(), vkt::no_mem);
     buffer_shared_memory.bind_memory(buffer.memory(), 0u);
 
     m_commandBuffer->begin();

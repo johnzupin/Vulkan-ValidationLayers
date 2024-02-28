@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ TEST_F(VkPositiveLayerTest, Maintenance1Tests) {
 
     AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    vkt::CommandBuffer cmd_buf(m_device, m_commandPool);
+    vkt::CommandBuffer cmd_buf(*m_device, m_commandPool);
     cmd_buf.begin();
     // Set Negative height, should give error if Maintenance 1 is not enabled
     VkViewport viewport = {0, 0, 16, -16, 0, 1};
@@ -64,11 +64,11 @@ TEST_F(VkPositiveLayerTest, ValidStructPNext) {
     buffer_create_info.pQueueFamilyIndices = &queue_family_index;
 
     VkBuffer buffer;
-    VkResult err = vk::CreateBuffer(m_device->device(), &buffer_create_info, NULL, &buffer);
+    VkResult err = vk::CreateBuffer(device(), &buffer_create_info, NULL, &buffer);
     ASSERT_EQ(VK_SUCCESS, err);
 
     VkMemoryRequirements memory_reqs;
-    vk::GetBufferMemoryRequirements(m_device->device(), buffer, &memory_reqs);
+    vk::GetBufferMemoryRequirements(device(), buffer, &memory_reqs);
 
     VkDedicatedAllocationMemoryAllocateInfoNV dedicated_memory_info = vku::InitStructHelper();
     dedicated_memory_info.buffer = buffer;
@@ -82,14 +82,14 @@ TEST_F(VkPositiveLayerTest, ValidStructPNext) {
     ASSERT_TRUE(pass);
 
     VkDeviceMemory buffer_memory;
-    err = vk::AllocateMemory(m_device->device(), &memory_info, NULL, &buffer_memory);
+    err = vk::AllocateMemory(device(), &memory_info, NULL, &buffer_memory);
     ASSERT_EQ(VK_SUCCESS, err);
 
-    err = vk::BindBufferMemory(m_device->device(), buffer, buffer_memory, 0);
+    err = vk::BindBufferMemory(device(), buffer, buffer_memory, 0);
     ASSERT_EQ(VK_SUCCESS, err);
 
-    vk::DestroyBuffer(m_device->device(), buffer, NULL);
-    vk::FreeMemory(m_device->device(), buffer_memory, NULL);
+    vk::DestroyBuffer(device(), buffer, NULL);
+    vk::FreeMemory(device(), buffer_memory, NULL);
 }
 
 TEST_F(VkPositiveLayerTest, DeviceIDPropertiesExtensions) {
@@ -225,7 +225,7 @@ TEST_F(VkPositiveLayerTest, GetDevProcAddrNullPtr) {
     TEST_DESCRIPTION("Call GetDeviceProcAddr on an enabled instance extension expecting nullptr");
     AddRequiredExtensions(VK_KHR_SURFACE_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    auto fpDestroySurface = (PFN_vkCreateValidationCacheEXT)vk::GetDeviceProcAddr(m_device->device(), "vkDestroySurfaceKHR");
+    auto fpDestroySurface = (PFN_vkCreateValidationCacheEXT)vk::GetDeviceProcAddr(device(), "vkDestroySurfaceKHR");
     if (fpDestroySurface) {
         m_errorMonitor->SetError("Null was expected!");
     }
@@ -235,8 +235,8 @@ TEST_F(VkPositiveLayerTest, GetDevProcAddrExtensions) {
     TEST_DESCRIPTION("Call GetDeviceProcAddr with and without extension enabled");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
-    auto vkTrimCommandPool = vk::GetDeviceProcAddr(m_device->device(), "vkTrimCommandPool");
-    auto vkTrimCommandPoolKHR = vk::GetDeviceProcAddr(m_device->device(), "vkTrimCommandPoolKHR");
+    auto vkTrimCommandPool = vk::GetDeviceProcAddr(device(), "vkTrimCommandPool");
+    auto vkTrimCommandPoolKHR = vk::GetDeviceProcAddr(device(), "vkTrimCommandPoolKHR");
     if (nullptr == vkTrimCommandPool) m_errorMonitor->SetError("Unexpected null pointer");
     if (nullptr != vkTrimCommandPoolKHR) m_errorMonitor->SetError("Didn't receive expected null pointer");
 
@@ -285,7 +285,7 @@ TEST_F(VkPositiveLayerTest, Vulkan12FeaturesBufferDeviceAddress) {
 
     // Also verify that we don't get the KHR extension address without enabling the KHR extension
     auto vkGetBufferDeviceAddressKHR =
-        (PFN_vkGetBufferDeviceAddressKHR)vk::GetDeviceProcAddr(m_device->device(), "vkGetBufferDeviceAddressKHR");
+        (PFN_vkGetBufferDeviceAddressKHR)vk::GetDeviceProcAddr(device(), "vkGetBufferDeviceAddressKHR");
     if (nullptr != vkGetBufferDeviceAddressKHR) m_errorMonitor->SetError("Didn't receive expected null pointer");
 }
 
@@ -440,7 +440,7 @@ TEST_F(VkPositiveLayerTest, UseInteractionApi1) {
     }
 
     VkDeviceGroupPresentCapabilitiesKHR device_group_present_caps = vku::InitStructHelper();
-    vk::GetDeviceGroupPresentCapabilitiesKHR(m_device->device(), &device_group_present_caps);
+    vk::GetDeviceGroupPresentCapabilitiesKHR(device(), &device_group_present_caps);
 }
 
 TEST_F(VkPositiveLayerTest, UseInteractionApi2) {
@@ -457,7 +457,7 @@ TEST_F(VkPositiveLayerTest, UseInteractionApi2) {
     }
 
     VkDeviceGroupPresentCapabilitiesKHR device_group_present_caps = vku::InitStructHelper();
-    vk::GetDeviceGroupPresentCapabilitiesKHR(m_device->device(), &device_group_present_caps);
+    vk::GetDeviceGroupPresentCapabilitiesKHR(device(), &device_group_present_caps);
 }
 
 TEST_F(VkPositiveLayerTest, ExtensionExpressions) {
@@ -514,9 +514,9 @@ TEST_F(VkPositiveLayerTest, ExtensionsInCreateInstance) {
     //       So, this test will only catch an erroneous extension _if_ run on HW/a driver that crashes in this use
     //       case.
 
-    for (const auto &ext : InstanceExtensions::get_info_map()) {
+    for (const auto &ext : InstanceExtensions::GetInfoMap()) {
         // Add all "real" instance extensions
-        if (InstanceExtensionSupported(ext.first.c_str())) {
+        if (InstanceExtensionSupported(String(ext.first))) {
             bool version_required = false;
             for (const auto &req : ext.second.requirements) {
                 std::string name(req.name);
@@ -526,7 +526,7 @@ TEST_F(VkPositiveLayerTest, ExtensionsInCreateInstance) {
                 }
             }
             if (!version_required) {
-                m_instance_extension_names.emplace_back(ext.first.c_str());
+                m_instance_extension_names.emplace_back(String(ext.first));
             }
         }
     }
@@ -688,4 +688,30 @@ TEST_F(VkPositiveLayerTest, GetCalibratedTimestampsKHR) {
     uint64_t timestamps[2];
     uint64_t max_deviation;
     vk::GetCalibratedTimestampsKHR(device(), 2, timestamp_infos, timestamps, &max_deviation);
+}
+
+TEST_F(VkPositiveLayerTest, ExtensionPhysicalDeviceFeatureEXT) {
+    TEST_DESCRIPTION("VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR has an EXT and KHR extension that can enable it");
+    AddRequiredExtensions(VK_EXT_GLOBAL_PRIORITY_QUERY_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitFramework());
+    VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR query_feature = vku::InitStructHelper();
+    query_feature.globalPriorityQuery = VK_TRUE;
+    RETURN_IF_SKIP(InitState(nullptr, &query_feature));
+}
+
+TEST_F(VkPositiveLayerTest, ExtensionPhysicalDeviceFeatureKHR) {
+    TEST_DESCRIPTION("VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR has an EXT and KHR extension that can enable it");
+    AddRequiredExtensions(VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitFramework());
+    VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR query_feature = vku::InitStructHelper();
+    query_feature.globalPriorityQuery = VK_TRUE;
+    RETURN_IF_SKIP(InitState(nullptr, &query_feature));
+}
+
+TEST_F(VkPositiveLayerTest, NoExtensionFromInstanceFunction) {
+    TEST_DESCRIPTION("Valid because we instance functions don't know which device it needs");
+    RETURN_IF_SKIP(Init());
+    VkFormatProperties format_properties;
+    // need VK_KHR_sampler_ycbcr_conversion if it was a device function
+    vk::GetPhysicalDeviceFormatProperties(gpu(), VK_FORMAT_B16G16R16G16_422_UNORM, &format_properties);
 }

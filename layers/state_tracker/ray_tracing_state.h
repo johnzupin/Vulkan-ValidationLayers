@@ -38,7 +38,7 @@ class AccelerationStructureNV : public Bindable {
     }
     AccelerationStructureNV(const AccelerationStructureNV &rh_obj) = delete;
 
-    VkAccelerationStructureNV acceleration_structure() const { return handle_.Cast<VkAccelerationStructureNV>(); }
+    VkAccelerationStructureNV VkHandle() const { return handle_.Cast<VkAccelerationStructureNV>(); }
 
     void Build(const VkAccelerationStructureInfoNV *pInfo) {
         built = true;
@@ -72,8 +72,8 @@ class AccelerationStructureNV : public Bindable {
 class AccelerationStructureKHR : public StateObject {
   public:
     AccelerationStructureKHR(VkAccelerationStructureKHR as, const VkAccelerationStructureCreateInfoKHR *ci,
-                             std::shared_ptr<Buffer> &&buf_state, VkDeviceAddress address)
-        : StateObject(as, kVulkanObjectTypeAccelerationStructureKHR), create_infoKHR(ci), buffer_state(buf_state), address(address) {}
+                             std::shared_ptr<Buffer> &&buf_state)
+        : StateObject(as, kVulkanObjectTypeAccelerationStructureKHR), create_infoKHR(ci), buffer_state(buf_state) {}
     AccelerationStructureKHR(const AccelerationStructureKHR &rh_obj) = delete;
 
     virtual ~AccelerationStructureKHR() {
@@ -82,7 +82,7 @@ class AccelerationStructureKHR : public StateObject {
         }
     }
 
-    VkAccelerationStructureKHR acceleration_structure() const { return handle_.Cast<VkAccelerationStructureKHR>(); }
+    VkAccelerationStructureKHR VkHandle() const { return handle_.Cast<VkAccelerationStructureKHR>(); }
 
     void LinkChildNodes() override {
         // Connect child node(s), which cannot safely be done in the constructor.
@@ -110,70 +110,12 @@ class AccelerationStructureKHR : public StateObject {
         }
     }
 
-    const safe_VkAccelerationStructureCreateInfoKHR create_infoKHR = {};
-    safe_VkAccelerationStructureBuildGeometryInfoKHR build_info_khr;
+    const safe_VkAccelerationStructureCreateInfoKHR create_infoKHR{};
+    safe_VkAccelerationStructureBuildGeometryInfoKHR build_info_khr{};
     bool built = false;
     uint64_t opaque_handle = 0;
-    std::shared_ptr<vvl::Buffer> buffer_state;
-    VkDeviceAddress address;
-    std::vector<VkAccelerationStructureBuildRangeInfoKHR> build_range_infos;
+    std::shared_ptr<vvl::Buffer> buffer_state{};
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR> build_range_infos{};
 };
 
 }  // namespace vvl
-
-// Safe struct that spans NV and KHR VkRayTracingPipelineCreateInfo structures.
-// It is a safe_VkRayTracingPipelineCreateInfoKHR and supports construction from
-// a VkRayTracingPipelineCreateInfoNV.
-class safe_VkRayTracingPipelineCreateInfoCommon : public safe_VkRayTracingPipelineCreateInfoKHR {
-  public:
-    safe_VkRayTracingPipelineCreateInfoCommon() : safe_VkRayTracingPipelineCreateInfoKHR() {}
-    safe_VkRayTracingPipelineCreateInfoCommon(const VkRayTracingPipelineCreateInfoNV *pCreateInfo)
-        : safe_VkRayTracingPipelineCreateInfoKHR() {
-        initialize(pCreateInfo);
-    }
-    safe_VkRayTracingPipelineCreateInfoCommon(const VkRayTracingPipelineCreateInfoKHR *pCreateInfo)
-        : safe_VkRayTracingPipelineCreateInfoKHR(pCreateInfo) {}
-
-    void initialize(const VkRayTracingPipelineCreateInfoNV *pCreateInfo) {
-        safe_VkRayTracingPipelineCreateInfoNV nvStruct;
-        nvStruct.initialize(pCreateInfo);
-
-        sType = nvStruct.sType;
-
-        // Take ownership of the pointer and null it out in nvStruct
-        pNext = nvStruct.pNext;
-        nvStruct.pNext = nullptr;
-
-        flags = nvStruct.flags;
-        stageCount = nvStruct.stageCount;
-
-        pStages = nvStruct.pStages;
-        nvStruct.pStages = nullptr;
-
-        groupCount = nvStruct.groupCount;
-        maxRecursionDepth = nvStruct.maxRecursionDepth;
-        layout = nvStruct.layout;
-        basePipelineHandle = nvStruct.basePipelineHandle;
-        basePipelineIndex = nvStruct.basePipelineIndex;
-
-        assert(pGroups == nullptr);
-        if (nvStruct.groupCount && nvStruct.pGroups) {
-            pGroups = new safe_VkRayTracingShaderGroupCreateInfoKHR[groupCount];
-            for (uint32_t i = 0; i < groupCount; ++i) {
-                pGroups[i].sType = nvStruct.pGroups[i].sType;
-                pGroups[i].pNext = nvStruct.pGroups[i].pNext;
-                pGroups[i].type = nvStruct.pGroups[i].type;
-                pGroups[i].generalShader = nvStruct.pGroups[i].generalShader;
-                pGroups[i].closestHitShader = nvStruct.pGroups[i].closestHitShader;
-                pGroups[i].anyHitShader = nvStruct.pGroups[i].anyHitShader;
-                pGroups[i].intersectionShader = nvStruct.pGroups[i].intersectionShader;
-                pGroups[i].intersectionShader = nvStruct.pGroups[i].intersectionShader;
-                pGroups[i].pShaderGroupCaptureReplayHandle = nullptr;
-            }
-        }
-    }
-    void initialize(const VkRayTracingPipelineCreateInfoKHR *pCreateInfo) {
-        safe_VkRayTracingPipelineCreateInfoKHR::initialize(pCreateInfo);
-    }
-    uint32_t maxRecursionDepth = 0;  // NV specific
-};

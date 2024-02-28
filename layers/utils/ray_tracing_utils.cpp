@@ -1,5 +1,5 @@
-/* Copyright (c) 2023 Valve Corporation
- * Copyright (c) 2023 LunarG, Inc.
+/* Copyright (c) 2024 Valve Corporation
+ * Copyright (c) 2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,31 +16,37 @@
 
 #include "ray_tracing_utils.h"
 
+#include "generated/layer_chassis_dispatch.h"
+#include "containers/custom_containers.h"
+
 #include <cassert>
 #include <vector>
-
-#include "generated/layer_chassis_dispatch.h"
 #include <vulkan/utility/vk_struct_helper.hpp>
 
 namespace rt {
 
 static VkAccelerationStructureBuildSizesInfoKHR ComputeBuildSizes(const VkDevice device,
+                                                                  const VkAccelerationStructureBuildTypeKHR build_type,
                                                                   const VkAccelerationStructureBuildGeometryInfoKHR &build_info,
                                                                   const VkAccelerationStructureBuildRangeInfoKHR *range_infos) {
     std::vector<uint32_t> primitive_counts(build_info.geometryCount);
-    for (uint32_t build_range_i = 0; build_range_i < build_info.geometryCount; build_range_i++) {
-        primitive_counts[build_range_i] = range_infos[build_range_i].primitiveCount;
+    for (const auto [i, build_range] : vvl::enumerate(range_infos, build_info.geometryCount)) {
+        primitive_counts[i] = build_range->primitiveCount;
     }
     VkAccelerationStructureBuildSizesInfoKHR size_info = vku::InitStructHelper();
-    DispatchGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info,
-                                                  primitive_counts.data(), &size_info);
+    DispatchGetAccelerationStructureBuildSizesKHR(device, build_type, &build_info, primitive_counts.data(), &size_info);
 
     return size_info;
 }
 
-VkDeviceSize ComputeScratchSize(const VkDevice device, const VkAccelerationStructureBuildGeometryInfoKHR &build_info,
+VkDeviceSize ComputeScratchSize(BuildType build_type, const VkDevice device,
+                                const VkAccelerationStructureBuildGeometryInfoKHR &build_info,
                                 const VkAccelerationStructureBuildRangeInfoKHR *range_infos) {
-    const VkAccelerationStructureBuildSizesInfoKHR size_info = ComputeBuildSizes(device, build_info, range_infos);
+    const VkAccelerationStructureBuildSizesInfoKHR size_info =
+        ComputeBuildSizes(device,
+                          build_type == BuildType::Device ? VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR
+                                                          : VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_KHR,
+                          build_info, range_infos);
     switch (build_info.mode) {
         case VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR:
             return size_info.buildScratchSize;
@@ -53,9 +59,15 @@ VkDeviceSize ComputeScratchSize(const VkDevice device, const VkAccelerationStruc
     }
 }
 
-VkDeviceSize ComputeAccelerationStructureSize(const VkDevice device, const VkAccelerationStructureBuildGeometryInfoKHR &build_info,
+VkDeviceSize ComputeAccelerationStructureSize(BuildType build_type, const VkDevice device,
+                                              const VkAccelerationStructureBuildGeometryInfoKHR &build_info,
                                               const VkAccelerationStructureBuildRangeInfoKHR *range_infos) {
-    const VkAccelerationStructureBuildSizesInfoKHR size_info = ComputeBuildSizes(device, build_info, range_infos);
+    const VkAccelerationStructureBuildSizesInfoKHR size_info =
+        ComputeBuildSizes(device,
+                          build_type == BuildType::Device ? VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR
+                                                          : VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_KHR,
+                          build_info, range_infos);
     return size_info.accelerationStructureSize;
 }
+
 }  // namespace rt

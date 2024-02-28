@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2020-2023 The Khronos Group Inc.
- * Copyright (c) 2020-2023 Valve Corporation
- * Copyright (c) 2020-2023 LunarG, Inc.
- * Copyright (c) 2020-2023 Google, Inc.
+ * Copyright (c) 2020-2024 The Khronos Group Inc.
+ * Copyright (c) 2020-2024 Valve Corporation
+ * Copyright (c) 2020-2024 LunarG, Inc.
+ * Copyright (c) 2020-2024 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,210 +16,23 @@
 #include "../framework/descriptor_helper.h"
 #include "../framework/gpu_av_helper.h"
 
-TEST_F(NegativeGpuAV, ValidationInlineUniformBlockAndMiscGpu) {
-    TEST_DESCRIPTION(
-        "GPU validation: Make sure inline uniform blocks don't generate false validation errors, verify reserved descriptor slot "
-        "and verify pipeline recovery");
-    AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    AddRequiredExtensions(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+TEST_F(NegativeGpuAV, DestroyedPipelineLayout) {
+    TEST_DESCRIPTION("Check if can catch pipeline layout not being bound");
     RETURN_IF_SKIP(InitGpuAvFramework());
-    VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexing_features = vku::InitStructHelper();
-    VkPhysicalDeviceInlineUniformBlockFeaturesEXT inline_uniform_block_features = vku::InitStructHelper(&indexing_features);
-    auto features2 = GetPhysicalDeviceFeatures2(inline_uniform_block_features);
-    if (!indexing_features.descriptorBindingPartiallyBound || !inline_uniform_block_features.inlineUniformBlock) {
-        GTEST_SKIP() << "Not all features supported";
-    }
-    VkPhysicalDeviceInlineUniformBlockPropertiesEXT inline_uniform_props = vku::InitStructHelper();
-    GetPhysicalDeviceProperties2(inline_uniform_props);
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
-    if (m_device->compute_queues().empty()) {
-        GTEST_SKIP() << "Compute not supported";
-    }
-
-    VkMemoryPropertyFlags mem_props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    vkt::Buffer buffer0(*m_device, 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, mem_props);
-
-    VkDescriptorBindingFlagsEXT ds_binding_flags[2] = {};
-    ds_binding_flags[1] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT layout_createinfo_binding_flags[1] = {};
-    layout_createinfo_binding_flags[0] = vku::InitStructHelper();
-    layout_createinfo_binding_flags[0].bindingCount = 2;
-    layout_createinfo_binding_flags[0].pBindingFlags = ds_binding_flags;
-
-    VkDescriptorPoolInlineUniformBlockCreateInfo pool_inline_info = vku::InitStructHelper();
-    pool_inline_info.maxInlineUniformBlockBindings = 32;
-
-    OneOffDescriptorSet descriptor_set(m_device,
-                                       {
-                                           {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
-                                           {1, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT, 32, VK_SHADER_STAGE_ALL, nullptr},
-                                       },
-                                       0, layout_createinfo_binding_flags, 0, nullptr, &pool_inline_info);
-    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
-
-    VkDescriptorBufferInfo buffer_info[1] = {};
-    buffer_info[0].buffer = buffer0.handle();
-    buffer_info[0].offset = 0;
-    buffer_info[0].range = sizeof(uint32_t);
-
-    const uint32_t test_data = 0xdeadca7;
-    VkWriteDescriptorSetInlineUniformBlockEXT write_inline_uniform = vku::InitStructHelper();
-    write_inline_uniform.dataSize = 4;
-    write_inline_uniform.pData = &test_data;
-
-    VkWriteDescriptorSet descriptor_writes[2] = {};
-    descriptor_writes[0] = vku::InitStructHelper();
-    descriptor_writes[0].dstSet = descriptor_set.set_;
-    descriptor_writes[0].dstBinding = 0;
-    descriptor_writes[0].descriptorCount = 1;
-    descriptor_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptor_writes[0].pBufferInfo = buffer_info;
-
-    descriptor_writes[1] = vku::InitStructHelper(&write_inline_uniform);
-    descriptor_writes[1].dstSet = descriptor_set.set_;
-    descriptor_writes[1].dstBinding = 1;
-    descriptor_writes[1].dstArrayElement = 16;  // Skip first 16 bytes (dummy)
-    descriptor_writes[1].descriptorCount = 4;   // Write 4 bytes to val
-    descriptor_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
-    vk::UpdateDescriptorSets(m_device->device(), 2, descriptor_writes, 0, NULL);
-
-    char const *csSource = R"glsl(
-        #version 450
-        #extension GL_EXT_nonuniform_qualifier : enable
-        layout(set = 0, binding = 0) buffer StorageBuffer { uint index; } u_index;
-        layout(set = 0, binding = 1) uniform inlineubodef { ivec4 dummy; int val; } inlineubo;
-
-        void main() {
-            u_index.index = inlineubo.val;
-        }
-        )glsl";
-
-    CreateComputePipelineHelper pipe1(*this);
-    pipe1.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe1.cp_ci_.layout = pipeline_layout.handle();
-    pipe1.InitState();
-    pipe1.CreateComputePipeline();
-
-    m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe1.pipeline_);
-    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
-                              &descriptor_set.set_, 0, nullptr);
-    vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
-    m_commandBuffer->end();
-
-    m_default_queue->submit(*m_commandBuffer, false);
-    m_default_queue->wait();
-
-    uint32_t *data = (uint32_t *)buffer0.memory().map();
-    ASSERT_TRUE(*data = test_data);
-    *data = 0;
-    buffer0.memory().unmap();
-
-    // Also verify that binding slot reservation is working
-    auto ici = GetInstanceCreateInfo();
-    VkInstance test_inst;
-    vk::CreateInstance(&ici, nullptr, &test_inst);
-    uint32_t gpu_count;
-    vk::EnumeratePhysicalDevices(test_inst, &gpu_count, nullptr);
-    std::vector<VkPhysicalDevice> phys_devices(gpu_count);
-    vk::EnumeratePhysicalDevices(test_inst, &gpu_count, phys_devices.data());
-
-    VkPhysicalDeviceProperties properties;
-    vk::GetPhysicalDeviceProperties(phys_devices[m_gpu_index], &properties);
-    if (m_device->phy().limits_.maxBoundDescriptorSets != properties.limits.maxBoundDescriptorSets - 1)
-        m_errorMonitor->SetError("VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT not functioning as expected");
-    vk::DestroyInstance(test_inst, NULL);
-
-    auto set_count = properties.limits.maxBoundDescriptorSets;
-    if (inline_uniform_props.maxPerStageDescriptorInlineUniformBlocks < set_count) {
-        GTEST_SKIP() << "Max per stage inline uniform block limit too small - skipping recovery portion of this test";
-    }
-
-    // Now be sure that recovery from an unavailable descriptor set works and that uninstrumented shaders are used
-    VkDescriptorSetLayoutBinding dsl_binding[2] = {};
-    dsl_binding[0].binding = 0;
-    dsl_binding[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    dsl_binding[0].descriptorCount = 1;
-    dsl_binding[0].stageFlags = VK_SHADER_STAGE_ALL;
-    dsl_binding[1].binding = 1;
-    dsl_binding[1].descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
-    dsl_binding[1].descriptorCount = set_count;
-    dsl_binding[1].stageFlags = VK_SHADER_STAGE_ALL;
-    VkDescriptorSetLayout *layouts{new VkDescriptorSetLayout[set_count]{}};
-    VkDescriptorSetLayoutCreateInfo dsl_create_info =
-        vku::InitStructHelper(layout_createinfo_binding_flags);
-    dsl_create_info.pBindings = dsl_binding;
-    dsl_create_info.bindingCount = 2;
-    for (uint32_t i = 0; i < set_count; i++) {
-        vk::CreateDescriptorSetLayout(m_device->handle(), &dsl_create_info, NULL, &layouts[i]);
-    }
-    VkPipelineLayoutCreateInfo pl_create_info = vku::InitStructHelper();
-    VkPipelineLayout pl_layout;
-    pl_create_info.setLayoutCount = set_count;
-    pl_create_info.pSetLayouts = layouts;
-    // Expect error since GPU-AV cannot add debug descriptor to layout
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-GPU-Assisted-Validation");
-    vk::CreatePipelineLayout(m_device->handle(), &pl_create_info, NULL, &pl_layout);
-    m_errorMonitor->VerifyFound();
-
-    CreateComputePipelineHelper pipe2(*this);
-    pipe2.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
-    // We should still be able to use the layout and create a temporary uninstrumented shader module
-    pipe2.cp_ci_.layout = pl_layout;
-    pipe2.InitState();
-    pipe2.CreateComputePipeline();
-
-    m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe2.pipeline_);
-    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pl_layout, 0, 1, &descriptor_set.set_, 0,
-                              nullptr);
-    vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
-    m_commandBuffer->end();
-    m_default_queue->submit(*m_commandBuffer, false);
-    m_default_queue->wait();
-    vk::DestroyPipelineLayout(m_device->handle(), pl_layout, NULL);
-    for (uint32_t i = 0; i < set_count; i++) {
-        vk::DestroyDescriptorSetLayout(m_device->handle(), layouts[i], NULL);
-    }
-    data = (uint32_t *)buffer0.memory().map();
-    if (*data != test_data) m_errorMonitor->SetError("Pipeline recovery when resources unavailable not functioning as expected");
-    *data = 0;
-    buffer0.memory().unmap();
-    delete[] layouts;
-
-    // Now make sure we can still use the shader with instrumentation
-    CreateComputePipelineHelper pipe3(*this);
-    pipe3.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe3.cp_ci_.layout = pipeline_layout.handle();
-    pipe3.InitState();
-    pipe3.CreateComputePipeline();
-
-    m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe3.pipeline_);
-    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
-                              &descriptor_set.set_, 0, nullptr);
-    vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
-    m_commandBuffer->end();
-    m_default_queue->submit(*m_commandBuffer, false);
-    m_default_queue->wait();
-    data = (uint32_t *)buffer0.memory().map();
-    if (*data != test_data) m_errorMonitor->SetError("Using shader after pipeline recovery not functioning as expected");
-    *data = 0;
-    buffer0.memory().unmap();
 
     // Destroy pipeline layout after creating pipeline
-    CreatePipelineHelper pipe4(*this);
-    pipe4.InitState();
+    CreatePipelineHelper pipe(*this);
+    pipe.InitState();
     {
         const vkt::PipelineLayout doomed_pipeline_layout(*m_device);
-        pipe4.gp_ci_.layout = doomed_pipeline_layout.handle();
-        pipe4.CreateGraphicsPipeline();
+        pipe.gp_ci_.layout = doomed_pipeline_layout.handle();
+        pipe.CreateGraphicsPipeline();
     }
 
     m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe4.Handle());
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "Unable to find pipeline layout to bind debug descriptor set");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
@@ -278,6 +91,7 @@ TEST_F(NegativeGpuAV, ValidationFeatures) {
 TEST_F(NegativeGpuAV, SelectInstrumentedShaders) {
     TEST_DESCRIPTION("GPU validation: Validate selection of which shaders get instrumented for GPU-AV");
     SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_LAYER_SETTINGS_EXTENSION_NAME);
     const VkBool32 value = true;
     const VkLayerSettingEXT setting = {OBJECT_LAYER_NAME, "select_instrumented_shaders", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1,
                                        &value};
@@ -379,7 +193,7 @@ TEST_F(NegativeGpuAV, DISABLED_InvalidAtomicStorageOperation) {
     VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT;
     VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;  // The format doesn't support VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT to
                                                        // cause DesiredFailure. VK_FORMAT_R32_UINT is right format.
-    auto image_ci = VkImageObj::ImageCreateInfo2D(64, 64, 1, 1, image_format, usage);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(64, 64, 1, 1, image_format, usage);
 
     if (ImageFormatIsSupported(instance(), gpu(), image_ci, VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT)) {
         GTEST_SKIP() << "Cannot make VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT not supported.";
@@ -397,8 +211,7 @@ TEST_F(NegativeGpuAV, DISABLED_InvalidAtomicStorageOperation) {
     VkPhysicalDeviceFeatures device_features = {};
     GetPhysicalDeviceFeatures(&device_features);
 
-    VkImageObj image(m_device);
-    image.Init(image_ci);
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
     vkt::ImageView image_view = image.CreateView();
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
@@ -455,10 +268,10 @@ TEST_F(NegativeGpuAV, DISABLED_InvalidAtomicStorageOperation) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(), 0, 1,
                               &g_pipe.descriptor_set_->set_, 0, nullptr);
 
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-02691");
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-02691");
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-07888");
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-07888");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02691");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-02691");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-07888");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-07888");
     vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -546,14 +359,12 @@ TEST_F(NegativeGpuAV, DISABLED_UnnormalizedCoordinatesInBoundsAccess) {
 
     VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    VkImageObj image(m_device);
-    auto image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 1, 1, format, usage);
-    image.Init(image_ci);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 1, format, usage);
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
     vkt::ImageView view_pass = image.CreateView();
 
-    VkImageObj image_3d(m_device);
     image_ci.imageType = VK_IMAGE_TYPE_3D;
-    image_3d.Init(image_ci);
+    vkt::Image image_3d(*m_device, image_ci, vkt::set_layout);
 
     VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
     sampler_ci.unnormalizedCoordinates = VK_TRUE;
@@ -571,7 +382,7 @@ TEST_F(NegativeGpuAV, DISABLED_UnnormalizedCoordinatesInBoundsAccess) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(), 0, 1,
                               &g_pipe.descriptor_set_->set_, 0, nullptr);
 
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-08611");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08611");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
 
     m_commandBuffer->EndRenderPass();
@@ -652,14 +463,12 @@ TEST_F(NegativeGpuAV, DISABLED_UnnormalizedCoordinatesCopyObject) {
 
     VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    VkImageObj image(m_device);
-    auto image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 1, 1, format, usage);
-    image.Init(image_ci);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 1, format, usage);
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
     vkt::ImageView view_pass = image.CreateView();
 
-    VkImageObj image_3d(m_device);
     image_ci.imageType = VK_IMAGE_TYPE_3D;
-    image_3d.Init(image_ci);
+    vkt::Image image_3d(*m_device, image_ci, vkt::set_layout);
 
     VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
     sampler_ci.unnormalizedCoordinates = VK_TRUE;
@@ -677,7 +486,7 @@ TEST_F(NegativeGpuAV, DISABLED_UnnormalizedCoordinatesCopyObject) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(), 0, 1,
                               &g_pipe.descriptor_set_->set_, 0, nullptr);
 
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdDraw-None-08611");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08611");
     vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -724,14 +533,12 @@ TEST_F(NegativeGpuAV, UnnormalizedCoordinatesSeparateSamplerSharedSampler) {
 
     const VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     const VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    VkImageObj image(m_device);
-    auto image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 1, 1, format, usage);
-    image.Init(image_ci);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 1, format, usage);
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
     vkt::ImageView image_view = image.CreateView();
 
-    VkImageObj image_3d(m_device);
     image_ci.imageType = VK_IMAGE_TYPE_3D;
-    image_3d.Init(image_ci);
+    vkt::Image image_3d(*m_device, image_ci, vkt::set_layout);
     vkt::ImageView image_view_3d = image_3d.CreateView(VK_IMAGE_VIEW_TYPE_3D);
 
     VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
@@ -752,18 +559,21 @@ TEST_F(NegativeGpuAV, UnnormalizedCoordinatesSeparateSamplerSharedSampler) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
 
-    // Core validation triggers 08610, causing the following draw to be skipped. GPU-AV will thus not be able to validate this draw
-    // call, and so will not trigger any of those 2 VUIDs. Descriptor arrays are not validated in core validation (See call to
-    // `descriptor_set.SkipBinding()` in `CoreChecks::ValidateDrawState()`), so 08609 will not fire
-    if (!m_gpuav_enable_core) {
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08609");
+    // Core validation triggers these errors, causing the following draw to be skipped.
+    // GPU-AV will thus not be able to validate this draw call.
+    // Descriptor arrays are not validated in core validation
+    // (See call to `descriptor_set.SkipBinding()` in `CoreChecks::ValidateDrawState()`)
+    if (m_gpuav_enable_core) {
+        m_errorMonitor->SetAllowedFailureMsg("VUID-vkCmdDraw-None-08609");
+        m_errorMonitor->SetAllowedFailureMsg("VUID-vkCmdDraw-None-08610");
     }
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08610");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
 
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08609");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08610");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();
@@ -845,11 +655,10 @@ TEST_F(NegativeGpuAV, ShareOpSampledImage) {
     g_pipe.gp_ci_.layout = pipeline_layout.handle();
     g_pipe.CreateGraphicsPipeline();
 
-    VkImageObj image(m_device);
-    auto image_ci = VkImageObj::ImageCreateInfo2D(
+    auto image_ci = vkt::Image::ImageCreateInfo2D(
         128, 128, 1, 1, VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    image.Init(image_ci);
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
     vkt::ImageView image_view = image.CreateView();
 
     VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
@@ -866,6 +675,10 @@ TEST_F(NegativeGpuAV, ShareOpSampledImage) {
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_);
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
+
+    if (m_gpuav_enable_core) {
+        m_errorMonitor->SetAllowedFailureMsg("VUID-vkCmdDraw-None-08610");
+    }
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
@@ -905,8 +718,7 @@ TEST_F(NegativeGpuAV, DISABLED_YcbcrDrawFetchIndexed) {
         GTEST_SKIP() << "Multiplane image format not supported";
     }
 
-    VkImageObj image(m_device);
-    image.Init(ci);
+    vkt::Image image(*m_device, ci, vkt::set_layout);
 
     vkt::SamplerYcbcrConversion conversion(*m_device, format);
     auto conversion_info = conversion.ConversionInfo();
@@ -938,7 +750,7 @@ TEST_F(NegativeGpuAV, DISABLED_YcbcrDrawFetchIndexed) {
     descriptor_writes.descriptorCount = 2;
     descriptor_writes.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     descriptor_writes.pImageInfo = image_infos;
-    vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_writes, 0, nullptr);
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_writes, 0, nullptr);
 
     const char fsSource[] = R"glsl(
         #version 450
@@ -970,4 +782,262 @@ TEST_F(NegativeGpuAV, DISABLED_YcbcrDrawFetchIndexed) {
     m_errorMonitor->VerifyFound();
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
+}
+
+TEST_F(NegativeGpuAV, CopyBufferToImageD32) {
+    TEST_DESCRIPTION(
+        "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
+        "VK_FORMAT_D32_SFLOAT.");
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+
+    vkt::Buffer copy_src_buffer(*m_device, sizeof(float) * 64 * 64,
+                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    float *ptr = static_cast<float *>(copy_src_buffer.memory().map());
+    for (size_t i = 0; i < 64 * 64; ++i) {
+        ptr[i] = 0.1f;
+    }
+    ptr[4094] = 42.0f;
+    copy_src_buffer.memory().unmap();
+
+    VkImageCreateInfo image_ci = vku::InitStructHelper();
+    image_ci.imageType = VK_IMAGE_TYPE_2D;
+    image_ci.format = VK_FORMAT_D32_SFLOAT;
+    image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image_ci.extent = {64, 64, 1};
+    image_ci.mipLevels = 1;
+    image_ci.arrayLayers = 1;
+    image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image copy_dst_image(*m_device, image_ci, vkt::set_layout);
+    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    m_commandBuffer->begin();
+
+    VkBufferImageCopy buffer_image_copy_1;
+    buffer_image_copy_1.bufferOffset = 0;
+    buffer_image_copy_1.bufferRowLength = 0;
+    buffer_image_copy_1.bufferImageHeight = 0;
+    buffer_image_copy_1.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    buffer_image_copy_1.imageSubresource.mipLevel = 0;
+    buffer_image_copy_1.imageSubresource.baseArrayLayer = 0;
+    buffer_image_copy_1.imageSubresource.layerCount = 1;
+    buffer_image_copy_1.imageOffset = {0, 0, 0};
+    buffer_image_copy_1.imageExtent = {64, 64, 1};
+
+    vk::CmdCopyBufferToImage(*m_commandBuffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                             &buffer_image_copy_1);
+
+    VkBufferImageCopy buffer_image_copy_2 = buffer_image_copy_1;
+    buffer_image_copy_2.imageOffset = {32, 32, 0};
+    buffer_image_copy_2.imageExtent = {32, 32, 1};
+
+    vk::CmdCopyBufferToImage(*m_commandBuffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                             &buffer_image_copy_2);
+
+    m_commandBuffer->end();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 16376 that is not in the range [0, 1]");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 16376 that is not in the range [0, 1]");
+    m_commandBuffer->QueueCommandBuffer();
+    m_errorMonitor->VerifyFound();
+    vk::DeviceWaitIdle(*m_device);
+}
+
+TEST_F(NegativeGpuAV, CopyBufferToImageD32Vk13) {
+    TEST_DESCRIPTION(
+        "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
+        "VK_FORMAT_D32_SFLOAT.");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
+    RETURN_IF_SKIP(InitFramework(&validation_features));
+    if (!CanEnableGpuAV(*this)) {
+        GTEST_SKIP() << "Requirements for GPU-AV are not met";
+    }
+    RETURN_IF_SKIP(InitState());
+
+    vkt::Buffer copy_src_buffer(*m_device, sizeof(float) * 64 * 64,
+                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    float *ptr = static_cast<float *>(copy_src_buffer.memory().map());
+    for (size_t i = 0; i < 64 * 64; ++i) {
+        ptr[i] = 0.1f;
+    }
+    ptr[4094] = 42.0f;
+    copy_src_buffer.memory().unmap();
+
+    VkImageCreateInfo image_ci = vku::InitStructHelper();
+    image_ci.imageType = VK_IMAGE_TYPE_2D;
+    image_ci.format = VK_FORMAT_D32_SFLOAT;
+    image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image_ci.extent = {64, 64, 1};
+    image_ci.mipLevels = 1;
+    image_ci.arrayLayers = 1;
+    image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image copy_dst_image(*m_device, image_ci, vkt::set_layout);
+    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    m_commandBuffer->begin();
+
+    VkBufferImageCopy2 region_1 = vku::InitStructHelper();
+    region_1.bufferOffset = 0;
+    region_1.bufferRowLength = 0;
+    region_1.bufferImageHeight = 0;
+    region_1.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    region_1.imageSubresource.mipLevel = 0;
+    region_1.imageSubresource.baseArrayLayer = 0;
+    region_1.imageSubresource.layerCount = 1;
+    region_1.imageOffset = {0, 0, 0};
+    region_1.imageExtent = {64, 64, 1};
+
+    VkCopyBufferToImageInfo2 buffer_image_copy = vku::InitStructHelper();
+    buffer_image_copy.srcBuffer = copy_src_buffer;
+    buffer_image_copy.dstImage = copy_dst_image;
+    buffer_image_copy.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    buffer_image_copy.regionCount = 1;
+    buffer_image_copy.pRegions = &region_1;
+
+    vk::CmdCopyBufferToImage2(*m_commandBuffer, &buffer_image_copy);
+
+    region_1.imageOffset = {32, 32, 0};
+    region_1.imageExtent = {32, 32, 1};
+
+    vk::CmdCopyBufferToImage2(*m_commandBuffer, &buffer_image_copy);
+
+    m_commandBuffer->end();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 16376 that is not in the range [0, 1]");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 16376 that is not in the range [0, 1]");
+    m_commandBuffer->QueueCommandBuffer();
+    m_errorMonitor->VerifyFound();
+    vk::DeviceWaitIdle(*m_device);
+}
+
+TEST_F(NegativeGpuAV, CopyBufferToImageD32U8) {
+    TEST_DESCRIPTION(
+        "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
+        "VK_FORMAT_D32_SFLOAT_S8_UINT.");
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+
+    vkt::Buffer copy_src_buffer(*m_device, 5 * 64 * 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    auto ptr = static_cast<uint8_t *>(copy_src_buffer.memory().map());
+    std::memset(ptr, 0, static_cast<size_t>(copy_src_buffer.create_info().size));
+    for (size_t i = 0; i < 64 * 64; ++i) {
+        auto ptr_float = reinterpret_cast<float *>(ptr + 5 * i);
+        if (i == 64 * 64 - 1) {
+            *ptr_float = 42.0f;
+        } else {
+            *ptr_float = 0.1f;
+        }
+    }
+
+    copy_src_buffer.memory().unmap();
+
+    VkImageCreateInfo image_ci = vku::InitStructHelper();
+    image_ci.imageType = VK_IMAGE_TYPE_2D;
+    image_ci.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image_ci.extent = {64, 64, 1};
+    image_ci.mipLevels = 1;
+    image_ci.arrayLayers = 1;
+    image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image copy_dst_image(*m_device, image_ci, vkt::set_layout);
+    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    m_commandBuffer->begin();
+
+    VkBufferImageCopy buffer_image_copy;
+    buffer_image_copy.bufferOffset = 0;
+    buffer_image_copy.bufferRowLength = 0;
+    buffer_image_copy.bufferImageHeight = 0;
+    buffer_image_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    buffer_image_copy.imageSubresource.mipLevel = 0;
+    buffer_image_copy.imageSubresource.baseArrayLayer = 0;
+    buffer_image_copy.imageSubresource.layerCount = 1;
+    buffer_image_copy.imageOffset = {33, 33, 0};
+    buffer_image_copy.imageExtent = {31, 31, 1};
+
+    vk::CmdCopyBufferToImage(*m_commandBuffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                             &buffer_image_copy);
+
+    m_commandBuffer->end();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 20475 that is not in the range [0, 1]");
+    m_commandBuffer->QueueCommandBuffer();
+    m_errorMonitor->VerifyFound();
+    vk::DeviceWaitIdle(*m_device);
+}
+
+TEST_F(NegativeGpuAV, CopyBufferToImageD32U8Vk13) {
+    TEST_DESCRIPTION(
+        "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
+        "VK_FORMAT_D32_SFLOAT_S8_UINT.");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
+    RETURN_IF_SKIP(InitFramework(&validation_features));
+    if (!CanEnableGpuAV(*this)) {
+        GTEST_SKIP() << "Requirements for GPU-AV are not met";
+    }
+    RETURN_IF_SKIP(InitState());
+
+    vkt::Buffer copy_src_buffer(*m_device, 5 * 64 * 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    auto ptr = static_cast<uint8_t *>(copy_src_buffer.memory().map());
+    std::memset(ptr, 0, static_cast<size_t>(copy_src_buffer.create_info().size));
+    for (size_t i = 0; i < 64 * 64; ++i) {
+        auto ptr_float = reinterpret_cast<float *>(ptr + 5 * i);
+        if (i == 64 * 64 - 1) {
+            *ptr_float = 42.0f;
+        } else {
+            *ptr_float = 0.1f;
+        }
+    }
+
+    copy_src_buffer.memory().unmap();
+
+    VkImageCreateInfo image_ci = vku::InitStructHelper();
+    image_ci.imageType = VK_IMAGE_TYPE_2D;
+    image_ci.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image_ci.extent = {64, 64, 1};
+    image_ci.mipLevels = 1;
+    image_ci.arrayLayers = 1;
+    image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image copy_dst_image(*m_device, image_ci, vkt::set_layout);
+    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    m_commandBuffer->begin();
+
+    VkBufferImageCopy2 region_1 = vku::InitStructHelper();
+    region_1.bufferOffset = 0;
+    region_1.bufferRowLength = 0;
+    region_1.bufferImageHeight = 0;
+    region_1.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    region_1.imageSubresource.mipLevel = 0;
+    region_1.imageSubresource.baseArrayLayer = 0;
+    region_1.imageSubresource.layerCount = 1;
+    region_1.imageOffset = {33, 33, 0};
+    region_1.imageExtent = {31, 31, 1};
+
+    VkCopyBufferToImageInfo2 buffer_image_copy = vku::InitStructHelper();
+    buffer_image_copy.srcBuffer = copy_src_buffer;
+    buffer_image_copy.dstImage = copy_dst_image;
+    buffer_image_copy.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    buffer_image_copy.regionCount = 1;
+    buffer_image_copy.pRegions = &region_1;
+
+    vk::CmdCopyBufferToImage2(*m_commandBuffer, &buffer_image_copy);
+
+    m_commandBuffer->end();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 20475 that is not in the range [0, 1]");
+    m_commandBuffer->QueueCommandBuffer();
+    m_errorMonitor->VerifyFound();
+    vk::DeviceWaitIdle(*m_device);
 }

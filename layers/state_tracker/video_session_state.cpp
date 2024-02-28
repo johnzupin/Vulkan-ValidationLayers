@@ -1,5 +1,5 @@
-/* Copyright (c) 2022-2023 The Khronos Group Inc.
- * Copyright (c) 2022-2023 RasterGrid Kft.
+/* Copyright (c) 2022-2024 The Khronos Group Inc.
+ * Copyright (c) 2022-2024 RasterGrid Kft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,6 +78,20 @@ bool VideoProfileDesc::InitProfile(VkVideoProfileInfoKHR const *profile) {
                 profile_.base.pNext = &profile_.decode_h265;
                 break;
             }
+            case VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR: {
+                auto decode_av1 = vku::FindStructInPNextChain<VkVideoDecodeAV1ProfileInfoKHR>(profile->pNext);
+                if (decode_av1) {
+                    profile_.valid = true;
+                    profile_.decode_av1 = *decode_av1;
+                    profile_.decode_av1.pNext = nullptr;
+                } else {
+                    profile_.valid = false;
+                    profile_.decode_av1 = vku::InitStructHelper();
+                }
+                profile_.is_decode = true;
+                profile_.base.pNext = &profile_.decode_av1;
+                break;
+            }
             case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR: {
                 auto encode_h264 = vku::FindStructInPNextChain<VkVideoEncodeH264ProfileInfoKHR>(profile->pNext);
                 if (encode_h264) {
@@ -154,6 +168,13 @@ void VideoProfileDesc::InitCapabilities(VkPhysicalDevice physical_device) {
             capabilities_.decode = vku::InitStructHelper();
             capabilities_.decode.pNext = &capabilities_.decode_h265;
             capabilities_.decode_h265 = vku::InitStructHelper();
+            break;
+
+        case VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR:
+            capabilities_.base.pNext = &capabilities_.decode;
+            capabilities_.decode = vku::InitStructHelper();
+            capabilities_.decode.pNext = &capabilities_.decode_av1;
+            capabilities_.decode_av1 = vku::InitStructHelper();
             break;
 
         case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
@@ -250,6 +271,38 @@ VkImageSubresourceRange VideoPictureResource::GetImageSubresourceRange(ImageView
     return range;
 }
 
+VkOffset3D VideoPictureResource::GetEffectiveImageOffset(const vvl::VideoSession &vs_state) const {
+    VkOffset3D offset{coded_offset.x, coded_offset.y, 0};
+
+    // Round to picture access granularity
+    const auto gran = vs_state.profile->GetCapabilities().base.pictureAccessGranularity;
+    offset.x = (offset.x / gran.width) * gran.width;
+    offset.y = (offset.y / gran.height) * gran.height;
+
+    return offset;
+}
+
+VkExtent3D VideoPictureResource::GetEffectiveImageExtent(const vvl::VideoSession &vs_state) const {
+    VkExtent3D extent{coded_extent.width, coded_extent.height, 1};
+
+    // H.264 decode interlacing with separate planes only accesses half of the coded height
+    if (vs_state.GetCodecOp() == VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR &&
+        vs_state.GetH264PictureLayout() == VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_INTERLACED_SEPARATE_PLANES_BIT_KHR) {
+        extent.height /= 2;
+    }
+
+    // Round to picture access granularity
+    const auto gran = vs_state.profile->GetCapabilities().base.pictureAccessGranularity;
+    extent.width = ((extent.width + gran.width - 1) / gran.width) * gran.width;
+    extent.height = ((extent.height + gran.height - 1) / gran.height) * gran.height;
+
+    // Clamp to mip level dimensions
+    extent.width = std::min(extent.width, image_state->createInfo.extent.width >> range.baseMipLevel);
+    extent.height = std::min(extent.height, image_state->createInfo.extent.height >> range.baseMipLevel);
+
+    return extent;
+}
+
 VideoPictureID::VideoPictureID(VideoProfileDesc const &profile, VkVideoReferenceSlotInfoKHR const &slot) {
     switch (profile.GetCodecOp()) {
         case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR: {
@@ -262,6 +315,7 @@ VideoPictureID::VideoPictureID(VideoProfileDesc const &profile, VkVideoReference
         }
 
         case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR:
+        case VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR:
         case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
         case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR:
             break;
@@ -323,7 +377,7 @@ void VideoSessionDeviceState::Invalidate(int32_t slot_index, const VideoPictureI
                                              [&res](const auto &it) { return it.second == res; });
             if (other_ref_it == pictures_per_id_[slot_index].end()) {
                 // If there are no remaining references to the resource, remove it
-                all_pictures_[slot_index].erase(prev_res_it->second);
+                all_pictures_[slot_index].erase(res);
             }
         }
     }
@@ -385,7 +439,8 @@ class RateControlStateMismatchRecorder {
 };
 
 bool VideoSessionDeviceState::ValidateRateControlState(const ValidationStateTracker *dev_data, const VideoSession *vs_state,
-                                                       const safe_VkVideoBeginCodingInfoKHR &begin_info) const {
+                                                       const safe_VkVideoBeginCodingInfoKHR &begin_info,
+                                                       const Location &loc) const {
     bool skip = false;
 
     assert(vs_state->IsEncode());
@@ -512,7 +567,7 @@ bool VideoSessionDeviceState::ValidateRateControlState(const ValidationStateTrac
 #undef CHECK_RC_LAYER_INFO
 
         if (mismatch_recorder.HasMismatch()) {
-            skip |= dev_data->LogError(vs_state->Handle(), "VUID-vkCmdBeginVideoCodingKHR-pBeginInfo-08254",
+            skip |= dev_data->LogError("VUID-vkCmdBeginVideoCodingKHR-pBeginInfo-08254", vs_state->Handle(), loc,
                                        "The video encode rate control information specified when beginning the video coding scope "
                                        "does not match the currently configured video encode rate control state for %s:\n%s",
                                        dev_data->FormatHandle(vs_state->Handle()).c_str(), mismatch_recorder.c_str());
@@ -521,7 +576,7 @@ bool VideoSessionDeviceState::ValidateRateControlState(const ValidationStateTrac
     } else {
         if (encode_.rate_control_state.base.rateControlMode != VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DEFAULT_KHR) {
             skip |=
-                dev_data->LogError(vs_state->Handle(), "VUID-vkCmdBeginVideoCodingKHR-pBeginInfo-08253",
+                dev_data->LogError("VUID-vkCmdBeginVideoCodingKHR-pBeginInfo-08253", vs_state->Handle(), loc,
                                    "No VkVideoEncodeRateControlInfoKHR structure was specified when beginning the "
                                    "video coding scope but the currently set video encode rate control mode for %s is %s.",
                                    dev_data->FormatHandle(vs_state->Handle()).c_str(),
@@ -570,6 +625,11 @@ bool VideoSession::ReferenceSetupRequested(VkVideoDecodeInfoKHR const &decode_in
         case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR: {
             auto pic_info = vku::FindStructInPNextChain<VkVideoDecodeH265PictureInfoKHR>(decode_info.pNext);
             return pic_info != nullptr && pic_info->pStdPictureInfo != nullptr && pic_info->pStdPictureInfo->flags.IsReference;
+        }
+        case VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR: {
+            auto pic_info = vku::FindStructInPNextChain<VkVideoDecodeAV1PictureInfoKHR>(decode_info.pNext);
+            return pic_info != nullptr && pic_info->pStdPictureInfo != nullptr &&
+                   pic_info->pStdPictureInfo->refresh_frame_flags != 0;
         }
 
         default:
@@ -638,6 +698,14 @@ VideoSessionParameters::VideoSessionParameters(VkVideoSessionParametersKHR vsp,
             data_.h265.vps_capacity = decode_h265->maxStdVPSCount;
             data_.h265.sps_capacity = decode_h265->maxStdSPSCount;
             data_.h265.pps_capacity = decode_h265->maxStdPPSCount;
+            break;
+        }
+
+        case VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR: {
+            const auto decode_av1 = vku::FindStructInPNextChain<VkVideoDecodeAV1SessionParametersCreateInfoKHR>(create_info.pNext);
+            if (decode_av1->pStdSequenceHeader) {
+                data_.av1.seq_header = std::make_unique<StdVideoAV1SequenceHeader>(*decode_av1->pStdSequenceHeader);
+            }
             break;
         }
 
@@ -712,6 +780,12 @@ void VideoSessionParameters::Update(VkVideoSessionParametersUpdateInfoKHR const 
             if (add_info) {
                 AddDecodeH265(add_info);
             }
+            break;
+        }
+
+        case VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR: {
+            // AV1 decode session parameters cannot be updated
+            assert(false);
             break;
         }
 

@@ -1,6 +1,6 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
@@ -19,6 +19,8 @@
 
 #include "best_practices/best_practices_validation.h"
 #include "best_practices/best_practices_error_enums.h"
+#include "best_practices/bp_state.h"
+#include "state_tracker/queue_state.h"
 
 bool BestPractices::PreCallValidateCreateImage(VkDevice device, const VkImageCreateInfo* pCreateInfo,
                                                const VkAllocationCallbacks* pAllocator, VkImage* pImage,
@@ -268,7 +270,7 @@ void BestPractices::ValidateImageInQueue(const vvl::Queue& qs, const vvl::Comman
                 usage == IMAGE_SUBRESOURCE_USAGE_BP::RESOLVE_READ) {
                 Location loc(command);
                 LogWarning(
-                    kVUID_BestPractices_ConcurrentUsageOfExclusiveImage, state.image(), loc,
+                    kVUID_BestPractices_ConcurrentUsageOfExclusiveImage, state.Handle(), loc,
                     "Subresource (arrayLayer: %" PRIu32 ", mipLevel: %" PRIu32 ") of image is used on queue family index %" PRIu32
                     " after being used on "
                     "queue family index %" PRIu32
@@ -291,4 +293,15 @@ void BestPractices::ValidateImageInQueue(const vvl::Queue& qs, const vvl::Comman
     if (VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorIMG)) {
         ValidateImageInQueueArmImg(command, state, last_usage.type, usage, array_layer, mip_level);
     }
+}
+
+std::shared_ptr<vvl::Image> BestPractices::CreateImageState(VkImage img, const VkImageCreateInfo* pCreateInfo,
+                                                            VkFormatFeatureFlags2KHR features) {
+    return std::make_shared<bp_state::Image>(this, img, pCreateInfo, features);
+}
+
+std::shared_ptr<vvl::Image> BestPractices::CreateImageState(VkImage img, const VkImageCreateInfo* pCreateInfo,
+                                                            VkSwapchainKHR swapchain, uint32_t swapchain_index,
+                                                            VkFormatFeatureFlags2KHR features) {
+    return std::make_shared<bp_state::Image>(this, img, pCreateInfo, swapchain, swapchain_index, features);
 }

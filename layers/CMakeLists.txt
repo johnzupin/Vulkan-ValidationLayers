@@ -1,7 +1,7 @@
 # ~~~
-# Copyright (c) 2014-2023 Valve Corporation
-# Copyright (c) 2014-2023 LunarG, Inc.
-# Copyright (c) 2023-2023 RasterGrid Kft.
+# Copyright (c) 2014-2024 Valve Corporation
+# Copyright (c) 2014-2024 LunarG, Inc.
+# Copyright (c) 2023-2024 RasterGrid Kft.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ target_sources(VkLayer_utils PRIVATE
     error_message/logging.cpp
     error_message/error_location.cpp
     error_message/error_location.h
+    error_message/error_strings.h
     error_message/record_object.h
     external/xxhash.h
     ${API_TYPE}/generated/error_location_helper.cpp
@@ -40,6 +41,7 @@ target_sources(VkLayer_utils PRIVATE
     ${API_TYPE}/generated/vk_validation_error_messages.h
     ${API_TYPE}/generated/vk_layer_dispatch_table.h
     ${API_TYPE}/generated/vk_dispatch_table_helper.h
+    ${API_TYPE}/generated/vk_dispatch_table_helper.cpp
     ${API_TYPE}/generated/vk_safe_struct.h
     ${API_TYPE}/generated/vk_safe_struct_utils.cpp
     ${API_TYPE}/generated/vk_safe_struct_core.cpp
@@ -47,8 +49,10 @@ target_sources(VkLayer_utils PRIVATE
     ${API_TYPE}/generated/vk_safe_struct_ext.cpp
     ${API_TYPE}/generated/vk_safe_struct_vendor.cpp
     ${API_TYPE}/generated/vk_object_types.h
+    ${API_TYPE}/generated/vk_object_types.cpp
     ${API_TYPE}/generated/vk_api_version.h
     ${API_TYPE}/generated/vk_extension_helper.h
+    ${API_TYPE}/generated/vk_extension_helper.cpp
     utils/cast_utils.h
     utils/convert_utils.cpp
     utils/convert_utils.h
@@ -110,7 +114,13 @@ elseif(MSVC)
     )
 endif()
 
-add_library(vvl MODULE)
+add_subdirectory(gpu_validation/spirv)
+
+if(IOS)
+    add_library(vvl SHARED)
+else()
+    add_library(vvl MODULE)
+endif()
 
 target_sources(vvl PRIVATE
     best_practices/best_practices_error_enums.h
@@ -128,6 +138,7 @@ target_sources(vvl PRIVATE
     best_practices/bp_pipeline.cpp
     best_practices/bp_ray_tracing.cpp
     best_practices/bp_render_pass.cpp
+    best_practices/bp_state.h
     best_practices/bp_synchronization.cpp
     best_practices/bp_video.cpp
     best_practices/bp_wsi.cpp
@@ -175,6 +186,7 @@ target_sources(vvl PRIVATE
     ${API_TYPE}/generated/chassis.cpp
     ${API_TYPE}/generated/valid_enum_values.cpp
     ${API_TYPE}/generated/valid_enum_values.h
+    ${API_TYPE}/generated/valid_flag_values.cpp
     ${API_TYPE}/generated/command_validation.cpp
     ${API_TYPE}/generated/dynamic_state_helper.cpp
     ${API_TYPE}/generated/dynamic_state_helper.h
@@ -213,6 +225,8 @@ target_sources(vvl PRIVATE
     gpu_validation/gpu_subclasses.cpp
     gpu_validation/gpu_subclasses.h
     gpu_validation/gpu_record.cpp
+    gpu_validation/gpu_resources.h
+    gpu_validation/gpu_settings.h
     gpu_validation/gpu_setup.cpp
     gpu_validation/gpu_validation.cpp
     gpu_validation/gpu_validation.h
@@ -223,6 +237,7 @@ target_sources(vvl PRIVATE
     object_tracker/object_tracker_utils.cpp
     state_tracker/buffer_state.cpp
     state_tracker/buffer_state.h
+    state_tracker/chassis_modification_state.h
     state_tracker/cmd_buffer_state.cpp
     state_tracker/cmd_buffer_state.h
     state_tracker/descriptor_sets.cpp
@@ -261,6 +276,7 @@ target_sources(vvl PRIVATE
     state_tracker/shader_object_state.h
     state_tracker/state_tracker.cpp
     state_tracker/state_tracker.h
+    state_tracker/vertex_index_buffer_state.h
     state_tracker/video_session_state.cpp
     state_tracker/video_session_state.h
     stateless/sl_buffer.cpp
@@ -288,6 +304,7 @@ target_sources(vvl PRIVATE
     sync/sync_commandbuffer.h
     sync/sync_common.cpp
     sync/sync_common.h
+    sync/sync_image.h
     sync/sync_op.cpp
     sync/sync_op.h
     sync/sync_renderpass.cpp
@@ -320,7 +337,17 @@ elseif(MINGW)
     target_compile_options(vvl PRIVATE -Wa,-mbig-obj)
     set_target_properties(vvl PROPERTIES PREFIX "") # remove the prefix "lib" so the manifest json "library_path" matches
 elseif(APPLE)
+
+# IOS and APPLE can both be true (FYI)
+if(IOS)
+    set_target_properties(vvl PROPERTIES
+		FRAMEWORK			TRUE
+		MACOSX_FRAMEWORK_IDENTIFIER 	com.khronos.validation
+    )
+else()
     set_target_properties(vvl PROPERTIES SUFFIX ".dylib")
+endif()
+    # Both Apple and IOS
     target_link_options(vvl PRIVATE -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}.exp)
 elseif(ANDROID)
     target_link_options(vvl PRIVATE LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}-android.map)
@@ -350,7 +377,7 @@ endif()
 target_link_libraries(vvl PRIVATE
     SPIRV-Headers::SPIRV-Headers
     SPIRV-Tools-opt
-    SPIRV-Tools-link
+    gpu_av_spirv
     VkLayer_utils
 )
 

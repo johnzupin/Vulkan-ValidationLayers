@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,11 @@
  * limitations under the License.
  */
 
-#include "gpu_validation.h"
+#include "gpu_validation/gpu_validation.h"
+#include "gpu_validation/gpu_subclasses.h"
 #include "generated/spirv_grammar_helper.h"
 #include "utils/image_layout_utils.h"
+#include "state_tracker/render_pass_state.h"
 
 using LayoutRange = image_layout_map::ImageSubresourceLayoutMap::RangeType;
 using LayoutEntry = image_layout_map::ImageSubresourceLayoutMap::LayoutEntry;
@@ -87,7 +89,7 @@ void gpuav::Validator::UpdateCmdBufImageLayouts(const vvl::CommandBuffer &cb_sta
     }
 }
 
-void gpuav::Validator::RecordTransitionImageLayout(vvl::CommandBuffer *cb_state, const ImageBarrier &mem_barrier) {
+void gpuav::Validator::RecordTransitionImageLayout(vvl::CommandBuffer &cb_state, const ImageBarrier &mem_barrier) {
     if (enabled_features.synchronization2) {
         if (mem_barrier.oldLayout == mem_barrier.newLayout) {
             return;
@@ -116,14 +118,14 @@ void gpuav::Validator::RecordTransitionImageLayout(vvl::CommandBuffer *cb_state,
     // choose to perform it as part of the acquire operation.
     //
     // However, we still need to record initial layout for the "initial layout" validation
-    if (cb_state->IsReleaseOp(mem_barrier)) {
-        cb_state->SetImageInitialLayout(*image_state, normalized_isr, initial_layout);
+    if (cb_state.IsReleaseOp(mem_barrier)) {
+        cb_state.SetImageInitialLayout(*image_state, normalized_isr, initial_layout);
     } else {
-        cb_state->SetImageLayout(*image_state, normalized_isr, new_layout, initial_layout);
+        cb_state.SetImageLayout(*image_state, normalized_isr, new_layout, initial_layout);
     }
 }
 
-void gpuav::Validator::TransitionImageLayouts(vvl::CommandBuffer *cb_state, uint32_t barrier_count,
+void gpuav::Validator::TransitionImageLayouts(vvl::CommandBuffer &cb_state, uint32_t barrier_count,
                                               const VkImageMemoryBarrier2 *image_barriers) {
     for (uint32_t i = 0; i < barrier_count; i++) {
         const ImageBarrier barrier(image_barriers[i]);
@@ -131,7 +133,7 @@ void gpuav::Validator::TransitionImageLayouts(vvl::CommandBuffer *cb_state, uint
     }
 }
 
-void gpuav::Validator::TransitionImageLayouts(vvl::CommandBuffer *cb_state, uint32_t barrier_count,
+void gpuav::Validator::TransitionImageLayouts(vvl::CommandBuffer &cb_state, uint32_t barrier_count,
                                               const VkImageMemoryBarrier *image_barriers, VkPipelineStageFlags src_stage_mask,
                                               VkPipelineStageFlags dst_stage_mask) {
     for (uint32_t i = 0; i < barrier_count; i++) {
@@ -348,30 +350,43 @@ void gpuav::Validator::PreCallRecordCmdCopyBufferToImage(VkCommandBuffer command
     BaseClass::PreCallRecordCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions,
                                                  record_obj);
 
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    auto dst_image_state = Get<vvl::Image>(dstImage);
-    if (cb_state_ptr && dst_image_state) {
-        // Make sure that all image slices are record referenced layout
-        for (uint32_t i = 0; i < regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*dst_image_state, pRegions[i].imageSubresource, dstImageLayout);
+    {
+        auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+        auto dst_image_state = Get<vvl::Image>(dstImage);
+        if (cb_state_ptr && dst_image_state) {
+            // Make sure that all image slices are record referenced layout
+            for (uint32_t i = 0; i < regionCount; ++i) {
+                cb_state_ptr->SetImageInitialLayout(*dst_image_state, pRegions[i].imageSubresource, dstImageLayout);
+            }
         }
     }
+
+    std::vector<VkBufferImageCopy2> regions_2(regionCount);
+    for (const auto [i, region] : vvl::enumerate(pRegions, regionCount)) {
+        regions_2[i].bufferOffset = region->bufferOffset;
+        regions_2[i].bufferRowLength = region->bufferRowLength;
+        regions_2[i].bufferImageHeight = region->bufferImageHeight;
+        regions_2[i].imageSubresource = region->imageSubresource;
+        regions_2[i].imageOffset = region->imageOffset;
+        regions_2[i].imageExtent = region->imageExtent;
+    }
+
+    VkCopyBufferToImageInfo2 copy_buffer_to_image_info = vku::InitStructHelper();
+    copy_buffer_to_image_info.srcBuffer = srcBuffer;
+    copy_buffer_to_image_info.dstImage = dstImage;
+    copy_buffer_to_image_info.dstImageLayout = dstImageLayout;
+    copy_buffer_to_image_info.regionCount = regionCount;
+    copy_buffer_to_image_info.pRegions = regions_2.data();
+
+    auto copy_buffer_to_image =
+        AllocatePreCopyBufferToImageValidationResources(record_obj.location, commandBuffer, &copy_buffer_to_image_info);
+    StoreCommandResources(commandBuffer, std::move(copy_buffer_to_image), record_obj.location);
 }
 
 void gpuav::Validator::PreCallRecordCmdCopyBufferToImage2KHR(VkCommandBuffer commandBuffer,
                                                              const VkCopyBufferToImageInfo2KHR *pCopyBufferToImageInfo2KHR,
                                                              const RecordObject &record_obj) {
-    BaseClass::PreCallRecordCmdCopyBufferToImage2KHR(commandBuffer, pCopyBufferToImageInfo2KHR, record_obj);
-
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    auto dst_image_state = Get<vvl::Image>(pCopyBufferToImageInfo2KHR->dstImage);
-    if (cb_state_ptr && dst_image_state) {
-        // Make sure that all image slices are record referenced layout
-        for (uint32_t i = 0; i < pCopyBufferToImageInfo2KHR->regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*dst_image_state, pCopyBufferToImageInfo2KHR->pRegions[i].imageSubresource,
-                                                pCopyBufferToImageInfo2KHR->dstImageLayout);
-        }
-    }
+    PreCallRecordCmdCopyBufferToImage2(commandBuffer, pCopyBufferToImageInfo2KHR, record_obj);
 }
 
 void gpuav::Validator::PreCallRecordCmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
@@ -379,15 +394,21 @@ void gpuav::Validator::PreCallRecordCmdCopyBufferToImage2(VkCommandBuffer comman
                                                           const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdCopyBufferToImage2(commandBuffer, pCopyBufferToImageInfo, record_obj);
 
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    auto dst_image_state = Get<vvl::Image>(pCopyBufferToImageInfo->dstImage);
-    if (cb_state_ptr && dst_image_state) {
-        // Make sure that all image slices are record referenced layout
-        for (uint32_t i = 0; i < pCopyBufferToImageInfo->regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*dst_image_state, pCopyBufferToImageInfo->pRegions[i].imageSubresource,
-                                                pCopyBufferToImageInfo->dstImageLayout);
+    {
+        auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+        auto dst_image_state = Get<vvl::Image>(pCopyBufferToImageInfo->dstImage);
+        if (cb_state_ptr && dst_image_state) {
+            // Make sure that all image slices are record referenced layout
+            for (uint32_t i = 0; i < pCopyBufferToImageInfo->regionCount; ++i) {
+                cb_state_ptr->SetImageInitialLayout(*dst_image_state, pCopyBufferToImageInfo->pRegions[i].imageSubresource,
+                                                    pCopyBufferToImageInfo->dstImageLayout);
+            }
         }
     }
+
+    auto copy_buffer_to_image =
+        AllocatePreCopyBufferToImageValidationResources(record_obj.location, commandBuffer, pCopyBufferToImageInfo);
+    StoreCommandResources(commandBuffer, std::move(copy_buffer_to_image), record_obj.location);
 }
 
 template <typename RegionType>
@@ -476,7 +497,7 @@ void gpuav::Validator::PreCallRecordCmdWaitEvents(
                                           pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,
                                           pImageMemoryBarriers, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    TransitionImageLayouts(cb_state.get(), imageMemoryBarrierCount, pImageMemoryBarriers, sourceStageMask, dstStageMask);
+    TransitionImageLayouts(*cb_state, imageMemoryBarrierCount, pImageMemoryBarriers, sourceStageMask, dstStageMask);
 }
 
 void gpuav::Validator::RecordCmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent *pEvents,
@@ -485,7 +506,7 @@ void gpuav::Validator::RecordCmdWaitEvents2(VkCommandBuffer commandBuffer, uint3
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     for (uint32_t i = 0; i < eventCount; i++) {
         const auto &dep_info = pDependencyInfos[i];
-        TransitionImageLayouts(cb_state.get(), dep_info.imageMemoryBarrierCount, dep_info.pImageMemoryBarriers);
+        TransitionImageLayouts(*cb_state, dep_info.imageMemoryBarrierCount, dep_info.pImageMemoryBarriers);
     }
 }
 
@@ -511,7 +532,7 @@ void gpuav::Validator::PreCallRecordCmdPipelineBarrier(
                                                imageMemoryBarrierCount, pImageMemoryBarriers, record_obj);
 
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    TransitionImageLayouts(cb_state.get(), imageMemoryBarrierCount, pImageMemoryBarriers, srcStageMask, dstStageMask);
+    TransitionImageLayouts(*cb_state, imageMemoryBarrierCount, pImageMemoryBarriers, srcStageMask, dstStageMask);
 }
 
 void gpuav::Validator::PreCallRecordCmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer,
@@ -520,7 +541,7 @@ void gpuav::Validator::PreCallRecordCmdPipelineBarrier2KHR(VkCommandBuffer comma
     BaseClass::PreCallRecordCmdPipelineBarrier2KHR(commandBuffer, pDependencyInfo, record_obj);
 
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    TransitionImageLayouts(cb_state.get(), pDependencyInfo->imageMemoryBarrierCount, pDependencyInfo->pImageMemoryBarriers);
+    TransitionImageLayouts(*cb_state, pDependencyInfo->imageMemoryBarrierCount, pDependencyInfo->pImageMemoryBarriers);
 }
 
 void gpuav::Validator::PreCallRecordCmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDependencyInfo *pDependencyInfo,
@@ -528,12 +549,12 @@ void gpuav::Validator::PreCallRecordCmdPipelineBarrier2(VkCommandBuffer commandB
     BaseClass::PreCallRecordCmdPipelineBarrier2(commandBuffer, pDependencyInfo, record_obj);
 
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    TransitionImageLayouts(cb_state.get(), pDependencyInfo->imageMemoryBarrierCount, pDependencyInfo->pImageMemoryBarriers);
+    TransitionImageLayouts(*cb_state, pDependencyInfo->imageMemoryBarrierCount, pDependencyInfo->pImageMemoryBarriers);
 }
 
-void gpuav::Validator::TransitionAttachmentRefLayout(vvl::CommandBuffer *cb_state, const safe_VkAttachmentReference2 &ref) {
+void gpuav::Validator::TransitionAttachmentRefLayout(vvl::CommandBuffer &cb_state, const safe_VkAttachmentReference2 &ref) {
     if (ref.attachment != VK_ATTACHMENT_UNUSED) {
-        vvl::ImageView *image_view = cb_state->GetActiveAttachmentImageViewState(ref.attachment);
+        vvl::ImageView *image_view = cb_state.GetActiveAttachmentImageViewState(ref.attachment);
         if (image_view) {
             VkImageLayout stencil_layout = kInvalidLayout;
             const auto *attachment_reference_stencil_layout = vku::FindStructInPNextChain<VkAttachmentReferenceStencilLayout>(ref.pNext);
@@ -541,12 +562,12 @@ void gpuav::Validator::TransitionAttachmentRefLayout(vvl::CommandBuffer *cb_stat
                 stencil_layout = attachment_reference_stencil_layout->stencilLayout;
             }
 
-            cb_state->SetImageViewLayout(*image_view, ref.layout, stencil_layout);
+            cb_state.SetImageViewLayout(*image_view, ref.layout, stencil_layout);
         }
     }
 }
 
-void gpuav::Validator::TransitionSubpassLayouts(vvl::CommandBuffer *cb_state, const vvl::RenderPass &render_pass_state,
+void gpuav::Validator::TransitionSubpassLayouts(vvl::CommandBuffer &cb_state, const vvl::RenderPass &render_pass_state,
                                                 const int subpass_index) {
     auto const &subpass = render_pass_state.createInfo.pSubpasses[subpass_index];
     for (uint32_t j = 0; j < subpass.inputAttachmentCount; ++j) {
@@ -563,11 +584,11 @@ void gpuav::Validator::TransitionSubpassLayouts(vvl::CommandBuffer *cb_state, co
 // Transition the layout state for renderpass attachments based on the BeginRenderPass() call. This includes:
 // 1. Transition into initialLayout state
 // 2. Transition from initialLayout to layout used in subpass 0
-void gpuav::Validator::TransitionBeginRenderPassLayouts(vvl::CommandBuffer *cb_state, const vvl::RenderPass &render_pass_state) {
+void gpuav::Validator::TransitionBeginRenderPassLayouts(vvl::CommandBuffer &cb_state, const vvl::RenderPass &render_pass_state) {
     // First record expected initialLayout as a potential initial layout usage.
     auto const rpci = render_pass_state.createInfo.ptr();
     for (uint32_t i = 0; i < rpci->attachmentCount; ++i) {
-        auto *view_state = cb_state->GetActiveAttachmentImageViewState(i);
+        auto *view_state = cb_state.GetActiveAttachmentImageViewState(i);
         if (view_state) {
             vvl::Image *image_state = view_state->image_state.get();
             const auto initial_layout = rpci->pAttachments[i].initialLayout;
@@ -577,11 +598,11 @@ void gpuav::Validator::TransitionBeginRenderPassLayouts(vvl::CommandBuffer *cb_s
                 const auto stencil_initial_layout = attachment_description_stencil_layout->stencilInitialLayout;
                 VkImageSubresourceRange sub_range = view_state->normalized_subresource_range;
                 sub_range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-                cb_state->SetImageInitialLayout(*image_state, sub_range, initial_layout);
+                cb_state.SetImageInitialLayout(*image_state, sub_range, initial_layout);
                 sub_range.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-                cb_state->SetImageInitialLayout(*image_state, sub_range, stencil_initial_layout);
+                cb_state.SetImageInitialLayout(*image_state, sub_range, stencil_initial_layout);
             } else {
-                cb_state->SetImageInitialLayout(*image_state, view_state->normalized_subresource_range, initial_layout);
+                cb_state.SetImageInitialLayout(*image_state, view_state->normalized_subresource_range, initial_layout);
             }
         }
     }
@@ -589,16 +610,16 @@ void gpuav::Validator::TransitionBeginRenderPassLayouts(vvl::CommandBuffer *cb_s
     TransitionSubpassLayouts(cb_state, render_pass_state, 0);
 }
 
-void gpuav::Validator::TransitionFinalSubpassLayouts(vvl::CommandBuffer *cb_state) {
-    auto render_pass_state = cb_state->activeRenderPass.get();
-    auto framebuffer_state = cb_state->activeFramebuffer.get();
+void gpuav::Validator::TransitionFinalSubpassLayouts(vvl::CommandBuffer &cb_state) {
+    auto render_pass_state = cb_state.activeRenderPass.get();
+    auto framebuffer_state = cb_state.activeFramebuffer.get();
     if (!render_pass_state || !framebuffer_state) {
         return;
     }
 
     const VkRenderPassCreateInfo2 *render_pass_info = render_pass_state->createInfo.ptr();
     for (uint32_t i = 0; i < render_pass_info->attachmentCount; ++i) {
-        auto *view_state = cb_state->GetActiveAttachmentImageViewState(i);
+        auto *view_state = cb_state.GetActiveAttachmentImageViewState(i);
         if (view_state) {
             VkImageLayout stencil_layout = kInvalidLayout;
             const auto *attachment_description_stencil_layout =
@@ -606,7 +627,7 @@ void gpuav::Validator::TransitionFinalSubpassLayouts(vvl::CommandBuffer *cb_stat
             if (attachment_description_stencil_layout) {
                 stencil_layout = attachment_description_stencil_layout->stencilFinalLayout;
             }
-            cb_state->SetImageViewLayout(*view_state, render_pass_info->pAttachments[i].finalLayout, stencil_layout);
+            cb_state.SetImageViewLayout(*view_state, render_pass_info->pAttachments[i].finalLayout, stencil_layout);
         }
     }
 }
@@ -673,7 +694,7 @@ bool gpuav::Validator::VerifyImageLayoutRange(const vvl::CommandBuffer &cb_state
                                               const RangeFactory &range_factory, const Location &loc,
                                               const char *mismatch_layout_vuid, bool *error) const {
     bool skip = false;
-    const auto *subresource_map = cb_state.GetImageSubresourceLayoutMap(image_state.image());
+    const auto *subresource_map = cb_state.GetImageSubresourceLayoutMap(image_state.VkHandle());
     if (!subresource_map) {
         return skip;
     }
@@ -711,15 +732,15 @@ bool gpuav::Validator::VerifyImageLayoutRange(const vvl::CommandBuffer &cb_state
                 // We can report all the errors for the intersected range directly
                 for (auto index : sparse_container::range_view<decltype(intersected_range)>(intersected_range)) {
                     const auto subresource = image_state.subresource_encoder.Decode(index);
-                    const LogObjectList objlist(cb_state.commandBuffer(), image_state.Handle());
-                    skip |= LogError(objlist, "UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout",
-                                     "%s command buffer %s expects %s (subresource: aspectMask 0x%x array layer %" PRIu32
+                    const LogObjectList objlist(cb_state.Handle(), image_state.Handle());
+                    skip |= LogError("UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout", objlist, loc,
+                                     "command buffer %s expects %s (subresource: aspectMask 0x%x array layer %" PRIu32
                                      ", mip level %" PRIu32
                                      ") "
                                      "to be in layout %s--instead, current layout is %s.",
-                                     loc.Message().c_str(), FormatHandle(cb_state).c_str(), FormatHandle(image_state).c_str(),
-                                     subresource.aspectMask, subresource.arrayLayer, subresource.mipLevel,
-                                     string_VkImageLayout(initial_layout), string_VkImageLayout(image_layout));
+                                     FormatHandle(cb_state).c_str(), FormatHandle(image_state).c_str(), subresource.aspectMask,
+                                     subresource.arrayLayer, subresource.mipLevel, string_VkImageLayout(initial_layout),
+                                     string_VkImageLayout(image_layout));
                 }
             }
         }

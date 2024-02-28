@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2020-2022 The Khronos Group Inc.
- * Copyright (c) 2020-2023 Valve Corporation
- * Copyright (c) 2020-2023 LunarG, Inc.
+ * Copyright (c) 2020-2024 The Khronos Group Inc.
+ * Copyright (c) 2020-2024 Valve Corporation
+ * Copyright (c) 2020-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ TEST_F(NegativePortabilitySubset, Event) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCreateEvent-events-04468");
     VkEventCreateInfo eci = vku::InitStructHelper();
     VkEvent event;
-    vk::CreateEvent(m_device->device(), &eci, nullptr, &event);
+    vk::CreateEvent(device(), &eci, nullptr, &event);
     m_errorMonitor->VerifyFound();
 }
 
@@ -133,12 +133,11 @@ TEST_F(NegativePortabilitySubset, ImageViewFormatSwizzle) {
     imageCI.queueFamilyIndexCount = 0;
     imageCI.pQueueFamilyIndices = nullptr;
     imageCI.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    VkImageObj image(m_device);
-    image.init(&imageCI);
+    vkt::Image image(*m_device, imageCI, vkt::set_layout);
 
     VkImageViewCreateInfo ci = vku::InitStructHelper();
     ci.flags = 0;
-    ci.image = image.image();
+    ci.image = image.handle();
     ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
     ci.format = VK_FORMAT_R8G8B8A8_UNORM;
     // Incorrect swizzling due to portability
@@ -181,12 +180,11 @@ TEST_F(NegativePortabilitySubset, ImageViewFormatReinterpretationComponentCount)
     imageCI.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
     imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCI.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    VkImageObj image(m_device);
-    image.init(&imageCI);
+    vkt::Image image(*m_device, imageCI, vkt::set_layout);
 
     VkImageViewCreateInfo ci = vku::InitStructHelper();
     ci.flags = 0;
-    ci.image = image.image();
+    ci.image = image.handle();
     ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
     ci.format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
     // Incorrect swizzling due to portability
@@ -230,7 +228,8 @@ TEST_F(NegativePortabilitySubset, TriangleFans) {
     RETURN_IF_SKIP(InitState(nullptr, &features2));
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
-    m_depthStencil->Init(m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    m_depthStencil->Init(*m_device, m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    m_depthStencil->SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView depth_image_view = m_depthStencil->CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
     InitRenderTarget(&depth_image_view.handle());
 
@@ -263,7 +262,8 @@ TEST_F(NegativePortabilitySubset, VertexInputStride) {
     auto vertex_stride = portability_properties.minVertexInputBindingStrideAlignment - 1;
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
-    m_depthStencil->Init(m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    m_depthStencil->Init(*m_device, m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    m_depthStencil->SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView depth_image_view = m_depthStencil->CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
     InitRenderTarget(&depth_image_view.handle());
 
@@ -297,7 +297,8 @@ TEST_F(NegativePortabilitySubset, VertexAttributes) {
     RETURN_IF_SKIP(InitState(nullptr, &features2));
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
-    m_depthStencil->Init(m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    m_depthStencil->Init(*m_device, m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    m_depthStencil->SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView depth_image_view = m_depthStencil->CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
     InitRenderTarget(&depth_image_view.handle());
 
@@ -380,7 +381,8 @@ TEST_F(NegativePortabilitySubset, DepthStencilState) {
     RETURN_IF_SKIP(InitState(nullptr, &features2));
 
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
-    m_depthStencil->Init(m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    m_depthStencil->Init(*m_device, m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    m_depthStencil->SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView depth_image_view = m_depthStencil->CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
     InitRenderTarget(&depth_image_view.handle());
 
@@ -464,8 +466,7 @@ TEST_F(VkPortabilitySubsetTest, UpdateDescriptorSets) {
     vkt::Sampler sampler(*m_device, sampler_info);
 
     constexpr VkFormat img_format = VK_FORMAT_R8G8B8A8_UNORM;
-    VkImageObj image(m_device);
-    image.Init(32, 32, 1, img_format, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, img_format, VK_IMAGE_USAGE_SAMPLED_BIT);
     image.Layout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     OneOffDescriptorSet descriptor_set(m_device,
                                        {
@@ -489,7 +490,7 @@ TEST_F(VkPortabilitySubsetTest, UpdateDescriptorSets) {
     descriptor_writes[0].pImageInfo = &img_info;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDescriptorImageInfo-mutableComparisonSamplers-04450");
-    vk::UpdateDescriptorSets(m_device->device(), 1, descriptor_writes, 0, NULL);
+    vk::UpdateDescriptorSets(device(), 1, descriptor_writes, 0, NULL);
     m_errorMonitor->VerifyFound();
 }
 
@@ -646,4 +647,35 @@ TEST_F(VkPortabilitySubsetTest, InstanceCreateEnumerate) {
         ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&ici, nullptr, &local_instance));
         vk::DestroyInstance(local_instance, nullptr);
     }
+}
+
+TEST_F(VkPortabilitySubsetTest, FeatureWithoutExtension) {
+    TEST_DESCRIPTION("Make sure can't use portability without VK_KHR_portability_subset");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    RETURN_IF_SKIP(Init());
+
+    if (DeviceExtensionSupported(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
+        GTEST_SKIP() << "Test needs no VK_KHR_portability_subset support";
+    }
+
+    VkPhysicalDevicePortabilitySubsetFeaturesKHR feature = vku::InitStructHelper();
+
+    vkt::PhysicalDevice physical_device(gpu());
+    vkt::QueueCreateInfoArray queue_info(physical_device.queue_properties_);
+    std::vector<VkDeviceQueueCreateInfo> create_queue_infos;
+    auto qci = queue_info.data();
+    for (uint32_t i = 0; i < queue_info.size(); ++i) {
+        if (qci[i].queueCount) {
+            create_queue_infos.push_back(qci[i]);
+        }
+    }
+
+    VkDeviceCreateInfo device_create_info = vku::InitStructHelper(&feature);
+    device_create_info.queueCreateInfoCount = queue_info.size();
+    device_create_info.pQueueCreateInfos = queue_info.data();
+    VkDevice testDevice;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkDeviceCreateInfo-pNext-pNext");
+    vk::CreateDevice(gpu(), &device_create_info, NULL, &testDevice);
+    m_errorMonitor->VerifyFound();
 }

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,16 +41,12 @@ TEST_F(NegativeSyncObject, ImageBarrierSubpassConflicts) {
                                VK_DEPENDENCY_BY_REGION_BIT};
     VkRenderPassCreateInfo rpci = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0, 1, attach, 1, subpasses, 1, &dep};
     vkt::RenderPass rp(*m_device, rpci);
-    ASSERT_TRUE(rp.initialized());
 
     rpci.dependencyCount = 0;
     rpci.pDependencies = nullptr;
 
     vkt::RenderPass rp_noselfdep(*m_device, rpci);
-    ASSERT_TRUE(rp_noselfdep.initialized());
-
-    VkImageObj image(m_device);
-    image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
     vkt::Framebuffer fb(*m_device, rp.handle(), 1, &imageView.handle());
     vkt::Framebuffer fb_noselfdep(*m_device, rp_noselfdep.handle(), 1, &imageView.handle());
@@ -164,8 +160,7 @@ TEST_F(NegativeSyncObject, ImageBarrierSubpassConflicts) {
     m_errorMonitor->VerifyFound();
 
     // Add image barrier w/ image handle that's not in framebuffer
-    VkImageObj lone_image(m_device);
-    lone_image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image lone_image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     img_barrier.image = lone_image.handle();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-image-04073");
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -194,7 +189,7 @@ TEST_F(NegativeSyncObject, ImageBarrierSubpassConflicts) {
 
 TEST_F(NegativeSyncObject, BufferMemoryBarrierNoBuffer) {
     // Try to add a buffer memory barrier with no buffer.
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-GeneralParameterError-RequiredParameter");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-GeneralParameterError-RequiredHandle");
 
     RETURN_IF_SKIP(Init());
     m_commandBuffer->begin();
@@ -246,8 +241,7 @@ TEST_F(NegativeSyncObject, Barriers) {
 
     RETURN_IF_SKIP(InitState(nullptr, &features2));
 
-    VkImageObj color_image(m_device);
-    color_image.Init(m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image color_image(*m_device, m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     auto color_view = color_image.CreateView();
 
     // Just using all framebuffer-space pipeline stages in order to get a reasonably large
@@ -295,8 +289,8 @@ TEST_F(NegativeSyncObject, Barriers) {
                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     conc_test.buffer_barrier_.buffer = buffer.handle();
 
-    VkImageObj image(m_device);
-    image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     conc_test.image_barrier_.image = image.handle();
 
     // New layout can't be UNDEFINED
@@ -383,8 +377,7 @@ TEST_F(NegativeSyncObject, Barriers) {
     conc_test.buffer_barrier_.size = VK_WHOLE_SIZE;
 
     // Now exercise barrier aspect bit errors, first DS
-    VkImageObj ds_image(m_device);
-    ds_image.Init(128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    vkt::Image ds_image(*m_device, 128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
     conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -415,8 +408,7 @@ TEST_F(NegativeSyncObject, Barriers) {
     VkFormatProperties format_props;
     vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), VK_FORMAT_D16_UNORM, &format_props);
     if (format_props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-        VkImageObj d_image(m_device);
-        d_image.Init(128, 128, 1, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        vkt::Image d_image(*m_device, 128, 128, 1, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
         conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -434,8 +426,7 @@ TEST_F(NegativeSyncObject, Barriers) {
     // Now test stencil-only
     vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), VK_FORMAT_S8_UINT, &format_props);
     if (format_props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-        VkImageObj s_image(m_device);
-        s_image.Init(128, 128, 1, VK_FORMAT_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        vkt::Image s_image(*m_device, 128, 128, 1, VK_FORMAT_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
         conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -448,9 +439,7 @@ TEST_F(NegativeSyncObject, Barriers) {
     }
 
     // Finally test color
-    VkImageObj c_image(m_device);
-    c_image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    ASSERT_TRUE(c_image.initialized());
+    vkt::Image c_image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     conc_test.image_barrier_.image = c_image.handle();
@@ -488,7 +477,7 @@ TEST_F(NegativeSyncObject, Barriers) {
             VkImage mp_image;
             VkDeviceMemory plane_0_memory;
             VkDeviceMemory plane_1_memory;
-            ASSERT_EQ(VK_SUCCESS, vk::CreateImage(m_device->device(), &image_create_info, NULL, &mp_image));
+            ASSERT_EQ(VK_SUCCESS, vk::CreateImage(device(), &image_create_info, NULL, &mp_image));
 
             VkImagePlaneMemoryRequirementsInfo image_plane_req = vku::InitStructHelper();
             image_plane_req.planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT;
@@ -543,38 +532,20 @@ TEST_F(NegativeSyncObject, Barriers) {
 
             vk::FreeMemory(device(), plane_0_memory, NULL);
             vk::FreeMemory(device(), plane_1_memory, NULL);
-            vk::DestroyImage(m_device->device(), mp_image, nullptr);
+            vk::DestroyImage(device(), mp_image, nullptr);
         }
     }
 
     // A barrier's new and old VkImageLayout must be compatible with an image's VkImageUsageFlags.
     {
-        VkImageObj img_color(m_device);
-        img_color.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        ASSERT_TRUE(img_color.initialized());
-
-        VkImageObj img_ds(m_device);
-        img_ds.Init(128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-        ASSERT_TRUE(img_ds.initialized());
-
-        VkImageObj img_xfer_src(m_device);
-        img_xfer_src.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        ASSERT_TRUE(img_xfer_src.initialized());
-
-        VkImageObj img_xfer_dst(m_device);
-        img_xfer_dst.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-        ASSERT_TRUE(img_xfer_dst.initialized());
-
-        VkImageObj img_sampled(m_device);
-        img_sampled.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-        ASSERT_TRUE(img_sampled.initialized());
-
-        VkImageObj img_input(m_device);
-        img_input.Init(128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-        ASSERT_TRUE(img_input.initialized());
-
+        vkt::Image img_color(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+        vkt::Image img_ds(*m_device, 128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        vkt::Image img_xfer_src(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        vkt::Image img_xfer_dst(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        vkt::Image img_sampled(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+        vkt::Image img_input(*m_device, 128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
         struct BadBufferTest {
-            VkImageObj &image_obj;
+            vkt::Image &image_obj;
             VkImageLayout bad_layout;
             std::string msg_code;
         };
@@ -713,12 +684,12 @@ TEST_F(NegativeSyncObject, Barriers) {
     conc_test.buffer_barrier_.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     conc_test.buffer_barrier_.offset = 0;
     conc_test.buffer_barrier_.size = VK_WHOLE_SIZE;
-    conc_test("", "VUID-vkCmdPipelineBarrier-srcAccessMask-02815");
+    conc_test("", "VUID-vkCmdPipelineBarrier-pBufferMemoryBarriers-02817");
 
     // Attempt barrier where dstAccessMask is not supported by dstStageMask
     conc_test.buffer_barrier_.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     conc_test.buffer_barrier_.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    conc_test("", "VUID-vkCmdPipelineBarrier-dstAccessMask-02816");
+    conc_test("", "VUID-vkCmdPipelineBarrier-pBufferMemoryBarriers-02818");
 
     // Attempt to mismatch barriers/waitEvents calls with incompatible queues
     // Create command pool with incompatible queueflags
@@ -741,7 +712,7 @@ TEST_F(NegativeSyncObject, Barriers) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcStageMask-06461");
 
     vkt::CommandPool command_pool(*m_device, queue_family_index.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer bad_command_buffer(m_device, &command_pool);
+    vkt::CommandBuffer bad_command_buffer(*m_device, &command_pool);
 
     bad_command_buffer.begin();
     // Set two bits that should both be supported as a bonus positive check
@@ -783,8 +754,7 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
 
     auto depth_format = FindSupportedDepthStencilFormat(gpu());
 
-    VkImageObj color_image(m_device);
-    color_image.Init(m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image color_image(*m_device, m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     auto color_view = color_image.CreateView();
 
     // Just using all framebuffer-space pipeline stages in order to get a reasonably large
@@ -829,8 +799,8 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     conc_test.buffer_barrier_.buffer = buffer.handle();
 
-    VkImageObj image(m_device);
-    image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     conc_test.image_barrier_.image = image.handle();
 
     // New layout can't be PREINITIALIZED
@@ -923,8 +893,7 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
     conc_test.buffer_barrier_.size = VK_WHOLE_SIZE;
 
     // Now exercise barrier aspect bit errors, first DS
-    VkImageObj ds_image(m_device);
-    ds_image.Init(128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    vkt::Image ds_image(*m_device, 128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
     conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -951,8 +920,7 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
     VkFormatProperties format_props;
     vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), VK_FORMAT_D16_UNORM, &format_props);
     if (format_props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-        VkImageObj d_image(m_device);
-        d_image.Init(128, 128, 1, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        vkt::Image d_image(*m_device, 128, 128, 1, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
         conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -970,8 +938,7 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
     // Now test stencil-only
     vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), VK_FORMAT_S8_UINT, &format_props);
     if (format_props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-        VkImageObj s_image(m_device);
-        s_image.Init(128, 128, 1, VK_FORMAT_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        vkt::Image s_image(*m_device, 128, 128, 1, VK_FORMAT_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
         conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -983,9 +950,7 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
     }
 
     // Finally test color
-    VkImageObj c_image(m_device);
-    c_image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    ASSERT_TRUE(c_image.initialized());
+    vkt::Image c_image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     conc_test.image_barrier_.image = c_image.handle();
@@ -1002,32 +967,14 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
 
     // A barrier's new and old VkImageLayout must be compatible with an image's VkImageUsageFlags.
     {
-        VkImageObj img_color(m_device);
-        img_color.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        ASSERT_TRUE(img_color.initialized());
-
-        VkImageObj img_ds(m_device);
-        img_ds.Init(128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-        ASSERT_TRUE(img_ds.initialized());
-
-        VkImageObj img_xfer_src(m_device);
-        img_xfer_src.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        ASSERT_TRUE(img_xfer_src.initialized());
-
-        VkImageObj img_xfer_dst(m_device);
-        img_xfer_dst.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-        ASSERT_TRUE(img_xfer_dst.initialized());
-
-        VkImageObj img_sampled(m_device);
-        img_sampled.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-        ASSERT_TRUE(img_sampled.initialized());
-
-        VkImageObj img_input(m_device);
-        img_input.Init(128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-        ASSERT_TRUE(img_input.initialized());
-
+        vkt::Image img_color(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+        vkt::Image img_ds(*m_device, 128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        vkt::Image img_xfer_src(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        vkt::Image img_xfer_dst(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        vkt::Image img_sampled(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+        vkt::Image img_input(*m_device, 128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
         struct BadBufferTest {
-            VkImageObj &image_obj;
+            vkt::Image &image_obj;
             VkImageLayout bad_layout;
             std::string msg_code;
         };
@@ -1202,7 +1149,7 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-srcStageMask-03849");
 
     vkt::CommandPool command_pool(*m_device, queue_family_index.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer bad_command_buffer(m_device, &command_pool);
+    vkt::CommandBuffer bad_command_buffer(*m_device, &command_pool);
 
     bad_command_buffer.begin();
     buf_barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -1237,8 +1184,7 @@ TEST_F(NegativeSyncObject, DepthStencilImageNonSeparate) {
     m_commandBuffer->begin();
 
     const VkFormat depth_format = FindSupportedDepthStencilFormat(gpu());
-    VkImageObj ds_image(m_device);
-    ds_image.Init(128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    vkt::Image ds_image(*m_device, 128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
     conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -1277,8 +1223,7 @@ TEST_F(NegativeSyncObject, DepthStencilImageNonSeparateSync2) {
     m_commandBuffer->begin();
 
     const VkFormat depth_format = FindSupportedDepthStencilFormat(gpu());
-    VkImageObj ds_image(m_device);
-    ds_image.Init(128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    vkt::Image ds_image(*m_device, 128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
     conc_test.image_barrier_.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     conc_test.image_barrier_.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -1456,8 +1401,8 @@ TEST_F(NegativeSyncObject, ImageBarrierWithHostStage) {
     AddRequiredFeature(vkt::Feature::synchronization2);
     RETURN_IF_SKIP(Init());
 
-    VkImageObj image(m_device);
-    image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     VkImageMemoryBarrier2 barrier = vku::InitStructHelper();
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -1991,6 +1936,7 @@ TEST_F(NegativeSyncObject, BarrierAccessVideoDecode) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::synchronization2);
     RETURN_IF_SKIP(Init());
@@ -2035,8 +1981,7 @@ TEST_F(NegativeSyncObject, Sync2LayoutFeature) {
     VkImageCreateInfo info = vkt::Image::create_info();
     info.format = VK_FORMAT_B8G8R8A8_UNORM;
     info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    VkImageObj image{m_device};
-    image.init(&info);
+    vkt::Image image(*m_device, info, vkt::set_layout);
 
     m_commandBuffer->begin();
     VkImageMemoryBarrier2 img_barrier = vku::InitStructHelper();
@@ -2091,7 +2036,7 @@ TEST_F(NegativeSyncObject, SubmitSignaledFence) {
 TEST_F(NegativeSyncObject, QueueSubmitWaitingSameSemaphore) {
     TEST_DESCRIPTION("Submit to queue with waitSemaphore that another queue is already waiting on.");
 
-    AddOptionalExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     RETURN_IF_SKIP(InitFramework());
 
     VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = vku::InitStructHelper();
@@ -2147,7 +2092,7 @@ TEST_F(NegativeSyncObject, QueueSubmitWaitingSameSemaphore) {
     }
 
     // sync 2
-    if (IsExtensionsEnabled(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+    {
         VkSemaphoreSubmitInfo signal_sem_info = vku::InitStructHelper();
         signal_sem_info.semaphore = semaphore.handle();
         signal_sem_info.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -2216,8 +2161,8 @@ TEST_F(NegativeSyncObject, WaitEventsDifferentQueueFamilies) {
     buffer_memory_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
     buffer_memory_barrier.dstQueueFamilyIndex = no_gfx.value();
 
-    VkImageObj image(m_device);
-    image.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
     VkImageMemoryBarrier image_memory_barrier = vku::InitStructHelper();
     image_memory_barrier.srcAccessMask = 0;
@@ -2264,13 +2209,13 @@ TEST_F(NegativeSyncObject, SemaphoreTypeCreateInfoCore) {
 
     // timelineSemaphore feature bit not set
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreTypeCreateInfo-timelineSemaphore-03252");
-    vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
+    vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore);
     m_errorMonitor->VerifyFound();
 
     // Binary semaphore can't be initialValue 0
     semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_BINARY;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreTypeCreateInfo-semaphoreType-03279");
-    vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
+    vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore);
     m_errorMonitor->VerifyFound();
 }
 
@@ -2294,13 +2239,13 @@ TEST_F(NegativeSyncObject, SemaphoreTypeCreateInfoExtension) {
 
     // timelineSemaphore feature bit not set
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreTypeCreateInfo-timelineSemaphore-03252");
-    vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
+    vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore);
     m_errorMonitor->VerifyFound();
 
     // Binary semaphore can't be initialValue 0
     semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_BINARY;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreTypeCreateInfo-semaphoreType-03279");
-    vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore);
+    vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore);
     m_errorMonitor->VerifyFound();
 }
 
@@ -2321,18 +2266,18 @@ TEST_F(NegativeSyncObject, MixedTimelineAndBinarySemaphores) {
     VkSemaphoreCreateInfo semaphore_create_info = vku::InitStructHelper(&semaphore_type_create_info);
 
     VkSemaphore semaphore[2];
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore[0]));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore[0]));
     // index 1 should be a binary semaphore
     semaphore_create_info.pNext = nullptr;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore[1]));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore[1]));
     VkSemaphore extra_binary;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &extra_binary));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &extra_binary));
 
     VkSemaphoreSignalInfo semaphore_signal_info = vku::InitStructHelper();
     semaphore_signal_info.semaphore = semaphore[0];
     semaphore_signal_info.value = 3;
     semaphore_signal_info.value = 10;
-    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(device(), &semaphore_signal_info));
 
     VkTimelineSemaphoreSubmitInfoKHR timeline_semaphore_submit_info = vku::InitStructHelper();
     uint64_t signalValue = 20;
@@ -2385,9 +2330,9 @@ TEST_F(NegativeSyncObject, MixedTimelineAndBinarySemaphores) {
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
 
     m_default_queue->wait();
-    vk::DestroySemaphore(m_device->device(), semaphore[0], nullptr);
-    vk::DestroySemaphore(m_device->device(), semaphore[1], nullptr);
-    vk::DestroySemaphore(m_device->device(), extra_binary, nullptr);
+    vk::DestroySemaphore(device(), semaphore[0], nullptr);
+    vk::DestroySemaphore(device(), semaphore[1], nullptr);
+    vk::DestroySemaphore(device(), extra_binary, nullptr);
 }
 
 TEST_F(NegativeSyncObject, QueueSubmitNoTimelineSemaphoreInfo) {
@@ -2403,7 +2348,7 @@ TEST_F(NegativeSyncObject, QueueSubmitNoTimelineSemaphoreInfo) {
     VkSemaphoreCreateInfo semaphore_create_info = vku::InitStructHelper(&semaphore_type_create_info);
 
     VkSemaphore semaphore;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore));
 
     VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     VkSubmitInfo submit_info[2] = {};
@@ -2433,7 +2378,7 @@ TEST_F(NegativeSyncObject, QueueSubmitNoTimelineSemaphoreInfo) {
     vk::QueueSubmit(m_default_queue->handle(), 2, submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
-    vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
+    vk::DestroySemaphore(device(), semaphore, nullptr);
 }
 
 TEST_F(NegativeSyncObject, QueueSubmitTimelineSemaphoreValue) {
@@ -2486,7 +2431,7 @@ TEST_F(NegativeSyncObject, QueueSubmitTimelineSemaphoreValue) {
         VkSemaphoreSignalInfo semaphore_signal_info = vku::InitStructHelper();
         semaphore_signal_info.semaphore = semaphore.handle();
         semaphore_signal_info.value = signalValue;
-        ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+        ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(device(), &semaphore_signal_info));
     }
 
     timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
@@ -2560,7 +2505,7 @@ TEST_F(NegativeSyncObject, QueueBindSparseTimelineSemaphoreValue) {
 
     auto index = m_device->graphics_queue_node_index_;
     if ((m_device->phy().queue_properties_[index].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) == 0) {
-        GTEST_SKIP() << "Sparse binding not supported, skipping test";
+        GTEST_SKIP() << "Graphics queue does not have sparse binding bit";
     }
 
     VkPhysicalDeviceTimelineSemaphorePropertiesKHR timelineproperties = vku::InitStructHelper();
@@ -2614,7 +2559,7 @@ TEST_F(NegativeSyncObject, QueueBindSparseTimelineSemaphoreValue) {
         VkSemaphoreSignalInfo semaphore_signal_info = vku::InitStructHelper();
         semaphore_signal_info.semaphore = semaphore.handle();
         semaphore_signal_info.value = signalValue;
-        ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+        ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(device(), &semaphore_signal_info));
     }
 
     timeline_semaphore_submit_info.waitSemaphoreValueCount = 1;
@@ -2771,8 +2716,8 @@ TEST_F(NegativeSyncObject, Sync2QueueSubmitTimelineSemaphoreValue) {
 TEST_F(NegativeSyncObject, QueueSubmitBinarySemaphoreNotSignaled) {
     TEST_DESCRIPTION("Submit a queue with a waiting binary semaphore not previously signaled.");
 
-    AddOptionalExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
-    AddOptionalExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::synchronization2);
     AddRequiredFeature(vkt::Feature::timelineSemaphore);
     RETURN_IF_SKIP(Init());
@@ -2855,7 +2800,7 @@ TEST_F(NegativeSyncObject, QueueSubmitBinarySemaphoreNotSignaled) {
         m_default_queue->wait();
     }
 
-    if (IsExtensionsEnabled(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+    {
         vkt::Semaphore semaphore[3];
         semaphore[0].init(*m_device, semaphore_create_info);
         semaphore[1].init(*m_device, semaphore_create_info);
@@ -3006,10 +2951,10 @@ TEST_F(NegativeSyncObject, WaitSemaphoresType) {
     VkSemaphoreCreateInfo semaphore_create_info = vku::InitStructHelper(&semaphore_type_create_info);
 
     VkSemaphore semaphore[2];
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &(semaphore[0])));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &(semaphore[0])));
 
     semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_BINARY;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &(semaphore[1])));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &(semaphore[1])));
 
     VkSemaphoreWaitInfo semaphore_wait_info = vku::InitStructHelper();
     semaphore_wait_info.semaphoreCount = 2;
@@ -3018,11 +2963,11 @@ TEST_F(NegativeSyncObject, WaitSemaphoresType) {
     semaphore_wait_info.pValues = &wait_values[0];
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreWaitInfo-pSemaphores-03256");
-    vk::WaitSemaphoresKHR(m_device->device(), &semaphore_wait_info, 10000);
+    vk::WaitSemaphoresKHR(device(), &semaphore_wait_info, 10000);
     m_errorMonitor->VerifyFound();
 
-    vk::DestroySemaphore(m_device->device(), semaphore[0], nullptr);
-    vk::DestroySemaphore(m_device->device(), semaphore[1], nullptr);
+    vk::DestroySemaphore(device(), semaphore[0], nullptr);
+    vk::DestroySemaphore(device(), semaphore[1], nullptr);
 }
 
 TEST_F(NegativeSyncObject, SignalSemaphoreType) {
@@ -3039,7 +2984,7 @@ TEST_F(NegativeSyncObject, SignalSemaphoreType) {
     semaphore_signal_info.value = 10;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-semaphore-03257");
-    vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+    vk::SignalSemaphoreKHR(device(), &semaphore_signal_info);
     m_errorMonitor->VerifyFound();
 }
 
@@ -3060,19 +3005,19 @@ TEST_F(NegativeSyncObject, SignalSemaphoreValue) {
     VkSemaphoreCreateInfo semaphore_create_info = vku::InitStructHelper(&semaphore_type_create_info);
 
     VkSemaphore semaphore[2];
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore[0]));
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &semaphore[1]));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore[0]));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &semaphore[1]));
 
     VkSemaphoreSignalInfo semaphore_signal_info = vku::InitStructHelper();
     semaphore_signal_info.semaphore = semaphore[0];
     semaphore_signal_info.value = 3;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-value-03258");
-    vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+    vk::SignalSemaphoreKHR(device(), &semaphore_signal_info);
     m_errorMonitor->VerifyFound();
 
     semaphore_signal_info.value = 10;
-    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(device(), &semaphore_signal_info));
 
     VkTimelineSemaphoreSubmitInfoKHR timeline_semaphore_submit_info = vku::InitStructHelper();
     uint64_t waitValue = 10;
@@ -3094,34 +3039,34 @@ TEST_F(NegativeSyncObject, SignalSemaphoreValue) {
     semaphore_signal_info.value = 25;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-value-03259");
-    vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+    vk::SignalSemaphoreKHR(device(), &semaphore_signal_info);
     m_errorMonitor->VerifyFound();
 
     semaphore_signal_info.value = 15;
-    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(device(), &semaphore_signal_info));
     semaphore_signal_info.semaphore = semaphore[1];
-    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(device(), &semaphore_signal_info));
 
     // Check if we can test violations of maxTimelineSemaphoreValueDifference
     if (timelineproperties.maxTimelineSemaphoreValueDifference < vvl::kU64Max) {
         VkSemaphore sem;
 
         semaphore_type_create_info.initialValue = 0;
-        ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &sem));
+        ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &sem));
 
         semaphore_signal_info.semaphore = sem;
         semaphore_signal_info.value = timelineproperties.maxTimelineSemaphoreValueDifference + 1;
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-value-03260");
-        vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+        vk::SignalSemaphoreKHR(device(), &semaphore_signal_info);
         m_errorMonitor->VerifyFound();
 
         semaphore_signal_info.value--;
-        ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info));
+        ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphoreKHR(device(), &semaphore_signal_info));
 
         m_default_queue->wait();
 
-        vk::DestroySemaphore(m_device->device(), sem, nullptr);
+        vk::DestroySemaphore(device(), sem, nullptr);
 
         // Regression test for value difference validations ran against binary semaphores
         {
@@ -3129,11 +3074,11 @@ TEST_F(NegativeSyncObject, SignalSemaphoreValue) {
             VkSemaphore binary_sem;
 
             semaphore_type_create_info.initialValue = 0;
-            ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &semaphore_create_info, nullptr, &timeline_sem));
+            ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &semaphore_create_info, nullptr, &timeline_sem));
 
             VkSemaphoreCreateInfo binary_semaphore_create_info = vku::InitStructHelper();
 
-            ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(m_device->device(), &binary_semaphore_create_info, nullptr, &binary_sem));
+            ASSERT_EQ(VK_SUCCESS, vk::CreateSemaphore(device(), &binary_semaphore_create_info, nullptr, &binary_sem));
 
             signalValue = 1;
             uint64_t offendingValue = timelineproperties.maxTimelineSemaphoreValueDifference + 1;
@@ -3154,18 +3099,18 @@ TEST_F(NegativeSyncObject, SignalSemaphoreValue) {
 
             semaphore_signal_info.semaphore = timeline_sem;
             semaphore_signal_info.value = 1;
-            vk::SignalSemaphoreKHR(m_device->device(), &semaphore_signal_info);
+            vk::SignalSemaphoreKHR(device(), &semaphore_signal_info);
 
             m_default_queue->wait();
 
-            vk::DestroySemaphore(m_device->device(), binary_sem, nullptr);
-            vk::DestroySemaphore(m_device->device(), timeline_sem, nullptr);
+            vk::DestroySemaphore(device(), binary_sem, nullptr);
+            vk::DestroySemaphore(device(), timeline_sem, nullptr);
         }
     }
 
     m_default_queue->wait();
-    vk::DestroySemaphore(m_device->device(), semaphore[0], nullptr);
-    vk::DestroySemaphore(m_device->device(), semaphore[1], nullptr);
+    vk::DestroySemaphore(device(), semaphore[0], nullptr);
+    vk::DestroySemaphore(device(), semaphore[1], nullptr);
 }
 
 TEST_F(NegativeSyncObject, Sync2SignalSemaphoreValue) {
@@ -3192,7 +3137,7 @@ TEST_F(NegativeSyncObject, Sync2SignalSemaphoreValue) {
     VkSemaphoreSignalInfo semaphore_signal_info = vku::InitStructHelper();
     semaphore_signal_info.semaphore = semaphore[0].handle();
     semaphore_signal_info.value = 10;
-    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphore(m_device->device(), &semaphore_signal_info));
+    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphore(device(), &semaphore_signal_info));
 
     VkSemaphoreSubmitInfoKHR signal_info = vku::InitStructHelper();
     signal_info.semaphore = semaphore[0].handle();
@@ -3228,13 +3173,13 @@ TEST_F(NegativeSyncObject, Sync2SignalSemaphoreValue) {
     semaphore_signal_info.value = 25;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSemaphoreSignalInfo-value-03259");
-    vk::SignalSemaphore(m_device->device(), &semaphore_signal_info);
+    vk::SignalSemaphore(device(), &semaphore_signal_info);
     m_errorMonitor->VerifyFound();
 
     semaphore_signal_info.value = 15;
-    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphore(m_device->device(), &semaphore_signal_info));
+    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphore(device(), &semaphore_signal_info));
     semaphore_signal_info.semaphore = semaphore[1].handle();
-    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphore(m_device->device(), &semaphore_signal_info));
+    ASSERT_EQ(VK_SUCCESS, vk::SignalSemaphore(device(), &semaphore_signal_info));
 
     // Check if we can test violations of maxTimelineSemaphoreValueDifference
     if (timelineproperties.maxTimelineSemaphoreValueDifference < vvl::kU64Max) {
@@ -3254,7 +3199,7 @@ TEST_F(NegativeSyncObject, Sync2SignalSemaphoreValue) {
 
         semaphore_signal_info.semaphore = timeline_sem.handle();
         semaphore_signal_info.value = 1;
-        vk::SignalSemaphore(m_device->device(), &semaphore_signal_info);
+        vk::SignalSemaphore(device(), &semaphore_signal_info);
 
         m_default_queue->wait();
     }
@@ -3274,7 +3219,7 @@ TEST_F(NegativeSyncObject, SemaphoreCounterType) {
     uint64_t value = 0xdeadbeef;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetSemaphoreCounterValue-semaphore-03255");
-    vk::GetSemaphoreCounterValueKHR(m_device->device(), semaphore.handle(), &value);
+    vk::GetSemaphoreCounterValueKHR(device(), semaphore.handle(), &value);
     m_errorMonitor->VerifyFound();
 }
 
@@ -3282,8 +3227,8 @@ TEST_F(NegativeSyncObject, EventStageMaskOneCommandBufferPass) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    vkt::CommandBuffer commandBuffer1(m_device, m_commandPool);
-    vkt::CommandBuffer commandBuffer2(m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer1(*m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer2(*m_device, m_commandPool);
 
     vkt::Event event(*m_device);
 
@@ -3304,8 +3249,8 @@ TEST_F(NegativeSyncObject, EventStageMaskOneCommandBufferFail) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    vkt::CommandBuffer commandBuffer1(m_device, m_commandPool);
-    vkt::CommandBuffer commandBuffer2(m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer1(*m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer2(*m_device, m_commandPool);
 
     vkt::Event event(*m_device);
 
@@ -3329,8 +3274,8 @@ TEST_F(NegativeSyncObject, EventStageMaskTwoCommandBufferPass) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    vkt::CommandBuffer commandBuffer1(m_device, m_commandPool);
-    vkt::CommandBuffer commandBuffer2(m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer1(*m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer2(*m_device, m_commandPool);
 
     vkt::Event event(*m_device);
 
@@ -3357,8 +3302,8 @@ TEST_F(NegativeSyncObject, EventStageMaskTwoCommandBufferFail) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    vkt::CommandBuffer commandBuffer1(m_device, m_commandPool);
-    vkt::CommandBuffer commandBuffer2(m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer1(*m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer2(*m_device, m_commandPool);
 
     vkt::Event event(*m_device);
 
@@ -3396,12 +3341,12 @@ TEST_F(NegativeSyncObject, DetectInterQueueEventUsage) {
 
     const vkt::Event event(*m_device);
 
-    vkt::CommandBuffer cb1(m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_commandPool);
     cb1.begin();
     vk::CmdSetEvent(cb1, event, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     cb1.end();
 
-    vkt::CommandBuffer cb2(m_device, m_commandPool);
+    vkt::CommandBuffer cb2(*m_device, m_commandPool);
     cb2.begin();
     vk::CmdWaitEvents(cb2, 1, &event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, nullptr,
                       0, nullptr, 0, nullptr);
@@ -3443,12 +3388,12 @@ TEST_F(NegativeSyncObject, DetectInterQueueEventUsage2) {
 
     const vkt::Event event(*m_device);
 
-    vkt::CommandBuffer cb1(m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_commandPool);
     cb1.begin();
     vk::CmdSetEvent2(cb1, event, &dependency_info);
     cb1.end();
 
-    vkt::CommandBuffer cb2(m_device, m_commandPool);
+    vkt::CommandBuffer cb2(*m_device, m_commandPool);
     cb2.begin();
     vk::CmdWaitEvents2(cb2, 1, &event.handle(), &dependency_info);
     cb2.end();
@@ -3471,9 +3416,9 @@ TEST_F(NegativeSyncObject, QueueForwardProgressFenceWait) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    const char *queue_forward_progress_message = "UNASSIGNED-vkQueueSubmit-QueueForwardProgress";
+    const char *queue_forward_progress_message = "VUID-vkQueueSubmit-pCommandBuffers-00065";
 
-    vkt::CommandBuffer cb1(m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_commandPool);
     cb1.begin();
     cb1.end();
 
@@ -3519,11 +3464,11 @@ TEST_F(NegativeSyncObject, PipelineStageConditionalRenderingWithWrongQueue) {
         GTEST_SKIP() << "Only VK_QUEUE_TRANSFER_BIT Queue is not supported";
     }
 
-    VkImageObj image(m_device);
-    image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_LINEAR);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
     vkt::CommandPool commandPool(*m_device, only_transfer_queueFamilyIndex);
-    vkt::CommandBuffer commandBuffer(m_device, &commandPool);
+    vkt::CommandBuffer commandBuffer(*m_device, &commandPool);
 
     commandBuffer.begin();
 
@@ -3583,11 +3528,11 @@ TEST_F(NegativeSyncObject, InvalidDeviceOnlyEvent) {
     event_ci.flags = VK_EVENT_CREATE_DEVICE_ONLY_BIT;
     vkt::Event ev(*m_device, event_ci);
 
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkResetEvent-event-03823");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkResetEvent-event-03823");
     vk::ResetEvent(*m_device, ev.handle());
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkSetEvent-event-03941");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkSetEvent-event-03941");
     vk::SetEvent(*m_device, ev.handle());
     m_errorMonitor->VerifyFound();
 }
@@ -3715,10 +3660,10 @@ TEST_F(NegativeSyncObject, ResetEventThenSet) {
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 1;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, &command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, &command_buffer);
 
     VkQueue queue = VK_NULL_HANDLE;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 0, &queue);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 0, &queue);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -3736,12 +3681,38 @@ TEST_F(NegativeSyncObject, ResetEventThenSet) {
         vk::QueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
     }
     {
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-vkSetEvent-QueueForwardProgress");
-        vk::SetEvent(m_device->device(), event.handle());
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkSetEvent-event-09543");
+        vk::SetEvent(device(), event.handle());
         m_errorMonitor->VerifyFound();
     }
 
     vk::QueueWaitIdle(queue);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 1, &command_buffer);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 1, &command_buffer);
+}
+
+TEST_F(NegativeSyncObject, RenderPassPipelineBarrierGraphicsStage) {
+    TEST_DESCRIPTION("Use non-graphics pipeline stage inside a renderpass");
+    RETURN_IF_SKIP(Init());
+
+    RenderPassSingleSubpass rp(*this);
+    rp.AddAttachmentDescription(VK_FORMAT_R8G8B8A8_UNORM);
+    rp.AddAttachmentReference({0, VK_IMAGE_LAYOUT_GENERAL});
+    rp.AddColorAttachment(0);
+    rp.AddSubpassDependency();
+    rp.CreateRenderPass();
+
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::ImageView view = image.CreateView();
+    vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &view.handle());
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(rp.Handle(), fb.handle());
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-07889");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-07889");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-07892");
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
+                           0, nullptr, 0, nullptr, 0, nullptr);
+    m_errorMonitor->VerifyFound();
 }

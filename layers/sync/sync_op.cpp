@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2019-2023 Valve Corporation
- * Copyright (c) 2019-2023 LunarG, Inc.
+ * Copyright (c) 2019-2024 Valve Corporation
+ * Copyright (c) 2019-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,11 @@
 #include "sync/sync_renderpass.h"
 #include "sync/sync_access_context.h"
 #include "sync/sync_commandbuffer.h"
+#include "sync/sync_image.h"
+
+#include "state_tracker/buffer_state.h"
+#include "state_tracker/cmd_buffer_state.h"
+#include "state_tracker/render_pass_state.h"
 
 #include "sync/sync_validation.h"
 
@@ -267,11 +272,11 @@ bool SyncOpPipelineBarrier::Validate(const CommandBufferAccessContext &cb_contex
             // PHASE1 TODO -- add tag information to log msg when useful.
             const Location loc(command_);
             const auto &sync_state = cb_context.GetSyncState();
-            const auto image_handle = image_state->image();
-            skip |= sync_state.LogError(string_SyncHazardVUID(hazard.Hazard()), image_handle, loc,
+            skip |= sync_state.LogError(string_SyncHazardVUID(hazard.Hazard()), image_state->Handle(), loc,
                                         "Hazard %s for image barrier %" PRIu32 " %s. Access info %s.",
                                         string_SyncHazard(hazard.Hazard()), image_barrier.index,
-                                        sync_state.FormatHandle(image_handle).c_str(), cb_context.FormatHazard(hazard).c_str());
+                                        sync_state.FormatHandle(image_state->Handle()).c_str(),
+                                        cb_context.FormatHazard(hazard).c_str());
         }
     }
     return skip;
@@ -501,7 +506,7 @@ const char *const SyncOpWaitEvents::kIgnored = "Wait operation is ignored for th
 bool SyncOpWaitEvents::Validate(const CommandBufferAccessContext &cb_context) const {
     bool skip = false;
     const auto &sync_state = cb_context.GetSyncState();
-    const auto command_buffer_handle = cb_context.GetCBState().commandBuffer();
+    const VkCommandBuffer command_buffer_handle = cb_context.GetCBState().VkHandle();
 
     // This is only interesting at record and not replay (Execute/Submit) time.
     for (size_t barrier_set_index = 0; barrier_set_index < barriers_.size(); barrier_set_index++) {
@@ -564,7 +569,7 @@ bool SyncOpWaitEvents::DoValidate(const CommandExecutionContext &exec_context, c
         // For replay calls, don't revalidate "same command buffer" events
         if (sync_event->last_command_tag >= base_tag) continue;
 
-        const auto event_handle = sync_event->event->event();
+        const VkEvent event_handle = sync_event->event->VkHandle();
         // TODO add "destroyed" checks
 
         if (sync_event->first_scope) {
@@ -643,10 +648,10 @@ bool SyncOpWaitEvents::DoValidate(const CommandExecutionContext &exec_context, c
                     *image_state, subresource_range, sync_event->scope.exec_scope, src_access_scope, queue_id,
                     sync_event->FirstScope(), sync_event->first_scope_tag, AccessContext::DetectOptions::kDetectAll);
                 if (hazard.IsHazard()) {
-                    skip |= sync_state.LogError(string_SyncHazardVUID(hazard.Hazard()), image_state->image(), loc,
+                    skip |= sync_state.LogError(string_SyncHazardVUID(hazard.Hazard()), image_state->Handle(), loc,
                                                 "Hazard %s for image barrier %" PRIu32 " %s. Access info %s.",
                                                 string_SyncHazard(hazard.Hazard()), image_memory_barrier.index,
-                                                sync_state.FormatHandle(image_state->image()).c_str(),
+                                                sync_state.FormatHandle(image_state->Handle()).c_str(),
                                                 exec_context.FormatHazard(hazard).c_str());
                     break;
                 }
@@ -839,7 +844,7 @@ bool SyncOpResetEvent::DoValidate(const CommandExecutionContext &exec_context, c
         }
         if (vuid) {
             const Location loc(command_);
-            skip |= sync_state.LogError(vuid, event_->event(), loc, message, sync_state.FormatHandle(event_->event()).c_str(),
+            skip |= sync_state.LogError(vuid, event_->Handle(), loc, message, sync_state.FormatHandle(event_->Handle()).c_str(),
                                         CmdName(), vvl::String(sync_event->last_command));
         }
     }
@@ -961,7 +966,7 @@ bool SyncOpSetEvent::DoValidate(const CommandExecutionContext &exec_context, con
             std::string vuid("SYNC-");
             vuid.append(CmdName()).append(vuid_stem);
             skip |=
-                sync_state.LogError(vuid.c_str(), event_->event(), loc, message, sync_state.FormatHandle(event_->event()).c_str(),
+                sync_state.LogError(vuid.c_str(), event_->Handle(), loc, message, sync_state.FormatHandle(event_->Handle()).c_str(),
                                     CmdName(), vvl::String(sync_event->last_command));
         }
     }
@@ -1175,7 +1180,8 @@ bool SyncOpEndRenderPass::ReplayValidate(ReplayState &replay, ResourceUsageTag r
     // Any store/resolve operations happen before the EndRenderPass tag so we can ignore them
     // Only the layout transitions happen at the replay tag
     ResourceUsageRange first_use_range = {recorded_tag, recorded_tag + 1};
-    bool skip = replay.DetectFirstUseHazard(first_use_range);
+    bool skip = false;
+    skip |= replay.DetectFirstUseHazard(first_use_range);
 
     // We can cleanup here as the recorded tag represents the final layout transition (which is the last operation or the RP
     replay.EndRenderPassReplayCleanup();
@@ -1229,8 +1235,8 @@ bool ReplayState::DetectFirstUseHazard(const ResourceUsageRange &first_use_range
         if (hazard.IsHazard()) {
             const SyncValidator &sync_state = exec_context_.GetSyncState();
             const auto handle = exec_context_.Handle();
-            const auto recorded_handle = recorded_context_.GetCBState().commandBuffer();
-            skip = sync_state.LogError(
+            const VkCommandBuffer recorded_handle = recorded_context_.GetCBState().VkHandle();
+            skip |= sync_state.LogError(
                 string_SyncHazardVUID(hazard.Hazard()), handle, error_obj_.location,
                 "Hazard %s for entry %" PRIu32 ", %s, %s access info %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
                 index_, sync_state.FormatHandle(recorded_handle).c_str(), exec_context_.ExecutionTypeString(),
@@ -1340,6 +1346,12 @@ void SyncEventsContext::AddReferencedTags(ResourceUsageTagSet &referenced) const
         }
     }
 }
+
+SyncEventState::SyncEventState(const SyncEventState::EventPointer &event_state) : SyncEventState() {
+    event = event_state;
+    destroyed = (event.get() == nullptr) || event_state->Destroyed();
+}
+
 void SyncEventState::ResetFirstScope() {
     first_scope.reset();
     scope = SyncExecScope();

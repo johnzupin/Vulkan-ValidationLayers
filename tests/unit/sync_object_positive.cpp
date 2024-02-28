@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,13 +35,12 @@ TEST_F(PositiveSyncObject, Sync2OwnershipTranfersImage) {
     vkt::Queue *no_gfx_queue = m_device->queue_family_queues(no_gfx.value())[0].get();
 
     vkt::CommandPool no_gfx_pool(*m_device, no_gfx.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer no_gfx_cb(m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
+    vkt::CommandBuffer no_gfx_cb(*m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
 
     // Create an "exclusive" image owned by the graphics queue.
-    VkImageObj image(m_device);
     VkFlags image_use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    image.Init(32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, image_use);
-    ASSERT_TRUE(image.initialized());
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, image_use);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     auto image_subres = image.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
     auto image_barrier = image.image_memory_barrier(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                                                     image.Layout(), image.Layout(), image_subres);
@@ -80,7 +79,7 @@ TEST_F(PositiveSyncObject, Sync2OwnershipTranfersBuffer) {
     vkt::Queue *no_gfx_queue = m_device->queue_family_queues(no_gfx.value())[0].get();
 
     vkt::CommandPool no_gfx_pool(*m_device, no_gfx.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer no_gfx_cb(m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
+    vkt::CommandBuffer no_gfx_cb(*m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
 
     vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
     auto buffer_barrier =
@@ -115,9 +114,9 @@ TEST_F(PositiveSyncObject, LayoutFromPresentWithoutAccessMemoryRead) {
 
     AddRequiredExtensions(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    VkImageObj image(m_device);
-    image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-    ASSERT_TRUE(image.initialized());
+    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM,
+                     (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
     VkImageMemoryBarrier barrier = vku::InitStructHelper();
     VkImageSubresourceRange range;
@@ -132,7 +131,7 @@ TEST_F(PositiveSyncObject, LayoutFromPresentWithoutAccessMemoryRead) {
     range.baseArrayLayer = 0;
     range.layerCount = 1;
     barrier.subresourceRange = range;
-    vkt::CommandBuffer cmdbuf(m_device, m_commandPool);
+    vkt::CommandBuffer cmdbuf(*m_device, m_commandPool);
     cmdbuf.begin();
     vk::CmdPipelineBarrier(cmdbuf.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr,
                            0, nullptr, 1, &barrier);
@@ -153,11 +152,10 @@ TEST_F(PositiveSyncObject, QueueSubmitSemaphoresAndLayoutTracking) {
     alloc_info.commandBufferCount = 4;
     alloc_info.commandPool = m_commandPool->handle();
     alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &alloc_info, cmd_bufs);
-    VkImageObj image(m_device);
-    image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM,
-               (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-    ASSERT_TRUE(image.initialized());
+    vk::AllocateCommandBuffers(device(), &alloc_info, cmd_bufs);
+    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM,
+                     (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    image.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkCommandBufferBeginInfo cb_binfo = vku::InitStructHelper();
     cb_binfo.pInheritanceInfo = VK_NULL_HANDLE;
     cb_binfo.flags = 0;
@@ -238,7 +236,7 @@ TEST_F(PositiveSyncObject, ResetUnsignaledFence) {
     RETURN_IF_SKIP(Init());
     testFence.init(*m_device, fenceInfo);
     VkFence fences[1] = {testFence.handle()};
-    VkResult result = vk::ResetFences(m_device->device(), 1, fences);
+    VkResult result = vk::ResetFences(device(), 1, fences);
     ASSERT_EQ(VK_SUCCESS, result);
 }
 
@@ -259,7 +257,7 @@ TEST_F(PositiveSyncObject, FenceCreateSignaledWaitHandling) {
 
     // Wait on both fences, with signaled first.
     VkFence fences[] = {f1.handle(), f2.handle()};
-    vk::WaitForFences(m_device->device(), 2, fences, VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 2, fences, VK_TRUE, kWaitTimeout);
     // Should have both retired! (get destroyed now)
 }
 
@@ -270,7 +268,7 @@ TEST_F(PositiveSyncObject, TwoFencesThreeFrames) {
 
     RETURN_IF_SKIP(Init());
     VkQueue queue = VK_NULL_HANDLE;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 0, &queue);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 0, &queue);
 
     static const uint32_t NUM_OBJECTS = 2;
     static const uint32_t NUM_FRAMES = 3;
@@ -291,8 +289,8 @@ TEST_F(PositiveSyncObject, TwoFencesThreeFrames) {
     fence_ci.flags = 0;
 
     for (uint32_t i = 0; i < NUM_OBJECTS; ++i) {
-        vk::AllocateCommandBuffers(m_device->device(), &cmd_buf_info, &cmd_buffers[i]);
-        vk::CreateFence(m_device->device(), &fence_ci, nullptr, &fences[i]);
+        vk::AllocateCommandBuffers(device(), &cmd_buf_info, &cmd_buffers[i]);
+        vk::CreateFence(device(), &fence_ci, nullptr, &fences[i]);
     }
 
     for (uint32_t frame = 0; frame < NUM_FRAMES; ++frame) {
@@ -308,12 +306,12 @@ TEST_F(PositiveSyncObject, TwoFencesThreeFrames) {
             submit_info.pCommandBuffers = &cmd_buffers[obj];
             // Submit cmd buffer and wait for fence
             vk::QueueSubmit(queue, 1, &submit_info, fences[obj]);
-            vk::WaitForFences(m_device->device(), 1, &fences[obj], VK_TRUE, kWaitTimeout);
-            vk::ResetFences(m_device->device(), 1, &fences[obj]);
+            vk::WaitForFences(device(), 1, &fences[obj], VK_TRUE, kWaitTimeout);
+            vk::ResetFences(device(), 1, &fences[obj]);
         }
     }
     for (uint32_t i = 0; i < NUM_OBJECTS; ++i) {
-        vk::DestroyFence(m_device->device(), fences[i], nullptr);
+        vk::DestroyFence(device(), fences[i], nullptr);
     }
 }
 
@@ -338,10 +336,10 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     VkQueue queue = VK_NULL_HANDLE;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 1, &queue);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 1, &queue);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -395,7 +393,7 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
 
     m_default_queue->wait();
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenceQWIFence) {
@@ -423,10 +421,10 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     VkQueue queue = VK_NULL_HANDLE;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 1, &queue);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 1, &queue);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -480,7 +478,7 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
 
     m_default_queue->wait();
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFenceTwoWFF) {
@@ -508,10 +506,10 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     VkQueue queue = VK_NULL_HANDLE;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 1, &queue);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 1, &queue);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -563,10 +561,10 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
         vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence.handle());
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, TwoQueuesEnsureCorrectRetirementWithWorkStolen) {
@@ -577,7 +575,7 @@ TEST_F(PositiveSyncObject, TwoQueuesEnsureCorrectRetirementWithWorkStolen) {
 
     VkQueue q0 = m_default_queue->handle();
     VkQueue q1 = nullptr;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 1, &q1);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 1, &q1);
     ASSERT_NE(q1, nullptr);
 
     // An (empty) command buffer. We must have work in the first submission --
@@ -588,7 +586,7 @@ TEST_F(PositiveSyncObject, TwoQueuesEnsureCorrectRetirementWithWorkStolen) {
     VkCommandBufferAllocateInfo cbai = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr, command_pool.handle(),
                                         VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
     VkCommandBuffer cb;
-    vk::AllocateCommandBuffers(m_device->device(), &cbai, &cb);
+    vk::AllocateCommandBuffers(device(), &cbai, &cb);
     VkCommandBufferBeginInfo cbbi = vku::InitStructHelper();
     vk::BeginCommandBuffer(cb, &cbbi);
     vk::EndCommandBuffer(cb);
@@ -612,7 +610,7 @@ TEST_F(PositiveSyncObject, TwoQueuesEnsureCorrectRetirementWithWorkStolen) {
     vk::QueueWaitIdle(q0);
 
     // Command buffer should have been completed (it was on q0); reset the pool.
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 1, &cb);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 1, &cb);
 
     // Force device completely idle and clean up resources
     m_device->wait();
@@ -643,10 +641,10 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     VkQueue queue = VK_NULL_HANDLE;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 1, &queue);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 1, &queue);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -698,9 +696,9 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
         vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence.handle());
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithTimelineSemaphoreAndOneFence) {
@@ -735,10 +733,10 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithTimelineSemaphoreAnd
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     VkQueue queue = VK_NULL_HANDLE;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 1, &queue);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 1, &queue);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -798,9 +796,9 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithTimelineSemaphoreAnd
         ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence.handle()));
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueWithSemaphoreAndOneFence) {
@@ -824,7 +822,7 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueWithSemaphoreAndOneFence) {
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -876,9 +874,9 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueWithSemaphoreAndOneFence) {
         vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence.handle());
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueNullQueueSubmitWithFence) {
@@ -900,7 +898,7 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueNullQueueSubmitWithFence) {
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -954,10 +952,10 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueNullQueueSubmitWithFence) {
 
     vk::QueueSubmit(m_default_queue->handle(), 0, NULL, fence.handle());
 
-    VkResult err = vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    VkResult err = vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
     ASSERT_EQ(VK_SUCCESS, err);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueOneFence) {
@@ -979,7 +977,7 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueOneFence) {
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -1031,9 +1029,9 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueOneFence) {
         vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence.handle());
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, TwoSubmitInfosWithSemaphoreOneQueueSubmitsOneFence) {
@@ -1056,7 +1054,7 @@ TEST_F(PositiveSyncObject, TwoSubmitInfosWithSemaphoreOneQueueSubmitsOneFence) {
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -1113,9 +1111,9 @@ TEST_F(PositiveSyncObject, TwoSubmitInfosWithSemaphoreOneQueueSubmitsOneFence) {
         vk::QueueSubmit(m_default_queue->handle(), 2, &submit_info[0], fence.handle());
     }
 
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 2, &command_buffer[0]);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 2, &command_buffer[0]);
 }
 
 TEST_F(PositiveSyncObject, LongSemaphoreChain) {
@@ -1128,7 +1126,7 @@ TEST_F(PositiveSyncObject, LongSemaphoreChain) {
     for (int i = 0; i < chainLength; i++) {
         VkSemaphoreCreateInfo sci = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, nullptr, 0};
         VkSemaphore semaphore;
-        vk::CreateSemaphore(m_device->device(), &sci, nullptr, &semaphore);
+        vk::CreateSemaphore(device(), &sci, nullptr, &semaphore);
 
         semaphores.push_back(semaphore);
 
@@ -1149,9 +1147,9 @@ TEST_F(PositiveSyncObject, LongSemaphoreChain) {
     VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, 1, &semaphores.back(), &flags, 0, nullptr, 0, nullptr};
     vk::QueueSubmit(m_default_queue->handle(), 1, &si, fence.handle());
 
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-    for (auto semaphore : semaphores) vk::DestroySemaphore(m_device->device(), semaphore, nullptr);
+    for (auto semaphore : semaphores) vk::DestroySemaphore(device(), semaphore, nullptr);
 }
 
 TEST_F(PositiveSyncObject, ExternalSemaphore) {
@@ -1355,19 +1353,19 @@ TEST_F(PositiveSyncObject, ExternalFence) {
 
     // Signal the exported fence and wait on the imported fence
     vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, export_fence.handle());
-    vk::WaitForFences(m_device->device(), 1, &import_fence.handle(), VK_TRUE, 1000000000);
-    vk::ResetFences(m_device->device(), 1, &import_fence.handle());
+    vk::WaitForFences(device(), 1, &import_fence.handle(), VK_TRUE, 1000000000);
+    vk::ResetFences(device(), 1, &import_fence.handle());
     vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, export_fence.handle());
-    vk::WaitForFences(m_device->device(), 1, &import_fence.handle(), VK_TRUE, 1000000000);
-    vk::ResetFences(m_device->device(), 1, &import_fence.handle());
+    vk::WaitForFences(device(), 1, &import_fence.handle(), VK_TRUE, 1000000000);
+    vk::ResetFences(device(), 1, &import_fence.handle());
 
     // Signal the imported fence and wait on the exported fence
     vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, import_fence.handle());
-    vk::WaitForFences(m_device->device(), 1, &export_fence.handle(), VK_TRUE, 1000000000);
-    vk::ResetFences(m_device->device(), 1, &export_fence.handle());
+    vk::WaitForFences(device(), 1, &export_fence.handle(), VK_TRUE, 1000000000);
+    vk::ResetFences(device(), 1, &export_fence.handle());
     vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, import_fence.handle());
-    vk::WaitForFences(m_device->device(), 1, &export_fence.handle(), VK_TRUE, 1000000000);
-    vk::ResetFences(m_device->device(), 1, &export_fence.handle());
+    vk::WaitForFences(device(), 1, &export_fence.handle(), VK_TRUE, 1000000000);
+    vk::ResetFences(device(), 1, &export_fence.handle());
 
     // Cleanup
     m_default_queue->wait();
@@ -1566,10 +1564,10 @@ TEST_F(PositiveSyncObject, WaitEventThenSet) {
     command_buffer_allocate_info.commandPool = command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 1;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, &command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, &command_buffer);
 
     VkQueue queue = VK_NULL_HANDLE;
-    vk::GetDeviceQueue(m_device->device(), m_device->graphics_queue_node_index_, 0, &queue);
+    vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 0, &queue);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -1588,11 +1586,11 @@ TEST_F(PositiveSyncObject, WaitEventThenSet) {
         submit_info.pSignalSemaphores = nullptr;
         vk::QueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
     }
-    { vk::SetEvent(m_device->device(), event.handle()); }
+    { vk::SetEvent(device(), event.handle()); }
 
     vk::QueueWaitIdle(queue);
 
-    vk::FreeCommandBuffers(m_device->device(), command_pool.handle(), 1, &command_buffer);
+    vk::FreeCommandBuffers(device(), command_pool.handle(), 1, &command_buffer);
 }
 
 TEST_F(PositiveSyncObject, DoubleLayoutTransition) {
@@ -1612,12 +1610,9 @@ TEST_F(PositiveSyncObject, DoubleLayoutTransition) {
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-    VkImageSubresource image_sub = VkImageObj::subresource(VK_IMAGE_ASPECT_COLOR_BIT, 0, 0);
-    VkImageSubresourceRange image_sub_range = VkImageObj::subresource_range(image_sub);
-
-    VkImageObj image(m_device);
-    image.init(&image_create_info);
-    ASSERT_TRUE(image.initialized());
+    VkImageSubresource image_sub = vkt::Image::subresource(VK_IMAGE_ASPECT_COLOR_BIT, 0, 0);
+    VkImageSubresourceRange image_sub_range = vkt::Image::subresource_range(image_sub);
+    vkt::Image image(*m_device, image_create_info, vkt::set_layout);
 
     m_commandBuffer->begin();
 
@@ -1683,13 +1678,13 @@ TEST_F(PositiveSyncObject, QueueSubmitTimelineSemaphore2Queue) {
 
     VkBufferCopy region = {0, 0, 256};
     vkt::CommandPool pool0(*m_device, q0->get_family_index());
-    vkt::CommandBuffer cb0(m_device, &pool0);
+    vkt::CommandBuffer cb0(*m_device, &pool0);
     cb0.begin();
     vk::CmdCopyBuffer(cb0.handle(), buffer_a.handle(), buffer_b.handle(), 1, &region);
     cb0.end();
 
     vkt::CommandPool pool1(*m_device, q1->get_family_index());
-    vkt::CommandBuffer cb1(m_device, &pool1);
+    vkt::CommandBuffer cb1(*m_device, &pool1);
     cb1.begin();
     vk::CmdCopyBuffer(cb1.handle(), buffer_c.handle(), buffer_b.handle(), 1, &region);
     cb1.end();
@@ -1738,7 +1733,7 @@ TEST_F(PositiveSyncObject, QueueSubmitTimelineSemaphore2Queue) {
     VkSemaphoreSignalInfo signal_info = vku::InitStructHelper();
     signal_info.semaphore = semaphore.handle();
     signal_info.value = kQ0Begin;
-    vk::SignalSemaphoreKHR(m_device->device(), &signal_info);
+    vk::SignalSemaphoreKHR(device(), &signal_info);
 
     // buffer_a is only used by the q0 commands
     uint64_t wait_info_value = kQ0End;
@@ -1746,16 +1741,16 @@ TEST_F(PositiveSyncObject, QueueSubmitTimelineSemaphore2Queue) {
     wait_info.semaphoreCount = 1;
     wait_info.pSemaphores = &semaphore.handle();
     wait_info.pValues = &wait_info_value;
-    vk::WaitSemaphoresKHR(m_device->device(), &wait_info, 1000000000);
+    vk::WaitSemaphoresKHR(device(), &wait_info, 1000000000);
     buffer_a.destroy();
 
     // signal semaphore to 3 to allow q1 to proceed
     signal_info.value = kQ1Begin;
-    vk::SignalSemaphoreKHR(m_device->device(), &signal_info);
+    vk::SignalSemaphoreKHR(device(), &signal_info);
 
     // buffer_b is used by both q0 and q1, buffer_c is used by q1
     wait_info_value = kQ1End;
-    vk::WaitSemaphoresKHR(m_device->device(), &wait_info, 1000000000);
+    vk::WaitSemaphoresKHR(device(), &wait_info, 1000000000);
     buffer_b.destroy();
     buffer_c.destroy();
 
@@ -1788,7 +1783,7 @@ TEST_F(PositiveSyncObject, ResetQueryPoolFromDifferentCBWithFenceAfter) {
     command_buffer_allocate_info.commandPool = m_commandPool->handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    vk::AllocateCommandBuffers(m_device->device(), &command_buffer_allocate_info, command_buffer);
+    vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -1815,7 +1810,7 @@ TEST_F(PositiveSyncObject, ResetQueryPoolFromDifferentCBWithFenceAfter) {
     // Write a timestamp, and add a fence to be signalled.
     {
         submit_info.pCommandBuffers = &command_buffer[1];
-        vk::ResetFences(m_device->device(), 1, &fence_handle);
+        vk::ResetFences(device(), 1, &fence_handle);
         vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence_handle);
     }
 
@@ -1828,7 +1823,7 @@ TEST_F(PositiveSyncObject, ResetQueryPoolFromDifferentCBWithFenceAfter) {
     // Finally, write a second timestamp, but before that, wait for the fence.
     {
         submit_info.pCommandBuffers = &command_buffer[1];
-        vk::WaitForFences(m_device->device(), 1, &fence_handle, true, kWaitTimeout);
+        vk::WaitForFences(device(), 1, &fence_handle, true, kWaitTimeout);
         vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     }
 
@@ -1887,7 +1882,7 @@ TEST_F(PositiveSyncObject, FenceSemThreadRace) {
 
     std::atomic<bool> bailout{false};
     FenceSemRaceData data;
-    data.device = m_device->device();
+    data.device = device();
     data.sem = sem.handle();
     data.wait_value = signal_value;
     data.bailout = &bailout;
@@ -1898,7 +1893,7 @@ TEST_F(PositiveSyncObject, FenceSemThreadRace) {
     for (uint32_t i = 0; i < data.iterations; i++, signal_value++) {
         vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence_handle);
         fence.wait(data.timeout);
-        vk::ResetFences(m_device->device(), 1, &fence_handle);
+        vk::ResetFences(device(), 1, &fence_handle);
     }
     m_errorMonitor->SetBailout(nullptr);
 
@@ -1910,9 +1905,7 @@ TEST_F(PositiveSyncObject, SubmitFenceButWaitIdle) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain, skipping CmdCopySwapchainImage test";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
     uint32_t image_index, image_count;
     vk::GetSwapchainImagesKHR(m_device->handle(), m_swapchain, &image_count, nullptr);
     std::vector<VkImage> swapchainImages(image_count, VK_NULL_HANDLE);
@@ -2040,7 +2033,7 @@ struct SemBufferRaceData {
         error_mon.SetBailout(&bailout);
         std::thread thread(&SemBufferRaceData::ThreadFunc, this);
         for (uint32_t i = 0; i < iterations; i++) {
-            vkt::CommandBuffer cb(&dev, &command_pool);
+            vkt::CommandBuffer cb(dev, &command_pool);
 
             VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
             auto buffer = std::make_unique<vkt::Buffer>();
@@ -2173,8 +2166,9 @@ TEST_F(PositiveSyncObject, SubpassBarrier) {
     rp.AddSubpassDependency();
     rp.CreateRenderPass();
 
-    VkImageObj image(m_device);
-    image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM,
+                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView image_view = image.CreateView();
 
     vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &image_view.handle());
@@ -2212,8 +2206,9 @@ TEST_F(PositiveSyncObject, SubpassBarrier2) {
     rp.AddSubpassDependency();
     rp.CreateRenderPass();
 
-    VkImageObj image(m_device);
-    image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM,
+                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView image_view = image.CreateView();
 
     vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &image_view.handle());
@@ -2314,8 +2309,8 @@ TEST_F(PositiveSyncObject, BarrierWithHostStage) {
     m_commandBuffer->end();
 
     // HOST stage as destination
-    VkImageObj image(m_device);
-    image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
     image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
     image_barrier.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
@@ -2355,5 +2350,29 @@ TEST_F(PositiveSyncObject, BarrierASBuildWithShaderReadAccess) {
 
     m_commandBuffer->begin();
     vk::CmdPipelineBarrier2KHR(*m_commandBuffer, &dependency_info);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncObject, BarrierAccessSyncMicroMap) {
+    TEST_DESCRIPTION("Test VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT can be used with VK_ACCESS_2_SHADER_READ_BIT.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+
+    VkMemoryBarrier2 mem_barrier = vku::InitStructHelper();
+    mem_barrier.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+    mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    mem_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    mem_barrier.dstStageMask = VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT;
+
+    VkDependencyInfo dependency_info = vku::InitStructHelper();
+    dependency_info.memoryBarrierCount = 1;
+    dependency_info.pMemoryBarriers = &mem_barrier;
+
+    m_commandBuffer->begin();
+    vk::CmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dependency_info);
     m_commandBuffer->end();
 }

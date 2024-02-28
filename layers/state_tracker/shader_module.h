@@ -1,4 +1,4 @@
-/* Copyright (c) 2021-2023 The Khronos Group Inc.
+/* Copyright (c) 2021-2024 The Khronos Group Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -123,6 +123,8 @@ struct ExecutionModeSet {
 
         depth_replacing_bit = 1 << 24,
         stencil_ref_replacing_bit = 1 << 25,
+
+        fp_fast_math_default = 1 << 26,
     };
 
     // bits to know if things have been set or not by a Decoration
@@ -152,6 +154,7 @@ struct AtomicInstructionInfo {
     uint32_t storage_class;
     uint32_t bit_width;
     uint32_t type;  // ex. OpTypeInt
+    uint32_t vector_size = 0;  // 0 for scalar, otherwise number of components
 };
 
 // This info *could* be found/saved in TypeStructInfo, but since
@@ -215,6 +218,9 @@ struct ImageAccess {
 // <Image OpVariable Result ID, [ImageAccess, ImageAccess, etc] > - used for faster lookup
 // Many ImageAccess can point to a single Image Variable
 using ImageAccessMap = vvl::unordered_map<uint32_t, std::vector<std::shared_ptr<const ImageAccess>>>;
+// < Variable ID, [ OpAccessChain ] >
+// Allows for grouping the access chains by which variables they are actually accessing
+using AccessChainVariableMap = std::unordered_map<uint32_t, std::vector<const Instruction *>>;
 
 // A slot is a <Location, Component> mapping
 struct InterfaceSlot {
@@ -317,7 +323,6 @@ struct StageInteraceVariable : public VariableBase {
 struct ResourceInterfaceVariable : public VariableBase {
     // If the type is a OpTypeArray save the length
     uint32_t array_length;
-    bool runtime_array;  // OpTypeRuntimeArray - can't validate length until run time
 
     bool is_sampled_image;  // OpTypeSampledImage
 
@@ -335,6 +340,11 @@ struct ResourceInterfaceVariable : public VariableBase {
     // Type once array/pointer are stripped
     // most likly will be OpTypeImage, OpTypeStruct, OpTypeSampler, or OpTypeAccelerationStructureKHR
     const Instruction &base_type;
+
+    // This is true if either:
+    // - The descriptor is made up of an OpRuntimeArray
+    // - Not all OpAccessChains pointing to this descriptor or easily determined constant
+    bool is_dynamic_accessed;
 
     // Sampled Type width of the OpTypeImage the variable points to, 0 if doesn't use the image
     const uint32_t image_sampled_type_width;
@@ -381,10 +391,12 @@ struct ResourceInterfaceVariable : public VariableBase {
     bool is_input_attachment{false};
 
     ResourceInterfaceVariable(const Module &module_state, const EntryPoint &entrypoint, const Instruction &insn,
-                              const ImageAccessMap &image_access_map);
+                              const ImageAccessMap &image_access_map, const AccessChainVariableMap &access_chain_map);
 
   protected:
     static const Instruction &FindBaseType(ResourceInterfaceVariable &variable, const Module &module_state);
+    static bool IsDynamicAccessed(ResourceInterfaceVariable &variable, const Module &module_state,
+                                  const AccessChainVariableMap &access_chain_map);
     static uint32_t FindImageSampledTypeWidth(const Module &module_state, const Instruction &base_type);
     static NumericType FindImageFormatType(const Module &module_state, const Instruction &base_type);
     static bool IsStorageBuffer(const ResourceInterfaceVariable &variable);
@@ -457,13 +469,34 @@ struct EntryPoint {
     bool has_passthrough{false};
     bool has_alpha_to_coverage_variable{false};  // only for Fragment shaders
 
-    EntryPoint(const Module &module_state, const Instruction &entrypoint_insn, const ImageAccessMap &image_access_map);
+    EntryPoint(const Module &module_state, const Instruction &entrypoint_insn, const ImageAccessMap &image_access_map,
+               const AccessChainVariableMap &access_chain_map);
 
   protected:
     static vvl::unordered_set<uint32_t> GetAccessibleIds(const Module &module_state, EntryPoint &entrypoint);
     static std::vector<StageInteraceVariable> GetStageInterfaceVariables(const Module &module_state, const EntryPoint &entrypoint);
     static std::vector<ResourceInterfaceVariable> GetResourceInterfaceVariables(const Module &module_state, EntryPoint &entrypoint,
-                                                                                const ImageAccessMap &image_access_map);
+                                                                                const ImageAccessMap &image_access_map,
+                                                                                const AccessChainVariableMap &access_chain_map);
+};
+
+// Info to capture while parsing the SPIR-V, but will only be used by ValidateSpirvStateless and don't need to save after
+struct StatelessData {
+    // These instruction mapping were designed to quickly find the few instructions without having to loop the entire pass
+    // In theory, these could be removed checked during the 2nd pass in ValidateSpirvStateless()
+    // TODO - Get perf numbers if better to understand if these make sense here
+    std::vector<const Instruction *> read_clock_inst;
+    std::vector<const Instruction *> atomic_inst;
+    std::vector<const Instruction *> group_inst;
+    // OpEmitStreamVertex/OpEndStreamPrimitive - only allowed in Geometry shader
+    std::vector<const Instruction *> transform_feedback_stream_inst;
+
+    // simpler to just track all OpExecutionModeId and parse things needed later
+    std::vector<const Instruction *> execution_mode_id_inst;
+
+    bool has_builtin_fully_covered{false};
+    bool has_invocation_repack_instruction{false};
+    bool has_group_decoration{false};
 };
 
 // Represents a SPIR-V Module
@@ -473,7 +506,7 @@ struct Module {
     // The goal of this struct is to move everything that is ready only into here
     struct StaticData {
         StaticData() = default;
-        StaticData(const Module &module_state);
+        StaticData(const Module &module_state, StatelessData *stateless_data = nullptr);
         StaticData &operator=(StaticData &&) = default;
         StaticData(StaticData &&) = default;
 
@@ -501,8 +534,6 @@ struct Module {
         std::vector<const Instruction *> variable_inst;
         // both OpDecorate and OpMemberDecorate builtin instructions
         std::vector<const Instruction *> builtin_decoration_inst;
-        // OpEmitStreamVertex/OpEndStreamPrimitive - only allowed in Geometry shader
-        std::vector<const Instruction *> transform_feedback_stream_inst;
         // OpString - used to find debug information
         std::vector<const Instruction *> debug_string_inst;
         // For shader tile image - OpDepthAttachmentReadEXT/OpStencilAttachmentReadEXT/OpColorAttachmentReadEXT
@@ -511,13 +542,9 @@ struct Module {
         bool has_shader_tile_image_color_read{false};
         // BuiltIn we just care about existing or not, don't have to be written to
         bool has_builtin_layer{false};
-        bool has_builtin_fully_covered{false};
         bool has_builtin_workgroup_size{false};
         uint32_t builtin_workgroup_size_id = 0;
 
-        std::vector<const Instruction *> atomic_inst;
-        std::vector<const Instruction *> group_inst;
-        std::vector<const Instruction *> read_clock_inst;
         std::vector<const Instruction *> cooperative_matrix_inst;
 
         std::vector<spv::Capability> capability_list;
@@ -525,7 +552,6 @@ struct Module {
         bool has_capability_runtime_descriptor_array{false};
 
         bool has_specialization_constants{false};
-        bool has_invocation_repack_instruction{false};
         bool uses_interpolate_at_sample{false};
 
         // EntryPoint has pointer references inside it that need to be preserved
@@ -534,8 +560,6 @@ struct Module {
         std::vector<std::shared_ptr<TypeStructInfo>> type_structs;  // All OpTypeStruct objects
         // <OpTypeStruct ID, info> - used for faster lookup as there can many structs
         vvl::unordered_map<uint32_t, std::shared_ptr<const TypeStructInfo>> type_struct_map;
-
-        bool has_group_decoration{false};
 
         // Tracks accesses (load, store, atomic) to the instruction calling them
         // Example: the OpLoad does the "access" but need to know if a OpImageRead uses that OpLoad later
@@ -569,7 +593,9 @@ struct Module {
     // Used for when modifying the SPIR-V (spirv-opt, GPU-AV instrumentation, etc) and need reparse it for VVL validaiton
     Module(vvl::span<const uint32_t> code) : words_(code.begin(), code.end()), static_data_(*this) {}
 
-    Module(size_t codeSize, const uint32_t *pCode) : words_(pCode, pCode + codeSize / sizeof(uint32_t)), static_data_(*this) {}
+    // StatelessData is a pointer as we have cases were we don't need it and simpler to just null check the few cases that use it
+    Module(size_t codeSize, const uint32_t *pCode, StatelessData *stateless_data = nullptr)
+        : words_(pCode, pCode + codeSize / sizeof(uint32_t)), static_data_(*this, stateless_data) {}
 
     const Instruction *FindDef(uint32_t id) const {
         auto it = static_data_.definitions.find(id);
@@ -635,6 +661,8 @@ struct Module {
 
     bool IsBuiltInWritten(const Instruction *builtin_insn, const EntryPoint &entrypoint) const;
 
+    bool HasRuntimeArray(uint32_t type_id) const;
+
     // Instruction helpers that need the knowledge of the whole SPIR-V module
     uint32_t GetNumComponentsInBaseType(const Instruction *insn) const;
     uint32_t GetTypeBitsSize(const Instruction *insn) const;
@@ -666,6 +694,8 @@ struct ShaderModule : public StateObject {
     ShaderModule(uint32_t unique_shader_id)
         : StateObject(static_cast<VkShaderModule>(VK_NULL_HANDLE), kVulkanObjectTypeShaderModule),
           gpu_validation_shader_id(unique_shader_id) {}
+
+    VkShaderModule VkHandle() const { return handle_.Cast<VkShaderModule>(); }
 
     // If null, means this is a empty object and no shader backing it
     // TODO - This (and vvl::ShaderObject) could be unique, but need handle multiple ValidationObjects

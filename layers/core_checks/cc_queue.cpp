@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
  * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +24,11 @@
 #include <vulkan/vk_enum_string_helper.h>
 #include "generated/chassis.h"
 #include "core_validation.h"
+#include "state_tracker/queue_state.h"
+#include "state_tracker/semaphore_state.h"
+#include "state_tracker/image_state.h"
+#include "state_tracker/buffer_state.h"
+#include "sync/sync_vuid_maps.h"
 
 struct CommandBufferSubmitState {
     const CoreChecks *core;
@@ -32,6 +37,9 @@ struct CommandBufferSubmitState {
     QFOTransferCBScoreboards<QFOBufferTransferBarrier> qfo_buffer_scoreboards;
     std::vector<VkCommandBuffer> current_cmds;
     GlobalImageLayoutMap overlay_image_layout_map;
+    std::vector<std::string> cmdbuf_label_stack;
+    std::string last_closed_cmdbuf_label;
+    bool found_unbalanced_cmdbuf_label;
 
     // The "local" prefix is about tracking state within a *single* queue submission
     // (accross all command buffers of that submission), as opposed to globally
@@ -40,17 +48,24 @@ struct CommandBufferSubmitState {
     EventToStageMap local_event_signal_info;
     vvl::unordered_map<VkVideoSessionKHR, vvl::VideoSessionDeviceState> local_video_session_state{};
 
-    CommandBufferSubmitState(const CoreChecks *c, const vvl::Queue *q) : core(c), queue_state(q) {}
+    CommandBufferSubmitState(const CoreChecks *c, const vvl::Queue *q) : core(c), queue_state(q) {
+        // Queue label state is updated during PostRecord phase.
+        // Copy state to be able to track labels during validation.
+        cmdbuf_label_stack = queue_state->cmdbuf_label_stack;
+        last_closed_cmdbuf_label = queue_state->last_closed_cmdbuf_label;
+        found_unbalanced_cmdbuf_label = queue_state->found_unbalanced_cmdbuf_label;
+    }
 
     bool Validate(const Location &loc, const vvl::CommandBuffer &cb_state, uint32_t perf_pass) {
         bool skip = false;
         skip |= core->ValidateCmdBufImageLayouts(loc, cb_state, overlay_image_layout_map);
-        auto cmd = cb_state.commandBuffer();
+        const VkCommandBuffer cmd = cb_state.VkHandle();
         current_cmds.push_back(cmd);
         skip |= core->ValidatePrimaryCommandBufferState(
             loc, cb_state, static_cast<uint32_t>(std::count(current_cmds.begin(), current_cmds.end(), cmd)), &qfo_image_scoreboards,
             &qfo_buffer_scoreboards);
         skip |= core->ValidateQueueFamilyIndices(loc, cb_state, queue_state->VkHandle());
+        skip |= ValidateCmdBufLabelMatching(loc, cb_state);
 
         // Potential early exit here as bad object state may crash in delayed function calls
         if (skip) {
@@ -83,25 +98,59 @@ struct CommandBufferSubmitState {
         }
         return skip;
     }
+
+private:
+    bool ValidateCmdBufLabelMatching(const Location &loc, const vvl::CommandBuffer &cb_state) {
+        bool skip = false;
+        if (found_unbalanced_cmdbuf_label) {
+            // We already reported an error. After the first error, do not perform further validation or state tracking.
+            // The assumption that after label mismatch the label stack is corrupted and can't be reasoned about.
+            return skip;
+        }
+        for (const auto &command : cb_state.GetLabelCommands()) {
+            if (command.begin) {
+                cmdbuf_label_stack.push_back(command.label_name);
+            } else {
+                if (cmdbuf_label_stack.empty()) {
+                    found_unbalanced_cmdbuf_label = true;
+                    break;
+                }
+                last_closed_cmdbuf_label = cmdbuf_label_stack.back();
+                cmdbuf_label_stack.pop_back();
+            }
+        }
+        if (found_unbalanced_cmdbuf_label) {
+            std::string previous_debug_region;
+            if (last_closed_cmdbuf_label.empty()) {
+                previous_debug_region = "There are no previous debug regions before the invalid command.";
+            } else {
+                previous_debug_region =
+                    std::string("The previous debug region before the invalid command is '") + last_closed_cmdbuf_label + "'.";
+            }
+            skip |= core->LogError("VUID-vkCmdEndDebugUtilsLabelEXT-commandBuffer-01912", cb_state.Handle(), loc,
+                                   "(%s) contains vkCmdEndDebugUtilsLabelEXT that does not have a matching "
+                                   "vkCmdBeginDebugUtilsLabelEXT in this or one of the previously submitted command buffers. %s",
+                                   core->FormatHandle(cb_state).c_str(), previous_debug_region.c_str());
+        }
+        return skip;
+    }
 };
 
 bool CoreChecks::PreCallValidateQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence,
                                             const ErrorObject &error_obj) const {
     bool skip = false;
-    {
-        auto fence_state = Get<vvl::Fence>(fence);
+    if (auto fence_state = Get<vvl::Fence>(fence)) {
         const LogObjectList objlist(queue, fence);
-        skip = ValidateFenceForSubmit(fence_state.get(), "VUID-vkQueueSubmit-fence-00064", "VUID-vkQueueSubmit-fence-00063",
-                                      objlist, error_obj.location);
+        skip |= ValidateFenceForSubmit(*fence_state, "VUID-vkQueueSubmit-fence-00064", "VUID-vkQueueSubmit-fence-00063", objlist,
+                                       error_obj.location);
     }
     if (skip) {
-        return true;
+        return skip;
     }
 
     auto queue_state = Get<vvl::Queue>(queue);
     CommandBufferSubmitState cb_submit_state(this, queue_state.get());
-    SemaphoreSubmitState sem_submit_state(this, queue,
-                                          physical_device_state->queue_family_properties[queue_state->queueFamilyIndex].queueFlags);
+    SemaphoreSubmitState sem_submit_state(this, queue, queue_state->queueFamilyProperties.queueFlags);
 
     // Now verify each individual submit
     for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
@@ -191,17 +240,17 @@ bool CoreChecks::PreCallValidateQueueSubmit(VkQueue queue, uint32_t submitCount,
             auto cb_state = GetRead<vvl::CommandBuffer>(submit.pCommandBuffers[i]);
             if (cb_state) {
                 if ((cb_state->unprotected == true) && (protected_submit == true)) {
-                    const LogObjectList objlist(cb_state->commandBuffer(), queue);
+                    const LogObjectList objlist(cb_state->Handle(), queue);
                     skip |= LogError("VUID-VkSubmitInfo-pNext-04148", objlist, cb_loc,
                                      "(%s) is unprotected while queue %s pSubmits[%u] has "
                                      "VkProtectedSubmitInfo:protectedSubmit set to VK_TRUE",
-                                     FormatHandle(cb_state->commandBuffer()).c_str(), FormatHandle(queue).c_str(), submit_idx);
+                                     FormatHandle(cb_state->Handle()).c_str(), FormatHandle(queue).c_str(), submit_idx);
                 }
                 if ((cb_state->unprotected == false) && (protected_submit == false)) {
-                    const LogObjectList objlist(cb_state->commandBuffer(), queue);
+                    const LogObjectList objlist(cb_state->Handle(), queue);
                     skip |= LogError("VUID-VkSubmitInfo-pNext-04120", objlist, cb_loc,
                                      "(%s) is protected while queue %s pSubmits[%u] has %s",
-                                     FormatHandle(cb_state->commandBuffer()).c_str(), FormatHandle(queue).c_str(), submit_idx,
+                                     FormatHandle(cb_state->Handle()).c_str(), FormatHandle(queue).c_str(), submit_idx,
                                      protected_submit_info ? "VkProtectedSubmitInfo:protectedSubmit set to VK_FALSE"
                                                            : "no VkProtectedSubmitInfo in the pNext chain");
                 }
@@ -215,14 +264,13 @@ bool CoreChecks::PreCallValidateQueueSubmit(VkQueue queue, uint32_t submitCount,
 bool CoreChecks::ValidateQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits, VkFence fence,
                                       const ErrorObject &error_obj) const {
     bool skip = false;
-    {
-        auto fence_state = Get<vvl::Fence>(fence);
+    if (auto fence_state = Get<vvl::Fence>(fence)) {
         const LogObjectList objlist(queue, fence);
-        skip = ValidateFenceForSubmit(fence_state.get(), "VUID-vkQueueSubmit2-fence-04895", "VUID-vkQueueSubmit2-fence-04894",
-                                      objlist, error_obj.location);
+        skip |= ValidateFenceForSubmit(*fence_state, "VUID-vkQueueSubmit2-fence-04895", "VUID-vkQueueSubmit2-fence-04894", objlist,
+                                       error_obj.location);
     }
     if (skip) {
-        return true;
+        return skip;
     }
 
     if (!enabled_features.synchronization2) {
@@ -232,8 +280,7 @@ bool CoreChecks::ValidateQueueSubmit2(VkQueue queue, uint32_t submitCount, const
 
     auto queue_state = Get<vvl::Queue>(queue);
     CommandBufferSubmitState cb_submit_state(this, queue_state.get());
-    SemaphoreSubmitState sem_submit_state(this, queue,
-                                          physical_device_state->queue_family_properties[queue_state->queueFamilyIndex].queueFlags);
+    SemaphoreSubmitState sem_submit_state(this, queue, queue_state->queueFamilyProperties.queueFlags);
 
     // Now verify each individual submit
     for (uint32_t submit_idx = 0; submit_idx < submitCount; submit_idx++) {
@@ -268,13 +315,13 @@ bool CoreChecks::ValidateQueueSubmit2(VkQueue queue, uint32_t submitCount, const
             if (cb_state != nullptr) {
                 // Make sure command buffers are all protected or unprotected
                 if ((cb_state->unprotected == true) && (protected_submit == true)) {
-                    const LogObjectList objlist(cb_state->commandBuffer(), queue);
+                    const LogObjectList objlist(cb_state->Handle(), queue);
                     skip |= LogError("VUID-VkSubmitInfo2-flags-03886", objlist, info_loc.dot(Field::commandBuffer),
                                      "is unprotected while %s.flags (%s) has VK_SUBMIT_PROTECTED_BIT_KHR set",
                                      submit_loc.Fields().c_str(), string_VkSubmitFlags(submit.flags).c_str());
                 }
                 if ((cb_state->unprotected == false) && (protected_submit == false)) {
-                    const LogObjectList objlist(cb_state->commandBuffer(), queue);
+                    const LogObjectList objlist(cb_state->Handle(), queue);
                     skip |= LogError("VUID-VkSubmitInfo2-flags-03887", objlist, info_loc.dot(Field::commandBuffer),
                                      "is protected while %s.flags (%s) has VK_SUBMIT_PROTECTED_BIT_KHR not set",
                                      submit_loc.Fields().c_str(), string_VkSubmitFlags(submit.flags).c_str());
@@ -330,10 +377,10 @@ void CoreChecks::PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, 
             if (cb_state) {
                 for (auto *secondary_cmd_buffer : cb_state->linkedCommandBuffers) {
                     UpdateCmdBufImageLayouts(*secondary_cmd_buffer);
-                    RecordQueuedQFOTransfers(secondary_cmd_buffer);
+                    RecordQueuedQFOTransfers(*secondary_cmd_buffer);
                 }
                 UpdateCmdBufImageLayouts(*cb_state);
-                RecordQueuedQFOTransfers(cb_state.get());
+                RecordQueuedQFOTransfers(*cb_state);
             }
         }
     }
@@ -350,10 +397,10 @@ void CoreChecks::RecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const V
             if (cb_state) {
                 for (auto *secondaryCmdBuffer : cb_state->linkedCommandBuffers) {
                     UpdateCmdBufImageLayouts(*secondaryCmdBuffer);
-                    RecordQueuedQFOTransfers(secondaryCmdBuffer);
+                    RecordQueuedQFOTransfers(*secondaryCmdBuffer);
                 }
                 UpdateCmdBufImageLayouts(*cb_state);
-                RecordQueuedQFOTransfers(cb_state.get());
+                RecordQueuedQFOTransfers(*cb_state);
             }
         }
     }
@@ -384,11 +431,11 @@ bool CoreChecks::ValidImageBufferQueue(const vvl::CommandBuffer &cb_state, const
     }
 
     if (!found) {
-        const LogObjectList objlist(cb_state.commandBuffer(), object);
-        skip = LogError("VUID-vkQueueSubmit-pSubmits-04626", objlist, loc,
-                        "%s contains %s which was not created allowing concurrent access to "
-                        "this queue family %d.",
-                        FormatHandle(cb_state).c_str(), FormatHandle(object).c_str(), queueFamilyIndex);
+        const LogObjectList objlist(cb_state.Handle(), object);
+        skip |= LogError("VUID-vkQueueSubmit-pSubmits-04626", objlist, loc,
+                         "%s contains %s which was not created allowing concurrent access to "
+                         "this queue family %d.",
+                         FormatHandle(cb_state).c_str(), FormatHandle(object).c_str(), queueFamilyIndex);
     }
     return skip;
 }
@@ -404,7 +451,7 @@ bool CoreChecks::ValidateQueueFamilyIndices(const Location &loc, const vvl::Comm
 
     if (pool && queue_state) {
         if (pool->queueFamilyIndex != queue_state->queueFamilyIndex) {
-            const LogObjectList objlist(cb_state.commandBuffer(), queue);
+            const LogObjectList objlist(cb_state.Handle(), queue);
             const auto &vuid = GetQueueSubmitVUID(loc, SubmitError::kCmdWrongQueueFamily);
             skip |= LogError(vuid, objlist, loc,
                              "Primary command buffer %s created in queue family %d is being submitted on %s "
@@ -454,7 +501,7 @@ bool CoreChecks::ValidateCommandBufferState(const vvl::CommandBuffer &cb_state, 
     if (const uint64_t submissions = cb_state.submitCount + current_submit_count;
         (cb_state.beginInfo.flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) && (submissions > 1)) {
         // VU being worked on https://gitlab.khronos.org/vulkan/vulkan/-/issues/2456
-        skip |= LogError("UNASSIGNED-DrawState-CommandBufferSingleSubmitViolation", cb_state.commandBuffer(), loc,
+        skip |= LogError("UNASSIGNED-DrawState-CommandBufferSingleSubmitViolation", cb_state.Handle(), loc,
                          "%s recorded with VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT has been submitted %" PRIu64 " times.",
                          FormatHandle(cb_state).c_str(), submissions);
     }
@@ -467,12 +514,12 @@ bool CoreChecks::ValidateCommandBufferState(const vvl::CommandBuffer &cb_state, 
             break;
 
         case CbState::New:
-            skip |= LogError(vuid, cb_state.commandBuffer(), loc, "%s is unrecorded and contains no commands.",
+            skip |= LogError(vuid, cb_state.Handle(), loc, "%s is unrecorded and contains no commands.",
                              FormatHandle(cb_state).c_str());
             break;
 
         case CbState::Recording:
-            skip |= LogError(vuid, cb_state.commandBuffer(), loc, "You must call vkEndCommandBuffer() on %s before this call.",
+            skip |= LogError(vuid, cb_state.Handle(), loc, "You must call vkEndCommandBuffer() on %s before this call.",
                              FormatHandle(cb_state).c_str());
             break;
 
@@ -510,22 +557,20 @@ bool CoreChecks::ValidatePrimaryCommandBufferState(
 
     if (cb_state.createInfo.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
         const auto &vuid = GetQueueSubmitVUID(loc, SubmitError::kSecondaryCmdInSubmit);
-        skip |=
-            LogError(vuid, cb_state.commandBuffer(), loc,
-                     "Command buffer %s must be allocated with VK_COMMAND_BUFFER_LEVEL_PRIMARY.", FormatHandle(cb_state).c_str());
+        skip |= LogError(vuid, cb_state.Handle(), loc, "Command buffer %s must be allocated with VK_COMMAND_BUFFER_LEVEL_PRIMARY.",
+                         FormatHandle(cb_state).c_str());
     } else {
         for (const auto *sub_cb : cb_state.linkedCommandBuffers) {
             skip |= ValidateQueuedQFOTransfers(*sub_cb, qfo_image_scoreboards, qfo_buffer_scoreboards, loc);
             // TODO: replace with InvalidateCommandBuffers() at recording.
-            if ((sub_cb->primaryCommandBuffer != cb_state.commandBuffer()) &&
+            if ((sub_cb->primaryCommandBuffer != cb_state.VkHandle()) &&
                 !(sub_cb->beginInfo.flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
                 const auto &vuid = GetQueueSubmitVUID(loc, SubmitError::kSecondaryCmdNotSimultaneous);
-                const LogObjectList objlist(device, cb_state.commandBuffer(), sub_cb->commandBuffer(),
-                                            sub_cb->primaryCommandBuffer);
+                const LogObjectList objlist(device, cb_state.Handle(), sub_cb->Handle(), sub_cb->primaryCommandBuffer);
                 skip |= LogError(vuid, objlist, loc,
                                  "%s was submitted with secondary %s but that buffer has subsequently been bound to "
                                  "primary %s and it does not have VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT set.",
-                                 FormatHandle(cb_state).c_str(), FormatHandle(sub_cb->commandBuffer()).c_str(),
+                                 FormatHandle(cb_state).c_str(), FormatHandle(sub_cb->Handle()).c_str(),
                                  FormatHandle(sub_cb->primaryCommandBuffer).c_str());
             }
 
@@ -533,11 +578,10 @@ bool CoreChecks::ValidatePrimaryCommandBufferState(
                 const char *const finished_cb_vuid = (loc.function == Func::vkQueueSubmit)
                                                          ? "VUID-vkQueueSubmit-pCommandBuffers-00072"
                                                          : "VUID-vkQueueSubmit2-commandBuffer-03876";
-                const LogObjectList objlist(device, cb_state.commandBuffer(), sub_cb->commandBuffer(),
-                                            sub_cb->primaryCommandBuffer);
+                const LogObjectList objlist(device, cb_state.Handle(), sub_cb->Handle(), sub_cb->primaryCommandBuffer);
                 skip |= LogError(finished_cb_vuid, objlist, loc,
                                  "Secondary command buffer %s is not in a valid (pending or executable) state.",
-                                 FormatHandle(sub_cb->commandBuffer()).c_str());
+                                 FormatHandle(sub_cb->Handle()).c_str());
             }
         }
     }
@@ -556,25 +600,24 @@ bool CoreChecks::ValidatePrimaryCommandBufferState(
 bool CoreChecks::PreCallValidateQueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo *pBindInfo,
                                                 VkFence fence, const ErrorObject &error_obj) const {
     bool skip = false;
-    {
-        auto fence_state = Get<vvl::Fence>(fence);
+    if (auto fence_state = Get<vvl::Fence>(fence)) {
         const LogObjectList objlist(queue, fence);
-        skip = ValidateFenceForSubmit(fence_state.get(), "VUID-vkQueueBindSparse-fence-01114", "VUID-vkQueueBindSparse-fence-01113",
-                                      objlist, error_obj.location);
+        skip |= ValidateFenceForSubmit(*fence_state, "VUID-vkQueueBindSparse-fence-01114", "VUID-vkQueueBindSparse-fence-01113",
+                                       objlist, error_obj.location);
     }
     if (skip) {
-        return true;
+        return skip;
     }
 
-    auto queue_data = Get<vvl::Queue>(queue);
-    const auto queue_flags = physical_device_state->queue_family_properties[queue_data->queueFamilyIndex].queueFlags;
+    auto queue_state = Get<vvl::Queue>(queue);
+    const VkQueueFlags queue_flags = queue_state->queueFamilyProperties.queueFlags;
     if (!(queue_flags & VK_QUEUE_SPARSE_BINDING_BIT)) {
         skip |= LogError("VUID-vkQueueBindSparse-queuetype", queue, error_obj.location,
-                         "a non-memory-management capable queue -- VK_QUEUE_SPARSE_BINDING_BIT not set.");
+                         "queueFamilyIndex %" PRIu32 " queueFlags are %s.", queue_state->queueFamilyIndex,
+                         string_VkQueueFlags(queue_flags).c_str());
     }
 
-    SemaphoreSubmitState sem_submit_state(this, queue,
-                                          physical_device_state->queue_family_properties[queue_data->queueFamilyIndex].queueFlags);
+    SemaphoreSubmitState sem_submit_state(this, queue, queue_flags);
     for (uint32_t bind_idx = 0; bind_idx < bindInfoCount; ++bind_idx) {
         const Location bind_info_loc = error_obj.location.dot(Struct::VkBindSparseInfo, Field::pBindInfo, bind_idx);
         const VkBindSparseInfo &bind_info = pBindInfo[bind_idx];
@@ -628,8 +671,9 @@ bool CoreChecks::PreCallValidateQueueBindSparse(VkQueue queue, uint32_t bindInfo
                 }
 
                 if (!image_state->sparse_residency) {
-                    skip |= LogError("VUID-VkSparseImageMemoryBindInfo-image-02901", image_bind.image, bind_loc.dot(Field::image),
-                                     "must have been created with VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT set.");
+                    skip |=
+                        LogError("VUID-VkSparseImageMemoryBindInfo-image-02901", image_bind.image, bind_loc.dot(Field::image),
+                                 "was created with flags %s.", string_VkImageCreateFlags(image_state->createInfo.flags).c_str());
                 }
 
                 for (uint32_t image_bind_idx = 0; image_bind_idx < image_bind.bindCount; ++image_bind_idx) {

@@ -387,8 +387,6 @@ TEST_F(NegativeShaderObject, SpirvCodeAlignment) {
 TEST_F(NegativeShaderObject, InvalidStage) {
     TEST_DESCRIPTION("Create shader with invalid stage.");
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkShaderCreateInfoEXT-stage-08425");
-
     RETURN_IF_SKIP(InitBasicShaderObject());
 
     const auto spv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
@@ -401,10 +399,12 @@ TEST_F(NegativeShaderObject, InvalidStage) {
     createInfo.pName = "main";
 
     VkShaderEXT shader;
+    m_errorMonitor->SetAllowedFailureMsg("VUID-VkShaderCreateInfoEXT-stage-parameter");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkShaderCreateInfoEXT-stage-08425");
     vk::CreateShadersEXT(m_device->handle(), 1u, &createInfo, nullptr, &shader);
-
     m_errorMonitor->VerifyFound();
 
+    m_errorMonitor->SetAllowedFailureMsg("VUID-VkShaderCreateInfoEXT-stage-parameter");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkShaderCreateInfoEXT-stage-08426");
 
     createInfo.stage = VK_SHADER_STAGE_CLUSTER_CULLING_BIT_HUAWEI;
@@ -512,7 +512,6 @@ TEST_F(NegativeShaderObject, CreateShadersWithoutEnabledFeatures) {
 
     {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkShaderCreateInfoEXT-stage-08419");
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkShaderCreateInfoEXT-pCode-08740");
 
         const auto spv = GLSLToSPV(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, kTessellationControlMinimalGlsl);
 
@@ -530,7 +529,6 @@ TEST_F(NegativeShaderObject, CreateShadersWithoutEnabledFeatures) {
 
     {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkShaderCreateInfoEXT-stage-08420");
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkShaderCreateInfoEXT-pCode-08740");
 
         const auto spv = GLSLToSPV(VK_SHADER_STAGE_GEOMETRY_BIT, kGeometryMinimalGlsl);
 
@@ -619,7 +617,7 @@ TEST_F(NegativeShaderObject, ComputeShaderNotSupportedByCommandPool) {
     VkShaderEXT shaderHandle = shader.handle();
 
     vkt::CommandPool command_pool(*m_device, graphics_queue_family_index.value());
-    vkt::CommandBuffer command_buffer(m_device, &command_pool);
+    vkt::CommandBuffer command_buffer(*m_device, &command_pool);
     command_buffer.begin();
 
     vk::CmdBindShadersEXT(command_buffer.handle(), 1u, &createInfo.stage, &shaderHandle);
@@ -654,7 +652,7 @@ TEST_F(NegativeShaderObject, GraphicsShadersNotSupportedByCommandPool) {
     VkShaderEXT shaderHandle = shader.handle();
 
     vkt::CommandPool command_pool(*m_device, non_graphics_queue_family_index.value());
-    vkt::CommandBuffer command_buffer(m_device, &command_pool);
+    vkt::CommandBuffer command_buffer(*m_device, &command_pool);
     command_buffer.begin();
 
     vk::CmdBindShadersEXT(command_buffer.handle(), 1u, &createInfo.stage, &shaderHandle);
@@ -689,7 +687,7 @@ TEST_F(NegativeShaderObject, GraphicsMeshShadersNotSupportedByCommandPool) {
     VkShaderEXT shaderHandle = shader.handle();
 
     vkt::CommandPool command_pool(*m_device, non_graphics_queue_family_index.value());
-    vkt::CommandBuffer command_buffer(m_device, &command_pool);
+    vkt::CommandBuffer command_buffer(*m_device, &command_pool);
     command_buffer.begin();
 
     vk::CmdBindShadersEXT(command_buffer.handle(), 1u, &createInfo.stage, &shaderHandle);
@@ -1383,8 +1381,8 @@ TEST_F(NegativeShaderObject, DrawWithShadersInNonDynamicRenderPass) {
     rp.AddColorAttachment(0);
     rp.CreateRenderPass();
 
-    VkImageObj image(m_device);
-    image.Init(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView image_view = image.CreateView();
     vkt::Framebuffer framebuffer(*m_device, rp.Handle(), 1, &image_view.handle());
 
@@ -1818,12 +1816,10 @@ TEST_F(NegativeShaderObject, ColorWriteEnableAttachmentCount) {
     AddRequiredFeature(vkt::Feature::colorWriteEnable);
     RETURN_IF_SKIP(InitBasicShaderObject());
 
-    VkImageObj img1(m_device);
-    img1.Init(m_width, m_height, 1, m_render_target_fmt,
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    VkImageObj img2(m_device);
-    img2.Init(m_width, m_height, 1, m_render_target_fmt,
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image img1(*m_device, m_width, m_height, 1, m_render_target_fmt,
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image img2(*m_device, m_width, m_height, 1, m_render_target_fmt,
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     vkt::ImageView view1 = img1.CreateView();
     vkt::ImageView view2 = img2.CreateView();
@@ -2583,7 +2579,7 @@ TEST_F(NegativeShaderObject, MissingPolygonModeCmdSetLineStippleEnableEXT) {
     m_commandBuffer->BeginRenderingColor(GetDynamicRenderTarget());
     SetDefaultDynamicStates();
     vk::CmdSetPolygonModeEXT(m_commandBuffer->handle(), VK_POLYGON_MODE_LINE);
-    vk::CmdSetLineRasterizationModeEXT(m_commandBuffer->handle(), VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT);
+    vk::CmdSetLineRasterizationModeEXT(m_commandBuffer->handle(), VK_LINE_RASTERIZATION_MODE_DEFAULT_KHR);
     BindVertFragShader(vertShader, fragShader);
     vk::CmdDraw(m_commandBuffer->handle(), 4, 1, 0, 0);
     m_commandBuffer->EndRendering();
@@ -2609,7 +2605,7 @@ TEST_F(NegativeShaderObject, MissingPrimitiveTopologyCmdSetLineStippleEnableEXT)
     m_commandBuffer->BeginRenderingColor(GetDynamicRenderTarget());
     SetDefaultDynamicStates();
     vk::CmdSetPrimitiveTopologyEXT(m_commandBuffer->handle(), VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
-    vk::CmdSetLineRasterizationModeEXT(m_commandBuffer->handle(), VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT);
+    vk::CmdSetLineRasterizationModeEXT(m_commandBuffer->handle(), VK_LINE_RASTERIZATION_MODE_DEFAULT_KHR);
     BindVertFragShader(vertShader, fragShader);
     vk::CmdDraw(m_commandBuffer->handle(), 4, 1, 0, 0);
     m_commandBuffer->EndRendering();
@@ -5793,7 +5789,7 @@ TEST_F(NegativeShaderObject, MissingLineStippleEnable) {
     m_commandBuffer->BeginRenderingColor(GetDynamicRenderTarget());
     SetDefaultDynamicStates({VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT});
     BindVertFragShader(vertShader, fragShader);
-    vk::CmdSetLineRasterizationModeEXT(m_commandBuffer->handle(), VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT);
+    vk::CmdSetLineRasterizationModeEXT(m_commandBuffer->handle(), VK_LINE_RASTERIZATION_MODE_DEFAULT_KHR);
     vk::CmdBindShadersEXT(m_commandBuffer->handle(), 1u, &stages[1], &geomShader.handle());
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_commandBuffer->EndRendering();
@@ -5828,8 +5824,8 @@ TEST_F(NegativeShaderObject, InvalidColorWriteMask) {
         GTEST_SKIP() << "image format not supported as color attachment.";
     }
 
-    VkImageObj image(m_device);
-    image.Init(32, 32, 1, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView image_view = image.CreateView();
 
     VkShaderStageFlagBits stages[] = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
@@ -5999,6 +5995,48 @@ TEST_F(NegativeShaderObject, MismatchedFormat64Components) {
     vertexAttributeDescription.offset = 0u;
 
     vk::CmdSetVertexInputEXT(m_commandBuffer->handle(), 1u, &vertexBindingDescription, 1u, &vertexAttributeDescription);
+
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeShaderObject, MismatchedAttributeType) {
+    TEST_DESCRIPTION("Draw with vertex format not matching vertex input format.");
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-Input-08734");
+
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitDynamicRenderTarget();
+
+    static const char vert_src[] = R"glsl(
+        #version 460
+        layout(location=0) in int x; /* attrib provided float */
+        void main(){
+           gl_Position = vec4(x);
+        }
+    )glsl";
+
+    VkShaderStageFlagBits stages[] = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
+    const vkt::Shader vertShader(*m_device, stages[0], GLSLToSPV(stages[0], vert_src));
+    const vkt::Shader fragShader(*m_device, stages[1], GLSLToSPV(stages[1], kFragmentMinimalGlsl));
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderingColor(GetDynamicRenderTarget());
+    SetDefaultDynamicStates();
+    BindVertFragShader(vertShader, fragShader);
+
+    VkVertexInputBindingDescription2EXT binding = vku::InitStructHelper();
+    binding.stride = 4;
+    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    binding.divisor = 1;
+
+    VkVertexInputAttributeDescription2EXT attribute = vku::InitStructHelper();
+    attribute.format = VK_FORMAT_R32_SFLOAT;
+
+    vk::CmdSetVertexInputEXT(m_commandBuffer->handle(), 1, &binding, 1, &attribute);
 
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_commandBuffer->EndRendering();
@@ -6372,8 +6410,8 @@ TEST_F(NegativeShaderObject, MissingImageFilterLinearBit) {
     const vkt::Shader fragShader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT, GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, frag_src),
                                  &descriptor_set.layout_.handle());
 
-    VkImageObj image(m_device);
-    image.Init(32, 32, 1, format, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, format, VK_IMAGE_USAGE_SAMPLED_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView image_view = image.CreateView();
 
     VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
@@ -6415,8 +6453,7 @@ TEST_F(NegativeShaderObject, MaxMultiviewInstanceIndex) {
     const vkt::Shader fragShader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT,
                                  GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl));
 
-    VkImageObj img(m_device);
-    img.Init(m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image img(*m_device, m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView view = img.CreateView();
 
     VkRenderingAttachmentInfo color_attachment = vku::InitStructHelper();
@@ -6475,12 +6512,10 @@ TEST_F(NegativeShaderObject, DISABLED_MaxFragmentDualSrcAttachmentsDynamicBlendE
     const vkt::Shader fragShader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT,
                                  GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, fsSource.str().c_str()));
 
-    VkImageObj img1(m_device);
-    img1.Init(m_width, m_height, 1, m_render_target_fmt,
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    VkImageObj img2(m_device);
-    img2.Init(m_width, m_height, 1, m_render_target_fmt,
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image img1(*m_device, m_width, m_height, 1, m_render_target_fmt,
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image img2(*m_device, m_width, m_height, 1, m_render_target_fmt,
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     vkt::ImageView view1 = img1.CreateView();
     vkt::ImageView view2 = img2.CreateView();

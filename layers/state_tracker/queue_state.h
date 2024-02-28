@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +42,6 @@ struct QueueSubmission {
     };
     QueueSubmission(const Location &loc_) : loc(loc_), completed(), waiter(completed.get_future()) {}
 
-    bool end_batch{false};
     std::vector<std::shared_ptr<vvl::CommandBuffer>> cbs;
     std::vector<SemaphoreInfo> wait_semaphores;
     std::vector<SemaphoreInfo> signal_semaphores;
@@ -91,10 +90,7 @@ class Queue: public StateObject {
 
     VkQueue VkHandle() const { return handle_.Cast<VkQueue>(); }
 
-    // called from the various PreCallRecordQueueSubmit() methods
-    virtual uint64_t PreSubmit(std::vector<QueueSubmission> &&submissions);
-    // called from the various PostCallRecordQueueSubmit() methods
-    void PostSubmit();
+    uint64_t Submit(QueueSubmission &&submission);
 
     // Tell the queue thread that submissions up to the submission with sequence number until_seq have finished
     uint64_t Notify(uint64_t until_seq = kU64Max);
@@ -108,11 +104,17 @@ class Queue: public StateObject {
     const VkDeviceQueueCreateFlags flags;
     const VkQueueFamilyProperties queueFamilyProperties;
 
-  protected:
-    // called from the various PostCallRecordQueueSubmit() methods
-    virtual void PostSubmit(QueueSubmission &submission) {}
-    // called when the worker thread decides a submissions has finished executing
-    virtual void Retire(QueueSubmission &submission);
+    // Track command buffer label stack accross all command buffers submitted to this queue.
+    // Access to this variable relies on external queue synchronization.
+    std::vector<std::string> cmdbuf_label_stack;
+
+    // Track the last closed label. It is used in the error messages to help locate unbalanced vkCmdEndDebugUtilsLabelEXT command.
+    // Access to this variable relies on external queue synchronization.
+    std::string last_closed_cmdbuf_label;
+
+    // Stop per-queue label tracking after the first label mismatch error.
+    // Access to this variable relies on external queue synchronization.
+    bool found_unbalanced_cmdbuf_label = false;
 
   private:
     using LockGuard = std::unique_lock<std::mutex>;

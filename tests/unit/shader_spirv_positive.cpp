@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -599,14 +599,14 @@ TEST_F(PositiveShaderSpirv, SpecializationWordBoundryOffset) {
 
     // Make sure spec constants were updated correctly
     void *pData;
-    ASSERT_EQ(VK_SUCCESS, vk::MapMemory(m_device->device(), buffer.memory().handle(), 0, VK_WHOLE_SIZE, 0, &pData));
+    ASSERT_EQ(VK_SUCCESS, vk::MapMemory(device(), buffer.memory().handle(), 0, VK_WHOLE_SIZE, 0, &pData));
     uint32_t *ssbo_data = reinterpret_cast<uint32_t *>(pData);
     ASSERT_EQ(ssbo_data[0], 0x02);
     ASSERT_EQ(ssbo_data[1], 0x05040302);
     ASSERT_EQ(ssbo_data[2], 0x06050403);
     ASSERT_EQ(ssbo_data[3], 0x07060504);
     ASSERT_EQ(ssbo_data[4], 0x04);
-    vk::UnmapMemory(m_device->device(), buffer.memory().handle());
+    vk::UnmapMemory(device(), buffer.memory().handle());
 }
 
 TEST_F(PositiveShaderSpirv, Spirv16Vulkan13) {
@@ -805,11 +805,9 @@ TEST_F(PositiveShaderSpirv, UnnormalizedCoordinatesNotSampled) {
 
     VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    auto image_ci = VkImageObj::ImageCreateInfo2D(128, 128, 1, 1, format, usage);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 1, format, usage);
     image_ci.imageType = VK_IMAGE_TYPE_3D;
-    VkImageObj image_3d(m_device);
-    image_3d.Init(image_ci);
-    ASSERT_TRUE(image_3d.initialized());
+    vkt::Image image_3d(*m_device, image_ci, vkt::set_layout);
 
     // If the sampler is unnormalizedCoordinates, the imageview type shouldn't be 3D, CUBE, 1D_ARRAY, 2D_ARRAY, CUBE_ARRAY.
     // This causes DesiredFailure.
@@ -1603,21 +1601,13 @@ TEST_F(PositiveShaderSpirv, Storage8and16bit) {
     }
 }
 
-TEST_F(PositiveShaderSpirv, ReadShaderClock) {
+TEST_F(PositiveShaderSpirv, ReadShaderClockDevice) {
     TEST_DESCRIPTION("Test VK_KHR_shader_clock");
 
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_SHADER_CLOCK_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceShaderClockFeaturesKHR shader_clock_features = vku::InitStructHelper();
-    auto features2 = GetPhysicalDeviceFeatures2(shader_clock_features);
-    if ((shader_clock_features.shaderDeviceClock == VK_FALSE) && (shader_clock_features.shaderSubgroupClock == VK_FALSE)) {
-        // shaderSubgroupClock should be supported, but extra check
-        GTEST_SKIP() << "no support for shaderDeviceClock or shaderSubgroupClock";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredFeature(vkt::Feature::shaderDeviceClock);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // Device scope using GL_EXT_shader_realtime_clock
@@ -1631,6 +1621,21 @@ TEST_F(PositiveShaderSpirv, ReadShaderClock) {
     )glsl";
     VkShaderObj vs_device(this, vsSourceDevice, VK_SHADER_STAGE_VERTEX_BIT);
 
+    const auto set_info = [&](CreatePipelineHelper &helper) {
+        helper.shader_stages_ = {vs_device.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+    };
+    CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+}
+
+TEST_F(PositiveShaderSpirv, ReadShaderClockSubgroup) {
+    TEST_DESCRIPTION("Test VK_KHR_shader_clock");
+
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SHADER_CLOCK_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderSubgroupClock);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
     // Subgroup scope using ARB_shader_clock
     char const *vsSourceScope = R"glsl(
         #version 450
@@ -1642,19 +1647,10 @@ TEST_F(PositiveShaderSpirv, ReadShaderClock) {
     )glsl";
     VkShaderObj vs_subgroup(this, vsSourceScope, VK_SHADER_STAGE_VERTEX_BIT);
 
-    if (shader_clock_features.shaderDeviceClock == VK_TRUE) {
-        const auto set_info = [&](CreatePipelineHelper &helper) {
-            helper.shader_stages_ = {vs_device.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
-        };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
-    }
-
-    if (shader_clock_features.shaderSubgroupClock == VK_TRUE) {
-        const auto set_info = [&](CreatePipelineHelper &helper) {
-            helper.shader_stages_ = {vs_subgroup.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
-        };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
-    }
+    const auto set_info = [&](CreatePipelineHelper &helper) {
+        helper.shader_stages_ = {vs_subgroup.GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
+    };
+    CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 }
 
 TEST_F(PositiveShaderSpirv, PhysicalStorageBufferStructRecursion) {
@@ -1757,6 +1753,7 @@ void main() {
 
 TEST_F(PositiveShaderSpirv, SpecConstantTextureArrayTessellation) {
     TEST_DESCRIPTION("Reproduces https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/6370");
+    AddRequiredFeature(vkt::Feature::tessellationShader);
     RETURN_IF_SKIP(Init());
     const char *source = R"glsl(
 #version 440
@@ -1908,4 +1905,122 @@ TEST_F(PositiveShaderSpirv, DescriptorCountSpecConstant) {
         helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
     };
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+}
+
+TEST_F(PositiveShaderSpirv, PhysicalStorageBufferGlslang6) {
+    TEST_DESCRIPTION("Taken from glslang spv.bufferhandle6.frag test");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitFramework());
+
+    VkPhysicalDeviceVulkan12Features features12 = vku::InitStructHelper();
+    GetPhysicalDeviceFeatures2(features12);
+    if (VK_TRUE != features12.bufferDeviceAddress) {
+        GTEST_SKIP() << "bufferDeviceAddress not supported and is required";
+    }
+
+    RETURN_IF_SKIP(InitState(nullptr, &features12));
+
+    char const *fsSource = R"glsl(
+        #version 450 core
+        #extension GL_EXT_buffer_reference : enable
+        layout (push_constant, std430) uniform Block { int identity[32]; } pc;
+        layout(r32ui, set = 3, binding = 0) uniform uimage2D image0_0;
+        layout(buffer_reference) buffer T1;
+        layout(set = 3, binding = 1, buffer_reference) buffer T1 {
+        layout(offset = 0) int a[2]; // stride = 4 for std430, 16 for std140
+        layout(offset = 32) int b;
+        layout(offset = 48) T1  c[2]; // stride = 8 for std430, 16 for std140
+        layout(offset = 80) T1  d;
+        } x;
+        void main() {}
+    )glsl";
+
+    VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
+}
+
+TEST_F(PositiveShaderSpirv, ShaderFloatControl2) {
+    TEST_DESCRIPTION("Basic usage of VK_KHR_shader_float_controls2");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderFloatControls2);
+    RETURN_IF_SKIP(Init());
+
+    VkPhysicalDeviceFloatControlsProperties shader_float_control = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(shader_float_control);
+    if (!shader_float_control.shaderSignedZeroInfNanPreserveFloat32) {
+        GTEST_SKIP() << "shaderSignedZeroInfNanPreserveFloat32 not supported";
+    }
+
+    const char *spv_source = R"(
+        OpCapability Shader
+        OpCapability FloatControls2
+        OpExtension "SPV_KHR_float_controls2"
+        OpMemoryModel Logical GLSL450
+        OpEntryPoint GLCompute %main "main"
+        OpExecutionModeId %main FPFastMathDefault %float %constant
+        OpExecutionMode %main LocalSize 1 1 1
+        OpDecorate %add FPFastMathMode Fast
+        %void = OpTypeVoid
+        %int = OpTypeInt 32 0
+        %constant = OpConstant %int 0
+        %float = OpTypeFloat 32
+        %zero = OpConstant %float 0
+        %void_fn = OpTypeFunction %void
+        %main = OpFunction %void None %void_fn
+        %entry = OpLabel
+        OpReturn
+        OpFunctionEnd
+        %func = OpFunction %void None %void_fn
+        %func_entry = OpLabel
+        %add = OpFAdd %float %zero %zero
+        OpReturn
+        OpFunctionEnd
+        )";
+
+    VkShaderObj cs(this, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM);
+}
+
+TEST_F(PositiveShaderSpirv, FPFastMathMode) {
+    TEST_DESCRIPTION("Use NSZ, NotInf, and NotNaN for all fast math mode");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderFloatControls2);
+    RETURN_IF_SKIP(Init());
+
+    VkPhysicalDeviceFloatControlsProperties shader_float_control = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(shader_float_control);
+    if (shader_float_control.shaderSignedZeroInfNanPreserveFloat32) {
+        GTEST_SKIP() << "shaderSignedZeroInfNanPreserveFloat32 is supported";
+    }
+
+    const char *spv_source = R"(
+        OpCapability Shader
+        OpCapability FloatControls2
+        OpExtension "SPV_KHR_float_controls2"
+        OpMemoryModel Logical GLSL450
+        OpEntryPoint GLCompute %main "main"
+        OpExecutionModeId %main FPFastMathDefault %float %constant
+        OpExecutionMode %main LocalSize 1 1 1
+        OpDecorate %add FPFastMathMode NSZ|NotInf|NotNaN
+        %void = OpTypeVoid
+        %int = OpTypeInt 32 0
+        %constant = OpConstant %int 7
+        %float = OpTypeFloat 32
+        %zero = OpConstant %float 0
+        %void_fn = OpTypeFunction %void
+        %main = OpFunction %void None %void_fn
+        %entry = OpLabel
+        OpReturn
+        OpFunctionEnd
+        %func = OpFunction %void None %void_fn
+        %func_entry = OpLabel
+        %add = OpFAdd %float %zero %zero
+        OpReturn
+        OpFunctionEnd
+        )";
+
+    VkShaderObj cs(this, spv_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1, SPV_SOURCE_ASM);
 }

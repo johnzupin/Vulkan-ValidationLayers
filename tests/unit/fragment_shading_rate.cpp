@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  * Modifications Copyright (C) 2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,37 +36,37 @@ TEST_F(NegativeFragmentShadingRate, Values) {
 
     m_commandBuffer->begin();
     fragmentSize.width = 0;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04513");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04513");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     fragmentSize.width = 1;
 
     fragmentSize.height = 0;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04514");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04514");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     fragmentSize.height = 1;
 
     fragmentSize.width = 3;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04515");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04515");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     fragmentSize.width = 1;
 
     fragmentSize.height = 3;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04516");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04516");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     fragmentSize.height = 1;
 
     fragmentSize.width = 8;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04517");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04517");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     fragmentSize.width = 1;
 
     fragmentSize.height = 8;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04518");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pFragmentSize-04518");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     fragmentSize.height = 1;
@@ -87,8 +87,7 @@ TEST_F(NegativeFragmentShadingRate, ValuesNoFeatures) {
                                                          VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR};
 
     m_commandBuffer->begin();
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
-                                         "VUID-vkCmdSetFragmentShadingRateKHR-pipelineFragmentShadingRate-04509");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pipelineFragmentShadingRate-04509");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     m_commandBuffer->end();
@@ -119,15 +118,13 @@ TEST_F(NegativeFragmentShadingRate, CombinerOpsNoFeatures) {
     m_commandBuffer->begin();
 
     combinerOps[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
-                                         "VUID-vkCmdSetFragmentShadingRateKHR-primitiveFragmentShadingRate-04510");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-primitiveFragmentShadingRate-04510");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     combinerOps[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
 
     combinerOps[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
-                                         "VUID-vkCmdSetFragmentShadingRateKHR-attachmentFragmentShadingRate-04511");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-attachmentFragmentShadingRate-04511");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     combinerOps[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
@@ -161,15 +158,13 @@ TEST_F(NegativeFragmentShadingRate, CombinerOpsNoPipelineRate) {
 
     m_commandBuffer->begin();
     fragmentSize.width = 2;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
-                                         "VUID-vkCmdSetFragmentShadingRateKHR-pipelineFragmentShadingRate-04507");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pipelineFragmentShadingRate-04507");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     fragmentSize.width = 1;
 
     fragmentSize.height = 2;
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
-                                         "VUID-vkCmdSetFragmentShadingRateKHR-pipelineFragmentShadingRate-04508");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdSetFragmentShadingRateKHR-pipelineFragmentShadingRate-04508");
     vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
     m_errorMonitor->VerifyFound();
     fragmentSize.height = 1;
@@ -207,7 +202,7 @@ TEST_F(NegativeFragmentShadingRate, CombinerOpsLimit) {
     m_commandBuffer->begin();
     if (fsr_features.primitiveFragmentShadingRate) {
         combinerOps[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR;
-        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                              "VUID-vkCmdSetFragmentShadingRateKHR-fragmentSizeNonTrivialCombinerOps-04512");
         vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
         m_errorMonitor->VerifyFound();
@@ -216,7 +211,7 @@ TEST_F(NegativeFragmentShadingRate, CombinerOpsLimit) {
 
     if (fsr_features.attachmentFragmentShadingRate) {
         combinerOps[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR;
-        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                              "VUID-vkCmdSetFragmentShadingRateKHR-fragmentSizeNonTrivialCombinerOps-04512");
         vk::CmdSetFragmentShadingRateKHR(m_commandBuffer->handle(), &fragmentSize, combinerOps);
         m_errorMonitor->VerifyFound();
@@ -409,8 +404,8 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapLayerCount) {
 
     vkt::RenderPass rp(*m_device, rpci);
 
-    VkImageObj image(m_device);
-    image.InitNoLayout(image.ImageCreateInfo2D(32, 32, 1, 2, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 2, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, image_ci);
     vkt::ImageView imageView = image.CreateView(VK_IMAGE_VIEW_TYPE_2D_ARRAY, 0, VK_REMAINING_MIP_LEVELS, 0, 2);
 
     VkFramebufferCreateInfo fb_info = vku::InitStructHelper();
@@ -570,9 +565,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapEnabled) {
     image_create_info.flags = 0;
     image_create_info.mipLevels = 1;
     image_create_info.usage = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT;
-    VkImageObj densityImage(m_device);
-    densityImage.init(&image_create_info);
-    ASSERT_TRUE(densityImage.initialized());
+    vkt::Image densityImage(*m_device, image_create_info, vkt::set_layout);
 
     VkImageViewCreateInfo ivci = vku::InitStructHelper();
     ivci.image = densityImage.handle();
@@ -588,9 +581,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapEnabled) {
     if (features2.features.sparseResidencyImage2D) {
         image_create_info.flags = VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
         image_create_info.usage = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT;
-        VkImageObj image(m_device);
-        image.init_no_mem(*m_device, image_create_info);
-        ASSERT_TRUE(image.initialized());
+        vkt::Image image(*m_device, image_create_info, vkt::no_mem);
 
         ivci.image = image.handle();
         CreateImageViewTest(*this, &ivci, "VUID-VkImageViewCreateInfo-flags-04116");
@@ -611,9 +602,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapEnabled) {
             image_create_info.flags = VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT;
             image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
             image_create_info.arrayLayers = density_map2_properties.maxSubsampledArrayLayers + 1;
-            VkImageObj image(m_device);
-            image.init(&image_create_info);
-            ASSERT_TRUE(image.initialized());
+            vkt::Image image(*m_device, image_create_info, vkt::set_layout);
             ivci.image = image.handle();
             ivci.flags = 0;
             ivci.subresourceRange.layerCount = density_map2_properties.maxSubsampledArrayLayers + 1;
@@ -642,10 +631,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapDisabled) {
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
     image_create_info.flags = 0;
-
-    VkImageObj image2D(m_device);
-    image2D.init(&image_create_info);
-    ASSERT_TRUE(image2D.initialized());
+    vkt::Image image2D(*m_device, image_create_info, vkt::set_layout);
 
     VkImageViewCreateInfo ivci = vku::InitStructHelper();
     ivci.image = image2D.handle();
@@ -724,9 +710,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapReferenceAttachment) {
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     image_create_info.usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     image_create_info.flags = 0;
-
-    VkImageObj image(m_device);
-    image.Init(image_create_info);
+    vkt::Image image(*m_device, image_create_info, vkt::set_layout);
     vkt::ImageView imageView = image.CreateView(VK_IMAGE_VIEW_TYPE_2D_ARRAY, 0, 1, 0, 4);
 
     VkFramebufferCreateInfo fb_info = vku::InitStructHelper();
@@ -792,6 +776,8 @@ TEST_F(NegativeFragmentShadingRate, DeviceFeatureCombinations) {
     VkDeviceCreateInfo device_ci = vku::InitStructHelper();
     device_ci.queueCreateInfoCount = 1;
     device_ci.pQueueCreateInfos = &queue_ci;
+    device_ci.enabledExtensionCount = m_device_extension_names.size();
+    device_ci.ppEnabledExtensionNames = m_device_extension_names.data();
 
     VkPhysicalDeviceFragmentDensityMapFeaturesEXT fdm_features = vku::InitStructHelper();
     VkPhysicalDeviceShadingRateImageFeaturesNV sri_features = vku::InitStructHelper();
@@ -872,8 +858,7 @@ TEST_F(NegativeFragmentShadingRate, FramebufferUsage) {
     rp.AddFragmentShadingRateAttachment(0, fsr_properties.minFragmentShadingRateAttachmentTexelSize);
     rp.CreateRenderPass();
 
-    VkImageObj image(m_device);
-    image.InitNoLayout(1, 1, 1, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 1, 1, 1, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04548");
@@ -902,10 +887,9 @@ TEST_F(NegativeFragmentShadingRate, FramebufferDimensions) {
     rp.AddFragmentShadingRateAttachment(0, fsr_properties.minFragmentShadingRateAttachmentTexelSize);
     rp.CreateRenderPass();
 
-    VkImageObj image(m_device);
     VkImageCreateInfo ici =
-        VkImageObj::ImageCreateInfo2D(1, 1, 1, 2, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
-    image.InitNoLayout(ici);
+        vkt::Image::ImageCreateInfo2D(1, 1, 1, 2, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
+    vkt::Image image(*m_device, ici);
     auto image_view_ci = image.BasicViewCreatInfo();
     image_view_ci.subresourceRange.layerCount = 2;
     image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
@@ -959,10 +943,9 @@ TEST_F(NegativeFragmentShadingRate, FramebufferDimensionsMultiview) {
     rp.SetViewMask(0x4);
     rp.CreateRenderPass();
 
-    VkImageObj image(m_device);
     VkImageCreateInfo ici =
-        VkImageObj::ImageCreateInfo2D(1, 1, 1, 2, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
-    image.InitNoLayout(ici);
+        vkt::Image::ImageCreateInfo2D(1, 1, 1, 2, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
+    vkt::Image image(*m_device, ici);
     auto image_view_ci = image.BasicViewCreatInfo();
     image_view_ci.subresourceRange.layerCount = 2;
     image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
@@ -1018,15 +1001,16 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
     VkRenderPass rp;
 
     rpci.flags = VK_RENDER_PASS_CREATE_TRANSFORM_BIT_QCOM;
+    m_errorMonitor->SetAllowedFailureMsg("VUID-VkRenderPassCreateInfo2-flags-parameter");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassCreateInfo2-flags-04521");
-    vk::CreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+    vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
     m_errorMonitor->VerifyFound();
     rpci.flags = 0;
     attach_desc.format =
         FindFormatWithoutFeatures(gpu(), VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
     if (attach_desc.format != VK_FORMAT_UNDEFINED) {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassCreateInfo2-pAttachments-04586");
-        vk::CreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+        vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
         m_errorMonitor->VerifyFound();
     }
     attach_desc.format = VK_FORMAT_R8_UINT;
@@ -1034,7 +1018,7 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
     attach.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04524");
-    vk::CreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+    vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
     m_errorMonitor->VerifyFound();
     attach.layout = VK_IMAGE_LAYOUT_GENERAL;
 
@@ -1054,7 +1038,7 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                              "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04530");
     }
-    vk::CreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+    vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
     m_errorMonitor->VerifyFound();
     fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
 
@@ -1064,7 +1048,7 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
                                          "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04526");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04529");
-    vk::CreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+    vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
     m_errorMonitor->VerifyFound();
     fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
 
@@ -1074,7 +1058,7 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
                                          "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04527");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                          "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04530");
-    vk::CreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+    vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
     m_errorMonitor->VerifyFound();
     fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
 
@@ -1084,7 +1068,7 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
         fsr_attachment.shadingRateAttachmentTexelSize.width = fsr_properties.maxFragmentShadingRateAttachmentTexelSize.width;
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                              "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04531");
-        vk::CreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+        vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
         m_errorMonitor->VerifyFound();
         fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
     }
@@ -1095,10 +1079,46 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
         fsr_attachment.shadingRateAttachmentTexelSize.height = fsr_properties.maxFragmentShadingRateAttachmentTexelSize.height;
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                              "VUID-VkFragmentShadingRateAttachmentInfoKHR-pFragmentShadingRateAttachment-04532");
-        vk::CreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+        vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
         m_errorMonitor->VerifyFound();
         fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
     }
+}
+
+TEST_F(NegativeFragmentShadingRate, LoadOpClear) {
+    AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::attachmentFragmentShadingRate);
+    RETURN_IF_SKIP(Init());
+
+    VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(fsr_properties);
+
+    VkAttachmentReference2 attach = vku::InitStructHelper();
+    attach.layout = VK_IMAGE_LAYOUT_GENERAL;
+    attach.attachment = 0;
+
+    VkFragmentShadingRateAttachmentInfoKHR fsr_attachment = vku::InitStructHelper();
+    fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
+    fsr_attachment.pFragmentShadingRateAttachment = &attach;
+    VkSubpassDescription2 subpass = vku::InitStructHelper(&fsr_attachment);
+
+    VkAttachmentDescription2 attach_desc = vku::InitStructHelper();
+    attach_desc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attach_desc.format = VK_FORMAT_R8_UINT;
+    attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
+    attach_desc.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+    attach_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkRenderPassCreateInfo2 rpci = vku::InitStructHelper();
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+    rpci.attachmentCount = 1;
+    rpci.pAttachments = &attach_desc;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassCreateInfo2-pAttachments-09387");
+    VkRenderPass rp;
+    vk::CreateRenderPass2KHR(device(), &rpci, NULL, &rp);
+    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeFragmentShadingRate, IncompatibleFragmentRateShadingAttachmentInExecuteCommands) {
@@ -1135,8 +1155,7 @@ TEST_F(NegativeFragmentShadingRate, IncompatibleFragmentRateShadingAttachmentInE
     rp_fsr_2.AddFragmentShadingRateAttachment(0, texel_size_2);
     rp_fsr_2.CreateRenderPass();
 
-    VkImageObj image(m_device);
-    image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
 
     // Create a frame buffer with a render pass with FSR attachment
@@ -1146,7 +1165,7 @@ TEST_F(NegativeFragmentShadingRate, IncompatibleFragmentRateShadingAttachmentInE
     vkt::Framebuffer framebuffer_no_fsr(*m_device, rp_no_fsr.Handle(), 1, &imageView.handle());
 
     vkt::CommandPool pool(*m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer secondary(m_device, &pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, &pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     // Inheritance info without FSR attachment
     const VkCommandBufferInheritanceInfo cmdbuff_ii_no_fsr = {
@@ -1267,11 +1286,9 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateUsage) {
                                                    &imageFormatProperties) == VK_ERROR_FORMAT_NOT_SUPPORTED) {
         GTEST_SKIP() << "Format not supported";
     }
-
-    VkImageObj image(m_device);
     // Initialize image with transfer source usage
-    image.Init(128, 128, 1, format, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
-    ASSERT_TRUE(image.initialized());
+    vkt::Image image(*m_device, 128, 128, 1, format, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
     VkImageViewCreateInfo createinfo = vku::InitStructHelper();
     createinfo.image = image.handle();
@@ -1299,10 +1316,9 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateUsage) {
             GTEST_SKIP() << "Test not supported by MockICD, doesn't correctly advertise format support for fragment shading "
                             "rate attachments";
         } else {
-            VkImageObj image2(m_device);
-            image2.Init(VkImageObj::ImageCreateInfo2D(128, 128, 1, 2, VK_FORMAT_R8_UINT,
-                                                      VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR));
-            ASSERT_TRUE(image2.initialized());
+            auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 2, VK_FORMAT_R8_UINT,
+                                                          VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
+            vkt::Image image2(*m_device, image_ci);
 
             createinfo.image = image2.handle();
             createinfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
@@ -1493,7 +1509,7 @@ TEST_F(NegativeFragmentShadingRate, PrimitiveWriteMultiViewportLimit) {
         };
 
         CreatePipelineHelper::OneshotTest(
-            *this, info_override, VK_DEBUG_REPORT_ERROR_BIT_EXT,
+            *this, info_override, kErrorBit,
             "VUID-VkGraphicsPipelineCreateInfo-primitiveFragmentShadingRateWithMultipleViewports-04503");
     }
 
@@ -1528,7 +1544,7 @@ TEST_F(NegativeFragmentShadingRate, PrimitiveWriteMultiViewportLimit) {
         };
 
         CreatePipelineHelper::OneshotTest(
-            *this, info_override, VK_DEBUG_REPORT_ERROR_BIT_EXT,
+            *this, info_override, kErrorBit,
             "VUID-VkGraphicsPipelineCreateInfo-primitiveFragmentShadingRateWithMultipleViewports-04504");
     }
 
@@ -1551,7 +1567,7 @@ TEST_F(NegativeFragmentShadingRate, PrimitiveWriteMultiViewportLimit) {
         };
 
         CreatePipelineHelper::OneshotTest(
-            *this, info_override, VK_DEBUG_REPORT_ERROR_BIT_EXT,
+            *this, info_override, kErrorBit,
             "VUID-VkGraphicsPipelineCreateInfo-primitiveFragmentShadingRateWithMultipleViewports-04504");
     }
 
@@ -1588,7 +1604,7 @@ TEST_F(NegativeFragmentShadingRate, PrimitiveWriteMultiViewportLimit) {
             };
 
             CreatePipelineHelper::OneshotTest(
-                *this, info_override, VK_DEBUG_REPORT_ERROR_BIT_EXT,
+                *this, info_override, kErrorBit,
                 "VUID-VkGraphicsPipelineCreateInfo-primitiveFragmentShadingRateWithMultipleViewports-04505");
         }
 
@@ -1611,7 +1627,7 @@ TEST_F(NegativeFragmentShadingRate, PrimitiveWriteMultiViewportLimit) {
             };
 
             CreatePipelineHelper::OneshotTest(
-                *this, info_override, VK_DEBUG_REPORT_ERROR_BIT_EXT,
+                *this, info_override, kErrorBit,
                 "VUID-VkGraphicsPipelineCreateInfo-primitiveFragmentShadingRateWithMultipleViewports-04505");
         }
     }
@@ -1802,47 +1818,29 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetQCOM) {
     image_create_info.usage = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT;
     image_create_info.flags = 0;
 
-    VkImageObj fdm_image(m_device);
-    fdm_image.init(&image_create_info);
-    ASSERT_TRUE(fdm_image.initialized());
+    vkt::Image fdm_image(*m_device, image_create_info, vkt::set_layout);
 
     image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     image_create_info.usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     image_create_info.samples = VK_SAMPLE_COUNT_4_BIT;
-
-    VkImageObj input_image(m_device);
-    input_image.init(&image_create_info);
-    ASSERT_TRUE(input_image.initialized());
+    vkt::Image input_image(*m_device, image_create_info, vkt::set_layout);
 
     image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    VkImageObj color_image1(m_device);
-    color_image1.init(&image_create_info);
-    ASSERT_TRUE(color_image1.initialized());
-
-    VkImageObj color_image2(m_device);
-    color_image2.init(&image_create_info);
-    ASSERT_TRUE(color_image2.initialized());
+    vkt::Image color_image1(*m_device, image_create_info, vkt::set_layout);
+    vkt::Image color_image2(*m_device, image_create_info, vkt::set_layout);
 
     image_create_info.format = ds_format;
     image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-    VkImageObj depth_image(m_device);
-    depth_image.init(&image_create_info);
-    ASSERT_TRUE(depth_image.initialized());
+    vkt::Image depth_image(*m_device, image_create_info, vkt::set_layout);
 
     image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
     image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-
-    VkImageObj resolve_image(m_device);
-    resolve_image.init(&image_create_info);
-    ASSERT_TRUE(resolve_image.initialized());
+    vkt::Image resolve_image(*m_device, image_create_info, vkt::set_layout);
 
     image_create_info.samples = VK_SAMPLE_COUNT_4_BIT;
-    VkImageObj preserve_image(m_device);
-    preserve_image.init(&image_create_info);
-    ASSERT_TRUE(preserve_image.initialized());
+    vkt::Image preserve_image(*m_device, image_create_info, vkt::set_layout);
 
     // Create view attachment
     VkImageView iv[7];
@@ -2059,10 +2057,7 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateImageNV) {
     CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-shadingRateImage-07727");
 
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-
-    // Should succeed.
-    VkImageObj image(m_device);
-    image.init(&image_create_info);
+    vkt::Image image(*m_device, image_create_info, vkt::set_layout);
 
     // Test image view creation
     VkImageViewCreateInfo ivci = vku::InitStructHelper();
@@ -2144,9 +2139,7 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateImageNV) {
     }
 
     // Create an image without the SRI bit
-    VkImageObj nonSRIimage(m_device);
-    nonSRIimage.Init(256, 256, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    ASSERT_TRUE(nonSRIimage.initialized());
+    vkt::Image nonSRIimage(*m_device, 256, 256, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView nonSRIview = nonSRIimage.CreateView();
 
     // Test SRI layout on non-SRI image
@@ -2311,9 +2304,7 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateImageNVViewportCount) {
     image_create_info.pQueueFamilyIndices = NULL;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     image_create_info.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-
-    VkImageObj image(m_device);
-    image.init(&image_create_info);
+    vkt::Image image(*m_device, image_create_info, vkt::set_layout);
 
     VkImageViewCreateInfo ivci = vku::InitStructHelper();
     ivci.image = image.handle();
@@ -2354,6 +2345,7 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateImageNVViewportCount) {
 TEST_F(NegativeFragmentShadingRate, StageUsage) {
     TEST_DESCRIPTION("Specify shading rate pipeline stage with attachmentFragmentShadingRate feature disabled");
     AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::synchronization2);
     RETURN_IF_SKIP(Init());
 
@@ -2543,15 +2535,14 @@ TEST_F(NegativeFragmentShadingRate, DISABLED_Framebuffer) {
         image_ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         image_ci.flags = 0;
-        VkImageObj image(m_device);
-        image.init(&image_ci);
+        vkt::Image image(*m_device, image_ci, vkt::set_layout);
 
         vkt::ImageView view = image.CreateView(VK_FORMAT_D16_UNORM);
 
         auto fci = vku::InitStruct<VkFramebufferCreateInfo>(nullptr, 0u, m_renderPass, 1u, &view.handle(), 256u, 256u, 1u);
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-pAttachments-00891");
         m_errorMonitor->SetUnexpectedError("VUID-VkFramebufferCreateInfo-pAttachments-00880");
-        vk::CreateFramebuffer(m_device->device(), &fci, nullptr, &fb);
+        vk::CreateFramebuffer(device(), &fci, nullptr, &fb);
         m_errorMonitor->VerifyFound();
     }
 
@@ -2584,9 +2575,8 @@ TEST_F(NegativeFragmentShadingRate, DISABLED_Framebuffer) {
 
     {
         // Create an image with 2 mip levels.
-        VkImageObj image(m_device);
-        image.Init(128, 128, 2, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        ASSERT_TRUE(image.initialized());
+        vkt::Image image(*m_device, 128, 128, 2, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+        image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
         // Create a image view with two mip levels.
         VkImageViewCreateInfo ivci = vku::InitStructHelper();
@@ -2691,10 +2681,7 @@ TEST_F(NegativeFragmentShadingRate, DISABLED_Framebuffer) {
 
         {
             // Set small width
-            VkImageObj image2(m_device);
-            image2.Init(16, attachment_height, 1, attachment_format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT,
-                        VK_IMAGE_TILING_LINEAR, 0);
-            ASSERT_TRUE(image2.initialized());
+            vkt::Image image2(*m_device, 16, attachment_height, 1, attachment_format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
 
             ivci.image = image2.handle();
             vkt::ImageView view_fragment_density_map(*m_device, ivci);
@@ -2708,10 +2695,7 @@ TEST_F(NegativeFragmentShadingRate, DISABLED_Framebuffer) {
         }
         {
             // Set small height
-            VkImageObj image3(m_device);
-            image3.Init(attachment_width, 16, 1, attachment_format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT,
-                        VK_IMAGE_TILING_LINEAR, 0);
-            ASSERT_TRUE(image3.initialized());
+            vkt::Image image3(*m_device, attachment_width, 16, 1, attachment_format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
 
             ivci.image = image3.handle();
             vkt::ImageView view_fragment_density_map(*m_device, ivci);
@@ -2726,9 +2710,8 @@ TEST_F(NegativeFragmentShadingRate, DISABLED_Framebuffer) {
 
     {
         // Create an image with one mip level.
-        VkImageObj image(m_device);
-        image.Init(128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        ASSERT_TRUE(image.initialized());
+        vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+        image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
         // Create view attachment with non-identity swizzle
         VkImageViewCreateInfo ivci = vku::InitStructHelper();
@@ -2787,9 +2770,8 @@ TEST_F(NegativeFragmentShadingRate, DISABLED_Framebuffer) {
             vkt::RenderPass rp_mv(*m_device, rpci_mv);
 
             // Create an image with 1 layer
-            VkImageObj image(m_device);
-            image.Init(128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-            ASSERT_TRUE(image.initialized());
+            vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+            image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
             VkImageViewCreateInfo ivci = vku::InitStructHelper();
             ivci.image = image.handle();

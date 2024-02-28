@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,16 +21,14 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSize) {
     AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
 
-    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
-    if (!sparse_index) {
-        GTEST_SKIP() << "Required queue families not present";
+    if (m_device->sparse_queues().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
     VkBufferCreateInfo b_info =
         vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
-    vkt::Buffer buffer_sparse;
-    buffer_sparse.init_no_mem(*m_device, b_info);
+    vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
     VkMemoryRequirements buffer_mem_reqs;
     vk::GetBufferMemoryRequirements(device(), buffer_sparse.handle(), &buffer_mem_reqs);
@@ -53,7 +51,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSize) {
     bind_info.bufferBindCount = 1;
     bind_info.pBufferBinds = &buffer_memory_bind_info;
 
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    VkQueue sparse_queue = m_device->sparse_queues()[0]->handle();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-size-01098");
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
@@ -65,16 +63,14 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindResourceOffset) {
     AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
 
-    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
-    if (!sparse_index) {
-        GTEST_SKIP() << "Required queue families not present";
+    if (m_device->sparse_queues().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
     VkBufferCreateInfo b_info =
         vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
-    vkt::Buffer buffer_sparse;
-    buffer_sparse.init_no_mem(*m_device, b_info);
+    vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
     VkMemoryRequirements buffer_mem_reqs;
     vk::GetBufferMemoryRequirements(device(), buffer_sparse.handle(), &buffer_mem_reqs);
@@ -99,7 +95,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindResourceOffset) {
     bind_info.bufferBindCount = 1;
     bind_info.pBufferBinds = &buffer_memory_bind_info;
 
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    VkQueue sparse_queue = m_device->sparse_queues()[0]->handle();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-resourceOffset-01099");
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
@@ -111,16 +107,14 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSizeResourceOffset) {
     AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
 
-    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
-    if (!sparse_index) {
-        GTEST_SKIP() << "Required queue families not present";
+    if (m_device->sparse_queues().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
     VkBufferCreateInfo b_info =
         vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
-    vkt::Buffer buffer_sparse;
-    buffer_sparse.init_no_mem(*m_device, b_info);
+    vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
     VkMemoryRequirements buffer_mem_reqs;
     vk::GetBufferMemoryRequirements(device(), buffer_sparse.handle(), &buffer_mem_reqs);
@@ -145,7 +139,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSizeResourceOffset) {
     bind_info.bufferBindCount = 1;
     bind_info.pBufferBinds = &buffer_memory_bind_info;
 
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    VkQueue sparse_queue = m_device->sparse_queues()[0]->handle();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-size-01100");
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
@@ -158,16 +152,14 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSizeMemoryOffset) {
     AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
 
-    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
-    if (!sparse_index) {
-        GTEST_SKIP() << "Required queue families not present";
+    if (m_device->sparse_queues().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
     VkBufferCreateInfo b_info =
         vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
-    vkt::Buffer buffer_sparse;
-    buffer_sparse.init_no_mem(*m_device, b_info);
+    vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
     VkMemoryRequirements buffer_mem_reqs;
     vk::GetBufferMemoryRequirements(device(), buffer_sparse.handle(), &buffer_mem_reqs);
@@ -192,7 +184,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSizeMemoryOffset) {
     bind_info.bufferBindCount = 1;
     bind_info.pBufferBinds = &buffer_memory_bind_info;
 
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    VkQueue sparse_queue = m_device->sparse_queues()[0]->handle();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkSparseMemoryBind-size-01102");
     if (buffer_memory_bind.memoryOffset % buffer_mem_reqs.alignment != 0) {
@@ -208,9 +200,8 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy) {
     AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
 
-    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
-    if (!sparse_index) {
-        GTEST_SKIP() << "Required queue families not present";
+    if (m_device->sparse_queues().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
     vkt::Semaphore semaphore(*m_device);
@@ -223,10 +214,8 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy) {
     VkBufferCreateInfo b_info =
         vkt::Buffer::create_info(copy_info.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
-    vkt::Buffer buffer_sparse;
-    buffer_sparse.init_no_mem(*m_device, b_info);
-    vkt::Buffer buffer_sparse2;
-    buffer_sparse2.init_no_mem(*m_device, b_info);
+    vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
+    vkt::Buffer buffer_sparse2(*m_device, b_info, vkt::no_mem);
 
     VkMemoryRequirements buffer_mem_reqs;
     vk::GetBufferMemoryRequirements(device(), buffer_sparse.handle(), &buffer_mem_reqs);
@@ -256,7 +245,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy) {
     bind_info.signalSemaphoreCount = 1;
     bind_info.pSignalSemaphores = &semaphore.handle();
 
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    VkQueue sparse_queue = m_device->sparse_queues()[0]->handle();
     vkt::Fence sparse_queue_fence(*m_device);
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, sparse_queue_fence);
     ASSERT_EQ(VK_SUCCESS, sparse_queue_fence.wait(kWaitTimeout));
@@ -291,9 +280,8 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy2) {
     AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
 
-    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
-    if (!sparse_index) {
-        GTEST_SKIP() << "Required queue families not present";
+    if (m_device->sparse_queues().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
     vkt::Semaphore semaphore(*m_device);
@@ -319,8 +307,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy2) {
     VkBufferCreateInfo b_info =
         vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
-    vkt::Buffer buffer_sparse;
-    buffer_sparse.init_no_mem(*m_device, b_info);
+    vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
     VkMemoryRequirements buffer_mem_reqs;
     vk::GetBufferMemoryRequirements(device(), buffer_sparse.handle(), &buffer_mem_reqs);
@@ -345,7 +332,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy2) {
     bind_info.signalSemaphoreCount = 1;
     bind_info.pSignalSemaphores = &semaphore.handle();
 
-    VkQueue sparse_queue = m_device->graphics_queues()[sparse_index.value()]->handle();
+    VkQueue sparse_queue = m_device->sparse_queues()[0]->handle();
     vkt::Fence sparse_queue_fence(*m_device);
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, sparse_queue_fence);
     ASSERT_EQ(VK_SUCCESS, sparse_queue_fence.wait(kWaitTimeout));
@@ -381,9 +368,8 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy3) {
     AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(Init());
 
-    const std::optional<uint32_t> sparse_index = m_device->QueueFamilyMatching(VK_QUEUE_SPARSE_BINDING_BIT, 0u);
-    if (!sparse_index) {
-        GTEST_SKIP() << "Required queue families not present";
+    if (m_device->sparse_queues().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
     vkt::Semaphore semaphore(*m_device);
@@ -391,8 +377,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy3) {
     VkBufferCreateInfo buffer_ci =
         vkt::Buffer::create_info(4096 * 32, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     buffer_ci.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
-    vkt::Buffer buffer_sparse;
-    buffer_sparse.init_no_mem(*m_device, buffer_ci);
+    vkt::Buffer buffer_sparse(*m_device, buffer_ci, vkt::no_mem);
 
     VkMemoryRequirements buffer_mem_reqs;
     vk::GetBufferMemoryRequirements(device(), buffer_sparse.handle(), &buffer_mem_reqs);
@@ -428,7 +413,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy3) {
     bind_info.signalSemaphoreCount = 1;
     bind_info.pSignalSemaphores = &semaphore.handle();
 
-    vkt::Queue* sparse_queue = m_device->graphics_queues()[sparse_index.value()];
+    vkt::Queue* sparse_queue = m_device->sparse_queues()[0];
     vkt::Fence sparse_queue_fence(*m_device);
     vk::QueueBindSparse(sparse_queue->handle(), 1, &bind_info, sparse_queue_fence);
     ASSERT_EQ(VK_SUCCESS, sparse_queue_fence.wait(kWaitTimeout));
@@ -504,9 +489,7 @@ TEST_F(NegativeSparseBuffer, VkSparseMemoryBindMemory) {
         GTEST_SKIP() << "Test requires unsupported sparseResidencyBuffer feature";
     }
 
-    vkt::Buffer buffer;
-    buffer.init_no_mem(*m_device, buffer_create_info);
-
+    vkt::Buffer buffer(*m_device, buffer_create_info, vkt::no_mem);
     VkDeviceMemory bad_memory = CastToHandle<VkDeviceMemory, uintptr_t>(0xbaadbeef);
 
     VkSparseMemoryBind buffer_memory_bind = {};
@@ -544,8 +527,7 @@ TEST_F(NegativeSparseBuffer, VkSparseMemoryBindFlags) {
         GTEST_SKIP() << "Test requires unsupported sparseResidencyBuffer feature";
     }
 
-    vkt::Buffer buffer;
-    buffer.init_no_mem(*m_device, buffer_create_info);
+    vkt::Buffer buffer(*m_device, buffer_create_info, vkt::no_mem);
 
     VkMemoryRequirements buffer_mem_reqs;
     vk::GetBufferMemoryRequirements(device(), buffer.handle(), &buffer_mem_reqs);

@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2019-2023 Valve Corporation
- * Copyright (c) 2019-2023 LunarG, Inc.
+ * Copyright (c) 2019-2024 Valve Corporation
+ * Copyright (c) 2019-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 #pragma once
 
 #include "sync/sync_renderpass.h"
+#include "state_tracker/cmd_buffer_state.h"
 
 class SyncValidator;
 
@@ -140,18 +141,25 @@ struct ResourceCmdUsageRecord {
     const vvl::CommandBuffer *cb_state = nullptr;
     Count reset_count;
     NamedHandleVector handles;
+
+    uint32_t label_command_index = vvl::kU32Max;
 };
+
+struct DebugNameProvider;
 
 struct ResourceUsageRecord : public ResourceCmdUsageRecord {
     struct FormatterState {
-        FormatterState(const SyncValidator &sync_state_, const ResourceUsageRecord &record_, const vvl::CommandBuffer *cb_state_)
-            : sync_state(sync_state_), record(record_), ex_cb_state(cb_state_) {}
+        FormatterState(const SyncValidator &sync_state_, const ResourceUsageRecord &record_, const vvl::CommandBuffer *cb_state_,
+                       const DebugNameProvider *debug_name_provider_)
+            : sync_state(sync_state_), record(record_), ex_cb_state(cb_state_), debug_name_provider(debug_name_provider_) {}
         const SyncValidator &sync_state;
         const ResourceUsageRecord &record;
         const vvl::CommandBuffer *ex_cb_state;
+        const DebugNameProvider *debug_name_provider;
     };
-    FormatterState Formatter(const SyncValidator &sync_state, const vvl::CommandBuffer *ex_cb_state) const {
-        return FormatterState(sync_state, *this, ex_cb_state);
+    FormatterState Formatter(const SyncValidator &sync_state, const vvl::CommandBuffer *ex_cb_state,
+                             const DebugNameProvider *debug_name_provider) const {
+        return FormatterState(sync_state, *this, ex_cb_state, debug_name_provider);
     }
 
     AlternateResourceUsage alt_usage;
@@ -166,6 +174,12 @@ struct ResourceUsageRecord : public ResourceCmdUsageRecord {
     ResourceUsageRecord &operator=(const ResourceUsageRecord &other) = default;
 };
 
+// Provides debug region name for the specified access log command.
+// If empty name is returned it means the command is not inside debug region.
+struct DebugNameProvider {
+    virtual std::string GetDebugRegionName(const ResourceUsageRecord &record) const = 0;
+};
+
 // Command execution context is the base class for command buffer and queue contexts
 // Preventing unintented leakage of subclass specific state, storing enough information
 // for message logging.
@@ -173,7 +187,7 @@ struct ResourceUsageRecord : public ResourceCmdUsageRecord {
 class CommandExecutionContext : public SyncValidationInfo {
   public:
     using AccessLog = std::vector<ResourceUsageRecord>;
-    using CommandBufferSet = vvl::unordered_set<std::shared_ptr<const vvl::CommandBuffer>>;
+    using CommandBufferSet = std::vector<std::shared_ptr<const vvl::CommandBuffer>>;
     CommandExecutionContext() : SyncValidationInfo(nullptr) {}
     CommandExecutionContext(const SyncValidator *sync_validator) : SyncValidationInfo(sync_validator) {}
     virtual ~CommandExecutionContext() = default;
@@ -225,12 +239,16 @@ class CommandExecutionContext : public SyncValidationInfo {
     bool ValidForSyncOps() const;
 };
 
-class CommandBufferAccessContext : public CommandExecutionContext {
+class CommandBufferAccessContext : public CommandExecutionContext, DebugNameProvider {
   public:
     using SyncOpPointer = std::shared_ptr<SyncOpBase>;
     constexpr static SyncStageAccessIndex kResolveRead = SYNC_COLOR_ATTACHMENT_OUTPUT_COLOR_ATTACHMENT_READ;
     constexpr static SyncStageAccessIndex kResolveWrite = SYNC_COLOR_ATTACHMENT_OUTPUT_COLOR_ATTACHMENT_WRITE;
-    constexpr static SyncOrdering kResolveOrder = SyncOrdering::kColorAttachment;
+    constexpr static SyncOrdering kColorResolveOrder = SyncOrdering::kColorAttachment;
+    // Although depth resolve runs on the color attachment output stage and uses color accesses, depth accesses
+    // still participate in the ordering. That's why using raster and not only color attachment ordering
+    constexpr static SyncOrdering kDepthStencilResolveOrder = SyncOrdering::kRaster;
+
     constexpr static SyncOrdering kStoreOrder = SyncOrdering::kRaster;
 
     struct SyncOpEntry {
@@ -252,7 +270,7 @@ class CommandBufferAccessContext : public CommandExecutionContext {
 
     // NOTE: because this class is encapsulated in syncval_state::CommandBuffer, it isn't safe
     // to use shared_from_this from the constructor.
-    void SetSelfReference() { cbs_referenced_->insert(cb_state_->shared_from_this()); }
+    void SetSelfReference() { cbs_referenced_->push_back(cb_state_->shared_from_this()); }
 
     ~CommandBufferAccessContext() override = default;
     const CommandExecutionContext &GetExecutionContext() const { return *this; }
@@ -352,6 +370,11 @@ class CommandBufferAccessContext : public CommandExecutionContext {
     void InsertRecordedAccessLogEntries(const CommandBufferAccessContext &cb_context) override;
     const std::vector<SyncOpEntry> &GetSyncOps() const { return sync_ops_; };
 
+    // DebugNameProvider
+    std::string GetDebugRegionName(const ResourceUsageRecord &record) const override;
+
+    std::vector<vvl::CommandBuffer::LabelCommand> &GetProxyLabelCommands() { return proxy_label_commands_; }
+
   private:
     // As this is passing around a shared pointer to record, move to avoid needless atomics.
     void RecordSyncOp(SyncOpPointer &&sync_op);
@@ -384,6 +407,11 @@ class CommandBufferAccessContext : public CommandExecutionContext {
     // State during dynamic rendering (dynamic rendering rendering passes must be
     // contained within a single command buffer)
     std::unique_ptr<syncval_state::DynamicRenderingInfo> dynamic_rendering_info_;
+
+    // Secondary buffer validation uses proxy context and does local update (imitates Record).
+    // Because in this case PreRecord is not called, the label state is not updated. We make
+    // a copy of label state to update it locally together with proxy context.
+    std::vector<vvl::CommandBuffer::LabelCommand> proxy_label_commands_;
 };
 
 namespace syncval_state {
