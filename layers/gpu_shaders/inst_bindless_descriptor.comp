@@ -1,6 +1,6 @@
-// Copyright (c) 2023 The Khronos Group Inc.
-// Copyright (c) 2023 Valve Corporation
-// Copyright (c) 2023 LunarG, Inc.
+// Copyright (c) 2024 The Khronos Group Inc.
+// Copyright (c) 2024 Valve Corporation
+// Copyright (c) 2024 LunarG, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,6 @@ layout(buffer_reference, buffer_reference_align = 8, std430) buffer DescriptorLa
     uint pad;
     uvec2 data[];
 };
-
 layout(buffer_reference, buffer_reference_align = 8, std430) buffer DescriptorSetInData {
     uvec2 data[]; // x = id, y = extra data depending on the descriptor type
 };
@@ -47,7 +46,7 @@ layout(buffer_reference, buffer_reference_align = 8, std430) buffer GlobalState 
     uint data[];
 };
 
-layout(set = 7, binding = 0, std430) buffer inst_OutputBuffer {
+layout(set = kDefaultDescriptorSet, binding = 0, std430) buffer inst_OutputBuffer {
     uint flags;
     uint written_count;
     uint data[];
@@ -59,73 +58,21 @@ struct DescriptorSetRecord {
     DescriptorSetOutData out_data;
 };
 
-layout(set = 7, binding = 1, std430) buffer inst_bindless_StateBuffer {
+layout(set = kDefaultDescriptorSet, binding = kBindingBindlessDescriptor, std430) buffer inst_bindless_StateBuffer {
     GlobalState global_state;
     DescriptorSetRecord desc_sets[32];
 } inst_bindless_state_buffer;
 
-layout(set = 7, binding = 2, std430) buffer inst_buff_addr_InputBuffer {
-    uint64_t data[];
-} inst_buff_addr_input_buffer;
-
-void inst_stream_write_3(const uint shader_id, const uint inst_num, const uvec4 stage_info, const uint error, const uint addr_lo,
-                         const uint addr_hi)
-{
-    uint rec_len = 10u;
-    uint write_pos = atomicAdd(inst_output_buffer.written_count, rec_len);
-    if ((write_pos + rec_len) <= uint(inst_output_buffer.data.length()))
-    {
-        inst_output_buffer.data[write_pos + 0u] = rec_len;
-        inst_output_buffer.data[write_pos + 1u] = shader_id;
-        inst_output_buffer.data[write_pos + 2u] = inst_num;
-        inst_output_buffer.data[write_pos + 3u] = stage_info.x;
-        inst_output_buffer.data[write_pos + 4u] = stage_info.y;
-        inst_output_buffer.data[write_pos + 5u] = stage_info.z;
-        inst_output_buffer.data[write_pos + 6u] = stage_info.w;
-        inst_output_buffer.data[write_pos + 7u] = error;
-        inst_output_buffer.data[write_pos + 8u] = addr_lo;
-        inst_output_buffer.data[write_pos + 9u] = addr_hi;
-    }
-}
-
-void inst_stream_write_6(const uint shader_id, const uint inst_num, const uvec4 stage_info, const uint error, const uint set,
-                         const uint binding, const uint index, const uint param5, const uint param6) {
-    uint rec_len = 13u;
-    uint write_pos = atomicAdd(inst_output_buffer.written_count, rec_len);
-    if ((write_pos + rec_len) <= uint(inst_output_buffer.data.length())) {
-        inst_output_buffer.data[write_pos] = rec_len;
-        inst_output_buffer.data[write_pos + 1u] = shader_id;
-        inst_output_buffer.data[write_pos + 2u] = inst_num;
-        inst_output_buffer.data[write_pos + 3u] = stage_info.x;
-        inst_output_buffer.data[write_pos + 4u] = stage_info.y;
-        inst_output_buffer.data[write_pos + 5u] = stage_info.z;
-        inst_output_buffer.data[write_pos + 6u] = stage_info.w;
-        inst_output_buffer.data[write_pos + 7u] = error;
-        inst_output_buffer.data[write_pos + 8u] = set;
-        inst_output_buffer.data[write_pos + 9u] = binding;
-        inst_output_buffer.data[write_pos + 10u] = index;
-        inst_output_buffer.data[write_pos + 11u] = param5;
-        inst_output_buffer.data[write_pos + 12u] = param6;
-    }
-}
-
-bool inst_bindless_is_init(const uint desc_id) {
-    uint index = desc_id / 32;
-    uint bit = 1 << (desc_id & 31);
-
-    return (inst_bindless_state_buffer.global_state.data[index] & bit) != 0;
-}
-
-bool inst_bindless_check_desc(const uint shader_id, const uint inst_num, const uvec4 stage_info, const uint desc_set,
+bool inst_bindless_descriptor(const uint inst_num, const uvec4 stage_info, const uint desc_set,
                               const uint binding, const uint desc_index, const uint byte_offset) {
     uint error = 0u;
-    uint param5 = 0u;
-    uint param6 = 0u;
+    uint param_0 = 0u;
+    uint param_1 = 0u;
     uint desc_id = 0u;
     do {
         if (desc_set >= 32u) {
             error = kInstErrorBindlessBounds;
-            param5 = desc_set;
+            param_0 = desc_set;
             break;
         }
         DescriptorLayoutData layout_data = inst_bindless_state_buffer.desc_sets[desc_set].layout_data;
@@ -141,7 +88,7 @@ bool inst_bindless_check_desc(const uint shader_id, const uint inst_num, const u
         uvec2 binding_state = layout_data.data[binding];
         if (desc_index >= binding_state.x) {
             error = kInstErrorBindlessBounds;
-            param5 = binding_state.x;
+            param_0 = binding_state.x;
             break;
         }
 
@@ -158,18 +105,22 @@ bool inst_bindless_check_desc(const uint shader_id, const uint inst_num, const u
         uint desc_type = (in_data.data[state_index].x & ~kDebugInputBindlessSkipId) >> kDescBitShift;
         if (desc_id == 0u) {
             error = kInstErrorBindlessUninit;
-            param5 = binding_state.y;
-            param6 = desc_index;
+            param_0 = binding_state.y;
+            param_1 = desc_index;
             break;
         }
         if (desc_id == kDebugInputBindlessSkipId) {
             break;
         }
+
         // check that the resource is still valid
-        if (!inst_bindless_is_init(desc_id)) {
+        uint desc_index = desc_id / 32;
+        uint desc_bit = 1 << (desc_id & 31);
+        bool is_valid = (inst_bindless_state_buffer.global_state.data[desc_index] & desc_bit) == 0;
+        if (is_valid) {
             error = kInstErrorBindlessDestroyed;
-            param5 = binding_state.y;
-            param6 = desc_index;
+            param_0 = binding_state.y;
+            param_1 = desc_index;
             break;
         }
         if (desc_type == kImageSamplerDesc) {
@@ -177,15 +128,18 @@ bool inst_bindless_check_desc(const uint shader_id, const uint inst_num, const u
             desc_id = in_data.data[state_index].y;
             if (desc_id == 0u) {
                 error = kInstErrorBindlessUninit;
-                param5 = binding_state.y;
-                param6 = desc_index;
+                param_0 = binding_state.y;
+                param_1 = desc_index;
                 break;
             }
             // check that the resource is still valid
-            if (!inst_bindless_is_init(desc_id)) {
+            desc_index = desc_id / 32;
+            desc_bit = 1 << (desc_id & 31);
+            is_valid = (inst_bindless_state_buffer.global_state.data[desc_index] & desc_bit) == 0;
+            if (is_valid) {
                 error = kInstErrorBindlessDestroyed;
-                param5 = binding_state.y;
-                param6 = desc_index;
+                param_0 = binding_state.y;
+                param_1 = desc_index;
                 break;
             }
         } else if (desc_type == kTexelDesc || desc_type == kBufferDesc) {
@@ -193,8 +147,8 @@ bool inst_bindless_check_desc(const uint shader_id, const uint inst_num, const u
             uint resource_size = in_data.data[state_index].y;
             if (byte_offset >= resource_size) {
                 error = kInstErrorOOB;
-                param5 = byte_offset;
-                param6 = resource_size;
+                param_0 = byte_offset;
+                param_1 = resource_size;
                 break;
             }
         }
@@ -207,31 +161,24 @@ bool inst_bindless_check_desc(const uint shader_id, const uint inst_num, const u
     } while (false);
 
     if (0u != error) {
-        inst_stream_write_6(shader_id, inst_num, stage_info, error, desc_set, binding, desc_index, param5, param6);
+        uint rec_len = 13u;
+        uint write_pos = atomicAdd(inst_output_buffer.written_count, rec_len);
+        if ((write_pos + rec_len) <= uint(inst_output_buffer.data.length())) {
+            inst_output_buffer.data[write_pos + 0u] = rec_len;
+            inst_output_buffer.data[write_pos + 1u] = kLinkShaderId;
+            inst_output_buffer.data[write_pos + 2u] = inst_num;
+            inst_output_buffer.data[write_pos + 3u] = stage_info.x;
+            inst_output_buffer.data[write_pos + 4u] = stage_info.y;
+            inst_output_buffer.data[write_pos + 5u] = stage_info.z;
+            inst_output_buffer.data[write_pos + 6u] = stage_info.w;
+            inst_output_buffer.data[write_pos + 7u] = error;
+            inst_output_buffer.data[write_pos + 8u] = desc_set;
+            inst_output_buffer.data[write_pos + 9u] = binding;
+            inst_output_buffer.data[write_pos + 10u] = desc_index;
+            inst_output_buffer.data[write_pos + 11u] = param_0;
+            inst_output_buffer.data[write_pos + 12u] = param_1;
+        }
         return false;
     }
     return true;
-}
-
-bool inst_buff_addr_search_and_test(const uint shader_id, const uint inst_num, const uvec4 stage_info, const uint64_t addr,
-                                    const uint len)
-{
-    uint end_idx;
-    uint start_idx= 1u;
-    for (;;)
-    {
-        end_idx = start_idx + 1u;
-        if (inst_buff_addr_input_buffer.data[end_idx] > addr) {
-            break;
-        } else {
-            start_idx = end_idx;
-            continue;
-        }
-    }
-    uint index = end_idx - 1u;
-    if (((addr- inst_buff_addr_input_buffer.data[index]) + uint64_t(len)) <= inst_buff_addr_input_buffer.data[(index - 1u) + uint(inst_buff_addr_input_buffer.data[0u])]) {
-      return true;
-    }
-    inst_stream_write_3(shader_id, inst_num, stage_info, kInstErrorBuffAddrUnallocRef, uint(addr), uint(addr >> 32u));
-    return false;
 }

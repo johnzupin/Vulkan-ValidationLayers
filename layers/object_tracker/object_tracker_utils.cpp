@@ -73,8 +73,8 @@ bool ObjectLifetimes::CheckObjectValidity(uint64_t object_handle, VulkanObjectTy
 
     // Object was not found anywhere
     if (!other_lifetimes) {
-        return LogError(invalid_handle_vuid, instance, loc, "Invalid %s Object 0x%" PRIxLEAST64 ".", object_string[object_type],
-                        object_handle);
+        return LogError(invalid_handle_vuid, instance, loc, "Invalid %s Object 0x%" PRIxLEAST64 ".",
+                        string_VulkanObjectType(object_type), object_handle);
     }
     // Anonymous object validation does not check parent, only that the object exists
     if (wrong_parent_vuid == kVUIDUndefined) {
@@ -105,7 +105,7 @@ bool ObjectLifetimes::CheckObjectValidity(uint64_t object_handle, VulkanObjectTy
                     "(%s 0x%" PRIxLEAST64
                     ") was created, allocated or retrieved from %s, but command is using (or its dispatchable parameter is "
                     "associated with) %s",
-                    object_string[object_type], object_handle, other_handle_str.c_str(), handle_str.c_str());
+                    string_VulkanObjectType(object_type), object_handle, other_handle_str.c_str(), handle_str.c_str());
 }
 
 void ObjectLifetimes::DestroyObjectSilently(uint64_t object, VulkanObjectType object_type) {
@@ -119,7 +119,7 @@ void ObjectLifetimes::DestroyObjectSilently(uint64_t object, VulkanObjectType ob
         (void)LogError("UNASSIGNED-ObjectTracker-Destroy", device, loc,
                        "Couldn't destroy %s Object 0x%" PRIxLEAST64
                        ", not found. This should not happen and may indicate a race condition in the application.",
-                       object_string[object_type], object);
+                       string_VulkanObjectType(object_type), object);
 
         return;
     }
@@ -356,6 +356,11 @@ bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSet2KHR(VkCommandBuffer co
                                                               const VkPushDescriptorSetInfoKHR *pPushDescriptorSetInfo,
                                                               const ErrorObject &error_obj) const {
     bool skip = false;
+    // Checked by chassis: commandBuffer: "VUID-vkCmdPushDescriptorSet2KHR-commandBuffer-parameter"
+    skip |= ValidateObject(pPushDescriptorSetInfo->layout, kVulkanObjectTypePipelineLayout, true,
+                           "VUID-VkPushDescriptorSetInfoKHR-layout-parameter", kVUIDUndefined,
+                           error_obj.location.dot(Field::pPushDescriptorSetInfo).dot(Field::layout));
+
     if (pPushDescriptorSetInfo->pDescriptorWrites) {
         for (uint32_t index0 = 0; index0 < pPushDescriptorSetInfo->descriptorWriteCount; ++index0) {
             skip |= ValidateDescriptorWrite(
@@ -432,7 +437,7 @@ bool ObjectLifetimes::PreCallValidateDestroyInstance(VkInstance instance, const 
         auto node = iit.second;
 
         VkDevice device = reinterpret_cast<VkDevice>(node->handle);
-        VkDebugReportObjectTypeEXT debug_object_type = get_debug_report_enum[node->object_type];
+        VkDebugReportObjectTypeEXT debug_object_type = GetDebugReport(node->object_type);
 
         skip |=
             LogError("VUID-vkDestroyInstance-instance-00629", instance, error_obj.location, "%s object %s has not been destroyed.",
@@ -859,6 +864,7 @@ bool ObjectLifetimes::PreCallValidateDestroySwapchainKHR(VkDevice device, VkSwap
                                                          const VkAllocationCallbacks *pAllocator,
                                                          const ErrorObject &error_obj) const {
     bool skip = false;
+    // Checked by chassis: device: "VUID-vkDestroySwapchainKHR-device-parameter"
     const Location swapchain_loc = error_obj.location.dot(Field::swapchain);
     skip |= ValidateObject(swapchain, kVulkanObjectTypeSwapchainKHR, true, "VUID-vkDestroySwapchainKHR-swapchain-parameter",
                            "VUID-vkDestroySwapchainKHR-swapchain-parent", swapchain_loc);
@@ -1183,6 +1189,48 @@ void ObjectLifetimes::PostCallRecordCreateFramebuffer(VkDevice device, const VkF
     CreateObject(*pFramebuffer, kVulkanObjectTypeFramebuffer, pAllocator, record_obj.location);
 }
 
+bool ObjectLifetimes::PreCallValidateDebugMarkerSetObjectTagEXT(VkDevice device, const VkDebugMarkerObjectTagInfoEXT *pTagInfo,
+                                                                const ErrorObject &error_obj) const {
+    // Checked by chassis: device: "VUID-vkDebugMarkerSetObjectTagEXT-device-parameter"
+    bool skip = false;
+    if (pTagInfo->objectType == VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT) {
+        skip |=
+            LogError("VUID-VkDebugMarkerObjectTagInfoEXT-objectType-01493", device,
+                     error_obj.location.dot(Field::pTagInfo).dot(Field::objectType), "is VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT.");
+    } else {
+        const auto object_type = ConvertDebugReportObjectToVulkanObject(pTagInfo->objectType);
+        if (pTagInfo->object == (uint64_t)VK_NULL_HANDLE) {
+            skip |= LogError("VUID-VkDebugMarkerObjectTagInfoEXT-object-01494", device,
+                             error_obj.location.dot(Field::pTagInfo).dot(Field::object), "is VK_NULL_HANDLE.");
+        } else if (!object_map[object_type].contains(pTagInfo->object)) {
+            skip |= LogError("VUID-VkDebugMarkerObjectTagInfoEXT-object-01495", device,
+                             error_obj.location.dot(Field::pTagInfo).dot(Field::objectType), "doesn't match the object.");
+        }
+    }
+    return skip;
+}
+
+bool ObjectLifetimes::PreCallValidateDebugMarkerSetObjectNameEXT(VkDevice device, const VkDebugMarkerObjectNameInfoEXT *pNameInfo,
+                                                                 const ErrorObject &error_obj) const {
+    // Checked by chassis: device: "VUID-vkDebugMarkerSetObjectNameEXT-device-parameter"
+    bool skip = false;
+    if (pNameInfo->objectType == VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT) {
+        skip |= LogError("VUID-VkDebugMarkerObjectNameInfoEXT-objectType-01490", device,
+                         error_obj.location.dot(Field::pNameInfo).dot(Field::objectType),
+                         "is VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT.");
+    } else {
+        const auto object_type = ConvertDebugReportObjectToVulkanObject(pNameInfo->objectType);
+        if (pNameInfo->object == (uint64_t)VK_NULL_HANDLE) {
+            skip |= LogError("VUID-VkDebugMarkerObjectNameInfoEXT-object-01491", device,
+                             error_obj.location.dot(Field::pNameInfo).dot(Field::object), "is VK_NULL_HANDLE.");
+        } else if (!object_map[object_type].contains(pNameInfo->object)) {
+            skip |= LogError("VUID-VkDebugMarkerObjectNameInfoEXT-object-01492", device,
+                             error_obj.location.dot(Field::pNameInfo).dot(Field::objectType), "doesn't match the object.");
+        }
+    }
+    return skip;
+}
+
 bool ObjectLifetimes::PreCallValidateSetDebugUtilsObjectNameEXT(VkDevice device, const VkDebugUtilsObjectNameInfoEXT *pNameInfo,
                                                                 const ErrorObject &error_obj) const {
     bool skip = false;
@@ -1487,6 +1535,7 @@ bool ObjectLifetimes::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkEx
 bool ObjectLifetimes::PreCallValidateGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT *pDescriptorInfo,
                                                       size_t dataSize, void *pDescriptor, const ErrorObject &error_obj) const {
     bool skip = false;
+    // Checked by chassis: device: "VUID-vkGetDescriptorEXT-device-parameter"
     skip |= ValidateObject(device, kVulkanObjectTypeDevice, false, kVUIDUndefined, kVUIDUndefined,
                            error_obj.location.dot(Field::device));
 

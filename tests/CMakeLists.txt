@@ -99,6 +99,9 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/gpu_av_oob.cpp
     unit/gpu_av_oob_positive.cpp
     unit/gpu_av_positive.cpp
+    unit/gpu_av_spirv.cpp
+    unit/gpu_av_spirv_positive.cpp
+    unit/gpu_av_ray_query_positive.cpp
     unit/graphics_library.cpp
     unit/graphics_library_positive.cpp
     unit/host_image_copy.cpp
@@ -278,4 +281,5 @@ install(TARGETS vk_layer_validation_tests)
 include(GoogleTest)
 gtest_discover_tests(vk_layer_validation_tests DISCOVERY_TIMEOUT 100)
 
+add_subdirectory(spirv)
 add_subdirectory(layers)

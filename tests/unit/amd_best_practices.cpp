@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
  * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,7 @@ const char *kEnableAMDValidation = "VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_AMD"
 #ifdef AMD_LONG_RUNNING_TEST
 TEST_F(VkAmdBestPracticesLayerTest, TooManyPipelines) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
@@ -38,7 +38,7 @@ TEST_F(VkAmdBestPracticesLayerTest, TooManyPipelines) {
         if (i == 1) {
             // check that the second pipeline helper cache was detected
             m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                                 "UNASSIGNED-BestPractices-vkCreatePipelines-multiple-pipelines-caches");
+                                                 "BestPractices-vkCreatePipelines-multiple-pipelines-caches");
         }
         CreatePipelineHelper pipe(*this);
         pipe.InitState();
@@ -47,8 +47,7 @@ TEST_F(VkAmdBestPracticesLayerTest, TooManyPipelines) {
         if (i == 1) {
             // change check to too many pipelines
             m_errorMonitor->VerifyFound();
-            m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                                 "UNASSIGNED-BestPractices-CreatePipelines-TooManyPipelines");
+            m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-CreatePipelines-TooManyPipelines");
         }
     }
 
@@ -58,12 +57,11 @@ TEST_F(VkAmdBestPracticesLayerTest, TooManyPipelines) {
 
 TEST_F(VkAmdBestPracticesLayerTest, UseMutableRT) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-vkImage-DontUseMutableRenderTargets");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkImage-DontUseMutableRenderTargets");
 
     // create a colot attachment image with mutable bit set
     VkImageCreateInfo img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -85,8 +83,7 @@ TEST_F(VkAmdBestPracticesLayerTest, UseMutableRT) {
     vk::CreateImage(m_device->handle(), &img_info, nullptr, &test_image);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-vkImage-DontUseMutableRenderTargets");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkImage-DontUseMutableRenderTargets");
     // create a depth attachment image with mutable bit set
     img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                 nullptr,
@@ -107,8 +104,7 @@ TEST_F(VkAmdBestPracticesLayerTest, UseMutableRT) {
     vk::CreateImage(m_device->handle(), &img_info, nullptr, &test_image);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-vkImage-DontUseMutableRenderTargets");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkImage-DontUseMutableRenderTargets");
     // create a storage image with mutable bit set
     img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                nullptr,
@@ -132,7 +128,7 @@ TEST_F(VkAmdBestPracticesLayerTest, UseMutableRT) {
 
 TEST_F(VkAmdBestPracticesLayerTest, UsageConcurentRT) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
@@ -145,7 +141,7 @@ TEST_F(VkAmdBestPracticesLayerTest, UsageConcurentRT) {
         queueFamilies[i] = i;
     }
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "UNASSIGNED-BestPractices-vkImage-AvoidConcurrentRenderTargets");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkImage-AvoidConcurrentRenderTargets");
 
     // create a render target image with mutable bit set
     VkImageCreateInfo img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -167,7 +163,7 @@ TEST_F(VkAmdBestPracticesLayerTest, UsageConcurentRT) {
     vk::CreateImage(m_device->handle(), &img_info, nullptr, &test_image);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "UNASSIGNED-BestPractices-vkImage-AvoidConcurrentRenderTargets");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkImage-AvoidConcurrentRenderTargets");
     // create a render target image with mutable bit set
     img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                 nullptr,
@@ -191,12 +187,11 @@ TEST_F(VkAmdBestPracticesLayerTest, UsageConcurentRT) {
 
 TEST_F(VkAmdBestPracticesLayerTest, UsageStorageRT) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-vkImage-DontUseStorageRenderTargets");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkImage-DontUseStorageRenderTargets");
 
     // create a render target image with mutable bit set
     VkImageCreateInfo img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -221,12 +216,11 @@ TEST_F(VkAmdBestPracticesLayerTest, UsageStorageRT) {
 
 TEST_F(VkAmdBestPracticesLayerTest, PrimitiveRestart) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-CreatePipelines-AvoidPrimitiveRestart");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-CreatePipelines-AvoidPrimitiveRestart");
 
     CreatePipelineHelper pipe(*this);
     pipe.InitState();
@@ -238,12 +232,11 @@ TEST_F(VkAmdBestPracticesLayerTest, PrimitiveRestart) {
 
 TEST_F(VkAmdBestPracticesLayerTest, NumDynamicStates) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-CreatePipelines-MinimizeNumDynamicStates");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-CreatePipelines-MinimizeNumDynamicStates");
 
     // fill the dynamic array with the first 8 types in the enum
     // imitates a case where the user have set most dynamic states unnecessarily
@@ -268,12 +261,11 @@ TEST_F(VkAmdBestPracticesLayerTest, NumDynamicStates) {
 TEST_F(VkAmdBestPracticesLayerTest, KeepLayoutSmall) {
     // TODO: add dynamic buffer check as well
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-CreatePipelinesLayout-KeepLayoutSmall");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-CreatePipelinesLayout-KeepLayoutSmall");
 
     // create a layout of 15 DWORDS (40 bytes push constants (10 DWORDS), a descriptor set (1 DWORD), and 2 dynamic buffers (4
     // DWORDS)
@@ -313,12 +305,11 @@ TEST_F(VkAmdBestPracticesLayerTest, KeepLayoutSmall) {
 TEST_F(VkAmdBestPracticesLayerTest, CopyingDescriptors) {
     // TODO: add dynamic buffer check as well
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-UpdateDescriptors-AvoidCopyingDescriptors");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-UpdateDescriptors-AvoidCopyingDescriptors");
 
     VkDescriptorPoolSize ds_type_count = {};
     ds_type_count.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -349,8 +340,8 @@ TEST_F(VkAmdBestPracticesLayerTest, CopyingDescriptors) {
     alloc_info.descriptorSetCount = 1;
     alloc_info.descriptorPool = ds_pool.handle();
     alloc_info.pSetLayouts = &ds_layout.handle();
-    vk::AllocateDescriptorSets(m_device->device(), &alloc_info, &descriptor_sets[0]);
-    vk::AllocateDescriptorSets(m_device->device(), &alloc_info, &descriptor_sets[1]);
+    vk::AllocateDescriptorSets(device(), &alloc_info, &descriptor_sets[0]);
+    vk::AllocateDescriptorSets(device(), &alloc_info, &descriptor_sets[1]);
 
     VkCopyDescriptorSet copy_info = {};
     copy_info.sType = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
@@ -371,7 +362,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ClearImage) {
     TEST_DESCRIPTION("Test for validating usage of vkCmdClearAttachments");
 
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     {
@@ -390,9 +381,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ClearImage) {
                                       0,
                                       nullptr,
                                       VK_IMAGE_LAYOUT_UNDEFINED};
-        VkImageObj image_1D(m_device);
-        image_1D.init(&img_info);
-        ASSERT_TRUE(image_1D.initialized());
+        vkt::Image image_1D(*m_device, img_info, vkt::set_layout);
 
         m_commandBuffer->begin();
         image_1D.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -403,8 +392,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ClearImage) {
         image_range.levelCount = 1;
         image_range.layerCount = 1;
 
-        m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                             "UNASSIGNED-BestPractices-ClearAttachment-ClearImage");
+        m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-ClearAttachment-ClearImage");
 
         vk::CmdClearColorImage(m_commandBuffer->handle(), image_1D.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_value, 1,
                                &image_range);
@@ -431,9 +419,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ClearImage) {
                                       0,
                                       nullptr,
                                       VK_IMAGE_LAYOUT_UNDEFINED};
-        VkImageObj image_1D(m_device);
-        image_1D.init(&img_info);
-        ASSERT_TRUE(image_1D.initialized());
+        vkt::Image image_1D(*m_device, img_info, vkt::set_layout);
 
         m_commandBuffer->begin();
         image_1D.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
@@ -445,8 +431,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ClearImage) {
         image_range.levelCount = 1;
         image_range.layerCount = 1;
 
-        m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                             "UNASSIGNED-BestPractices-ClearAttachment-ClearImage");
+        m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-ClearAttachment-ClearImage");
 
         vk::CmdClearDepthStencilImage(m_commandBuffer->handle(), image_1D.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                       &clear_value, 1, &image_range);
@@ -458,7 +443,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ClearImage) {
 
 TEST_F(VkAmdBestPracticesLayerTest, ImageToImageCopy) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     VkImageCreateInfo img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -476,15 +461,11 @@ TEST_F(VkAmdBestPracticesLayerTest, ImageToImageCopy) {
                                   0,
                                   nullptr,
                                   VK_IMAGE_LAYOUT_UNDEFINED};
-    VkImageObj image1D_1(m_device);
-    image1D_1.init(&img_info);
-    ASSERT_TRUE(image1D_1.initialized());
+    vkt::Image image1D_1(*m_device, img_info, vkt::set_layout);
 
     img_info.tiling = VK_IMAGE_TILING_LINEAR;
     img_info.usage = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-    VkImageObj image_1D_2(m_device);
-    image_1D_2.init(&img_info);
+    vkt::Image image_1D_2(*m_device, img_info, vkt::set_layout);
     if (!image_1D_2.initialized()) {
         GTEST_SKIP() << "Could not initilize Linear image, skipping image to image copy test";
     }
@@ -492,8 +473,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ImageToImageCopy) {
     m_commandBuffer->begin();
 
     image1D_1.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-vkImage-AvoidImageToImageCopy");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkImage-AvoidImageToImageCopy");
 
     VkImageCopy copy{};
     copy.extent = img_info.extent;
@@ -508,41 +488,38 @@ TEST_F(VkAmdBestPracticesLayerTest, ImageToImageCopy) {
 
 TEST_F(VkAmdBestPracticesLayerTest, GeneralLayout) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     VkImageCreateInfo img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                                 nullptr,
-                                 0,
-                                 VK_IMAGE_TYPE_2D,
-                                 VK_FORMAT_R8G8B8A8_UNORM,
-                                 {1024, 1024, 1},
-                                 1,
-                                 1,
-                                 VK_SAMPLE_COUNT_1_BIT,
-                                 VK_IMAGE_TILING_OPTIMAL,
-                                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                                 VK_SHARING_MODE_EXCLUSIVE,
-                                 0,
-                                 nullptr,
-                                 VK_IMAGE_LAYOUT_UNDEFINED};
-    VkImageObj image_1D(m_device);
-
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-vkImage-AvoidGeneral");
-    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-VkCommandBuffer-AvoidTinyCmdBuffers");
+                                  nullptr,
+                                  0,
+                                  VK_IMAGE_TYPE_2D,
+                                  VK_FORMAT_R8G8B8A8_UNORM,
+                                  {1024, 1024, 1},
+                                  1,
+                                  1,
+                                  VK_SAMPLE_COUNT_1_BIT,
+                                  VK_IMAGE_TILING_OPTIMAL,
+                                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                  VK_SHARING_MODE_EXCLUSIVE,
+                                  0,
+                                  nullptr,
+                                  VK_IMAGE_LAYOUT_UNDEFINED};
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkImage-AvoidGeneral");
+    m_errorMonitor->SetAllowedFailureMsg("BestPractices-VkCommandBuffer-AvoidTinyCmdBuffers");
 
     // the init function initializes to general layout
-    image_1D.init(&img_info);
+    vkt::Image image_1D(*m_device, img_info);
+    image_1D.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(VkAmdBestPracticesLayerTest, RobustAccessOn) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-vkCreateDevice-RobustBufferAccess");
+    RETURN_IF_SKIP(InitState());
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreateDevice-RobustBufferAccess");
 
     VkPhysicalDeviceFeatures features = {};
     features.robustBufferAccess = true;
@@ -568,7 +545,7 @@ TEST_F(VkAmdBestPracticesLayerTest, RobustAccessOn) {
 
 TEST_F(VkAmdBestPracticesLayerTest, Barriers) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     VkImageCreateInfo img_info = {
@@ -587,15 +564,12 @@ TEST_F(VkAmdBestPracticesLayerTest, Barriers) {
         0,
         nullptr,
         VK_IMAGE_LAYOUT_UNDEFINED};
-    VkImageObj image_1D(m_device);
-    image_1D.init(&img_info);
-    ASSERT_TRUE(image_1D.initialized());
+    vkt::Image image_1D(*m_device, img_info, vkt::set_layout);
 
     m_commandBuffer->begin();
     // check for read-to-read barrier
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-PipelineBarrier-readToReadBarrier");
-    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-CmdBuffer-backToBackBarrier");  // we already test for this above
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-PipelineBarrier-readToReadBarrier");
+    m_errorMonitor->SetAllowedFailureMsg("BestPractices-CmdBuffer-backToBackBarrier");  // we already test for this above
     image_1D.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     image_1D.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
@@ -610,9 +584,8 @@ TEST_F(VkAmdBestPracticesLayerTest, Barriers) {
         image_1D.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     }
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-CmdBuffer-highBarrierCount");
-    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-CmdBuffer-backToBackBarrier");  // we already test for this above
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-CmdBuffer-highBarrierCount");
+    m_errorMonitor->SetAllowedFailureMsg("BestPractices-CmdBuffer-backToBackBarrier");  // we already test for this above
     image_1D.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     m_errorMonitor->VerifyFound();
 
@@ -624,8 +597,8 @@ TEST_F(VkAmdBestPracticesLayerTest, NumberOfSubmissions) {
 
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
 
-    InitState();
-    InitSwapchain();
+    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(InitSwapchain());
     InitRenderTarget();
 
     VkImageCreateInfo img_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -643,9 +616,7 @@ TEST_F(VkAmdBestPracticesLayerTest, NumberOfSubmissions) {
                                  0,
                                  nullptr,
                                  VK_IMAGE_LAYOUT_UNDEFINED};
-    VkImageObj image_1D(m_device);
-    image_1D.init(&img_info);
-    ASSERT_TRUE(image_1D.initialized());
+    vkt::Image image_1D(*m_device, img_info);
 
     uint32_t warn_limit = 11;
 
@@ -668,8 +639,7 @@ TEST_F(VkAmdBestPracticesLayerTest, NumberOfSubmissions) {
     present_info.pImageIndices = &current_buffer;
     present_info.pResults = NULL;
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-Submission-ReduceNumberOfSubmissions");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Submission-ReduceNumberOfSubmissions");
     m_errorMonitor->SetUnexpectedError("VUID-VkPresentInfoKHR-pImageIndices-01430");
 
     vk::QueuePresentKHR(m_default_queue->handle(), &present_info);
@@ -679,7 +649,7 @@ TEST_F(VkAmdBestPracticesLayerTest, NumberOfSubmissions) {
 
 TEST_F(VkAmdBestPracticesLayerTest, NumSyncPrimitives) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     constexpr int fence_warn_limit = 5;
@@ -688,8 +658,7 @@ TEST_F(VkAmdBestPracticesLayerTest, NumSyncPrimitives) {
     for (int i = 0; i < fence_warn_limit - 1; ++i) {
         test_fences[i].init(*m_device, fence_ci);
     }
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-SyncObjects-HighNumberOfFences");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-SyncObjects-HighNumberOfFences");
     test_fences[fence_warn_limit - 1].init(*m_device, fence_ci);
     m_errorMonitor->VerifyFound();
 
@@ -699,15 +668,14 @@ TEST_F(VkAmdBestPracticesLayerTest, NumSyncPrimitives) {
     for (int i = 0; i < semaphore_warn_limit - 1; ++i) {
         test_semaphores[i].init(*m_device, semaphore_ci);
     }
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-SyncObjects-HighNumberOfSemaphores");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-SyncObjects-HighNumberOfSemaphores");
     test_semaphores[semaphore_warn_limit - 1].init(*m_device, semaphore_ci);
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(VkAmdBestPracticesLayerTest, SecondaryCmdBuffer) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     InitRenderTarget();
 
@@ -727,7 +695,7 @@ TEST_F(VkAmdBestPracticesLayerTest, SecondaryCmdBuffer) {
     pipe.CreateGraphicsPipeline();
 
     vkt::CommandPool pool(*m_device, m_device->graphics_queue_node_index_);
-    vkt::CommandBuffer secondary_cmd_buf(m_device, &pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary_cmd_buf(*m_device, &pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     VkCommandBufferInheritanceInfo iinfo = vku::InitStructHelper();
     iinfo.renderPass = m_renderPassBeginInfo.renderPass;
@@ -761,9 +729,8 @@ TEST_F(VkAmdBestPracticesLayerTest, SecondaryCmdBuffer) {
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "UNASSIGNED-BestPractices-DrawState-ClearCmdBeforeDraw");
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                         "UNASSIGNED-BestPractices-VkCommandBuffer-AvoidSecondaryCmdBuffers");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-DrawState-ClearCmdBeforeDraw");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-VkCommandBuffer-AvoidSecondaryCmdBuffers");
 
     vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary_cmd_buf.handle());
 
@@ -774,7 +741,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ComputeWorkgroupSize) {
     TEST_DESCRIPTION("On AMD make the workgroup size a multiple of 64 to obtain best performance across all GPU generations.");
 
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableAMDValidation));
-    InitState();
+    RETURN_IF_SKIP(InitState());
 
     CreateComputePipelineHelper pipe(*this);
 
@@ -794,8 +761,7 @@ TEST_F(VkAmdBestPracticesLayerTest, ComputeWorkgroupSize) {
                                   "layout(local_size_x = 4, local_size_y = 1, local_size_z = 1) in;\n\n"
                                   "void main() {}\n",
                                   VK_SHADER_STAGE_COMPUTE_BIT);
-        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
-                                             "UNASSIGNED-BestPractices-LocalWorkgroup-Multiple64");
+        m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-LocalWorkgroup-Multiple64");
         make_pipeline_with_shader(pipe, compute_4_1_1.GetStageCreateInfo());
         m_errorMonitor->VerifyFound();
     }

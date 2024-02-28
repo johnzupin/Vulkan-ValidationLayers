@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,15 +18,10 @@
  */
 #pragma once
 #include "utils/hash_vk_types.h"
-#include "state_tracker/state_object.h"
-#include "state_tracker/sampler_state.h"
-#include "state_tracker/ray_tracing_state.h"
-#include "state_tracker/render_pass_state.h"
-#include "state_tracker/shader_module.h"
-#include "state_tracker/pipeline_layout_state.h"
 #include "state_tracker/pipeline_sub_state.h"
 #include "generated/dynamic_state_helper.h"
 #include "utils/shader_utils.h"
+#include "state_tracker/state_tracker.h"
 
 // Fwd declarations -- including descriptor_set.h creates an ugly include loop
 namespace vvl {
@@ -37,10 +32,12 @@ class Descriptor;
 class RenderPass;
 class CommandBuffer;
 class Pipeline;
+struct ShaderObject;
 struct ShaderModule;
 }  // namespace vvl
 
 class ValidationStateTracker;
+struct create_shader_module_api_state;
 
 struct StageCreateInfo {
     const vvl::Pipeline *pipeline;
@@ -56,12 +53,23 @@ struct StageCreateInfo {
 namespace vvl {
 class PipelineCache : public StateObject {
   public:
+    const safe_VkPipelineCacheCreateInfo create_info;
+
     PipelineCache(VkPipelineCache pipeline_cache, const VkPipelineCacheCreateInfo *pCreateInfo)
         : StateObject(pipeline_cache, kVulkanObjectTypePipelineCache), create_info(pCreateInfo) {}
 
-    VkPipelineCache pipelineCache() const { return handle_.Cast<VkPipelineCache>(); }
+    VkPipelineCache VkHandle() const { return handle_.Cast<VkPipelineCache>(); }
 
-    const safe_VkPipelineCacheCreateInfo create_info;
+    virtual std::shared_ptr<const vvl::ShaderModule> GetStageModule(const vvl::Pipeline &pipe_state, size_t stage_index) const {
+        // This interface enables derived versions of the pipeline cache state object to return
+        // the shader module information from pipeline cache data, if available.
+        // This is currently used by Vulkan SC to retrieve SPIR-V module debug information when
+        // available, but may also be used by vendor-specific validation layers.
+        // The default behavior (having no parsed pipeline cache data) is to not return anything.
+        (void)pipe_state;
+        (void)stage_index;
+        return nullptr;
+    }
 };
 
 class Pipeline : public StateObject {
@@ -71,29 +79,7 @@ class Pipeline : public StateObject {
         struct Traits {};
 
         CreateInfo(const VkGraphicsPipelineCreateInfo &ci, std::shared_ptr<const vvl::RenderPass> rpstate,
-                   const ValidationStateTracker *state_data)
-            : graphics() {
-            bool use_color = false;
-            bool use_depth_stencil = false;
-
-            if (ci.renderPass == VK_NULL_HANDLE) {
-                auto dynamic_rendering = vku::FindStructInPNextChain<VkPipelineRenderingCreateInfo>(ci.pNext);
-                if (dynamic_rendering) {
-                    use_color = (dynamic_rendering->colorAttachmentCount > 0);
-                    use_depth_stencil = (dynamic_rendering->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ||
-                                        (dynamic_rendering->stencilAttachmentFormat != VK_FORMAT_UNDEFINED);
-                }
-            } else if (rpstate) {
-                use_color = rpstate->UsesColorAttachment(ci.subpass);
-                use_depth_stencil = rpstate->UsesDepthStencilAttachment(ci.subpass);
-            }
-
-            PNextCopyState copy_state = {
-                [state_data, &ci](VkBaseOutStructure *safe_struct, const VkBaseOutStructure *in_struct) -> bool {
-                    return Pipeline::PnextRenderingInfoCustomCopy(state_data, ci, safe_struct, in_struct);
-                }};
-            graphics.initialize(&ci, use_color, use_depth_stencil, &copy_state);
-        }
+                   const ValidationStateTracker *state_data);
         CreateInfo(const VkComputePipelineCreateInfo *ci) : compute(ci) {}
         CreateInfo(const VkRayTracingPipelineCreateInfoKHR *ci) : raytracing(ci) {}
         CreateInfo(const VkRayTracingPipelineCreateInfoNV *ci) : raytracing(ci) {}
@@ -130,6 +116,9 @@ class Pipeline : public StateObject {
     const CreateInfo create_info;
 
   public:
+    // Pipeline cache state
+    const std::shared_ptr<const vvl::PipelineCache> pipeline_cache;
+
     // Create Info values saved for fast access later
     const VkPipelineRenderingCreateInfo *rendering_create_info = nullptr;
     const VkPipelineLibraryCreateInfoKHR *library_create_info = nullptr;
@@ -176,24 +165,28 @@ class Pipeline : public StateObject {
     const bool uses_pipeline_robustness;
     bool ignore_color_attachments;
 
+    using CreateShaderModuleStates = std::array<create_shader_module_api_state, 32>;
     CreateShaderModuleStates *csm_states = nullptr;
 
     // Executable or legacy pipeline
     Pipeline(const ValidationStateTracker *state_data, const VkGraphicsPipelineCreateInfo *pCreateInfo,
-             std::shared_ptr<const vvl::RenderPass> &&rpstate, std::shared_ptr<const vvl::PipelineLayout> &&layout,
-             CreateShaderModuleStates *csm_states = nullptr);
+             std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::RenderPass> &&rpstate,
+             std::shared_ptr<const vvl::PipelineLayout> &&layout, CreateShaderModuleStates *csm_states = nullptr);
 
     // Compute pipeline
     Pipeline(const ValidationStateTracker *state_data, const VkComputePipelineCreateInfo *pCreateInfo,
-             std::shared_ptr<const vvl::PipelineLayout> &&layout, CreateShaderModuleStates *csm_states = nullptr);
+             std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout,
+             CreateShaderModuleStates *csm_states = nullptr);
 
     Pipeline(const ValidationStateTracker *state_data, const VkRayTracingPipelineCreateInfoKHR *pCreateInfo,
-             std::shared_ptr<const vvl::PipelineLayout> &&layout, CreateShaderModuleStates *csm_states = nullptr);
+             std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout,
+             CreateShaderModuleStates *csm_states = nullptr);
 
     Pipeline(const ValidationStateTracker *state_data, const VkRayTracingPipelineCreateInfoNV *pCreateInfo,
-             std::shared_ptr<const vvl::PipelineLayout> &&layout, CreateShaderModuleStates *csm_states = nullptr);
+             std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout,
+             CreateShaderModuleStates *csm_states = nullptr);
 
-    VkPipeline pipeline() const { return handle_.Cast<VkPipeline>(); }
+    VkPipeline VkHandle() const { return handle_.Cast<VkPipeline>(); }
 
     void SetHandle(VkPipeline p) { handle_.handle = CastToUint64(p); }
 
@@ -251,6 +244,8 @@ class Pipeline : public StateObject {
 
     // Used to know if the pipeline substate is being created (as opposed to being linked)
     // Important as some pipeline checks need pipeline state that won't be there if the substate is from linking
+    // Many VUs say "the pipeline require" which means "not being linked in as a library"
+    // If the VUs says "created with" then you should NOT use this function
     bool OwnsSubState(const std::shared_ptr<PipelineSubState> sub_state) const { return sub_state && (&sub_state->parent == this); }
 
     const std::shared_ptr<const vvl::RenderPass> RenderPassState() const {
@@ -265,7 +260,10 @@ class Pipeline : public StateObject {
         return rp_state;
     }
 
-    bool IsRenderPassStateRequired() const { return pre_raster_state || fragment_shader_state || fragment_output_state; }
+    // A pipeline does not "require" state that is specified in a library.
+    bool IsRenderPassStateRequired() const {
+        return OwnsSubState(pre_raster_state) || OwnsSubState(fragment_shader_state) || OwnsSubState(fragment_output_state);
+    }
 
     const std::shared_ptr<const vvl::PipelineLayout> PipelineLayoutState() const {
         // TODO A render pass object is required for all of these sub-states. Which one should be used for an "executable pipeline"?
@@ -295,6 +293,7 @@ class Pipeline : public StateObject {
         return merged_graphics_layout;
     }
 
+    // the VkPipelineMultisampleStateCreateInfo need to be identically defined so can safely grab both
     const safe_VkPipelineMultisampleStateCreateInfo *MultisampleState() const {
         // TODO A render pass object is required for all of these sub-states. Which one should be used for an "executable pipeline"?
         if (fragment_shader_state && fragment_shader_state->ms_state &&
@@ -363,13 +362,6 @@ class Pipeline : public StateObject {
     const safe_VkPipelineInputAssemblyStateCreateInfo *InputAssemblyState() const {
         if (vertex_input_state) {
             return vertex_input_state->input_assembly_state;
-        }
-        return nullptr;
-    }
-
-    const VertexInputState::VertexBindingVector *BindingDescriptions() const {
-        if (vertex_input_state) {
-            return &vertex_input_state->binding_descriptions;
         }
         return nullptr;
     }
@@ -857,19 +849,4 @@ static LvlBindPoint inline ConvertToLvlBindPoint(VkShaderStageFlagBits stage) {
             return static_cast<LvlBindPoint>(stage);
     }
     return BindPoint_Count;
-}
-
-static ShaderObjectStage inline ConvertToShaderObjectStage(VkShaderStageFlagBits stage) {
-    if (stage == VK_SHADER_STAGE_VERTEX_BIT) return ShaderObjectStage::VERTEX;
-    if (stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT) return ShaderObjectStage::TESSELLATION_CONTROL;
-    if (stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) return ShaderObjectStage::TESSELLATION_EVALUATION;
-    if (stage == VK_SHADER_STAGE_GEOMETRY_BIT) return ShaderObjectStage::GEOMETRY;
-    if (stage == VK_SHADER_STAGE_FRAGMENT_BIT) return ShaderObjectStage::FRAGMENT;
-    if (stage == VK_SHADER_STAGE_COMPUTE_BIT) return ShaderObjectStage::COMPUTE;
-    if (stage == VK_SHADER_STAGE_TASK_BIT_EXT) return ShaderObjectStage::TASK;
-    if (stage == VK_SHADER_STAGE_MESH_BIT_EXT) return ShaderObjectStage::MESH;
-
-    assert(false);
-
-    return ShaderObjectStage::LAST;
 }

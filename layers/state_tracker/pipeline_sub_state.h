@@ -1,6 +1,6 @@
-/* Copyright (c) 2015-2017, 2019-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2017, 2019-2023 Valve Corporation
- * Copyright (c) 2015-2017, 2019-2023 LunarG, Inc.
+/* Copyright (c) 2015-2017, 2019-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2017, 2019-2024 Valve Corporation
+ * Copyright (c) 2015-2017, 2019-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,11 @@
 
 // Graphics pipeline sub-state as defined by VK_KHR_graphics_pipeline_library
 
+class ValidationStateTracker;
 namespace vvl {
 class RenderPass;
+class Pipeline;
+class PipelineLayout;
 struct ShaderModule;
 }  // namespace vvl
 
@@ -54,17 +57,11 @@ struct VertexInputState : public PipelineSubState {
     safe_VkPipelineVertexInputStateCreateInfo *input_state = nullptr;
     safe_VkPipelineInputAssemblyStateCreateInfo *input_assembly_state = nullptr;
 
-    using VertexBindingVector = std::vector<VkVertexInputBindingDescription>;
-    VertexBindingVector binding_descriptions;
+    std::vector<VkVertexInputBindingDescription> binding_descriptions;
 
-    using VertexBindingIndexMap = vvl::unordered_map<uint32_t, uint32_t>;
-    VertexBindingIndexMap binding_to_index_map;
+    vvl::unordered_map<uint32_t, uint32_t> binding_to_index_map;
 
-    using VertexAttrVector = std::vector<VkVertexInputAttributeDescription>;
-    VertexAttrVector vertex_attribute_descriptions;
-
-    using VertexAttrAlignmentVector = std::vector<VkDeviceSize>;
-    VertexAttrAlignmentVector vertex_attribute_alignments;
+    std::vector<VkVertexInputAttributeDescription2EXT> vertex_attribute_descriptions;
 
     std::shared_ptr<VertexInputState> FromCreateInfo(const ValidationStateTracker &state,
                                                      const safe_VkGraphicsPipelineCreateInfo &create_info);

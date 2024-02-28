@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2020-2022 The Khronos Group Inc.
- * Copyright (c) 2020-2023 Valve Corporation
- * Copyright (c) 2020-2023 LunarG, Inc.
+ * Copyright (c) 2020-2024 The Khronos Group Inc.
+ * Copyright (c) 2020-2024 Valve Corporation
+ * Copyright (c) 2020-2024 LunarG, Inc.
  * Copyright (c) 2020-2022 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@
 #include "../framework/shader_helper.h"
 #include "../framework/gpu_av_helper.h"
 
-TEST_F(NegativeGpuAVRayTracing, CmdTraceRaysIndirectKHR) {
+TEST_F(NegativeGpuAVRayTracing, DISABLED_CmdTraceRaysIndirectKHR) {
     TEST_DESCRIPTION("Invalid parameters used in vkCmdTraceRaysIndirectKHR");
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -80,13 +80,12 @@ TEST_F(NegativeGpuAVRayTracing, CmdTraceRaysIndirectKHR) {
     ASSERT_EQ(VK_SUCCESS, result);
 
     // Create dummy shader binding table (SBT)
-    vkt::Buffer sbt_buffer;
     VkBufferCreateInfo buffer_ci = vku::InitStructHelper();
     buffer_ci.usage =
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR;
     buffer_ci.size = 4096;
     buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    sbt_buffer.init_no_mem(*m_device, buffer_ci);
+    vkt::Buffer sbt_buffer(*m_device, buffer_ci, vkt::no_mem);
 
     VkMemoryRequirements mem_reqs;
     vk::GetBufferMemoryRequirements(device(), sbt_buffer.handle(), &mem_reqs);

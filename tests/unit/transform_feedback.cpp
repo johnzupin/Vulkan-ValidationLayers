@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  * Modifications Copyright (C) 2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -251,13 +251,10 @@ TEST_F(NegativeTransformFeedback, CmdBindTransformFeedbackBuffersEXT) {
 
     // Don't bind memory.
     {
-        vkt::Buffer buffer;
-        {
-            VkBufferCreateInfo info = vku::InitStructHelper();
-            info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
-            info.size = 4;
-            buffer.init_no_mem(*m_device, info);
-        }
+        VkBufferCreateInfo info = vku::InitStructHelper();
+        info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
+        info.size = 4;
+        vkt::Buffer buffer(*m_device, info, vkt::no_mem);
 
         VkDeviceSize const offsets[1]{};
 
@@ -453,7 +450,7 @@ TEST_F(NegativeTransformFeedback, ExecuteSecondaryCommandBuffers) {
 
     // A pool we can reset in.
     vkt::CommandPool pool(*m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer secondary(m_device, &pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, &pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     VkCommandBufferBeginInfo info = vku::InitStructHelper();
     VkCommandBufferInheritanceInfo hinfo = vku::InitStructHelper();
@@ -592,7 +589,7 @@ TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
     device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
     vkt::Device test_device(gpu(), device_extension_names);
     vkt::CommandPool commandPool(test_device, 0);
-    vkt::CommandBuffer commandBuffer(&test_device, &commandPool);
+    vkt::CommandBuffer commandBuffer(test_device, &commandPool);
     vkt::Buffer counter_buffer2;
     counter_buffer2.init(test_device, buffer_create_info);
 
@@ -651,8 +648,7 @@ TEST_F(NegativeTransformFeedback, UsingRasterizationStateStreamExtDisabled) {
     pipe.rs_state_ci_.pNext = &rasterization_state_stream_ci;
     pipe.InitState();
 
-    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
-                                         "VUID-VkPipelineRasterizationStateStreamCreateInfoEXT-geometryStreams-02324");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineRasterizationStateStreamCreateInfoEXT-geometryStreams-02324");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
@@ -724,12 +720,9 @@ TEST_F(NegativeTransformFeedback, RuntimeSpirv) {
                OpFunctionEnd
         )asm";
 
-        auto vs = VkShaderObj::CreateFromASM(this, vsSource.str().c_str(), VK_SHADER_STAGE_VERTEX_BIT);
-
-        const auto set_info = [&](CreatePipelineHelper &helper) {
-            helper.shader_stages_ = {vs->GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
-        };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-RuntimeSpirv-XfbStride-06313");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-XfbStride-06313");
+        VkShaderObj::CreateFromASM(this, vsSource.str().c_str(), VK_SHADER_STAGE_VERTEX_BIT);
+        m_errorMonitor->VerifyFound();
     }
 
     {
@@ -777,12 +770,9 @@ TEST_F(NegativeTransformFeedback, RuntimeSpirv) {
                OpFunctionEnd
         )asm";
 
-        auto gs = VkShaderObj::CreateFromASM(this, gsSource.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT);
-
-        const auto set_info = [&](CreatePipelineHelper &helper) {
-            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), gs->GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
-        };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-RuntimeSpirv-OpEmitStreamVertex-06310");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-OpEmitStreamVertex-06310");
+        VkShaderObj::CreateFromASM(this, gsSource.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT);
+        m_errorMonitor->VerifyFound();
     }
 
     if (transform_feedback_props.transformFeedbackStreamsLinesTriangles == VK_FALSE) {
@@ -837,13 +827,9 @@ TEST_F(NegativeTransformFeedback, RuntimeSpirv) {
                OpFunctionEnd
         )asm";
 
-        auto gs = VkShaderObj::CreateFromASM(this, gsSource, VK_SHADER_STAGE_GEOMETRY_BIT);
-
-        const auto set_info = [&](CreatePipelineHelper &helper) {
-            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), gs->GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
-        };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit,
-                                          "VUID-RuntimeSpirv-transformFeedbackStreamsLinesTriangles-06311");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-transformFeedbackStreamsLinesTriangles-06311");
+        VkShaderObj::CreateFromASM(this, gsSource, VK_SHADER_STAGE_GEOMETRY_BIT);
+        m_errorMonitor->VerifyFound();
     }
 
     {
@@ -892,17 +878,13 @@ TEST_F(NegativeTransformFeedback, RuntimeSpirv) {
                OpFunctionEnd
         )asm";
 
-        auto gs = VkShaderObj::CreateFromASM(this, gsSource.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT);
-
-        const auto set_info = [&](CreatePipelineHelper &helper) {
-            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), gs->GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
-        };
-        std::vector<std::string> vuids = {"VUID-RuntimeSpirv-Offset-06308"};
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-Offset-06308");
         if (transform_feedback_props.maxTransformFeedbackBufferDataSize + 4 >=
             transform_feedback_props.maxTransformFeedbackStreamDataSize) {
-            vuids.push_back("VUID-RuntimeSpirv-XfbBuffer-06309");
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-XfbBuffer-06309");
         }
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, vuids);
+        VkShaderObj::CreateFromASM(this, gsSource.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT);
+        m_errorMonitor->VerifyFound();
     }
 
     {
@@ -951,12 +933,9 @@ TEST_F(NegativeTransformFeedback, RuntimeSpirv) {
                OpFunctionEnd
         )asm";
 
-        auto gs = VkShaderObj::CreateFromASM(this, gsSource.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT);
-
-        const auto set_info = [&](CreatePipelineHelper &helper) {
-            helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), gs->GetStageCreateInfo(), helper.fs_->GetStageCreateInfo()};
-        };
-        CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-RuntimeSpirv-Stream-06312");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-Stream-06312");
+        VkShaderObj::CreateFromASM(this, gsSource.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT);
+        m_errorMonitor->VerifyFound();
     }
 
     {
@@ -1022,13 +1001,9 @@ TEST_F(NegativeTransformFeedback, RuntimeSpirv) {
                OpFunctionEnd
         )asm";
 
-            auto gs = VkShaderObj::CreateFromASM(this, gsSource.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT);
-
-            const auto set_info = [&](CreatePipelineHelper &helper) {
-                helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), gs->GetStageCreateInfo(),
-                                         helper.fs_->GetStageCreateInfo()};
-            };
-            CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit, "VUID-RuntimeSpirv-XfbBuffer-06309");
+            m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-XfbBuffer-06309");
+            VkShaderObj::CreateFromASM(this, gsSource.str().c_str(), VK_SHADER_STAGE_GEOMETRY_BIT);
+            m_errorMonitor->VerifyFound();
         }
     }
 }
@@ -1058,10 +1033,10 @@ TEST_F(NegativeTransformFeedback, PipelineRasterizationStateStreamCreateInfoEXT)
     pipe.InitState();
 
     if (transfer_feedback_props.transformFeedbackRasterizationStreamSelect) {
-        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                              "VUID-VkPipelineRasterizationStateStreamCreateInfoEXT-rasterizationStream-02325");
     } else {
-        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT,
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
                                              "VUID-VkPipelineRasterizationStateStreamCreateInfoEXT-rasterizationStream-02326");
     }
     pipe.CreateGraphicsPipeline();
@@ -1102,8 +1077,7 @@ TEST_F(NegativeTransformFeedback, CmdNextSubpass) {
 
     vkt::RenderPass rp(*m_device, rpci);
 
-    VkImageObj image(m_device);
-    image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
     vkt::Framebuffer fb(*m_device, rp.handle(), 1, &imageView.handle());
 

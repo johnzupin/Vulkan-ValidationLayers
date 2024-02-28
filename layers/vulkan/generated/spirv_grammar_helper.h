@@ -290,6 +290,10 @@ static constexpr bool OpcodeHasType(uint32_t opcode) {
         case spv::OpImageBoxFilterQCOM:
         case spv::OpImageBlockMatchSSDQCOM:
         case spv::OpImageBlockMatchSADQCOM:
+        case spv::OpImageBlockMatchWindowSSDQCOM:
+        case spv::OpImageBlockMatchWindowSADQCOM:
+        case spv::OpImageBlockMatchGatherSSDQCOM:
+        case spv::OpImageBlockMatchGatherSADQCOM:
         case spv::OpGroupIAddNonUniformAMD:
         case spv::OpGroupFAddNonUniformAMD:
         case spv::OpGroupFMinNonUniformAMD:
@@ -302,6 +306,8 @@ static constexpr bool OpcodeHasType(uint32_t opcode) {
         case spv::OpFragmentFetchAMD:
         case spv::OpReadClockKHR:
         case spv::OpFinishWritingNodePayloadAMDX:
+        case spv::OpGroupNonUniformQuadAllKHR:
+        case spv::OpGroupNonUniformQuadAnyKHR:
         case spv::OpHitObjectGetWorldToObjectNV:
         case spv::OpHitObjectGetObjectToWorldNV:
         case spv::OpHitObjectGetObjectRayDirectionNV:
@@ -402,6 +408,7 @@ static constexpr bool OpcodeHasType(uint32_t opcode) {
         case spv::OpGroupLogicalAndKHR:
         case spv::OpGroupLogicalOrKHR:
         case spv::OpGroupLogicalXorKHR:
+        case spv::OpMaskedGatherINTEL:
             return true;
         default:
             return false;
@@ -680,6 +687,10 @@ static constexpr bool OpcodeHasResult(uint32_t opcode) {
         case spv::OpImageBoxFilterQCOM:
         case spv::OpImageBlockMatchSSDQCOM:
         case spv::OpImageBlockMatchSADQCOM:
+        case spv::OpImageBlockMatchWindowSSDQCOM:
+        case spv::OpImageBlockMatchWindowSADQCOM:
+        case spv::OpImageBlockMatchGatherSSDQCOM:
+        case spv::OpImageBlockMatchGatherSADQCOM:
         case spv::OpGroupIAddNonUniformAMD:
         case spv::OpGroupFAddNonUniformAMD:
         case spv::OpGroupFMinNonUniformAMD:
@@ -692,6 +703,8 @@ static constexpr bool OpcodeHasResult(uint32_t opcode) {
         case spv::OpFragmentFetchAMD:
         case spv::OpReadClockKHR:
         case spv::OpFinishWritingNodePayloadAMDX:
+        case spv::OpGroupNonUniformQuadAllKHR:
+        case spv::OpGroupNonUniformQuadAnyKHR:
         case spv::OpHitObjectGetWorldToObjectNV:
         case spv::OpHitObjectGetObjectToWorldNV:
         case spv::OpHitObjectGetObjectRayDirectionNV:
@@ -799,6 +812,7 @@ static constexpr bool OpcodeHasResult(uint32_t opcode) {
         case spv::OpGroupLogicalAndKHR:
         case spv::OpGroupLogicalOrKHR:
         case spv::OpGroupLogicalXorKHR:
+        case spv::OpMaskedGatherINTEL:
             return true;
         default:
             return false;
@@ -869,6 +883,8 @@ static constexpr bool GroupOperation(uint32_t opcode) {
         case spv::OpGroupNonUniformLogicalXor:
         case spv::OpGroupNonUniformQuadBroadcast:
         case spv::OpGroupNonUniformQuadSwap:
+        case spv::OpGroupNonUniformQuadAllKHR:
+        case spv::OpGroupNonUniformQuadAnyKHR:
         case spv::OpGroupNonUniformPartitionNV:
             return true;
         default:
@@ -915,6 +931,8 @@ static constexpr bool ImageGatherOperation(uint32_t opcode) {
         case spv::OpImageDrefGather:
         case spv::OpImageSparseGather:
         case spv::OpImageSparseDrefGather:
+        case spv::OpImageBlockMatchGatherSSDQCOM:
+        case spv::OpImageBlockMatchGatherSADQCOM:
             return true;
         default:
             return false;
@@ -1265,6 +1283,7 @@ static constexpr SpvType GetSpvType(uint32_t opcode) {
 }
 
 enum class OperandKind {
+    Invalid = 0,
     Id,
     Label,  // Id but for Control Flow
     Literal,

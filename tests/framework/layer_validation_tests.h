@@ -247,7 +247,7 @@ class VkBestPracticesLayerTest : public VkLayerTest {
 class VkAmdBestPracticesLayerTest : public VkBestPracticesLayerTest {};
 class VkArmBestPracticesLayerTest : public VkBestPracticesLayerTest {
   public:
-    std::unique_ptr<VkImageObj> CreateImage(VkFormat format, const uint32_t width, const uint32_t height,
+    std::unique_ptr<vkt::Image> CreateImage(VkFormat format, const uint32_t width, const uint32_t height,
                                             VkImageUsageFlags attachment_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     VkRenderPass CreateRenderPass(VkFormat format, VkAttachmentLoadOp load_op = VK_ATTACHMENT_LOAD_OP_CLEAR,
                                   VkAttachmentStoreOp store_op = VK_ATTACHMENT_STORE_OP_STORE);
@@ -279,6 +279,10 @@ class GpuAVDescriptorIndexingTest : public GpuAVTest {
 class NegativeGpuAVDescriptorIndexing : public GpuAVDescriptorIndexingTest {};
 class PositiveGpuAVDescriptorIndexing : public GpuAVDescriptorIndexingTest {};
 
+class GpuAVSpirvTest : public GpuAVTest {};
+class NegativeGpuAVSpirv : public GpuAVSpirvTest {};
+class PositiveGpuAVSpirv : public GpuAVSpirvTest {};
+
 class NegativeGpuAVIndirectBuffer : public GpuAVTest {};
 
 class GpuAVOOBTest : public GpuAVTest {};
@@ -290,6 +294,8 @@ class NegativeGpuAVOOB : public GpuAVOOBTest {
     void ComputeStorageBufferTest(const char *expected_error, const char *shader, VkDeviceSize buffer_size);
 };
 class PositiveGpuAVOOB : public GpuAVOOBTest {};
+
+class PositiveGpuAVRayQuery : public PositiveGpuAV {};
 
 class NegativeDebugPrintf : public VkLayerTest {
   public:
@@ -614,6 +620,7 @@ class WsiTest : public VkLayerTest {
   public:
     // most tests need images in VK_IMAGE_LAYOUT_PRESENT_SRC_KHR layout
     void SetImageLayoutPresentSrc(VkImage image);
+    VkImageMemoryBarrier TransitionToPresent(VkImage swapchain_image, VkImageLayout old_layout, VkAccessFlags src_access_mask);
 };
 class NegativeWsi : public WsiTest {};
 class PositiveWsi : public WsiTest {};
@@ -625,7 +632,12 @@ class YcbcrTest : public VkLayerTest {
 class NegativeYcbcr : public YcbcrTest {};
 class PositiveYcbcr : public YcbcrTest {};
 
-class CooperativeMatrixTest : public VkLayerTest {};
+class CooperativeMatrixTest : public VkLayerTest {
+  public:
+    void InitCooperativeMatrixKHR();
+    bool HasValidProperty(VkScopeKHR scope, uint32_t m, uint32_t n, uint32_t k, VkComponentTypeKHR type);
+    std::vector<VkCooperativeMatrixPropertiesKHR> coop_matrix_props;
+};
 class NegativeShaderCooperativeMatrix : public CooperativeMatrixTest {};
 class PositiveShaderCooperativeMatrix : public CooperativeMatrixTest {};
 

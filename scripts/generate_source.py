@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# Copyright (c) 2021-2023 The Khronos Group Inc.
-# Copyright (c) 2021-2023 Valve Corporation
-# Copyright (c) 2021-2023 LunarG, Inc.
-# Copyright (c) 2021-2023 Google Inc.
-# Copyright (c) 2023-2023 RasterGrid Kft.
+# Copyright (c) 2021-2024 The Khronos Group Inc.
+# Copyright (c) 2021-2024 Valve Corporation
+# Copyright (c) 2021-2024 LunarG, Inc.
+# Copyright (c) 2021-2024 Google Inc.
+# Copyright (c) 2023-2024 RasterGrid Kft.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -66,6 +66,7 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
     from generators.safe_struct_generator import SafeStructOutputGenerator
     from generators.enum_flag_bits_generator import EnumFlagBitsOutputGenerator
     from generators.valid_enum_values_generator import ValidEnumValuesOutputGenerator
+    from generators.valid_flag_values_generator import ValidFlagValuesOutputGenerator
     from generators.spirv_tool_commit_id_generator import SpirvToolCommitIdOutputGenerator
     from generators.error_location_helper_generator import ErrorLocationHelperOutputGenerator
     from generators.pnext_chain_extraction_generator import PnextChainExtractionGenerator
@@ -125,6 +126,10 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : ValidEnumValuesOutputGenerator,
             'genCombined': False,
         },
+        'valid_flag_values.cpp' : {
+            'generator' : ValidFlagValuesOutputGenerator,
+            'genCombined': False,
+        },
         'object_tracker.h' : {
             'generator' : ObjectTrackerOutputGenerator,
             'genCombined': True,
@@ -144,6 +149,10 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'genCombined': True,
         },
         'vk_dispatch_table_helper.h' : {
+            'generator' : DispatchTableHelperOutputGenerator,
+            'genCombined': True,
+        },
+        'vk_dispatch_table_helper.cpp' : {
             'generator' : DispatchTableHelperOutputGenerator,
             'genCombined': True,
         },
@@ -187,7 +196,15 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : ObjectTypesOutputGenerator,
             'genCombined': True,
         },
+        'vk_object_types.cpp' : {
+            'generator' : ObjectTypesOutputGenerator,
+            'genCombined': True,
+        },
         'vk_extension_helper.h' : {
+            'generator' : ExtensionHelperOutputGenerator,
+            'genCombined': True,
+        },
+        'vk_extension_helper.cpp' : {
             'generator' : ExtensionHelperOutputGenerator,
             'genCombined': True,
         },
@@ -351,7 +368,9 @@ def main(argv):
         'gpu_pre_dispatch_comp.h',
         'gpu_pre_draw_vert.h',
         'gpu_pre_trace_rays_rgen.h',
-        'inst_functions_comp.h',
+        'gpu_pre_copy_buffer_to_image_comp.h',
+        'inst_buffer_device_address_comp.h',
+        'inst_bindless_descriptor_comp.h',
         'gpu_inst_shader_hash.h'
     ]
 

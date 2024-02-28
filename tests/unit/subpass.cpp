@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2021 ARM, Inc. All rights reserved.
  *
@@ -16,6 +16,7 @@
 #include "utils/cast_utils.h"
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
+#include "../framework/render_pass_helper.h"
 
 TEST_F(NegativeSubpass, NonGraphicsPipeline) {
     TEST_DESCRIPTION("Create a subpass with the compute pipeline bind point");
@@ -402,7 +403,7 @@ TEST_F(NegativeSubpass, SubpassIndices) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassCreateInfo-pDependencies-06866");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassCreateInfo-pDependencies-06867");
-    vk::CreateRenderPass(m_device->device(), &rpci, nullptr, &render_pass);
+    vk::CreateRenderPass(device(), &rpci, nullptr, &render_pass);
     m_errorMonitor->VerifyFound();
 
     if (rp2_supported) {
@@ -410,7 +411,7 @@ TEST_F(NegativeSubpass, SubpassIndices) {
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassCreateInfo2-srcSubpass-02526");
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassCreateInfo2-dstSubpass-02527");
-        vk::CreateRenderPass2KHR(m_device->device(), create_info2.ptr(), nullptr, &render_pass);
+        vk::CreateRenderPass2KHR(device(), create_info2.ptr(), nullptr, &render_pass);
         m_errorMonitor->VerifyFound();
     }
 }
@@ -440,9 +441,7 @@ TEST_F(NegativeSubpass, DrawWithPipelineIncompatibleWithSubpass) {
                                VK_DEPENDENCY_BY_REGION_BIT};
     auto rpci = vku::InitStruct<VkRenderPassCreateInfo>(nullptr, 0u, 1u, attach, 2u, subpasses, 1u, &dep);
     vkt::RenderPass rp(*m_device, rpci);
-
-    VkImageObj image(m_device);
-    image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
     vkt::Framebuffer fb(*m_device, rp.handle(), 1u, &imageView.handle());
 
@@ -505,11 +504,9 @@ TEST_F(NegativeSubpass, ImageBarrierSubpassConflict) {
     auto rpci = vku::InitStruct<VkRenderPassCreateInfo>(nullptr, 0u, 2u, attach, 1u, subpasses, 1u, &dep);
     vkt::RenderPass rp(*m_device, rpci);
 
-    VkImageObj image(m_device);
-    image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
-    VkImageObj image2(m_device);
-    image2.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image2(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView2 = image2.CreateView();
     // re-use imageView from start of test
     VkImageView iv_array[2] = {imageView, imageView2};
@@ -546,9 +543,8 @@ TEST_F(NegativeSubpass, SubpassInputNotBoundDescriptorSet) {
     VkImageUsageFlags usage_input =
         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    VkImageObj image_input(m_device);
-    auto image_ci = VkImageObj::ImageCreateInfo2D(64, 64, 1, 1, format, usage_input);
-    image_input.Init(image_ci);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(64, 64, 1, 1, format, usage_input);
+    vkt::Image image_input(*m_device, image_ci, vkt::set_layout);
     image_input.SetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     vkt::ImageView view_input = image_input.CreateView();
 
@@ -608,8 +604,8 @@ TEST_F(NegativeSubpass, SubpassInputNotBoundDescriptorSet) {
         g_pipe.gp_ci_.renderPass = rp.handle();
         g_pipe.InitState();
 
-        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06038");
-        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-VkGraphicsPipelineCreateInfo-layout-07988");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06038");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-layout-07988");
         g_pipe.CreateGraphicsPipeline();
         m_errorMonitor->VerifyFound();
     }
@@ -743,9 +739,7 @@ TEST_F(NegativeSubpass, PipelineSubpassIndex) {
     render_pass_ci.pAttachments = &attach_desc;
 
     vkt::RenderPass render_pass(*m_device, render_pass_ci);
-
-    VkImageObj image(m_device);
-    image.InitNoLayout(32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
     vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1, &imageView.handle());
 
@@ -859,6 +853,7 @@ TEST_F(NegativeSubpass, SubpassDependencyMasksSync2) {
 TEST_F(NegativeSubpass, InputAttachmentReferences) {
     TEST_DESCRIPTION("Create a subpass with the meta data aspect mask set for an input attachment");
 
+    AddRequiredExtensions(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
@@ -1243,4 +1238,35 @@ TEST_F(NegativeSubpass, NextSubpassNoRenderPass) {
     m_commandBuffer->NextSubpass();
     m_errorMonitor->VerifyFound();
     m_commandBuffer->end();
+}
+
+TEST_F(NegativeSubpass, FramebufferNoAttachmentsSampleCounts) {
+    TEST_DESCRIPTION("Create no attachment subpass that goes against framebufferNoAttachmentsSampleCounts");
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    if ((m_device->phy().limits_.framebufferNoAttachmentsSampleCounts & VK_SAMPLE_COUNT_8_BIT) != 0) {
+        GTEST_SKIP() << "Need framebufferNoAttachmentsSampleCounts with no support";
+    }
+
+    RenderPassSingleSubpass rp(*this);
+    rp.AddAttachmentDescription(VK_FORMAT_R8G8B8A8_UNORM);
+    rp.AddAttachmentReference({0, VK_IMAGE_LAYOUT_GENERAL});
+    rp.CreateRenderPass();
+
+    VkPipelineMultisampleStateCreateInfo ms_state = vku::InitStructHelper();
+    ms_state.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;
+    ms_state.sampleShadingEnable = VK_FALSE;
+    ms_state.minSampleShading = 0.0f;
+    ms_state.pSampleMask = nullptr;
+    ms_state.alphaToCoverageEnable = VK_FALSE;
+    ms_state.alphaToOneEnable = VK_FALSE;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitState();
+    pipe.gp_ci_.renderPass = rp.Handle();
+    pipe.pipe_ms_state_ci_ = ms_state;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-subpass-00758");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
 }

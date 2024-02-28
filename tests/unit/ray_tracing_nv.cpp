@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@ void RayTracingTest::NvInitFrameworkForRayTracingTest(VkPhysicalDeviceFeatures2K
                                                       VkValidationFeaturesEXT *enabled_features /*= nullptr*/) {
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
     AddRequiredExtensions(VK_NV_RAY_TRACING_EXTENSION_NAME);
 
     RETURN_IF_SKIP(InitFramework(enabled_features));
@@ -90,7 +91,7 @@ void NegativeRayTracingNV::OOBRayTracingShadersTestBodyNV(bool gpu_assisted) {
 
     vkt::CommandPool ray_tracing_command_pool(*m_device, ray_tracing_queue_family_index,
                                               VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer ray_tracing_command_buffer(m_device, &ray_tracing_command_pool);
+    vkt::CommandBuffer ray_tracing_command_buffer(*m_device, &ray_tracing_command_pool);
 
     constexpr std::array<VkAabbPositionsKHR, 1> aabbs = {{{-1.0f, -1.0f, -1.0f, +1.0f, +1.0f, +1.0f}}};
 
@@ -201,8 +202,8 @@ void NegativeRayTracingNV::OOBRayTracingShadersTestBodyNV(bool gpu_assisted) {
     ray_tracing_queue->submit(ray_tracing_command_buffer);
     ray_tracing_queue->wait();
 
-    VkImageObj image(m_device);
-    image.Init(16, 16, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TILING_LINEAR);
+    vkt::Image image(*m_device, 16, 16, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView imageView = image.CreateView();
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
@@ -311,12 +312,12 @@ void NegativeRayTracingNV::OOBRayTracingShadersTestBodyNV(bool gpu_assisted) {
     }
     descriptor_writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     descriptor_writes[2].pImageInfo = descriptor_image_infos;
-    vk::UpdateDescriptorSets(m_device->device(), 3, descriptor_writes, 0, NULL);
+    vk::UpdateDescriptorSets(device(), 3, descriptor_writes, 0, NULL);
     if (descriptor_indexing) {
         descriptor_writes[0].dstSet = ds_variable.set_;
         descriptor_writes[1].dstSet = ds_variable.set_;
         descriptor_writes[2].dstSet = ds_variable.set_;
-        vk::UpdateDescriptorSets(m_device->device(), 3, descriptor_writes, 0, NULL);
+        vk::UpdateDescriptorSets(device(), 3, descriptor_writes, 0, NULL);
     }
 
     const vkt::PipelineLayout pipeline_layout(*m_device, {&ds.layout_});
@@ -1079,8 +1080,7 @@ TEST_F(NegativeRayTracingNV, ValidateGeometry) {
     VkBufferCreateInfo unbound_buffer_ci = vku::InitStructHelper();
     unbound_buffer_ci.size = 1024;
     unbound_buffer_ci.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
-    vkt::Buffer unbound_buffer;
-    unbound_buffer.init_no_mem(*m_device, unbound_buffer_ci);
+    vkt::Buffer unbound_buffer(*m_device, unbound_buffer_ci, vkt::no_mem);
 
     constexpr std::array vertices = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f};
     constexpr std::array<uint32_t, 3> indicies = {0, 1, 2};
@@ -1407,7 +1407,7 @@ TEST_F(NegativeRayTracingNV, ValidateCreateAccelerationStructure) {
         mix_geometry_types_as_create_info.info.pGeometries = geometries.data();
         mix_geometry_types_as_create_info.info.flags = 0;
 
-        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "VUID-VkAccelerationStructureInfoNV-type-02786");
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkAccelerationStructureInfoNV-type-02786");
         vk::CreateAccelerationStructureNV(device(), &mix_geometry_types_as_create_info, nullptr, &as);
         m_errorMonitor->VerifyFound();
     }
@@ -1590,7 +1590,7 @@ TEST_F(NegativeRayTracingNV, ValidateWriteDescriptorSetAccelerationStructure) {
 
     acc.pAccelerationStructures = &top_level_as.handle();
     descriptor_write.pNext = &acc;
-    vk::UpdateDescriptorSets(m_device->device(), 1, &descriptor_write, 0, NULL);
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
 }
 
 TEST_F(NegativeRayTracingNV, ValidateCmdBuildAccelerationStructure) {

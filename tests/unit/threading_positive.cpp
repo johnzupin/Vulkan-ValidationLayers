@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2022 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2022 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  * Modifications Copyright (C) 2020-2021 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -126,7 +126,7 @@ TEST_F(PositiveThreading, NullFenceCollision) {
     RETURN_IF_SKIP(Init());
 
     ThreadTestData data;
-    data.device = m_device->device();
+    data.device = device();
     std::atomic<bool> bailout{false};
     data.bailout = &bailout;
     m_errorMonitor->SetBailout(data.bailout);
@@ -135,7 +135,7 @@ TEST_F(PositiveThreading, NullFenceCollision) {
     // There should be no validation error from collision of that non-object.
     std::thread thread(ReleaseNullFence, &data);
     for (int i = 0; i < 40000; i++) {
-        vk::DestroyFence(m_device->device(), VK_NULL_HANDLE, NULL);
+        vk::DestroyFence(device(), VK_NULL_HANDLE, NULL);
     }
     thread.join();
 
@@ -264,7 +264,7 @@ TEST_F(PositiveThreading, Queue) {
 
     const auto queue_family = m_device->graphics_queues()[0]->get_family_index();
     constexpr uint32_t queue_index = 0;
-    vkt::CommandPool command_pool(*DeviceObj(), queue_family);
+    vkt::CommandPool command_pool(*m_device, queue_family);
 
     const VkDevice device_h = device();
     VkQueue queue_h;
@@ -273,7 +273,7 @@ TEST_F(PositiveThreading, Queue) {
 
     const VkCommandBufferAllocateInfo cbai = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr, command_pool.handle(),
                                               VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
-    vkt::CommandBuffer mock_cmdbuff(*DeviceObj(), cbai);
+    vkt::CommandBuffer mock_cmdbuff(*m_device, cbai);
     const VkCommandBufferBeginInfo cbbi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, nullptr,
                                         VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, nullptr};
     mock_cmdbuff.begin(&cbbi);

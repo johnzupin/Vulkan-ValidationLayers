@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
@@ -19,8 +19,6 @@
  */
 #pragma once
 #include "state_tracker/state_object.h"
-#include "utils/hash_vk_types.h"
-#include "utils/vk_layer_utils.h"
 
 enum QueryState {
     QUERYSTATE_UNKNOWN,    // Initial state.
@@ -58,7 +56,7 @@ class QueryPool : public StateObject {
         }
     }
 
-    VkQueryPool pool() const { return handle_.Cast<VkQueryPool>(); }
+    VkQueryPool VkHandle() const { return handle_.Cast<VkQueryPool>(); }
 
     void SetQueryState(uint32_t query, uint32_t perf_pass, QueryState state) {
         auto guard = WriteLock();

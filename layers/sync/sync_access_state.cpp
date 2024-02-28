@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2019-2023 Valve Corporation
- * Copyright (c) 2019-2023 LunarG, Inc.
+ * Copyright (c) 2019-2024 Valve Corporation
+ * Copyright (c) 2019-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -161,7 +161,7 @@ HazardResult ResourceAccessState::DetectHazard(const ResourceAccessState &record
             --count;
         }
 
-        for (Size i = 0; i < count; ++count) {
+        for (Size i = 0; i < count; ++i) {
             const auto &first = recorded_accesses[i];
             // Skip and quit logic
             if (first.tag < tag_range.begin) continue;
@@ -264,7 +264,7 @@ HazardResult ResourceAccessState::DetectBarrierHazard(const SyncStageAccessInfoT
     if (last_reads.size()) {
         // Look at the reads if any
         for (const auto &read_access : last_reads) {
-            if (read_access.IsReadBarrierHazard(queue_id, src_exec_scope)) {
+            if (read_access.IsReadBarrierHazard(queue_id, src_exec_scope, src_access_scope)) {
                 hazard.Set(this, usage_info, WRITE_AFTER_READ, read_access.access, read_access.tag);
                 break;
             }
@@ -312,7 +312,7 @@ HazardResult ResourceAccessState::DetectBarrierHazard(const SyncStageAccessInfoT
                     // If the read stage is not in the src sync scope
                     // *AND* not execution chained with an existing sync barrier (that's the or)
                     // then the barrier access is unsafe (R/W after R)
-                    if (scope_read.IsReadBarrierHazard(event_queue, src_exec_scope)) {
+                    if (scope_read.IsReadBarrierHazard(event_queue, src_exec_scope, src_access_scope)) {
                         hazard.Set(this, usage_info, WRITE_AFTER_READ, scope_read.access, scope_read.tag);
                         break;
                     }
@@ -847,6 +847,20 @@ bool ResourceAccessWriteState::IsOrdered(const OrderingBarrier &ordering, QueueI
 
 bool ResourceAccessWriteState::IsWriteBarrierHazard(QueueId queue_id, VkPipelineStageFlags2KHR src_exec_scope,
                                                     const SyncStageAccessFlags &src_access_scope) const {
+    // Current implementation relies on TOP_OF_PIPE constant due to the fact that it's non-zero value
+    // and AND-ing with it can create execution dependency when necessary. One example, it allows the
+    // ALL_COMMANDS stage to guard all accesses even if NONE/TOP_OF_PIPE is used. When NONE constant is
+    // used, which has numerical value of zero, then AND-ing with it always results in 0 which means
+    // "no barrier", so it's not possible to use NONE internally in equivalent way to TOP_OF_PIPE.
+    // Here we replace NONE with TOP_OF_PIPE in the scenarios where they are equivalent according to the spec.
+    //
+    // If we update implementation to get rid of deprecated TOP_OF_PIPE/BOTTOM_OF_PIPE then we must
+    // invert the condition below and exchange TOP_OF_PIPE and NONE roles, so deprecated stages would
+    // not propagate into implementation internals.
+    if (src_exec_scope == VK_PIPELINE_STAGE_2_NONE && src_access_scope.none()) {
+        src_exec_scope = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    }
+
     // Special rules for sequential ILT's
     if (IsIndex(SYNC_IMAGE_LAYOUT_TRANSITION)) {
         if (queue_id == queue_) {
@@ -972,6 +986,10 @@ SyncExecScope SyncExecScope::MakeSrc(VkQueueFlags queue_flags, VkPipelineStageFl
     result.expanded_mask = sync_utils::ExpandPipelineStages(mask_param, queue_flags, disabled_feature_mask);
     result.exec_scope = sync_utils::WithEarlierPipelineStages(result.expanded_mask);
     result.valid_accesses = SyncStageAccess::AccessScopeByStage(result.expanded_mask);
+    // ALL_COMMANDS stage includes all accesses performed by the gpu, not only accesses defined by the stages
+    if (mask_param & VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT) {
+        result.valid_accesses |= SYNC_IMAGE_LAYOUT_TRANSITION_BIT;
+    }
     return result;
 }
 
@@ -981,6 +999,10 @@ SyncExecScope SyncExecScope::MakeDst(VkQueueFlags queue_flags, VkPipelineStageFl
     result.expanded_mask = sync_utils::ExpandPipelineStages(mask_param, queue_flags);
     result.exec_scope = sync_utils::WithLaterPipelineStages(result.expanded_mask);
     result.valid_accesses = SyncStageAccess::AccessScopeByStage(result.expanded_mask);
+    // ALL_COMMANDS stage includes all accesses performed by the gpu, not only accesses defined by the stages
+    if (mask_param & VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT) {
+        result.valid_accesses |= SYNC_IMAGE_LAYOUT_TRANSITION_BIT;
+    }
     return result;
 }
 

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (c) 2015-2023 Google, Inc.
+ * Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2024 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,22 +62,20 @@ TEST_F(PositiveSyncVal, CmdClearAttachmentLayer) {
     const auto transfer_usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     const auto rt_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | transfer_usage;
 
-    VkImageObj image(m_device);
-    image.InitNoLayout(width, height, 1, rt_format, transfer_usage);
+    vkt::Image image(*m_device, width, height, 1, rt_format, transfer_usage);
     image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
-    VkImageObj rt(m_device);
-    rt.InitNoLayout(VkImageObj::ImageCreateInfo2D(width, height, 1, layers, rt_format, rt_usage));
+    vkt::Image rt(*m_device, vkt::Image::ImageCreateInfo2D(width, height, 1, layers, rt_format, rt_usage));
     rt.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
     auto attachment_without_load_store = [](VkFormat format) {
         VkAttachmentDescription attachment = {};
         attachment.format = format;
         attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_NONE_EXT;
-        attachment.storeOp = VK_ATTACHMENT_STORE_OP_NONE_EXT;
-        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_NONE_EXT;
-        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_NONE_EXT;
+        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_NONE_KHR;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_NONE_KHR;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_NONE_KHR;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_NONE_KHR;
         attachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
         attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
         return attachment;
@@ -154,8 +152,7 @@ TEST_F(PositiveSyncVal, WriteToImageAfterTransition) {
     constexpr VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
 
     vkt::Buffer buffer(*m_device, width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    VkImageObj image(m_device);
-    image.InitNoLayout(width, height, 1, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image image(*m_device, width, height, 1, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     VkImageMemoryBarrier barrier = vku::InitStructHelper();
     barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -367,16 +364,6 @@ TEST_F(PositiveSyncVal, ShaderReferencesNotBoundSet) {
     RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
-    const char vs_source[] = R"glsl(
-        #version 460
-        layout(set=1) layout(binding=0) uniform foo { float x; } bar;
-        void main() {
-           gl_Position = vec4(bar.x);
-        }
-    )glsl";
-    VkShaderObj vs(this, vs_source, VK_SHADER_STAGE_VERTEX_BIT);
-    VkShaderObj fs(this, kFragmentColorOutputGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
-
     const VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
     const vkt::DescriptorSetLayout set_layout(*m_device, {binding});
     const vkt::PipelineLayout pipeline_layout(*m_device, {&set_layout, &set_layout});
@@ -410,9 +397,7 @@ TEST_F(PositiveSyncVal, PresentAfterSubmit2AutomaticVisibility) {
     AddRequiredFeature(vkt::Feature::synchronization2);
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
     const vkt::Semaphore acquire_semaphore(*m_device);
     const vkt::Semaphore submit_semaphore(*m_device);
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
@@ -489,9 +474,7 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
     AddSurfaceExtension();
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
     const vkt::Semaphore acquire_semaphore(*m_device);
     const vkt::Semaphore submit_semaphore(*m_device);
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
@@ -593,10 +576,8 @@ TEST_F(PositiveSyncVal, LayoutTransitionWithAlreadyAvailableImage) {
     constexpr VkDeviceSize buffer_size = 64 * 64 * 4;
     const vkt::Buffer buffer(*m_device, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-    VkImageObj image(m_device);
-    image.Init(64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-               VK_IMAGE_TILING_LINEAR);
-    ASSERT_TRUE(image.initialized());
+    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM,
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     m_commandBuffer->begin();
@@ -649,10 +630,10 @@ TEST_F(PositiveSyncVal, ImageArrayDynamicIndexing) {
     constexpr VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     constexpr VkImageLayout image_layout = VK_IMAGE_LAYOUT_GENERAL;
 
-    VkImageObj images[4] = {m_device, m_device, m_device, m_device};
+    vkt::Image images[4];
     vkt::ImageView views[4];
     for (int i = 0; i < 4; i++) {
-        images[i].Init(64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT);
+        images[i].Init(*m_device, 64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT);
         ASSERT_TRUE(images[i].initialized());
         images[i].SetLayout(image_layout);
         views[i] = images[i].CreateView();
@@ -729,9 +710,7 @@ TEST_F(PositiveSyncVal, ImageArrayConstantIndexing) {
     RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
-    VkImageObj image(m_device);
-    image.Init(64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT);
-    ASSERT_TRUE(image.initialized());
+    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT);
     image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     const vkt::ImageView view = image.CreateView();
 
@@ -886,4 +865,414 @@ TEST_F(PositiveSyncVal, QSBufferCopyHazardsDisabled) {
     vk::QueueSubmit(test.q0, 1, &submit1, VK_NULL_HANDLE);
 
     test.DeviceWait();
+}
+
+TEST_F(PositiveSyncVal, QSTransitionWithSrcNoneStage) {
+    TEST_DESCRIPTION(
+        "Two submission batches synchronized with binary semaphore. Layout transition in the second batch should not interfere "
+        "with image read in the previous batch.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::ImageView view = image.CreateView();
+
+    vkt::Semaphore semaphore(*m_device);
+
+    // Submit 0: shader reads image data (read access)
+    const OneOffDescriptorSet::Bindings bindings = {{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    OneOffDescriptorSet descriptor_set(m_device, bindings);
+    descriptor_set.WriteDescriptorImageInfo(0, view, VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_IMAGE_LAYOUT_GENERAL);
+    descriptor_set.UpdateDescriptorSets();
+
+    char const *cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0, rgba8) uniform image2D image;
+        void main() {
+            vec4 data = imageLoad(image, ivec2(1, 1));
+        }
+    )glsl";
+    CreateComputePipelineHelper cs_pipe(*this);
+    cs_pipe.dsl_bindings_ = bindings;
+    cs_pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    cs_pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    cs_pipe.CreateComputePipeline();
+
+    vkt::CommandBuffer cb(*m_device, m_commandPool);
+    cb.begin();
+    vk::CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_);
+    vk::CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_layout_, 0, 1, &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(cb, 1, 1, 1);
+    cb.end();
+
+    VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
+    cbuf_info.commandBuffer = cb;
+    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
+    signal_info.semaphore = semaphore;
+    signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit = vku::InitStructHelper();
+    submit.commandBufferInfoCount = 1;
+    submit.pCommandBufferInfos = &cbuf_info;
+    submit.signalSemaphoreInfoCount = 1;
+    submit.pSignalSemaphoreInfos = &signal_info;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit, VK_NULL_HANDLE);
+
+    // Submit 1: transition image layout (write access)
+    VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
+    // NOTE: this test check that using NONE as source stage for transition works correctly.
+    // Wait on ALL_COMMANDS semaphore should protect this submission from previous accesses.
+    layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    layout_transition.srcAccessMask = 0;
+    layout_transition.dstAccessMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    layout_transition.dstAccessMask = 0;
+    layout_transition.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    layout_transition.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    layout_transition.image = image;
+    layout_transition.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    VkDependencyInfoKHR dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &layout_transition;
+
+    vkt::CommandBuffer cb2(*m_device, m_commandPool);
+    cb2.begin();
+    vk::CmdPipelineBarrier2(cb2, &dep_info);
+    cb2.end();
+
+    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
+    cbuf_info2.commandBuffer = cb2;
+    VkSemaphoreSubmitInfo wait_info2 = vku::InitStructHelper();
+    wait_info2.semaphore = semaphore;
+    wait_info2.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit2 = vku::InitStructHelper();
+    submit2.waitSemaphoreInfoCount = 1;
+    submit2.pWaitSemaphoreInfos = &wait_info2;
+    submit2.commandBufferInfoCount = 1;
+    submit2.pCommandBufferInfos = &cbuf_info2;
+
+    vk::QueueSubmit2(*m_default_queue, 1, &submit2, VK_NULL_HANDLE);
+    m_default_queue->wait();
+}
+
+TEST_F(PositiveSyncVal, QSTransitionWithSrcNoneStage2) {
+    TEST_DESCRIPTION(
+        "Two submission batches synchronized with binary semaphore. Layout transition in the second batch should not interfere "
+        "with image write in the first batch.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+
+    VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
+    layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    layout_transition.srcAccessMask = VK_ACCESS_2_NONE;
+    layout_transition.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    layout_transition.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    layout_transition.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    layout_transition.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    layout_transition.image = image;
+    layout_transition.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &layout_transition;
+
+    vkt::Semaphore semaphore(*m_device);
+
+    // Submit 1: Clear image (WRITE access)
+    vkt::CommandBuffer cb(*m_device, m_commandPool);
+    cb.begin();
+    vk::CmdClearColorImage(cb, image, VK_IMAGE_LAYOUT_GENERAL, &m_clear_color, 1, &layout_transition.subresourceRange);
+    cb.end();
+
+    VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
+    cbuf_info.commandBuffer = cb;
+    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
+    signal_info.semaphore = semaphore;
+    signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit = vku::InitStructHelper();
+    submit.commandBufferInfoCount = 1;
+    submit.pCommandBufferInfos = &cbuf_info;
+    submit.signalSemaphoreInfoCount = 1;
+    submit.pSignalSemaphoreInfos = &signal_info;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit, VK_NULL_HANDLE);
+
+    // Submit 2: Transition layout (WRITE access)
+    vkt::CommandBuffer cb2(*m_device, m_commandPool);
+    cb2.begin();
+    vk::CmdPipelineBarrier2(cb2, &dep_info);
+    cb2.end();
+
+    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
+    cbuf_info2.commandBuffer = cb2;
+    VkSemaphoreSubmitInfo wait_info2 = vku::InitStructHelper();
+    wait_info2.semaphore = semaphore;
+    wait_info2.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit2 = vku::InitStructHelper();
+    submit2.waitSemaphoreInfoCount = 1;
+    submit2.pWaitSemaphoreInfos = &wait_info2;
+    submit2.commandBufferInfoCount = 1;
+    submit2.pCommandBufferInfos = &cbuf_info2;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit2, VK_NULL_HANDLE);
+    m_default_queue->wait();
+}
+
+TEST_F(PositiveSyncVal, QSTransitionAndRead) {
+    TEST_DESCRIPTION("Transition and read image in different submits synchronized via ALL_COMMANDS semaphore");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT);
+    vkt::ImageView view = image.CreateView();
+
+    // Submit0: transition image and signal semaphore with ALL_COMMANDS scope
+    VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
+    layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    layout_transition.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    layout_transition.dstAccessMask = VK_PIPELINE_STAGE_2_NONE;
+    layout_transition.dstAccessMask = 0;
+    layout_transition.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    layout_transition.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    layout_transition.image = image;
+    layout_transition.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    VkDependencyInfoKHR dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &layout_transition;
+
+    vkt::CommandBuffer cb(*m_device, m_commandPool);
+    cb.begin();
+    vk::CmdPipelineBarrier2(cb, &dep_info);
+    cb.end();
+
+    vkt::Semaphore semaphore(*m_device);
+
+    VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
+    cbuf_info.commandBuffer = cb;
+    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
+    signal_info.semaphore = semaphore;
+    signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit = vku::InitStructHelper();
+    submit.commandBufferInfoCount = 1;
+    submit.pCommandBufferInfos = &cbuf_info;
+    submit.signalSemaphoreInfoCount = 1;
+    submit.pSignalSemaphoreInfos = &signal_info;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit, VK_NULL_HANDLE);
+
+    // Submit1: wait for the semaphore and read image in the shader
+    const OneOffDescriptorSet::Bindings bindings = {{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    OneOffDescriptorSet descriptor_set(m_device, bindings);
+    descriptor_set.WriteDescriptorImageInfo(0, view, VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_IMAGE_LAYOUT_GENERAL);
+    descriptor_set.UpdateDescriptorSets();
+
+    char const *cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0, rgba8) uniform image2D image;
+        void main() {
+            vec4 data = imageLoad(image, ivec2(1, 1));
+        }
+    )glsl";
+    CreateComputePipelineHelper cs_pipe(*this);
+    cs_pipe.dsl_bindings_ = bindings;
+    cs_pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    cs_pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    cs_pipe.CreateComputePipeline();
+
+    vkt::CommandBuffer cb2(*m_device, m_commandPool);
+    cb2.begin();
+    vk::CmdBindPipeline(cb2, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_);
+    vk::CmdBindDescriptorSets(cb2, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_layout_, 0, 1, &descriptor_set.set_, 0,
+                              nullptr);
+    vk::CmdDispatch(cb2, 1, 1, 1);
+    cb2.end();
+
+    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
+    cbuf_info2.commandBuffer = cb2;
+    VkSemaphoreSubmitInfo wait_info2 = vku::InitStructHelper();
+    wait_info2.semaphore = semaphore;
+    wait_info2.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit2 = vku::InitStructHelper();
+    submit2.waitSemaphoreInfoCount = 1;
+    submit2.pWaitSemaphoreInfos = &wait_info2;
+    submit2.commandBufferInfoCount = 1;
+    submit2.pCommandBufferInfos = &cbuf_info2;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit2, VK_NULL_HANDLE);
+    m_default_queue->wait();
+}
+
+TEST_F(PositiveSyncVal, DynamicRenderingColorResolve) {
+    TEST_DESCRIPTION("Test color resolve with dynamic rendering");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = vku::InitStructHelper(&sync2_features);
+    dynamic_rendering_features.dynamicRendering = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
+
+    const uint32_t width = 64;
+    const uint32_t height = 64;
+    const VkFormat color_format = VK_FORMAT_R8G8B8A8_UNORM;
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    auto color_ci = vkt::Image::ImageCreateInfo2D(width, height, 1, 1, color_format, usage);
+    color_ci.samples = VK_SAMPLE_COUNT_4_BIT;  // guaranteed by framebufferColorSampleCounts
+    vkt::Image color_image(*m_device, color_ci, vkt::set_layout);
+    color_image.SetLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    vkt::ImageView color_image_view = color_image.CreateView(VK_IMAGE_ASPECT_COLOR_BIT);
+
+    auto color_resolved_ci = vkt::Image::ImageCreateInfo2D(width, height, 1, 1, color_format, usage);
+    vkt::Image color_resolved_image(*m_device, color_resolved_ci, vkt::set_layout);
+    color_resolved_image.SetLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    vkt::ImageView color_resolved_image_view = color_resolved_image.CreateView(VK_IMAGE_ASPECT_COLOR_BIT);
+
+    VkRenderingAttachmentInfo color_attachment = vku::InitStructHelper();
+    color_attachment.imageView = color_image_view;
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+    color_attachment.resolveImageView = color_resolved_image_view;
+    color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color_attachment.clearValue.color = m_clear_color;
+
+    VkRenderingInfo rendering_info = vku::InitStructHelper();
+    rendering_info.renderArea.extent = {width, height};
+    rendering_info.layerCount = 1;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachments = &color_attachment;
+
+    m_commandBuffer->begin();
+    vk::CmdBeginRendering(*m_commandBuffer, &rendering_info);
+    vk::CmdEndRendering(*m_commandBuffer);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, DynamicRenderingDepthResolve) {
+    TEST_DESCRIPTION("Test depth resolve with dynamic rendering");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = vku::InitStructHelper(&sync2_features);
+    dynamic_rendering_features.dynamicRendering = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
+
+    const uint32_t width = 64;
+    const uint32_t height = 64;
+    const VkFormat depth_format = FindSupportedDepthOnlyFormat(gpu());
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+    auto depth_ci = vkt::Image::ImageCreateInfo2D(width, height, 1, 1, depth_format, usage);
+    depth_ci.samples = VK_SAMPLE_COUNT_4_BIT;  // guaranteed by framebufferDepthSampleCounts
+    vkt::Image depth_image(*m_device, depth_ci, vkt::set_layout);
+    depth_image.SetLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    vkt::ImageView depth_image_view = depth_image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    auto depth_resolved_ci = vkt::Image::ImageCreateInfo2D(width, height, 1, 1, depth_format, usage);
+    vkt::Image depth_resolved_image(*m_device, depth_resolved_ci, vkt::set_layout);
+    depth_resolved_image.SetLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    vkt::ImageView depth_resolved_image_view = depth_resolved_image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    VkRenderingAttachmentInfo depth_attachment = vku::InitStructHelper();
+    depth_attachment.imageView = depth_image_view;
+    depth_attachment.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    depth_attachment.resolveMode = VK_RESOLVE_MODE_MIN_BIT;
+    depth_attachment.resolveImageView = depth_resolved_image_view;
+    depth_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depth_attachment.clearValue.depthStencil.depth = 1.0f;
+
+    VkRenderingInfo rendering_info = vku::InitStructHelper();
+    rendering_info.renderArea.extent = {width, height};
+    rendering_info.layerCount = 1;
+    rendering_info.pDepthAttachment = &depth_attachment;
+
+    m_commandBuffer->begin();
+    vk::CmdBeginRendering(*m_commandBuffer, &rendering_info);
+    vk::CmdEndRendering(*m_commandBuffer);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, FillBuffer) {
+    TEST_DESCRIPTION("Synchronize with vkCmdFillBuffer assuming that its writes happen on the CLEAR stage");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    constexpr VkDeviceSize size = 1024;
+    vkt::Buffer src_buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer dst_buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferCopy region{};
+    region.size = size;
+
+    VkBufferMemoryBarrier2 barrier = vku::InitStructHelper();
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_CLEAR_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+    barrier.buffer = src_buffer;
+    barrier.size = size;
+
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.bufferMemoryBarrierCount = 1;
+    dep_info.pBufferMemoryBarriers = &barrier;
+
+    m_commandBuffer->begin();
+    vk::CmdFillBuffer(*m_commandBuffer, src_buffer, 0, size, 42);
+    vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
+    vk::CmdCopyBuffer(*m_commandBuffer, src_buffer, dst_buffer, 1, &region);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, UpdateBuffer) {
+    TEST_DESCRIPTION("Synchronize with vkCmdUpdateBuffer assuming that its writes happen on the CLEAR stage");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    constexpr VkDeviceSize size = 64;
+    vkt::Buffer src_buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer dst_buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    std::array<uint8_t, size> data = {};
+
+    VkBufferCopy region{};
+    region.size = size;
+
+    VkBufferMemoryBarrier2 barrier = vku::InitStructHelper();
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_CLEAR_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+    barrier.buffer = src_buffer;
+    barrier.size = size;
+
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.bufferMemoryBarrierCount = 1;
+    dep_info.pBufferMemoryBarriers = &barrier;
+
+    m_commandBuffer->begin();
+    vk::CmdUpdateBuffer(*m_commandBuffer, src_buffer, 0, static_cast<VkDeviceSize>(data.size()), data.data());
+    vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
+    vk::CmdCopyBuffer(*m_commandBuffer, src_buffer, dst_buffer, 1, &region);
+    m_commandBuffer->end();
 }

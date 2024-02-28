@@ -1,5 +1,5 @@
-/* Copyright (c) 2023 Nintendo
- * Copyright (c) 2023 LunarG, Inc.
+/* Copyright (c) 2023-2024 Nintendo
+ * Copyright (c) 2023-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
 
 #include "state_tracker/state_object.h"
 #include "utils/shader_utils.h"
-#include "descriptor_sets.h"
+#include "state_tracker/pipeline_layout_state.h"
 
 namespace vvl {
 // Represents a VkShaderEXT (VK_EXT_shader_object) handle
@@ -52,7 +52,7 @@ struct ShaderObject : public StateObject {
     const PushConstantRangesId push_constant_ranges;
     const std::vector<PipelineLayoutCompatId> set_compat_ids;
 
-    VkShaderEXT shader() const { return handle_.Cast<VkShaderEXT>(); }
+    VkShaderEXT VkHandle() const { return handle_.Cast<VkShaderEXT>(); }
     bool IsGraphicsShaderState() const { return create_info.stage != VK_SHADER_STAGE_COMPUTE_BIT; };
     VkPrimitiveTopology GetTopology() const;
 };

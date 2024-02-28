@@ -425,6 +425,13 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 kMaxEnableFlags,
             } EnableFlags;
 
+            // When testing for a valid value, allow a way to right away return how it might not be valid
+            enum class ValidValue {
+                Valid = 0,
+                NotFound, // example, trying to use a random int for an enum
+                NoExtension, // trying to use a proper value, but the extension is required
+            };
+
             typedef std::array<bool, kMaxDisableFlags> CHECK_DISABLED;
             typedef std::array<bool, kMaxEnableFlags> CHECK_ENABLED;
 
@@ -536,15 +543,6 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 ValidationObjectType* GetValidationObject() const;
 
                 // Debug Logging Helpers
-                // deprecated LogError - moving to use one with Location
-                bool DECORATE_PRINTF(4, 5) LogError(const LogObjectList& objlist, std::string_view vuid_text, const char* format, ...) const {
-                    va_list argptr;
-                    va_start(argptr, format);
-                    const bool result = LogMsg(report_data, kErrorBit, objlist, nullptr, vuid_text, format, argptr);
-                    va_end(argptr);
-                    return result;
-                }
-
                 bool DECORATE_PRINTF(5, 6)
                     LogError(std::string_view vuid_text, const LogObjectList& objlist, const Location& loc, const char* format, ...) const {
                     va_list argptr;
@@ -764,9 +762,16 @@ class LayerChassisOutputGenerator(BaseGenerator):
         };
 
         template <typename T>
-        std::vector<T> ValidParamValues() const;
+        ValidValue IsValidEnumValue(T value) const;
+        template <typename T>
+        vvl::Extensions GetEnumExtensions(T value) const;
 };
 // clang-format on
+
+// VkFlags values don't have a way overload, so need to use vvl::FlagBitmask
+vvl::Extensions IsValidFlagValue(vvl::FlagBitmask flag_bitmask, VkFlags value, const DeviceExtensions& device_extensions);
+vvl::Extensions IsValidFlag64Value(vvl::FlagBitmask flag_bitmask, VkFlags64 value, const DeviceExtensions& device_extensions);
+
 ''')
 
         out.append('extern small_unordered_map<void*, ValidationObject*, 2> layer_data_map;')
@@ -783,6 +788,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
             #include "chassis.h"
             #include "layer_options.h"
             #include "layer_chassis_dispatch.h"
+            #include "state_tracker/chassis_modification_state.h"
 
             thread_local WriteLockGuard* ValidationObject::record_guard{};
 
@@ -912,13 +918,13 @@ class LayerChassisOutputGenerator(BaseGenerator):
             static void InstanceExtensionWhitelist(ValidationObject* layer_data, const VkInstanceCreateInfo* pCreateInfo, VkInstance instance) {
                 for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
                     // Check for recognized instance extensions
-                    if (!white_list(pCreateInfo->ppEnabledExtensionNames[i], kInstanceExtensionNames)) {
+                    vvl::Extension extension = GetExtension(pCreateInfo->ppEnabledExtensionNames[i]);
+                    if (!IsInstanceExtension(extension)) {
                         Location loc(vvl::Func::vkCreateInstance);
                         layer_data->LogWarning(kVUIDUndefined, layer_data->instance,
                                             loc.dot(vvl::Field::pCreateInfo).dot(vvl::Field::ppEnabledExtensionNames, i),
                                             "%s is not supported by this layer.  Using this extension may adversely affect validation "
-                                            "results and/or produce undefined behavior.",
-                                            pCreateInfo->ppEnabledExtensionNames[i]);
+                                            "results and/or produce undefined behavior.", String(extension));
                     }
                 }
             }
@@ -927,13 +933,13 @@ class LayerChassisOutputGenerator(BaseGenerator):
             static void DeviceExtensionWhitelist(ValidationObject* layer_data, const VkDeviceCreateInfo* pCreateInfo, VkDevice device) {
                 for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
                     // Check for recognized device extensions
-                    if (!white_list(pCreateInfo->ppEnabledExtensionNames[i], kDeviceExtensionNames)) {
+                    vvl::Extension extension = GetExtension(pCreateInfo->ppEnabledExtensionNames[i]);
+                    if (!IsDeviceExtension(extension)) {
                         Location loc(vvl::Func::vkCreateDevice);
                         layer_data->LogWarning(kVUIDUndefined, layer_data->device,
                                             loc.dot(vvl::Field::pCreateInfo).dot(vvl::Field::ppEnabledExtensionNames, i),
                                             "%s is not supported by this layer.  Using this extension may adversely affect validation "
-                                            "results and/or produce undefined behavior.",
-                                            pCreateInfo->ppEnabledExtensionNames[i]);
+                                            "results and/or produce undefined behavior.", String(extension));
                     }
                 }
             }
@@ -1101,8 +1107,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 CHECK_ENABLED local_enables{};
                 CHECK_DISABLED local_disables{};
                 bool lock_setting;
-                // select_instrumented_shaders is the only gpu-av setting that is off by default
-                GpuAVSettings local_gpuav_settings = {true, true, true, true, true, false, 10000};
+                GpuAVSettings local_gpuav_settings = {};
                 ConfigAndEnvSettings config_and_env_settings_data{OBJECT_LAYER_DESCRIPTION,
                                                                 pCreateInfo,
                                                                 local_enables,
@@ -1591,7 +1596,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 }
 
                 // Special extra check if SPIR-V itself fails runtime validation in PreCallRecord
-                if (!csm_state.valid_spirv) return VK_ERROR_VALIDATION_FAILED_EXT;
+                if (csm_state.skip) return VK_ERROR_VALIDATION_FAILED_EXT;
 
                 VkResult result = DispatchCreateShaderModule(device, &csm_state.instrumented_create_info, pAllocator, pShaderModule);
                 record_obj.result = result;
@@ -1629,7 +1634,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 }
 
                 // Special extra check if SPIR-V itself fails runtime validation in PreCallRecord
-                if (!csm_state.valid_spirv) return VK_ERROR_VALIDATION_FAILED_EXT;
+                if (csm_state.skip) return VK_ERROR_VALIDATION_FAILED_EXT;
 
                 VkResult result = DispatchCreateShadersEXT(device, createInfoCount, new_shader_create_infos.data(), pAllocator, pShaders);
                 record_obj.result = result;

@@ -16,6 +16,7 @@
 #include "shader_helper.h"
 
 #include <memory>
+#include <optional>
 
 namespace vkt {
 // acceleration structure
@@ -48,8 +49,7 @@ class GeometryKHR {
         std::unique_ptr<VkAabbPositionsKHR[]> host_buffer;
     };
     struct Instance {
-        // As of now, only manage one instance
-        std::unique_ptr<VkAccelerationStructureInstanceKHR> vk_instance{};
+        std::vector<VkAccelerationStructureInstanceKHR> vk_instances{};
         // Used to (eventually, no need for host instance) store on device instance
         vkt::Buffer buffer;
     };
@@ -78,15 +78,20 @@ class GeometryKHR {
     GeometryKHR& SetTrianglesVertexFormat(VkFormat vertex_format);
     GeometryKHR& SetTrianglesMaxVertex(uint32_t max_vertex);
     GeometryKHR& SetTrianglesTransformatData(VkDeviceAddress address);
+    GeometryKHR& SetTrianglesVertexBufferDeviceAddress(VkDeviceAddress address);
+    GeometryKHR& SetTrianglesIndexBufferDeviceAddress(VkDeviceAddress address);
     // AABB
     GeometryKHR& SetAABBsDeviceBuffer(vkt::Buffer&& buffer, VkDeviceSize stride = sizeof(VkAabbPositionsKHR));
     GeometryKHR& SetAABBsHostBuffer(std::unique_ptr<VkAabbPositionsKHR[]> buffer, VkDeviceSize stride = sizeof(VkAabbPositionsKHR));
     GeometryKHR& SetAABBsStride(VkDeviceSize stride);
+    GeometryKHR& SetAABBsDeviceAddress(VkDeviceAddress address);
     // Instance
-    GeometryKHR& SetInstanceDeviceAccelStructRef(const vkt::Device& device, VkAccelerationStructureKHR bottom_level_as);
-    GeometryKHR& SetInstanceHostAccelStructRef(VkAccelerationStructureKHR bottom_level_as);
-    GeometryKHR& SetInstanceDeviceAddress(VkDeviceAddress address);
-
+    GeometryKHR& AddInstanceDeviceAccelStructRef(const vkt::Device& device, VkAccelerationStructureKHR blas);
+    GeometryKHR& AddInstanceHostAccelStructRef(VkAccelerationStructureKHR blas);
+    GeometryKHR& SetInstancesDeviceAddress(VkDeviceAddress address);
+    GeometryKHR& SetInstanceHostAccelStructRef(VkAccelerationStructureKHR blas, uint32_t instance_i);
+	GeometryKHR& SetInstanceHostAddress(void* address);
+    
     GeometryKHR& Build();
 
     const auto& GetVkObj() const { return vk_obj_; }
@@ -124,6 +129,7 @@ class AccelerationStructureKHR : public vkt::internal::NonDispHandle<VkAccelerat
     AccelerationStructureKHR& SetBufferUsageFlags(VkBufferUsageFlags usage_flags);
 
     VkDeviceAddress GetBufferDeviceAddress() const;
+    VkDeviceAddress GetAccelerationStructureDeviceAddress() const;
 
     // Null check is done in BuildGeometryInfoKHR::Build(). Object is build iff it is not null.
     void SetNull(bool is_null) { is_null_ = is_null; }
@@ -132,7 +138,7 @@ class AccelerationStructureKHR : public vkt::internal::NonDispHandle<VkAccelerat
     bool IsBuilt() const { return initialized(); }
     void Destroy();
 
-    const auto& GetBuffer() const { return device_buffer_; }
+    auto& GetBuffer() { return device_buffer_; }
 
   private:
     const vkt::Device* device_;
@@ -154,6 +160,7 @@ class BuildGeometryInfoKHR {
     BuildGeometryInfoKHR& operator=(const BuildGeometryInfoKHR&) = delete;
 
     BuildGeometryInfoKHR& SetType(VkAccelerationStructureTypeKHR type);
+    BuildGeometryInfoKHR& SetBuildType(VkAccelerationStructureBuildTypeKHR build_type);
     BuildGeometryInfoKHR& SetMode(VkBuildAccelerationStructureModeKHR mode);
     BuildGeometryInfoKHR& SetFlags(VkBuildAccelerationStructureFlagsKHR flags);
     BuildGeometryInfoKHR& AddFlags(VkBuildAccelerationStructureFlagsKHR flags);
@@ -163,13 +170,19 @@ class BuildGeometryInfoKHR {
     BuildGeometryInfoKHR& SetSrcAS(std::shared_ptr<AccelerationStructureKHR> src_as);
     BuildGeometryInfoKHR& SetDstAS(std::shared_ptr<AccelerationStructureKHR> dst_as);
     BuildGeometryInfoKHR& SetScratchBuffer(std::shared_ptr<vkt::Buffer> scratch_buffer);
+    BuildGeometryInfoKHR& SetHostScratchBuffer(std::unique_ptr<uint8_t[]>&& host_scratch);
     BuildGeometryInfoKHR& SetDeviceScratchOffset(VkDeviceAddress offset);
+    BuildGeometryInfoKHR& SetEnableScratchBuild(bool build_scratch);
     BuildGeometryInfoKHR& SetBottomLevelAS(std::shared_ptr<BuildGeometryInfoKHR> bottom_level_as);
     // Should be 0 or 1
     BuildGeometryInfoKHR& SetInfoCount(uint32_t info_count);
     BuildGeometryInfoKHR& SetNullInfos(bool use_null_infos);
+    BuildGeometryInfoKHR& SetNullGeometries(bool use_null_geometries);
     BuildGeometryInfoKHR& SetNullBuildRangeInfos(bool use_null_build_range_infos);
     BuildGeometryInfoKHR& SetDeferredOp(VkDeferredOperationKHR deferred_op);
+    BuildGeometryInfoKHR& SetUpdateDstAccelStructSizeBeforeBuild(bool update_before_build);
+    BuildGeometryInfoKHR& SetIndirectStride(uint32_t indirect_stride);
+    BuildGeometryInfoKHR& SetIndirectDeviceAddress(std::optional<VkDeviceAddress> indirect_buffer_address);
 
     // Those functions call Build() on internal resources (geometries, src and dst acceleration structures, scratch buffer),
     // then will build/update an acceleration structure.
@@ -177,6 +190,7 @@ class BuildGeometryInfoKHR {
     void BuildCmdBufferIndirect(VkCommandBuffer cmd_buffer);
     void BuildHost();
 
+    void UpdateDstAccelStructSize();
     void SetupBuild(bool is_on_device_build, bool use_ppGeometries = true);
 
     // These will only setup the geometries lists and the pertaining build ranges
@@ -200,15 +214,21 @@ class BuildGeometryInfoKHR {
     const vkt::Device* device_;
     uint32_t vk_info_count_ = 1;
     bool use_null_infos_ = false;
+    bool use_null_geometries_ = false;
     bool use_null_build_range_infos_ = false;
+    bool update_dst_as_size_before_build_ = false;
     VkAccelerationStructureBuildGeometryInfoKHR vk_info_;
+    VkAccelerationStructureBuildTypeKHR build_type_;
     std::vector<GeometryKHR> geometries_;
     std::shared_ptr<AccelerationStructureKHR> src_as_, dst_as_;
+    bool build_scratch_ = true;
     VkDeviceAddress device_scratch_offset_ = 0;
     std::shared_ptr<vkt::Buffer> device_scratch_;
     std::unique_ptr<uint8_t[]> host_scratch_;
     std::shared_ptr<BuildGeometryInfoKHR> blas_;
     std::unique_ptr<vkt::Buffer> indirect_buffer_;
+    std::optional<VkDeviceAddress> indirect_buffer_address_{};
+    uint32_t indirect_stride_ = sizeof(VkAccelerationStructureBuildRangeInfoKHR);
     std::vector<VkAccelerationStructureBuildRangeInfoKHR> build_range_infos_;
     VkDeferredOperationKHR deferred_op_ = VK_NULL_HANDLE;
 };
@@ -278,12 +298,12 @@ class Pipeline {
     // --------------
     void AddCreateInfoFlags(VkPipelineCreateFlags flags);
     void InitLibraryInfo();
-    void AddBinding(VkDescriptorSetLayoutBinding binding);
-    std::shared_ptr<as::BuildGeometryInfoKHR> AddTopLevelAccelStructBinding(
-        std::shared_ptr<vkt::as::BuildGeometryInfoKHR> top_level_accel_struct, uint32_t bind_point);
+    void AddTopLevelAccelStructBinding(std::shared_ptr<as::BuildGeometryInfoKHR> tlas, uint32_t bind_point);
+    void SetUniformBufferBinding(std::shared_ptr<vkt::Buffer> uniform_buffer, uint32_t bind_point);
     void SetPushConstantRangeSize(uint32_t byte_size);
     void SetRayGenShader(const char* glsl);
     void AddMissShader(const char* glsl);
+    void AddClosestHitShader(const char* glsl);
     void AddLibrary(const Pipeline& library);
     void AddDynamicState(VkDynamicState dynamic_state);
 
@@ -308,16 +328,18 @@ class Pipeline {
     vkt::Device* device_;
     VkRayTracingPipelineCreateInfoKHR vk_info_{};
     uint32_t push_constant_range_size_ = 0;
-    std::vector<std::shared_ptr<as::BuildGeometryInfoKHR>> top_level_accel_structs_;
-    std::vector<VkDescriptorSetLayoutBinding> bindings_;
+    std::vector<std::shared_ptr<as::BuildGeometryInfoKHR>> tlas_vec_{};
+    std::shared_ptr<vkt::Buffer> uniform_buffer_{};
+    std::vector<VkDescriptorSetLayoutBinding> bindings_{};
     std::unique_ptr<OneOffDescriptorSet> desc_set_{};
     vkt::PipelineLayout pipeline_layout_{};
     std::vector<VkDynamicState> dynamic_states{};
     std::unique_ptr<VkShaderObj> ray_gen_{};
     std::vector<std::unique_ptr<VkShaderObj>> miss_shaders_{};
+    std::vector<std::unique_ptr<VkShaderObj>> closest_hit_shaders_ {};
     std::vector<VkRayTracingShaderGroupCreateInfoKHR> shader_group_cis_{};
     vkt::Pipeline rt_pipeline_{};
-    vkt::Buffer sbt_buffer{};
+    vkt::Buffer sbt_buffer_{};
     VkRayTracingPipelineInterfaceCreateInfoKHR rt_pipeline_interface_info_{};
     VkPipelineLibraryCreateInfoKHR pipeline_lib_info_{};
     std::vector<VkPipeline> libraries_{};

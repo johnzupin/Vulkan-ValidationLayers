@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2023 Valve Corporation
- * Copyright (c) 2023 LunarG, Inc.
+ * Copyright (c) 2023-2024 Valve Corporation
+ * Copyright (c) 2023-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 
 void WsiTest::SetImageLayoutPresentSrc(VkImage image) {
     vkt::CommandPool pool(*m_device, m_device->graphics_queue_node_index_);
-    vkt::CommandBuffer cmd_buf(m_device, &pool);
+    vkt::CommandBuffer cmd_buf(*m_device, &pool);
 
     cmd_buf.begin();
     VkImageMemoryBarrier layout_barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -36,6 +36,27 @@ void WsiTest::SetImageLayoutPresentSrc(VkImage image) {
                            0, nullptr, 1, &layout_barrier);
     cmd_buf.end();
     cmd_buf.QueueCommandBuffer();
+}
+
+VkImageMemoryBarrier WsiTest::TransitionToPresent(VkImage swapchain_image, VkImageLayout old_layout,
+                                                  VkAccessFlags src_access_mask) {
+    VkImageMemoryBarrier transition = vku::InitStructHelper();
+    transition.srcAccessMask = src_access_mask;
+
+    // No need to make writes visible. Available writes are automatically become visible to the presentation engine
+    transition.dstAccessMask = 0;
+
+    transition.oldLayout = old_layout;
+    transition.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    transition.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    transition.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    transition.image = swapchain_image;
+    transition.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    transition.subresourceRange.baseMipLevel = 0;
+    transition.subresourceRange.levelCount = 1;
+    transition.subresourceRange.baseArrayLayer = 0;
+    transition.subresourceRange.layerCount = 1;
+    return transition;
 }
 
 TEST_F(PositiveWsi, CreateWaylandSurface) {
@@ -187,9 +208,7 @@ TEST_F(PositiveWsi, GetPhysicalDeviceSurfaceCapabilities2KHRWithFullScreenEXT) {
     }
 
     InitRenderTarget();
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
 
     const POINT pt_zero = {0, 0};
 
@@ -220,9 +239,7 @@ TEST_F(PositiveWsi, CmdCopySwapchainImage) {
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-    if (!InitSwapchain(VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain(VK_IMAGE_USAGE_TRANSFER_DST_BIT));
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
@@ -237,9 +254,7 @@ TEST_F(PositiveWsi, CmdCopySwapchainImage) {
     image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VkImageObj srcImage(m_device);
-    srcImage.init(&image_create_info);
+    vkt::Image srcImage(*m_device, image_create_info, vkt::set_layout);
 
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
@@ -258,7 +273,7 @@ TEST_F(PositiveWsi, CmdCopySwapchainImage) {
     bind_info.memory = VK_NULL_HANDLE;
     bind_info.memoryOffset = 0;
 
-    vk::BindImageMemory2(m_device->device(), 1, &bind_info);
+    vk::BindImageMemory2(device(), 1, &bind_info);
 
     VkImageCopy copy_region = {};
     copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -307,9 +322,7 @@ TEST_F(PositiveWsi, TransferImageToSwapchainDeviceGroup) {
     create_device_pnext.pPhysicalDevices = physical_device_group[0].physicalDevices;
     RETURN_IF_SKIP(InitState(nullptr, &create_device_pnext));
     InitRenderTarget();
-    if (!InitSwapchain(VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain(VK_IMAGE_USAGE_TRANSFER_DST_BIT));
 
     constexpr uint32_t test_extent_value = 10;
     if (m_surface_capabilities.minImageExtent.width < test_extent_value ||
@@ -330,9 +343,7 @@ TEST_F(PositiveWsi, TransferImageToSwapchainDeviceGroup) {
     image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VkImageObj src_Image(m_device);
-    src_Image.init(&image_create_info);
+    vkt::Image src_Image(*m_device, image_create_info, vkt::set_layout);
 
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
@@ -358,7 +369,7 @@ TEST_F(PositiveWsi, TransferImageToSwapchainDeviceGroup) {
     bind_info.memory = VK_NULL_HANDLE;
     bind_info.memoryOffset = 0;
 
-    vk::BindImageMemory2(m_device->device(), 1, &bind_info);
+    vk::BindImageMemory2(device(), 1, &bind_info);
 
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
 
@@ -368,7 +379,7 @@ TEST_F(PositiveWsi, TransferImageToSwapchainDeviceGroup) {
 
     uint32_t image_index;
     vk::AcquireNextImageKHR(m_device->handle(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, fence_handle, &image_index);
-    vk::WaitForFences(m_device->device(), 1, &fence_handle, VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence_handle, VK_TRUE, kWaitTimeout);
 
     m_commandBuffer->begin();
 
@@ -406,9 +417,7 @@ TEST_F(PositiveWsi, SwapchainAcquireImageAndPresent) {
     TEST_DESCRIPTION("Test acquiring swapchain image and then presenting it.");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
 
     const vkt::Semaphore acquire_semaphore(*m_device);
     const vkt::Semaphore submit_semaphore(*m_device);
@@ -418,7 +427,8 @@ TEST_F(PositiveWsi, SwapchainAcquireImageAndPresent) {
     uint32_t image_index = 0;
     vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
 
-    const VkImageMemoryBarrier present_transition = vkt::Image::transition_to_present(swapchain_images[image_index]);
+    const VkImageMemoryBarrier present_transition =
+        TransitionToPresent(swapchain_images[image_index], VK_IMAGE_LAYOUT_UNDEFINED, 0);
     m_commandBuffer->begin();
     vk::CmdPipelineBarrier(*m_commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
                            nullptr, 0, nullptr, 1, &present_transition);
@@ -450,10 +460,7 @@ TEST_F(PositiveWsi, SwapchainAcquireImageAndWaitForFence) {
     TEST_DESCRIPTION("Test waiting on swapchain image with a fence.");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
-
+    RETURN_IF_SKIP(InitSwapchain());
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
     for (auto image : swapchain_images) {
         SetImageLayoutPresentSrc(image);
@@ -476,9 +483,7 @@ TEST_F(PositiveWsi, WaitForAcquireFenceAndIgnoreSemaphore) {
     TEST_DESCRIPTION("Image acquire specifies both semaphore and fence to signal. Only fence is being waited on.");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
     for (auto image : swapchain_images) {
         SetImageLayoutPresentSrc(image);
@@ -508,9 +513,7 @@ TEST_F(PositiveWsi, WaitForAcquireSemaphoreAndIgnoreFence) {
     TEST_DESCRIPTION("Image acquire specifies both semaphore and fence to signal. Only semaphore is being waited on.");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
     for (auto image : swapchain_images) {
         SetImageLayoutPresentSrc(image);
@@ -544,9 +547,7 @@ TEST_F(PositiveWsi, RetireSubmissionUsingAcquireFence) {
     TEST_DESCRIPTION("Acquire fence can be used to determine that submission from previous frame finished.");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
     for (auto image : swapchain_images) {
         SetImageLayoutPresentSrc(image);
@@ -555,7 +556,7 @@ TEST_F(PositiveWsi, RetireSubmissionUsingAcquireFence) {
     std::vector<vkt::CommandBuffer> command_buffers;
     std::vector<vkt::Semaphore> submit_semaphores;
     for (size_t i = 0; i < swapchain_images.size(); i++) {
-        command_buffers.emplace_back(m_device, m_commandPool);
+        command_buffers.emplace_back(*m_device, m_commandPool);
         submit_semaphores.emplace_back(*m_device);
     }
     const vkt::Fence acquire_fence(*m_device);
@@ -602,9 +603,7 @@ TEST_F(PositiveWsi, RetireSubmissionUsingAcquireFence2) {
     TEST_DESCRIPTION("Test that retiring submission using acquire fence works correctly after swapchain was changed.");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
     auto swapchain_images = GetSwapchainImages(m_swapchain);
     for (auto image : swapchain_images) {
         SetImageLayoutPresentSrc(image);
@@ -613,7 +612,7 @@ TEST_F(PositiveWsi, RetireSubmissionUsingAcquireFence2) {
     std::vector<vkt::CommandBuffer> command_buffers;
     std::vector<vkt::Semaphore> submit_semaphores;
     for (size_t i = 0; i < swapchain_images.size(); i++) {
-        command_buffers.emplace_back(m_device, m_commandPool);
+        command_buffers.emplace_back(*m_device, m_commandPool);
         submit_semaphores.emplace_back(*m_device);
     }
     const vkt::Fence acquire_fence(*m_device);
@@ -672,9 +671,7 @@ TEST_F(PositiveWsi, SwapchainImageLayout) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain, skipping CmdCopySwapchainImage test";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
     const auto swapchainImages = GetSwapchainImages(m_swapchain);
     const vkt::Fence fence(*m_device);
     uint32_t image_index = 0;
@@ -723,7 +720,7 @@ TEST_F(PositiveWsi, SwapchainImageLayout) {
     m_commandBuffer->EndRenderPass();
 
     const VkImageMemoryBarrier present_transition =
-        vkt::Image::transition_to_present(swapchainImages[image_index], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        TransitionToPresent(swapchainImages[image_index], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0);
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
                            0, nullptr, 0, nullptr, 1, &present_transition);
     m_commandBuffer->end();
@@ -735,10 +732,10 @@ TEST_F(PositiveWsi, SwapchainImageLayout) {
     submit_info.pCommandBuffers = &m_commandBuffer->handle();
     submit_info.signalSemaphoreCount = 0;
     submit_info.pSignalSemaphores = NULL;
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
-    vk::ResetFences(m_device->device(), 1, &fence.handle());
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::ResetFences(device(), 1, &fence.handle());
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, fence.handle());
-    vk::WaitForFences(m_device->device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 }
 
 TEST_F(PositiveWsi, SwapchainPresentShared) {
@@ -749,9 +746,7 @@ TEST_F(PositiveWsi, SwapchainPresentShared) {
     AddRequiredExtensions(VK_KHR_SHARED_PRESENTABLE_IMAGE_EXTENSION_NAME);
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSurface()) {
-        GTEST_SKIP() << "Cannot create surface";
-    }
+    RETURN_IF_SKIP(InitSurface());
     InitSwapchainInfo();
 
     VkBool32 supported;
@@ -837,10 +832,7 @@ TEST_F(PositiveWsi, CreateSurface) {
 
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-
-    if (!InitSurface()) {
-        GTEST_SKIP() << "Cannot create surface";
-    }
+    RETURN_IF_SKIP(InitSurface());
     DestroySwapchain();  // cleans up both surface and swapchain, if they were created
 }
 
@@ -860,10 +852,7 @@ TEST_F(PositiveWsi, CreateSwapchainFullscreenExclusive) {
     }
 
     InitRenderTarget();
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
-
+    RETURN_IF_SKIP(InitSwapchain());
     VkSurfaceFullScreenExclusiveInfoEXT surface_full_screen_exlusive_info = vku::InitStructHelper();
     surface_full_screen_exlusive_info.fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_DEFAULT_EXT;
 
@@ -906,9 +895,7 @@ TEST_F(PositiveWsi, CreateSwapchainFullscreenExclusive2) {
     }
 
     InitRenderTarget();
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
 
     const POINT pt_zero = {0, 0};
 
@@ -944,10 +931,7 @@ TEST_F(PositiveWsi, SwapchainImageFormatProps) {
 
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
 
     // HACK: I know InitSwapchain() will pick first supported format
     VkSurfaceFormatKHR format_tmp;
@@ -1016,7 +1000,7 @@ TEST_F(PositiveWsi, SwapchainImageFormatProps) {
     vkt::ImageView image_view(*m_device, ivci);
     vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1, &image_view.handle(), 1, 1);
 
-    vkt::CommandBuffer cmdbuff(DeviceObj(), m_commandPool);
+    vkt::CommandBuffer cmdbuff(*m_device, m_commandPool);
     cmdbuff.begin();
     cmdbuff.BeginRenderPass(render_pass.handle(), framebuffer.handle());
 
@@ -1028,9 +1012,7 @@ TEST_F(PositiveWsi, SwapchainExclusiveModeQueueFamilyPropertiesReferences) {
 
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSurface()) {
-        GTEST_SKIP() << "Cannot create surface";
-    }
+    RETURN_IF_SKIP(InitSurface());
     InitSwapchainInfo();
 
     VkBool32 supported;
@@ -1069,10 +1051,8 @@ TEST_F(PositiveWsi, InitSwapchain) {
     TEST_DESCRIPTION("Make sure InitSwapchain is not producing anying invalid usage");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-
-    if (InitSwapchain()) {
-        DestroySwapchain();
-    }
+    RETURN_IF_SKIP(InitSwapchain());
+    DestroySwapchain();
 }
 
 TEST_F(PositiveWsi, DestroySwapchainWithBoundImages) {
@@ -1081,9 +1061,7 @@ TEST_F(PositiveWsi, DestroySwapchainWithBoundImages) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    if (!InitSwapchain()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSwapchain());
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
@@ -1117,7 +1095,7 @@ TEST_F(PositiveWsi, DestroySwapchainWithBoundImages) {
         bind_info.memory = VK_NULL_HANDLE;
         bind_info.memoryOffset = 0;
 
-        vk::BindImageMemory2KHR(m_device->device(), 1, &bind_info);
+        vk::BindImageMemory2KHR(device(), 1, &bind_info);
     }
 }
 
@@ -1147,10 +1125,7 @@ TEST_F(PositiveWsi, ProtectedSwapchainImageColorAttachment) {
 
     // Turns m_commandBuffer into a unprotected command buffer
     RETURN_IF_SKIP(InitState(nullptr, &protected_memory_features));
-
-    if (!InitSurface()) {
-        GTEST_SKIP() << "Cannot create surface, skipping test";
-    }
+    RETURN_IF_SKIP(InitSurface());
     InitSwapchainInfo();
 
     // Create protected swapchain
@@ -1238,7 +1213,7 @@ TEST_F(PositiveWsi, ProtectedSwapchainImageColorAttachment) {
 
     // Create a protected command buffer/pool to use
     vkt::CommandPool protectedCommandPool(*m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_PROTECTED_BIT);
-    vkt::CommandBuffer protectedCommandBuffer(m_device, &protectedCommandPool);
+    vkt::CommandBuffer protectedCommandBuffer(*m_device, &protectedCommandPool);
 
     protectedCommandBuffer.begin();
     VkRect2D render_area = {{0, 0}, swapchain_create_info.imageExtent};
@@ -1258,9 +1233,7 @@ TEST_F(PositiveWsi, CreateSwapchainWithPresentModeInfo) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    if (!InitSurface()) {
-        GTEST_SKIP() << "Cannot create surface or swapchain";
-    }
+    RETURN_IF_SKIP(InitSurface());
     InitSwapchainInfo();
 
     // Implementations must support.
@@ -1349,9 +1322,7 @@ TEST_F(PositiveWsi, PhysicalDeviceSurfaceSupport) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    if (!InitSurface()) {
-        GTEST_SKIP() << "Cannot create surface";
-    }
+    RETURN_IF_SKIP(InitSurface());
 
     VkBool32 supported;
     vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), 0, m_surface, &supported);

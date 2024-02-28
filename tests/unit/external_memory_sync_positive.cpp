@@ -43,6 +43,7 @@ TEST_F(PositiveExternalMemorySync, ImportMemoryFd) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
+    IgnoreHandleTypeError(m_errorMonitor);
 
     VkExternalMemoryBufferCreateInfo external_buffer_info = vku::InitStructHelper();
     external_buffer_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
@@ -59,8 +60,7 @@ TEST_F(PositiveExternalMemorySync, ImportMemoryFd) {
         GTEST_SKIP() << "Cannot find handle types that are supported but not compatible with each other";
     }
 
-    vkt::Buffer buffer;
-    buffer.init_no_mem(*m_device, buffer_info);
+    vkt::Buffer buffer(*m_device, buffer_info, vkt::no_mem);
 
     VkMemoryDedicatedAllocateInfoKHR dedicated_info = vku::InitStructHelper();
     dedicated_info.image = VK_NULL_HANDLE;
@@ -78,7 +78,7 @@ TEST_F(PositiveExternalMemorySync, ImportMemoryFd) {
     mgfi.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
 
     int fd;
-    vk::GetMemoryFdKHR(m_device->device(), &mgfi, &fd);
+    vk::GetMemoryFdKHR(device(), &mgfi, &fd);
 
     VkImportMemoryFdInfoKHR import_info = vku::InitStructHelper(&dedicated_info);
     import_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
@@ -174,10 +174,8 @@ TEST_F(PositiveExternalMemorySync, ExternalMemory) {
                                                                       nullptr, handle_type};
     auto buffer_info = vkt::Buffer::create_info(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     buffer_info.pNext = &external_buffer_info;
-    vkt::Buffer buffer_export;
-    buffer_export.init_no_mem(*m_device, buffer_info);
-    vkt::Buffer buffer_import;
-    buffer_import.init_no_mem(*m_device, buffer_info);
+    vkt::Buffer buffer_export(*m_device, buffer_info, vkt::no_mem);
+    vkt::Buffer buffer_import(*m_device, buffer_info, vkt::no_mem);
 
     // Allocation info
     auto alloc_info = vkt::DeviceMemory::get_resource_alloc_info(*m_device, buffer_export.memory_requirements(), mem_flags);
@@ -205,7 +203,7 @@ TEST_F(PositiveExternalMemorySync, ExternalMemory) {
     VkMemoryGetWin32HandleInfoKHR mghi = {VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR, nullptr, memory_export.handle(),
                                           handle_type};
     HANDLE handle;
-    ASSERT_EQ(VK_SUCCESS, vk::GetMemoryWin32HandleKHR(m_device->device(), &mghi, &handle));
+    ASSERT_EQ(VK_SUCCESS, vk::GetMemoryWin32HandleKHR(device(), &mghi, &handle));
 
     VkImportMemoryWin32HandleInfoKHR import_info = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR, nullptr, handle_type,
                                                     handle};
@@ -213,7 +211,7 @@ TEST_F(PositiveExternalMemorySync, ExternalMemory) {
     // Export memory to fd
     VkMemoryGetFdInfoKHR mgfi = {VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, nullptr, memory_export.handle(), handle_type};
     int fd;
-    ASSERT_EQ(VK_SUCCESS, vk::GetMemoryFdKHR(m_device->device(), &mgfi, &fd));
+    ASSERT_EQ(VK_SUCCESS, vk::GetMemoryFdKHR(device(), &mgfi, &fd));
 
     VkImportMemoryFdInfoKHR import_info = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, nullptr, handle_type, fd};
 #endif
@@ -256,6 +254,7 @@ TEST_F(PositiveExternalMemorySync, BufferDedicatedAllocation) {
     TEST_DESCRIPTION("Create external buffer that requires dedicated allocation.");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
+    IgnoreHandleTypeError(m_errorMonitor);
 
     VkExternalMemoryBufferCreateInfo external_buffer_info = vku::InitStructHelper();
     const auto buffer_info = vkt::Buffer::create_info(4096, VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr, &external_buffer_info);
@@ -351,7 +350,7 @@ TEST_F(PositiveExternalMemorySync, ExportMetalObjects) {
         RETURN_IF_SKIP(InitState(nullptr, &features2));
     }
 
-    const VkDevice device = m_device->device();
+    const VkDevice device = this->device();
 
     // Get Metal Device and Metal Command Queue in 1 call
     {
@@ -410,9 +409,7 @@ TEST_F(PositiveExternalMemorySync, ExportMetalObjects) {
         ici.samples = VK_SAMPLE_COUNT_1_BIT;
         ici.tiling = VK_IMAGE_TILING_LINEAR;
         ici.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        VkImageObj image(m_device);
-        image.Init(ici);
-        ASSERT_TRUE(image.initialized());
+        vkt::Image image(*m_device, ici, vkt::set_layout);
 
         VkExportMetalIOSurfaceInfoEXT surfaceInfo = vku::InitStructHelper();
         surfaceInfo.image = image.handle();
@@ -454,6 +451,7 @@ TEST_F(PositiveExternalMemorySync, ExportFromImportedFence) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_WIN32_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
+    IgnoreHandleTypeError(m_errorMonitor);
 
     const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
     {
@@ -491,6 +489,8 @@ TEST_F(PositiveExternalMemorySync, ExportFromImportedFence) {
     import_fence.export_handle(handle2, handle_type);
 
     ::CloseHandle(handle);
-    ::CloseHandle(handle2);
+    if (handle2 != handle) {
+        ::CloseHandle(handle2);
+    }
 }
 #endif  // VK_USE_PLATFORM_WIN32_KHR

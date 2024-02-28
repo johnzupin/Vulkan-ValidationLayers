@@ -673,6 +673,14 @@ const char* string_SpvOpcode(uint32_t opcode) {
             return "OpImageBlockMatchSSDQCOM";
         case spv::OpImageBlockMatchSADQCOM:
             return "OpImageBlockMatchSADQCOM";
+        case spv::OpImageBlockMatchWindowSSDQCOM:
+            return "OpImageBlockMatchWindowSSDQCOM";
+        case spv::OpImageBlockMatchWindowSADQCOM:
+            return "OpImageBlockMatchWindowSADQCOM";
+        case spv::OpImageBlockMatchGatherSSDQCOM:
+            return "OpImageBlockMatchGatherSSDQCOM";
+        case spv::OpImageBlockMatchGatherSADQCOM:
+            return "OpImageBlockMatchGatherSADQCOM";
         case spv::OpGroupIAddNonUniformAMD:
             return "OpGroupIAddNonUniformAMD";
         case spv::OpGroupFAddNonUniformAMD:
@@ -701,6 +709,10 @@ const char* string_SpvOpcode(uint32_t opcode) {
             return "OpFinishWritingNodePayloadAMDX";
         case spv::OpInitializeNodePayloadsAMDX:
             return "OpInitializeNodePayloadsAMDX";
+        case spv::OpGroupNonUniformQuadAllKHR:
+            return "OpGroupNonUniformQuadAllKHR";
+        case spv::OpGroupNonUniformQuadAnyKHR:
+            return "OpGroupNonUniformQuadAnyKHR";
         case spv::OpHitObjectRecordHitMotionNV:
             return "OpHitObjectRecordHitMotionNV";
         case spv::OpHitObjectRecordHitWithIndexMotionNV:
@@ -995,6 +1007,10 @@ const char* string_SpvOpcode(uint32_t opcode) {
             return "OpGroupLogicalOrKHR";
         case spv::OpGroupLogicalXorKHR:
             return "OpGroupLogicalXorKHR";
+        case spv::OpMaskedGatherINTEL:
+            return "OpMaskedGatherINTEL";
+        case spv::OpMaskedScatterINTEL:
+            return "OpMaskedScatterINTEL";
 
         default:
             return "Unknown Opcode";
@@ -1231,6 +1247,10 @@ const char* string_SpvExecutionMode(uint32_t execution_mode) {
             return "StencilRefGreaterBackAMD";
         case spv::ExecutionModeStencilRefLessBackAMD:
             return "StencilRefLessBackAMD";
+        case spv::ExecutionModeQuadDerivativesKHR:
+            return "QuadDerivativesKHR";
+        case spv::ExecutionModeRequireFullQuadsKHR:
+            return "RequireFullQuadsKHR";
         case spv::ExecutionModeOutputLinesNV:
             return "OutputLinesNV";
         case spv::ExecutionModeOutputPrimitivesNV:
@@ -1273,6 +1293,10 @@ const char* string_SpvExecutionMode(uint32_t execution_mode) {
             return "NumSIMDWorkitemsINTEL";
         case spv::ExecutionModeSchedulerTargetFmaxMhzINTEL:
             return "SchedulerTargetFmaxMhzINTEL";
+        case spv::ExecutionModeMaximallyReconvergesKHR:
+            return "MaximallyReconvergesKHR";
+        case spv::ExecutionModeFPFastMathDefault:
+            return "FPFastMathDefault";
         case spv::ExecutionModeStreamingInterfaceINTEL:
             return "StreamingInterfaceINTEL";
         case spv::ExecutionModeRegisterMapInterfaceINTEL:
@@ -1389,6 +1413,8 @@ const char* string_SpvDecoration(uint32_t decoration) {
             return "WeightTextureQCOM";
         case spv::DecorationBlockMatchTextureQCOM:
             return "BlockMatchTextureQCOM";
+        case spv::DecorationBlockMatchSamplerQCOM:
+            return "BlockMatchSamplerQCOM";
         case spv::DecorationExplicitInterpAMD:
             return "ExplicitInterpAMD";
         case spv::DecorationNodeSharesPayloadLimitsWithAMDX:
@@ -2074,7 +2100,7 @@ const OperandInfo& GetOperandInfo(uint32_t opcode) {
         {spv::OpLabel, {{}}},
         {spv::OpBranch, {{OperandKind::Label}}},
         {spv::OpBranchConditional, {{OperandKind::Id, OperandKind::Label, OperandKind::Label, OperandKind::Literal}}},
-        {spv::OpSwitch, {{OperandKind::Id, OperandKind::Id, OperandKind::Label}}},
+        {spv::OpSwitch, {{OperandKind::Id, OperandKind::Label, OperandKind::Label}}},
         {spv::OpKill, {{}}},
         {spv::OpReturn, {{}}},
         {spv::OpReturnValue, {{OperandKind::Id}}},
@@ -2189,6 +2215,10 @@ const OperandInfo& GetOperandInfo(uint32_t opcode) {
         {spv::OpImageBoxFilterQCOM, {{OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
         {spv::OpImageBlockMatchSSDQCOM, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
         {spv::OpImageBlockMatchSADQCOM, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
+        {spv::OpImageBlockMatchWindowSSDQCOM, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
+        {spv::OpImageBlockMatchWindowSADQCOM, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
+        {spv::OpImageBlockMatchGatherSSDQCOM, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
+        {spv::OpImageBlockMatchGatherSADQCOM, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
         {spv::OpGroupIAddNonUniformAMD, {{OperandKind::Id, OperandKind::ValueEnum, OperandKind::Id}}},
         {spv::OpGroupFAddNonUniformAMD, {{OperandKind::Id, OperandKind::ValueEnum, OperandKind::Id}}},
         {spv::OpGroupFMinNonUniformAMD, {{OperandKind::Id, OperandKind::ValueEnum, OperandKind::Id}}},
@@ -2203,6 +2233,8 @@ const OperandInfo& GetOperandInfo(uint32_t opcode) {
         {spv::OpFinalizeNodePayloadsAMDX, {{OperandKind::Id}}},
         {spv::OpFinishWritingNodePayloadAMDX, {{OperandKind::Id}}},
         {spv::OpInitializeNodePayloadsAMDX, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
+        {spv::OpGroupNonUniformQuadAllKHR, {{OperandKind::Id}}},
+        {spv::OpGroupNonUniformQuadAnyKHR, {{OperandKind::Id}}},
         {spv::OpHitObjectRecordHitMotionNV, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
         {spv::OpHitObjectRecordHitWithIndexMotionNV, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
         {spv::OpHitObjectRecordMissMotionNV, {{OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id, OperandKind::Id}}},
@@ -2350,6 +2382,8 @@ const OperandInfo& GetOperandInfo(uint32_t opcode) {
         {spv::OpGroupLogicalAndKHR, {{OperandKind::Id, OperandKind::ValueEnum, OperandKind::Id}}},
         {spv::OpGroupLogicalOrKHR, {{OperandKind::Id, OperandKind::ValueEnum, OperandKind::Id}}},
         {spv::OpGroupLogicalXorKHR, {{OperandKind::Id, OperandKind::ValueEnum, OperandKind::Id}}},
+        {spv::OpMaskedGatherINTEL, {{OperandKind::Id, OperandKind::Literal, OperandKind::Id, OperandKind::Id}}},
+        {spv::OpMaskedScatterINTEL, {{OperandKind::Id, OperandKind::Id, OperandKind::Literal, OperandKind::Id}}},
     };  // clang-format on
 
     auto info = kOperandTable.find(opcode);

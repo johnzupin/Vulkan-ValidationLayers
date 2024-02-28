@@ -1,6 +1,6 @@
-/* Copyright (c) 2018-2023 The Khronos Group Inc.
- * Copyright (c) 2018-2023 Valve Corporation
- * Copyright (c) 2018-2023 LunarG, Inc.
+/* Copyright (c) 2018-2024 The Khronos Group Inc.
+ * Copyright (c) 2018-2024 Valve Corporation
+ * Copyright (c) 2018-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@
 #include "utils/shader_utils.h"
 #include "utils/hash_util.h"
 #include "gpu_validation/gpu_validation.h"
+#include "gpu_validation/gpu_subclasses.h"
+#include "state_tracker/device_state.h"
 #include "spirv-tools/instrument.hpp"
 #include "spirv-tools/linker.hpp"
 #include "generated/layer_chassis_dispatch.h"
@@ -34,7 +36,6 @@
 #include "generated/gpu_pre_dispatch_comp.h"
 #include "generated/gpu_pre_trace_rays_rgen.h"
 #include "generated/gpu_as_inspection_comp.h"
-#include "generated/inst_functions_comp.h"
 #include "generated/gpu_inst_shader_hash.h"
 
 std::shared_ptr<vvl::Buffer> gpuav::Validator::CreateBufferState(VkBuffer buf, const VkBufferCreateInfo *pCreateInfo) {
@@ -59,9 +60,8 @@ std::shared_ptr<vvl::AccelerationStructureNV> gpuav::Validator::CreateAccelerati
 }
 
 std::shared_ptr<vvl::AccelerationStructureKHR> gpuav::Validator::CreateAccelerationStructureState(
-    VkAccelerationStructureKHR as, const VkAccelerationStructureCreateInfoKHR *ci, std::shared_ptr<vvl::Buffer> &&buf_state,
-    VkDeviceAddress address) {
-    return std::make_shared<AccelerationStructureKHR>(as, ci, std::move(buf_state), address, *desc_heap);
+    VkAccelerationStructureKHR as, const VkAccelerationStructureCreateInfoKHR *ci, std::shared_ptr<vvl::Buffer> &&buf_state) {
+    return std::make_shared<AccelerationStructureKHR>(as, ci, std::move(buf_state), *desc_heap);
 }
 
 std::shared_ptr<vvl::Sampler> gpuav::Validator::CreateSamplerState(VkSampler s, const VkSamplerCreateInfo *ci) {
@@ -81,7 +81,7 @@ std::shared_ptr<vvl::CommandBuffer> gpuav::Validator::CreateCmdBufferState(VkCom
 }
 
 // Perform initializations that can be done at Create Device time.
-void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
+void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) {
     // Add the callback hooks for the functions that are either broadly or deeply used and that the ValidationStateTracker refactor
     // would be messier without.
     // TODO: Find a good way to do this hooklessly.
@@ -103,20 +103,17 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
         binding.binding = i;
         bindings_.push_back(binding);
     }
-    BaseClass::CreateDevice(pCreateInfo);
-    Location loc(vvl::Func::vkCreateDevice);
-
-    validate_instrumented_shaders = (GetEnvironment("VK_LAYER_GPUAV_VALIDATE_INSTRUMENTED_SHADERS").size() > 0);
+    BaseClass::CreateDevice(pCreateInfo, loc);
 
     if (api_version < VK_API_VERSION_1_1) {
-        ReportSetupProblem(device, "GPU-Assisted validation requires Vulkan 1.1 or later.  GPU-Assisted Validation disabled.");
+        ReportSetupProblem(device, loc, "GPU-Assisted validation requires Vulkan 1.1 or later.  GPU-Assisted Validation disabled.");
         aborted = true;
         return;
     }
 
     DispatchGetPhysicalDeviceFeatures(physical_device, &supported_features);
     if (!supported_features.fragmentStoresAndAtomics || !supported_features.vertexPipelineStoresAndAtomics) {
-        ReportSetupProblem(device,
+        ReportSetupProblem(device, loc,
                            "GPU-Assisted validation requires fragmentStoresAndAtomics and vertexPipelineStoresAndAtomics.  "
                            "GPU-Assisted Validation disabled.");
         aborted = true;
@@ -150,8 +147,9 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
         VkResult result = vmaCreateBuffer(vmaAllocator, &buffer_info, &alloc_info, &app_buffer_device_addresses.buffer,
                                           &app_buffer_device_addresses.allocation, nullptr);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(
-                device, "Unable to allocate device memory for buffer device address data. Device could become unstable.", true);
+            ReportSetupProblem(device, loc,
+                               "Unable to allocate device memory for buffer device address data. Device could become unstable.",
+                               true);
             aborted = true;
             return;
         }
@@ -206,7 +204,7 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
         pool_create_info.flags = VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT;
         VkResult result = vmaCreatePool(vmaAllocator, &pool_create_info, &output_buffer_pool);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Unable to create VMA memory pool");
+            ReportSetupProblem(device, loc, "Unable to create VMA memory pool");
         }
     }
 
@@ -240,10 +238,10 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo) {
         }
     }
 
-    CreateAccelerationStructureBuildValidationState(pCreateInfo);
+    CreateAccelerationStructureBuildValidationState(pCreateInfo, loc);
 }
 
-void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkDeviceCreateInfo *pCreateInfo) {
+void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) {
     if (aborted) {
         return;
     }
@@ -256,7 +254,6 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
     if (!IsExtEnabled(device_extensions.vk_nv_ray_tracing)) {
         return;
     }
-    Location loc(vvl::Func::vkCreateDevice);
 
     // Cannot use this validation without a queue that supports graphics
     auto pd_state = Get<vvl::PhysicalDevice>(physical_device);
@@ -307,7 +304,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = vmaCreateBuffer(vmaAllocator, &vbo_ci, &vbo_ai, &vbo, &vbo_allocation, nullptr);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create vertex buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create vertex buffer for acceleration structure build validation.");
         }
     }
 
@@ -315,7 +312,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
         uint8_t *mapped_vbo_buffer = nullptr;
         result = vmaMapMemory(vmaAllocator, vbo_allocation, reinterpret_cast<void **>(&mapped_vbo_buffer));
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to map vertex buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to map vertex buffer for acceleration structure build validation.");
         } else {
             constexpr std::array vertices = {1.0f, 0.0f, 0.0f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
             std::memcpy(mapped_vbo_buffer, (uint8_t *)vertices.data(), sizeof(vertices[0]) * vertices.size());
@@ -336,7 +333,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = vmaCreateBuffer(vmaAllocator, &ibo_ci, &ibo_ai, &ibo, &ibo_allocation, nullptr);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create index buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create index buffer for acceleration structure build validation.");
         }
     }
 
@@ -344,7 +341,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
         uint8_t *mapped_ibo_buffer = nullptr;
         result = vmaMapMemory(vmaAllocator, ibo_allocation, reinterpret_cast<void **>(&mapped_ibo_buffer));
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to map index buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to map index buffer for acceleration structure build validation.");
         } else {
             constexpr std::array<uint32_t, 3> indicies = {0, 1, 2};
             std::memcpy(mapped_ibo_buffer, (uint8_t *)indicies.data(), sizeof(indicies[0]) * indicies.size());
@@ -377,7 +374,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
     if (result == VK_SUCCESS) {
         result = DispatchCreateAccelerationStructureNV(device, &as_ci, nullptr, &as_validation_state.replacement_as);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create acceleration structure for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create acceleration structure for acceleration structure build validation.");
         }
     }
 
@@ -398,7 +395,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
         result = vmaAllocateMemory(vmaAllocator, &as_mem_requirements.memoryRequirements, &as_memory_aci,
                                    &as_validation_state.replacement_as_allocation, &as_memory_ai);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device,
+            ReportSetupProblem(device, loc,
                                "Failed to alloc acceleration structure memory for acceleration structure build validation.");
         }
     }
@@ -411,7 +408,8 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = DispatchBindAccelerationStructureMemoryNV(device, 1, &as_bind_info);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to bind acceleration structure memory for acceleration structure build validation.");
+            ReportSetupProblem(device, loc,
+                               "Failed to bind acceleration structure memory for acceleration structure build validation.");
         }
     }
 
@@ -419,7 +417,8 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
         result = DispatchGetAccelerationStructureHandleNV(device, as_validation_state.replacement_as, sizeof(uint64_t),
                                                           &as_validation_state.replacement_as_handle);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to get acceleration structure handle for acceleration structure build validation.");
+            ReportSetupProblem(device, loc,
+                               "Failed to get acceleration structure handle for acceleration structure build validation.");
         }
     }
 
@@ -443,7 +442,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = vmaCreateBuffer(vmaAllocator, &scratch_ci, &scratch_aci, &scratch, &scratch_allocation, nullptr);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create scratch buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create scratch buffer for acceleration structure build validation.");
         }
     }
 
@@ -454,7 +453,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = DispatchCreateCommandPool(device, &command_pool_ci, nullptr, &command_pool);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create command pool for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create command pool for acceleration structure build validation.");
         }
     }
 
@@ -468,7 +467,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = DispatchAllocateCommandBuffers(device, &command_buffer_ai, &command_buffer);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create command buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create command buffer for acceleration structure build validation.");
         }
 
         // Hook up command buffer dispatch
@@ -480,7 +479,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = DispatchBeginCommandBuffer(command_buffer, &command_buffer_bi);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to begin command buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to begin command buffer for acceleration structure build validation.");
         }
     }
 
@@ -502,14 +501,14 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
         submit_info.pCommandBuffers = &command_buffer;
         result = DispatchQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to submit command buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to submit command buffer for acceleration structure build validation.");
         }
     }
 
     if (result == VK_SUCCESS) {
         result = DispatchQueueWaitIdle(queue);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to wait for queue idle for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to wait for queue idle for acceleration structure build validation.");
         }
     }
 
@@ -527,7 +526,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
     }
 
     if (debug_desc_layout == VK_NULL_HANDLE) {
-        ReportSetupProblem(device, "Failed to find descriptor set layout for acceleration structure build validation.");
+        ReportSetupProblem(device, loc, "Failed to find descriptor set layout for acceleration structure build validation.");
         result = VK_INCOMPLETE;
     }
 
@@ -537,7 +536,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
         pipeline_layout_ci.pSetLayouts = &debug_desc_layout;
         result = DispatchCreatePipelineLayout(device, &pipeline_layout_ci, 0, &as_validation_state.pipeline_layout);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create pipeline layout for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create pipeline layout for acceleration structure build validation.");
         }
     }
 
@@ -549,7 +548,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = DispatchCreateShaderModule(device, &shader_module_ci, nullptr, &shader_module);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create compute shader module for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create compute shader module for acceleration structure build validation.");
         }
     }
 
@@ -565,7 +564,7 @@ void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkD
 
         result = DispatchCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &as_validation_state.pipeline);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, "Failed to create compute pipeline for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Failed to create compute pipeline for acceleration structure build validation.");
         }
     }
 
@@ -589,84 +588,91 @@ void gpuav::Validator::Destroy(AccelerationStructureBuildValidationInfo &as_vali
     }
 }
 
-void gpuav::CommonDrawResources::Destroy(VkDevice device) {
+void gpuav::PreDrawResources::SharedResources::Destroy(gpuav::Validator &validator) {
     if (shader_module != VK_NULL_HANDLE) {
-        DispatchDestroyShaderModule(device, shader_module, nullptr);
+        DispatchDestroyShaderModule(validator.device, shader_module, nullptr);
         shader_module = VK_NULL_HANDLE;
     }
     if (ds_layout != VK_NULL_HANDLE) {
-        DispatchDestroyDescriptorSetLayout(device, ds_layout, nullptr);
+        DispatchDestroyDescriptorSetLayout(validator.device, ds_layout, nullptr);
         ds_layout = VK_NULL_HANDLE;
     }
     if (pipeline_layout != VK_NULL_HANDLE) {
-        DispatchDestroyPipelineLayout(device, pipeline_layout, nullptr);
+        DispatchDestroyPipelineLayout(validator.device, pipeline_layout, nullptr);
         pipeline_layout = VK_NULL_HANDLE;
     }
     auto to_destroy = renderpass_to_pipeline.snapshot();
     for (auto &entry : to_destroy) {
-        DispatchDestroyPipeline(device, entry.second, nullptr);
+        DispatchDestroyPipeline(validator.device, entry.second, nullptr);
         renderpass_to_pipeline.erase(entry.first);
     }
     if (shader_object != VK_NULL_HANDLE) {
-        DispatchDestroyShaderEXT(device, shader_object, nullptr);
+        DispatchDestroyShaderEXT(validator.device, shader_object, nullptr);
         shader_object = VK_NULL_HANDLE;
     }
-    initialized = false;
 }
 
-void gpuav::CommonDispatchResources::Destroy(VkDevice device) {
-    if (shader_module != VK_NULL_HANDLE) {
-        DispatchDestroyShaderModule(device, shader_module, nullptr);
-        shader_module = VK_NULL_HANDLE;
-    }
+void gpuav::PreDispatchResources::SharedResources::Destroy(gpuav::Validator &validator) {
     if (ds_layout != VK_NULL_HANDLE) {
-        DispatchDestroyDescriptorSetLayout(device, ds_layout, nullptr);
+        DispatchDestroyDescriptorSetLayout(validator.device, ds_layout, nullptr);
         ds_layout = VK_NULL_HANDLE;
     }
     if (pipeline_layout != VK_NULL_HANDLE) {
-        DispatchDestroyPipelineLayout(device, pipeline_layout, nullptr);
+        DispatchDestroyPipelineLayout(validator.device, pipeline_layout, nullptr);
         pipeline_layout = VK_NULL_HANDLE;
     }
     if (pipeline != VK_NULL_HANDLE) {
-        DispatchDestroyPipeline(device, pipeline, nullptr);
+        DispatchDestroyPipeline(validator.device, pipeline, nullptr);
         pipeline = VK_NULL_HANDLE;
     }
     if (shader_object != VK_NULL_HANDLE) {
-        DispatchDestroyShaderEXT(device, shader_object, nullptr);
+        DispatchDestroyShaderEXT(validator.device, shader_object, nullptr);
         shader_object = VK_NULL_HANDLE;
     }
-    initialized = false;
 }
 
-void gpuav::CommonTraceRaysResources::Destroy(VkDevice device, VmaAllocator &vmaAllocator) {
-    if (shader_module != VK_NULL_HANDLE) {
-        DispatchDestroyShaderModule(device, shader_module, nullptr);
-        shader_module = VK_NULL_HANDLE;
-    }
+void gpuav::PreTraceRaysResources::SharedResources::Destroy(gpuav::Validator &validator) {
     if (ds_layout != VK_NULL_HANDLE) {
-        DispatchDestroyDescriptorSetLayout(device, ds_layout, nullptr);
+        DispatchDestroyDescriptorSetLayout(validator.device, ds_layout, nullptr);
         ds_layout = VK_NULL_HANDLE;
     }
     if (pipeline_layout != VK_NULL_HANDLE) {
-        DispatchDestroyPipelineLayout(device, pipeline_layout, nullptr);
+        DispatchDestroyPipelineLayout(validator.device, pipeline_layout, nullptr);
         pipeline_layout = VK_NULL_HANDLE;
     }
     if (pipeline != VK_NULL_HANDLE) {
-        DispatchDestroyPipeline(device, pipeline, nullptr);
+        DispatchDestroyPipeline(validator.device, pipeline, nullptr);
         pipeline = VK_NULL_HANDLE;
     }
     if (sbt_buffer != VK_NULL_HANDLE) {
-        vmaDestroyBuffer(vmaAllocator, sbt_buffer, sbt_allocation);
+        vmaDestroyBuffer(validator.vmaAllocator, sbt_buffer, sbt_allocation);
         sbt_buffer = VK_NULL_HANDLE;
         sbt_allocation = VK_NULL_HANDLE;
         sbt_address = 0;
     }
     if (sbt_pool) {
-        vmaDestroyPool(vmaAllocator, sbt_pool);
+        vmaDestroyPool(validator.vmaAllocator, sbt_pool);
         sbt_pool = VK_NULL_HANDLE;
     }
+}
 
-    initialized = false;
+void gpuav::PreCopyBufferToImageResources::SharedResources::Destroy(gpuav::Validator &validator) {
+    if (ds_layout != VK_NULL_HANDLE) {
+        DispatchDestroyDescriptorSetLayout(validator.device, ds_layout, nullptr);
+        ds_layout = VK_NULL_HANDLE;
+    }
+    if (pipeline_layout != VK_NULL_HANDLE) {
+        DispatchDestroyPipelineLayout(validator.device, pipeline_layout, nullptr);
+        pipeline_layout = VK_NULL_HANDLE;
+    }
+    if (pipeline != VK_NULL_HANDLE) {
+        DispatchDestroyPipeline(validator.device, pipeline, nullptr);
+        pipeline = VK_NULL_HANDLE;
+    }
+    if (copy_regions_pool != VK_NULL_HANDLE) {
+        vmaDestroyPool(validator.vmaAllocator, copy_regions_pool);
+        copy_regions_pool = VK_NULL_HANDLE;
+    }
 }
 
 void gpuav::AccelerationStructureBuildValidationState::Destroy(VkDevice device, VmaAllocator &vmaAllocator) {
@@ -689,13 +695,13 @@ void gpuav::AccelerationStructureBuildValidationState::Destroy(VkDevice device, 
     initialized = false;
 }
 
-void gpuav::RestorablePipelineState::Create(vvl::CommandBuffer *cb_state, VkPipelineBindPoint bind_point) {
+void gpuav::RestorablePipelineState::Create(vvl::CommandBuffer &cb_state, VkPipelineBindPoint bind_point) {
     pipeline_bind_point = bind_point;
     const auto lv_bind_point = ConvertToLvlBindPoint(bind_point);
 
-    LastBound &last_bound = cb_state->lastBound[lv_bind_point];
+    LastBound &last_bound = cb_state.lastBound[lv_bind_point];
     if (last_bound.pipeline_state) {
-        pipeline = last_bound.pipeline_state->pipeline();
+        pipeline = last_bound.pipeline_state->VkHandle();
         pipeline_layout = last_bound.pipeline_layout;
         descriptor_sets.reserve(last_bound.per_set.size());
         for (std::size_t i = 0; i < last_bound.per_set.size(); i++) {
@@ -713,8 +719,8 @@ void gpuav::RestorablePipelineState::Create(vvl::CommandBuffer *cb_state, VkPipe
             push_descriptor_set_writes = last_bound.push_descriptor_set->GetWrites();
         }
         const auto &pipeline_layout = last_bound.pipeline_state->PipelineLayoutState();
-        if (pipeline_layout->push_constant_ranges == cb_state->push_constant_data_ranges) {
-            push_constants_data = cb_state->push_constant_data;
+        if (pipeline_layout->push_constant_ranges == cb_state.push_constant_data_ranges) {
+            push_constants_data = cb_state.push_constant_data;
             push_constants_ranges = pipeline_layout->push_constant_ranges;
         }
     }
@@ -785,6 +791,22 @@ void gpuav::PreTraceRaysResources::Destroy(gpuav::Validator &validator) {
         validator.desc_set_manager->PutBackDescriptorSet(desc_pool, desc_set);
         desc_set = VK_NULL_HANDLE;
         desc_pool = VK_NULL_HANDLE;
+    }
+
+    CommandResources::Destroy(validator);
+}
+
+void gpuav::PreCopyBufferToImageResources::Destroy(gpuav::Validator &validator) {
+    if (desc_set != VK_NULL_HANDLE) {
+        validator.desc_set_manager->PutBackDescriptorSet(desc_pool, desc_set);
+        desc_set = VK_NULL_HANDLE;
+        desc_pool = VK_NULL_HANDLE;
+    }
+
+    if (copy_src_regions_buffer != VK_NULL_HANDLE) {
+        vmaDestroyBuffer(validator.vmaAllocator, copy_src_regions_buffer, copy_src_regions_allocation);
+        copy_src_regions_buffer = VK_NULL_HANDLE;
+        copy_src_regions_allocation = VK_NULL_HANDLE;
     }
 
     CommandResources::Destroy(validator);

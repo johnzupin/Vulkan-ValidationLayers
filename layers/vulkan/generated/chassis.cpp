@@ -31,6 +31,7 @@
 #include "chassis.h"
 #include "layer_options.h"
 #include "layer_chassis_dispatch.h"
+#include "state_tracker/chassis_modification_state.h"
 
 thread_local WriteLockGuard* ValidationObject::record_guard{};
 
@@ -187,13 +188,14 @@ extern const vvl::unordered_map<std::string, function_data> name_to_funcptr_map;
 static void InstanceExtensionWhitelist(ValidationObject* layer_data, const VkInstanceCreateInfo* pCreateInfo, VkInstance instance) {
     for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
         // Check for recognized instance extensions
-        if (!white_list(pCreateInfo->ppEnabledExtensionNames[i], kInstanceExtensionNames)) {
+        vvl::Extension extension = GetExtension(pCreateInfo->ppEnabledExtensionNames[i]);
+        if (!IsInstanceExtension(extension)) {
             Location loc(vvl::Func::vkCreateInstance);
             layer_data->LogWarning(kVUIDUndefined, layer_data->instance,
                                    loc.dot(vvl::Field::pCreateInfo).dot(vvl::Field::ppEnabledExtensionNames, i),
                                    "%s is not supported by this layer.  Using this extension may adversely affect validation "
                                    "results and/or produce undefined behavior.",
-                                   pCreateInfo->ppEnabledExtensionNames[i]);
+                                   String(extension));
         }
     }
 }
@@ -202,13 +204,14 @@ static void InstanceExtensionWhitelist(ValidationObject* layer_data, const VkIns
 static void DeviceExtensionWhitelist(ValidationObject* layer_data, const VkDeviceCreateInfo* pCreateInfo, VkDevice device) {
     for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
         // Check for recognized device extensions
-        if (!white_list(pCreateInfo->ppEnabledExtensionNames[i], kDeviceExtensionNames)) {
+        vvl::Extension extension = GetExtension(pCreateInfo->ppEnabledExtensionNames[i]);
+        if (!IsDeviceExtension(extension)) {
             Location loc(vvl::Func::vkCreateDevice);
             layer_data->LogWarning(kVUIDUndefined, layer_data->device,
                                    loc.dot(vvl::Field::pCreateInfo).dot(vvl::Field::ppEnabledExtensionNames, i),
                                    "%s is not supported by this layer.  Using this extension may adversely affect validation "
                                    "results and/or produce undefined behavior.",
-                                   pCreateInfo->ppEnabledExtensionNames[i]);
+                                   String(extension));
         }
     }
 }
@@ -376,8 +379,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     CHECK_ENABLED local_enables{};
     CHECK_DISABLED local_disables{};
     bool lock_setting;
-    // select_instrumented_shaders is the only gpu-av setting that is off by default
-    GpuAVSettings local_gpuav_settings = {true, true, true, true, true, false, 10000};
+    GpuAVSettings local_gpuav_settings = {};
     ConfigAndEnvSettings config_and_env_settings_data{OBJECT_LAYER_DESCRIPTION,
                                                       pCreateInfo,
                                                       local_enables,
@@ -866,7 +868,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const VkShade
     }
 
     // Special extra check if SPIR-V itself fails runtime validation in PreCallRecord
-    if (!csm_state.valid_spirv) return VK_ERROR_VALIDATION_FAILED_EXT;
+    if (csm_state.skip) return VK_ERROR_VALIDATION_FAILED_EXT;
 
     VkResult result = DispatchCreateShaderModule(device, &csm_state.instrumented_create_info, pAllocator, pShaderModule);
     record_obj.result = result;
@@ -905,7 +907,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateShadersEXT(VkDevice device, uint32_t create
     }
 
     // Special extra check if SPIR-V itself fails runtime validation in PreCallRecord
-    if (!csm_state.valid_spirv) return VK_ERROR_VALIDATION_FAILED_EXT;
+    if (csm_state.skip) return VK_ERROR_VALIDATION_FAILED_EXT;
 
     VkResult result = DispatchCreateShadersEXT(device, createInfoCount, new_shader_create_infos.data(), pAllocator, pShaders);
     record_obj.result = result;
@@ -8428,6 +8430,58 @@ VKAPI_ATTR void VKAPI_CALL CmdSetFragmentShadingRateKHR(VkCommandBuffer commandB
     }
 }
 
+VKAPI_ATTR void VKAPI_CALL CmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer commandBuffer,
+                                                                 const VkRenderingAttachmentLocationInfoKHR* pLocationInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdSetRenderingAttachmentLocationsKHR,
+                          VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallValidateCmdSetRenderingAttachmentLocationsKHR]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdSetRenderingAttachmentLocationsKHR(commandBuffer, pLocationInfo, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdSetRenderingAttachmentLocationsKHR);
+    for (ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallRecordCmdSetRenderingAttachmentLocationsKHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdSetRenderingAttachmentLocationsKHR(commandBuffer, pLocationInfo, record_obj);
+    }
+    DispatchCmdSetRenderingAttachmentLocationsKHR(commandBuffer, pLocationInfo);
+    for (ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPostCallRecordCmdSetRenderingAttachmentLocationsKHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdSetRenderingAttachmentLocationsKHR(commandBuffer, pLocationInfo, record_obj);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer,
+                                                                    const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdSetRenderingInputAttachmentIndicesKHR,
+                          VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallValidateCmdSetRenderingInputAttachmentIndicesKHR]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdSetRenderingInputAttachmentIndicesKHR);
+    for (ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallRecordCmdSetRenderingInputAttachmentIndicesKHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo, record_obj);
+    }
+    DispatchCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo);
+    for (ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPostCallRecordCmdSetRenderingInputAttachmentIndicesKHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo, record_obj);
+    }
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL WaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t presentId, uint64_t timeout) {
     auto layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
     bool skip = false;
@@ -9381,6 +9435,28 @@ VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceCooperativeMatrixPropertiesKHR(V
                                                                                  record_obj);
     }
     return result;
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetLineStippleKHR(VkCommandBuffer commandBuffer, uint32_t lineStippleFactor,
+                                                uint16_t lineStipplePattern) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdSetLineStippleKHR, VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallValidateCmdSetLineStippleKHR]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdSetLineStippleKHR(commandBuffer, lineStippleFactor, lineStipplePattern, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdSetLineStippleKHR);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdSetLineStippleKHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdSetLineStippleKHR(commandBuffer, lineStippleFactor, lineStipplePattern, record_obj);
+    }
+    DispatchCmdSetLineStippleKHR(commandBuffer, lineStippleFactor, lineStipplePattern);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdSetLineStippleKHR]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdSetLineStippleKHR(commandBuffer, lineStippleFactor, lineStipplePattern, record_obj);
+    }
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceCalibrateableTimeDomainsKHR(VkPhysicalDevice physicalDevice,
@@ -15148,30 +15224,6 @@ VKAPI_ATTR VkDeviceAddress VKAPI_CALL GetPipelineIndirectDeviceAddressNV(VkDevic
     return result;
 }
 
-VKAPI_ATTR void VKAPI_CALL CmdSetTessellationDomainOriginEXT(VkCommandBuffer commandBuffer,
-                                                             VkTessellationDomainOrigin domainOrigin) {
-    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
-    bool skip = false;
-    ErrorObject error_obj(vvl::Func::vkCmdSetTessellationDomainOriginEXT,
-                          VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
-    for (const ValidationObject* intercept :
-         layer_data->intercept_vectors[InterceptIdPreCallValidateCmdSetTessellationDomainOriginEXT]) {
-        auto lock = intercept->ReadLock();
-        skip |= intercept->PreCallValidateCmdSetTessellationDomainOriginEXT(commandBuffer, domainOrigin, error_obj);
-        if (skip) return;
-    }
-    RecordObject record_obj(vvl::Func::vkCmdSetTessellationDomainOriginEXT);
-    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdSetTessellationDomainOriginEXT]) {
-        auto lock = intercept->WriteLock();
-        intercept->PreCallRecordCmdSetTessellationDomainOriginEXT(commandBuffer, domainOrigin, record_obj);
-    }
-    DispatchCmdSetTessellationDomainOriginEXT(commandBuffer, domainOrigin);
-    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdSetTessellationDomainOriginEXT]) {
-        auto lock = intercept->WriteLock();
-        intercept->PostCallRecordCmdSetTessellationDomainOriginEXT(commandBuffer, domainOrigin, record_obj);
-    }
-}
-
 VKAPI_ATTR void VKAPI_CALL CmdSetDepthClampEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthClampEnable) {
     auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
     bool skip = false;
@@ -15399,6 +15451,30 @@ VKAPI_ATTR void VKAPI_CALL CmdSetColorWriteMaskEXT(VkCommandBuffer commandBuffer
         auto lock = intercept->WriteLock();
         intercept->PostCallRecordCmdSetColorWriteMaskEXT(commandBuffer, firstAttachment, attachmentCount, pColorWriteMasks,
                                                          record_obj);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdSetTessellationDomainOriginEXT(VkCommandBuffer commandBuffer,
+                                                             VkTessellationDomainOrigin domainOrigin) {
+    auto layer_data = GetLayerDataPtr(get_dispatch_key(commandBuffer), layer_data_map);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkCmdSetTessellationDomainOriginEXT,
+                          VulkanTypedHandle(commandBuffer, kVulkanObjectTypeCommandBuffer));
+    for (const ValidationObject* intercept :
+         layer_data->intercept_vectors[InterceptIdPreCallValidateCmdSetTessellationDomainOriginEXT]) {
+        auto lock = intercept->ReadLock();
+        skip |= intercept->PreCallValidateCmdSetTessellationDomainOriginEXT(commandBuffer, domainOrigin, error_obj);
+        if (skip) return;
+    }
+    RecordObject record_obj(vvl::Func::vkCmdSetTessellationDomainOriginEXT);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPreCallRecordCmdSetTessellationDomainOriginEXT]) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordCmdSetTessellationDomainOriginEXT(commandBuffer, domainOrigin, record_obj);
+    }
+    DispatchCmdSetTessellationDomainOriginEXT(commandBuffer, domainOrigin);
+    for (ValidationObject* intercept : layer_data->intercept_vectors[InterceptIdPostCallRecordCmdSetTessellationDomainOriginEXT]) {
+        auto lock = intercept->WriteLock();
+        intercept->PostCallRecordCmdSetTessellationDomainOriginEXT(commandBuffer, domainOrigin, record_obj);
     }
 }
 
@@ -17365,6 +17441,8 @@ const vvl::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkSignalSemaphoreKHR", {kFuncTypeDev, (void*)SignalSemaphoreKHR}},
     {"vkGetPhysicalDeviceFragmentShadingRatesKHR", {kFuncTypePdev, (void*)GetPhysicalDeviceFragmentShadingRatesKHR}},
     {"vkCmdSetFragmentShadingRateKHR", {kFuncTypeDev, (void*)CmdSetFragmentShadingRateKHR}},
+    {"vkCmdSetRenderingAttachmentLocationsKHR", {kFuncTypeDev, (void*)CmdSetRenderingAttachmentLocationsKHR}},
+    {"vkCmdSetRenderingInputAttachmentIndicesKHR", {kFuncTypeDev, (void*)CmdSetRenderingInputAttachmentIndicesKHR}},
     {"vkWaitForPresentKHR", {kFuncTypeDev, (void*)WaitForPresentKHR}},
     {"vkGetBufferDeviceAddressKHR", {kFuncTypeDev, (void*)GetBufferDeviceAddressKHR}},
     {"vkGetBufferOpaqueCaptureAddressKHR", {kFuncTypeDev, (void*)GetBufferOpaqueCaptureAddressKHR}},
@@ -17405,6 +17483,7 @@ const vvl::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkGetDeviceImageSubresourceLayoutKHR", {kFuncTypeDev, (void*)GetDeviceImageSubresourceLayoutKHR}},
     {"vkGetImageSubresourceLayout2KHR", {kFuncTypeDev, (void*)GetImageSubresourceLayout2KHR}},
     {"vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR", {kFuncTypePdev, (void*)GetPhysicalDeviceCooperativeMatrixPropertiesKHR}},
+    {"vkCmdSetLineStippleKHR", {kFuncTypeDev, (void*)CmdSetLineStippleKHR}},
     {"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR", {kFuncTypePdev, (void*)GetPhysicalDeviceCalibrateableTimeDomainsKHR}},
     {"vkGetCalibratedTimestampsKHR", {kFuncTypeDev, (void*)GetCalibratedTimestampsKHR}},
     {"vkCmdBindDescriptorSets2KHR", {kFuncTypeDev, (void*)CmdBindDescriptorSets2KHR}},
@@ -17675,7 +17754,6 @@ const vvl::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkGetPipelineIndirectMemoryRequirementsNV", {kFuncTypeDev, (void*)GetPipelineIndirectMemoryRequirementsNV}},
     {"vkCmdUpdatePipelineIndirectBufferNV", {kFuncTypeDev, (void*)CmdUpdatePipelineIndirectBufferNV}},
     {"vkGetPipelineIndirectDeviceAddressNV", {kFuncTypeDev, (void*)GetPipelineIndirectDeviceAddressNV}},
-    {"vkCmdSetTessellationDomainOriginEXT", {kFuncTypeDev, (void*)CmdSetTessellationDomainOriginEXT}},
     {"vkCmdSetDepthClampEnableEXT", {kFuncTypeDev, (void*)CmdSetDepthClampEnableEXT}},
     {"vkCmdSetPolygonModeEXT", {kFuncTypeDev, (void*)CmdSetPolygonModeEXT}},
     {"vkCmdSetRasterizationSamplesEXT", {kFuncTypeDev, (void*)CmdSetRasterizationSamplesEXT}},
@@ -17686,6 +17764,7 @@ const vvl::unordered_map<std::string, function_data> name_to_funcptr_map = {
     {"vkCmdSetColorBlendEnableEXT", {kFuncTypeDev, (void*)CmdSetColorBlendEnableEXT}},
     {"vkCmdSetColorBlendEquationEXT", {kFuncTypeDev, (void*)CmdSetColorBlendEquationEXT}},
     {"vkCmdSetColorWriteMaskEXT", {kFuncTypeDev, (void*)CmdSetColorWriteMaskEXT}},
+    {"vkCmdSetTessellationDomainOriginEXT", {kFuncTypeDev, (void*)CmdSetTessellationDomainOriginEXT}},
     {"vkCmdSetRasterizationStreamEXT", {kFuncTypeDev, (void*)CmdSetRasterizationStreamEXT}},
     {"vkCmdSetConservativeRasterizationModeEXT", {kFuncTypeDev, (void*)CmdSetConservativeRasterizationModeEXT}},
     {"vkCmdSetExtraPrimitiveOverestimationSizeEXT", {kFuncTypeDev, (void*)CmdSetExtraPrimitiveOverestimationSizeEXT}},

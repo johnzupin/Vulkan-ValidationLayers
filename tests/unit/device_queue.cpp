@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2023 Valve Corporation
- * Copyright (c) 2023 LunarG, Inc.
+ * Copyright (c) 2023-2024 Valve Corporation
+ * Copyright (c) 2023-2024 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -320,7 +320,7 @@ TEST_F(NegativeDeviceQueue, BindPipeline) {
         GTEST_SKIP() << "Only VK_QUEUE_TRANSFER_BIT Queue is not supported";
     }
     vkt::CommandPool commandPool(*m_device, only_transfer_queueFamilyIndex);
-    vkt::CommandBuffer commandBuffer(m_device, &commandPool);
+    vkt::CommandBuffer commandBuffer(*m_device, &commandPool);
 
     CreatePipelineHelper g_pipe(*this);
     g_pipe.InitState();
@@ -375,6 +375,8 @@ TEST_F(NegativeDeviceQueue, Robustness2WithoutRobustness) {
     device_ci.queueCreateInfoCount = 1u;
     device_ci.pQueueCreateInfos = &device_queue_ci;
     device_ci.enabledLayerCount = 0u;
+    device_ci.enabledExtensionCount = m_device_extension_names.size();
+    device_ci.ppEnabledExtensionNames = m_device_extension_names.data();
 
     VkDevice device;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPhysicalDeviceRobustness2FeaturesEXT-robustBufferAccess2-04000");
@@ -449,10 +451,10 @@ TEST_F(NegativeDeviceQueue, MismatchedQueueFamiliesOnSubmit) {
 
     const uint32_t other_queue_family = queue_families[1];
     VkQueue other_queue;
-    vk::GetDeviceQueue(m_device->device(), other_queue_family, 0, &other_queue);
+    vk::GetDeviceQueue(device(), other_queue_family, 0, &other_queue);
 
     vkt::CommandPool cmd_pool(*m_device, queue_family);
-    vkt::CommandBuffer cmd_buff(m_device, &cmd_pool);
+    vkt::CommandBuffer cmd_buff(*m_device, &cmd_pool);
 
     cmd_buff.begin();
     cmd_buff.end();

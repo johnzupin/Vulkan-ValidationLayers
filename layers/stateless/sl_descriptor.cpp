@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2023 The Khronos Group Inc.
- * Copyright (c) 2015-2023 Valve Corporation
- * Copyright (c) 2015-2023 LunarG, Inc.
- * Copyright (C) 2015-2023 Google Inc.
+/* Copyright (c) 2015-2024 The Khronos Group Inc.
+ * Copyright (c) 2015-2024 Valve Corporation
+ * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (C) 2015-2024 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -190,7 +190,7 @@ bool StatelessValidation::manual_PreCallValidateCreateSampler(VkDevice device, c
     // If compareEnable is VK_TRUE, compareOp must be a valid VkCompareOp value
     const auto *sampler_reduction = vku::FindStructInPNextChain<VkSamplerReductionModeCreateInfo>(pCreateInfo->pNext);
     if (pCreateInfo->compareEnable == VK_TRUE) {
-        skip |= ValidateRangedEnum(create_info_loc.dot(Field::compareOp), "VkCompareOp", pCreateInfo->compareOp,
+        skip |= ValidateRangedEnum(create_info_loc.dot(Field::compareOp), vvl::Enum::VkCompareOp, pCreateInfo->compareOp,
                                    "VUID-VkSamplerCreateInfo-compareEnable-01080");
         if (sampler_reduction != nullptr) {
             if (sampler_reduction->reductionMode != VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE) {
@@ -220,7 +220,7 @@ bool StatelessValidation::manual_PreCallValidateCreateSampler(VkDevice device, c
     if ((pCreateInfo->addressModeU == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER) ||
         (pCreateInfo->addressModeV == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER) ||
         (pCreateInfo->addressModeW == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)) {
-        skip |= ValidateRangedEnum(create_info_loc.dot(Field::borderColor), "VkBorderColor", pCreateInfo->borderColor,
+        skip |= ValidateRangedEnum(create_info_loc.dot(Field::borderColor), vvl::Enum::VkBorderColor, pCreateInfo->borderColor,
                                    "VUID-VkSamplerCreateInfo-addressModeU-01078");
     }
 
@@ -312,12 +312,6 @@ bool StatelessValidation::manual_PreCallValidateCreateSampler(VkDevice device, c
 
     if (pCreateInfo->borderColor == VK_BORDER_COLOR_INT_CUSTOM_EXT ||
         pCreateInfo->borderColor == VK_BORDER_COLOR_FLOAT_CUSTOM_EXT) {
-        if (!IsExtEnabled(device_extensions.vk_ext_custom_border_color)) {
-            // TODO - https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/2787
-            skip |= LogError("UNASSIGNED-DrawState-ExtensionNotEnabled", device, create_info_loc.dot(Field::borderColor),
-                             "is %s but %s is not enabled.", string_VkBorderColor(pCreateInfo->borderColor),
-                             VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
-        }
         auto custom_create_info = vku::FindStructInPNextChain<VkSamplerCustomBorderColorCreateInfoEXT>(pCreateInfo->pNext);
         if (!custom_create_info) {
             skip |= LogError("VUID-VkSamplerCreateInfo-borderColor-04011", device, create_info_loc.dot(Field::borderColor),
@@ -569,24 +563,6 @@ bool StatelessValidation::manual_PreCallValidateCreateDescriptorSetLayout(VkDevi
         }
     }
 
-    // TODO - Remove these 2 extension checks once the enum-to-extensions logic is generated
-    // mostly likely will fail test trying to hit these
-    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/2787
-    if (pCreateInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR &&
-        !IsExtEnabled(device_extensions.vk_khr_push_descriptor)) {
-        skip |= LogError("UNASSIGNED-DrawState-ExtensionNotEnabled", device, error_obj.location,
-                         "Attempted to use %s in %s but its required extension %s has not been enabled.\n",
-                         "VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR", "VkDescriptorSetLayoutCreateInfo::flags",
-                         VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    }
-    if (pCreateInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT &&
-        !IsExtEnabled(device_extensions.vk_ext_descriptor_indexing)) {
-        skip |= LogError("UNASSIGNED-DrawState-ExtensionNotEnabled", device, error_obj.location,
-                         "Attemped to use %s in %s but its required extension %s has not been enabled.\n",
-                         "VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT", "VkDescriptorSetLayoutCreateInfo::flags",
-                         VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-    }
-
     if ((pCreateInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR) &&
         (pCreateInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_HOST_ONLY_POOL_BIT_EXT)) {
         skip |= LogError("VUID-VkDescriptorSetLayoutCreateInfo-flags-04590", device, create_info_loc.dot(Field::flags), "is %s.",
@@ -674,7 +650,7 @@ bool StatelessValidation::ValidateWriteDescriptorSet(const Location &loc, const 
             } else if (descriptor_type != VK_DESCRIPTOR_TYPE_SAMPLER) {
                 for (uint32_t descriptor_index = 0; descriptor_index < descriptor_writes.descriptorCount; ++descriptor_index) {
                     skip |= ValidateRangedEnum(writes_loc.dot(Field::pImageInfo, descriptor_index).dot(Field::imageLayout),
-                                               "VkImageLayout", descriptor_writes.pImageInfo[descriptor_index].imageLayout,
+                                               vvl::Enum::VkImageLayout, descriptor_writes.pImageInfo[descriptor_index].imageLayout,
                                                kVUIDUndefined);
                 }
             }
@@ -979,20 +955,17 @@ bool StatelessValidation::manual_PreCallValidateCreateQueryPool(VkDevice device,
                                                                 const VkAllocationCallbacks *pAllocator, VkQueryPool *pQueryPool,
                                                                 const ErrorObject &error_obj) const {
     bool skip = false;
-
-    // Validation for parameters excluded from the generated validation code due to a 'noautovalidity' tag in vk.xml
-    if (!pCreateInfo) {
-        return skip;
-    }
     const Location create_info_loc = error_obj.location.dot(Field::pCreateInfo);
-    // If queryType is VK_QUERY_TYPE_PIPELINE_STATISTICS, pipelineStatistics must be a valid combination of
-    // VkQueryPipelineStatisticFlagBits values
-    if ((pCreateInfo->queryType == VK_QUERY_TYPE_PIPELINE_STATISTICS) && (pCreateInfo->pipelineStatistics != 0) &&
-        ((pCreateInfo->pipelineStatistics & (~AllVkQueryPipelineStatisticFlagBits)) != 0)) {
-        skip |= LogError("VUID-VkQueryPoolCreateInfo-queryType-00792", device, create_info_loc.dot(Field::queryType),
-                         "is VK_QUERY_TYPE_PIPELINE_STATISTICS, but "
-                         "pCreateInfo->pipelineStatistics must be a valid combination of VkQueryPipelineStatisticFlagBits "
-                         "values.");
+    if (pCreateInfo->queryType == VK_QUERY_TYPE_PIPELINE_STATISTICS) {
+        if (pCreateInfo->pipelineStatistics == 0) {
+            skip |= LogError("VUID-VkQueryPoolCreateInfo-queryType-09534", device, create_info_loc.dot(Field::queryType),
+                             "is VK_QUERY_TYPE_PIPELINE_STATISTICS, but pCreateInfo->pipelineStatistics is zero");
+        } else if ((pCreateInfo->pipelineStatistics & (~AllVkQueryPipelineStatisticFlagBits)) != 0) {
+            skip |= LogError("VUID-VkQueryPoolCreateInfo-queryType-00792", device, create_info_loc.dot(Field::queryType),
+                             "is VK_QUERY_TYPE_PIPELINE_STATISTICS, but "
+                             "pCreateInfo->pipelineStatistics must be a valid combination of VkQueryPipelineStatisticFlagBits "
+                             "values.");
+        }
     }
     if (pCreateInfo->queryCount == 0) {
         skip |= LogError("VUID-VkQueryPoolCreateInfo-queryCount-02763", device, create_info_loc.dot(Field::queryCount), "is zero.");
@@ -1120,5 +1093,73 @@ bool StatelessValidation::manual_PreCallValidateCreateSamplerYcbcrConversion(VkD
         }
     }
 
+    return skip;
+}
+
+bool StatelessValidation::manual_PreCallValidateGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT *pDescriptorInfo,
+                                                                 size_t dataSize, void *pDescriptor,
+                                                                 const ErrorObject &error_obj) const {
+    bool skip = false;
+
+    const Location descriptor_info_loc = error_obj.location.dot(Field::pDescriptorInfo);
+    const Location data_loc = descriptor_info_loc.dot(Field::data);
+    const VkDescriptorAddressInfoEXT *address_info = nullptr;
+    Field data_field = Field::Empty;
+    switch (pDescriptorInfo->type) {
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            if (!pDescriptorInfo->data.pCombinedImageSampler) {
+                skip |= LogError("VUID-VkDescriptorGetInfoEXT-pCombinedImageSampler-parameter", device,
+                                 descriptor_info_loc.dot(Field::type),
+                                 "is VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, but pCombinedImageSampler is null.");
+            }
+            break;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            if (!pDescriptorInfo->data.pInputAttachmentImage) {
+                skip |= LogError("VUID-VkDescriptorGetInfoEXT-pInputAttachmentImage-parameter", device,
+                                 descriptor_info_loc.dot(Field::type),
+                                 "is VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, but pInputAttachmentImage is null.");
+            }
+            break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            if (pDescriptorInfo->data.pUniformTexelBuffer) {
+                address_info = pDescriptorInfo->data.pUniformTexelBuffer;
+                data_field = Field::pUniformTexelBuffer;
+            }
+            break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            if (pDescriptorInfo->data.pStorageTexelBuffer) {
+                address_info = pDescriptorInfo->data.pStorageTexelBuffer;
+                data_field = Field::pStorageTexelBuffer;
+            }
+            break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            if (pDescriptorInfo->data.pUniformBuffer) {
+                address_info = pDescriptorInfo->data.pUniformBuffer;
+                data_field = Field::pUniformBuffer;
+            }
+            break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            if (pDescriptorInfo->data.pStorageBuffer) {
+                address_info = pDescriptorInfo->data.pStorageBuffer;
+                data_field = Field::pStorageBuffer;
+            }
+            break;
+        default:
+            break;
+    }
+
+    if (address_info) {
+        const Location address_loc = data_loc.dot(data_field);
+        skip |= ValidateDescriptorAddressInfoEXT(*address_info, address_loc);
+
+        if (address_info->address != 0) {
+            if ((pDescriptorInfo->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
+                 pDescriptorInfo->type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER) &&
+                address_info->format == VK_FORMAT_UNDEFINED) {
+                skip |= LogError("VUID-VkDescriptorAddressInfoEXT-None-09508", device, address_loc.dot(Field::format),
+                                 "is VK_FORMAT_UNDEFINED.");
+            }
+        }
+    }
     return skip;
 }
