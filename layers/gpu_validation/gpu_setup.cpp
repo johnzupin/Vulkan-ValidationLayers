@@ -32,6 +32,7 @@
 #include "gpu_vuids.h"
 #include "containers/custom_containers.h"
 // Generated shaders
+#include "gpu_shaders/gpu_error_header.h"
 #include "generated/gpu_pre_draw_vert.h"
 #include "generated/gpu_pre_dispatch_comp.h"
 #include "generated/gpu_pre_trace_rays_rgen.h"
@@ -78,6 +79,11 @@ std::shared_ptr<vvl::CommandBuffer> gpuav::Validator::CreateCmdBufferState(VkCom
                                                                            const VkCommandBufferAllocateInfo *pCreateInfo,
                                                                            const vvl::CommandPool *pool) {
     return std::static_pointer_cast<vvl::CommandBuffer>(std::make_shared<CommandBuffer>(this, cb, pCreateInfo, pool));
+}
+
+std::shared_ptr<vvl::Queue> gpuav::Validator::CreateQueue(VkQueue q, uint32_t index, VkDeviceQueueCreateFlags flags,
+                                                          const VkQueueFamilyProperties &queueFamilyProperties) {
+    return std::static_pointer_cast<vvl::Queue>(std::make_shared<Queue>(*this, q, index, flags, queueFamilyProperties));
 }
 
 // Perform initializations that can be done at Create Device time.
@@ -161,7 +167,7 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const
                    "Use of descriptor buffers will result in no descriptor checking");
     }
 
-    output_buffer_size = sizeof(uint32_t) * (glsl::kInstMaxOutCnt + spvtools::kDebugOutputDataOffset);
+    output_buffer_size = sizeof(uint32_t) * (glsl::kMaxErrorRecordSize + spvtools::kDebugOutputDataOffset);
 
     if (gpuav_settings.validate_descriptors && !force_buffer_device_address) {
         gpuav_settings.validate_descriptors = false;

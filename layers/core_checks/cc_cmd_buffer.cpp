@@ -1246,11 +1246,11 @@ bool CoreChecks::PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuffer
         for (const auto &sub_layout_map_entry : sub_cb_state.image_layout_map) {
             const auto image = sub_layout_map_entry.first;
 
-            const auto *cb_subres_map = cb_state.GetImageSubresourceLayoutMap(image);
+            const auto cb_subres_map = cb_state.GetImageSubresourceLayoutMap(image);
             // Const getter can be null in which case we have nothing to check against for this image...
             if (!cb_subres_map) continue;
 
-            const auto &sub_layout_map = sub_layout_map_entry.second->GetLayoutMap();
+            const auto &sub_layout_map = sub_layout_map_entry.second.map->GetLayoutMap();
             const auto &cb_layout_map = cb_subres_map->GetLayoutMap();
             for (sparse_container::parallel_iterator<const ImageSubresourceLayoutMap::LayoutMap> iter(sub_layout_map, cb_layout_map,
                                                                                                       0);

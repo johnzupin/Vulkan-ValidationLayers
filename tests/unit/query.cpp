@@ -1428,9 +1428,7 @@ TEST_F(NegativeQuery, CmdEndQueryIndexedEXTIndex) {
     TEST_DESCRIPTION("Test InvalidCmdEndQueryIndexedEXT with invalid index");
 
     AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    InitState();
+    RETURN_IF_SKIP(Init());
 
     VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(transform_feedback_properties);
@@ -1716,6 +1714,8 @@ TEST_F(NegativeQuery, MultiviewBeginQuery) {
 TEST_F(NegativeQuery, PipelineStatisticsQuery) {
     TEST_DESCRIPTION("Test unsupported pipeline statistics queries");
 
+    AddRequiredFeature(vkt::Feature::pipelineStatisticsQuery);
+
     RETURN_IF_SKIP(Init());
 
     const std::optional<uint32_t> graphics_queue_family_index =
@@ -1878,7 +1878,6 @@ TEST_F(NegativeQuery, PrimitivesGeneratedDiscardEnabled) {
     pipe.rs_state_ci_ = rs_ci;
     // Rasterization discard enable prohibits fragment shader.
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT, 1);
@@ -1934,7 +1933,6 @@ TEST_F(NegativeQuery, PrimitivesGeneratedStreams) {
 
     CreatePipelineHelper pipe(*this);
     pipe.rs_state_ci_.pNext = &rasterization_streams;
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT, 1);
@@ -2546,7 +2544,6 @@ TEST_F(NegativeQuery, InvalidMeshQueryAtDraw) {
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_MESH_PRIMITIVES_GENERATED_EXT, 1);

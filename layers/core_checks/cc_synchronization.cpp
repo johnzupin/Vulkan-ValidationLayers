@@ -804,8 +804,7 @@ bool CoreChecks::ValidateRenderPassPipelineBarriers(const Location &outer_loc, c
                                                     VkDependencyFlags dependency_flags, uint32_t mem_barrier_count,
                                                     const VkMemoryBarrier *mem_barriers, uint32_t buffer_mem_barrier_count,
                                                     const VkBufferMemoryBarrier *buffer_mem_barriers,
-                                                    uint32_t image_mem_barrier_count,
-                                                    const VkImageMemoryBarrier *image_barriers) const {
+                                                    uint32_t image_mem_barrier_count, const VkImageMemoryBarrier *image_barriers) const {
     bool skip = false;
     const auto &rp_state = cb_state.activeRenderPass;
     RenderPassDepState state(this, "VUID-vkCmdPipelineBarrier-None-07889", cb_state.GetActiveSubpass(), rp_state->VkHandle(),
@@ -1270,7 +1269,8 @@ bool CoreChecks::PreCallValidateCmdPipelineBarrier(
     if (cb_state->activeRenderPass && cb_state->activeRenderPass->UsesDynamicRendering()) {
         // In dynamic rendering, vkCmdPipelineBarrier is only allowed for VK_EXT_shader_tile_image
         skip |= ValidateShaderTileImageBarriers(objlist, error_obj.location, dependencyFlags, memoryBarrierCount, pMemoryBarriers,
-                                                bufferMemoryBarrierCount, imageMemoryBarrierCount, srcStageMask, dstStageMask);
+                                                bufferMemoryBarrierCount, imageMemoryBarrierCount, pImageMemoryBarriers,
+                                                srcStageMask, dstStageMask);
     }
     skip |= ValidateBarriers(error_obj.location, *cb_state, srcStageMask, dstStageMask, memoryBarrierCount, pMemoryBarriers,
                              bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
@@ -1534,6 +1534,9 @@ bool CoreChecks::ValidateBarrierLayoutToImageUsage(const Location &layout_loc, V
             is_error |= ((usage_flags & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) == 0);
             is_error |= ((usage_flags & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT) == 0);
             break;
+        case VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR:
+            is_error = !IsShaderTileImageUsageValid(usage_flags);
+            break;
         case VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR:
             is_error = ((usage_flags & VK_IMAGE_USAGE_VIDEO_DECODE_SRC_BIT_KHR) == 0);
             break;
@@ -1565,15 +1568,46 @@ bool CoreChecks::ValidateBarrierLayoutToImageUsage(const Location &layout_loc, V
     return skip;
 }
 
+std::vector<uint32_t> GetUsedAttachments(const vvl::CommandBuffer &cb_state) {
+    std::set<uint32_t> unique;
+
+    for (size_t i = 0; i < cb_state.rendering_attachments.color_locations.size(); ++i) {
+        const uint32_t unmapped_color_attachment = cb_state.rendering_attachments.color_locations[i];
+        if (unmapped_color_attachment != VK_ATTACHMENT_UNUSED) {
+            unique.insert(unmapped_color_attachment);
+        }
+    }
+
+    for (size_t i = 0; i < cb_state.rendering_attachments.color_indexes.size(); ++i) {
+        const uint32_t unmapped_color_index = cb_state.rendering_attachments.color_indexes[i];
+        if (unmapped_color_index != VK_ATTACHMENT_UNUSED) {
+            unique.insert(unmapped_color_index);
+        }
+    }
+
+    if (cb_state.rendering_attachments.depth_index) {
+        unique.insert(*cb_state.rendering_attachments.depth_index);
+    }
+    if (cb_state.rendering_attachments.stencil_index) {
+        unique.insert(*cb_state.rendering_attachments.stencil_index);
+    }
+
+    std::vector<uint32_t> attachments;
+    for (auto x : unique) {
+        attachments.push_back(x);
+    }
+    return attachments;
+}
+
 // Verify image barriers are compatible with the images they reference.
 bool CoreChecks::ValidateBarriersToImages(const Location &barrier_loc, const vvl::CommandBuffer &cb_state,
                                           const ImageBarrier &img_barrier,
-                                          CommandBufferImageLayoutMap &layout_updates_state) const {
+                                          vvl::CommandBuffer::ImageLayoutMap &layout_updates_state) const {
     bool skip = false;
     using sync_vuid_maps::GetImageBarrierVUID;
     using sync_vuid_maps::ImageError;
 
-    const CommandBufferImageLayoutMap &current_map = cb_state.GetImageSubresourceLayoutMap();
+    const auto &current_map = cb_state.GetImageSubresourceLayoutMap();
 
     {
         auto image_state = Get<vvl::Image>(img_barrier.image);
@@ -1648,10 +1682,55 @@ bool CoreChecks::ValidateBarriersToImages(const Location &barrier_loc, const vvl
             }
         }
 
+        if (!enabled_features.dynamicRenderingLocalRead) {
+            if (img_barrier.newLayout == VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR) {
+                auto vuid = GetImageBarrierVUID(barrier_loc, ImageError::kDynamicRenderingLocalReadNew);
+                skip |= LogError(vuid, img_barrier.image, image_loc, "(%s) cannot have newLayout = %s.",
+                                 FormatHandle(img_barrier.image).c_str(), string_VkImageLayout(img_barrier.newLayout));
+            }
+            if (img_barrier.oldLayout == VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR) {
+                auto vuid = GetImageBarrierVUID(barrier_loc, ImageError::kDynamicRenderingLocalReadOld);
+                skip |= LogError(vuid, img_barrier.image, image_loc, "(%s) cannot have oldLayout = %s.",
+                                 FormatHandle(img_barrier.image).c_str(), string_VkImageLayout(img_barrier.oldLayout));
+            }
+        }
+
         if (img_barrier.oldLayout == VK_IMAGE_LAYOUT_UNDEFINED) {
             // TODO: Set memory invalid which is in mem_tracker currently
         } else if (!IsQueueFamilyExternal(img_barrier.srcQueueFamilyIndex)) {
             skip |= UpdateCommandBufferImageLayoutMap(cb_state, image_loc, img_barrier, current_map, layout_updates_state);
+        }
+
+        if (enabled_features.dynamicRenderingLocalRead && cb_state.activeRenderPass) {
+            const auto &rp_state = cb_state.activeRenderPass;
+            const auto &img_barrier_image = img_barrier.image;
+            const auto &rendering_info = rp_state->dynamic_rendering_begin_rendering_info;
+            std::vector<uint32_t> used_attachments(GetUsedAttachments(cb_state));
+
+            for (auto color_attachment_idx : used_attachments) {
+                if (color_attachment_idx >= rendering_info.colorAttachmentCount) {
+                    continue;
+                }
+                const auto &color_attachment = rendering_info.pColorAttachments[color_attachment_idx];
+                if (color_attachment.imageView == VK_NULL_HANDLE) {
+                    continue;
+                }
+                const auto &image_view_state = Get<vvl::ImageView>(color_attachment.imageView);
+                const auto &image_view_image_state = image_view_state->image_state;
+
+                if (img_barrier_image == image_view_image_state->VkHandle()) {
+                    auto guard = image_view_image_state->layout_range_map->ReadLock();
+
+                    for (const auto &entry : *image_view_image_state->layout_range_map) {
+                        if (entry.second != VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR && entry.second != VK_IMAGE_LAYOUT_GENERAL) {
+                            const auto &vuid = sync_vuid_maps::GetShaderTileImageVUID(
+                                barrier_loc, sync_vuid_maps::ShaderTileImageError::kShaderTileImageLayout);
+                            skip |= LogError(vuid, img_barrier.image, barrier_loc, "image layout is %s.",
+                                             string_VkImageLayout(entry.second));
+                        }
+                    }
+                }
+            }
         }
 
         // checks color format and (single-plane or non-disjoint)
@@ -2327,8 +2406,9 @@ bool CoreChecks::ValidateImageBarrier(const LogObjectList &objects, const Locati
         skip |= ValidateBarrierQueueFamilies(objects, barrier_loc, image_loc, mem_barrier, image_data->Handle(),
                                              image_data->createInfo.sharingMode);
 
-        skip |= ValidateImageAspectMask(image_data->VkHandle(), image_data->createInfo.format,
-                                        mem_barrier.subresourceRange.aspectMask, image_data->disjoint, image_loc);
+        skip |=
+            ValidateImageAspectMask(image_data->VkHandle(), image_data->createInfo.format, mem_barrier.subresourceRange.aspectMask,
+                                    image_data->disjoint, image_loc, "UNASSIGNED-ImageBarrier-InvalidImageAspect");
 
         skip |= ValidateImageBarrierSubresourceRange(image_data->createInfo, mem_barrier.subresourceRange, objects,
                                                      barrier_loc.dot(Field::subresourceRange));
@@ -2346,7 +2426,7 @@ bool CoreChecks::ValidateBarriers(const Location &outer_loc, const vvl::CommandB
 
     // Tracks duplicate layout transition for image barriers.
     // Keeps state between ValidateBarriersToImages calls.
-    CommandBufferImageLayoutMap layout_updates_state;
+    vvl::CommandBuffer::ImageLayoutMap layout_updates_state;
 
     for (uint32_t i = 0; i < memBarrierCount; ++i) {
         const Location barrier_loc = outer_loc.dot(Struct::VkMemoryBarrier, Field::pMemoryBarriers, i);
@@ -2375,7 +2455,7 @@ bool CoreChecks::ValidateDependencyInfo(const LogObjectList &objects, const Loca
 
     // Tracks duplicate layout transition for image barriers.
     // Keeps state between ValidateBarriersToImages calls.
-    CommandBufferImageLayoutMap layout_updates_state;
+    vvl::CommandBuffer::ImageLayoutMap layout_updates_state;
 
     for (uint32_t i = 0; i < dep_info.memoryBarrierCount; ++i) {
         const Location barrier_loc = dep_info_loc.dot(Struct::VkMemoryBarrier2, Field::pMemoryBarriers, i);
@@ -2400,79 +2480,80 @@ bool CoreChecks::ValidateDependencyInfo(const LogObjectList &objects, const Loca
 }
 
 bool CoreChecks::ValidatePipelineStageForShaderTileImage(const LogObjectList &objlist, const Location &loc,
-                                                         VkPipelineStageFlags2KHR stage_mask, const std::string &vuid) const {
+                                                         VkPipelineStageFlags2KHR stage_mask,
+                                                         VkDependencyFlags dependency_flags) const {
     bool skip = false;
     if (HasNonFramebufferStagePipelineStageFlags(stage_mask)) {
+        const auto &vuid =
+            sync_vuid_maps::GetShaderTileImageVUID(loc, sync_vuid_maps::ShaderTileImageError::kShaderTileImageFramebufferSpace);
+
         skip |= LogError(vuid, objlist, loc, "(%s) is restricted to framebuffer space stages (%s).",
                          sync_utils::StringPipelineStageFlags(stage_mask).c_str(),
                          sync_utils::StringPipelineStageFlags(kFramebufferStagePipelineStageFlags).c_str());
     }
+    if (HasFramebufferStagePipelineStageFlags(stage_mask) && loc.field == Field::srcStageMask &&
+        (dependency_flags & VK_DEPENDENCY_BY_REGION_BIT) != VK_DEPENDENCY_BY_REGION_BIT) {
+        const auto &vuid =
+            sync_vuid_maps::GetShaderTileImageVUID(loc, sync_vuid_maps::ShaderTileImageError::kShaderTileImageDependencyFlags);
+        skip |= LogError(vuid, objlist, loc, "must contain VK_DEPENDENCY_BY_REGION_BIT.");
+    }
+
     return skip;
 }
 
-bool CoreChecks::ValidateAccessMaskForShaderTileImage(const LogObjectList &objlist, const Location &loc,
-                                                      VkAccessFlags2KHR access_mask, const std::string &vuid) const {
-    bool skip = false;
-    if (HasNonShaderTileImageAccessFlags(access_mask)) {
-        skip |= LogError(vuid, objlist, loc, "(%s) is not from allowed access mask (%s).",
-                         sync_utils::StringAccessFlags(access_mask).c_str(),
-                         sync_utils::StringAccessFlags(kShaderTileImageAllowedAccessFlags).c_str());
-    }
-    return skip;
+bool CoreChecks::IsShaderTileImageUsageValid(VkImageUsageFlags image_usage) const {
+    bool valid = false;
+
+    valid |= ((image_usage & VK_IMAGE_USAGE_STORAGE_BIT) != 0);
+    valid |= (((image_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) != 0) &&
+              (image_usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) != 0);
+
+    return valid;
 }
 
 bool CoreChecks::ValidateShaderTileImageBarriers(const LogObjectList &objlist, const Location &outer_loc,
                                                  const VkDependencyInfo &dep_info) const {
     bool skip = false;
-    const auto &vuid =
-        sync_vuid_maps::GetShaderTileImageVUID(outer_loc, sync_vuid_maps::ShaderTileImageError::kShaderTileImageBarrierError);
 
-    skip |= ValidateShaderTimeImageCommon(objlist, outer_loc, vuid, dep_info.dependencyFlags, dep_info.bufferMemoryBarrierCount,
+    skip |= ValidateShaderTileImageCommon(objlist, outer_loc, dep_info.dependencyFlags, dep_info.bufferMemoryBarrierCount,
                                           dep_info.imageMemoryBarrierCount);
 
     for (uint32_t i = 0; i < dep_info.memoryBarrierCount; ++i) {
         const Location loc = outer_loc.dot(Struct::VkMemoryBarrier2, Field::pMemoryBarriers, i);
         const auto &mem_barrier = dep_info.pMemoryBarriers[i];
-        skip |= ValidatePipelineStageForShaderTileImage(objlist, loc.dot(Field::srcStageMask), mem_barrier.srcStageMask, vuid);
-        skip |= ValidatePipelineStageForShaderTileImage(objlist, loc.dot(Field::dstStageMask), mem_barrier.dstStageMask, vuid);
-        skip |= ValidateAccessMaskForShaderTileImage(objlist, loc.dot(Field::srcAccessMask), mem_barrier.srcAccessMask, vuid);
-        skip |= ValidateAccessMaskForShaderTileImage(objlist, loc.dot(Field::dstAccessMask), mem_barrier.dstAccessMask, vuid);
+        skip |= ValidatePipelineStageForShaderTileImage(objlist, loc.dot(Field::srcStageMask), mem_barrier.srcStageMask,
+                                                        dep_info.dependencyFlags);
+        skip |= ValidatePipelineStageForShaderTileImage(objlist, loc.dot(Field::dstStageMask), mem_barrier.dstStageMask,
+                                                        dep_info.dependencyFlags);
     }
+
     return skip;
 }
 
 bool CoreChecks::ValidateShaderTileImageBarriers(const LogObjectList &objlist, const Location &outer_loc,
                                                  VkDependencyFlags dependency_flags, uint32_t memory_barrier_count,
                                                  const VkMemoryBarrier *memory_barriers, uint32_t buffer_barrier_count,
-                                                 uint32_t image_barrier_count, VkPipelineStageFlags src_stage_mask,
-                                                 VkPipelineStageFlags dst_stage_mask) const {
+                                                 uint32_t image_barrier_count, const VkImageMemoryBarrier *image_barriers,
+                                                 VkPipelineStageFlags src_stage_mask, VkPipelineStageFlags dst_stage_mask) const {
     bool skip = false;
-    const auto &vuid =
-        sync_vuid_maps::GetShaderTileImageVUID(outer_loc, sync_vuid_maps::ShaderTileImageError::kShaderTileImageBarrierError);
 
-    skip |= ValidateShaderTimeImageCommon(objlist, outer_loc, vuid, dependency_flags, buffer_barrier_count, image_barrier_count);
-    skip |= ValidatePipelineStageForShaderTileImage(objlist, outer_loc.dot(Field::srcStageMask), src_stage_mask, vuid);
-    skip |= ValidatePipelineStageForShaderTileImage(objlist, outer_loc.dot(Field::dstStageMask), dst_stage_mask, vuid);
+    skip |= ValidateShaderTileImageCommon(objlist, outer_loc, dependency_flags, buffer_barrier_count, image_barrier_count);
+    skip |= ValidatePipelineStageForShaderTileImage(objlist, outer_loc.dot(Field::srcStageMask), src_stage_mask, dependency_flags);
+    skip |= ValidatePipelineStageForShaderTileImage(objlist, outer_loc.dot(Field::dstStageMask), dst_stage_mask, dependency_flags);
 
-    for (uint32_t i = 0; i < memory_barrier_count; ++i) {
-        const Location loc = outer_loc.dot(Struct::VkMemoryBarrier, Field::pMemoryBarriers, i);
-        const auto &mem_barrier = memory_barriers[i];
-        skip |= ValidateAccessMaskForShaderTileImage(objlist, loc.dot(Field::srcAccessMask), mem_barrier.srcAccessMask, vuid);
-        skip |= ValidateAccessMaskForShaderTileImage(objlist, loc.dot(Field::dstAccessMask), mem_barrier.dstAccessMask, vuid);
-    }
     return skip;
 }
 
-bool CoreChecks::ValidateShaderTimeImageCommon(const LogObjectList &objlist, const Location &outer_loc,
-                                               const std::string &barrier_error_vuid, VkDependencyFlags dependency_flags,
-                                               uint32_t buffer_barrier_count, uint32_t image_barrier_count) const {
+bool CoreChecks::ValidateShaderTileImageCommon(const LogObjectList &objlist, const Location &outer_loc,
+                                               VkDependencyFlags dependency_flags, uint32_t buffer_barrier_count,
+                                               uint32_t image_barrier_count) const {
     bool skip = false;
 
     // Check shader tile image features
     const bool features_enabled = enabled_features.shaderTileImageColorReadAccess ||
                                   enabled_features.shaderTileImageDepthReadAccess ||
-                                  enabled_features.shaderTileImageStencilReadAccess;
-    if (!features_enabled && !enabled_features.dynamicRenderingLocalRead) {
+                                  enabled_features.dynamicRenderingLocalRead;
+    if (!features_enabled) {
         const auto &feature_error_vuid =
             sync_vuid_maps::GetShaderTileImageVUID(outer_loc, sync_vuid_maps::ShaderTileImageError::kShaderTileImageFeatureError);
         skip |= LogError(feature_error_vuid, objlist, outer_loc,
@@ -2480,14 +2561,17 @@ bool CoreChecks::ValidateShaderTimeImageCommon(const LogObjectList &objlist, con
                          "VK_EXT_shader_tile_image features.");
     }
 
-    // Check basic parameter requirements for shader tile image barriers
-    if ((dependency_flags & VK_DEPENDENCY_BY_REGION_BIT) != VK_DEPENDENCY_BY_REGION_BIT) {
-        skip |= LogError(barrier_error_vuid, objlist, outer_loc.dot(Field::dependencyFlags),
-                         "should contain VK_DEPENDENCY_BY_REGION_BIT.");
+    if (!enabled_features.dynamicRenderingLocalRead) {
+        if (buffer_barrier_count != 0 || image_barrier_count != 0) {
+            const auto &buf_img_vuid = sync_vuid_maps::GetShaderTileImageVUID(
+                outer_loc, sync_vuid_maps::ShaderTileImageError::kShaderTileImageNoBuffersOrImages);
+            skip |= LogError(buf_img_vuid, objlist, outer_loc,
+                             "can only include memory barriers, while application specify image barrier count %" PRIu32
+                             " and buffer barrier count %" PRIu32,
+                             image_barrier_count, buffer_barrier_count);
+        }
     }
-    if (buffer_barrier_count != 0 || image_barrier_count != 0) {
-        skip |= LogError(barrier_error_vuid, objlist, outer_loc, "can only include memory barriers.");
-    }
+
     return skip;
 }
 

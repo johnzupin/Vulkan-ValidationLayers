@@ -37,6 +37,7 @@ class Buffer;
 class BufferView;
 class CommandBuffer;
 class ImageView;
+class Queue;
 class Sampler;
 
 class DescriptorSet;
@@ -45,8 +46,10 @@ struct CmdIndirectState;
 struct AccelerationStructureBuildValidationInfo;
 
 struct GpuVuid {
-    const char* uniform_access_oob = kVUIDUndefined;
-    const char* storage_access_oob = kVUIDUndefined;
+    const char* uniform_access_oob_06935 = kVUIDUndefined;
+    const char* storage_access_oob_06936 = kVUIDUndefined;
+    const char* uniform_access_oob_08612 = kVUIDUndefined;
+    const char* storage_access_oob_08613 = kVUIDUndefined;
     const char* invalid_descriptor = kVUIDUndefined;
     const char* count_exceeds_bufsize_1 = kVUIDUndefined;
     const char* count_exceeds_bufsize = kVUIDUndefined;
@@ -78,6 +81,7 @@ VALSTATETRACK_DERIVED_STATE_OBJECT(VkCommandBuffer, gpuav::CommandBuffer, vvl::C
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkDescriptorSet, gpuav::DescriptorSet, vvl::DescriptorSet)
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkImageView, gpuav::ImageView, vvl::ImageView)
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkSampler, gpuav::Sampler, vvl::Sampler)
+VALSTATETRACK_DERIVED_STATE_OBJECT(VkQueue, gpuav::Queue, vvl::Queue)
 
 namespace gpuav {
 
@@ -109,7 +113,7 @@ class Validator : public gpu_tracker::Validator {
     bool CheckForCachedInstrumentedShader(const uint32_t index, const uint32_t shader_hash,
                                           create_shader_object_api_state* cso_state);
     void UpdateInstrumentationBuffer(CommandBuffer* cb_node);
-    void UpdateBDABuffer(DeviceMemoryBlock buffer_device_addresses, const Location& loc);
+    void UpdateBDABuffer(const Location& loc);
 
     void UpdateBoundDescriptors(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, const Location& loc);
 
@@ -157,16 +161,19 @@ class Validator : public gpu_tracker::Validator {
     // gpu_error_message.cpp
     // ---------------------
   public:
-    // Return true iff a error has been found in the internal call to GenerateValidationMessage
+    // Return true iff a error has been found
     bool AnalyzeAndGenerateMessages(VkCommandBuffer cmd_buffer, VkQueue queue, CommandResources& cmd_resources,
                                     uint32_t operation_index, uint32_t* const debug_output_buffer,
                                     const std::vector<DescSetState>& descriptor_sets, const Location& loc);
 
   private:
     // Return true iff an error has been found in debug_record, among the list of errors this function manages
-    bool GenerateValidationMessage(const uint32_t* debug_record, const CommandResources& cmd_resources,
-                                   const std::vector<DescSetState>& descriptor_sets, std::string& out_error_msg,
-                                   std::string& out_vuid_msg, bool& out_oob_access) const;
+    bool LogMessageInstBindlessDescriptor(const uint32_t* debug_record, std::string& out_error_msg, std::string& out_vuid_msg,
+                                          const CommandResources& cmd_resources, const std::vector<DescSetState>& descriptor_sets,
+                                          bool& out_oob_access) const;
+    bool LogMessageInstBufferDeviceAddress(const uint32_t* debug_record, std::string& out_error_msg, std::string& out_vuid_msg,
+                                           bool& out_oob_access) const;
+    bool LogMessageInstRayQuery(const uint32_t* debug_record, std::string& out_error_msg, std::string& out_vuid_msg) const;
 
     // gpu_setup.cpp
     // -------------
@@ -188,6 +195,8 @@ class Validator : public gpu_tracker::Validator {
     std::shared_ptr<vvl::DescriptorSet> CreateDescriptorSet(VkDescriptorSet, vvl::DescriptorPool*,
                                                             const std::shared_ptr<vvl::DescriptorSetLayout const>& layout,
                                                             uint32_t variable_count) final;
+    std::shared_ptr<vvl::Queue> CreateQueue(VkQueue q, uint32_t index, VkDeviceQueueCreateFlags flags,
+                                            const VkQueueFamilyProperties& queueFamilyProperties) override;
 
     void CreateDevice(const VkDeviceCreateInfo* pCreateInfo, const Location& loc) final;
     void CreateAccelerationStructureBuildValidationState(const VkDeviceCreateInfo* pCreateInfo, const Location& loc);
@@ -257,18 +266,6 @@ class Validator : public gpu_tracker::Validator {
     void PreCallRecordCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
                                                const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo,
                                                const RecordObject& record_obj) override;
-    void PreCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence,
-                                  const RecordObject&) override;
-    void PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence,
-                                   const RecordObject& record_obj) override;
-    void PreCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR* pSubmits, VkFence fence,
-                                      const RecordObject&) override;
-    void PreCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence,
-                                   const RecordObject&) override;
-    void PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR* pSubmits, VkFence fence,
-                                       const RecordObject& record_obj) override;
-    void PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR* pSubmits, VkFence fence,
-                                    const RecordObject& record_obj) override;
     void PreCallRecordCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount,
                                                   const VkDescriptorBufferBindingInfoEXT* pBindingInfos,
                                                   const RecordObject& record_obj) override;
@@ -374,8 +371,8 @@ class Validator : public gpu_tracker::Validator {
     void TransitionBeginRenderPassLayouts(vvl::CommandBuffer& cb_state, const vvl::RenderPass& render_pass_state);
 
     bool UpdateCommandBufferImageLayoutMap(const vvl::CommandBuffer& cb_state, const Location& image_loc,
-                                           const ImageBarrier& img_barrier, const CommandBufferImageLayoutMap& current_map,
-                                           CommandBufferImageLayoutMap& layout_updates) const;
+                                           const ImageBarrier& img_barrier, const vvl::CommandBuffer::ImageLayoutMap& current_map,
+                                           vvl::CommandBuffer::ImageLayoutMap& layout_updates) const;
     void PostCallRecordCreateImage(VkDevice device, const VkImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,
                                    VkImage* pImage, const RecordObject& record_obj) override;
     void PreCallRecordDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks* pAllocator,
@@ -484,7 +481,6 @@ class Validator : public gpu_tracker::Validator {
                            bool* error) const override;
 
   private:
-    void PreRecordCommandBuffer(VkCommandBuffer command_buffer);
     VkPipeline GetDrawValidationPipeline(VkRenderPass render_pass);
 
     template <typename RangeFactory>

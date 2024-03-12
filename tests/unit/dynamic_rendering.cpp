@@ -18,33 +18,26 @@
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
 
-class DynamicRenderingCommandBufferInheritanceRenderingInfoTest : public VkLayerTest {
-  public:
-    void Test(bool const useLinearColorAttachmen);
-};
-
-void DynamicRenderingCommandBufferInheritanceRenderingInfoTest::Test(bool const useLinearColorAttachment) {
+TEST_F(NegativeDynamicRendering, CommandBufferInheritanceRenderingInfo) {
+    TEST_DESCRIPTION("VkCommandBufferInheritanceRenderingInfoKHR Dynamic Rendering Tests.");
     SetTargetApiVersion(VK_API_VERSION_1_2);
-
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    if (useLinearColorAttachment) {
-        AddRequiredExtensions(VK_NV_LINEAR_COLOR_ATTACHMENT_EXTENSION_NAME);
-    }
+    AddOptionalExtensions(VK_NV_LINEAR_COLOR_ATTACHMENT_EXTENSION_NAME);
     RETURN_IF_SKIP(InitFramework());
+    const bool linear_color = IsExtensionsEnabled(VK_NV_LINEAR_COLOR_ATTACHMENT_EXTENSION_NAME);
 
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = vku::InitStructHelper();
     VkPhysicalDeviceLinearColorAttachmentFeaturesNV linear_color_attachment = vku::InitStructHelper();
-    if (IsExtensionsEnabled(VK_NV_LINEAR_COLOR_ATTACHMENT_EXTENSION_NAME)) {
+    if (linear_color) {
         dynamic_rendering_features.pNext = &linear_color_attachment;
     }
     VkPhysicalDeviceFeatures2 features2 = GetPhysicalDeviceFeatures2(dynamic_rendering_features);
     if (dynamic_rendering_features.dynamicRendering == VK_FALSE) {
         GTEST_SKIP() << "Test requires (unsupported) dynamicRendering";
     }
-    if (useLinearColorAttachment && !linear_color_attachment.linearColorAttachment) {
+    if (linear_color && !linear_color_attachment.linearColorAttachment) {
         GTEST_SKIP() << "Test requires linearColorAttachment";
     }
-
     features2.features.variableMultisampleRate = VK_FALSE;
 
     RETURN_IF_SKIP(InitState(nullptr, &features2));
@@ -98,18 +91,6 @@ void DynamicRenderingCommandBufferInheritanceRenderingInfoTest::Test(bool const 
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(DynamicRenderingCommandBufferInheritanceRenderingInfoTest, Core) {
-    TEST_DESCRIPTION("VkCommandBufferInheritanceRenderingInfoKHR Dynamic Rendering Tests.");
-
-    Test(false);
-}
-
-TEST_F(DynamicRenderingCommandBufferInheritanceRenderingInfoTest, LinearColorAttachment) {
-    TEST_DESCRIPTION("VkCommandBufferInheritanceRenderingInfoKHR Dynamic Rendering Tests with linearColorAttachment.");
-
-    Test(true);
-}
-
 TEST_F(NegativeDynamicRendering, CommandDraw) {
     TEST_DESCRIPTION("vkCmdDraw* Dynamic Rendering Tests.");
     RETURN_IF_SKIP(InitBasicDynamicRendering());
@@ -119,12 +100,10 @@ TEST_F(NegativeDynamicRendering, CommandDraw) {
     pipeline_rendering_info.depthAttachmentFormat = depth_format;
     pipeline_rendering_info.stencilAttachmentFormat = depth_format;
 
-    CreatePipelineHelper pipe(*this, 0);
-    pipe.InitState();
-    pipe.pipe_ms_state_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.ms_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
     pipe.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.CreateGraphicsPipeline();
 
     vkt::Image image(*m_device, 32, 32, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -190,15 +169,13 @@ TEST_F(NegativeDynamicRendering, CommandDrawWithShaderTileImageRead) {
     ms_ci.minSampleShading = 1.0;
     ms_ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    CreatePipelineHelper pipe(*this);
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs->GetStageCreateInfo()};
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.gp_ci_.pMultisampleState = &ms_ci;
     pipe.gp_ci_.pDepthStencilState = &ds_state;
     pipe.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE);
     pipe.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK);
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     vkt::Image depth_image(*m_device, 32, 32, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -791,13 +768,15 @@ TEST_F(NegativeDynamicRendering, GraphicsPipelineCreateInfo) {
     VkShaderObj tc(this, kTessellationControlMinimalGlsl, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
     VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    CreatePipelineHelper pipe(*this, 2);
-    pipe.InitState();
+    VkPipelineColorBlendAttachmentState cb_attachments[2];
+    memset(cb_attachments, 0, sizeof(VkPipelineColorBlendAttachmentState) * 2);
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), gs.GetStageCreateInfo(), te.GetStageCreateInfo(), tc.GetStageCreateInfo(),
                            fs.GetStageCreateInfo()};
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.tess_ci_ = vku::InitStruct<VkPipelineTessellationStateCreateInfo>();
     pipe.tess_ci_.patchControlPoints = 1;
+    pipe.cb_ci_.attachmentCount = 2;
+    pipe.cb_ci_.pAttachments = cb_attachments;
     pipe.ia_ci_.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-09033");
@@ -818,7 +797,7 @@ TEST_F(NegativeDynamicRendering, GraphicsPipelineCreateInfo) {
     m_errorMonitor->VerifyFound();
 
     color_format[0] = VK_FORMAT_D32_SFLOAT_S8_UINT;
-    pipe.cb_attachments_[0].blendEnable = VK_TRUE;
+    cb_attachments[0].blendEnable = VK_TRUE;
     pipe.gp_ci_.pColorBlendState = &pipe.cb_ci_;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06582");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06062");
@@ -851,11 +830,9 @@ TEST_F(NegativeDynamicRendering, ColorAttachmentMismatch) {
     pipeline_rendering_info.pColorAttachmentFormats = color_format;
 
     {
-        CreatePipelineHelper pipe(*this);
-        pipe.gp_ci_.pNext = &pipeline_rendering_info;
+        CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
         pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
         pipe.cb_ci_ = color_blend_state_create_info;
-        pipe.InitState();
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06055");
         pipe.CreateGraphicsPipeline();
         m_errorMonitor->VerifyFound();
@@ -863,14 +840,27 @@ TEST_F(NegativeDynamicRendering, ColorAttachmentMismatch) {
 
     pipeline_rendering_info.colorAttachmentCount = 2;
     {
-        CreatePipelineHelper pipe(*this);
-        pipe.gp_ci_.pNext = &pipeline_rendering_info;
+        // default attachmentCount is 1
+        CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
         pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-        pipe.InitState();
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06055");
         pipe.CreateGraphicsPipeline();
         m_errorMonitor->VerifyFound();
     }
+}
+
+TEST_F(NegativeDynamicRendering, ColorAttachmentMismatchDefault) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7586");
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+    InitRenderTarget();
+
+    // default attachmentCount is 1
+    CreatePipelineHelper pipe(*this);
+    // Not having VkPipelineRenderingCreateInfoKHR means colorAttachmentCount is zero
+    pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06055");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeDynamicRendering, MismatchingViewMask) {
@@ -884,9 +874,7 @@ TEST_F(NegativeDynamicRendering, MismatchingViewMask) {
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
     pipeline_rendering_info.viewMask = 1;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -919,19 +907,16 @@ TEST_F(NegativeDynamicRendering, MistmatchingAttachmentFormats) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = color_formats;
 
-    CreatePipelineHelper pipeline_color(*this);
-    pipeline_color.InitState();
-    pipeline_color.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipeline_color(*this, &pipeline_rendering_info);
     pipeline_color.CreateGraphicsPipeline();
 
     pipeline_rendering_info.colorAttachmentCount = 0;
     pipeline_rendering_info.pColorAttachmentFormats = nullptr;
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_D16_UNORM;
 
-    CreatePipelineHelper pipeline_depth(*this, 0);
-    pipeline_depth.InitState();
+    CreatePipelineHelper pipeline_depth(*this, &pipeline_rendering_info);
     pipeline_depth.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipeline_depth.gp_ci_.pNext = &pipeline_rendering_info;
+    pipeline_depth.cb_ci_.attachmentCount = 0;
     pipeline_depth.CreateGraphicsPipeline();
 
     VkFormat depthStencilFormat = FindSupportedDepthStencilFormat(gpu());
@@ -956,15 +941,15 @@ TEST_F(NegativeDynamicRendering, MistmatchingAttachmentFormats) {
         testStencil = true;
     }
 
-    CreatePipelineHelper pipeline_stencil(*this, 0);
+    CreatePipelineHelper pipeline_stencil(*this);
     if (testStencil) {
         pipeline_rendering_info.colorAttachmentCount = 0;
         pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
         pipeline_rendering_info.stencilAttachmentFormat = stencilFormat;
 
-        pipeline_stencil.InitState();
         pipeline_stencil.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
         pipeline_stencil.gp_ci_.pNext = &pipeline_rendering_info;
+        pipeline_stencil.cb_ci_.attachmentCount = 0;
         pipeline_stencil.CreateGraphicsPipeline();
     }
 
@@ -1044,19 +1029,16 @@ TEST_F(NegativeDynamicRendering, MismatchingAttachmentFormats2) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = color_formats;
 
-    CreatePipelineHelper pipeline_color(*this);
-    pipeline_color.InitState();
-    pipeline_color.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipeline_color(*this, &pipeline_rendering_info);
     pipeline_color.CreateGraphicsPipeline();
 
     pipeline_rendering_info.colorAttachmentCount = 0;
     pipeline_rendering_info.pColorAttachmentFormats = nullptr;
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_D16_UNORM;
 
-    CreatePipelineHelper pipeline_depth(*this, 0);
-    pipeline_depth.InitState();
+    CreatePipelineHelper pipeline_depth(*this, &pipeline_rendering_info);
     pipeline_depth.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipeline_depth.gp_ci_.pNext = &pipeline_rendering_info;
+    pipeline_depth.cb_ci_.attachmentCount = 0;
     pipeline_depth.CreateGraphicsPipeline();
 
     const VkFormat depthStencilFormat = FindSupportedDepthStencilFormat(gpu());
@@ -1064,10 +1046,9 @@ TEST_F(NegativeDynamicRendering, MismatchingAttachmentFormats2) {
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
     pipeline_rendering_info.stencilAttachmentFormat = depthStencilFormat;
 
-    CreatePipelineHelper pipeline_stencil(*this, 0);
-    pipeline_stencil.InitState();
+    CreatePipelineHelper pipeline_stencil(*this, &pipeline_rendering_info);
     pipeline_stencil.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipeline_stencil.gp_ci_.pNext = &pipeline_rendering_info;
+    pipeline_stencil.cb_ci_.attachmentCount = 0;
     pipeline_stencil.CreateGraphicsPipeline();
 
     vkt::Image colorImage(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
@@ -1144,9 +1125,7 @@ TEST_F(NegativeDynamicRendering, MistmatchingAttachmentFormats3Color) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.CreateGraphicsPipeline();
 
@@ -1188,10 +1167,8 @@ TEST_F(NegativeDynamicRendering, MistmatchingAttachmentFormats3DepthStencil) {
     pipeline_rendering_info.pColorAttachmentFormats = nullptr;
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_D16_UNORM;
 
-    CreatePipelineHelper pipe1(*this);
-    pipe1.InitState();
+    CreatePipelineHelper pipe1(*this, &pipeline_rendering_info);
     pipe1.ds_ci_ = vku::InitStructHelper();
-    pipe1.gp_ci_.pNext = &pipeline_rendering_info;
     pipe1.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe1.gp_ci_.pColorBlendState = nullptr;
     pipe1.CreateGraphicsPipeline();
@@ -1223,7 +1200,6 @@ TEST_F(NegativeDynamicRendering, MistmatchingAttachmentFormats3DepthStencil) {
         pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
         pipeline_rendering_info.stencilAttachmentFormat = stencilFormat;
 
-        pipe2.InitState();
         pipe2.ds_ci_ = vku::InitStructHelper();
         pipe2.gp_ci_.pNext = &pipeline_rendering_info;
         pipe2.gp_ci_.renderPass = VK_NULL_HANDLE;
@@ -1280,10 +1256,8 @@ TEST_F(NegativeDynamicRendering, MistmatchingAttachmentSamplesColor) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.pipe_ms_state_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.ms_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.CreateGraphicsPipeline();
 
@@ -1323,12 +1297,10 @@ TEST_F(NegativeDynamicRendering, MistmatchingAttachmentSamplesDepthStencil) {
     pipeline_rendering_info.pColorAttachmentFormats = nullptr;
     pipeline_rendering_info.depthAttachmentFormat = depthStencilFormat;
 
-    CreatePipelineHelper pipe1(*this);
-    pipe1.InitState();
-    pipe1.pipe_ms_state_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
+    CreatePipelineHelper pipe1(*this, &pipeline_rendering_info);
+    pipe1.ms_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
     pipe1.ds_ci_ = vku::InitStructHelper();
     pipe1.gp_ci_.pColorBlendState = nullptr;
-    pipe1.gp_ci_.pNext = &pipeline_rendering_info;
     pipe1.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe1.CreateGraphicsPipeline();
 
@@ -1336,12 +1308,10 @@ TEST_F(NegativeDynamicRendering, MistmatchingAttachmentSamplesDepthStencil) {
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
     pipeline_rendering_info.stencilAttachmentFormat = depthStencilFormat;
 
-    CreatePipelineHelper pipe2(*this);
-    pipe2.InitState();
-    pipe2.pipe_ms_state_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
+    CreatePipelineHelper pipe2(*this, &pipeline_rendering_info);
+    pipe2.ms_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
     pipe2.ds_ci_ = vku::InitStructHelper();
     pipe2.gp_ci_.pColorBlendState = nullptr;
-    pipe2.gp_ci_.pNext = &pipeline_rendering_info;
     pipe2.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe2.CreateGraphicsPipeline();
 
@@ -1406,9 +1376,7 @@ TEST_F(NegativeDynamicRendering, MismatchingMixedAttachmentSamplesColor) {
     samples_info.colorAttachmentCount = 1;
     samples_info.pColorAttachmentSamples = counts;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
 
     samples_info.colorAttachmentCount = 2;
@@ -1471,11 +1439,9 @@ TEST_F(NegativeDynamicRendering, MismatchingMixedAttachmentSamplesDepthStencil) 
     samples_info.pColorAttachmentSamples = nullptr;
     samples_info.depthStencilAttachmentSamples = counts[0];
 
-    CreatePipelineHelper pipe1(*this);
-    pipe1.InitState();
+    CreatePipelineHelper pipe1(*this, &pipeline_rendering_info);
     pipe1.ds_ci_ = vku::InitStructHelper();
     pipe1.gp_ci_.pColorBlendState = nullptr;
-    pipe1.gp_ci_.pNext = &pipeline_rendering_info;
     pipe1.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe1.CreateGraphicsPipeline();
 
@@ -1483,11 +1449,9 @@ TEST_F(NegativeDynamicRendering, MismatchingMixedAttachmentSamplesDepthStencil) 
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
     pipeline_rendering_info.stencilAttachmentFormat = depthStencilFormat;
 
-    CreatePipelineHelper pipe2(*this);
-    pipe2.InitState();
+    CreatePipelineHelper pipe2(*this, &pipeline_rendering_info);
     pipe2.ds_ci_ = vku::InitStructHelper();
     pipe2.gp_ci_.pColorBlendState = nullptr;
-    pipe2.gp_ci_.pNext = &pipeline_rendering_info;
     pipe2.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe2.CreateGraphicsPipeline();
 
@@ -1800,10 +1764,8 @@ TEST_F(NegativeDynamicRendering, PipelineMissingFlags) {
         pipeline_rendering_info.colorAttachmentCount = 1;
         pipeline_rendering_info.pColorAttachmentFormats = &color_format;
 
-        CreatePipelineHelper pipe(*this);
-        pipe.gp_ci_.pNext = &pipeline_rendering_info;
+        CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
         pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-        pipe.InitState();
         pipe.CreateGraphicsPipeline();
 
         m_commandBuffer->begin();
@@ -1835,10 +1797,8 @@ TEST_F(NegativeDynamicRendering, PipelineMissingFlags) {
         pipeline_rendering_info.colorAttachmentCount = 1;
         pipeline_rendering_info.pColorAttachmentFormats = &color_format;
 
-        CreatePipelineHelper pipe(*this);
-        pipe.gp_ci_.pNext = &pipeline_rendering_info;
+        CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
         pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-        pipe.InitState();
         pipe.CreateGraphicsPipeline();
 
         m_commandBuffer->begin();
@@ -2483,7 +2443,7 @@ TEST_F(NegativeDynamicRendering, WithShaderTileImageAndBarrier) {
     dependency_info.pImageMemoryBarriers = VK_NULL_HANDLE;
 
     dependency_info.dependencyFlags = VK_DEPENDENCY_VIEW_LOCAL_BIT;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-dependencyFlags-07891");
     vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 
@@ -2500,40 +2460,38 @@ TEST_F(NegativeDynamicRendering, WithShaderTileImageAndBarrier) {
     dependency_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     dependency_info.bufferMemoryBarrierCount = 1;
     dependency_info.pBufferMemoryBarriers = &buf_barrier_2;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-09554");
     vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 
     dependency_info.bufferMemoryBarrierCount = 0;
     dependency_info.pBufferMemoryBarriers = VK_NULL_HANDLE;
     memory_barrier_2.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-srcStageMask-09556");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-srcAccessMask-03911");
     vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 
     memory_barrier_2.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     memory_barrier_2.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-srcStageMask-09556");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-03910");
     vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 
     memory_barrier_2.srcAccessMask = VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT;
     memory_barrier_2.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-srcAccessMask-03903");
     vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 
     memory_barrier_2.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     memory_barrier_2.dstAccessMask = VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier2-None-08719");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkMemoryBarrier2-dstAccessMask-03903");
     vk::CmdPipelineBarrier2(m_commandBuffer->handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-dependencyFlags-07891");
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_DEVICE_GROUP_BIT, 0, nullptr, 0, nullptr, 0,
                            nullptr);
@@ -2548,7 +2506,7 @@ TEST_F(NegativeDynamicRendering, WithShaderTileImageAndBarrier) {
     buf_barrier.offset = 0;
     buf_barrier.size = VK_WHOLE_SIZE;
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-09554");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-pBufferMemoryBarriers-02817");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-pBufferMemoryBarriers-02818");
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -2556,13 +2514,13 @@ TEST_F(NegativeDynamicRendering, WithShaderTileImageAndBarrier) {
                            0, nullptr);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcStageMask-09556");
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 0,
                            nullptr);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcStageMask-09556");
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
     m_errorMonitor->VerifyFound();
@@ -2571,7 +2529,6 @@ TEST_F(NegativeDynamicRendering, WithShaderTileImageAndBarrier) {
     memory_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     memory_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-srcAccessMask-02815");
     memory_barrier.srcAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -2579,7 +2536,6 @@ TEST_F(NegativeDynamicRendering, WithShaderTileImageAndBarrier) {
                            nullptr, 0, nullptr);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-None-08719");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdPipelineBarrier-dstAccessMask-02816 ");
     memory_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     memory_barrier.dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
@@ -2669,10 +2625,8 @@ TEST_F(NegativeDynamicRendering, CreateGraphicsPipelineWithAttachmentSampleCount
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_format;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-depthStencilAttachmentSamples-06593");
     pipe.CreateGraphicsPipeline();
@@ -2689,7 +2643,7 @@ TEST_F(NegativeDynamicRendering, CreatePipelineWithoutFeature) {
 
     CreatePipelineHelper pipe(*this);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
+    pipe.cb_ci_.attachmentCount = 0;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-dynamicRendering-06576");
     pipe.CreateGraphicsPipeline();
@@ -2702,7 +2656,6 @@ TEST_F(NegativeDynamicRendering, BadRenderPass) {
     RETURN_IF_SKIP(Init());
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     VkRenderPass bad_rp = CastToHandle<VkRenderPass, uintptr_t>(0xbaadbeef);
     pipe.gp_ci_.renderPass = bad_rp;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06603");
@@ -3049,11 +3002,9 @@ TEST_F(NegativeDynamicRendering, ShaderLayerBuiltIn) {
     pipeline_rendering_info.pColorAttachmentFormats = &color_format;
     pipeline_rendering_info.viewMask = 0x1;
 
-    CreatePipelineHelper pipe(*this);
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), gs.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06059");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
@@ -3096,11 +3047,9 @@ TEST_F(NegativeDynamicRendering, InputAttachmentCapability) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_format;
 
-    CreatePipelineHelper pipe(*this);
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06061");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
@@ -3117,10 +3066,8 @@ TEST_F(NegativeDynamicRendering, RenderingInfoColorAttachmentFormat) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_format;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06579");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06580");
     pipe.CreateGraphicsPipeline();
@@ -3140,10 +3087,8 @@ TEST_F(NegativeDynamicRendering, PipelineRenderingCreateInfoFormat) {
     pipeline_rendering_info.colorAttachmentCount = over_limit;
     pipeline_rendering_info.pColorAttachmentFormats = color_format.data();
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineRenderingCreateInfo-colorAttachmentCount-09533");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
@@ -3172,7 +3117,6 @@ TEST_F(NegativeDynamicRendering, LibraryViewMask) {
     lib.cb_ci_ = color_blend_state_create_info;
     lib.InitFragmentOutputLibInfo(&pipeline_rendering_info);
     lib.gp_ci_.renderPass = VK_NULL_HANDLE;
-    lib.InitState();
     lib.CreateGraphicsPipeline();
 
     pipeline_rendering_info.viewMask = 0x1;
@@ -3186,7 +3130,6 @@ TEST_F(NegativeDynamicRendering, LibraryViewMask) {
     CreatePipelineHelper pipe(*this);
     pipe.InitFragmentLibInfo(&fs_stage.stage_ci, &library_create_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
 
     m_errorMonitor->SetUnexpectedError("VUID-VkGraphicsPipelineCreateInfo-pStages-06895");  // spec bug
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-flags-06626");
@@ -3210,10 +3153,8 @@ TEST_F(NegativeDynamicRendering, AttachmentSampleCount) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_format;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-pColorAttachmentSamples-06592");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
@@ -3242,7 +3183,6 @@ TEST_F(NegativeDynamicRendering, LibrariesViewMask) {
     lib1.cb_ci_ = color_blend_state_create_info;
     lib1.InitFragmentOutputLibInfo(&pipeline_rendering_info);
     lib1.gp_ci_.renderPass = VK_NULL_HANDLE;
-    lib1.InitState();
     lib1.CreateGraphicsPipeline();
 
     pipeline_rendering_info.viewMask = 0x1;
@@ -3257,7 +3197,6 @@ TEST_F(NegativeDynamicRendering, LibrariesViewMask) {
     lib2.InitFragmentLibInfo(&fs_stage.stage_ci, &pipeline_rendering_info);
     lib2.gp_ci_.renderPass = VK_NULL_HANDLE;
     lib2.ds_ci_ = ds_ci;
-    lib2.InitState();
     lib2.CreateGraphicsPipeline();
 
     pipeline_rendering_info.viewMask = 0;
@@ -3267,6 +3206,7 @@ TEST_F(NegativeDynamicRendering, LibrariesViewMask) {
     library_create_info.pLibraries = libraries;
 
     VkGraphicsPipelineCreateInfo pipe_ci = vku::InitStructHelper(&library_create_info);
+    pipe_ci.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
     pipe_ci.layout = lib1.gp_ci_.layout;
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-pLibraries-06627");
     vkt::Pipeline pipe(*m_device, pipe_ci);
@@ -3294,7 +3234,6 @@ TEST_F(NegativeDynamicRendering, LibraryRenderPass) {
     CreatePipelineHelper lib(*this);
     lib.cb_ci_ = color_blend_state_create_info;
     lib.InitFragmentOutputLibInfo(&pipeline_rendering_info);
-    lib.InitState();
     lib.CreateGraphicsPipeline();
 
     VkPipelineLibraryCreateInfoKHR library_create_info = vku::InitStructHelper(&pipeline_rendering_info);
@@ -3314,7 +3253,6 @@ TEST_F(NegativeDynamicRendering, LibraryRenderPass) {
     CreatePipelineHelper pipe(*this);
     pipe.InitFragmentLibInfo(&fs_stage_ci, &library_create_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
     // If not Frag Output with frag shader, need depth/stencil struct
     pipe.ds_ci_ = vku::InitStructHelper();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderpass-06625");
@@ -3333,7 +3271,6 @@ TEST_F(NegativeDynamicRendering, PipelineMissingMultisampleState) {
     {
         CreatePipelineHelper pipe(*this);
         pipe.gp_ci_.pMultisampleState = nullptr;
-        pipe.InitState();
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderpass-06631");
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-pMultisampleState-09026");
         pipe.CreateGraphicsPipeline();
@@ -3345,7 +3282,6 @@ TEST_F(NegativeDynamicRendering, PipelineMissingMultisampleState) {
         pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
         pipe.gp_ci_.pMultisampleState = nullptr;
         pipe.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
-        pipe.InitState();
         // No fragment shader implies no fragment shader state and rasterizerDiscardEnable == true implies no fragment
         // output state, so there should be no error with pMultisampleState == nullptr here
         pipe.CreateGraphicsPipeline();
@@ -3404,7 +3340,6 @@ TEST_F(NegativeDynamicRendering, RenderingFragmentDensityMapAttachment) {
     vkt::Image image2(*m_device, image_create_info, vkt::set_layout);
     vkt::ImageView image_view2 = image2.CreateView(VK_IMAGE_VIEW_TYPE_2D_ARRAY);
     rendering_fragment_density.imageView = image_view2;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingFragmentDensityMapAttachmentInfoEXT-apiVersion-07908");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-imageView-06109");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
@@ -3478,7 +3413,6 @@ TEST_F(NegativeDynamicRendering, FragmentDensityMapAttachmentCreateFlags) {
 TEST_F(NegativeDynamicRendering, FragmentDensityMapAttachmentLayerCount) {
     TEST_DESCRIPTION("Use VkRenderingFragmentDensityMapAttachmentInfoEXT with invalid layer count");
     AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::multiview);
     RETURN_IF_SKIP(InitBasicDynamicRendering());
 
     if (!FormatFeaturesAreSupported(gpu(), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
@@ -3510,6 +3444,7 @@ TEST_F(NegativeDynamicRendering, FragmentDensityMapAttachmentLayerCount) {
 
     m_commandBuffer->begin();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingFragmentDensityMapAttachmentInfoEXT-apiVersion-07908");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-multiview-06127");
     m_commandBuffer->BeginRendering(begin_rendering_info);
     m_errorMonitor->VerifyFound();
     m_commandBuffer->end();
@@ -3679,10 +3614,8 @@ TEST_F(NegativeDynamicRendering, ColorAttachmentFormat) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &format;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06582");
     pipe.CreateGraphicsPipeline();
@@ -4608,7 +4541,6 @@ TEST_F(NegativeDynamicRendering, Pipeline) {
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     VkRenderingInfoKHR begin_rendering_info = vku::InitStructHelper();
@@ -5717,9 +5649,7 @@ TEST_F(NegativeDynamicRendering, InSecondaryCommandBuffers) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &format;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
-    pipe.InitState();
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.CreateGraphicsPipeline();
 
     VkCommandBufferInheritanceRenderingInfoKHR inheritanceRenderingInfo =
@@ -5993,10 +5923,8 @@ TEST_F(NegativeDynamicRendering, PipelineRenderingParameters) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
 
     // Invalid color format
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06582");
@@ -6068,9 +5996,7 @@ TEST_F(NegativeDynamicRendering, PipelineRenderingViewMaskParameter) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06578");
     pipeline_rendering_info.viewMask = 1 << multiview_props.maxMultiviewViewCount;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
@@ -6099,11 +6025,9 @@ TEST_F(NegativeDynamicRendering, CreateGraphicsPipeline) {
     rendering_info.pColorAttachmentFormats = &color_format;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06061");
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
+    CreatePipelineHelper pipe(*this, &rendering_info);
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pl.handle();
-    pipe.gp_ci_.pNext = &rendering_info;
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
@@ -6128,9 +6052,9 @@ TEST_F(NegativeDynamicRendering, CreateGraphicsPipelineNoInfo) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06061");
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pl.handle();
+    pipe.cb_ci_.attachmentCount = 0;
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
@@ -6146,10 +6070,8 @@ TEST_F(NegativeDynamicRendering, DynamicColorBlendAttchment) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.AddDynamicState(VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT);
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -6230,7 +6152,7 @@ TEST_F(NegativeDynamicRendering, MissingMultisampleState) {
     CreatePipelineHelper pipe(*this);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.gp_ci_.pMultisampleState = nullptr;
-    pipe.InitState();
+    pipe.cb_ci_.attachmentCount = 0;
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-pMultisampleState-09026");
     pipe.CreateGraphicsPipeline();
@@ -6267,12 +6189,10 @@ TEST_F(NegativeDynamicRendering, MismatchingDepthAttachmentFormatInSecondaryCmdB
     VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();
     pipeline_rendering_info.depthAttachmentFormat = depth_format1;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.cb_ci_.attachmentCount = 0u;
     pipe.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     vkt::CommandBuffer secondary_cmd_buf(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
@@ -6519,5 +6439,214 @@ TEST_F(NegativeDynamicRendering, ResolveAttachmentUsage) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingAttachmentInfo-imageView-06865");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pStencilAttachment-09478");
     m_commandBuffer->BeginRendering(rendering_info);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDynamicRendering, BeginRenderingWithRenderPassStriped) {
+    TEST_DESCRIPTION("Various tests to validate begin rendering with VK_ARM_render_pass_striped.");
+    AddRequiredExtensions(VK_ARM_RENDER_PASS_STRIPED_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::renderPassStriped);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+
+    VkPhysicalDeviceRenderPassStripedPropertiesARM rp_striped_props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(rp_striped_props);
+
+    const uint32_t stripe_width = rp_striped_props.renderPassStripeGranularity.width;
+    const uint32_t stripe_height = rp_striped_props.renderPassStripeGranularity.height;
+
+    VkRenderingInfoKHR rendering_info = vku::InitStructHelper();
+    rendering_info.layerCount = 1;
+
+    uint32_t stripe_count = rp_striped_props.maxRenderPassStripes + 1;
+    std::vector<VkRenderPassStripeInfoARM> stripe_infos(rp_striped_props.maxRenderPassStripes + 1);
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i] = vku::InitStructHelper();
+        stripe_infos[i].stripeArea.offset.x = stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    VkRenderPassStripeBeginInfoARM rp_stripe_info = vku::InitStructHelper();
+    rp_stripe_info.stripeInfoCount = stripe_count;
+    rp_stripe_info.pStripeInfos = stripe_infos.data();
+
+    rendering_info.pNext = &rp_stripe_info;
+    rendering_info.renderArea = {{0, 0}, {stripe_width * stripe_count, stripe_height}};
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeBeginInfoARM-stripeInfoCount-09450");
+    m_commandBuffer->BeginRendering(rendering_info);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    // Stripes overlap
+    stripe_count = 8;
+    stripe_infos.resize(stripe_count);
+    rp_stripe_info.pStripeInfos = stripe_infos.data();
+    rp_stripe_info.stripeInfoCount = stripe_count;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = i > 1 && i <= 4 ? (stripe_width * (i - 1) / 2) : stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09452");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09452");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeBeginInfoARM-stripeArea-09451");
+    m_commandBuffer->BeginRendering(rendering_info);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    // Offset, width and height not multiple of granularity width and height
+    const uint32_t half_stripe_width = stripe_width / 2;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = (i == 1 ? half_stripe_width : stripe_width) * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = i == 2 ? half_stripe_width : stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeBeginInfoARM-stripeArea-09451");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09452");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09453");
+    m_commandBuffer->BeginRendering(rendering_info);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    const uint32_t non_align_stripe_width = stripe_width - 12;
+    rendering_info.renderArea.extent.width = (stripe_width * (stripe_count - 1)) + non_align_stripe_width + 4;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = i == 7 ? non_align_stripe_width : stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09453");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-09535");
+    m_commandBuffer->BeginRendering(rendering_info);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    rendering_info.renderArea.extent = {stripe_width, stripe_height * stripe_count};
+    const uint32_t half_stripe_height = stripe_height / 2;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = 0;
+        stripe_infos[i].stripeArea.offset.y = (i == 1 ? half_stripe_height : stripe_height) * i;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = i == 2 ? half_stripe_height : stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeBeginInfoARM-stripeArea-09451");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09454");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09455");
+    m_commandBuffer->BeginRendering(rendering_info);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    const uint32_t non_align_stripe_height = stripe_height - 12;
+    rendering_info.renderArea.extent.height = (stripe_height * (stripe_count - 1)) + non_align_stripe_height + 4;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = 0;
+        stripe_infos[i].stripeArea.offset.y = stripe_height * i;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = i == 7 ? non_align_stripe_height : stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09455");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderingInfo-pNext-09535");
+    m_commandBuffer->BeginRendering(rendering_info);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicRendering, RenderPassStripeInfoQueueSubmit2) {
+    TEST_DESCRIPTION("Test VK_ARM_render_pass_striped with QueueSubmit2.");
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    AddRequiredExtensions(VK_ARM_RENDER_PASS_STRIPED_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::renderPassStriped);
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::timelineSemaphore);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+
+    VkPhysicalDeviceRenderPassStripedPropertiesARM rp_striped_props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(rp_striped_props);
+
+    const uint32_t stripe_width = rp_striped_props.renderPassStripeGranularity.width;
+    const uint32_t stripe_height = rp_striped_props.renderPassStripeGranularity.height;
+
+    const uint32_t stripe_count = 8;
+    std::vector<VkRenderPassStripeInfoARM> stripe_infos(stripe_count);
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i] = vku::InitStructHelper();
+        stripe_infos[i].stripeArea.offset.x = stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    VkRenderPassStripeBeginInfoARM rp_stripe_info = vku::InitStructHelper();
+    rp_stripe_info.stripeInfoCount = stripe_count;
+    rp_stripe_info.pStripeInfos = stripe_infos.data();
+
+    VkRenderingInfoKHR rendering_info = vku::InitStructHelper(&rp_stripe_info);
+    rendering_info.layerCount = 1;
+    rendering_info.renderArea = {{0, 0}, {stripe_width * stripe_count, stripe_height}};
+
+    vkt::CommandPool command_pool(*m_device, m_device->graphics_queue_node_index_);
+    vkt::CommandBuffer cmd_buffer(*m_device, &command_pool);
+
+    VkCommandBufferBeginInfo cmd_begin = vku::InitStructHelper();
+
+    cmd_buffer.begin(&cmd_begin);
+    cmd_buffer.BeginRendering(rendering_info);
+    cmd_buffer.EndRendering();
+    cmd_buffer.end();
+
+    VkCommandBufferSubmitInfo cb_submit_info = vku::InitStructHelper();
+    cb_submit_info.commandBuffer = cmd_buffer.handle();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCommandBufferSubmitInfo-commandBuffer-09445");
+
+    VkSubmitInfo2KHR submit_info = vku::InitStructHelper();
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &cb_submit_info;
+    vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->wait();
+
+    m_errorMonitor->VerifyFound();
+
+    VkSemaphoreCreateInfo semaphore_create_info = vku::InitStructHelper();
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = vku::InitStructHelper();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    VkSemaphoreCreateInfo semaphore_timeline_create_info = vku::InitStructHelper(&semaphore_type_create_info);
+    vkt::Semaphore semaphore[stripe_count + 1];
+    VkSemaphoreSubmitInfo semaphore_submit_infos[stripe_count + 1];
+
+    for (uint32_t i = 0; i < stripe_count + 1; ++i) {
+        VkSemaphoreCreateInfo create_info = i == 4 ? semaphore_timeline_create_info : semaphore_create_info;
+        semaphore[i].init(*m_device, create_info);
+
+        semaphore_submit_infos[i] = vku::InitStructHelper();
+        semaphore_submit_infos[i].semaphore = semaphore[i].handle();
+    }
+
+    VkRenderPassStripeSubmitInfoARM rp_stripe_submit_info = vku::InitStructHelper();
+    rp_stripe_submit_info.stripeSemaphoreInfoCount = stripe_count + 1;
+    rp_stripe_submit_info.pStripeSemaphoreInfos = semaphore_submit_infos;
+    cb_submit_info.pNext = &rp_stripe_submit_info;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCommandBufferSubmitInfo-pNext-09446");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeSubmitInfoARM-semaphore-09447");
+    vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->wait();
     m_errorMonitor->VerifyFound();
 }

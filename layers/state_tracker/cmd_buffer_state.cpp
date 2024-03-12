@@ -175,9 +175,12 @@ void CommandBuffer::ResetCBState() {
     active_attachments = nullptr;
     active_subpasses = nullptr;
     active_color_attachments_index.clear();
+    has_render_pass_striped = false;
+    striped_count = 0;
     attachments_view_states.clear();
     activeSubpassContents = VK_SUBPASS_CONTENTS_INLINE;
     SetActiveSubpass(0);
+    rendering_attachments.Reset();
     waitedEvents.clear();
     events.clear();
     writeEventsBeforeWait.clear();
@@ -325,48 +328,57 @@ void CommandBuffer::NotifyInvalidate(const StateObject::NodeList &invalid_nodes,
     StateObject::NotifyInvalidate(invalid_nodes, unlink);
 }
 
-const CommandBufferImageLayoutMap &CommandBuffer::GetImageSubresourceLayoutMap() const { return image_layout_map; }
+const CommandBuffer::ImageLayoutMap &CommandBuffer::GetImageSubresourceLayoutMap() const { return image_layout_map; }
 
 // The const variant only need the image as it is the key for the map
-const ImageSubresourceLayoutMap *CommandBuffer::GetImageSubresourceLayoutMap(VkImage image) const {
+std::shared_ptr<const ImageSubresourceLayoutMap> CommandBuffer::GetImageSubresourceLayoutMap(VkImage image) const {
     auto it = image_layout_map.find(image);
     if (it == image_layout_map.cend()) {
         return nullptr;
     }
-    return it->second.get();
+    return it->second.map;
 }
 
 // The non-const variant only needs the image state, as the factory requires it to construct a new entry
-ImageSubresourceLayoutMap *CommandBuffer::GetImageSubresourceLayoutMap(const vvl::Image &image_state) {
-    auto &layout_map = image_layout_map[image_state.VkHandle()];
-    if (!layout_map) {
-        // Make sure we don't create a nullptr keyed entry for a zombie Image
-        if (image_state.Destroyed() || !image_state.layout_range_map) {
-            return nullptr;
-        }
-        // Was an empty slot... fill it in.
-        if (image_state.CanAlias()) {
-            // Aliasing images need to share the same local layout map.
-            // Since they use the same global layout state, use it as a key
-            // for the local state. We don't need a lock on the global range
-            // map to do a lookup based on its pointer.
-            const auto *global_layout_map = image_state.layout_range_map.get();
-            auto iter = aliased_image_layout_map.find(global_layout_map);
-            if (iter != aliased_image_layout_map.end()) {
-                layout_map = iter->second;
-            } else {
-                layout_map = std::make_shared<ImageSubresourceLayoutMap>(image_state);
-                // Save the local layout map for the next aliased image.
-                // The global layout map pointer is only used as a key into the local lookup
-                // table so it doesn't need to be locked.
-                aliased_image_layout_map.emplace(global_layout_map, layout_map);
-            }
-
+std::shared_ptr<ImageSubresourceLayoutMap> CommandBuffer::GetImageSubresourceLayoutMap(const vvl::Image &image_state) {
+    // Make sure we don't create a nullptr keyed entry for a zombie Image
+    if (image_state.Destroyed() || !image_state.layout_range_map) {
+        return nullptr;
+    }
+    auto iter = image_layout_map.find(image_state.VkHandle());
+    if (iter != image_layout_map.end() && image_state.GetId() == iter->second.id) {
+        return iter->second.map;
+    }
+    std::shared_ptr<ImageSubresourceLayoutMap> layout_map;
+    if (image_state.CanAlias()) {
+        // Aliasing images need to share the same local layout map.
+        // Since they use the same global layout state, use it as a key
+        // for the local state. We don't need a lock on the global range
+        // map to do a lookup based on its pointer.
+        const auto *global_layout_map = image_state.layout_range_map.get();
+        auto alias_iter = aliased_image_layout_map.find(global_layout_map);
+        if (alias_iter != aliased_image_layout_map.end()) {
+            layout_map = alias_iter->second;
         } else {
             layout_map = std::make_shared<ImageSubresourceLayoutMap>(image_state);
+            // Save the local layout map for the next aliased image.
+            // The global layout map pointer is only used as a key into the local lookup
+            // table so it doesn't need to be locked.
+            aliased_image_layout_map.emplace(global_layout_map, layout_map);
         }
+
+    } else {
+        layout_map = std::make_shared<ImageSubresourceLayoutMap>(image_state);
     }
-    return layout_map.get();
+    if (iter != image_layout_map.end()) {
+        // overwrite the stale entry
+        iter->second.id = image_state.GetId();
+        iter->second.map = layout_map;
+    } else {
+        // add a new entry
+        image_layout_map.insert({image_state.VkHandle(), vvl::CommandBuffer::LayoutState{image_state.GetId(), layout_map}});
+    }
+    return layout_map;
 }
 
 static bool SetQueryState(const QueryObject &object, QueryState value, QueryMap *localQueryToStateMap) {
@@ -523,6 +535,12 @@ void CommandBuffer::BeginRenderPass(Func command, const VkRenderPassBeginInfo *p
         AddChild(activeRenderPass);
     }
 
+    auto rp_striped_begin = vku::FindStructInPNextChain<VkRenderPassStripeBeginInfoARM>(pRenderPassBegin->pNext);
+    if (rp_striped_begin) {
+        has_render_pass_striped = true;
+        striped_count += rp_striped_begin->stripeInfoCount;
+    }
+
     // Spec states that after BeginRenderPass all resources should be rebound
     if (activeRenderPass->has_multiview_enabled) {
         UnbindResources();
@@ -590,11 +608,21 @@ void CommandBuffer::BeginRendering(Func command, const VkRenderingInfo *pRenderi
     activeRenderPass = std::make_shared<vvl::RenderPass>(pRenderingInfo, true);
     renderPassQueries.clear();
 
+    rendering_attachments.Reset();
+    rendering_attachments.color_locations.resize(pRenderingInfo->colorAttachmentCount);
+    rendering_attachments.color_indexes.resize(pRenderingInfo->colorAttachmentCount);
+
     auto chained_device_group_struct = vku::FindStructInPNextChain<VkDeviceGroupRenderPassBeginInfo>(pRenderingInfo->pNext);
     if (chained_device_group_struct) {
         active_render_pass_device_mask = chained_device_group_struct->deviceMask;
     } else {
         active_render_pass_device_mask = initial_device_mask;
+    }
+
+    auto rp_striped_begin = vku::FindStructInPNextChain<VkRenderPassStripeBeginInfoARM>(pRenderingInfo->pNext);
+    if (rp_striped_begin) {
+        has_render_pass_striped = true;
+        striped_count += rp_striped_begin->stripeInfoCount;
     }
 
     activeSubpassContents = ((pRenderingInfo->flags & VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR)
@@ -624,6 +652,10 @@ void CommandBuffer::BeginRendering(Func command, const VkRenderingInfo *pRenderi
         auto &colorResolveAttachment = attachments[GetDynamicColorResolveAttachmentImageIndex(i)];
         colorAttachment = nullptr;
         colorResolveAttachment = nullptr;
+
+        // Default from spec
+        rendering_attachments.color_locations[i] = i;
+        rendering_attachments.color_indexes[i] = i;
 
         if (pRenderingInfo->pColorAttachments[i].imageView != VK_NULL_HANDLE) {
             auto res =
@@ -981,13 +1013,12 @@ void CommandBuffer::ExecuteCommands(vvl::span<const VkCommandBuffer> secondary_c
         // for those other classes.
         for (const auto &sub_layout_map_entry : sub_cb_state->image_layout_map) {
             const auto image_state = dev_data->Get<vvl::Image>(sub_layout_map_entry.first);
-            if (!image_state || image_state->Destroyed()) {
+            if (!image_state || image_state->Destroyed() || image_state->GetId() != sub_layout_map_entry.second.id) {
                 continue;
             }
-            auto *cb_subres_map = GetImageSubresourceLayoutMap(*image_state);
+            auto cb_subres_map = GetImageSubresourceLayoutMap(*image_state);
             if (cb_subres_map) {
-                const auto &sub_cb_subres_map = sub_layout_map_entry.second;
-                cb_subres_map->UpdateFrom(*sub_cb_subres_map);
+                cb_subres_map->UpdateFrom(*sub_layout_map_entry.second.map);
             }
         }
 
@@ -1311,7 +1342,7 @@ void CommandBuffer::UpdateLastBoundDescriptorBuffers(VkPipelineBindPoint pipelin
 // Set image layout for given VkImageSubresourceRange struct
 void CommandBuffer::SetImageLayout(const vvl::Image &image_state, const VkImageSubresourceRange &image_subresource_range,
                                    VkImageLayout layout, VkImageLayout expected_layout) {
-    auto *subresource_map = GetImageSubresourceLayoutMap(image_state);
+    auto subresource_map = GetImageSubresourceLayoutMap(image_state);
     if (subresource_map && subresource_map->SetSubresourceRangeLayout(*this, image_subresource_range, layout, expected_layout)) {
         image_layout_change_count++;  // Change the version of this data to force revalidation
     }
@@ -1323,7 +1354,7 @@ void CommandBuffer::SetImageViewInitialLayout(const vvl::ImageView &view_state, 
         return;
     }
     vvl::Image *image_state = view_state.image_state.get();
-    auto *subresource_map = image_state ? GetImageSubresourceLayoutMap(*image_state) : nullptr;
+    auto subresource_map = (image_state && !image_state->Destroyed()) ? GetImageSubresourceLayoutMap(*image_state) : nullptr;
     if (subresource_map) {
         subresource_map->SetSubresourceRangeInitialLayout(*this, layout, view_state);
     }
@@ -1332,7 +1363,7 @@ void CommandBuffer::SetImageViewInitialLayout(const vvl::ImageView &view_state, 
 // Set the initial image layout for a passed non-normalized subresource range
 void CommandBuffer::SetImageInitialLayout(const vvl::Image &image_state, const VkImageSubresourceRange &range,
                                           VkImageLayout layout) {
-    auto *subresource_map = GetImageSubresourceLayoutMap(image_state);
+    auto subresource_map = GetImageSubresourceLayoutMap(image_state);
     if (subresource_map) {
         subresource_map->SetSubresourceRangeInitialLayout(*this, image_state.NormalizeSubresourceRange(range), layout);
     }

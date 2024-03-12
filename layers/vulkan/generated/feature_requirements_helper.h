@@ -628,6 +628,8 @@ enum class Feature {
     rasterizationOrderDepthAttachmentAccess,
     // VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT
     rasterizationOrderStencilAttachmentAccess,
+    // VkPhysicalDeviceRawAccessChainsFeaturesNV
+    shaderRawAccessChains,
     // VkPhysicalDeviceRayQueryFeaturesKHR
     rayQuery,
     // VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV
@@ -652,6 +654,8 @@ enum class Feature {
     rayTraversalPrimitiveCulling,
     // VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR
     rayTracingPositionFetch,
+    // VkPhysicalDeviceRayTracingValidationFeaturesNV
+    rayTracingValidation,
     // VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG
     relaxedLineRasterization,
     // VkPhysicalDeviceRenderPassStripedFeaturesARM

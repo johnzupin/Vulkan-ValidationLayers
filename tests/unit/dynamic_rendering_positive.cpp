@@ -51,9 +51,7 @@ TEST_F(PositiveDynamicRendering, Draw) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -85,16 +83,12 @@ TEST_F(PositiveDynamicRendering, DrawMultiBind) {
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
     pipeline_rendering_info.depthAttachmentFormat = depth_format;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.ds_ci_ = vku::InitStructHelper();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.CreateGraphicsPipeline();
 
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
-    CreatePipelineHelper pipe2(*this);
-    pipe2.InitState();
-    pipe2.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe2(*this, &pipeline_rendering_info);
     pipe2.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -157,9 +151,7 @@ TEST_F(PositiveDynamicRendering, PipeWithDiscard) {
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_D16_UNORM;  // D16_UNORM has guaranteed support
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.ds_ci_ = ds_ci;
     pipe.CreateGraphicsPipeline();
 }
@@ -271,10 +263,8 @@ TEST_F(PositiveDynamicRendering, SuspendResumeDraw) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.ds_ci_ = vku::InitStructHelper();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -349,12 +339,10 @@ TEST_F(PositiveDynamicRendering, CreateGraphicsPipeline) {
     rp.AddInputAttachment(0);
     rp.CreateRenderPass();
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
+    CreatePipelineHelper pipe(*this, &rendering_info);
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pl.handle();
     pipe.gp_ci_.renderPass = rp.Handle();
-    pipe.gp_ci_.pNext = &rendering_info;
     pipe.CreateGraphicsPipeline();
 }
 
@@ -383,7 +371,6 @@ TEST_F(PositiveDynamicRendering, CreateGraphicsPipelineNoInfo) {
     rp.CreateRenderPass();
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pl.handle();
     pipe.gp_ci_.renderPass = rp.Handle();
@@ -418,15 +405,13 @@ TEST_F(PositiveDynamicRendering, CommandDrawWithShaderTileImageRead) {
     ms_ci.minSampleShading = 1.0;
     ms_ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    CreatePipelineHelper pipe(*this);
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs->GetStageCreateInfo()};
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.gp_ci_.pMultisampleState = &ms_ci;
     pipe.gp_ci_.pDepthStencilState = &ds_state;
     pipe.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE);
     pipe.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK);
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     vkt::Image depth_image(*m_device, 32, 32, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -504,10 +489,8 @@ TEST_F(PositiveDynamicRendering, DualSourceBlending) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
-    pipe.cb_attachments_[0] = cb_attachments;
-    pipe.InitState();
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.cb_attachments_ = cb_attachments;
     pipe.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -583,9 +566,7 @@ TEST_F(PositiveDynamicRendering, SuspendPrimaryResumeInSecondary) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -632,9 +613,7 @@ TEST_F(PositiveDynamicRendering, SuspendSecondaryResumeInPrimary) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.InitState();
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -733,6 +712,20 @@ TEST_F(PositiveDynamicRendering, WithShaderTileImageAndBarrier) {
     m_commandBuffer->end();
 }
 
+TEST_F(PositiveDynamicRendering, IgnoreUnusedColorAttachment) {
+    TEST_DESCRIPTION("Case from https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/6518");
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+    VkFormat color_formats[] = {VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};
+    VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();
+    pipeline_rendering_info.colorAttachmentCount = 2;
+    pipeline_rendering_info.pColorAttachmentFormats = color_formats;
+
+    CreatePipelineHelper pipe(*this);
+    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    pipe.gp_ci_.pColorBlendState = nullptr;
+    pipe.CreateGraphicsPipeline();
+}
+
 TEST_F(PositiveDynamicRendering, MatchingAttachmentFormats) {
     TEST_DESCRIPTION(
         "Draw with Dynamic Rendering with attachment specified as VK_NULL_HANDLE in VkRenderingInfoKHR, and with corresponding "
@@ -745,29 +738,25 @@ TEST_F(PositiveDynamicRendering, MatchingAttachmentFormats) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = color_formats;
 
-    CreatePipelineHelper pipeline_color(*this);
-    pipeline_color.InitState();
-    pipeline_color.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipeline_color(*this, &pipeline_rendering_info);
     pipeline_color.CreateGraphicsPipeline();
 
     pipeline_rendering_info.colorAttachmentCount = 0;
     pipeline_rendering_info.pColorAttachmentFormats = nullptr;
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
 
-    CreatePipelineHelper pipeline_depth(*this, 0);
-    pipeline_depth.InitState();
+    CreatePipelineHelper pipeline_depth(*this, &pipeline_rendering_info);
     pipeline_depth.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipeline_depth.gp_ci_.pNext = &pipeline_rendering_info;
+    pipeline_depth.cb_ci_.attachmentCount = 0;
     pipeline_depth.CreateGraphicsPipeline();
 
     pipeline_rendering_info.colorAttachmentCount = 0;
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
     pipeline_rendering_info.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
-    CreatePipelineHelper pipeline_stencil(*this, 0);
-    pipeline_stencil.InitState();
+    CreatePipelineHelper pipeline_stencil(*this, &pipeline_rendering_info);
     pipeline_stencil.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipeline_stencil.gp_ci_.pNext = &pipeline_rendering_info;
+    pipeline_stencil.cb_ci_.attachmentCount = 0;
     pipeline_stencil.CreateGraphicsPipeline();
 
     vkt::Image colorImage(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
@@ -837,9 +826,7 @@ TEST_F(PositiveDynamicRendering, MatchingAttachmentFormats2) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = color_formats;
 
-    CreatePipelineHelper pipeline_color(*this);
-    pipeline_color.InitState();
-    pipeline_color.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipeline_color(*this, &pipeline_rendering_info);
     pipeline_color.CreateGraphicsPipeline();
 
     VkFormat depthStencilFormat = FindSupportedDepthStencilFormat(gpu());
@@ -848,20 +835,18 @@ TEST_F(PositiveDynamicRendering, MatchingAttachmentFormats2) {
     pipeline_rendering_info.pColorAttachmentFormats = nullptr;
     pipeline_rendering_info.depthAttachmentFormat = depthStencilFormat;
 
-    CreatePipelineHelper pipeline_depth(*this, 0);
-    pipeline_depth.InitState();
+    CreatePipelineHelper pipeline_depth(*this, &pipeline_rendering_info);
     pipeline_depth.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipeline_depth.gp_ci_.pNext = &pipeline_rendering_info;
+    pipeline_depth.cb_ci_.attachmentCount = 0;
     pipeline_depth.CreateGraphicsPipeline();
 
     pipeline_rendering_info.colorAttachmentCount = 0;
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
     pipeline_rendering_info.stencilAttachmentFormat = depthStencilFormat;
 
-    CreatePipelineHelper pipeline_stencil(*this, 0);
-    pipeline_stencil.InitState();
+    CreatePipelineHelper pipeline_stencil(*this, &pipeline_rendering_info);
     pipeline_stencil.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipeline_stencil.gp_ci_.pNext = &pipeline_rendering_info;
+    pipeline_stencil.cb_ci_.attachmentCount = 0;
     pipeline_stencil.CreateGraphicsPipeline();
 
     vkt::Image colorImage(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
@@ -1004,10 +989,8 @@ TEST_F(PositiveDynamicRendering, ColorAttachmentMismatch) {
     VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();
     pipeline_rendering_info.colorAttachmentCount = 0;
 
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
-    pipe.InitState();
     pipe.AddDynamicState(VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT);
     pipe.AddDynamicState(VK_DYNAMIC_STATE_LOGIC_OP_EXT);
     pipe.AddDynamicState(VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT);
@@ -1034,9 +1017,7 @@ TEST_F(PositiveDynamicRendering, PipelineUnusedAttachments) {
     cbi.attachmentCount = 2u;
     cbi.pAttachments = color_blend_attachments.data();
 
-    CreatePipelineHelper pipeline(*this);
-    pipeline.InitState();
-    pipeline.gp_ci_.pNext = &pipeline_rendering_info;
+    CreatePipelineHelper pipeline(*this, &pipeline_rendering_info);
     pipeline.gp_ci_.pColorBlendState = &cbi;
     pipeline.CreateGraphicsPipeline();
 
@@ -1075,11 +1056,9 @@ TEST_F(PositiveDynamicRendering, DynamicColorBlendEnable) {
     pipeline_rendering_info.colorAttachmentCount = 1;
     pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
 
-    CreatePipelineHelper pipe(*this);
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
-    pipe.InitState();
     pipe.AddDynamicState(VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT);
-    pipe.gp_ci_.pNext = &pipeline_rendering_info;
     pipe.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -1116,10 +1095,9 @@ TEST_F(PositiveDynamicRendering, UnusedAttachmentsMismatchedFormats) {
     pipeline_rendering_info.pColorAttachmentFormats = nullptr;
     pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_D16_UNORM;
 
-    CreatePipelineHelper pipeline_depth(*this, 0);
-    pipeline_depth.InitState();
+    CreatePipelineHelper pipeline_depth(*this, &pipeline_rendering_info);
     pipeline_depth.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
-    pipeline_depth.gp_ci_.pNext = &pipeline_rendering_info;
+    pipeline_depth.cb_ci_.attachmentCount = 0;
     pipeline_depth.CreateGraphicsPipeline();
 
     VkCommandBufferInheritanceRenderingInfoKHR inheritance_rendering_info = vku::InitStructHelper();
@@ -1136,4 +1114,70 @@ TEST_F(PositiveDynamicRendering, UnusedAttachmentsMismatchedFormats) {
     vk::CmdBindPipeline(secondary.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_depth.Handle());
     vk::CmdDraw(secondary.handle(), 1, 1, 0, 0);
     secondary.end();
+}
+
+TEST_F(PositiveDynamicRendering, BeginRenderingWithRenderPassStriped) {
+    TEST_DESCRIPTION("Test to validate begin rendering with VK_ARM_render_pass_striped. ");
+    AddRequiredExtensions(VK_ARM_RENDER_PASS_STRIPED_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::renderPassStriped);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+
+    VkPhysicalDeviceRenderPassStripedPropertiesARM rp_striped_props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(rp_striped_props);
+    const uint32_t stripe_width = rp_striped_props.renderPassStripeGranularity.width * 2;
+    const uint32_t stripe_height = rp_striped_props.renderPassStripeGranularity.height;
+
+    const uint32_t stripe_count = 8;
+    const uint32_t width = stripe_width * stripe_count;
+    const uint32_t height = stripe_height;
+    std::vector<VkRenderPassStripeInfoARM> stripe_infos(stripe_count);
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i] = vku::InitStructHelper();
+        stripe_infos[i].stripeArea.offset.x = stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    VkRenderPassStripeBeginInfoARM rp_striped_info = vku::InitStructHelper();
+    rp_striped_info.stripeInfoCount = stripe_count;
+    rp_striped_info.pStripeInfos = stripe_infos.data();
+
+    VkRenderingInfoKHR begin_rendering_info = vku::InitStructHelper(&rp_striped_info);
+    begin_rendering_info.layerCount = 1;
+    begin_rendering_info.renderArea = {{0, 0}, {width, height}};
+
+    vkt::CommandPool command_pool(*m_device, m_device->graphics_queue_node_index_);
+    vkt::CommandBuffer cmd_buffer(*m_device, &command_pool);
+
+    VkCommandBufferBeginInfo cmd_begin = vku::InitStructHelper();
+    cmd_buffer.begin(&cmd_begin);
+    cmd_buffer.BeginRendering(begin_rendering_info);
+    cmd_buffer.EndRendering();
+    cmd_buffer.end();
+
+    VkSemaphoreCreateInfo semaphore_create_info = vku::InitStructHelper();
+    vkt::Semaphore semaphores[stripe_count];
+    VkSemaphoreSubmitInfo semaphore_submit_infos[stripe_count];
+
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        semaphores[i].init(*m_device, semaphore_create_info);
+        semaphore_submit_infos[i] = vku::InitStructHelper();
+        semaphore_submit_infos[i].semaphore = semaphores[i].handle();
+    }
+
+    VkRenderPassStripeSubmitInfoARM rp_stripe_submit_info = vku::InitStructHelper();
+    rp_stripe_submit_info.stripeSemaphoreInfoCount = stripe_count;
+    rp_stripe_submit_info.pStripeSemaphoreInfos = semaphore_submit_infos;
+
+    VkCommandBufferSubmitInfo cb_submit_info = vku::InitStructHelper(&rp_stripe_submit_info);
+    cb_submit_info.commandBuffer = cmd_buffer.handle();
+
+    VkSubmitInfo2KHR submit_info = vku::InitStructHelper();
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &cb_submit_info;
+    vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->wait();
 }

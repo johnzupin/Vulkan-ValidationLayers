@@ -265,13 +265,9 @@ TEST_F(PositiveShaderInterface, ScalarBlockLayout) {
     TEST_DESCRIPTION("Create a shader that requires scalar block layout.");
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    AddRequiredFeature(vkt::Feature::scalarBlockLayout);
 
-    VkPhysicalDeviceScalarBlockLayoutFeaturesEXT scalar_block_features = vku::InitStructHelper(NULL);
-    GetPhysicalDeviceFeatures2(scalar_block_features);
-    VkPhysicalDeviceFeatures2 set_features2 = vku::InitStructHelper(&scalar_block_features);
-
-    RETURN_IF_SKIP(InitState(nullptr, &set_features2));
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     // Vertex shader requiring scalar layout.
@@ -321,7 +317,6 @@ TEST_F(PositiveShaderInterface, FragmentOutputNotWrittenButMasked) {
     VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
     pipe.CreateGraphicsPipeline();
 }
@@ -365,7 +360,6 @@ TEST_F(PositiveShaderInterface, RelaxedTypeMatch) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -410,7 +404,6 @@ TEST_F(PositiveShaderInterface, TessPerVertex) {
     pipe.gp_ci_.pTessellationState = &tsci;
     pipe.gp_ci_.pInputAssemblyState = &iasci;
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), tcs.GetStageCreateInfo(), tes.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -450,7 +443,6 @@ TEST_F(PositiveShaderInterface, GeometryInputBlockPositive) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), gs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -485,7 +477,6 @@ TEST_F(PositiveShaderInterface, InputAttachment) {
     rp.CreateRenderPass();
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pl.handle();
     pipe.gp_ci_.renderPass = rp.Handle();
@@ -738,7 +729,7 @@ TEST_F(PositiveShaderInterface, FragmentOutputNotConsumedButAlphaToCoverageEnabl
     ms_state_ci.alphaToCoverageEnable = VK_TRUE;
 
     const auto set_info = [&](CreatePipelineHelper &helper) {
-        helper.pipe_ms_state_ci_ = ms_state_ci;
+        helper.ms_ci_ = ms_state_ci;
         helper.cb_ci_.attachmentCount = 0;
     };
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
@@ -777,7 +768,6 @@ TEST_F(PositiveShaderInterface, DISABLED_InputOutputMatch2) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -858,7 +848,6 @@ TEST_F(PositiveShaderInterface, InputOutputMatch) {
     pipe.vi_ci_.pVertexBindingDescriptions = &vertex_input_binding_description;
     pipe.vi_ci_.vertexAttributeDescriptionCount = 4;
     pipe.vi_ci_.pVertexAttributeDescriptions = vertex_input_attribute_descriptions;
-    pipe.InitState();
     pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&ds.layout_});
     pipe.CreateGraphicsPipeline();
 
@@ -925,7 +914,6 @@ TEST_F(PositiveShaderInterface, NestedStructs) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -950,7 +938,7 @@ TEST_F(PositiveShaderInterface, AlphaToCoverageOffsetToAlpha) {
 
     const auto set_info = [&](CreatePipelineHelper &helper) {
         helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-        helper.pipe_ms_state_ci_ = ms_state_ci;
+        helper.ms_ci_ = ms_state_ci;
     };
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 }
@@ -976,7 +964,7 @@ TEST_F(PositiveShaderInterface, AlphaToCoverageArray) {
 
     const auto set_info = [&](CreatePipelineHelper &helper) {
         helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-        helper.pipe_ms_state_ci_ = ms_state_ci;
+        helper.ms_ci_ = ms_state_ci;
     };
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 }

@@ -34,6 +34,7 @@
 #include "state_tracker/chassis_modification_state.h"
 #include "state_tracker/render_pass_state.h"
 // Generated shaders
+#include "gpu_shaders/gpu_error_header.h"
 #include "generated/gpu_pre_draw_vert.h"
 #include "generated/gpu_pre_dispatch_comp.h"
 #include "generated/gpu_pre_trace_rays_rgen.h"
@@ -139,13 +140,17 @@ bool gpuav::Validator::InstrumentShader(const vvl::span<const uint32_t> &input, 
 
     // If descriptor indexing is enabled, enable length checks and updated descriptor checks
     if (gpuav_settings.validate_descriptors) {
-        module.RunPassBindlessDescriptorPass();
+        module.RunPassBindlessDescriptor();
     }
 
     if ((IsExtEnabled(device_extensions.vk_ext_buffer_device_address) ||
          IsExtEnabled(device_extensions.vk_khr_buffer_device_address)) &&
         shaderInt64 && enabled_features.bufferDeviceAddress) {
         module.RunPassBufferDeviceAddress();
+    }
+
+    if (enabled_features.rayQuery && gpuav_settings.validate_ray_query) {
+        module.RunPassRayQuery();
     }
 
     for (const auto info : module.link_info_) {
@@ -246,8 +251,8 @@ void gpuav::Validator::UpdateInstrumentationBuffer(CommandBuffer *cb_node) {
     }
 }
 
-void gpuav::Validator::UpdateBDABuffer(DeviceMemoryBlock device_address_buffer, const Location &loc) {
-    if (gpuav_bda_buffer_version == buffer_device_address_ranges_version) {
+void gpuav::Validator::UpdateBDABuffer(const Location &loc) {
+    if (!buffer_device_address_enabled || gpuav_bda_buffer_version == buffer_device_address_ranges_version) {
         return;
     }
     auto address_ranges = GetBufferAddressRanges();
@@ -268,7 +273,7 @@ void gpuav::Validator::UpdateBDABuffer(DeviceMemoryBlock device_address_buffer, 
     uint64_t *bda_data;
     // Make sure to limit writes to size of the buffer
     [[maybe_unused]] VkResult result;
-    result = vmaMapMemory(vmaAllocator, device_address_buffer.allocation, reinterpret_cast<void **>(&bda_data));
+    result = vmaMapMemory(vmaAllocator, app_buffer_device_addresses.allocation, reinterpret_cast<void **>(&bda_data));
     assert(result == VK_SUCCESS);
     uint32_t address_index = 1;
     size_t size_index = 3 + address_ranges.size();
@@ -293,10 +298,10 @@ void gpuav::Validator::UpdateBDABuffer(DeviceMemoryBlock device_address_buffer, 
     bda_data[address_index] = std::numeric_limits<uintptr_t>::max();
     bda_data[size_index] = 0;
     // Flush the BDA buffer before unmapping so that the new state is visible to the GPU
-    result = vmaFlushAllocation(vmaAllocator, device_address_buffer.allocation, 0, VK_WHOLE_SIZE);
+    result = vmaFlushAllocation(vmaAllocator, app_buffer_device_addresses.allocation, 0, VK_WHOLE_SIZE);
     // No good way to handle this error, we should still try to unmap.
     assert(result == VK_SUCCESS);
-    vmaUnmapMemory(vmaAllocator, device_address_buffer.allocation);
+    vmaUnmapMemory(vmaAllocator, app_buffer_device_addresses.allocation);
     gpuav_bda_buffer_version = buffer_device_address_ranges_version;
 }
 
@@ -562,6 +567,7 @@ gpuav::CommandResources gpuav::Validator::AllocateActionCommandResources(const V
     cmd_resources.output_buffer_desc_pool = output_buffer_desc_pool;
     cmd_resources.pipeline_bind_point = bind_point;
     cmd_resources.uses_robustness = uses_robustness;
+    cmd_resources.uses_shader_object = pipeline_state == nullptr;
     cmd_resources.command = loc.function;
     cmd_resources.desc_binding_index = di_buf_index;
     cmd_resources.desc_binding_list = &cb_node->di_input_buffer_list;
@@ -724,15 +730,14 @@ std::unique_ptr<gpuav::CommandResources> gpuav::Validator::AllocatePreDrawIndire
         draw_resources->indirect_buffer_size = bufsize;
 
         assert(phys_dev_props.limits.maxDrawIndirectCount > 0);
-        push_constants[0] =
-            (is_mesh_call) ? gpuav::glsl::pre_draw_select_mesh_count_buffer : gpuav::glsl::pre_draw_select_count_buffer;
+        push_constants[0] = (is_mesh_call) ? gpuav::glsl::kPreDrawSelectMeshCountBuffer : gpuav::glsl::kPreDrawSelectCountBuffer;
         push_constants[1] = phys_dev_props.limits.maxDrawIndirectCount;
         push_constants[2] = max_count;
         push_constants[3] = static_cast<uint32_t>((count_buffer_offset / sizeof(uint32_t)));
     } else if ((command == Func::vkCmdDrawIndirect || command == Func::vkCmdDrawIndexedIndirect) &&
                !enabled_features.drawIndirectFirstInstance) {
         // Validate buffer for firstInstance check instead of count buffer check
-        push_constants[0] = glsl::pre_draw_select_draw_buffer;
+        push_constants[0] = glsl::kPreDrawSelectDrawBuffer;
         push_constants[1] = draw_count;
         if (command == Func::vkCmdDrawIndirect) {
             push_constants[2] =
@@ -748,7 +753,7 @@ std::unique_ptr<gpuav::CommandResources> gpuav::Validator::AllocatePreDrawIndire
     if (is_mesh_call && phys_dev_props.limits.maxPushConstantsSize >= PreDrawResources::push_constant_words * sizeof(uint32_t)) {
         if (!is_count_call) {
             // Select was set in count check for count call
-            push_constants[0] = gpuav::glsl::pre_draw_select_mesh_no_count;
+            push_constants[0] = gpuav::glsl::kPreDrawSelectMeshNoCount;
         }
         const VkShaderStageFlags stages = pipeline_state->create_info_shaders;
         push_constants[4] = static_cast<uint32_t>(indirect_offset / sizeof(uint32_t));

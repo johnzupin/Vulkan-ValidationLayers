@@ -27,10 +27,11 @@ import tempfile
 import difflib
 import json
 import common_ci
+import pickle
 from xml.etree import ElementTree
 from generate_spec_error_message import GenerateSpecErrorMessage
 
-def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFile: str, targetFilter: str):
+def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFile: str, targetFilter: str, caching: bool):
 
     has_clang_format = shutil.which('clang-format') is not None
     if not has_clang_format:
@@ -75,7 +76,7 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
 
     # These set fields that are needed by both OutputGenerator and BaseGenerator,
     # but are uniform and don't need to be set at a per-generated file level
-    from generators.base_generator import SetOutputDirectory, SetTargetApiName, SetMergedApiNames
+    from generators.base_generator import SetOutputDirectory, SetTargetApiName, SetMergedApiNames, EnableCaching
     SetOutputDirectory(directory)
     SetTargetApiName(api)
 
@@ -113,6 +114,7 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : StatelessValidationHelperOutputGenerator,
             'genCombined': False,
             'options' : [valid_usage_file],
+            'regenerate' : True
         },
         'enum_flag_bits.h' : {
             'generator' : EnumFlagBitsOutputGenerator,
@@ -120,15 +122,15 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
         },
         'valid_enum_values.h' : {
             'generator' : ValidEnumValuesOutputGenerator,
-            'genCombined': False,
+            'genCombined': True,
         },
         'valid_enum_values.cpp' : {
             'generator' : ValidEnumValuesOutputGenerator,
-            'genCombined': False,
+            'genCombined': True,
         },
         'valid_flag_values.cpp' : {
             'generator' : ValidFlagValuesOutputGenerator,
-            'genCombined': False,
+            'genCombined': True,
         },
         'object_tracker.h' : {
             'generator' : ObjectTrackerOutputGenerator,
@@ -179,6 +181,7 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
         'vk_safe_struct_core.cpp' : {
             'generator' : SafeStructOutputGenerator,
             'genCombined': True,
+            'regenerate' : True
         },
         'vk_safe_struct_khr.cpp' : {
             'generator' : SafeStructOutputGenerator,
@@ -212,7 +215,6 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : ApiVersionOutputGenerator,
             'genCombined': True,
         },
-
         'chassis.h' : {
             'generator' : LayerChassisOutputGenerator,
             'genCombined': True,
@@ -243,15 +245,17 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
         },
         'sync_validation_types.h' : {
             'generator' : SyncValidationOutputGenerator,
-            'genCombined': False,
+            'genCombined': True,
         },
         'sync_validation_types.cpp' : {
             'generator' : SyncValidationOutputGenerator,
-            'genCombined': False,
+            'genCombined': True,
+            'regenerate' : True
         },
         'spirv_validation_helper.cpp' : {
             'generator' : SpirvValidationHelperOutputGenerator,
             'genCombined': False,
+            'options' : [grammar],
         },
         'spirv_grammar_helper.h' : {
             'generator' : SpirvGrammarHelperOutputGenerator,
@@ -314,6 +318,11 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
     # Filter if --target is passed in
     targets = [x for x in generators.keys() if not targetFilter or x in targetFilter]
 
+    cacheVkObjectData = None
+    cachePath = os.path.join(tempfile.gettempdir(), f'vkobject_{os.getpid()}')
+    if caching:
+        EnableCaching()
+
     for index, target in enumerate(targets, start=1):
         print(f'[{index}|{len(targets)}] Generating {target}')
 
@@ -348,12 +357,27 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
         # Load the XML tree into the registry object
         reg.loadElementTree(tree)
 
-        # Finally, use the output generator to create the requested target
-        reg.apiGen()
+        # The cached data is saved inside the BaseGenerator, so search for it and try
+        # to reuse the parsing for each generator file.
+        if caching and not cacheVkObjectData:
+            if os.path.isfile(cachePath):
+                file = open(cachePath, 'rb')
+                cacheVkObjectData = pickle.load(file)
+                file.close()
+
+        if caching and cacheVkObjectData and 'regenerate' not in generators[target]:
+            # TODO - We shouldn't have to regenerate any files, need to investigate why we some scripts need it
+            reg.gen.generateFromCache(cacheVkObjectData, reg.genOpts)
+        else:
+            # Finally, use the output generator to create the requested target
+            reg.apiGen()
 
         # Run clang-format on the file
         if has_clang_format:
             common_ci.RunShellCmd(f'clang-format -i --style=file:{styleFile} {os.path.join(directory, target)}')
+
+    if os.path.isfile(cachePath):
+        os.remove(cachePath)
 
 # helper to define paths relative to the repo root
 def repo_relative(path):
@@ -371,6 +395,7 @@ def main(argv):
         'gpu_pre_copy_buffer_to_image_comp.h',
         'inst_buffer_device_address_comp.h',
         'inst_bindless_descriptor_comp.h',
+        'inst_ray_query_comp.h',
         'gpu_inst_shader_hash.h'
     ]
 
@@ -387,6 +412,7 @@ def main(argv):
     group.add_argument('--target', nargs='+', help='only generate file names passed in')
     group.add_argument('-i', '--incremental', action='store_true', help='only update repo files that change')
     group.add_argument('-v', '--verify', action='store_true', help='verify repo files match generator output')
+    group.add_argument('--caching', action='store_true', help='Try to cache generator objects')
     args = parser.parse_args(argv)
 
     repo_dir = repo_relative(f'layers/{args.api}/generated')
@@ -430,7 +456,7 @@ def main(argv):
 
     registry = os.path.abspath(os.path.join(args.registry,  'vk.xml'))
     grammar = os.path.abspath(os.path.join(args.grammar, 'spirv.core.grammar.json'))
-    RunGenerators(args.api, registry, grammar, gen_dir, styleFile, args.target)
+    RunGenerators(args.api, registry, grammar, gen_dir, styleFile, args.target, args.caching)
 
     # Generate vk_validation_error_messages.h (ignore if targeting a single generator)
     if (not args.target):

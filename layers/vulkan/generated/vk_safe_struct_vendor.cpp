@@ -25,14 +25,8 @@
 
 #include "vk_safe_struct.h"
 #include <vulkan/utility/vk_struct_helper.hpp>
-#include "utils/vk_layer_utils.h"
 
-#include <cstddef>
-#include <cassert>
 #include <cstring>
-#include <vector>
-
-#include <vulkan/vk_layer.h>
 
 safe_VkAttachmentSampleCountInfoAMD::safe_VkAttachmentSampleCountInfoAMD(const VkAttachmentSampleCountInfoAMD* in_struct,
                                                                          [[maybe_unused]] PNextCopyState* copy_state,
@@ -10251,226 +10245,6 @@ void safe_VkPhysicalDeviceDisplacementMicromapPropertiesNV::initialize(
     maxDisplacementMicromapSubdivisionLevel = copy_src->maxDisplacementMicromapSubdivisionLevel;
     pNext = SafePnextCopy(copy_src->pNext);
 }
-
-safe_VkAccelerationStructureTrianglesDisplacementMicromapNV::safe_VkAccelerationStructureTrianglesDisplacementMicromapNV(
-    const VkAccelerationStructureTrianglesDisplacementMicromapNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state,
-    bool copy_pnext)
-    : sType(in_struct->sType),
-      displacementBiasAndScaleFormat(in_struct->displacementBiasAndScaleFormat),
-      displacementVectorFormat(in_struct->displacementVectorFormat),
-      displacementBiasAndScaleBuffer(&in_struct->displacementBiasAndScaleBuffer),
-      displacementBiasAndScaleStride(in_struct->displacementBiasAndScaleStride),
-      displacementVectorBuffer(&in_struct->displacementVectorBuffer),
-      displacementVectorStride(in_struct->displacementVectorStride),
-      displacedMicromapPrimitiveFlags(&in_struct->displacedMicromapPrimitiveFlags),
-      displacedMicromapPrimitiveFlagsStride(in_struct->displacedMicromapPrimitiveFlagsStride),
-      indexType(in_struct->indexType),
-      indexBuffer(&in_struct->indexBuffer),
-      indexStride(in_struct->indexStride),
-      baseTriangle(in_struct->baseTriangle),
-      usageCountsCount(in_struct->usageCountsCount),
-      pUsageCounts(nullptr),
-      ppUsageCounts(nullptr),
-      micromap(in_struct->micromap) {
-    if (copy_pnext) {
-        pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    }
-    if (in_struct->pUsageCounts) {
-        pUsageCounts = new VkMicromapUsageEXT[in_struct->usageCountsCount];
-        memcpy((void*)pUsageCounts, (void*)in_struct->pUsageCounts, sizeof(VkMicromapUsageEXT) * in_struct->usageCountsCount);
-    }
-    if (in_struct->ppUsageCounts) {
-        VkMicromapUsageEXT** pointer_array = new VkMicromapUsageEXT*[in_struct->usageCountsCount];
-        for (uint32_t i = 0; i < in_struct->usageCountsCount; ++i) {
-            pointer_array[i] = new VkMicromapUsageEXT(*in_struct->ppUsageCounts[i]);
-        }
-        ppUsageCounts = pointer_array;
-    }
-}
-
-safe_VkAccelerationStructureTrianglesDisplacementMicromapNV::safe_VkAccelerationStructureTrianglesDisplacementMicromapNV()
-    : sType(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_TRIANGLES_DISPLACEMENT_MICROMAP_NV),
-      pNext(nullptr),
-      displacementBiasAndScaleFormat(),
-      displacementVectorFormat(),
-      displacementBiasAndScaleStride(),
-      displacementVectorStride(),
-      displacedMicromapPrimitiveFlagsStride(),
-      indexType(),
-      indexStride(),
-      baseTriangle(),
-      usageCountsCount(),
-      pUsageCounts(nullptr),
-      ppUsageCounts(nullptr),
-      micromap() {}
-
-safe_VkAccelerationStructureTrianglesDisplacementMicromapNV::safe_VkAccelerationStructureTrianglesDisplacementMicromapNV(
-    const safe_VkAccelerationStructureTrianglesDisplacementMicromapNV& copy_src) {
-    sType = copy_src.sType;
-    displacementBiasAndScaleFormat = copy_src.displacementBiasAndScaleFormat;
-    displacementVectorFormat = copy_src.displacementVectorFormat;
-    displacementBiasAndScaleBuffer.initialize(&copy_src.displacementBiasAndScaleBuffer);
-    displacementBiasAndScaleStride = copy_src.displacementBiasAndScaleStride;
-    displacementVectorBuffer.initialize(&copy_src.displacementVectorBuffer);
-    displacementVectorStride = copy_src.displacementVectorStride;
-    displacedMicromapPrimitiveFlags.initialize(&copy_src.displacedMicromapPrimitiveFlags);
-    displacedMicromapPrimitiveFlagsStride = copy_src.displacedMicromapPrimitiveFlagsStride;
-    indexType = copy_src.indexType;
-    indexBuffer.initialize(&copy_src.indexBuffer);
-    indexStride = copy_src.indexStride;
-    baseTriangle = copy_src.baseTriangle;
-    usageCountsCount = copy_src.usageCountsCount;
-    pUsageCounts = nullptr;
-    ppUsageCounts = nullptr;
-    micromap = copy_src.micromap;
-    pNext = SafePnextCopy(copy_src.pNext);
-
-    if (copy_src.pUsageCounts) {
-        pUsageCounts = new VkMicromapUsageEXT[copy_src.usageCountsCount];
-        memcpy((void*)pUsageCounts, (void*)copy_src.pUsageCounts, sizeof(VkMicromapUsageEXT) * copy_src.usageCountsCount);
-    }
-    if (copy_src.ppUsageCounts) {
-        VkMicromapUsageEXT** pointer_array = new VkMicromapUsageEXT*[copy_src.usageCountsCount];
-        for (uint32_t i = 0; i < copy_src.usageCountsCount; ++i) {
-            pointer_array[i] = new VkMicromapUsageEXT(*copy_src.ppUsageCounts[i]);
-        }
-        ppUsageCounts = pointer_array;
-    }
-}
-
-safe_VkAccelerationStructureTrianglesDisplacementMicromapNV& safe_VkAccelerationStructureTrianglesDisplacementMicromapNV::operator=(
-    const safe_VkAccelerationStructureTrianglesDisplacementMicromapNV& copy_src) {
-    if (&copy_src == this) return *this;
-
-    if (pUsageCounts) delete[] pUsageCounts;
-    if (ppUsageCounts) {
-        for (uint32_t i = 0; i < usageCountsCount; ++i) {
-            delete ppUsageCounts[i];
-        }
-        delete[] ppUsageCounts;
-    }
-    FreePnextChain(pNext);
-
-    sType = copy_src.sType;
-    displacementBiasAndScaleFormat = copy_src.displacementBiasAndScaleFormat;
-    displacementVectorFormat = copy_src.displacementVectorFormat;
-    displacementBiasAndScaleBuffer.initialize(&copy_src.displacementBiasAndScaleBuffer);
-    displacementBiasAndScaleStride = copy_src.displacementBiasAndScaleStride;
-    displacementVectorBuffer.initialize(&copy_src.displacementVectorBuffer);
-    displacementVectorStride = copy_src.displacementVectorStride;
-    displacedMicromapPrimitiveFlags.initialize(&copy_src.displacedMicromapPrimitiveFlags);
-    displacedMicromapPrimitiveFlagsStride = copy_src.displacedMicromapPrimitiveFlagsStride;
-    indexType = copy_src.indexType;
-    indexBuffer.initialize(&copy_src.indexBuffer);
-    indexStride = copy_src.indexStride;
-    baseTriangle = copy_src.baseTriangle;
-    usageCountsCount = copy_src.usageCountsCount;
-    pUsageCounts = nullptr;
-    ppUsageCounts = nullptr;
-    micromap = copy_src.micromap;
-    pNext = SafePnextCopy(copy_src.pNext);
-
-    if (copy_src.pUsageCounts) {
-        pUsageCounts = new VkMicromapUsageEXT[copy_src.usageCountsCount];
-        memcpy((void*)pUsageCounts, (void*)copy_src.pUsageCounts, sizeof(VkMicromapUsageEXT) * copy_src.usageCountsCount);
-    }
-    if (copy_src.ppUsageCounts) {
-        VkMicromapUsageEXT** pointer_array = new VkMicromapUsageEXT*[copy_src.usageCountsCount];
-        for (uint32_t i = 0; i < copy_src.usageCountsCount; ++i) {
-            pointer_array[i] = new VkMicromapUsageEXT(*copy_src.ppUsageCounts[i]);
-        }
-        ppUsageCounts = pointer_array;
-    }
-
-    return *this;
-}
-
-safe_VkAccelerationStructureTrianglesDisplacementMicromapNV::~safe_VkAccelerationStructureTrianglesDisplacementMicromapNV() {
-    if (pUsageCounts) delete[] pUsageCounts;
-    if (ppUsageCounts) {
-        for (uint32_t i = 0; i < usageCountsCount; ++i) {
-            delete ppUsageCounts[i];
-        }
-        delete[] ppUsageCounts;
-    }
-    FreePnextChain(pNext);
-}
-
-void safe_VkAccelerationStructureTrianglesDisplacementMicromapNV::initialize(
-    const VkAccelerationStructureTrianglesDisplacementMicromapNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
-    if (pUsageCounts) delete[] pUsageCounts;
-    if (ppUsageCounts) {
-        for (uint32_t i = 0; i < usageCountsCount; ++i) {
-            delete ppUsageCounts[i];
-        }
-        delete[] ppUsageCounts;
-    }
-    FreePnextChain(pNext);
-    sType = in_struct->sType;
-    displacementBiasAndScaleFormat = in_struct->displacementBiasAndScaleFormat;
-    displacementVectorFormat = in_struct->displacementVectorFormat;
-    displacementBiasAndScaleBuffer.initialize(&in_struct->displacementBiasAndScaleBuffer);
-    displacementBiasAndScaleStride = in_struct->displacementBiasAndScaleStride;
-    displacementVectorBuffer.initialize(&in_struct->displacementVectorBuffer);
-    displacementVectorStride = in_struct->displacementVectorStride;
-    displacedMicromapPrimitiveFlags.initialize(&in_struct->displacedMicromapPrimitiveFlags);
-    displacedMicromapPrimitiveFlagsStride = in_struct->displacedMicromapPrimitiveFlagsStride;
-    indexType = in_struct->indexType;
-    indexBuffer.initialize(&in_struct->indexBuffer);
-    indexStride = in_struct->indexStride;
-    baseTriangle = in_struct->baseTriangle;
-    usageCountsCount = in_struct->usageCountsCount;
-    pUsageCounts = nullptr;
-    ppUsageCounts = nullptr;
-    micromap = in_struct->micromap;
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-
-    if (in_struct->pUsageCounts) {
-        pUsageCounts = new VkMicromapUsageEXT[in_struct->usageCountsCount];
-        memcpy((void*)pUsageCounts, (void*)in_struct->pUsageCounts, sizeof(VkMicromapUsageEXT) * in_struct->usageCountsCount);
-    }
-    if (in_struct->ppUsageCounts) {
-        VkMicromapUsageEXT** pointer_array = new VkMicromapUsageEXT*[in_struct->usageCountsCount];
-        for (uint32_t i = 0; i < in_struct->usageCountsCount; ++i) {
-            pointer_array[i] = new VkMicromapUsageEXT(*in_struct->ppUsageCounts[i]);
-        }
-        ppUsageCounts = pointer_array;
-    }
-}
-
-void safe_VkAccelerationStructureTrianglesDisplacementMicromapNV::initialize(
-    const safe_VkAccelerationStructureTrianglesDisplacementMicromapNV* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
-    sType = copy_src->sType;
-    displacementBiasAndScaleFormat = copy_src->displacementBiasAndScaleFormat;
-    displacementVectorFormat = copy_src->displacementVectorFormat;
-    displacementBiasAndScaleBuffer.initialize(&copy_src->displacementBiasAndScaleBuffer);
-    displacementBiasAndScaleStride = copy_src->displacementBiasAndScaleStride;
-    displacementVectorBuffer.initialize(&copy_src->displacementVectorBuffer);
-    displacementVectorStride = copy_src->displacementVectorStride;
-    displacedMicromapPrimitiveFlags.initialize(&copy_src->displacedMicromapPrimitiveFlags);
-    displacedMicromapPrimitiveFlagsStride = copy_src->displacedMicromapPrimitiveFlagsStride;
-    indexType = copy_src->indexType;
-    indexBuffer.initialize(&copy_src->indexBuffer);
-    indexStride = copy_src->indexStride;
-    baseTriangle = copy_src->baseTriangle;
-    usageCountsCount = copy_src->usageCountsCount;
-    pUsageCounts = nullptr;
-    ppUsageCounts = nullptr;
-    micromap = copy_src->micromap;
-    pNext = SafePnextCopy(copy_src->pNext);
-
-    if (copy_src->pUsageCounts) {
-        pUsageCounts = new VkMicromapUsageEXT[copy_src->usageCountsCount];
-        memcpy((void*)pUsageCounts, (void*)copy_src->pUsageCounts, sizeof(VkMicromapUsageEXT) * copy_src->usageCountsCount);
-    }
-    if (copy_src->ppUsageCounts) {
-        VkMicromapUsageEXT** pointer_array = new VkMicromapUsageEXT*[copy_src->usageCountsCount];
-        for (uint32_t i = 0; i < copy_src->usageCountsCount; ++i) {
-            pointer_array[i] = new VkMicromapUsageEXT(*copy_src->ppUsageCounts[i]);
-        }
-        ppUsageCounts = pointer_array;
-    }
-}
 #endif  // VK_ENABLE_BETA_EXTENSIONS
 
 safe_VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI::safe_VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI(
@@ -15268,6 +15042,54 @@ void safe_VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV::initialize(
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
+safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::safe_VkPhysicalDeviceRawAccessChainsFeaturesNV(
+    const VkPhysicalDeviceRawAccessChainsFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), shaderRawAccessChains(in_struct->shaderRawAccessChains) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::safe_VkPhysicalDeviceRawAccessChainsFeaturesNV()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV), pNext(nullptr), shaderRawAccessChains() {}
+
+safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::safe_VkPhysicalDeviceRawAccessChainsFeaturesNV(
+    const safe_VkPhysicalDeviceRawAccessChainsFeaturesNV& copy_src) {
+    sType = copy_src.sType;
+    shaderRawAccessChains = copy_src.shaderRawAccessChains;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceRawAccessChainsFeaturesNV& safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::operator=(
+    const safe_VkPhysicalDeviceRawAccessChainsFeaturesNV& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    shaderRawAccessChains = copy_src.shaderRawAccessChains;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::~safe_VkPhysicalDeviceRawAccessChainsFeaturesNV() { FreePnextChain(pNext); }
+
+void safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::initialize(const VkPhysicalDeviceRawAccessChainsFeaturesNV* in_struct,
+                                                                [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    shaderRawAccessChains = in_struct->shaderRawAccessChains;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::initialize(const safe_VkPhysicalDeviceRawAccessChainsFeaturesNV* copy_src,
+                                                                [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    shaderRawAccessChains = copy_src->shaderRawAccessChains;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
 safe_VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV::safe_VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV(
     const VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state,
     bool copy_pnext)
@@ -15318,6 +15140,56 @@ void safe_VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV::initialize(
     const safe_VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
     sType = copy_src->sType;
     shaderFloat16VectorAtomics = copy_src->shaderFloat16VectorAtomics;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceRayTracingValidationFeaturesNV::safe_VkPhysicalDeviceRayTracingValidationFeaturesNV(
+    const VkPhysicalDeviceRayTracingValidationFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), rayTracingValidation(in_struct->rayTracingValidation) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceRayTracingValidationFeaturesNV::safe_VkPhysicalDeviceRayTracingValidationFeaturesNV()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV), pNext(nullptr), rayTracingValidation() {}
+
+safe_VkPhysicalDeviceRayTracingValidationFeaturesNV::safe_VkPhysicalDeviceRayTracingValidationFeaturesNV(
+    const safe_VkPhysicalDeviceRayTracingValidationFeaturesNV& copy_src) {
+    sType = copy_src.sType;
+    rayTracingValidation = copy_src.rayTracingValidation;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceRayTracingValidationFeaturesNV& safe_VkPhysicalDeviceRayTracingValidationFeaturesNV::operator=(
+    const safe_VkPhysicalDeviceRayTracingValidationFeaturesNV& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    rayTracingValidation = copy_src.rayTracingValidation;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceRayTracingValidationFeaturesNV::~safe_VkPhysicalDeviceRayTracingValidationFeaturesNV() {
+    FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceRayTracingValidationFeaturesNV::initialize(
+    const VkPhysicalDeviceRayTracingValidationFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    rayTracingValidation = in_struct->rayTracingValidation;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceRayTracingValidationFeaturesNV::initialize(
+    const safe_VkPhysicalDeviceRayTracingValidationFeaturesNV* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    rayTracingValidation = copy_src->rayTracingValidation;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 

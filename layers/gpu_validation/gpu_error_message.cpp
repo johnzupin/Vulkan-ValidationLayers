@@ -21,6 +21,7 @@
 #include "gpu_validation/gpu_vuids.h"
 #include "spirv-tools/instrument.hpp"
 #include "state_tracker/shader_module.h"
+#include "gpu_shaders/gpu_error_header.h"
 
 #include <algorithm>
 #include <regex>
@@ -29,67 +30,75 @@
 static void GenerateStageMessage(const uint32_t *debug_record, std::string &msg) {
     using namespace gpuav::glsl;
     std::ostringstream strm;
-    switch (debug_record[kInstCommonOutStageIdx]) {
+    switch (debug_record[kHeaderStageIdOffset]) {
         case spv::ExecutionModelVertex: {
-            strm << "Stage = Vertex. Vertex Index = " << debug_record[kInstVertOutVertexIndex]
-                 << " Instance Index = " << debug_record[kInstVertOutInstanceIndex] << ". ";
+            strm << "Stage = Vertex. Vertex Index = " << debug_record[kHeaderVertexIndexOffset]
+                 << " Instance Index = " << debug_record[kHeaderVertInstanceIndexOffset] << ". ";
         } break;
         case spv::ExecutionModelTessellationControl: {
-            strm << "Stage = Tessellation Control.  Invocation ID = " << debug_record[kInstTessCtlOutInvocationId]
-                 << ", Primitive ID = " << debug_record[kInstTessCtlOutPrimitiveId];
+            strm << "Stage = Tessellation Control.  Invocation ID = " << debug_record[kHeaderTessCltInvocationIdOffset]
+                 << ", Primitive ID = " << debug_record[kHeaderTessCtlPrimitiveIdOffset];
         } break;
         case spv::ExecutionModelTessellationEvaluation: {
-            strm << "Stage = Tessellation Eval.  Primitive ID = " << debug_record[kInstTessEvalOutPrimitiveId]
-                 << ", TessCoord (u, v) = (" << debug_record[kInstTessEvalOutTessCoordU] << ", "
-                 << debug_record[kInstTessEvalOutTessCoordV] << "). ";
+            strm << "Stage = Tessellation Eval.  Primitive ID = " << debug_record[kHeaderTessEvalPrimitiveIdOffset]
+                 << ", TessCoord (u, v) = (" << debug_record[kHeaderTessEvalCoordUOffset] << ", "
+                 << debug_record[kHeaderTessEvalCoordVOffset] << "). ";
         } break;
         case spv::ExecutionModelGeometry: {
-            strm << "Stage = Geometry.  Primitive ID = " << debug_record[kInstGeomOutPrimitiveId]
-                 << " Invocation ID = " << debug_record[kInstGeomOutInvocationId] << ". ";
+            strm << "Stage = Geometry.  Primitive ID = " << debug_record[kHeaderGeomPrimitiveIdOffset]
+                 << " Invocation ID = " << debug_record[kHeaderGeomInvocationIdOffset] << ". ";
         } break;
         case spv::ExecutionModelFragment: {
             strm << "Stage = Fragment.  Fragment coord (x,y) = ("
-                 << *reinterpret_cast<const float *>(&debug_record[kInstFragOutFragCoordX]) << ", "
-                 << *reinterpret_cast<const float *>(&debug_record[kInstFragOutFragCoordY]) << "). ";
+                 << *reinterpret_cast<const float *>(&debug_record[kHeaderFragCoordXOffset]) << ", "
+                 << *reinterpret_cast<const float *>(&debug_record[kHeaderFragCoordYOffset]) << "). ";
         } break;
         case spv::ExecutionModelGLCompute: {
-            strm << "Stage = Compute.  Global invocation ID (x, y, z) = (" << debug_record[kInstCompOutGlobalInvocationIdX] << ", "
-                 << debug_record[kInstCompOutGlobalInvocationIdY] << ", " << debug_record[kInstCompOutGlobalInvocationIdZ] << " )";
+            strm << "Stage = Compute.  Global invocation ID (x, y, z) = (" << debug_record[kHeaderInvocationIdXOffset] << ", "
+                 << debug_record[kHeaderInvocationIdYOffset] << ", " << debug_record[kHeaderInvocationIdZOffset] << " )";
         } break;
         case spv::ExecutionModelRayGenerationNV: {
-            strm << "Stage = Ray Generation.  Global Launch ID (x,y,z) = (" << debug_record[kInstRayTracingOutLaunchIdX] << ", "
-                 << debug_record[kInstRayTracingOutLaunchIdY] << ", " << debug_record[kInstRayTracingOutLaunchIdZ] << "). ";
+            strm << "Stage = Ray Generation.  Global Launch ID (x,y,z) = (" << debug_record[kHeaderRayTracingLaunchIdXOffset]
+                 << ", " << debug_record[kHeaderRayTracingLaunchIdYOffset] << ", " << debug_record[kHeaderRayTracingLaunchIdZOffset]
+                 << "). ";
         } break;
         case spv::ExecutionModelIntersectionNV: {
-            strm << "Stage = Intersection.  Global Launch ID (x,y,z) = (" << debug_record[kInstRayTracingOutLaunchIdX] << ", "
-                 << debug_record[kInstRayTracingOutLaunchIdY] << ", " << debug_record[kInstRayTracingOutLaunchIdZ] << "). ";
+            strm << "Stage = Intersection.  Global Launch ID (x,y,z) = (" << debug_record[kHeaderRayTracingLaunchIdXOffset] << ", "
+                 << debug_record[kHeaderRayTracingLaunchIdYOffset] << ", " << debug_record[kHeaderRayTracingLaunchIdZOffset]
+                 << "). ";
         } break;
         case spv::ExecutionModelAnyHitNV: {
-            strm << "Stage = Any Hit.  Global Launch ID (x,y,z) = (" << debug_record[kInstRayTracingOutLaunchIdX] << ", "
-                 << debug_record[kInstRayTracingOutLaunchIdY] << ", " << debug_record[kInstRayTracingOutLaunchIdZ] << "). ";
+            strm << "Stage = Any Hit.  Global Launch ID (x,y,z) = (" << debug_record[kHeaderRayTracingLaunchIdXOffset] << ", "
+                 << debug_record[kHeaderRayTracingLaunchIdYOffset] << ", " << debug_record[kHeaderRayTracingLaunchIdZOffset]
+                 << "). ";
         } break;
         case spv::ExecutionModelClosestHitNV: {
-            strm << "Stage = Closest Hit.  Global Launch ID (x,y,z) = (" << debug_record[kInstRayTracingOutLaunchIdX] << ", "
-                 << debug_record[kInstRayTracingOutLaunchIdY] << ", " << debug_record[kInstRayTracingOutLaunchIdZ] << "). ";
+            strm << "Stage = Closest Hit.  Global Launch ID (x,y,z) = (" << debug_record[kHeaderRayTracingLaunchIdXOffset] << ", "
+                 << debug_record[kHeaderRayTracingLaunchIdYOffset] << ", " << debug_record[kHeaderRayTracingLaunchIdZOffset]
+                 << "). ";
         } break;
         case spv::ExecutionModelMissNV: {
-            strm << "Stage = Miss.  Global Launch ID (x,y,z) = (" << debug_record[kInstRayTracingOutLaunchIdX] << ", "
-                 << debug_record[kInstRayTracingOutLaunchIdY] << ", " << debug_record[kInstRayTracingOutLaunchIdZ] << "). ";
+            strm << "Stage = Miss.  Global Launch ID (x,y,z) = (" << debug_record[kHeaderRayTracingLaunchIdXOffset] << ", "
+                 << debug_record[kHeaderRayTracingLaunchIdYOffset] << ", " << debug_record[kHeaderRayTracingLaunchIdZOffset]
+                 << "). ";
         } break;
         case spv::ExecutionModelCallableNV: {
-            strm << "Stage = Callable.  Global Launch ID (x,y,z) = (" << debug_record[kInstRayTracingOutLaunchIdX] << ", "
-                 << debug_record[kInstRayTracingOutLaunchIdY] << ", " << debug_record[kInstRayTracingOutLaunchIdZ] << "). ";
+            strm << "Stage = Callable.  Global Launch ID (x,y,z) = (" << debug_record[kHeaderRayTracingLaunchIdXOffset] << ", "
+                 << debug_record[kHeaderRayTracingLaunchIdYOffset] << ", " << debug_record[kHeaderRayTracingLaunchIdZOffset]
+                 << "). ";
         } break;
         case spv::ExecutionModelTaskNV: {
-            strm << "Stage = Task. Global invocation ID (x, y, z) = (" << debug_record[kInstTaskOutGlobalInvocationIdX] << ", "
-                 << debug_record[kInstTaskOutGlobalInvocationIdY] << ", " << debug_record[kInstTaskOutGlobalInvocationIdZ] << " )";
+            strm << "Stage = Task. Global invocation ID (x, y, z) = (" << debug_record[kHeaderTaskGlobalInvocationIdXOffset] << ", "
+                 << debug_record[kHeaderTaskGlobalInvocationIdYOffset] << ", " << debug_record[kHeaderTaskGlobalInvocationIdZOffset]
+                 << " )";
         } break;
         case spv::ExecutionModelMeshNV: {
-            strm << "Stage = Mesh.Global invocation ID (x, y, z) = (" << debug_record[kInstMeshOutGlobalInvocationIdX] << ", "
-                 << debug_record[kInstMeshOutGlobalInvocationIdY] << ", " << debug_record[kInstMeshOutGlobalInvocationIdZ] << " )";
+            strm << "Stage = Mesh.Global invocation ID (x, y, z) = (" << debug_record[kHeaderMeshGlobalInvocationIdXOffset] << ", "
+                 << debug_record[kHeaderMeshGlobalInvocationIdYOffset] << ", " << debug_record[kHeaderMeshGlobalInvocationIdZOffset]
+                 << " )";
         } break;
         default: {
-            strm << "Internal Error (unexpected stage = " << debug_record[kInstCommonOutStageIdx] << "). ";
+            strm << "Internal Error (unexpected stage = " << debug_record[kHeaderStageIdOffset] << "). ";
             assert(false);
         } break;
     }
@@ -148,7 +157,7 @@ void UtilGenerateCommonMessage(const debug_report_data *report_data, const VkCom
         }
     }
     strm << std::dec << std::noshowbase;
-    strm << "Shader Instruction Index = " << debug_record[kInstCommonOutInstructionIdx] << ". ";
+    strm << "Shader Instruction Index = " << debug_record[gpuav::glsl::kHeaderInstructionIdOffset] << ". ";
     msg = strm.str();
 }
 
@@ -249,7 +258,7 @@ void UtilGenerateSourceMessages(vvl::span<const uint32_t> pgm, const uint32_t *d
             reported_line_number = insn.Word(2);
             reported_column_number = insn.Word(3);
         }
-        if (instruction_index == debug_record[kInstCommonOutInstructionIdx]) {
+        if (instruction_index == debug_record[gpuav::glsl::kHeaderInstructionIdOffset]) {
             break;
         }
         instruction_index++;
@@ -347,52 +356,44 @@ void UtilGenerateSourceMessages(vvl::span<const uint32_t> pgm, const uint32_t *d
     source_msg = source_stream.str();
 }
 
-// Generate the part of the message describing the violation.
-bool gpuav::Validator::GenerateValidationMessage(const uint32_t *debug_record, const CommandResources &cmd_resources,
-                                                 const std::vector<DescSetState> &descriptor_sets, std::string &out_error_msg,
-                                                 std::string &out_vuid_msg, bool &out_oob_access) const {
-    using namespace spvtools;
+bool gpuav::Validator::LogMessageInstBindlessDescriptor(const uint32_t *debug_record, std::string &out_error_msg,
+                                                        std::string &out_vuid_msg, const CommandResources &cmd_resources,
+                                                        const std::vector<DescSetState> &descriptor_sets,
+                                                        bool &out_oob_access) const {
     using namespace glsl;
+    bool error_found = true;
     std::ostringstream strm;
-    bool error_found = false;
     const GpuVuid vuid = GetGpuVuid(cmd_resources.command);
-    out_oob_access = false;
-    switch (debug_record[kInstValidationOutError]) {
-        case kInstErrorBindlessBounds: {
-            strm << "(set = " << debug_record[kInstBindlessBoundsOutDescSet]
-                 << ", binding = " << debug_record[kInstBindlessBoundsOutDescBinding] << ") Index of "
-                 << debug_record[kInstBindlessBoundsOutDescIndex] << " used to index descriptor array of length "
-                 << debug_record[kInstBindlessBoundsOutDescBound] << ".";
+
+    switch (debug_record[kHeaderErrorSubCodeOffset]) {
+        case kErrorSubCodeBindlessDescriptorBounds: {
+            strm << "(set = " << debug_record[kInstBindlessBoundsDescSetOffset]
+                 << ", binding = " << debug_record[kInstBindlessBoundsDescBindingOffset] << ") Index of "
+                 << debug_record[kInstBindlessBoundsDescIndexOffset] << " used to index descriptor array of length "
+                 << debug_record[kInstBindlessBoundsDescBoundOffset] << ".";
             out_vuid_msg = "UNASSIGNED-Descriptor index out of bounds";
             error_found = true;
         } break;
-        case kInstErrorBindlessUninit: {
-            strm << "(set = " << debug_record[kInstBindlessUninitOutDescSet]
-                 << ", binding = " << debug_record[kInstBindlessUninitOutBinding] << ") Descriptor index "
-                 << debug_record[kInstBindlessUninitOutDescIndex] << " is uninitialized.";
+        case kErrorSubCodeBindlessDescriptorUninit: {
+            strm << "(set = " << debug_record[kInstBindlessUninitDescSetOffset]
+                 << ", binding = " << debug_record[kInstBindlessUninitBindingOffset] << ") Descriptor index "
+                 << debug_record[kInstBindlessUninitDescIndexOffset] << " is uninitialized.";
             out_vuid_msg = vuid.invalid_descriptor;
             error_found = true;
         } break;
-        case kInstErrorBindlessDestroyed: {
-            strm << "(set = " << debug_record[kInstBindlessUninitOutDescSet]
-                 << ", binding = " << debug_record[kInstBindlessUninitOutBinding] << ") Descriptor index "
-                 << debug_record[kInstBindlessUninitOutDescIndex] << " references a resource that was destroyed.";
+        case kErrorSubCodeBindlessDescriptorDestroyed: {
+            strm << "(set = " << debug_record[kInstBindlessUninitDescSetOffset]
+                 << ", binding = " << debug_record[kInstBindlessUninitBindingOffset] << ") Descriptor index "
+                 << debug_record[kInstBindlessUninitDescIndexOffset] << " references a resource that was destroyed.";
             out_vuid_msg = "UNASSIGNED-Descriptor destroyed";
             error_found = true;
         } break;
-        case kInstErrorBuffAddrUnallocRef: {
-            out_oob_access = true;
-            uint64_t *ptr = (uint64_t *)&debug_record[kInstBuffAddrUnallocOutDescPtrLo];
-            strm << "Device address 0x" << std::hex << *ptr << " access out of bounds. ";
-            out_vuid_msg = "UNASSIGNED-Device address out of bounds";
-            error_found = true;
-        } break;
-        case kInstErrorOOB: {
-            const uint32_t set_num = debug_record[kInstBindlessBuffOOBOutDescSet];
-            const uint32_t binding_num = debug_record[kInstBindlessBuffOOBOutDescBinding];
-            const uint32_t desc_index = debug_record[kInstBindlessBuffOOBOutDescIndex];
-            const uint32_t size = debug_record[kInstBindlessBuffOOBOutBuffSize];
-            const uint32_t offset = debug_record[kInstBindlessBuffOOBOutBuffOff];
+        case kErrorSubCodeBindlessDescriptorOOB: {
+            const uint32_t set_num = debug_record[kInstBindlessBuffOOBDescSetOffset];
+            const uint32_t binding_num = debug_record[kInstBindlessBuffOOBDescBindingOffset];
+            const uint32_t desc_index = debug_record[kInstBindlessBuffOOBDescIndexOffset];
+            const uint32_t size = debug_record[kInstBindlessBuffOOBBuffSizeOffset];
+            const uint32_t offset = debug_record[kInstBindlessBuffOOBBuffOffOffset];
             const auto *binding_state = descriptor_sets[set_num].state->GetBinding(binding_num);
             assert(binding_state);
             if (size == 0) {
@@ -414,9 +415,11 @@ bool gpuav::Validator::GenerateValidationMessage(const uint32_t *debug_record, c
                          << " access out of bounds. Descriptor size is " << size << " and highest byte accessed was " << offset;
                     if (binding_state->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
                         binding_state->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) {
-                        out_vuid_msg = vuid.uniform_access_oob;
+                        out_vuid_msg =
+                            cmd_resources.uses_shader_object ? vuid.uniform_access_oob_08612 : vuid.uniform_access_oob_06935;
                     } else {
-                        out_vuid_msg = vuid.storage_access_oob;
+                        out_vuid_msg =
+                            cmd_resources.uses_shader_object ? vuid.storage_access_oob_08613 : vuid.storage_access_oob_06936;
                     }
                     error_found = true;
                     break;
@@ -425,9 +428,11 @@ bool gpuav::Validator::GenerateValidationMessage(const uint32_t *debug_record, c
                          << " access out of bounds. Descriptor size is " << size << " texels and highest texel accessed was "
                          << offset;
                     if (binding_state->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
-                        out_vuid_msg = vuid.uniform_access_oob;
+                        out_vuid_msg =
+                            cmd_resources.uses_shader_object ? vuid.uniform_access_oob_08612 : vuid.uniform_access_oob_06935;
                     } else {
-                        out_vuid_msg = vuid.storage_access_oob;
+                        out_vuid_msg =
+                            cmd_resources.uses_shader_object ? vuid.storage_access_oob_08613 : vuid.storage_access_oob_06936;
                     }
                     error_found = true;
                     break;
@@ -436,13 +441,92 @@ bool gpuav::Validator::GenerateValidationMessage(const uint32_t *debug_record, c
                     assert(false);
             }
         } break;
-#if 0
-        default: {
-            strm << "Internal Error (unexpected error type = " << debug_record[kInstValidationOutError] << "). ";
-            out_vuid_msg = "UNASSIGNED-Internal Error";
-            assert(false);
+    }
+    out_error_msg = strm.str();
+    return error_found;
+}
+
+bool gpuav::Validator::LogMessageInstBufferDeviceAddress(const uint32_t *debug_record, std::string &out_error_msg,
+                                                         std::string &out_vuid_msg, bool &out_oob_access) const {
+    using namespace glsl;
+    bool error_found = true;
+    std::ostringstream strm;
+    switch (debug_record[kHeaderErrorSubCodeOffset]) {
+        case kErrorSubCodeBufferDeviceAddressUnallocRef: {
+            out_oob_access = true;
+            uint64_t *ptr = (uint64_t *)&debug_record[kInstBuffAddrUnallocDescPtrLoOffset];
+            strm << "Device address 0x" << std::hex << *ptr << " access out of bounds. ";
+            out_vuid_msg = "UNASSIGNED-Device address out of bounds";
         } break;
-#endif
+        default:
+            error_found = false;
+            break;
+    }
+    out_error_msg = strm.str();
+    return error_found;
+}
+
+bool gpuav::Validator::LogMessageInstRayQuery(const uint32_t *debug_record, std::string &out_error_msg,
+                                              std::string &out_vuid_msg) const {
+    using namespace glsl;
+    bool error_found = true;
+    std::ostringstream strm;
+    switch (debug_record[kHeaderErrorSubCodeOffset]) {
+        case kErrorSubCodeRayQueryNegativeMin: {
+            // TODO - Figure a way to properly use GLSL floatBitsToUint and print the float values
+            strm << "OpRayQueryInitializeKHR operand Ray Tmin value is negative. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06349";
+        } break;
+        case kErrorSubCodeRayQueryNegativeMax: {
+            strm << "OpRayQueryInitializeKHR operand Ray Tmax value is negative. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06349";
+        } break;
+        case kErrorSubCodeRayQueryMinMax: {
+            strm << "OpRayQueryInitializeKHR operand Ray Tmax is less than RayTmin. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06350";
+        } break;
+        case kErrorSubCodeRayQueryMinNaN: {
+            strm << "OpRayQueryInitializeKHR operand Ray Tmin is NaN. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06351";
+        } break;
+        case kErrorSubCodeRayQueryMaxNaN: {
+            strm << "OpRayQueryInitializeKHR operand Ray Tmax is NaN. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06351";
+        } break;
+        case kErrorSubCodeRayQueryOriginNaN: {
+            strm << "OpRayQueryInitializeKHR operand Ray Origin contains a NaN. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06351";
+        } break;
+        case kErrorSubCodeRayQueryDirectionNaN: {
+            strm << "OpRayQueryInitializeKHR operand Ray Direction contains a NaN. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06351";
+        } break;
+        case kErrorSubCodeRayQueryOriginFinite: {
+            strm << "OpRayQueryInitializeKHR operand Ray Origin contains a non-finite value. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06348";
+        } break;
+        case kErrorSubCodeRayQueryDirectionFinite: {
+            strm << "OpRayQueryInitializeKHR operand Ray Direction contains a non-finite value. ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06348";
+        } break;
+        case kErrorSubCodeRayQueryBothSkip: {
+            const uint32_t value = debug_record[kInstRayQueryParamOffset_0];
+            strm << "OpRayQueryInitializeKHR operand Ray Flags is 0x" << std::hex << value << ". ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06889";
+        } break;
+        case kErrorSubCodeRayQuerySkipCull: {
+            const uint32_t value = debug_record[kInstRayQueryParamOffset_0];
+            strm << "OpRayQueryInitializeKHR operand Ray Flags is 0x" << std::hex << value << ". ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06890";
+        } break;
+        case kErrorSubCodeRayQueryOpaque: {
+            const uint32_t value = debug_record[kInstRayQueryParamOffset_0];
+            strm << "OpRayQueryInitializeKHR operand Ray Flags is 0x" << std::hex << value << ". ";
+            out_vuid_msg = "VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06891";
+        } break;
+        default:
+            error_found = false;
+            break;
     }
     out_error_msg = strm.str();
     return error_found;
@@ -459,7 +543,6 @@ bool gpuav::Validator::AnalyzeAndGenerateMessages(VkCommandBuffer cmd_buffer, Vk
                                                   uint32_t operation_index, uint32_t *const debug_output_buffer,
                                                   const std::vector<DescSetState> &descriptor_sets, const Location &loc) {
     const uint32_t total_words = debug_output_buffer[spvtools::kDebugOutputSizeOffset];
-    bool oob_access;
     // A zero here means that the shader instrumentation didn't write anything.
     // If you have nothing to say, don't say it here.
     if (0 == total_words) {
@@ -483,7 +566,7 @@ bool gpuav::Validator::AnalyzeAndGenerateMessages(VkCommandBuffer cmd_buffer, Vk
     const uint32_t *debug_record = &debug_output_buffer[spvtools::kDebugOutputDataOffset];
     // Lookup the VkShaderModule handle and SPIR-V code used to create the shader, using the unique shader ID value returned
     // by the instrumented shader.
-    auto it = shader_map.find(debug_record[glsl::kInstCommonOutShaderId]);
+    auto it = shader_map.find(debug_record[glsl::kHeaderShaderIdOffset]);
     if (it != shader_map.end()) {
         shader_module_handle = it->second.shader_module;
         pipeline_handle = it->second.pipeline;
@@ -493,8 +576,23 @@ bool gpuav::Validator::AnalyzeAndGenerateMessages(VkCommandBuffer cmd_buffer, Vk
 
     std::string error_msg;
     std::string vuid_msg;
-    const bool error_found =
-        GenerateValidationMessage(debug_record, cmd_resources, descriptor_sets, error_msg, vuid_msg, oob_access);
+    bool oob_access = false;
+    bool error_found = false;
+    switch (debug_record[glsl::kHeaderErrorGroupOffset]) {
+        case glsl::kErrorGroupInstBindlessDescriptor:
+            error_found =
+                LogMessageInstBindlessDescriptor(debug_record, error_msg, vuid_msg, cmd_resources, descriptor_sets, oob_access);
+            break;
+        case glsl::kErrorGroupInstBufferDeviceAddress:
+            error_found = LogMessageInstBufferDeviceAddress(debug_record, error_msg, vuid_msg, oob_access);
+            break;
+        case glsl::kErrorGroupInstRayQuery:
+            error_found = LogMessageInstRayQuery(debug_record, error_msg, vuid_msg);
+            break;
+        default:
+            break;
+    }
+
     if (error_found) {
         std::string stage_message;
         std::string common_message;
@@ -565,108 +663,103 @@ bool gpuav::PreDrawResources::LogCustomValidationMessage(gpuav::Validator &valid
                                                          const LogObjectList &objlist) {
     using namespace glsl;
     bool error_logged = false;
+    if (debug_record[kHeaderErrorGroupOffset] != kErrorGroupGpuPreDraw) {
+        return error_logged;
+    }
 
     const GpuVuid &vuids = GetGpuVuid(command);
     const Location loc(command);
 
-    switch (debug_record[kInstValidationOutError]) {
-        case kInstErrorPreDrawValidate: {
-            switch (debug_record[kPreValidateSubError]) {
-                case pre_draw_count_exceeds_bufsize_error: {
-                    // Buffer size must be >= (stride * (drawCount - 1) + offset + sizeof(VkDrawIndexedIndirectCommand))
-                    const uint32_t count = debug_record[kPreValidateSubError + 1];
-                    const uint32_t stride = indirect_buffer_stride;
-                    const uint32_t offset =
-                        static_cast<uint32_t>(indirect_buffer_offset);  // TODO: why cast to uin32_t? If it is changed, think about
-                                                                        // also doing it in the error message
-                    const uint32_t draw_size = (stride * (count - 1) + offset + sizeof(VkDrawIndexedIndirectCommand));
+    switch (debug_record[kHeaderErrorSubCodeOffset]) {
+        case kErrorSubCodePreDrawBufferSize: {
+            // Buffer size must be >= (stride * (drawCount - 1) + offset + sizeof(VkDrawIndexedIndirectCommand))
+            const uint32_t count = debug_record[kPreActionParamOffset_0];
+            const uint32_t stride = indirect_buffer_stride;
+            const uint32_t offset =
+                static_cast<uint32_t>(indirect_buffer_offset);  // TODO: why cast to uin32_t? If it is changed, think about
+                                                                // also doing it in the error message
+            const uint32_t draw_size = (stride * (count - 1) + offset + sizeof(VkDrawIndexedIndirectCommand));
 
-                    const char *vuid = nullptr;
-                    if (count == 1) {
-                        vuid = vuids.count_exceeds_bufsize_1;
-                    } else {
-                        vuid = vuids.count_exceeds_bufsize;
-                    }
-                    validator.LogError(vuid, objlist, loc,
-                                       "Indirect draw count of %" PRIu32 " would exceed buffer size %" PRIu64
-                                       " of buffer %s "
-                                       "stride = %" PRIu32 " offset = %" PRIu32
-                                       " (stride * (drawCount - 1) + offset + sizeof(VkDrawIndexedIndirectCommand)) = %" PRIu32 ".",
-                                       count, indirect_buffer_size, validator.FormatHandle(indirect_buffer).c_str(), stride, offset,
-                                       draw_size);
-                    error_logged = true;
-                    break;
-                }
-                case pre_draw_count_exceeds_limit_error: {
-                    const uint32_t count = debug_record[kPreValidateSubError + 1];
-                    validator.LogError(vuids.count_exceeds_device_limit, objlist, loc,
-                                       "Indirect draw count of %" PRIu32 " would exceed maxDrawIndirectCount limit of %" PRIu32 ".",
-                                       count, validator.phys_dev_props.limits.maxDrawIndirectCount);
-                    error_logged = true;
-                    break;
-                }
-                case pre_draw_first_instance_error: {
-                    const uint32_t index = debug_record[kPreValidateSubError + 1];
-                    validator.LogError(
-                        vuids.first_instance_not_zero, objlist, loc,
-                        "The drawIndirectFirstInstance feature is not enabled, but the firstInstance member of the %s structure at "
-                        "index %" PRIu32 " is not zero.",
-                        command == vvl::Func::vkCmdDrawIndirect ? "VkDrawIndirectCommand" : "VkDrawIndexedIndirectCommand", index);
-                    error_logged = true;
-                    break;
-                }
-                case pre_draw_group_count_exceeds_limit_x_error:
-                case pre_draw_group_count_exceeds_limit_y_error:
-                case pre_draw_group_count_exceeds_limit_z_error: {
-                    const uint32_t group_count = debug_record[kPreValidateSubError + 1];
-                    const uint32_t draw_number = debug_record[kPreValidateSubError + 2];
-                    const char *count_label;
-                    uint32_t index;
-                    uint32_t limit;
-                    const char *vuid;
-                    if (debug_record[kPreValidateSubError] == pre_draw_group_count_exceeds_limit_x_error) {
-                        count_label = "groupCountX";
-                        index = 0;
-                        vuid = emit_task_error ? vuids.task_group_count_exceeds_max_x : vuids.mesh_group_count_exceeds_max_x;
-                        limit = validator.phys_dev_ext_props.mesh_shader_props_ext.maxMeshWorkGroupCount[0];
-                    } else if (debug_record[kPreValidateSubError] == pre_draw_group_count_exceeds_limit_y_error) {
-                        count_label = "groupCountY";
-                        index = 1;
-                        vuid = emit_task_error ? vuids.task_group_count_exceeds_max_y : vuids.mesh_group_count_exceeds_max_y;
-                        limit = validator.phys_dev_ext_props.mesh_shader_props_ext.maxMeshWorkGroupCount[1];
-                    } else {
-                        assert(debug_record[kPreValidateSubError] == pre_draw_group_count_exceeds_limit_z_error);
-                        count_label = "groupCountZ";
-                        index = 2;
-                        vuid = emit_task_error ? vuids.task_group_count_exceeds_max_z : vuids.mesh_group_count_exceeds_max_z;
-                        limit = validator.phys_dev_ext_props.mesh_shader_props_ext.maxMeshWorkGroupCount[2];
-                    }
-                    validator.LogError(
-                        vuid, objlist, loc,
-                        "In draw %" PRIu32 ", %s is %" PRIu32
-                        " which is greater than VkPhysicalDeviceMeshShaderPropertiesEXT::maxTaskWorkGroupCount[%" PRIu32
-                        "] (%" PRIu32 ").",
-                        draw_number, count_label, group_count, index, limit);
-                    error_logged = true;
-                    break;
-                }
-                case pre_draw_group_count_exceeds_total_error: {
-                    const uint32_t total_count = debug_record[kPreValidateSubError + 1];
-                    const uint32_t draw_number = debug_record[kPreValidateSubError + 2];
-                    auto vuid =
-                        emit_task_error ? vuids.task_group_count_exceeds_max_total : vuids.mesh_group_count_exceeds_max_total;
-                    validator.LogError(
-                        vuid, objlist, loc,
-                        "In draw %" PRIu32 ", The product of groupCountX, groupCountY and groupCountZ (%" PRIu32
-                        ") is greater than VkPhysicalDeviceMeshShaderPropertiesEXT::maxTaskWorkGroupTotalCount (%" PRIu32 ").",
-                        draw_number, total_count, validator.phys_dev_ext_props.mesh_shader_props_ext.maxTaskWorkGroupTotalCount);
-                    error_logged = true;
-                    break;
-                }
-                default:
-                    break;
+            const char *vuid = nullptr;
+            if (count == 1) {
+                vuid = vuids.count_exceeds_bufsize_1;
+            } else {
+                vuid = vuids.count_exceeds_bufsize;
             }
-        } break;
+            validator.LogError(vuid, objlist, loc,
+                               "Indirect draw count of %" PRIu32 " would exceed buffer size %" PRIu64
+                               " of buffer %s "
+                               "stride = %" PRIu32 " offset = %" PRIu32
+                               " (stride * (drawCount - 1) + offset + sizeof(VkDrawIndexedIndirectCommand)) = %" PRIu32 ".",
+                               count, indirect_buffer_size, validator.FormatHandle(indirect_buffer).c_str(), stride, offset,
+                               draw_size);
+            error_logged = true;
+            break;
+        }
+        case kErrorSubCodePreDrawCountLimit: {
+            const uint32_t count = debug_record[kPreActionParamOffset_0];
+            validator.LogError(vuids.count_exceeds_device_limit, objlist, loc,
+                               "Indirect draw count of %" PRIu32 " would exceed maxDrawIndirectCount limit of %" PRIu32 ".", count,
+                               validator.phys_dev_props.limits.maxDrawIndirectCount);
+            error_logged = true;
+            break;
+        }
+        case kErrorSubCodePreDrawFirstInstance: {
+            const uint32_t index = debug_record[kPreActionParamOffset_0];
+            validator.LogError(
+                vuids.first_instance_not_zero, objlist, loc,
+                "The drawIndirectFirstInstance feature is not enabled, but the firstInstance member of the %s structure at "
+                "index %" PRIu32 " is not zero.",
+                String(command), index);
+            error_logged = true;
+            break;
+        }
+        case kErrorSubCodePreDrawGroupCountX:
+        case kErrorSubCodePreDrawGroupCountY:
+        case kErrorSubCodePreDrawGroupCountZ: {
+            const uint32_t group_count = debug_record[kPreActionParamOffset_0];
+            const uint32_t draw_number = debug_record[kPreActionParamOffset_1];
+            const char *count_label;
+            uint32_t index;
+            uint32_t limit;
+            const char *vuid;
+            if (debug_record[kHeaderErrorSubCodeOffset] == kErrorSubCodePreDrawGroupCountX) {
+                count_label = "groupCountX";
+                index = 0;
+                vuid = emit_task_error ? vuids.task_group_count_exceeds_max_x : vuids.mesh_group_count_exceeds_max_x;
+                limit = validator.phys_dev_ext_props.mesh_shader_props_ext.maxMeshWorkGroupCount[0];
+            } else if (debug_record[kHeaderErrorSubCodeOffset] == kErrorSubCodePreDrawGroupCountY) {
+                count_label = "groupCountY";
+                index = 1;
+                vuid = emit_task_error ? vuids.task_group_count_exceeds_max_y : vuids.mesh_group_count_exceeds_max_y;
+                limit = validator.phys_dev_ext_props.mesh_shader_props_ext.maxMeshWorkGroupCount[1];
+            } else {
+                assert(debug_record[kHeaderErrorSubCodeOffset] == kErrorSubCodePreDrawGroupCountZ);
+                count_label = "groupCountZ";
+                index = 2;
+                vuid = emit_task_error ? vuids.task_group_count_exceeds_max_z : vuids.mesh_group_count_exceeds_max_z;
+                limit = validator.phys_dev_ext_props.mesh_shader_props_ext.maxMeshWorkGroupCount[2];
+            }
+            validator.LogError(vuid, objlist, loc,
+                               "In draw %" PRIu32 ", %s is %" PRIu32
+                               " which is greater than VkPhysicalDeviceMeshShaderPropertiesEXT::maxTaskWorkGroupCount[%" PRIu32
+                               "] (%" PRIu32 ").",
+                               draw_number, count_label, group_count, index, limit);
+            error_logged = true;
+            break;
+        }
+        case kErrorSubCodePreDrawGroupCountTotal: {
+            const uint32_t total_count = debug_record[kPreActionParamOffset_0];
+            const uint32_t draw_number = debug_record[kPreActionParamOffset_1];
+            auto vuid = emit_task_error ? vuids.task_group_count_exceeds_max_total : vuids.mesh_group_count_exceeds_max_total;
+            validator.LogError(
+                vuid, objlist, loc,
+                "In draw %" PRIu32 ", The product of groupCountX, groupCountY and groupCountZ (%" PRIu32
+                ") is greater than VkPhysicalDeviceMeshShaderPropertiesEXT::maxTaskWorkGroupTotalCount (%" PRIu32 ").",
+                draw_number, total_count, validator.phys_dev_ext_props.mesh_shader_props_ext.maxTaskWorkGroupTotalCount);
+            error_logged = true;
+            break;
+        }
         default:
             break;
     }
@@ -677,35 +770,40 @@ bool gpuav::PreDispatchResources::LogCustomValidationMessage(gpuav::Validator &v
                                                              const uint32_t *debug_record, const uint32_t operation_index,
                                                              const LogObjectList &objlist) {
     using namespace glsl;
+    bool error_logged = false;
+    if (debug_record[kHeaderErrorGroupOffset] != kErrorGroupGpuPreDispatch) {
+        return error_logged;
+    }
 
     const Location loc(command);
-
-    bool error_logged = false;
-    switch (debug_record[kInstValidationOutError]) {
-        case kInstErrorPreDispatchValidate: {
-            if (debug_record[kPreValidateSubError] == pre_dispatch_count_exceeds_limit_x_error) {
-                uint32_t count = debug_record[kPreValidateSubError + 1];
-                validator.LogError("VUID-VkDispatchIndirectCommand-x-00417", objlist, loc,
-                                   "Indirect dispatch VkDispatchIndirectCommand::x of %" PRIu32
-                                   " would exceed maxComputeWorkGroupCount[0] limit of %" PRIu32 ".",
-                                   count, validator.phys_dev_props.limits.maxComputeWorkGroupCount[0]);
-                error_logged = true;
-            } else if (debug_record[kPreValidateSubError] == pre_dispatch_count_exceeds_limit_y_error) {
-                uint32_t count = debug_record[kPreValidateSubError + 1];
-                validator.LogError("VUID-VkDispatchIndirectCommand-y-00418", objlist, loc,
-                                   "Indirect dispatch VkDispatchIndirectCommand::y of %" PRIu32
-                                   " would exceed maxComputeWorkGroupCount[1] limit of %" PRIu32 ".",
-                                   count, validator.phys_dev_props.limits.maxComputeWorkGroupCount[1]);
-                error_logged = true;
-            } else if (debug_record[kPreValidateSubError] == pre_dispatch_count_exceeds_limit_z_error) {
-                uint32_t count = debug_record[kPreValidateSubError + 1];
-                validator.LogError("VUID-VkDispatchIndirectCommand-z-00419", objlist, loc,
-                                   "Indirect dispatch VkDispatchIndirectCommand::z of %" PRIu32
-                                   " would exceed maxComputeWorkGroupCount[2] limit of %" PRIu32 ".",
-                                   count, validator.phys_dev_props.limits.maxComputeWorkGroupCount[0]);
-                error_logged = true;
-            }
-        } break;
+    switch (debug_record[kHeaderErrorSubCodeOffset]) {
+        case kErrorSubCodePreDispatchCountLimitX: {
+            uint32_t count = debug_record[kPreActionParamOffset_0];
+            validator.LogError("VUID-VkDispatchIndirectCommand-x-00417", objlist, loc,
+                               "Indirect dispatch VkDispatchIndirectCommand::x of %" PRIu32
+                               " would exceed maxComputeWorkGroupCount[0] limit of %" PRIu32 ".",
+                               count, validator.phys_dev_props.limits.maxComputeWorkGroupCount[0]);
+            error_logged = true;
+            break;
+        }
+        case kErrorSubCodePreDispatchCountLimitY: {
+            uint32_t count = debug_record[kPreActionParamOffset_0];
+            validator.LogError("VUID-VkDispatchIndirectCommand-y-00418", objlist, loc,
+                               "Indirect dispatch VkDispatchIndirectCommand::y of %" PRIu32
+                               " would exceed maxComputeWorkGroupCount[1] limit of %" PRIu32 ".",
+                               count, validator.phys_dev_props.limits.maxComputeWorkGroupCount[1]);
+            error_logged = true;
+            break;
+        }
+        case kErrorSubCodePreDispatchCountLimitZ: {
+            uint32_t count = debug_record[kPreActionParamOffset_0];
+            validator.LogError("VUID-VkDispatchIndirectCommand-z-00419", objlist, loc,
+                               "Indirect dispatch VkDispatchIndirectCommand::z of %" PRIu32
+                               " would exceed maxComputeWorkGroupCount[2] limit of %" PRIu32 ".",
+                               count, validator.phys_dev_props.limits.maxComputeWorkGroupCount[0]);
+            error_logged = true;
+            break;
+        }
         default:
             break;
     }
@@ -719,41 +817,47 @@ bool gpuav::PreTraceRaysResources::LogCustomValidationMessage(gpuav::Validator &
 
     const Location loc(command);
     bool error_logged = false;
+    if (debug_record[kHeaderErrorGroupOffset] != kErrorGroupGpuPreTraceRays) {
+        return error_logged;
+    }
 
-    switch (debug_record[kInstValidationOutError]) {
-        case kInstErrorPreTraceRaysKhrValidate: {
-            if (debug_record[kPreValidateSubError] == pre_trace_rays_query_dimensions_exceeds_width_limit) {
-                const uint32_t width = debug_record[kPreValidateSubError + 1];
-                validator.LogError("VUID-VkTraceRaysIndirectCommandKHR-width-03638", objlist, loc,
-                                   "Indirect trace rays of VkTraceRaysIndirectCommandKHR::width of %" PRIu32
-                                   " would exceed VkPhysicalDeviceLimits::maxComputeWorkGroupCount[0] * "
-                                   "VkPhysicalDeviceLimits::maxComputeWorkGroupSize[0] limit of %" PRIu64 ".",
-                                   width,
-                                   static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupCount[0]) *
-                                       static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupSize[0]));
-                error_logged = true;
-            } else if (debug_record[kPreValidateSubError] == pre_trace_rays_query_dimensions_exceeds_height_limit) {
-                uint32_t height = debug_record[kPreValidateSubError + 1];
-                validator.LogError("VUID-VkTraceRaysIndirectCommandKHR-height-03639", objlist, loc,
-                                   "Indirect trace rays of VkTraceRaysIndirectCommandKHR::height of %" PRIu32
-                                   " would exceed VkPhysicalDeviceLimits::maxComputeWorkGroupCount[1] * "
-                                   "VkPhysicalDeviceLimits::maxComputeWorkGroupSize[1] limit of %" PRIu64 ".",
-                                   height,
-                                   static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupCount[1]) *
-                                       static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupSize[1]));
-                error_logged = true;
-            } else if (debug_record[kPreValidateSubError] == pre_trace_rays_query_dimensions_exceeds_depth_limit) {
-                uint32_t depth = debug_record[kPreValidateSubError + 1];
-                validator.LogError("VUID-VkTraceRaysIndirectCommandKHR-depth-03640", objlist, loc,
-                                   "Indirect trace rays of VkTraceRaysIndirectCommandKHR::height of %" PRIu32
-                                   " would exceed VkPhysicalDeviceLimits::maxComputeWorkGroupCount[2] * "
-                                   "VkPhysicalDeviceLimits::maxComputeWorkGroupSize[2] limit of %" PRIu64 ".",
-                                   depth,
-                                   static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupCount[2]) *
-                                       static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupSize[2]));
-                error_logged = true;
-            }
-        } break;
+    switch (debug_record[kHeaderErrorSubCodeOffset]) {
+        case kErrorSubCodePreTraceRaysLimitWidth: {
+            const uint32_t width = debug_record[kPreActionParamOffset_0];
+            validator.LogError("VUID-VkTraceRaysIndirectCommandKHR-width-03638", objlist, loc,
+                               "Indirect trace rays of VkTraceRaysIndirectCommandKHR::width of %" PRIu32
+                               " would exceed VkPhysicalDeviceLimits::maxComputeWorkGroupCount[0] * "
+                               "VkPhysicalDeviceLimits::maxComputeWorkGroupSize[0] limit of %" PRIu64 ".",
+                               width,
+                               static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupCount[0]) *
+                                   static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupSize[0]));
+            error_logged = true;
+            break;
+        }
+        case kErrorSubCodePreTraceRaysLimitHeight: {
+            uint32_t height = debug_record[kPreActionParamOffset_0];
+            validator.LogError("VUID-VkTraceRaysIndirectCommandKHR-height-03639", objlist, loc,
+                               "Indirect trace rays of VkTraceRaysIndirectCommandKHR::height of %" PRIu32
+                               " would exceed VkPhysicalDeviceLimits::maxComputeWorkGroupCount[1] * "
+                               "VkPhysicalDeviceLimits::maxComputeWorkGroupSize[1] limit of %" PRIu64 ".",
+                               height,
+                               static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupCount[1]) *
+                                   static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupSize[1]));
+            error_logged = true;
+            break;
+        }
+        case kErrorSubCodePreTraceRaysLimitDepth: {
+            uint32_t depth = debug_record[kPreActionParamOffset_0];
+            validator.LogError("VUID-VkTraceRaysIndirectCommandKHR-depth-03640", objlist, loc,
+                               "Indirect trace rays of VkTraceRaysIndirectCommandKHR::height of %" PRIu32
+                               " would exceed VkPhysicalDeviceLimits::maxComputeWorkGroupCount[2] * "
+                               "VkPhysicalDeviceLimits::maxComputeWorkGroupSize[2] limit of %" PRIu64 ".",
+                               depth,
+                               static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupCount[2]) *
+                                   static_cast<uint64_t>(validator.phys_dev_props.limits.maxComputeWorkGroupSize[2]));
+            error_logged = true;
+            break;
+        }
         default:
             break;
     }
@@ -766,22 +870,23 @@ bool gpuav::PreCopyBufferToImageResources::LogCustomValidationMessage(gpuav::Val
                                                                       const LogObjectList &objlist) {
     using namespace glsl;
     bool error_logged = false;
+    if (debug_record[kHeaderErrorGroupOffset] != kErrorGroupGpuCopyBufferToImage) {
+        return error_logged;
+    }
 
-    switch (debug_record[kInstValidationOutError]) {
-        case kInstErrorCopyBufferToImage: {
-            if (debug_record[kPreValidateSubError] == pre_copy_buffer_to_image_out_of_range_value) {
-                uint32_t texel_offset = debug_record[kPreValidateSubError + 1];
-                LogObjectList objlist_and_src_buffer = objlist;
-                objlist_and_src_buffer.add(this->src_buffer);
-                const char *vuid = this->command == vvl::Func::vkCmdCopyBufferToImage
-                                       ? "VUID-vkCmdCopyBufferToImage-pRegions-07931"
-                                       : "VUID-VkCopyBufferToImageInfo2-pRegions-07931";
-                validator.LogError(vuid, objlist_and_src_buffer, command,
-                                   "Source buffer %s has a float value at offset %" PRIu32 " that is not in the range [0, 1].",
-                                   validator.FormatHandle(this->src_buffer).c_str(), texel_offset);
-                error_logged = true;
-            }
-        } break;
+    switch (debug_record[kHeaderErrorSubCodeOffset]) {
+        case kErrorSubCodePreCopyBufferToImageBufferTexel: {
+            uint32_t texel_offset = debug_record[kPreActionParamOffset_0];
+            LogObjectList objlist_and_src_buffer = objlist;
+            objlist_and_src_buffer.add(this->src_buffer);
+            const char *vuid = this->command == vvl::Func::vkCmdCopyBufferToImage ? "VUID-vkCmdCopyBufferToImage-pRegions-07931"
+                                                                                  : "VUID-VkCopyBufferToImageInfo2-pRegions-07931";
+            validator.LogError(vuid, objlist_and_src_buffer, command,
+                               "Source buffer %s has a float value at offset %" PRIu32 " that is not in the range [0, 1].",
+                               validator.FormatHandle(this->src_buffer).c_str(), texel_offset);
+            error_logged = true;
+            break;
+        }
         default:
             break;
     }

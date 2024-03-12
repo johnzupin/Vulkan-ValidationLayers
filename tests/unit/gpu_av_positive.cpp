@@ -33,7 +33,7 @@ VkValidationFeaturesEXT GpuAVTest::GetGpuAvValidationFeatures() {
     VkValidationFeaturesEXT features = vku::InitStructHelper();
     features.enabledValidationFeatureCount = size32(gpu_av_enables);
     features.pEnabledValidationFeatures = gpu_av_enables.data();
-    if (!m_gpuav_enable_core) {
+    if (m_gpuav_disable_core) {
         features.disabledValidationFeatureCount = size32(gpu_av_disables);
         features.pDisabledValidationFeatures = gpu_av_disables.data();
     }
@@ -49,6 +49,56 @@ void GpuAVTest::InitGpuAvFramework(void *p_next) {
     if (!CanEnableGpuAV(*this)) {
         GTEST_SKIP() << "Requirements for GPU-AV are not met";
     }
+}
+
+TEST_F(PositiveGpuAV, RobustBuffer) {
+    TEST_DESCRIPTION("OOB errors should not occur with robustness turned on");
+    AddRequiredFeature(vkt::Feature::robustBufferAccess);
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+    InitRenderTarget();
+
+    VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    vkt::Buffer offset_buffer(*m_device, 4, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, reqs);
+    vkt::Buffer write_buffer(*m_device, 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, reqs);
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                  {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}});
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+    descriptor_set.WriteDescriptorBufferInfo(0, offset_buffer.handle(), 0, 4);
+    descriptor_set.WriteDescriptorBufferInfo(1, write_buffer.handle(), 0, 16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    const char vs_source[] = R"glsl(
+        #version 450
+        layout(set = 0, binding = 0) uniform ufoo { uint index[]; } u_index;      // index[1]
+        layout(set = 0, binding = 1) buffer StorageBuffer { uint data[]; } Data;  // data[4]
+        void main() {
+            Data.data[u_index.index[0]] = 0xdeadca71;
+        }
+    )glsl";
+
+    VkShaderObj vs(this, vs_source, VK_SHADER_STAGE_VERTEX_BIT);
+    CreatePipelineHelper pipe(*this);
+    pipe.shader_stages_[0] = vs.GetStageCreateInfo();
+    pipe.gp_ci_.layout = pipeline_layout.handle();
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_commandBuffer->EndRenderPass();
+    m_commandBuffer->end();
+
+    uint32_t *data = (uint32_t *)offset_buffer.memory().map();
+    *data = 8;
+    offset_buffer.memory().unmap();
+
+    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->wait();
 }
 
 TEST_F(PositiveGpuAV, ReserveBinding) {
@@ -150,7 +200,6 @@ TEST_F(PositiveGpuAV, InlineUniformBlock) {
     CreateComputePipelineHelper pipe1(*this);
     pipe1.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
     pipe1.cp_ci_.layout = pipeline_layout.handle();
-    pipe1.InitState();
     pipe1.CreateComputePipeline();
 
     m_commandBuffer->begin();
@@ -260,7 +309,6 @@ TEST_F(PositiveGpuAV, InlineUniformBlockAndRecovery) {
         pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
         // We should still be able to use the layout and create a temporary uninstrumented shader module
         pipe.cp_ci_.layout = pl_layout.handle();
-        pipe.InitState();
         pipe.CreateComputePipeline();
 
         m_commandBuffer->begin();
@@ -287,7 +335,6 @@ TEST_F(PositiveGpuAV, InlineUniformBlockAndRecovery) {
         CreateComputePipelineHelper pipe(*this);
         pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
         pipe.cp_ci_.layout = pipeline_layout.handle();
-        pipe.InitState();
         pipe.CreateComputePipeline();
 
         m_commandBuffer->begin();
@@ -343,7 +390,6 @@ TEST_F(PositiveGpuAV, SetSSBOBindDescriptor) {
     pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
                           {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
-    pipe.InitState();
     pipe.CreateComputePipeline();
 
     VkBufferUsageFlags buffer_usage =
@@ -660,7 +706,6 @@ TEST_F(PositiveGpuAV, SelectInstrumentedShaders) {
     features.pEnabledValidationFeatures = enabled;
     VkShaderObj fs(this, vertshader, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL, nullptr, "main", &features);
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_.clear();
     pipe.shader_stages_.push_back(vs.GetStageCreateInfo());
     pipe.shader_stages_.push_back(fs.GetStageCreateInfo());
@@ -685,17 +730,9 @@ TEST_F(PositiveGpuAV, BindingPartiallyBound) {
     TEST_DESCRIPTION("Ensure that no validation errors for invalid descriptors if binding is PARTIALLY_BOUND");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::descriptorBindingPartiallyBound);
     RETURN_IF_SKIP(InitGpuAvFramework());
-
-    auto indexing_features = vku::InitStruct<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>();
-    auto features2 = vku::InitStruct<VkPhysicalDeviceFeatures2KHR>(&indexing_features);
-    GetPhysicalDeviceFeatures2(features2);
-
-    if (!indexing_features.descriptorBindingPartiallyBound) {
-        GTEST_SKIP() << "Partially bound bindings not supported, skipping test";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     VkDescriptorBindingFlagsEXT ds_binding_flags[2] = {};
@@ -743,7 +780,6 @@ TEST_F(PositiveGpuAV, BindingPartiallyBound) {
     VkShaderObj vs(this, shader_source, VK_SHADER_STAGE_VERTEX_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[0] = vs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
@@ -809,7 +845,6 @@ TEST_F(PositiveGpuAV, DrawingWithUnboundUnusedSet) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.InitState();
     pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_, &descriptor_set.layout_});
     pipe.CreateGraphicsPipeline();
 
@@ -846,7 +881,6 @@ TEST_F(PositiveGpuAV, FirstInstance) {
     draw_buffer.memory().unmap();
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();

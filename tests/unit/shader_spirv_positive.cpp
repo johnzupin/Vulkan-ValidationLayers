@@ -165,7 +165,6 @@ TEST_F(PositiveShaderSpirv, GroupDecorations) {
     memcpy(pipe.dsl_bindings_.data(), dslb, dslb_size * sizeof(VkDescriptorSetLayoutBinding));
     pipe.cs_ =
         std::make_unique<VkShaderObj>(this, spv_source.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM);
-    pipe.InitState();
     pipe.CreateComputePipeline();
 }
 
@@ -192,7 +191,6 @@ TEST_F(PositiveShaderSpirv, CapabilityExtension1of2) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -219,7 +217,6 @@ TEST_F(PositiveShaderSpirv, CapabilityExtension2of2) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -324,18 +321,10 @@ TEST_F(PositiveShaderSpirv, Std430SpirvOptFlags10) {
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::uniformBufferStandardLayout);
+    AddRequiredFeature(vkt::Feature::scalarBlockLayout);
 
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceUniformBufferStandardLayoutFeatures uniform_buffer_standard_layout_features = vku::InitStructHelper();
-    VkPhysicalDeviceScalarBlockLayoutFeatures scalar_block_layout_features =
-        vku::InitStructHelper(&uniform_buffer_standard_layout_features);
-    GetPhysicalDeviceFeatures2(scalar_block_layout_features);
-    if (scalar_block_layout_features.scalarBlockLayout == VK_FALSE ||
-        uniform_buffer_standard_layout_features.uniformBufferStandardLayout == VK_FALSE) {
-        GTEST_SKIP() << "scalarBlockLayout and uniformBufferStandardLayout are not supported Skipping";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &scalar_block_layout_features));
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     const VkShaderObj vs(this, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT);
@@ -373,7 +362,6 @@ void main() {
 
     CreatePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
-    pipe.InitState();
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 }
@@ -428,7 +416,6 @@ void main() {
 
     CreatePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
-    pipe.InitState();
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 }
@@ -575,7 +562,6 @@ TEST_F(PositiveShaderSpirv, SpecializationWordBoundryOffset) {
     memcpy(pipe.dsl_bindings_.data(), bindings.data(), bindings.size() * sizeof(VkDescriptorSetLayoutBinding));
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_src.c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM,
                                              &specialization_info);
-    pipe.InitState();
     pipe.CreateComputePipeline();
 
     // Submit shader to see SSBO output
@@ -800,8 +786,7 @@ TEST_F(PositiveShaderSpirv, UnnormalizedCoordinatesNotSampled) {
     CreatePipelineHelper g_pipe(*this);
     g_pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
-    g_pipe.InitState();
-    ASSERT_EQ(VK_SUCCESS, g_pipe.CreateGraphicsPipeline());
+    g_pipe.CreateGraphicsPipeline();
 
     VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -897,7 +882,6 @@ TEST_F(PositiveShaderSpirv, GeometryShaderPassthroughNV) {
     VkShaderObj fs(this, fs_src, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), gs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
 
     // Create pipeline and make sure that the usage of NV_geometry_shader_passthrough
@@ -960,7 +944,6 @@ TEST_F(PositiveShaderSpirv, SpecializeInt8) {
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.shader_stages_[1].pSpecializationInfo = &specialization_info;
-    pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
 }
@@ -1018,7 +1001,6 @@ TEST_F(PositiveShaderSpirv, SpecializeInt16) {
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.shader_stages_[1].pSpecializationInfo = &specialization_info;
-    pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
 }
@@ -1067,7 +1049,6 @@ TEST_F(PositiveShaderSpirv, SpecializeInt32) {
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.shader_stages_[1].pSpecializationInfo = &specialization_info;
-    pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
 }
@@ -1126,7 +1107,6 @@ TEST_F(PositiveShaderSpirv, SpecializeInt64) {
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.shader_stages_[1].pSpecializationInfo = &specialization_info;
-    pipe.InitState();
 
     pipe.CreateGraphicsPipeline();
 }
@@ -1601,6 +1581,43 @@ TEST_F(PositiveShaderSpirv, Storage8and16bit) {
     }
 }
 
+TEST_F(PositiveShaderSpirv, SubgroupRotate) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SHADER_SUBGROUP_ROTATE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderSubgroupRotate);
+    RETURN_IF_SKIP(Init());
+
+    char const *source = R"glsl(
+        #version 450
+        #extension GL_KHR_shader_subgroup_rotate: enable
+        layout(binding = 0) buffer Buffers { vec4  x; } data;
+        void main() {
+            data.x = subgroupRotate(data.x, 1);
+        }
+    )glsl";
+
+    VkShaderObj const cs(this, source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1);
+}
+
+TEST_F(PositiveShaderSpirv, SubgroupRotateClustered) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SHADER_SUBGROUP_ROTATE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderSubgroupRotate);
+    AddRequiredFeature(vkt::Feature::shaderSubgroupRotateClustered);
+    RETURN_IF_SKIP(Init());
+
+    char const *source = R"glsl(
+        #version 450
+        #extension GL_KHR_shader_subgroup_rotate: enable
+        layout(binding = 0) buffer Buffers { vec4  x; } data;
+        void main() {
+            data.x = subgroupClusteredRotate(data.x, 1, 1);
+        }
+    )glsl";
+
+    VkShaderObj const cs(this, source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1);
+}
+
 TEST_F(PositiveShaderSpirv, ReadShaderClockDevice) {
     TEST_DESCRIPTION("Test VK_KHR_shader_clock");
 
@@ -1746,7 +1763,6 @@ void main() {
         {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
     };
-    pipe.InitState();
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 }
@@ -1820,7 +1836,6 @@ TEST_F(PositiveShaderSpirv, SpecConstantTextureIndexDefault) {
 
     CreatePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, VK_SHADER_STAGE_ALL_GRAPHICS, nullptr}};
-    pipe.InitState();
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 }
@@ -1875,7 +1890,6 @@ TEST_F(PositiveShaderSpirv, SpecConstantTextureIndexValue) {
 
     CreatePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, VK_SHADER_STAGE_ALL_GRAPHICS, nullptr}};
-    pipe.InitState();
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 }
@@ -1911,15 +1925,9 @@ TEST_F(PositiveShaderSpirv, PhysicalStorageBufferGlslang6) {
     TEST_DESCRIPTION("Taken from glslang spv.bufferhandle6.frag test");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
 
-    VkPhysicalDeviceVulkan12Features features12 = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(features12);
-    if (VK_TRUE != features12.bufferDeviceAddress) {
-        GTEST_SKIP() << "bufferDeviceAddress not supported and is required";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features12));
+    RETURN_IF_SKIP(Init());
 
     char const *fsSource = R"glsl(
         #version 450 core

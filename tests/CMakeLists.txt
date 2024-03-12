@@ -82,6 +82,8 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/device_queue.cpp
     unit/dynamic_rendering.cpp
     unit/dynamic_rendering_positive.cpp
+    unit/dynamic_rendering_local_read.cpp
+    unit/dynamic_rendering_local_read_positive.cpp
     unit/dynamic_state.cpp
     unit/dynamic_state_positive.cpp
     unit/external_memory_sync.cpp
@@ -99,9 +101,14 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/gpu_av_oob.cpp
     unit/gpu_av_oob_positive.cpp
     unit/gpu_av_positive.cpp
+    unit/gpu_av_shader_object_positive.cpp
     unit/gpu_av_spirv.cpp
     unit/gpu_av_spirv_positive.cpp
+    unit/gpu_av_ray_query.cpp
     unit/gpu_av_ray_query_positive.cpp
+    unit/gpu_av_ray_tracing_nv.cpp
+    unit/gpu_av_ray_tracing.cpp
+    unit/gpu_av_ray_tracing_positive.cpp
     unit/graphics_library.cpp
     unit/graphics_library_positive.cpp
     unit/host_image_copy.cpp
@@ -143,8 +150,6 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/query_positive.cpp
     unit/ray_tracing.cpp
     unit/ray_tracing_nv.cpp
-    unit/ray_tracing_gpu_nv.cpp
-    unit/ray_tracing_gpu.cpp
     unit/ray_tracing_pipeline.cpp
     unit/ray_tracing_pipeline_positive.cpp
     unit/ray_tracing_pipeline_nv.cpp

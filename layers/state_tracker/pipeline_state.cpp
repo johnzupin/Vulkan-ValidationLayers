@@ -51,6 +51,9 @@ Pipeline::CreateInfo::CreateInfo(const VkGraphicsPipelineCreateInfo &ci, std::sh
             use_color = (dynamic_rendering->colorAttachmentCount > 0);
             use_depth_stencil = (dynamic_rendering->depthAttachmentFormat != VK_FORMAT_UNDEFINED) ||
                                 (dynamic_rendering->stencilAttachmentFormat != VK_FORMAT_UNDEFINED);
+        } else {
+            // if this is true, will be caught later by VU
+            use_color = ci.pColorBlendState && ci.pColorBlendState->attachmentCount > 0;
         }
     } else if (rpstate) {
         use_color = rpstate->UsesColorAttachment(ci.subpass);
@@ -74,6 +77,11 @@ StageStateVec Pipeline::GetStageStates(const ValidationStateTracker &state_data,
         // shader stages need to be recorded in pipeline order
 
         for (size_t stage_index = 0; stage_index < pipe_state.shader_stages_ci.size(); ++stage_index) {
+            if (pipe_state.pipeline_type == VK_PIPELINE_BIND_POINT_GRAPHICS && !pipe_state.fragment_shader_state &&
+                !pipe_state.pre_raster_state) {
+                break;  // pStages are ignored if not using one of these substates
+            }
+
             const auto &stage_ci = pipe_state.shader_stages_ci[stage_index];
             if (stage_ci.stage == stage) {
                 auto module_state = state_data.Get<vvl::ShaderModule>(stage_ci.module);
@@ -168,6 +176,11 @@ StageStateVec Pipeline::GetStageStates(const ValidationStateTracker &state_data,
 
 static uint32_t GetCreateInfoShaders(const Pipeline &pipe_state) {
     uint32_t result = 0;
+    if (pipe_state.pipeline_type == VK_PIPELINE_BIND_POINT_GRAPHICS && !pipe_state.fragment_shader_state &&
+        !pipe_state.pre_raster_state) {
+        return result;  // pStages are ignored if not using one of these substates
+    }
+
     for (const auto &stage_ci : pipe_state.shader_stages_ci) {
         result |= stage_ci.stage;
     }
@@ -199,7 +212,7 @@ static CBDynamicFlags GetGraphicsDynamicState(Pipeline &pipe_state) {
     const bool has_fragment_shader_state = pipe_state.OwnsSubState(pipe_state.fragment_shader_state);
     const bool has_fragment_output_state = pipe_state.OwnsSubState(pipe_state.fragment_output_state);
 
-    const auto *dynamic_state_ci = pipe_state.DynamicStateGraphics();
+    const auto *dynamic_state_ci = pipe_state.GetCreateInfo<VkGraphicsPipelineCreateInfo>().pDynamicState;
     if (dynamic_state_ci) {
         for (const VkDynamicState vk_dynamic_state :
              vvl::make_span(dynamic_state_ci->pDynamicStates, dynamic_state_ci->dynamicStateCount)) {
@@ -358,7 +371,9 @@ static CBDynamicFlags GetGraphicsDynamicState(Pipeline &pipe_state) {
 static CBDynamicFlags GetRayTracingDynamicState(Pipeline &pipe_state) {
     CBDynamicFlags flags = 0;
 
-    const auto *dynamic_state_ci = pipe_state.DynamicStateRayTracing();
+    const auto *dynamic_state_ci = (pipe_state.GetCreateInfoSType() == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR)
+                                       ? pipe_state.GetCreateInfo<VkRayTracingPipelineCreateInfoKHR>().pDynamicState
+                                       : pipe_state.GetCreateInfo<VkRayTracingPipelineCreateInfoNV>().pDynamicState;
     if (dynamic_state_ci) {
         for (const VkDynamicState vk_dynamic_state :
              vvl::make_span(dynamic_state_ci->pDynamicStates, dynamic_state_ci->dynamicStateCount)) {
@@ -402,7 +417,6 @@ static bool UsesPipelineRobustness(const void *pNext, const Pipeline &pipe_state
 }
 
 static bool IgnoreColorAttachments(const ValidationStateTracker *state_data, Pipeline &pipe_state) {
-    bool ignore = false;
     // If the libraries used to create this pipeline are ignoring color attachments, this pipeline should as well
     if (pipe_state.library_create_info) {
         for (uint32_t i = 0; i < pipe_state.library_create_info->libraryCount; i++) {
@@ -413,20 +427,21 @@ static bool IgnoreColorAttachments(const ValidationStateTracker *state_data, Pip
     // According to the spec, pAttachments is to be ignored if the pipeline is created with
     // VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT, VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT, VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT
     // and VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT dynamic states set
-    if (pipe_state.ColorBlendState() && pipe_state.DynamicStateGraphics()) {
-        ignore = (pipe_state.IsDynamic(VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT) &&
-                  pipe_state.IsDynamic(VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT) &&
-                  pipe_state.IsDynamic(VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT) &&
-                  pipe_state.IsDynamic(VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT));
-    }
-    return ignore;
+    return pipe_state.ColorBlendState() && (pipe_state.IsDynamic(VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT) &&
+                                            pipe_state.IsDynamic(VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT) &&
+                                            pipe_state.IsDynamic(VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT) &&
+                                            pipe_state.IsDynamic(VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT));
 }
 
 static bool UsesShaderModuleId(const Pipeline &pipe_state) {
     for (const auto &stage_ci : pipe_state.shader_stages_ci) {
-        const auto module_id_info = vku::FindStructInPNextChain<VkPipelineShaderStageModuleIdentifierCreateInfoEXT>(stage_ci.pNext);
-        if (module_id_info && (module_id_info->identifierSize > 0)) {
-            return true;
+        // if using GPL, can have null pStages
+        if (stage_ci.ptr()) {
+            const auto module_id_info =
+                vku::FindStructInPNextChain<VkPipelineShaderStageModuleIdentifierCreateInfoEXT>(stage_ci.pNext);
+            if (module_id_info && (module_id_info->identifierSize > 0)) {
+                return true;
+            }
         }
     }
     return false;
@@ -454,9 +469,7 @@ static vvl::unordered_set<uint32_t> GetFSOutputLocations(const StageStateVec &st
 }
 
 static VkPrimitiveTopology GetTopologyAtRasterizer(const Pipeline &pipeline) {
-    auto result = (pipeline.vertex_input_state && pipeline.vertex_input_state->input_assembly_state)
-                      ? pipeline.vertex_input_state->input_assembly_state->topology
-                      : VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
+    auto result = (pipeline.InputAssemblyState()) ? pipeline.InputAssemblyState()->topology : VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
     for (const auto &stage : pipeline.stage_states) {
         if (!stage.entrypoint) {
             continue;
@@ -971,4 +984,14 @@ bool LastBound::IsValidShaderBound(ShaderObjectStage stage) const {
 
 bool LastBound::IsValidShaderOrNullBound(ShaderObjectStage stage) const {
     return shader_object_bound[static_cast<uint32_t>(stage)];
+}
+
+bool LastBound::IsAnyGraphicsShaderBound() const {
+    return IsValidShaderBound(ShaderObjectStage::VERTEX) ||
+        IsValidShaderBound(ShaderObjectStage::TESSELLATION_CONTROL) ||
+        IsValidShaderBound(ShaderObjectStage::TESSELLATION_EVALUATION) ||
+        IsValidShaderBound(ShaderObjectStage::GEOMETRY) ||
+        IsValidShaderBound(ShaderObjectStage::FRAGMENT) ||
+        IsValidShaderBound(ShaderObjectStage::TASK) ||
+        IsValidShaderBound(ShaderObjectStage::MESH);
 }

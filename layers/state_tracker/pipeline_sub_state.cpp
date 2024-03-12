@@ -25,23 +25,30 @@ VkPipelineLayoutCreateFlags PipelineSubState::PipelineLayoutCreateFlags() const 
 }
 
 VertexInputState::VertexInputState(const vvl::Pipeline &p, const safe_VkGraphicsPipelineCreateInfo &create_info)
-    : PipelineSubState(p), input_state(create_info.pVertexInputState), input_assembly_state(create_info.pInputAssemblyState) {
-    if (create_info.pVertexInputState) {
-        const auto *vici = create_info.pVertexInputState;
-        if (vici->vertexBindingDescriptionCount) {
-            const uint32_t count = vici->vertexBindingDescriptionCount;
+    : PipelineSubState(p) {
+    for (uint32_t i = 0; i < create_info.stageCount; i++) {
+        if (create_info.pStages && create_info.pStages[i].stage == VK_SHADER_STAGE_MESH_BIT_EXT) {
+            return;  // if mesh shaders are used, all vertex input state is ignored
+        }
+    }
+    input_state = create_info.pVertexInputState;
+    input_assembly_state = create_info.pInputAssemblyState;
+
+    if (input_state) {
+        if (input_state->vertexBindingDescriptionCount) {
+            const uint32_t count = input_state->vertexBindingDescriptionCount;
             binding_descriptions.reserve(count);
             binding_to_index_map.reserve(count);
 
             for (uint32_t i = 0; i < count; i++) {
-                binding_descriptions.emplace_back(vici->pVertexBindingDescriptions[i]);
+                binding_descriptions.emplace_back(input_state->pVertexBindingDescriptions[i]);
                 binding_to_index_map[binding_descriptions.back().binding] = i;
             }
         }
 
-        vertex_attribute_descriptions.reserve(vici->vertexAttributeDescriptionCount);
+        vertex_attribute_descriptions.reserve(input_state->vertexAttributeDescriptionCount);
         for (const auto [i, description] :
-             vvl::enumerate(vici->pVertexAttributeDescriptions, vici->vertexAttributeDescriptionCount)) {
+             vvl::enumerate(input_state->pVertexAttributeDescriptions, input_state->vertexAttributeDescriptionCount)) {
             vertex_attribute_descriptions.emplace_back(vku::InitStruct<VkVertexInputAttributeDescription2EXT>(
                 nullptr, description->location, description->binding, description->format, description->offset));
         }
@@ -50,17 +57,13 @@ VertexInputState::VertexInputState(const vvl::Pipeline &p, const safe_VkGraphics
 
 PreRasterState::PreRasterState(const vvl::Pipeline &p, const ValidationStateTracker &state_data,
                                const safe_VkGraphicsPipelineCreateInfo &create_info, std::shared_ptr<const vvl::RenderPass> rp)
-    : PipelineSubState(p), rp_state(rp), subpass(create_info.subpass) {
-    pipeline_layout = state_data.Get<vvl::PipelineLayout>(create_info.layout);
-
-    viewport_state = create_info.pViewportState;
-
-    rp_state = state_data.Get<vvl::RenderPass>(create_info.renderPass);
-
-    raster_state = create_info.pRasterizationState;
-
-    tess_create_info = create_info.pTessellationState;
-
+    : PipelineSubState(p),
+      pipeline_layout(state_data.Get<vvl::PipelineLayout>(create_info.layout)),
+      viewport_state(create_info.pViewportState),
+      raster_state(create_info.pRasterizationState),
+      tessellation_state(create_info.pTessellationState),
+      rp_state(rp),
+      subpass(create_info.subpass) {
     VkShaderStageFlags all_stages = 0;
 
     for (uint32_t i = 0; i < create_info.stageCount; ++i) {

@@ -260,7 +260,6 @@ TEST_F(NegativeFragmentShadingRate, PrimitiveFragmentShadingRateWriteMultiViewpo
     VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[0] = vs.GetStageCreateInfo();
     pipe.vp_state_ci_.viewportCount = 0;
     pipe.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT);
@@ -969,6 +968,7 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
 
     AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::attachmentFragmentShadingRate);
     RETURN_IF_SKIP(Init());
 
@@ -1087,6 +1087,7 @@ TEST_F(NegativeFragmentShadingRate, Attachments) {
 
 TEST_F(NegativeFragmentShadingRate, LoadOpClear) {
     AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::attachmentFragmentShadingRate);
     RETURN_IF_SKIP(Init());
 

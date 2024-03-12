@@ -76,9 +76,13 @@ bool CoreChecks::ValidateGraphicsPipeline(const vvl::Pipeline &pipeline, const L
         }
     }
 
+    // While these are split into the 4 sub-states from GPL, they are validated for normal pipelines too.
+    // These are VUs that fall strangely between both GPL and non-GPL pipelines
+    skip |= ValidateGraphicsPipelineVertexInputState(pipeline, create_info_loc);
+    skip |= ValidateGraphicsPipelinePreRasterizationState(pipeline, create_info_loc);
+
     skip |= ValidateGraphicsPipelineRenderPass(pipeline, create_info_loc);
     skip |= ValidateGraphicsPipelineLibrary(pipeline, create_info_loc);
-    skip |= ValidateGraphicsPipelinePreRasterState(pipeline, create_info_loc);
     skip |= ValidateGraphicsPipelineInputAssemblyState(pipeline, create_info_loc);
     skip |= ValidateGraphicsPipelineTessellationState(pipeline, create_info_loc);
     skip |= ValidateGraphicsPipelineColorBlendState(pipeline, subpass_desc, create_info_loc);
@@ -104,33 +108,6 @@ bool CoreChecks::ValidateGraphicsPipeline(const vvl::Pipeline &pipeline, const L
             }
             unique_stage_map[stage_ci.stage] = index;
             index++;
-        }
-    }
-
-    // Check if a Vertex Input State is used
-    // Need to make sure it has a vertex shader and if a GPL, that it contains a GPL vertex input state
-    // vkspec.html#pipelines-graphics-subsets-vertex-input
-    if ((pipeline.create_info_shaders & VK_SHADER_STAGE_VERTEX_BIT) && pipeline.OwnsSubState(pipeline.vertex_input_state)) {
-        if (!pipeline.IsDynamic(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT)) {
-            const auto *input_state = pipeline.InputState();
-            if (!input_state) {
-                skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pStages-02097", device,
-                                 create_info_loc.dot(Field::pVertexInputState), "is NULL.");
-            } else {
-                // Can use raw Pipeline state values because not using the stride (which can be dynamic with
-                // VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE)
-                skip |= ValidatePipelineVertexDivisors(*input_state, pipeline.vertex_input_state->binding_descriptions,
-                                                       create_info_loc);
-            }
-        }
-
-        if (!pipeline.InputAssemblyState()) {
-            if (!IsExtEnabled(device_extensions.vk_ext_extended_dynamic_state3) ||
-                !pipeline.IsDynamic(VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE) ||
-                !pipeline.IsDynamic(VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY) ||
-                !phys_dev_ext_props.extended_dynamic_state3_props.dynamicPrimitiveTopologyUnrestricted)
-                skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-dynamicPrimitiveTopologyUnrestricted-09031", device,
-                                 create_info_loc.dot(Field::pInputAssemblyState), "is NULL.");
         }
     }
 
@@ -465,10 +442,13 @@ static bool ComparePipelineMultisampleStateCreateInfo(VkPipelineMultisampleState
         valid_mask = false;  // one is not null
     }
 
-    return (a.sType == b.sType) && (a.pNext == b.pNext) && (a.flags == b.flags) &&
-           (a.rasterizationSamples == b.rasterizationSamples) && (a.sampleShadingEnable == b.sampleShadingEnable) &&
-           (a.minSampleShading == b.minSampleShading) && (valid_mask) && (a.alphaToCoverageEnable == b.alphaToCoverageEnable) &&
-           (a.alphaToOneEnable == b.alphaToOneEnable);
+    // TODO - to do a deep pNext chain check would require us generating these compare functions for all structs
+    // For now, just check if pNext both null or not
+    const bool valid_pNext = (a.pNext && b.pNext) || (a.pNext == b.pNext);
+
+    return (a.sType == b.sType) && (valid_pNext) && (a.flags == b.flags) && (a.rasterizationSamples == b.rasterizationSamples) &&
+           (a.sampleShadingEnable == b.sampleShadingEnable) && (a.minSampleShading == b.minSampleShading) && (valid_mask) &&
+           (a.alphaToCoverageEnable == b.alphaToCoverageEnable) && (a.alphaToOneEnable == b.alphaToOneEnable);
 }
 
 static bool CompareDescriptorSetLayoutBinding(VkDescriptorSetLayoutBinding a, VkDescriptorSetLayoutBinding b) {
@@ -488,6 +468,50 @@ static bool ComparePipelineFragmentShadingRateStateCreateInfo(VkPipelineFragment
     // Since this is chained in a pnext, we don't want to check the pNext/sType
     return (a.fragmentSize.width == b.fragmentSize.width) && (a.fragmentSize.height == b.fragmentSize.height) &&
            (a.combinerOps[0] == b.combinerOps[0]) && (a.combinerOps[1] == b.combinerOps[1]);
+}
+
+// vkspec.html#pipelines-graphics-subsets-vertex-input
+bool CoreChecks::ValidateGraphicsPipelineVertexInputState(const vvl::Pipeline &pipeline, const Location &create_info_loc) const {
+    bool skip = false;
+    // If using a mesh shader, all vertex input is ignored
+    if (!pipeline.OwnsSubState(pipeline.vertex_input_state) || (pipeline.active_shaders & VK_SHADER_STAGE_MESH_BIT_EXT)) {
+        return skip;
+    }
+
+    const bool ignore_vertex_input_state = pipeline.IsDynamic(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT);
+    const bool ignore_input_assembly_state = IsExtEnabled(device_extensions.vk_ext_extended_dynamic_state3) &&
+                                             pipeline.IsDynamic(VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE) &&
+                                             pipeline.IsDynamic(VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY) &&
+                                             phys_dev_ext_props.extended_dynamic_state3_props.dynamicPrimitiveTopologyUnrestricted;
+
+    if (!ignore_vertex_input_state) {
+        skip |= ValidatePipelineVertexDivisors(pipeline, create_info_loc);
+    }
+
+    const auto *input_state = pipeline.InputState();
+    const auto *assembly_state = pipeline.InputAssemblyState();
+    const bool invalid_input_state = !ignore_vertex_input_state && !input_state;
+    const bool invalid_assembly_state = !ignore_input_assembly_state && !assembly_state;
+
+    if (invalid_input_state && invalid_assembly_state && pipeline.IsGraphicsLibrary()) {
+        // Failed to defined a Vertex Input State
+        if (!pipeline.pre_raster_state) {
+            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-flags-08898", device, create_info_loc,
+                             "pVertexInputState and pInputAssemblyState are both NULL so this is an invalid Vertex Input State (no "
+                             "dynamic state or mesh shaders were used to ignore them).");
+        } else if ((pipeline.active_shaders & VK_SHADER_STAGE_VERTEX_BIT)) {
+            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-flags-08897", device, create_info_loc,
+                             "pVertexInputState and pInputAssemblyState are both NULL so this is an invalid Vertex Input State (no "
+                             "dynamic state were used to ignore them).");
+        }
+    } else if (invalid_input_state) {
+        skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pStages-02097", device, create_info_loc.dot(Field::pVertexInputState),
+                         "is NULL.");
+    } else if (invalid_assembly_state) {
+        skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-dynamicPrimitiveTopologyUnrestricted-09031", device,
+                         create_info_loc.dot(Field::pInputAssemblyState), "is NULL.");
+    }
+    return skip;
 }
 
 bool CoreChecks::ValidateGraphicsPipelineRenderPass(const vvl::Pipeline &pipeline, const Location &create_info_loc) const {
@@ -526,15 +550,42 @@ bool CoreChecks::ValidateGraphicsPipelineLibrary(const vvl::Pipeline &pipeline, 
                          string_VkShaderStageFlags(pipeline.create_info_shaders).c_str());
     }
 
+    if (!pipeline.fragment_shader_state && !pipeline.pre_raster_state && pipeline.shader_stages_ci.size() > 0) {
+        skip |= LogError("UNASSIGNED-VkGraphicsPipelineCreateInfo-pStages", device, create_info_loc.dot(Field::stageCount),
+                         "is %zu, but the pipeline does not have a pre-rasterization or fragment shader state.",
+                         pipeline.shader_stages_ci.size());
+    }
+
     const VkPipelineCreateFlags2KHR pipeline_flags = pipeline.create_flags;
     const bool is_create_library = (pipeline_flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR) != 0;
 
-    if (is_create_library && !enabled_features.graphicsPipelineLibrary) {
-        skip |=
-            LogError("VUID-VkGraphicsPipelineCreateInfo-graphicsPipelineLibrary-06606", device, create_info_loc.dot(Field::flags),
-                     "(%s) includes VK_PIPELINE_CREATE_LIBRARY_BIT_KHR, but "
-                     "graphicsPipelineLibrary feature is not enabled.",
-                     string_VkPipelineCreateFlags2KHR(pipeline_flags).c_str());
+    if (is_create_library) {
+        if (!enabled_features.graphicsPipelineLibrary) {
+            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-graphicsPipelineLibrary-06606", device,
+                             create_info_loc.dot(Field::flags),
+                             "(%s) includes VK_PIPELINE_CREATE_LIBRARY_BIT_KHR, but "
+                             "graphicsPipelineLibrary feature is not enabled.",
+                             string_VkPipelineCreateFlags2KHR(pipeline_flags).c_str());
+        }
+    } else {
+        // check to make sure all required sub states are here
+        // Note: You don't require a vertex input state (ex. if using Mesh Shaders)
+        if (!pipeline.pre_raster_state) {
+            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-flags-08901", device, create_info_loc,
+                             "Attempting to link pipeline libraries without a pre-rasterization shader state (did you forget to "
+                             "add VK_PIPELINE_CREATE_LIBRARY_BIT_KHR to your intermediate pipeline?).");
+        } else if (pipeline.IsDynamic(VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE) ||
+                   !pipeline.RasterizationState()->rasterizerDiscardEnable) {
+            if (!pipeline.fragment_shader_state) {
+                skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-flags-08909", device, create_info_loc,
+                                 "Attempting to link pipeline libraries without a fragment shader state (did you forget to add "
+                                 "VK_PIPELINE_CREATE_LIBRARY_BIT_KHR to your intermediate pipeline?).");
+            } else if (!pipeline.fragment_output_state) {
+                skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-flags-08909", device, create_info_loc,
+                                 "Attempting to link pipeline libraries without a fragment output state (did you forget to add "
+                                 "VK_PIPELINE_CREATE_LIBRARY_BIT_KHR to your intermediate pipeline?).");
+            }
+        }
     }
 
     if (pipeline.OwnsSubState(pipeline.fragment_shader_state) && !pipeline.OwnsSubState(pipeline.pre_raster_state) &&
@@ -650,7 +701,7 @@ bool CoreChecks::ValidateGraphicsPipelineLibrary(const vvl::Pipeline &pipeline, 
             if (!lib) {
                 continue;
             }
-            if (lib->graphics_lib_type == VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {
+            if (lib->graphics_lib_type & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {
                 pre_raster_info.init = GPLInitType::link_libraries;
                 const auto layout_state = lib->PreRasterPipelineLayoutState();
                 if (layout_state) {
@@ -659,7 +710,8 @@ bool CoreChecks::ValidateGraphicsPipelineLibrary(const vvl::Pipeline &pipeline, 
                 }
                 pre_raster_info.shading_rate_state =
                     vku::FindStructInPNextChain<VkPipelineFragmentShadingRateStateCreateInfoKHR>(lib->PNext());
-            } else if (lib->graphics_lib_type == VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
+            }
+            if (lib->graphics_lib_type & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
                 frag_shader_info.init = GPLInitType::link_libraries;
                 const auto layout_state = lib->FragmentShaderPipelineLayoutState();
                 if (layout_state) {
@@ -669,7 +721,8 @@ bool CoreChecks::ValidateGraphicsPipelineLibrary(const vvl::Pipeline &pipeline, 
                 frag_shader_info.ms_state = lib->fragment_shader_state->ms_state.get()->ptr();
                 frag_shader_info.shading_rate_state =
                     vku::FindStructInPNextChain<VkPipelineFragmentShadingRateStateCreateInfoKHR>(lib->PNext());
-            } else if (lib->graphics_lib_type == VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) {
+            }
+            if (lib->graphics_lib_type & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) {
                 frag_output_info.init = GPLInitType::link_libraries;
                 frag_output_info.ms_state = lib->fragment_output_state->ms_state.get()->ptr();
             }
@@ -1377,7 +1430,8 @@ bool CoreChecks::ValidateGraphicsPipelineTessellationState(const vvl::Pipeline &
     return skip;
 }
 
-bool CoreChecks::ValidateGraphicsPipelinePreRasterState(const vvl::Pipeline &pipeline, const Location &create_info_loc) const {
+bool CoreChecks::ValidateGraphicsPipelinePreRasterizationState(const vvl::Pipeline &pipeline,
+                                                               const Location &create_info_loc) const {
     bool skip = false;
     // Only validate once during creation
     if (!pipeline.OwnsSubState(pipeline.pre_raster_state)) {
@@ -1617,9 +1671,7 @@ bool CoreChecks::ValidateGraphicsPipelineRasterizationState(const vvl::Pipeline 
         }
 
         // If subpass uses a depth/stencil attachment, pDepthStencilState must be a pointer to a valid structure
-        const bool has_ds_state = (!pipeline.IsGraphicsLibrary() && pipeline.HasFullState()) ||
-                                  ((pipeline.graphics_lib_type & (VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)) != 0);
-        if (has_ds_state) {
+        if (pipeline.fragment_shader_state) {
             if (subpass_desc && subpass_desc->pDepthStencilAttachment &&
                 subpass_desc->pDepthStencilAttachment->attachment != VK_ATTACHMENT_UNUSED) {
                 const Location ds_loc = create_info_loc.dot(Field::pDepthStencilState);
@@ -1662,10 +1714,8 @@ bool CoreChecks::ValidateGraphicsPipelineRasterizationState(const vvl::Pipeline 
         }
 
         // If subpass uses color attachments, pColorBlendState must be valid pointer
-        const bool has_color_blend_state =
-            !pipeline.IsGraphicsLibrary() ||
-            ((pipeline.graphics_lib_type & (VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)) != 0);
-        if (has_color_blend_state && subpass_desc) {
+        if (pipeline.fragment_output_state && subpass_desc && !pipeline.fragment_output_state->color_blend_state &&
+            !pipeline.IsColorBlendStateDynamic()) {
             uint32_t color_attachment_count = 0;
             for (uint32_t i = 0; i < subpass_desc->colorAttachmentCount; ++i) {
                 if (subpass_desc->pColorAttachments[i].attachment != VK_ATTACHMENT_UNUSED) {
@@ -1673,8 +1723,7 @@ bool CoreChecks::ValidateGraphicsPipelineRasterizationState(const vvl::Pipeline 
                 }
             }
 
-            if (pipeline.fragment_output_state && (color_attachment_count > 0) &&
-                !pipeline.fragment_output_state->color_blend_state && !pipeline.IsColorBlendStateDynamic()) {
+            if (color_attachment_count > 0) {
                 skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-09030", device,
                                  create_info_loc.dot(Field::pColorBlendState),
                                  "is NULL when rasterization is enabled and "
@@ -2125,7 +2174,8 @@ bool CoreChecks::ValidateGraphicsPipelineMultisampleState(const vvl::Pipeline &p
         }
     }
 
-    if (!multisample_state && pipeline.OwnsSubState(pipeline.fragment_output_state)) {
+    if (!pipeline.GetCreateInfo<VkGraphicsPipelineCreateInfo>().pMultisampleState &&
+        pipeline.OwnsSubState(pipeline.fragment_output_state)) {
         // Don't need to check for VK_EXT_extended_dynamic_state3 since it would be on if using these VkDynamicState
         const bool dynamic_alpha_to_one =
             pipeline.IsDynamic(VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT) || !enabled_features.alphaToOne;
@@ -2649,11 +2699,27 @@ bool CoreChecks::ValidateGraphicsPipelineFragmentShadingRateState(const vvl::Pip
 
 bool CoreChecks::ValidateGraphicsPipelineDynamicRendering(const vvl::Pipeline &pipeline, const Location &create_info_loc) const {
     bool skip = false;
-    const auto rendering_struct = vku::FindStructInPNextChain<VkPipelineRenderingCreateInfo>(pipeline.PNext());
-    if (!rendering_struct || pipeline.GetCreateInfo<VkGraphicsPipelineCreateInfo>().renderPass != VK_NULL_HANDLE) {
+    if (pipeline.GetCreateInfo<VkGraphicsPipelineCreateInfo>().renderPass != VK_NULL_HANDLE) {
         return skip;
     }
+
     const auto color_blend_state = pipeline.ColorBlendState();
+    const auto rendering_struct = vku::FindStructInPNextChain<VkPipelineRenderingCreateInfo>(pipeline.PNext());
+    if (!rendering_struct) {
+        // The spec says when thie struct is not included it is same as
+        // viewMask = 0, colorAttachmentCount = 0, formats = VK_FORMAT_UNDEFINED.
+        // Most VUs are worded around this, but some need to be validated here
+        if (pipeline.OwnsSubState(pipeline.fragment_output_state) && color_blend_state && color_blend_state->attachmentCount > 0) {
+            skip |= LogError(
+                "VUID-VkGraphicsPipelineCreateInfo-renderPass-06055", device,
+                create_info_loc.dot(Field::pColorBlendState).dot(Field::attachmentCount),
+                "is %" PRIu32
+                ", but VkPipelineRenderingCreateInfo::colorAttachmentCount is zero because the pNext chain was not included.",
+                color_blend_state->attachmentCount);
+        }
+        return skip;
+    }
+
     const auto raster_state = pipeline.RasterizationState();
     const bool has_rasterization = raster_state && (raster_state->rasterizerDiscardEnable == VK_FALSE);
     if (has_rasterization) {
@@ -2672,11 +2738,46 @@ bool CoreChecks::ValidateGraphicsPipelineDynamicRendering(const vvl::Pipeline &p
 
         if (pipeline.fragment_output_state && (rendering_struct->colorAttachmentCount != 0) && !color_blend_state &&
             !pipeline.IsColorBlendStateDynamic()) {
-            skip |=
-                LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-09037", device, create_info_loc.dot(Field::pColorBlendState),
-                         "is NULL, but %s is %" PRIu32 ".",
-                         create_info_loc.pNext(Struct::VkPipelineRenderingCreateInfo, Field::colorAttachmentCount).Fields().c_str(),
-                         rendering_struct->colorAttachmentCount);
+            for (const auto [i, format] :
+                 vvl::enumerate(rendering_struct->pColorAttachmentFormats, rendering_struct->colorAttachmentCount)) {
+                if (*format != VK_FORMAT_UNDEFINED) {
+                    skip |= LogError(
+                        "VUID-VkGraphicsPipelineCreateInfo-renderPass-09037", device, create_info_loc.dot(Field::pColorBlendState),
+                        "is NULL, but %s is %" PRIu32 " and pColorAttachmentFormats[%" PRIu32 "] is %s.",
+                        create_info_loc.pNext(Struct::VkPipelineRenderingCreateInfo, Field::colorAttachmentCount).Fields().c_str(),
+                        rendering_struct->colorAttachmentCount, i, string_VkFormat(*format));
+                }
+            }
+        }
+        if (pipeline.fragment_shader_state && pipeline.fragment_output_state) {
+            const auto input_attachment_index =
+                vku::FindStructInPNextChain<VkRenderingInputAttachmentIndexInfoKHR>(pipeline.PNext());
+            if (input_attachment_index) {
+                skip |= ValidateRenderingInputAttachmentIndicesKHR(
+                    *input_attachment_index, device, create_info_loc.pNext(Struct::VkRenderingInputAttachmentIndexInfoKHR));
+                if (input_attachment_index->colorAttachmentCount != rendering_struct->colorAttachmentCount) {
+                    const Location loc =
+                        create_info_loc.pNext(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::colorAttachmentCount);
+                    skip |=
+                        LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-09531", device, loc,
+                                 "= %" PRIu32 " does not match VkPipelineRenderingCreateInfo.colorAttachmentCount = %" PRIu32 ".",
+                                 input_attachment_index->colorAttachmentCount, rendering_struct->colorAttachmentCount);
+                }
+            }
+
+            const auto attachment_location = vku::FindStructInPNextChain<VkRenderingAttachmentLocationInfoKHR>(pipeline.PNext());
+            if (attachment_location) {
+                skip |= ValidateRenderingAttachmentLocationsKHR(
+                    *attachment_location, device, create_info_loc.pNext(Struct::VkRenderingAttachmentLocationInfoKHR));
+                if (attachment_location->colorAttachmentCount != rendering_struct->colorAttachmentCount) {
+                    const Location loc =
+                        create_info_loc.pNext(Struct::VkRenderingAttachmentLocationInfoKHR, Field::colorAttachmentCount);
+                    skip |=
+                        LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-09532", device, loc,
+                                 "= %" PRIu32 " does not match VkPipelineRenderingCreateInfo.colorAttachmentCount = %" PRIu32 ".",
+                                 attachment_location->colorAttachmentCount, rendering_struct->colorAttachmentCount);
+                }
+            }
         }
     }
 
@@ -3491,7 +3592,7 @@ bool CoreChecks::ValidatePipelineDynamicRenderpassDraw(const LastBound &last_bou
                              FormatHandle(*pipeline).c_str());
         }
 
-        const auto pipeline_rendering_ci = rp_state->dynamic_rendering_pipeline_create_info;
+        const auto pipeline_rendering_ci = rp_state->dynamic_pipeline_rendering_create_info;
 
         if (pipeline_rendering_ci.viewMask != rendering_view_mask) {
             const LogObjectList objlist(cb_state.Handle(), pipeline->Handle(), cb_state.activeRenderPass->Handle());
@@ -3909,17 +4010,25 @@ bool CoreChecks::ValidatePipelineDynamicRenderpassDraw(const LastBound &last_bou
     return skip;
 }
 
-bool CoreChecks::ValidatePipelineVertexDivisors(const safe_VkPipelineVertexInputStateCreateInfo &input_state,
-                                                const std::vector<VkVertexInputBindingDescription> &binding_descriptions,
-                                                const Location &loc) const {
+bool CoreChecks::ValidatePipelineVertexDivisors(const vvl::Pipeline &pipeline, const Location &create_info_loc) const {
     bool skip = false;
-    const auto divisor_state_info = vku::FindStructInPNextChain<VkPipelineVertexInputDivisorStateCreateInfoKHR>(input_state.pNext);
+    const auto *input_state = pipeline.InputState();
+    if (!input_state) {
+        return skip;
+    }
+    const auto divisor_state_info = vku::FindStructInPNextChain<VkPipelineVertexInputDivisorStateCreateInfoKHR>(input_state->pNext);
     if (!divisor_state_info) {
         return skip;
     }
+
+    const Location vertex_input_loc = create_info_loc.dot(Field::pVertexInputState);
+    // Can use raw Pipeline state values because not using the stride (which can be dynamic with
+    // VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE)
+    const auto &binding_descriptions = pipeline.vertex_input_state->binding_descriptions;
     const VkPhysicalDeviceLimits *device_limits = &phys_dev_props.limits;
     for (uint32_t j = 0; j < divisor_state_info->vertexBindingDivisorCount; j++) {
-        const Location divisor_loc = loc.pNext(Struct::VkVertexInputBindingDivisorDescriptionKHR, Field::pVertexBindingDivisors, j);
+        const Location divisor_loc =
+            vertex_input_loc.pNext(Struct::VkVertexInputBindingDivisorDescriptionKHR, Field::pVertexBindingDivisors, j);
         const auto *vibdd = &(divisor_state_info->pVertexBindingDivisors[j]);
         if (vibdd->binding >= device_limits->maxVertexInputBindings) {
             skip |= LogError("VUID-VkVertexInputBindingDivisorDescriptionKHR-binding-01869", device,
@@ -4075,6 +4184,9 @@ bool CoreChecks::ValidateMultiViewShaders(const vvl::Pipeline &pipeline, const L
     }
 
     for (const auto &stage : pipeline.stage_states) {
+        // Stage may not have SPIR-V data (e.g. due to the use of shader module identifier or in Vulkan SC)
+        if (!stage.spirv_state) continue;
+
         if (stage.spirv_state->static_data_.has_builtin_layer) {
             const char *vuid = dynamic_rendering ? "VUID-VkGraphicsPipelineCreateInfo-renderPass-06059"
                                                  : "VUID-VkGraphicsPipelineCreateInfo-renderPass-06050";

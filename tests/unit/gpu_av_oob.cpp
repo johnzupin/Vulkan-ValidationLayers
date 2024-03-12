@@ -61,11 +61,9 @@ TEST_F(NegativeGpuAVOOB, RobustBuffer) {
     pipeline_robustness_ci.uniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
     pipeline_robustness_ci.storageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
 
-    CreatePipelineHelper robust_pipe(*this);
-    robust_pipe.InitState();
+    CreatePipelineHelper robust_pipe(*this, &pipeline_robustness_ci);
     robust_pipe.shader_stages_[0] = vs.GetStageCreateInfo();
     robust_pipe.gp_ci_.layout = pipeline_layout.handle();
-    robust_pipe.gp_ci_.pNext = &pipeline_robustness_ci;
     robust_pipe.CreateGraphicsPipeline();
 
     m_commandBuffer->begin();
@@ -80,7 +78,7 @@ TEST_F(NegativeGpuAVOOB, RobustBuffer) {
     uint32_t *data = (uint32_t *)uniform_buffer.memory().map();
     *data = 0;
     uniform_buffer.memory().unmap();
-    // normally VUID-vkCmdDraw-None-08612
+    // normally VUID-vkCmdDraw-uniformBuffers-06935
     m_errorMonitor->SetDesiredFailureMsg(
         kWarningBit, "Descriptor index 0 access out of bounds. Descriptor size is 4 and highest byte accessed was 19");
     m_commandBuffer->QueueCommandBuffer();
@@ -88,7 +86,7 @@ TEST_F(NegativeGpuAVOOB, RobustBuffer) {
     data = (uint32_t *)uniform_buffer.memory().map();
     *data = 1;
     uniform_buffer.memory().unmap();
-    // normally VUID-vkCmdDraw-None-08613
+    // normally VUID-vkCmdDraw-storageBuffers-06936
     m_errorMonitor->SetDesiredFailureMsg(
         kWarningBit, "Descriptor index 0 access out of bounds. Descriptor size is 16 and highest byte accessed was 35");
     m_commandBuffer->QueueCommandBuffer();
@@ -126,7 +124,6 @@ TEST_F(NegativeGpuAVOOB, Basic) {
 
     VkShaderObj vs(this, vs_source, VK_SHADER_STAGE_VERTEX_BIT);
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[0] = vs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
@@ -144,7 +141,7 @@ TEST_F(NegativeGpuAVOOB, Basic) {
     *data = 8;
     offset_buffer.memory().unmap();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08613");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-storageBuffers-06936");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();
@@ -211,9 +208,20 @@ void NegativeGpuAVOOB::ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSi
     VkShaderObj fs(this, fragment_shader, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.gp_ci_.layout = pipeline_layout.handle();
+
+    VkFormat color_formats = VK_FORMAT_UNDEFINED;
+    VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();
+    const auto depth_format = FindSupportedDepthOnlyFormat(gpu());
+
+    if (shader_objects) {
+        pipeline_rendering_info.colorAttachmentCount = 1;
+        pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
+        pipeline_rendering_info.depthAttachmentFormat = depth_format;
+        pipe.gp_ci_.pNext = &pipeline_rendering_info;
+    }
+
     pipe.CreateGraphicsPipeline();
 
     m_commandBuffer->begin();
@@ -267,7 +275,7 @@ TEST_F(NegativeGpuAVOOB, UniformBufferTooSmall) {
     ShaderBufferSizeTest(4,  // buffer size
                          0,  // binding offset
                          4,  // binding range
-                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "VUID-vkCmdDraw-None-08612");
+                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "VUID-vkCmdDraw-uniformBuffers-06935");
 }
 
 TEST_F(NegativeGpuAVOOB, StorageBufferTooSmall) {
@@ -286,7 +294,7 @@ TEST_F(NegativeGpuAVOOB, StorageBufferTooSmall) {
     ShaderBufferSizeTest(4,  // buffer size
                          0,  // binding offset
                          4,  // binding range
-                         VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fsSource, "VUID-vkCmdDraw-None-08613");
+                         VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fsSource, "VUID-vkCmdDraw-storageBuffers-06936");
 }
 
 TEST_F(NegativeGpuAVOOB, UniformBufferTooSmallArray) {
@@ -310,11 +318,10 @@ TEST_F(NegativeGpuAVOOB, UniformBufferTooSmallArray) {
     ShaderBufferSizeTest(64,  // buffer size
                          0,   // binding offset
                          64,  // binding range
-                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "VUID-vkCmdDraw-None-08612");
+                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "VUID-vkCmdDraw-uniformBuffers-06935");
 }
 
-// Is failing to create a pipeline on new Windows NVIDIA NDA driver
-TEST_F(NegativeGpuAVOOB, DISABLED_UniformBufferTooSmallNestedStruct) {
+TEST_F(NegativeGpuAVOOB, UniformBufferTooSmallNestedStruct) {
     TEST_DESCRIPTION(
         "Test that an error is produced when trying to access uniform buffer outside the bound region. Uses nested struct in block "
         "definition.");
@@ -336,7 +343,7 @@ TEST_F(NegativeGpuAVOOB, DISABLED_UniformBufferTooSmallNestedStruct) {
     ShaderBufferSizeTest(8,  // buffer size
                          0,  // binding offset
                          8,  // binding range
-                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "VUID-vkCmdDraw-None-08612");
+                         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, fsSource, "VUID-vkCmdDraw-uniformBuffers-06935");
 }
 
 TEST_F(NegativeGpuAVOOB, ObjectUniformBufferTooSmall) {
@@ -424,12 +431,10 @@ TEST_F(NegativeGpuAVOOB, GPL) {
 
     CreatePipelineHelper vi(*this);
     vi.InitVertexInputLibInfo();
-    vi.InitState();
     vi.CreateGraphicsPipeline(false);
 
     CreatePipelineHelper pre_raster(*this);
     pre_raster.InitPreRasterLibInfo(&pre_raster_stage.stage_ci);
-    pre_raster.InitState();
     pre_raster.gp_ci_.layout = pipeline_layout.handle();
     pre_raster.CreateGraphicsPipeline(false);
 
@@ -474,13 +479,13 @@ TEST_F(NegativeGpuAVOOB, GPL) {
         char const *expected_error;
     };
     std::vector<TestCase> tests;
-    tests.push_back({"read", 8, "VUID-vkCmdDraw-None-08613"});
+    tests.push_back({"read", 8, "VUID-vkCmdDraw-storageBuffers-06936"});
     // Uniform buffer stride rounded up to the alignment of a vec4 (16 bytes)
     // so u_index.index[4] accesses bytes 64, 65, 66, and 67
-    tests.push_back({"write", 0, "VUID-vkCmdDraw-None-08612"});
-    tests.push_back({"texel fetch", 2, "VUID-vkCmdDraw-None-08612"});
-    tests.push_back({"image load", 3, "VUID-vkCmdDraw-None-08613"});
-    tests.push_back({"image store", 4, "VUID-vkCmdDraw-None-08613"});
+    tests.push_back({"write", 0, "VUID-vkCmdDraw-uniformBuffers-06935"});
+    tests.push_back({"texel fetch", 2, "VUID-vkCmdDraw-uniformBuffers-06935"});
+    tests.push_back({"image load", 3, "VUID-vkCmdDraw-storageBuffers-06936"});
+    tests.push_back({"image store", 4, "VUID-vkCmdDraw-storageBuffers-06936"});
 
     for (const auto &test : tests) {
         SCOPED_TRACE(test.name);
@@ -565,12 +570,10 @@ TEST_F(NegativeGpuAVOOB, GPLIndependentSets) {
 
     CreatePipelineHelper vi(*this);
     vi.InitVertexInputLibInfo();
-    vi.InitState();
     vi.CreateGraphicsPipeline(false);
 
     CreatePipelineHelper pre_raster(*this);
     pre_raster.InitPreRasterLibInfo(&pre_raster_stage.stage_ci);
-    pre_raster.InitState();
     pre_raster.gp_ci_.layout = pipeline_layout_vs.handle();
     pre_raster.CreateGraphicsPipeline(false);
 
@@ -627,13 +630,13 @@ TEST_F(NegativeGpuAVOOB, GPLIndependentSets) {
         char const *expected_error;
     };
     std::vector<TestCase> tests;
-    tests.push_back({"read", 8, "VUID-vkCmdDraw-None-08613"});
+    tests.push_back({"read", 8, "VUID-vkCmdDraw-storageBuffers-06936"});
     // Uniform buffer stride rounded up to the alignment of a vec4 (16 bytes)
     // so u_index.index[4] accesses bytes 64, 65, 66, and 67
-    tests.push_back({"write", 0, "VUID-vkCmdDraw-None-08612"});
-    tests.push_back({"texel fetch", 2, "VUID-vkCmdDraw-None-08612"});
-    tests.push_back({"image load", 3, "VUID-vkCmdDraw-None-08613"});
-    tests.push_back({"image store", 4, "VUID-vkCmdDraw-None-08613"});
+    tests.push_back({"write", 0, "VUID-vkCmdDraw-uniformBuffers-06935"});
+    tests.push_back({"texel fetch", 2, "VUID-vkCmdDraw-uniformBuffers-06935"});
+    tests.push_back({"image load", 3, "VUID-vkCmdDraw-storageBuffers-06936"});
+    tests.push_back({"image store", 4, "VUID-vkCmdDraw-storageBuffers-06936"});
 
     for (const auto &test : tests) {
         SCOPED_TRACE(test.name);
@@ -687,7 +690,6 @@ TEST_F(NegativeGpuAVOOB, StorageBuffer) {
 
     CreateComputePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipe.CreateComputePipeline();
 
@@ -715,7 +717,7 @@ TEST_F(NegativeGpuAVOOB, StorageBuffer) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-None-08613");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-storageBuffers-06936");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();
@@ -729,7 +731,6 @@ void NegativeGpuAVOOB::ComputeStorageBufferTest(const char *expected_error, cons
 
     CreateComputePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.cs_ = std::make_unique<VkShaderObj>(this, shader, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipe.CreateComputePipeline();
 
@@ -769,7 +770,7 @@ TEST_F(NegativeGpuAVOOB, Vector) {
             in_buffer.b.y = 0.0;
         }
     )glsl";
-    ComputeStorageBufferTest("VUID-vkCmdDispatch-None-08613", shader_source, 20);
+    ComputeStorageBufferTest("VUID-vkCmdDispatch-storageBuffers-06936", shader_source, 20);
 }
 
 TEST_F(NegativeGpuAVOOB, Matrix) {
@@ -788,7 +789,7 @@ TEST_F(NegativeGpuAVOOB, Matrix) {
             in_buffer.b[2][1] = 0.0;
         }
     )glsl";
-    ComputeStorageBufferTest("VUID-vkCmdDispatch-None-08613", shader_source, 30);
+    ComputeStorageBufferTest("VUID-vkCmdDispatch-storageBuffers-06936", shader_source, 30);
 }
 
 TEST_F(NegativeGpuAVOOB, TexelFetch) {
@@ -815,7 +816,6 @@ TEST_F(NegativeGpuAVOOB, TexelFetch) {
     CreateComputePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
                           {1, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipe.CreateComputePipeline();
 
@@ -841,7 +841,7 @@ TEST_F(NegativeGpuAVOOB, TexelFetch) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-None-08612");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-uniformBuffers-06935");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();
@@ -870,7 +870,6 @@ TEST_F(NegativeGpuAVOOB, ImageLoad) {
     CreateComputePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
                           {1, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipe.CreateComputePipeline();
 
@@ -896,7 +895,7 @@ TEST_F(NegativeGpuAVOOB, ImageLoad) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-None-08613");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-storageBuffers-06936");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();
@@ -921,7 +920,6 @@ TEST_F(NegativeGpuAVOOB, ImageStore) {
 
     CreateComputePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipe.CreateComputePipeline();
 
@@ -944,7 +942,7 @@ TEST_F(NegativeGpuAVOOB, ImageStore) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-None-08613");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-storageBuffers-06936");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();
@@ -978,7 +976,6 @@ TEST_F(NegativeGpuAVOOB, Geometry) {
 
     CreatePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), gs.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 
@@ -998,7 +995,7 @@ TEST_F(NegativeGpuAVOOB, Geometry) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08613");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-storageBuffers-06936");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();
@@ -1036,7 +1033,6 @@ TEST_F(NegativeGpuAVOOB, DISABLED_TessellationControl) {
 
     CreatePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.ia_ci_.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
     pipe.tess_ci_ = tess_ci;
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), tcs.GetStageCreateInfo(), tes.GetStageCreateInfo(),
@@ -1059,7 +1055,7 @@ TEST_F(NegativeGpuAVOOB, DISABLED_TessellationControl) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08613");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-storageBuffers-06936");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();
@@ -1095,7 +1091,6 @@ TEST_F(NegativeGpuAVOOB, DISABLED_TessellationEvaluation) {
 
     CreatePipelineHelper pipe(*this);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.ia_ci_.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
     pipe.tess_ci_ = tess_ci;
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), tcs.GetStageCreateInfo(), tes.GetStageCreateInfo(),
@@ -1118,7 +1113,7 @@ TEST_F(NegativeGpuAVOOB, DISABLED_TessellationEvaluation) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08613");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-storageBuffers-06936");
     m_default_queue->submit(*m_commandBuffer, false);
     m_default_queue->wait();
     m_errorMonitor->VerifyFound();

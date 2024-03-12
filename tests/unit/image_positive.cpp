@@ -791,7 +791,9 @@ TEST_F(PositiveImage, SlicedCreateInfo) {
     ivci.subresourceRange.levelCount = 1;
     ivci.subresourceRange.layerCount = 1;
 
-    auto get_effective_depth = [&]() -> uint32_t { return GetEffectiveExtent(ci, ivci.subresourceRange).depth; };
+    auto get_effective_depth = [&]() -> uint32_t {
+        return GetEffectiveExtent(ci, ivci.subresourceRange.aspectMask, ivci.subresourceRange.baseMipLevel).depth;
+    };
 
     {
         sliced_info.sliceCount = VK_REMAINING_3D_SLICES_EXT;
@@ -990,7 +992,6 @@ TEST_F(PositiveImage, DescriptorSubresourceLayout) {
     // Create PSO to be used for draw-time errors below
     VkShaderObj fs(this, kFragmentSamplerGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
@@ -1178,7 +1179,6 @@ TEST_F(PositiveImage, Descriptor3D2DSubresourceLayout) {
     // Create PSO to be used for draw-time errors below
     VkShaderObj fs(this, kFragmentSamplerGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.gp_ci_.renderPass = rp.handle();
