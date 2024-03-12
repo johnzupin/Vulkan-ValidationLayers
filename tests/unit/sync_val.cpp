@@ -1657,11 +1657,10 @@ TEST_F(NegativeSyncVal, CmdDispatchDrawHazards) {
     AddOptionalExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
     RETURN_IF_SKIP(InitSyncValFramework());
     const bool has_khr_indirect = IsExtensionsEnabled(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-    VkPhysicalDeviceVulkan12Features features12 = vku::InitStructHelper();
     if (DeviceValidationVersion() >= VK_API_VERSION_1_2) {
-        features12.drawIndirectCount = VK_TRUE;
+        AddRequiredFeature(vkt::Feature::drawIndirectCount);
     }
-    RETURN_IF_SKIP(InitState(nullptr, &features12));
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
     VkImageUsageFlags image_usage_combine = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -1740,7 +1739,6 @@ TEST_F(NegativeSyncVal, CmdDispatchDrawHazards) {
 
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe.InitState();
     pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
     pipe.CreateComputePipeline();
 
@@ -1828,7 +1826,6 @@ TEST_F(NegativeSyncVal, CmdDispatchDrawHazards) {
     VkShaderObj fs(this, csSource, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper g_pipe(*this);
-    g_pipe.InitState();
     g_pipe.vi_ci_.pVertexBindingDescriptions = &VertexInputBindingDescription;
     g_pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     g_pipe.vi_ci_.pVertexAttributeDescriptions = &VertexInputAttributeDescription;
@@ -2293,19 +2290,16 @@ TEST_F(NegativeSyncVal, CmdDrawDepthStencil) {
     CreatePipelineHelper g_pipe_ds(*this), g_pipe_dp(*this), g_pipe_st(*this);
     g_pipe_ds.gp_ci_.renderPass = rp_ds.handle();
     g_pipe_ds.gp_ci_.pDepthStencilState = &ds_ci;
-    g_pipe_ds.InitState();
-    ASSERT_EQ(VK_SUCCESS, g_pipe_ds.CreateGraphicsPipeline());
+    g_pipe_ds.CreateGraphicsPipeline();
     g_pipe_dp.gp_ci_.renderPass = rp_dp.handle();
     ds_ci.stencilTestEnable = VK_FALSE;
     g_pipe_dp.gp_ci_.pDepthStencilState = &ds_ci;
-    g_pipe_dp.InitState();
-    ASSERT_EQ(VK_SUCCESS, g_pipe_dp.CreateGraphicsPipeline());
+    g_pipe_dp.CreateGraphicsPipeline();
     g_pipe_st.gp_ci_.renderPass = rp_st.handle();
     ds_ci.depthTestEnable = VK_FALSE;
     ds_ci.stencilTestEnable = VK_TRUE;
     g_pipe_st.gp_ci_.pDepthStencilState = &ds_ci;
-    g_pipe_st.InitState();
-    ASSERT_EQ(VK_SUCCESS, g_pipe_st.CreateGraphicsPipeline());
+    g_pipe_st.CreateGraphicsPipeline();
 
     m_commandBuffer->begin();
     m_renderPassBeginInfo.renderArea = {{0, 0}, {16, 16}};
@@ -2564,8 +2558,7 @@ TEST_F(NegativeSyncVal, RenderPassWithWrongDepthStencilInitialLayout) {
     ds_ci.back = stencil;
 
     g_pipe.gp_ci_.pDepthStencilState = &ds_ci;
-    g_pipe.InitState();
-    ASSERT_EQ(VK_SUCCESS, g_pipe.CreateGraphicsPipeline());
+    g_pipe.CreateGraphicsPipeline();
 
     m_commandBuffer->begin();
     VkClearValue clear = {};
@@ -2830,10 +2823,6 @@ struct CreateRenderPassHelper {
         framebuffer->init(*dev, fbci);
     }
 
-    void InitState() {
-        InitImageAndView();
-    }
-
     void InitBeginInfo() {
         render_pass_begin = vku::InitStructHelper();
         render_pass_begin.renderArea = {{0, 0}, {width, height}};
@@ -2855,12 +2844,11 @@ struct CreateRenderPassHelper {
         g_pipe.ResetShaderInfo(kVertexMinimalGlsl, kFragmentSubpassLoadGlsl);
         g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         g_pipe.gp_ci_.renderPass = render_pass->handle();
-        g_pipe.InitState();
         ASSERT_EQ(VK_SUCCESS, g_pipe.CreateGraphicsPipeline());
     }
 
     void Init() {
-        InitState();
+        InitImageAndView();
         InitRenderPass();
         InitFramebuffer();
         InitBeginInfo();
@@ -2883,13 +2871,11 @@ struct SyncTestPipeline {
           vs(&test, kVertexMinimalGlsl, VK_SHADER_STAGE_VERTEX_BIT),
           fs(&test, kFragmentSubpassLoadGlsl, VK_SHADER_STAGE_FRAGMENT_BIT),
           sampler_info(SafeSaneSamplerCreateInfo()),
-          sampler() {}
-    void InitState() {
+          sampler() {
         sampler.init(*test.DeviceObj(), sampler_info);
         g_pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
         g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         g_pipe.gp_ci_.renderPass = rp;
-        g_pipe.InitState();
     }
     void Init() {
         ASSERT_EQ(VK_SUCCESS, g_pipe.CreateGraphicsPipeline());
@@ -2908,7 +2894,6 @@ TEST_F(NegativeSyncVal, LayoutTransition) {
     const VkRenderPass rp = rp_helper.render_pass->handle();
 
     SyncTestPipeline st_pipe(*this, rp);
-    st_pipe.InitState();
     st_pipe.view_input = rp_helper.view_input;
     st_pipe.Init();
     const auto& g_pipe = st_pipe.g_pipe;
@@ -2997,7 +2982,7 @@ TEST_F(NegativeSyncVal, SubpassMultiDep) {
 
     VkImageCopy full_region{mip_0_layer_0, image_zero, mip_0_layer_0, image_zero, image_size};
 
-    rp_helper_positive.InitState();
+    rp_helper_positive.InitImageAndView();
     rp_helper_positive.InitAllAttachmentsToLayoutGeneral();
 
     // Copy the comon state to the other renderpass helper
@@ -3266,7 +3251,6 @@ TEST_F(NegativeSyncVal, RenderPassAsyncHazard) {
 
         CreatePipelineHelper g_pipe_0(*this);
         g_pipe_0.gp_ci_.renderPass = rp.handle();
-        g_pipe_0.InitState();
         ASSERT_EQ(VK_SUCCESS, g_pipe_0.CreateGraphicsPipeline());
 
         CreatePipelineHelper g_pipe_12(*this);
@@ -3274,7 +3258,6 @@ TEST_F(NegativeSyncVal, RenderPassAsyncHazard) {
         g_pipe_12.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         g_pipe_12.gp_ci_.renderPass = rp.handle();
         g_pipe_12.gp_ci_.subpass = 1;
-        g_pipe_12.InitState();
         g_pipe_12.LateBindPipelineInfo();
 
         std::vector<vkt::Pipeline> g_pipes(kNumImages - 1);
@@ -3349,7 +3332,6 @@ TEST_F(NegativeSyncVal, RenderPassAsyncHazard) {
 
         CreatePipelineHelper g_pipe_0(*this);
         g_pipe_0.gp_ci_.renderPass = rp.handle();
-        g_pipe_0.InitState();
         ASSERT_EQ(VK_SUCCESS, g_pipe_0.CreateGraphicsPipeline());
 
         CreatePipelineHelper g_pipe_12(*this);
@@ -3357,7 +3339,6 @@ TEST_F(NegativeSyncVal, RenderPassAsyncHazard) {
         g_pipe_12.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         g_pipe_12.gp_ci_.renderPass = rp.handle();
         g_pipe_12.gp_ci_.subpass = 1;
-        g_pipe_12.InitState();
         g_pipe_12.LateBindPipelineInfo();
 
         std::vector<vkt::Pipeline> g_pipes(kNumImages - 1);
@@ -3439,7 +3420,6 @@ TEST_F(NegativeSyncVal, RenderPassAsyncHazard) {
 
         CreatePipelineHelper g_pipe_0(*this);
         g_pipe_0.gp_ci_.renderPass = rp.handle();
-        g_pipe_0.InitState();
         ASSERT_EQ(VK_SUCCESS, g_pipe_0.CreateGraphicsPipeline());
 
         CreatePipelineHelper g_pipe_12(*this);
@@ -3447,7 +3427,6 @@ TEST_F(NegativeSyncVal, RenderPassAsyncHazard) {
         g_pipe_12.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         g_pipe_12.gp_ci_.renderPass = rp.handle();
         g_pipe_12.gp_ci_.subpass = 1;
-        g_pipe_12.InitState();
         g_pipe_12.LateBindPipelineInfo();
 
         std::vector<vkt::Pipeline> g_pipes(kNumImages - 1);
@@ -4081,7 +4060,6 @@ TEST_F(NegativeSyncVal, DestroyedUnusedDescriptors) {
 
     VkShaderObj vs(this, shader_source, VK_SHADER_STAGE_VERTEX_BIT);
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_ = {vs.GetStageCreateInfo()};
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
@@ -4193,8 +4171,7 @@ TEST_F(NegativeSyncVal, TestInvalidExternalSubpassDependency) {
     CreatePipelineHelper pipe(*this);
     pipe.gp_ci_.renderPass = render_pass.handle();
     pipe.gp_ci_.pDepthStencilState = &ds_ci;
-    pipe.InitState();
-    ASSERT_EQ(VK_SUCCESS, pipe.CreateGraphicsPipeline());
+    pipe.CreateGraphicsPipeline();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "SYNC-HAZARD-WRITE-AFTER-WRITE");
 
@@ -4406,14 +4383,13 @@ TEST_F(NegativeSyncVal, StageAccessExpansion) {
     VkShaderObj fs(this, csSource.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT);
 
     CreatePipelineHelper g_pipe(*this);
-    g_pipe.InitState();
     g_pipe.vi_ci_.pVertexBindingDescriptions = &VertexInputBindingDescription;
     g_pipe.vi_ci_.vertexBindingDescriptionCount = 1;
     g_pipe.vi_ci_.pVertexAttributeDescriptions = &VertexInputAttributeDescription;
     g_pipe.vi_ci_.vertexAttributeDescriptionCount = 1;
     g_pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     g_pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
-    ASSERT_EQ(VK_SUCCESS, g_pipe.CreateGraphicsPipeline());
+    g_pipe.CreateGraphicsPipeline();
 
     m_commandBuffer->reset();
     m_commandBuffer->begin();
@@ -4904,7 +4880,7 @@ TEST_F(NegativeSyncVal, QSRenderPass) {
     CreateRenderPassHelper rp_helper(m_device);
     rp_helper.InitAllAttachmentsToLayoutGeneral();
 
-    rp_helper.InitState();
+    rp_helper.InitImageAndView();
     rp_helper.InitAttachmentLayouts();  // Quiet any CoreChecks ImageLayout complaints
     m_device->wait();                   // and quiesce the system
 
@@ -4967,7 +4943,7 @@ TEST_F(NegativeSyncVal, QSRenderPass) {
     CreateRenderPassHelper rp_helper2(m_device);
     rp_helper2.InitAllAttachmentsToLayoutGeneral();
 
-    rp_helper2.InitState();
+    rp_helper2.InitImageAndView();
     rp_helper2.InitAttachmentLayouts();  // Quiet any CoreChecks ImageLayout complaints
     m_device->wait();                    // and quiesce the system
 
@@ -5482,7 +5458,6 @@ TEST_F(NegativeSyncVal, WriteOnlyBufferWriteHazard) {
     )glsl";
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe.InitState();
     pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
     pipe.CreateComputePipeline();
 
@@ -5529,7 +5504,6 @@ TEST_F(NegativeSyncVal, WriteOnlyImageWriteHazard) {
     )glsl";
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe.InitState();
     pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
     pipe.CreateComputePipeline();
 
@@ -6226,7 +6200,6 @@ TEST_F(NegativeSyncVal, UseShaderReadAccessForUniformBuffer) {
     )glsl";
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe.InitState();
     pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
     pipe.CreateComputePipeline();
 
@@ -6369,6 +6342,363 @@ TEST_F(NegativeSyncVal, UpdateBufferWrongBarrier) {
     vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "SYNC-HAZARD-READ-AFTER-WRITE");
     vk::CmdCopyBuffer(*m_commandBuffer, src_buffer, dst_buffer, 1, &region);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeSyncVal, QSWriteRacingWrite) {
+    TEST_DESCRIPTION("Write to the same image from different queues");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    const std::optional<uint32_t> transfer_family =
+        m_device->QueueFamilyMatching(VK_QUEUE_TRANSFER_BIT, (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT));
+    if (!transfer_family) {
+        GTEST_SKIP() << "Transfer-only queue family is not present";
+    }
+    vkt::Queue* transfer_queue = m_device->queue_family_queues(transfer_family.value())[0].get();
+
+    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer(*m_device, 64 * 64, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+    VkBufferImageCopy region = {};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageExtent = {64, 64, 1};
+
+    // Submit from Graphics queue: perform image layout transition (WRITE access).
+    vkt::CommandBuffer cb0(*m_device, m_commandPool);
+    cb0.begin();
+    VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
+    image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    image_barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    image_barrier.dstAccessMask = VK_ACCESS_2_NONE;
+    image_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    image_barrier.image = image;
+    image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &image_barrier;
+    vk::CmdPipelineBarrier2(cb0, &dep_info);
+    cb0.end();
+
+    VkCommandBufferSubmitInfo cbuf_info0 = vku::InitStructHelper();
+    cbuf_info0.commandBuffer = cb0;
+    VkSubmitInfo2 submit0 = vku::InitStructHelper();
+    submit0.commandBufferInfoCount = 1;
+    submit0.pCommandBufferInfos = &cbuf_info0;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit0, VK_NULL_HANDLE);
+
+    // Submit from Transfer queue: write image data (racing WRITE access)
+    vkt::CommandPool transfer_pool(*m_device, transfer_family.value());
+    vkt::CommandBuffer cb1(*m_device, &transfer_pool);
+    cb1.begin();
+    vk::CmdCopyBufferToImage(cb1, buffer, image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+    cb1.end();
+
+    VkCommandBufferSubmitInfo cbuf_info1 = vku::InitStructHelper();
+    cbuf_info1.commandBuffer = cb1;
+    VkSubmitInfo2 submit1 = vku::InitStructHelper();
+    submit1.commandBufferInfoCount = 1;
+    submit1.pCommandBufferInfos = &cbuf_info1;
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-RACING-WRITE");
+    vk::QueueSubmit2(*transfer_queue, 1, &submit1, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    m_default_queue->wait();
+}
+
+TEST_F(NegativeSyncVal, QSWriteRacingWrite2) {
+    TEST_DESCRIPTION("Transfer queue synchronizes with graphics queue and after that both queues initiate image write");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    const std::optional<uint32_t> transfer_family =
+        m_device->QueueFamilyMatching(VK_QUEUE_TRANSFER_BIT, (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT));
+    if (!transfer_family) {
+        GTEST_SKIP() << "Transfer-only queue family is not present";
+    }
+    vkt::Queue* transfer_queue = m_device->queue_family_queues(transfer_family.value())[0].get();
+
+    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer(*m_device, 64 * 64, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+    VkBufferImageCopy region = {};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageExtent = {64, 64, 1};
+
+    vkt::Semaphore semaphore(*m_device);
+
+    // Submit on Graphics queue: empty batch just so Transfer queue can synchronize with.
+    VkSemaphoreSubmitInfo signal_info0 = vku::InitStructHelper();
+    signal_info0.semaphore = semaphore;
+    signal_info0.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit0 = vku::InitStructHelper();
+    submit0.signalSemaphoreInfoCount = 1;
+    submit0.pSignalSemaphoreInfos = &signal_info0;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit0, VK_NULL_HANDLE);
+
+    // Submit on Graphics queue: image layout transition (WRITE access).
+    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    cb1.begin();
+    VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
+    image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    image_barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    image_barrier.dstAccessMask = VK_ACCESS_2_NONE;
+    image_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    image_barrier.image = image;
+    image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &image_barrier;
+    vk::CmdPipelineBarrier2(cb1, &dep_info);
+    cb1.end();
+
+    VkCommandBufferSubmitInfo cbuf_info1 = vku::InitStructHelper();
+    cbuf_info1.commandBuffer = cb1;
+    VkSubmitInfo2 submit1 = vku::InitStructHelper();
+    submit1.commandBufferInfoCount = 1;
+    submit1.pCommandBufferInfos = &cbuf_info1;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit1, VK_NULL_HANDLE);
+
+    // Submit on Transfer queue: write image data (racing WRITE access)
+    vkt::CommandPool transfer_pool(*m_device, transfer_family.value());
+    vkt::CommandBuffer cb2(*m_device, &transfer_pool);
+    cb2.begin();
+    vk::CmdCopyBufferToImage(cb2, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    cb2.end();
+
+    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
+    cbuf_info2.commandBuffer = cb2;
+    VkSemaphoreSubmitInfo wait_info2 = vku::InitStructHelper();
+    wait_info2.semaphore = semaphore;
+    wait_info2.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit2 = vku::InitStructHelper();
+    submit2.waitSemaphoreInfoCount = 1;
+    submit2.pWaitSemaphoreInfos = &wait_info2;
+    submit2.commandBufferInfoCount = 1;
+    submit2.pCommandBufferInfos = &cbuf_info2;
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-RACING-WRITE");
+    vk::QueueSubmit2(*transfer_queue, 1, &submit2, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    m_default_queue->wait();
+}
+
+// Gfx      :   Submit 0: [Read A, signal sem]  Submit 1: [Read A]
+// Compute  :   Submit 1: [Unrelated access, signal sem2]
+// Transfer :   Submit 3: [wait sem+sem2, Write A]
+//
+// Write in Submit 3 races with read in Sumbit 1.
+// Compute submit is needed to generate tags in such a ways that reproduces regression
+// with incorrect async tag tracking. This generates compute tags that have larger values
+// than the tags from the second gfx queue submission.
+TEST_F(NegativeSyncVal, QSWriteRacingRead) {
+    TEST_DESCRIPTION("Write-racing-read scenario that involves three queues");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    const std::optional<uint32_t> gfx_family = m_device->QueueFamilyMatching(VK_QUEUE_GRAPHICS_BIT, 0);
+    if (!gfx_family) {
+        GTEST_SKIP() << "Graphics-only queue family is not present";
+    }
+    vkt::Queue* gfx_queue = m_device->queue_family_queues(gfx_family.value())[0].get();
+    vkt::CommandPool gfx_pool(*m_device, gfx_queue->get_family_index());
+
+    const std::optional<uint32_t> compute_family = m_device->QueueFamilyMatching(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
+    if (!compute_family) {
+        GTEST_SKIP() << "Compute-only queue family is not present";
+    }
+    vkt::Queue* compute_queue = m_device->queue_family_queues(compute_family.value())[0].get();
+    vkt::CommandPool compute_pool(*m_device, compute_queue->get_family_index());
+
+    const std::optional<uint32_t> transfer_family =
+        m_device->QueueFamilyMatching(VK_QUEUE_TRANSFER_BIT, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT);
+    if (!transfer_family) {
+        GTEST_SKIP() << "Transfer-only queue family is not present";
+    }
+    vkt::Queue* transfer_queue = m_device->queue_family_queues(transfer_family.value())[0].get();
+    vkt::CommandPool transfer_pool(*m_device, transfer_queue->get_family_index());
+
+    constexpr VkDeviceSize size = 1024;
+    vkt::Buffer buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer gfx_src_buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer gfx_dst_buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer gfx_dst_buffer2(*m_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer compute_src_buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer compute_dst_buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferCopy region{};
+    region.size = size;
+
+    vkt::CommandBuffer gfx_cb(*m_device, &gfx_pool);
+    vkt::CommandBuffer gfx_cb2(*m_device, &gfx_pool);
+    vkt::CommandBuffer compute_cb(*m_device, &compute_pool);
+    vkt::CommandBuffer transfer_cb(*m_device, &transfer_pool);
+    vkt::Semaphore semaphore(*m_device);
+    vkt::Semaphore semaphore2(*m_device);
+
+    // Submit 0 (gfx queue): buffer read
+    {
+        gfx_cb.begin();
+        vk::CmdCopyBuffer(gfx_cb, buffer, gfx_dst_buffer, 1, &region);
+        gfx_cb.end();
+
+        VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
+        cbuf_info.commandBuffer = gfx_cb;
+        VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
+        signal_info.semaphore = semaphore;
+        signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        VkSubmitInfo2 submit = vku::InitStructHelper();
+        submit.commandBufferInfoCount = 1;
+        submit.pCommandBufferInfos = &cbuf_info;
+        submit.signalSemaphoreInfoCount = 1;
+        submit.pSignalSemaphoreInfos = &signal_info;
+        vk::QueueSubmit2(*gfx_queue, 1, &submit, VK_NULL_HANDLE);
+    }
+
+    // Submit 1 (gfx queue): another read from the same buffer
+    {
+        gfx_cb2.begin();
+        vk::CmdCopyBuffer(gfx_cb2, buffer, gfx_dst_buffer2, 1, &region);
+        gfx_cb2.end();
+
+        VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
+        cbuf_info.commandBuffer = gfx_cb2;
+        VkSubmitInfo2 submit = vku::InitStructHelper();
+        submit.commandBufferInfoCount = 1;
+        submit.pCommandBufferInfos = &cbuf_info;
+        vk::QueueSubmit2(*gfx_queue, 1, &submit, VK_NULL_HANDLE);
+    }
+
+    // Submit 2 (compute queue): compute buffer copy (does not interract with other buffers)
+    {
+        compute_cb.begin();
+        vk::CmdCopyBuffer(compute_cb, compute_src_buffer, compute_dst_buffer, 1, &region);
+        compute_cb.end();
+
+        VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
+        cbuf_info.commandBuffer = compute_cb;
+        VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
+        signal_info.semaphore = semaphore2;
+        signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        VkSubmitInfo2 submit = vku::InitStructHelper();
+        submit.commandBufferInfoCount = 1;
+        submit.pCommandBufferInfos = &cbuf_info;
+        submit.signalSemaphoreInfoCount = 1;
+        submit.pSignalSemaphoreInfos = &signal_info;
+        vk::QueueSubmit2(*compute_queue, 1, &submit, VK_NULL_HANDLE);
+    }
+
+    // Submit 3 (transfer queue): wait for gfx/compute semaphores
+    {
+        transfer_cb.begin();
+        vk::CmdCopyBuffer(transfer_cb, gfx_src_buffer, buffer, 1, &region);
+        transfer_cb.end();
+
+        VkSemaphoreSubmitInfo wait_infos[2];
+        wait_infos[0] = vku::InitStructHelper();
+        wait_infos[0].semaphore = semaphore;
+        wait_infos[0].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        wait_infos[1] = vku::InitStructHelper();
+        wait_infos[1].semaphore = semaphore2;
+        wait_infos[1].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
+        cbuf_info.commandBuffer = transfer_cb;
+        VkSubmitInfo2 submit = vku::InitStructHelper();
+        submit.waitSemaphoreInfoCount = 2;
+        submit.pWaitSemaphoreInfos = wait_infos;
+        submit.commandBufferInfoCount = 1;
+        submit.pCommandBufferInfos = &cbuf_info;
+        m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE-RACING-READ");
+        vk::QueueSubmit2(*transfer_queue, 1, &submit, VK_NULL_HANDLE);
+        m_errorMonitor->VerifyFound();
+    }
+
+    gfx_queue->wait();
+    compute_queue->wait();
+    transfer_queue->wait();
+}
+
+TEST_F(NegativeSyncVal, RenderPassStoreOpNone) {
+    TEST_DESCRIPTION("Missing synchronization with draw command when render pass uses storeOp=NONE");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredExtensions(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    const VkFormat depth_format = FindSupportedDepthOnlyFormat(gpu());
+    const VkImageLayout input_attachment_layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+
+    RenderPassSingleSubpass rp(*this);
+    rp.AddAttachmentDescription(depth_format, input_attachment_layout, input_attachment_layout, VK_ATTACHMENT_LOAD_OP_LOAD,
+                                VK_ATTACHMENT_STORE_OP_NONE);
+    rp.AddAttachmentReference({0, input_attachment_layout});
+    rp.AddInputAttachment(0);
+    rp.CreateRenderPass();
+
+    vkt::Image image(*m_device, 32, 32, 1, depth_format, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    image.SetLayout(input_attachment_layout);
+    vkt::ImageView image_view = image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
+    vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &image_view.handle());
+
+    VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
+    // Form an execution dependency with loadOp (EARLY_FRAGMENT_TESTS) but not with draw command (FRAGMENT_SHADER)
+    layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+    layout_transition.srcAccessMask = VK_ACCESS_2_NONE;
+    layout_transition.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    layout_transition.dstAccessMask = VK_ACCESS_2_NONE;
+    layout_transition.oldLayout = input_attachment_layout;
+    layout_transition.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    layout_transition.image = image;
+    layout_transition.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &layout_transition;
+
+    // Fragment shader READs input attachment.
+    VkShaderObj fs(this, kFragmentSubpassLoadGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
+    const VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+    OneOffDescriptorSet descriptor_set(m_device, {binding});
+    descriptor_set.WriteDescriptorImageInfo(0, image_view, VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                                            input_attachment_layout);
+    descriptor_set.UpdateDescriptorSets();
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
+    CreatePipelineHelper pipe(*this);
+    pipe.shader_stages_[1] = fs.GetStageCreateInfo();
+    pipe.gp_ci_.layout = pipeline_layout.handle();
+    pipe.gp_ci_.renderPass = rp.Handle();
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(rp.Handle(), fb);
+    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0,
+                              nullptr);
+    vk::CmdDraw(*m_commandBuffer, 1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+
+    // SYNC-HAZARD-WRITE-AFTER-READ hazard: transition should synchronize with draw command
+    m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC_FRAGMENT_SHADER_INPUT_ATTACHMENT_READ");
+    vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
     m_errorMonitor->VerifyFound();
     m_commandBuffer->end();
 }

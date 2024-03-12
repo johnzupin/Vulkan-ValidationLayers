@@ -22,23 +22,24 @@
 #include "../framework/ray_tracing_objects.h"
 #include "../../layers/gpu_shaders/gpu_shaders_constants.h"
 
-TEST_F(PositiveGpuAVRayQuery, ComputeBasic) {
-    TEST_DESCRIPTION("Ray query in a compute shader");
+void GpuAVRayQueryTest::InitGpuAVRayQuery() {
     SetTargetApiVersion(VK_API_VERSION_1_2);
-
+    AddRequiredExtensions(VK_KHR_RAY_QUERY_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::rayQuery);
     AddRequiredFeature(vkt::Feature::accelerationStructure);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-
-    AddRequiredExtensions(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-
     RETURN_IF_SKIP(InitGpuAvFramework());
     RETURN_IF_SKIP(InitState());
+}
+
+TEST_F(PositiveGpuAVRayQuery, ComputeBasic) {
+    TEST_DESCRIPTION("Ray query in a compute shader");
+    RETURN_IF_SKIP(InitGpuAVRayQuery());
 
     char const *shader_source = R"glsl(
         #version 460
         #extension GL_EXT_ray_query : require
-        
+
         layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
 
         void main() {
@@ -51,7 +52,6 @@ TEST_F(PositiveGpuAVRayQuery, ComputeBasic) {
     CreateComputePipelineHelper pipeline(*this);
     pipeline.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipeline.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
-    pipeline.InitState();
     pipeline.CreateComputePipeline();
 
     // Add TLAS binding
@@ -72,22 +72,12 @@ TEST_F(PositiveGpuAVRayQuery, ComputeBasic) {
 
 TEST_F(PositiveGpuAVRayQuery, ComputeDynamicTminTmax) {
     TEST_DESCRIPTION("Ray query in a compute shader, with dynamically set t_min and t_max");
-
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-
-    AddRequiredFeature(vkt::Feature::rayQuery);
-    AddRequiredFeature(vkt::Feature::accelerationStructure);
-    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-
-    AddRequiredExtensions(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(InitGpuAVRayQuery());
 
     char const *shader_source = R"glsl(
         #version 460
         #extension GL_EXT_ray_query : require
-        
+
         layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
         layout(set = 0, binding = 1) uniform Uniforms {
           float t_min;
@@ -96,7 +86,7 @@ TEST_F(PositiveGpuAVRayQuery, ComputeDynamicTminTmax) {
 
         void main() {
             rayQueryEXT query;
-            rayQueryInitializeEXT(query, tlas, gl_RayFlagsTerminateOnFirstHitEXT, 0xff, vec3(0), 
+            rayQueryInitializeEXT(query, tlas, gl_RayFlagsTerminateOnFirstHitEXT, 0xff, vec3(0),
               trace_rays_params.t_min, vec3(0,0,1), trace_rays_params.t_max);
             rayQueryProceedEXT(query);
         }
@@ -106,7 +96,6 @@ TEST_F(PositiveGpuAVRayQuery, ComputeDynamicTminTmax) {
     pipeline.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipeline.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
                               {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
-    pipeline.InitState();
     pipeline.CreateComputePipeline();
 
     // Add TLAS binding
@@ -150,22 +139,12 @@ TEST_F(PositiveGpuAVRayQuery, ComputeDynamicTminTmax) {
 
 TEST_F(PositiveGpuAVRayQuery, ComputeDynamicRayFlags) {
     TEST_DESCRIPTION("Ray query in a compute shader, with dynamically set ray flags");
-
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-
-    AddRequiredFeature(vkt::Feature::rayQuery);
-    AddRequiredFeature(vkt::Feature::accelerationStructure);
-    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-
-    AddRequiredExtensions(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(InitGpuAVRayQuery());
 
     char const *shader_source = R"glsl(
         #version 460
         #extension GL_EXT_ray_query : require
-        
+
         layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
         layout(set = 0, binding = 1) uniform Uniforms {
           uint ray_query_flags;
@@ -182,7 +161,6 @@ TEST_F(PositiveGpuAVRayQuery, ComputeDynamicRayFlags) {
     pipeline.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipeline.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
                               {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
-    pipeline.InitState();
     pipeline.CreateComputePipeline();
 
     // Add TLAS binding
@@ -215,24 +193,14 @@ TEST_F(PositiveGpuAVRayQuery, ComputeDynamicRayFlags) {
 
 TEST_F(PositiveGpuAVRayQuery, ComputeDynamicRayFlagsSkipTriangles) {
     TEST_DESCRIPTION("Ray query in a compute shader, with dynamically set ray flags containing gl_RayFlagsSkipTrianglesEXT");
-
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-
-    AddRequiredFeature(vkt::Feature::rayQuery);
-    AddRequiredFeature(vkt::Feature::accelerationStructure);
-    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::rayTraversalPrimitiveCulling);
-
-    AddRequiredExtensions(VK_KHR_RAY_QUERY_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
+    AddRequiredFeature(vkt::Feature::rayTraversalPrimitiveCulling);
+    RETURN_IF_SKIP(InitGpuAVRayQuery());
 
     char const *shader_source = R"glsl(
         #version 460
         #extension GL_EXT_ray_query : require
-        
+
         layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
         layout(set = 0, binding = 1) uniform Uniforms {
           uint ray_query_flags;
@@ -249,7 +217,6 @@ TEST_F(PositiveGpuAVRayQuery, ComputeDynamicRayFlagsSkipTriangles) {
     pipeline.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipeline.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
                               {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
-    pipeline.InitState();
     pipeline.CreateComputePipeline();
 
     // Add TLAS binding
@@ -281,22 +248,13 @@ TEST_F(PositiveGpuAVRayQuery, ComputeDynamicRayFlagsSkipTriangles) {
 
 TEST_F(PositiveGpuAVRayQuery, GraphicsBasic) {
     TEST_DESCRIPTION("Ray query in a vertex shader");
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-
-    AddRequiredFeature(vkt::Feature::rayQuery);
-    AddRequiredFeature(vkt::Feature::accelerationStructure);
-    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-
-    AddRequiredExtensions(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(InitGpuAVRayQuery());
     InitRenderTarget();
 
     char const *vertex_source = R"glsl(
         #version 460
         #extension GL_EXT_ray_query : require
-        
+
         layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
 
         void main() {
@@ -306,12 +264,11 @@ TEST_F(PositiveGpuAVRayQuery, GraphicsBasic) {
             gl_Position = vec4(1);
         }
     )glsl";
+    VkShaderObj vs(this, vertex_source, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_2);
 
     CreatePipelineHelper pipeline(*this);
-    pipeline.vs_ = std::make_unique<VkShaderObj>(this, vertex_source, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_2);
-    pipeline.shader_stages_ = {pipeline.vs_->GetStageCreateInfo(), pipeline.fs_->GetStageCreateInfo()};
+    pipeline.shader_stages_ = {vs.GetStageCreateInfo(), pipeline.fs_->GetStageCreateInfo()};
     pipeline.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}};
-    pipeline.InitState();
     pipeline.CreateGraphicsPipeline();
 
     // Add TLAS binding
@@ -334,18 +291,9 @@ TEST_F(PositiveGpuAVRayQuery, GraphicsBasic) {
 
 TEST_F(PositiveGpuAVRayQuery, RayTracingBasic) {
     TEST_DESCRIPTION("Ray query in a ray generation shader");
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-
-    AddRequiredFeature(vkt::Feature::rayQuery);
-    AddRequiredFeature(vkt::Feature::accelerationStructure);
-    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::rayTracingPipeline);
-
-    AddRequiredExtensions(VK_KHR_RAY_QUERY_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
+    AddRequiredFeature(vkt::Feature::rayTracingPipeline);
+    RETURN_IF_SKIP(InitGpuAVRayQuery());
 
     vkt::rt::Pipeline pipeline(*this, m_device);
 

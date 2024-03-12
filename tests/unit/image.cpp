@@ -2284,7 +2284,7 @@ TEST_F(NegativeImage, ImageViewAspect) {
     // Cause an error by setting an invalid image aspect
     image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_METADATA_BIT;
 
-    CreateImageViewTest(*this, &image_view_create_info, "UNASSIGNED-CoreValidation-DrawState-InvalidImageAspect");
+    CreateImageViewTest(*this, &image_view_create_info, "UNASSIGNED-vkCreateImageView-InvalidImageAspect");
 }
 
 TEST_F(NegativeImage, GetImageSubresourceLayout) {
@@ -3528,7 +3528,7 @@ TEST_F(NegativeImage, DepthStencilImageViewWithColorAspectBit) {
     image_view_create_info.subresourceRange.layerCount = 1;
     image_view_create_info.subresourceRange.levelCount = 1;
     image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
-    CreateImageViewTest(*this, &image_view_create_info, "UNASSIGNED-CoreValidation-DrawState-InvalidImageAspect");
+    CreateImageViewTest(*this, &image_view_create_info, "UNASSIGNED-vkCreateImageView-InvalidImageAspect");
 }
 
 TEST_F(NegativeImage, CornerSampledImageNV) {
@@ -4901,7 +4901,7 @@ TEST_F(NegativeImage, ColorWthDepthAspect) {
     civ_ci.subresourceRange.levelCount = 1;
     civ_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-CoreValidation-DrawState-InvalidImageAspect");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "UNASSIGNED-vkCreateImageView-InvalidImageAspect");
     vkt::ImageView color_image_view(*m_device, civ_ci);
     m_errorMonitor->VerifyFound();
 }
@@ -5523,7 +5523,9 @@ TEST_F(NegativeImage, SlicedUsage) {
     ivci.subresourceRange.layerCount = 1;
     ivci.subresourceRange.levelCount = 1;
 
-    auto get_effective_depth = [&]() -> uint32_t { return GetEffectiveExtent(ci, ivci.subresourceRange).depth; };
+    auto get_effective_depth = [&]() -> uint32_t {
+        return GetEffectiveExtent(ci, ivci.subresourceRange.aspectMask, ivci.subresourceRange.baseMipLevel).depth;
+    };
 
     {
         sliced_info.sliceCount = VK_REMAINING_3D_SLICES_EXT;
@@ -5797,7 +5799,6 @@ TEST_F(NegativeImage, ComputeImageLayout) {
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs, VK_SHADER_STAGE_COMPUTE_BIT);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.CreateComputePipeline();
 
     const VkFormat fmt = VK_FORMAT_R8G8B8A8_UNORM;
@@ -5857,7 +5858,6 @@ TEST_F(NegativeImage, ComputeImageLayout11) {
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs, VK_SHADER_STAGE_COMPUTE_BIT);
     pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr}};
-    pipe.InitState();
     pipe.CreateComputePipeline();
 
     const VkFormat fmt = VK_FORMAT_R8G8B8A8_UNORM;

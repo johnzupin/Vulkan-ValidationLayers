@@ -1438,6 +1438,15 @@ bool CoreChecks::ValidateAttachmentReference(VkAttachmentReference2 reference, c
                                  "attachmentFeedbackLoopLayout feature was not enabled.");
             }
             break;
+        case VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR:
+            if (!enabled_features.dynamicRenderingLocalRead) {
+                vuid = (use_rp2) ? "VUID-VkAttachmentReference2-dynamicRenderingLocalRead-09546"
+                                 : "VUID-VkAttachmentReference-dynamicRenderingLocalRead-09546";
+                skip |= LogError(vuid, device, loc,
+                                 "is VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR, but the "
+                                 "dynamicRenderingLocalRead feature was not enabled.");
+            }
+            break;
 
         default:
             break;
@@ -3303,7 +3312,7 @@ bool CoreChecks::ValidateBeginRenderingFragmentDensityMap(VkCommandBuffer comman
                              string_VkImageCreateFlags(fragment_density_map_view_state->image_state->createInfo.flags).c_str());
         }
         int32_t layer_count = static_cast<int32_t>(fragment_density_map_view_state->normalized_subresource_range.layerCount);
-        if (layer_count != 1) {
+        if (layer_count != 1 && !enabled_features.multiview) {
             const LogObjectList objlist(commandBuffer, fragment_density_map_attachment_info->imageView);
             skip |= LogError("VUID-VkRenderingFragmentDensityMapAttachmentInfoEXT-apiVersion-07908", objlist, view_loc,
                              "must have a layer count (%" PRId32 ") equal to 1.", layer_count);
@@ -4371,7 +4380,8 @@ bool CoreChecks::MatchUsage(uint32_t count, const VkAttachmentReference2 *attach
                 }
                 if ((creation_usage & usage_flag) == 0) {
                     skip |= LogError(vuid, device, create_info_loc.dot(Field::pAttachments, fb_attachment),
-                                     "conflicts with the image's flags (%s).", string_VkImageUsageFlagBits(usage_flag));
+                                     "expected usage (%s) conflicts with the image's flags (%s).",
+                                     string_VkImageUsageFlagBits(usage_flag), string_VkImageUsageFlags(creation_usage).c_str());
                 }
             }
         } else {
@@ -4380,7 +4390,8 @@ bool CoreChecks::MatchUsage(uint32_t count, const VkAttachmentReference2 *attach
                 uint32_t image_usage = fbaci->pAttachmentImageInfos[fb_attachment].usage;
                 if ((image_usage & usage_flag) == 0) {
                     skip |= LogError(vuid, device, create_info_loc.dot(Field::pAttachments, fb_attachment),
-                                     "conflicts with the image's flags (%s).", string_VkImageUsageFlagBits(usage_flag));
+                                     "expected usage (%s) conflicts with the image's flags (%s).",
+                                     string_VkImageUsageFlagBits(usage_flag), string_VkImageUsageFlags(image_usage).c_str());
                 }
             }
         }
@@ -5185,5 +5196,204 @@ bool CoreChecks::ValidateInheritanceInfoFramebuffer(VkCommandBuffer primaryBuffe
                              FormatHandle(primary_fb).c_str());
         }
     }
+    return skip;
+}
+
+bool CoreChecks::ValidateRenderingAttachmentLocationsKHR(const VkRenderingAttachmentLocationInfoKHR &location_info,
+                                                         const LogObjectList objlist, const Location &loc_info) const {
+    bool skip = false;
+
+    if (location_info.pColorAttachmentLocations) {
+        vvl::unordered_map<uint32_t, uint32_t> unique;
+
+        for (uint32_t i = 0; i < location_info.colorAttachmentCount; ++i) {
+            const uint32_t location = location_info.pColorAttachmentLocations[i];
+            const Location loc = loc_info.dot(Struct::VkRenderingAttachmentLocationInfoKHR, Field::pColorAttachmentLocations, i);
+
+            if (!enabled_features.dynamicRenderingLocalRead && location != i) {
+                skip |= LogError("VUID-VkRenderingAttachmentLocationInfoKHR-dynamicRenderingLocalRead-09512", objlist, loc,
+                                 "= %" PRIu32 " while expected to be %" PRIu32, location, i);
+            }
+
+            if (location == VK_ATTACHMENT_UNUSED) {
+                continue;
+            }
+
+            if (unique.find(location) != unique.end()) {
+                skip |= LogError("VUID-VkRenderingAttachmentLocationInfoKHR-pColorAttachmentLocations-09513", objlist, loc,
+                                 "= %" PRIu32 " have same value as pColorAttachmentLocations[%" PRIu32 "] = %" PRIu32, location,
+                                 unique[location], location);
+            } else
+                unique[location] = i;
+
+            if (location >= phys_dev_props.limits.maxColorAttachments) {
+                skip |= LogError("VUID-VkRenderingAttachmentLocationInfoKHR-pColorAttachmentLocations-09515", objlist, loc,
+                                 "= %" PRIu32 " that is greater than the maxColorAttachments limit (%" PRIu32 ")", location,
+                                 phys_dev_props.limits.maxColorAttachments);
+            }
+        }
+    }
+
+    if (location_info.colorAttachmentCount > phys_dev_props.limits.maxColorAttachments) {
+        skip |= LogError("VUID-VkRenderingAttachmentLocationInfoKHR-colorAttachmentCount-09514", objlist,
+                         loc_info.dot(Field::colorAttachmentCount),
+                         "(%" PRIu32 ") is greater than the maxColorAttachments limit (%" PRIu32 ").",
+                         location_info.colorAttachmentCount, phys_dev_props.limits.maxColorAttachments);
+    }
+
+    return skip;
+}
+
+bool CoreChecks::PreCallValidateCmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer commandBuffer,
+                                                                      const VkRenderingAttachmentLocationInfoKHR *pLocationInfo,
+                                                                      const ErrorObject &error_obj) const {
+    const auto &cb_state = *GetRead<vvl::CommandBuffer>(commandBuffer);
+    const Location loc_info = error_obj.location;
+    bool skip = false;
+
+    if (!enabled_features.dynamicRenderingLocalRead) {
+        skip |= LogError("VUID-vkCmdSetRenderingAttachmentLocationsKHR-dynamicRenderingLocalRead-09509", commandBuffer, loc_info,
+                         "dynamicRenderingLocalRead was not enabled.");
+    }
+
+    skip |= ValidateCmd(cb_state, loc_info);
+
+    const auto *rp_state_ptr = cb_state.activeRenderPass.get();
+    if (!rp_state_ptr) {
+        return skip;
+    }
+
+    const auto &rp_state = *rp_state_ptr;
+
+    if (!rp_state.UsesDynamicRendering()) {
+        const LogObjectList objlist(commandBuffer, rp_state.VkHandle());
+        skip |= LogError("VUID-vkCmdSetRenderingAttachmentLocationsKHR-commandBuffer-09511", objlist, loc_info,
+                         "vkCmdBeginRendering was not called.");
+    }
+
+    if (pLocationInfo->colorAttachmentCount != rp_state.dynamic_rendering_begin_rendering_info.colorAttachmentCount) {
+        const LogObjectList objlist(commandBuffer, rp_state.VkHandle());
+        skip |= LogError("VUID-vkCmdSetRenderingAttachmentLocationsKHR-pLocationInfo-09510", objlist,
+                         error_obj.location.dot(Field::pLocationInfo).dot(Field::colorAttachmentCount),
+                         "= %" PRIu32 " is not equal to count specified in VkRenderingInfo (%" PRIu32 ").",
+                         pLocationInfo->colorAttachmentCount, rp_state.createInfo.attachmentCount);
+    }
+
+    skip |= ValidateRenderingAttachmentLocationsKHR(*pLocationInfo, commandBuffer, loc_info.dot(Field::pLocationInfo));
+
+    return skip;
+}
+
+bool CoreChecks::ValidateRenderingInputAttachmentIndicesKHR(const VkRenderingInputAttachmentIndexInfoKHR &index_info,
+                                                            const LogObjectList objlist, const Location &loc_info) const {
+    bool skip = false;
+
+    if (!enabled_features.dynamicRenderingLocalRead) {
+        if (index_info.pDepthInputAttachmentIndex) {
+            if (*index_info.pDepthInputAttachmentIndex != VK_ATTACHMENT_UNUSED) {
+                skip |= LogError("VUID-VkRenderingInputAttachmentIndexInfoKHR-dynamicRenderingLocalRead-09520", objlist,
+                                 loc_info.dot(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::pDepthInputAttachmentIndex, 0),
+                                 "= %" PRIu32 " while must be VK_ATTACHMENT_UNUSED", *index_info.pDepthInputAttachmentIndex);
+            }
+        }
+        if (index_info.pStencilInputAttachmentIndex) {
+            if (*index_info.pStencilInputAttachmentIndex != VK_ATTACHMENT_UNUSED) {
+                skip |=
+                    LogError("VUID-VkRenderingInputAttachmentIndexInfoKHR-dynamicRenderingLocalRead-09521", objlist,
+                             loc_info.dot(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::pStencilInputAttachmentIndex, 0),
+                             "= %" PRIu32 " while must be VK_ATTACHMENT_UNUSED", *index_info.pStencilInputAttachmentIndex);
+            }
+        }
+    }
+
+    if (index_info.pColorAttachmentInputIndices) {
+        std::map<uint32_t, uint32_t> unique;
+
+        for (uint32_t i = 0; i < index_info.colorAttachmentCount; ++i) {
+            const uint32_t index = index_info.pColorAttachmentInputIndices[i];
+
+            if (index == VK_ATTACHMENT_UNUSED) {
+                continue;
+            } else if (!enabled_features.dynamicRenderingLocalRead) {
+                skip |=
+                    LogError("VUID-VkRenderingInputAttachmentIndexInfoKHR-dynamicRenderingLocalRead-09519", objlist,
+                             loc_info.dot(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::pColorAttachmentInputIndices, i),
+                             "= %" PRIu32 " must be VK_ATTACHMENT_UNUSED", index);
+            }
+
+            if (unique.find(index) != unique.end()) {
+                skip |=
+                    LogError("VUID-VkRenderingInputAttachmentIndexInfoKHR-pColorAttachmentInputIndices-09522", objlist,
+                             loc_info.dot(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::pColorAttachmentInputIndices, i),
+                             "= %" PRIu32 " have same value as in pColorAttachmentInputIndices[%" PRIu32 "] = %" PRIu32, index,
+                             unique[index], index_info.pColorAttachmentInputIndices[unique[index]]);
+            } else
+                unique[index] = i;
+        }
+        if (index_info.pDepthInputAttachmentIndex && *index_info.pDepthInputAttachmentIndex != VK_ATTACHMENT_UNUSED &&
+            unique.find(*index_info.pDepthInputAttachmentIndex) != unique.end()) {
+            const Location loc = loc_info.dot(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::pDepthInputAttachmentIndex, 0);
+            skip |= LogError("VUID-VkRenderingInputAttachmentIndexInfoKHR-pColorAttachmentInputIndices-09523", objlist, loc,
+                             "= %" PRIu32 " have same value as in pColorAttachmentInputIndices[%" PRIu32 "] = %" PRIu32,
+                             *index_info.pDepthInputAttachmentIndex, unique[*index_info.pDepthInputAttachmentIndex],
+                             index_info.pColorAttachmentInputIndices[unique[*index_info.pDepthInputAttachmentIndex]]);
+        }
+        if (index_info.pStencilInputAttachmentIndex && *index_info.pStencilInputAttachmentIndex != VK_ATTACHMENT_UNUSED &&
+            unique.find(*index_info.pStencilInputAttachmentIndex) != unique.end()) {
+            const Location loc =
+                loc_info.dot(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::pStencilInputAttachmentIndex, 0);
+            skip |= LogError("VUID-VkRenderingInputAttachmentIndexInfoKHR-pColorAttachmentInputIndices-09524", objlist, loc,
+                             "= %" PRIu32 " have same value as in pColorAttachmentInputIndices[%" PRIu32 "] = %" PRIu32,
+                             *index_info.pStencilInputAttachmentIndex, unique[*index_info.pStencilInputAttachmentIndex],
+                             index_info.pColorAttachmentInputIndices[unique[*index_info.pStencilInputAttachmentIndex]]);
+        }
+    }
+
+    if (index_info.colorAttachmentCount > phys_dev_props.limits.maxColorAttachments) {
+        const Location loc = loc_info.dot(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::colorAttachmentCount);
+        skip |= LogError("VUID-VkRenderingInputAttachmentIndexInfoKHR-colorAttachmentCount-09525", objlist, loc,
+                         "= %" PRIu32 " must be less than or equal to maxColorAttachments = %" PRIu32 ".",
+                         index_info.colorAttachmentCount, phys_dev_props.limits.maxColorAttachments);
+    }
+
+    return skip;
+}
+
+bool CoreChecks::PreCallValidateCmdSetRenderingInputAttachmentIndicesKHR(
+    VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR *pLocationInfo,
+    const ErrorObject &error_obj) const {
+    const auto &cb_state = *GetRead<vvl::CommandBuffer>(commandBuffer);
+    bool skip = false;
+
+    if (!enabled_features.dynamicRenderingLocalRead) {
+        skip |= LogError("VUID-vkCmdSetRenderingInputAttachmentIndicesKHR-dynamicRenderingLocalRead-09516", commandBuffer, error_obj.location,
+                         "dynamicRenderingLocalRead was not enabled.");
+    }
+
+    skip |= ValidateCmd(cb_state, error_obj.location);
+
+    const auto *rp_state_ptr = cb_state.activeRenderPass.get();
+    if (!rp_state_ptr) {
+        return skip;
+    }
+
+    const auto &rp_state = *rp_state_ptr;
+    if (!rp_state.UsesDynamicRendering()) {
+        const LogObjectList objlist =
+            rp_state_ptr ? LogObjectList(commandBuffer, rp_state_ptr->VkHandle()) : LogObjectList(commandBuffer);
+        skip |= LogError("VUID-vkCmdSetRenderingInputAttachmentIndicesKHR-commandBuffer-09518", objlist, error_obj.location,
+                         "vkCmdBeginRendering was not called.");
+    }
+    if (pLocationInfo->colorAttachmentCount != rp_state.dynamic_rendering_begin_rendering_info.colorAttachmentCount) {
+        const LogObjectList objlist(commandBuffer, rp_state.VkHandle());
+        const Location loc = error_obj.location.dot(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::colorAttachmentCount);
+
+        skip |= LogError("VUID-vkCmdSetRenderingInputAttachmentIndicesKHR-pInputAttachmentIndexInfo-09517", objlist, loc,
+                         "= %" PRIu32 " is not equal to the attachment count the render pass being begun (%" PRIu32 ")",
+                         pLocationInfo->colorAttachmentCount, rp_state.createInfo.attachmentCount);
+    }
+
+    skip |= ValidateRenderingInputAttachmentIndicesKHR(*pLocationInfo, commandBuffer, error_obj.location);
+
     return skip;
 }

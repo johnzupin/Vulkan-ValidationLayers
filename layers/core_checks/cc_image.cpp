@@ -1090,8 +1090,21 @@ bool CoreChecks::PreCallValidateCmdClearAttachments(VkCommandBuffer commandBuffe
         bool external_format_resolve = false;
 
         if (cb_state.activeRenderPass->UsesDynamicRendering()) {
-            color_view_state = cb_state.GetActiveAttachmentImageViewState(
-                cb_state.GetDynamicColorAttachmentImageIndex(clear_desc->colorAttachment));
+            uint32_t colorAttachment = clear_desc->colorAttachment;
+
+            for (size_t i = 0; i < cb_state.rendering_attachments.color_locations.size(); i++) {
+                if (cb_state.rendering_attachments.color_locations[i] == VK_ATTACHMENT_UNUSED) {
+                    const LogObjectList objlist(commandBuffer, cb_state.activeRenderPass->VkHandle());
+                    skip |=
+                        LogError("VUID-vkCmdClearAttachments-colorAttachment-09503", objlist, attachment_loc,
+                                 "cannot be cleared because VkRenderingAttachmentLocationInfoKHR::pColorAttachmentLocations[%zu] "
+                                 "is VK_ATTACHMENT_UNUSED.",
+                                 i);
+                    break;
+                }
+            }
+
+            color_view_state = cb_state.GetActiveAttachmentImageViewState(cb_state.GetDynamicColorAttachmentImageIndex(colorAttachment));
             color_attachment_count = cb_state.GetDynamicColorAttachmentCount();
 
             depth_view_state = cb_state.GetActiveAttachmentImageViewState(cb_state.GetDynamicDepthAttachmentImageIndex());
@@ -1945,7 +1958,8 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
     }
 
     // Validate correct image aspect bits for desired formats and format consistency
-    skip |= ValidateImageAspectMask(image_state.VkHandle(), image_format, aspect_mask, image_state.disjoint, error_obj.location);
+    skip |= ValidateImageAspectMask(image_state.VkHandle(), image_format, aspect_mask, image_state.disjoint, error_obj.location,
+                                    "UNASSIGNED-vkCreateImageView-InvalidImageAspect");
 
     // Valdiate Image/ImageView type compatibility #resources-image-views-compatibility
     switch (image_type) {

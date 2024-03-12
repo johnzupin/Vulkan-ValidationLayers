@@ -295,7 +295,12 @@ class NegativeGpuAVOOB : public GpuAVOOBTest {
 };
 class PositiveGpuAVOOB : public GpuAVOOBTest {};
 
-class PositiveGpuAVRayQuery : public PositiveGpuAV {};
+class GpuAVRayQueryTest : public GpuAVTest {
+  public:
+    void InitGpuAVRayQuery();
+};
+class NegativeGpuAVRayQuery : public GpuAVRayQueryTest {};
+class PositiveGpuAVRayQuery : public GpuAVRayQueryTest {};
 
 class NegativeDebugPrintf : public VkLayerTest {
   public:
@@ -371,9 +376,13 @@ class NegativeDeviceQueue : public VkLayerTest {};
 class DynamicRenderingTest : public VkLayerTest {
   public:
     void InitBasicDynamicRendering();
+    void InitBasicDynamicRenderingLocalRead();
 };
 class NegativeDynamicRendering : public DynamicRenderingTest {};
 class PositiveDynamicRendering : public DynamicRenderingTest {};
+
+class NegativeDynamicRenderingLocalRead : public DynamicRenderingTest {};
+class PositiveDynamicRenderingLocalRead : public DynamicRenderingTest {};
 
 class DynamicStateTest : public VkLayerTest {
   public:
@@ -516,6 +525,7 @@ class PositiveRayTracingPipelineNV : public PositiveRayTracingPipeline {};
 
 class GpuAVRayTracingTest : public GpuAVTest, public RayTracingTest {};
 class NegativeGpuAVRayTracing : public GpuAVRayTracingTest {};
+class PositiveGpuAVRayTracing : public GpuAVRayTracingTest {};
 class NegativeGpuAVRayTracingNV : public NegativeGpuAVRayTracing {};
 
 class RenderPassTest : public VkLayerTest {};
@@ -547,6 +557,8 @@ class ShaderObjectTest : public virtual VkLayerTest {
 };
 class NegativeShaderObject : public ShaderObjectTest {};
 class PositiveShaderObject : public ShaderObjectTest {};
+
+class PositiveGpuAVShaderObject : public PositiveShaderObject, public PositiveGpuAV {};
 
 class ShaderInterfaceTest : public VkLayerTest {};
 class NegativeShaderInterface : public ShaderInterfaceTest {};

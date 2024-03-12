@@ -13,6 +13,10 @@
 
 #include "../framework/layer_validation_tests.h"
 
+#ifndef VK_USE_PLATFORM_WIN32_KHR
+#include <sys/mman.h>
+#endif
+
 TEST_F(PositiveMemory, MapMemory2) {
     TEST_DESCRIPTION("Validate vkMapMemory2 and vkUnmapMemory2");
 
@@ -32,9 +36,7 @@ TEST_F(PositiveMemory, MapMemory2) {
     bool pass = m_device->phy().set_memory_type(vvl::kU32Max, &memory_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     ASSERT_TRUE(pass);
 
-    VkDeviceMemory memory;
-    VkResult err = vk::AllocateMemory(device(), &memory_info, NULL, &memory);
-    ASSERT_EQ(VK_SUCCESS, err);
+    vkt::DeviceMemory memory(*m_device, memory_info);
 
     VkMemoryMapInfoKHR map_info = vku::InitStructHelper();
     map_info.memory = memory;
@@ -44,26 +46,104 @@ TEST_F(PositiveMemory, MapMemory2) {
     VkMemoryUnmapInfoKHR unmap_info = vku::InitStructHelper();
     unmap_info.memory = memory;
 
-    uint32_t *pData = NULL;
-    err = vk::MapMemory2KHR(device(), &map_info, (void **)&pData);
+    uint32_t *pData = nullptr;
+    VkResult err = vk::MapMemory2KHR(device(), &map_info, (void **)&pData);
     ASSERT_EQ(VK_SUCCESS, err);
-    ASSERT_TRUE(pData != NULL);
+    ASSERT_TRUE(pData != nullptr);
 
     err = vk::UnmapMemory2KHR(device(), &unmap_info);
     ASSERT_EQ(VK_SUCCESS, err);
 
     map_info.size = VK_WHOLE_SIZE;
 
-    pData = NULL;
+    pData = nullptr;
     err = vk::MapMemory2KHR(device(), &map_info, (void **)&pData);
     ASSERT_EQ(VK_SUCCESS, err);
-    ASSERT_TRUE(pData != NULL);
+    ASSERT_TRUE(pData != nullptr);
 
     err = vk::UnmapMemory2KHR(device(), &unmap_info);
     ASSERT_EQ(VK_SUCCESS, err);
-
-    vk::FreeMemory(device(), memory, NULL);
 }
+
+#ifndef VK_USE_PLATFORM_WIN32_KHR
+TEST_F(PositiveMemory, MapMemoryPlaced) {
+    TEST_DESCRIPTION("Validate placed memory maps");
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_MAP_MEMORY_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_MAP_MEMORY_PLACED_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::memoryMapPlaced);
+    AddRequiredFeature(vkt::Feature::memoryUnmapReserve);
+    RETURN_IF_SKIP(Init());
+
+    VkPhysicalDeviceMapMemoryPlacedPropertiesEXT map_placed_props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(map_placed_props);
+
+    /* Vulkan doesn't have any requirements on what allocationSize can be
+     * other than that it must be non-zero.  Pick 64KB because that should
+     * work out to an even number of pages on basically any GPU.
+     */
+    const VkDeviceSize allocation_size = map_placed_props.minPlacedMemoryMapAlignment * 16;
+
+    VkMemoryAllocateInfo memory_info = vku::InitStructHelper();
+    memory_info.allocationSize = allocation_size;
+
+    bool pass = m_device->phy().set_memory_type(vvl::kU32Max, &memory_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    ASSERT_TRUE(pass);
+
+    vkt::DeviceMemory memory(*m_device, memory_info);
+
+    /* Reserve one more page in case we need to deal with any alignment weirdness. */
+    size_t reservation_size = allocation_size + map_placed_props.minPlacedMemoryMapAlignment;
+    void *reservation = mmap(NULL, reservation_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_TRUE(reservation != MAP_FAILED);
+
+    /* Align up to minPlacedMemoryMapAlignment */
+    uintptr_t align_1 = map_placed_props.minPlacedMemoryMapAlignment - 1;
+    void *addr = reinterpret_cast<void *>((reinterpret_cast<uintptr_t>(reservation) + align_1) & ~align_1);
+
+    VkMemoryMapInfoKHR map_info = vku::InitStructHelper();
+    map_info.memory = memory;
+    map_info.flags = VK_MEMORY_MAP_PLACED_BIT_EXT;
+    map_info.offset = 0;
+    map_info.size = VK_WHOLE_SIZE;
+
+    VkMemoryMapPlacedInfoEXT placed_info = vku::InitStructHelper();
+    placed_info.pPlacedAddress = addr;
+    map_info.pNext = &placed_info;
+
+    void *pData;
+    VkResult res = vk::MapMemory2KHR(device(), &map_info, &pData);
+    ASSERT_EQ(VK_SUCCESS, res);
+
+    if (IsPlatformMockICD()) {
+        return;  // currently can only validate the output with real driver
+    }
+
+    ASSERT_EQ(pData, addr);
+
+    /* Write some data and make sure we don't fault */
+    memset(pData, 0x5c, allocation_size);
+
+    VkMemoryUnmapInfoKHR unmap_info = vku::InitStructHelper();
+    unmap_info.memory = memory;
+    unmap_info.flags = VK_MEMORY_UNMAP_RESERVE_BIT_EXT;
+
+    res = vk::UnmapMemory2KHR(device(), &unmap_info);
+    ASSERT_EQ(VK_SUCCESS, res);
+
+    map_info.flags = 0;
+    vk::MapMemory2KHR(device(), &map_info, &pData);
+
+    /* We unmapped with RESERVE above so this should be different */
+    ASSERT_NE(pData, addr);
+
+    ASSERT_EQ(static_cast<uint8_t *>(pData)[0], 0x5c);
+
+    unmap_info.flags = 0;
+    res = vk::UnmapMemory2KHR(device(), &unmap_info);
+    ASSERT_EQ(VK_SUCCESS, res);
+}
+#endif
 
 TEST_F(PositiveMemory, GetMemoryRequirements2) {
     TEST_DESCRIPTION(
@@ -194,7 +274,6 @@ TEST_F(PositiveMemory, NonCoherentMapping) {
     uint8_t *pData;
     RETURN_IF_SKIP(Init());
 
-    VkDeviceMemory mem;
     VkMemoryRequirements mem_reqs;
     mem_reqs.memoryTypeBits = 0xFFFFFFFF;
     const VkDeviceSize atom_size = m_device->phy().limits_.nonCoherentAtomSize;
@@ -222,8 +301,7 @@ TEST_F(PositiveMemory, NonCoherentMapping) {
         }
     }
 
-    err = vk::AllocateMemory(device(), &alloc_info, NULL, &mem);
-    ASSERT_EQ(VK_SUCCESS, err);
+    vkt::DeviceMemory mem(*m_device, alloc_info);
 
     // Map/Flush/Invalidate using WHOLE_SIZE and zero offsets and entire mapped range
     err = vk::MapMemory(device(), mem, 0, VK_WHOLE_SIZE, 0, (void **)&pData);
@@ -276,8 +354,6 @@ TEST_F(PositiveMemory, NonCoherentMapping) {
     err = vk::FlushMappedMemoryRanges(device(), 1, &mmr);
     ASSERT_EQ(VK_SUCCESS, err);
     vk::UnmapMemory(device(), mem);
-
-    vk::FreeMemory(device(), mem, NULL);
 }
 
 TEST_F(PositiveMemory, MappingWithMultiInstanceHeapFlag) {
@@ -306,13 +382,11 @@ TEST_F(PositiveMemory, MappingWithMultiInstanceHeapFlag) {
     mem_alloc.allocationSize = 64;
     mem_alloc.memoryTypeIndex = memory_index;
 
-    VkDeviceMemory memory;
-    vk::AllocateMemory(device(), &mem_alloc, nullptr, &memory);
+    vkt::DeviceMemory memory(*m_device, mem_alloc);
 
     uint32_t *pData;
     vk::MapMemory(device(), memory, 0, VK_WHOLE_SIZE, 0, (void **)&pData);
     vk::UnmapMemory(device(), memory);
-    vk::FreeMemory(device(), memory, nullptr);
 }
 
 TEST_F(PositiveMemory, BindImageMemoryMultiThreaded) {
@@ -338,13 +412,9 @@ TEST_F(PositiveMemory, BindImageMemoryMultiThreaded) {
     // Create an image object, allocate memory, bind memory, and destroy the object
     auto worker_thread = [&]() {
         for (uint32_t i = 0; i < 1000; ++i) {
-            VkImage image;
-            VkDeviceMemory mem;
+            vkt::Image image(*m_device, image_create_info, vkt::no_mem);
+
             VkMemoryRequirements mem_reqs;
-
-            VkResult err = vk::CreateImage(device(), &image_create_info, nullptr, &image);
-            ASSERT_EQ(VK_SUCCESS, err);
-
             vk::GetImageMemoryRequirements(device(), image, &mem_reqs);
 
             VkMemoryAllocateInfo mem_alloc = vku::InitStructHelper();
@@ -353,15 +423,9 @@ TEST_F(PositiveMemory, BindImageMemoryMultiThreaded) {
             const bool pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &mem_alloc, 0);
             ASSERT_TRUE(pass);
 
-            err = vk::AllocateMemory(device(), &mem_alloc, nullptr, &mem);
-            ASSERT_EQ(VK_SUCCESS, err);
+            vkt::DeviceMemory mem(*m_device, mem_alloc);
 
-            err = vk::BindImageMemory(device(), image, mem, 0);
-            ASSERT_EQ(VK_SUCCESS, err);
-
-            vk::DestroyImage(device(), image, nullptr);
-
-            vk::FreeMemory(device(), mem, nullptr);
+            ASSERT_EQ(VK_SUCCESS, vk::BindImageMemory(device(), image, mem, 0));
         }
     };
 

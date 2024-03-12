@@ -562,7 +562,7 @@ void QueueBatchContext::CommonSetupAccessContext(const std::shared_ptr<const Que
         }
 
         // The start of the asynchronous access range for a given queue is one more than the highest tagged reference
-        access_context_.AddAsyncContext(async_batch->GetCurrentAccessContext(), sync_tag);
+        access_context_.AddAsyncContext(async_batch->GetCurrentAccessContext(), sync_tag, async_batch->GetQueueId());
         // We need to snapshot the async log information for async hazard reporting
         batch_log_.Import(async_batch->batch_log_);
     }
@@ -788,9 +788,7 @@ VkSemaphoreSubmitInfo SubmitInfoConverter::BatchStore::SignalSemaphore(const VkS
                                                                        VkQueueFlags queue_flags) {
     VkSemaphoreSubmitInfo semaphore_info = vku::InitStructHelper();
     semaphore_info.semaphore = info.pSignalSemaphores[index];
-    // Can't just use BOTTOM, because of how access expansion is done
-    semaphore_info.stageMask =
-        sync_utils::ExpandPipelineStages(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, queue_flags, VK_PIPELINE_STAGE_2_HOST_BIT);
+    semaphore_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
     return semaphore_info;
 }
 

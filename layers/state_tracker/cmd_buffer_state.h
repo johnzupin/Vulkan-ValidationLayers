@@ -124,17 +124,19 @@ enum class CbState {
     InvalidIncomplete,  // fouled before recording was completed
 };
 
-typedef vvl::unordered_map<VkImage, std::shared_ptr<ImageSubresourceLayoutMap>> CommandBufferImageLayoutMap;
-
-typedef vvl::unordered_map<const GlobalImageLayoutRangeMap *, std::shared_ptr<ImageSubresourceLayoutMap>>
-    CommandBufferAliasedLayoutMap;
 
 namespace vvl {
 
 class CommandBuffer : public RefcountedStateObject {
     using Func = vvl::Func;
-
   public:
+    struct LayoutState {
+        StateObject::IdType id;
+        std::shared_ptr<ImageSubresourceLayoutMap> map;
+    };
+    using ImageLayoutMap = vvl::unordered_map<VkImage, LayoutState>;
+    using AliasedLayoutMap = vvl::unordered_map<const GlobalImageLayoutRangeMap *, std::shared_ptr<ImageSubresourceLayoutMap>>;
+
     VkCommandBufferAllocateInfo createInfo = {};
     VkCommandBufferBeginInfo beginInfo;
     VkCommandBufferInheritanceInfo inheritanceInfo;
@@ -276,6 +278,7 @@ class CommandBuffer : public RefcountedStateObject {
         uint32_t exclusive_scissor_first;
         uint32_t exclusive_scissor_count;
         std::vector<VkRect2D> exclusive_scissors;
+
         // When the Command Buffer resets, the value most things in this struct don't matter because if they are read without
         // setting the state, it will fail in ValidateDynamicStateIsSet() for us. Some values (ex. the bitset) are tracking in
         // replacement for static_status/dynamic_status so this needs to reset along with those
@@ -355,6 +358,8 @@ class CommandBuffer : public RefcountedStateObject {
     // Used for both type of renderPass
     vvl::unordered_set<uint32_t> active_color_attachments_index;
     uint32_t active_render_pass_device_mask;
+    bool has_render_pass_striped;
+    uint32_t striped_count;
     // only when not using dynamic rendering
     safe_VkRenderPassBeginInfo active_render_pass_begin_info;
     std::shared_ptr<std::vector<SubpassInfo>> active_subpasses;
@@ -377,6 +382,24 @@ class CommandBuffer : public RefcountedStateObject {
     QFOTransferBarrierSets<QFOBufferTransferBarrier> qfo_transfer_buffer_barriers;
     QFOTransferBarrierSets<QFOImageTransferBarrier> qfo_transfer_image_barriers;
 
+    // VK_KHR_dynamic_rendering_local_read works like dynamic state, but lives for the rendering lifetime only
+    struct RenderingAttachment {
+        // VkRenderingAttachmentLocationInfoKHR
+        bool set_color_locations = false;
+        std::vector<uint32_t> color_locations;
+        // VkRenderingInputAttachmentIndexInfoKHR
+        bool set_color_indexes = false;
+        std::vector<uint32_t> color_indexes;
+        const uint32_t *depth_index = nullptr;
+        const uint32_t *stencil_index = nullptr;
+        void Reset() {
+            color_locations.clear();
+            color_indexes.clear();
+            depth_index = nullptr;
+            stencil_index = nullptr;
+        }
+    } rendering_attachments;
+
     vvl::unordered_set<VkEvent> waitedEvents;
     std::vector<VkEvent> writeEventsBeforeWait;
     std::vector<VkEvent> events;
@@ -384,8 +407,8 @@ class CommandBuffer : public RefcountedStateObject {
     vvl::unordered_set<QueryObject> startedQueries;
     vvl::unordered_set<QueryObject> updatedQueries;
     vvl::unordered_set<QueryObject> renderPassQueries;
-    CommandBufferImageLayoutMap image_layout_map;
-    CommandBufferAliasedLayoutMap aliased_image_layout_map;  // storage for potentially aliased images
+    ImageLayoutMap image_layout_map;
+    AliasedLayoutMap aliased_image_layout_map;  // storage for potentially aliased images
 
     vvl::unordered_map<uint32_t, vvl::VertexBufferBinding> current_vertex_buffer_binding_info;
     vvl::IndexBufferBinding index_buffer_binding;
@@ -473,9 +496,9 @@ class CommandBuffer : public RefcountedStateObject {
 
     void ResetPushConstantDataIfIncompatible(const vvl::PipelineLayout *pipeline_layout_state);
 
-    const ImageSubresourceLayoutMap *GetImageSubresourceLayoutMap(VkImage image) const;
-    ImageSubresourceLayoutMap *GetImageSubresourceLayoutMap(const vvl::Image &image_state);
-    const CommandBufferImageLayoutMap &GetImageSubresourceLayoutMap() const;
+    std::shared_ptr<const ImageSubresourceLayoutMap> GetImageSubresourceLayoutMap(VkImage image) const;
+    std::shared_ptr<ImageSubresourceLayoutMap> GetImageSubresourceLayoutMap(const vvl::Image &image_state);
+    const ImageLayoutMap &GetImageSubresourceLayoutMap() const;
 
     const QFOTransferBarrierSets<QFOImageTransferBarrier> &GetQFOBarrierSets(const QFOImageTransferBarrier &type_tag) const {
         return qfo_transfer_image_barriers;

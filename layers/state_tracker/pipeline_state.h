@@ -157,7 +157,7 @@ class Pipeline : public StateObject {
     const ActiveSlotMap active_slots;
     const uint32_t max_active_slot = 0;  // the highest set number in active_slots for pipeline layout compatibility checks
 
-    // Which state is dynamic from pipeline creation
+    // Which state is dynamic from pipeline creation, factors in GPL sub state as well
     CBDynamicFlags dynamic_state;
 
     const VkPrimitiveTopology topology_at_rasterizer = VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
@@ -192,6 +192,9 @@ class Pipeline : public StateObject {
 
     bool IsGraphicsLibrary() const { return !HasFullState(); }
     bool HasFullState() const {
+        if (pipeline_type != VK_PIPELINE_BIND_POINT_GRAPHICS) {
+            return true;
+        }
         // First make sure that this pipeline is a "classic" pipeline, or is linked together with the appropriate sub-state
         // libraries
         if (graphics_lib_type && (graphics_lib_type != (VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT |
@@ -246,6 +249,7 @@ class Pipeline : public StateObject {
     // Important as some pipeline checks need pipeline state that won't be there if the substate is from linking
     // Many VUs say "the pipeline require" which means "not being linked in as a library"
     // If the VUs says "created with" then you should NOT use this function
+    // TODO - This could probably just be a check to VkGraphicsPipelineLibraryCreateInfoEXT::flags
     bool OwnsSubState(const std::shared_ptr<PipelineSubState> sub_state) const { return sub_state && (&sub_state->parent == this); }
 
     const std::shared_ptr<const vvl::RenderPass> RenderPassState() const {
@@ -340,7 +344,7 @@ class Pipeline : public StateObject {
 
     const safe_VkPipelineTessellationStateCreateInfo *TessellationState() const {
         if (pre_raster_state) {
-            return pre_raster_state->tess_create_info;
+            return pre_raster_state->tessellation_state;
         }
         return nullptr;
     }
@@ -396,16 +400,6 @@ class Pipeline : public StateObject {
     bool BlendConstantsEnabled() const { return fragment_output_state && fragment_output_state->blend_constants_enabled; }
 
     bool SampleLocationEnabled() const { return fragment_output_state && fragment_output_state->sample_location_enabled; }
-
-    const safe_VkPipelineDynamicStateCreateInfo *DynamicStateGraphics() const {
-        // TODO Each library can contain its own dynamic state (apparently?). Which one should be returned here? Union?
-        return create_info.graphics.pDynamicState;
-    }
-
-    const safe_VkPipelineDynamicStateCreateInfo *DynamicStateRayTracing() const {
-        // TODO Each library can contain its own dynamic state (apparently?). Which one should be returned here? Union?
-        return create_info.raytracing.pDynamicState;
-    }
 
     template <typename CI>
     const typename CreateInfo::Traits<CI>::SafeCreateInfo &GetCreateInfo() const {
@@ -755,6 +749,7 @@ struct LastBound {
     bool HasShaderObjects() const;
     bool IsValidShaderBound(ShaderObjectStage stage) const;
     bool IsValidShaderOrNullBound(ShaderObjectStage stage) const;
+    bool IsAnyGraphicsShaderBound() const;
 };
 
 static inline bool IsBoundSetCompat(uint32_t set, const LastBound &last_bound, const vvl::PipelineLayout &pipeline_layout) {

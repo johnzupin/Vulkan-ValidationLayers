@@ -695,8 +695,8 @@ bool ObjectLifetimes::ReportUndestroyedDeviceObjects(VkDevice device, const Loca
                 # Do not generate validation code for the function's dispatchable parameter (the first one).
                 # Validation of such parameters is always successful based on the model of how the chassis
                 # dispactches the calls to ValidationObject. If invalid handle is used it will cause
-                # crash/corruption on the chassis level (in get_dispatch_key or later). And if correct handle
-                # is passed, then due to the mapping done by get_dispatch_key() the handle will belong to the
+                # crash/corruption on the chassis level (in GetDispatchKey or later). And if correct handle
+                # is passed, then due to the mapping done by GetDispatchKey() the handle will belong to the
                 # retrieved validation object, which guarantees positive result of the parenting test.
                 function_dispatchable_parameter = not is_struct and member == members[0]
                 if function_dispatchable_parameter:
@@ -749,7 +749,7 @@ bool ObjectLifetimes::ReportUndestroyedDeviceObjects(VkDevice device, const Loca
                     location = f'{errorLoc}.dot(Field::{member.name})'
                     if self.vk.commands[topCommand].device and self.vk.handles[member.type].instance:
                         # Use case when for device-level API call we should use instance-level validation object
-                        pre_call_validate += 'auto instance_data = GetLayerDataPtr(get_dispatch_key(instance), layer_data_map);\n'
+                        pre_call_validate += 'auto instance_data = GetLayerDataPtr(GetDispatchKey(instance), layer_data_map);\n'
                         pre_call_validate += 'auto instance_object_lifetimes = instance_data->GetValidationObject<ObjectLifetimes>();\n'
                         pre_call_validate += f'skip |= instance_object_lifetimes->ValidateObject({prefix}{member.name}, kVulkanObjectType{member.type[2:]}, {nullAllowed}, {param_vuid}, {parent_vuid}, {location}{parent_object_type});\n'
                     else:
@@ -800,8 +800,8 @@ bool ObjectLifetimes::ReportUndestroyedDeviceObjects(VkDevice device, const Loca
                             continue
                         contains_pNext = True
                         nested_struct.extend(guard_helper.add_guard(extended_struct.protect))
-                        nested_struct.append(f'if (auto pNext = vku::FindStructInPNextChain<{extendedBy}>({new_prefix}pNext)) {{\n')
-                        nested_struct.append(f'    const Location pNext_loc = {new_error_loc}.pNext(Struct::{extendedBy});\n')
+                        nested_struct.append(f'if ([[maybe_unused]] auto pNext = vku::FindStructInPNextChain<{extendedBy}>({new_prefix}pNext)) {{\n')
+                        nested_struct.append(f'    [[maybe_unused]] const Location pNext_loc = {new_error_loc}.pNext(Struct::{extendedBy});\n')
                         nested_struct.append(self.validateObjects(extended_members, 'pNext->', arrayIndex + 1, extendedBy, topCommand, 'pNext_loc'))
                         nested_struct.append('}\n')
                     nested_struct.extend(guard_helper.add_guard(None))

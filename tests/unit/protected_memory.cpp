@@ -487,7 +487,6 @@ TEST_F(NegativeProtectedMemory, PipelineProtectedAccess) {
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
     pipe.gp_ci_.flags = VK_PIPELINE_CREATE_NO_PROTECTED_ACCESS_BIT_EXT | VK_PIPELINE_CREATE_PROTECTED_ACCESS_ONLY_BIT_EXT;
 
@@ -504,7 +503,6 @@ TEST_F(NegativeProtectedMemory, PipelineProtectedAccess) {
     m_errorMonitor->VerifyFound();
 
     CreatePipelineHelper protected_pipe(*this);
-    protected_pipe.InitState();
     protected_pipe.shader_stages_ = {protected_pipe.vs_->GetStageCreateInfo()};
     protected_pipe.gp_ci_.flags = VK_PIPELINE_CREATE_PROTECTED_ACCESS_ONLY_BIT_EXT;
     protected_pipe.CreateGraphicsPipeline();
@@ -530,7 +528,6 @@ TEST_F(NegativeProtectedMemory, PipelineProtectedAccess) {
 
         pre_raster_lib.InitPreRasterLibInfo(&stage_ci);
         pre_raster_lib.pipeline_layout_ci_.flags |= VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT;
-        pre_raster_lib.InitState();
         ASSERT_EQ(VK_SUCCESS, pre_raster_lib.CreateGraphicsPipeline());
 
         VkPipeline libraries[1] = {
@@ -542,22 +539,22 @@ TEST_F(NegativeProtectedMemory, PipelineProtectedAccess) {
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineLibraryCreateInfoKHR-pipeline-07404");
         VkGraphicsPipelineCreateInfo lib_ci = vku::InitStructHelper(&link_info);
-        lib_ci.flags = VK_PIPELINE_CREATE_NO_PROTECTED_ACCESS_BIT_EXT;
+        lib_ci.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR | VK_PIPELINE_CREATE_NO_PROTECTED_ACCESS_BIT_EXT;
         lib_ci.renderPass = renderPass();
         lib_ci.layout = pre_raster_lib.gp_ci_.layout;
         vkt::Pipeline lib(*m_device, lib_ci);
         m_errorMonitor->VerifyFound();
 
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineLibraryCreateInfoKHR-pipeline-07406");
-        lib_ci.flags = VK_PIPELINE_CREATE_PROTECTED_ACCESS_ONLY_BIT_EXT;
+        lib_ci.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR | VK_PIPELINE_CREATE_PROTECTED_ACCESS_ONLY_BIT_EXT;
         vkt::Pipeline lib2(*m_device, lib_ci);
         m_errorMonitor->VerifyFound();
 
         CreatePipelineHelper protected_pre_raster_lib(*this);
         protected_pre_raster_lib.InitPreRasterLibInfo(&stage_ci);
         protected_pre_raster_lib.pipeline_layout_ci_.flags |= VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT;
-        protected_pre_raster_lib.InitState();
-        protected_pre_raster_lib.gp_ci_.flags = VK_PIPELINE_CREATE_PROTECTED_ACCESS_ONLY_BIT_EXT;
+        protected_pre_raster_lib.gp_ci_.flags =
+            VK_PIPELINE_CREATE_LIBRARY_BIT_KHR | VK_PIPELINE_CREATE_PROTECTED_ACCESS_ONLY_BIT_EXT;
         ASSERT_EQ(VK_SUCCESS, protected_pre_raster_lib.CreateGraphicsPipeline());
         libraries[0] = protected_pre_raster_lib.pipeline_;
         VkGraphicsPipelineCreateInfo protected_lib_ci = vku::InitStructHelper(&link_info);
@@ -565,17 +562,19 @@ TEST_F(NegativeProtectedMemory, PipelineProtectedAccess) {
         protected_lib_ci.layout = pre_raster_lib.gp_ci_.layout;
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineLibraryCreateInfoKHR-pipeline-07407");
         lib_ci.flags = 0;
+        protected_lib_ci.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
         vkt::Pipeline lib3(*m_device, protected_lib_ci);
         m_errorMonitor->VerifyFound();
 
         CreatePipelineHelper unprotected_pre_raster_lib(*this);
         unprotected_pre_raster_lib.InitPreRasterLibInfo(&stage_ci);
         unprotected_pre_raster_lib.pipeline_layout_ci_.flags |= VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT;
-        unprotected_pre_raster_lib.InitState();
-        unprotected_pre_raster_lib.gp_ci_.flags = VK_PIPELINE_CREATE_NO_PROTECTED_ACCESS_BIT_EXT;
+        unprotected_pre_raster_lib.gp_ci_.flags =
+            VK_PIPELINE_CREATE_LIBRARY_BIT_KHR | VK_PIPELINE_CREATE_NO_PROTECTED_ACCESS_BIT_EXT;
         ASSERT_EQ(VK_SUCCESS, unprotected_pre_raster_lib.CreateGraphicsPipeline());
         libraries[0] = unprotected_pre_raster_lib.pipeline_;
         VkGraphicsPipelineCreateInfo unprotected_lib_ci = vku::InitStructHelper(&link_info);
+        unprotected_lib_ci.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
         unprotected_lib_ci.renderPass = renderPass();
         unprotected_lib_ci.layout = pre_raster_lib.gp_ci_.layout;
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineLibraryCreateInfoKHR-pipeline-07405");
@@ -616,7 +615,6 @@ TEST_F(NegativeProtectedMemory, PipelineProtectedAccess) {
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-pipelineProtectedAccess-07368");
     CreatePipelineHelper featureless_pipe(*this);
     featureless_pipe.device_ = &test_device;
-    featureless_pipe.InitState();
     featureless_pipe.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
     featureless_pipe.shader_stages_ = {vs2.GetStageCreateInfo()};
     featureless_pipe.gp_ci_.flags = VK_PIPELINE_CREATE_PROTECTED_ACCESS_ONLY_BIT_EXT;
@@ -657,7 +655,6 @@ TEST_F(NegativeProtectedMemory, UnprotectedCommands) {
     vkt::Buffer index_buffer(*m_device, sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.CreateGraphicsPipeline();
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_OCCLUSION, 1);
@@ -867,13 +864,16 @@ TEST_F(NegativeProtectedMemory, MixingProtectedResources) {
     )glsl";
     VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    CreatePipelineHelper g_pipe(*this, 2u);
+    VkPipelineColorBlendAttachmentState cb_attachments[2] = {};
+    memset(cb_attachments, 0, sizeof(VkPipelineColorBlendAttachmentState) * 2);
+    CreatePipelineHelper g_pipe(*this);
     g_pipe.gp_ci_.renderPass = rp.Handle();
     g_pipe.shader_stages_ = {g_pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                             {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
-    g_pipe.InitState();
-    ASSERT_EQ(VK_SUCCESS, g_pipe.CreateGraphicsPipeline());
+    g_pipe.cb_ci_.attachmentCount = 2;
+    g_pipe.cb_ci_.pAttachments = cb_attachments;
+    g_pipe.CreateGraphicsPipeline();
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
@@ -1080,19 +1080,10 @@ TEST_F(NegativeProtectedMemory, RayTracingPipeline) {
     AddRequiredExtensions(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::protectedMemory);
+    AddRequiredFeature(vkt::Feature::rayTracingPipeline);
     RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceProtectedMemoryFeatures protected_memory_features = vku::InitStructHelper();
-    VkPhysicalDeviceRayTracingPipelineFeaturesKHR ray_tracing_features = vku::InitStructHelper(&protected_memory_features);
-    auto features2 = GetPhysicalDeviceFeatures2(ray_tracing_features);
-
-    if (!protected_memory_features.protectedMemory) {
-        GTEST_SKIP() << "protectedMemory feature not supported";
-    };
-    if (!ray_tracing_features.rayTracingPipeline) {
-        GTEST_SKIP() << "rayTracingPipeline feature not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2, VK_COMMAND_POOL_CREATE_PROTECTED_BIT));
+    RETURN_IF_SKIP(InitState(nullptr, nullptr, VK_COMMAND_POOL_CREATE_PROTECTED_BIT));
 
     const vkt::PipelineLayout empty_pipeline_layout(*m_device, {});
     VkShaderObj rgen_shader(this, kRayTracingMinimalGlsl, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
@@ -1178,7 +1169,6 @@ TEST_F(NegativeProtectedMemory, RayQuery) {
     VkShaderObj fs(this, spv_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 

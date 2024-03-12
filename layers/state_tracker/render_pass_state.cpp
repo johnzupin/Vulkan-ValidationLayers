@@ -301,7 +301,7 @@ RenderPass::RenderPass(VkPipelineRenderingCreateInfo const *pPipelineRenderingCr
       use_dynamic_rendering_inherited(false),
       has_multiview_enabled(false),
       rasterization_enabled(rasterization_enabled),
-      dynamic_rendering_pipeline_create_info((pPipelineRenderingCreateInfo && rasterization_enabled)
+      dynamic_pipeline_rendering_create_info((pPipelineRenderingCreateInfo && rasterization_enabled)
                                                  ? pPipelineRenderingCreateInfo
                                                  : &VkPipelineRenderingCreateInfo_default) {}
 

@@ -14,6 +14,7 @@
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
+#include "../framework/render_pass_helper.h"
 #include "../framework/thread_helper.h"
 #include "../framework/queue_submit_context.h"
 
@@ -24,7 +25,7 @@ void VkSyncValTest::InitSyncValFramework(bool disable_queue_submit_validation) {
     features_ = {VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT, nullptr, 1u, enables_, 4, disables_};
 
     // Optionally enable core validation (by disabling nothing)
-    if (m_syncval_enable_core) {
+    if (!m_syncval_disable_core) {
         features_.disabledValidationFeatureCount = 0;
     }
 
@@ -108,8 +109,7 @@ TEST_F(PositiveSyncVal, CmdClearAttachmentLayer) {
 
     CreatePipelineHelper pipe(*this);
     pipe.gp_ci_.renderPass = render_pass;
-    pipe.InitState();
-    ASSERT_EQ(VK_SUCCESS, pipe.CreateGraphicsPipeline());
+    pipe.CreateGraphicsPipeline();
 
     VkImageCopy copy_region = {};
     copy_region.srcSubresource = {VkImageAspectFlags(VK_IMAGE_ASPECT_COLOR_BIT), 0, 0, 1};
@@ -370,7 +370,6 @@ TEST_F(PositiveSyncVal, ShaderReferencesNotBoundSet) {
     OneOffDescriptorSet set(m_device, {binding});
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
 
@@ -525,6 +524,68 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
     present.pImageIndices = &image_index;
     ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue->handle(), &present));
     m_default_queue->wait();
+}
+
+TEST_F(PositiveSyncVal, PresentAfterSubmitNoneDstStage) {
+    TEST_DESCRIPTION("Test that QueueSubmit's signal semaphore behaves the same way as QueueSubmit2 with ALL_COMMANDS signal.");
+    AddSurfaceExtension();
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+    RETURN_IF_SKIP(InitSwapchain());
+    const vkt::Semaphore acquire_semaphore(*m_device);
+    const vkt::Semaphore submit_semaphore(*m_device);
+    const auto swapchain_images = GetSwapchainImages(m_swapchain);
+
+    uint32_t image_index = 0;
+    ASSERT_EQ(VK_SUCCESS,
+              vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index));
+
+    VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
+    layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    layout_transition.srcAccessMask = 0;
+    // Specify NONE as destination stage to detect issues during conversion SubmitInfo -> SubmitInfo2
+    layout_transition.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    layout_transition.dstAccessMask = 0;
+    layout_transition.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    layout_transition.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    layout_transition.image = swapchain_images[image_index];
+    layout_transition.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    VkDependencyInfoKHR dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &layout_transition;
+
+    m_commandBuffer->begin();
+    vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
+    m_commandBuffer->end();
+
+    constexpr VkPipelineStageFlags semaphore_wait_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit = vku::InitStructHelper();
+    submit.waitSemaphoreCount = 1;
+    submit.pWaitSemaphores = &acquire_semaphore.handle();
+    submit.pWaitDstStageMask = &semaphore_wait_stage;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &m_commandBuffer->handle();
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores = &submit_semaphore.handle();
+
+    // The goal of this test is to use QueueSubmit API (not QueueSubmit2) to
+    // ensure syncval correctly converts SubmitInfo to SubmitInfo2 with
+    // regard to signal semaphore.
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE);
+
+    VkPresentInfoKHR present = vku::InitStructHelper();
+    present.waitSemaphoreCount = 1;
+    present.pWaitSemaphores = &submit_semaphore.handle();
+    present.swapchainCount = 1;
+    present.pSwapchains = &m_swapchain;
+    present.pImageIndices = &image_index;
+
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
+    m_device->wait();
 }
 
 TEST_F(PositiveSyncVal, SeparateAvailabilityAndVisibilityForBuffer) {
@@ -1170,6 +1231,12 @@ TEST_F(PositiveSyncVal, DynamicRenderingDepthResolve) {
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
 
+    VkPhysicalDeviceDepthStencilResolveProperties resolve_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(resolve_properties);
+    if ((resolve_properties.supportedDepthResolveModes & VK_RESOLVE_MODE_MIN_BIT) == 0) {
+        GTEST_SKIP() << "VK_RESOLVE_MODE_MIN_BIT not supported";
+    }
+
     const uint32_t width = 64;
     const uint32_t height = 64;
     const VkFormat depth_format = FindSupportedDepthOnlyFormat(gpu());
@@ -1274,5 +1341,162 @@ TEST_F(PositiveSyncVal, UpdateBuffer) {
     vk::CmdUpdateBuffer(*m_commandBuffer, src_buffer, 0, static_cast<VkDeviceSize>(data.size()), data.data());
     vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
     vk::CmdCopyBuffer(*m_commandBuffer, src_buffer, dst_buffer, 1, &region);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, QSSynchronizedWritesAndAsyncWait) {
+    TEST_DESCRIPTION(
+        "Graphics queue: Image transition and subsequent image write are synchronized using a pipeline barrier. Transfer queue: "
+        "waits for the image layout transition using a semaphore. This should not affect pipeline barrier on the graphics queue");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    const std::optional<uint32_t> transfer_family =
+        m_device->QueueFamilyMatching(VK_QUEUE_TRANSFER_BIT, (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT));
+    if (!transfer_family) {
+        GTEST_SKIP() << "Transfer-only queue family is not present";
+    }
+    vkt::Queue *transfer_queue = m_device->queue_family_queues(transfer_family.value())[0].get();
+
+    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer(*m_device, 64 * 64, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+    VkBufferImageCopy region = {};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageExtent = {64, 64, 1};
+
+    vkt::Semaphore semaphore(*m_device);
+
+    // Submit 0: perform image layout transition on Graphics queue.
+    // Image barrier synchronizes with COPY-WRITE access from Submit 2.
+    vkt::CommandBuffer cb0(*m_device, m_commandPool);
+    cb0.begin();
+    VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
+    image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    image_barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    image_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR;
+    image_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    image_barrier.image = image;
+    image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &image_barrier;
+    vk::CmdPipelineBarrier2(cb0, &dep_info);
+    cb0.end();
+
+    VkCommandBufferSubmitInfo cbuf_info0 = vku::InitStructHelper();
+    cbuf_info0.commandBuffer = cb0;
+    VkSemaphoreSubmitInfo signal_info0 = vku::InitStructHelper();
+    signal_info0.semaphore = semaphore;
+    signal_info0.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit0 = vku::InitStructHelper();
+    submit0.commandBufferInfoCount = 1;
+    submit0.pCommandBufferInfos = &cbuf_info0;
+    submit0.signalSemaphoreInfoCount = 1;
+    submit0.pSignalSemaphoreInfos = &signal_info0;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit0, VK_NULL_HANDLE);
+
+    // Submit 1: empty submit on Transfer queue that waits for Submit 0.
+    VkSemaphoreSubmitInfo wait_info1 = vku::InitStructHelper();
+    wait_info1.semaphore = semaphore;
+    wait_info1.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSubmitInfo2 submit1 = vku::InitStructHelper();
+    submit1.waitSemaphoreInfoCount = 1;
+    submit1.pWaitSemaphoreInfos = &wait_info1;
+    vk::QueueSubmit2(*transfer_queue, 1, &submit1, VK_NULL_HANDLE);
+
+    // Submit 2: copy to image on Graphics queue. No synchronization is needed because of COPY+WRITE barrier from Submit 0.
+    vkt::CommandBuffer cb2(*m_device, m_commandPool);
+    cb2.begin();
+    vk::CmdCopyBufferToImage(cb2, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    cb2.end();
+
+    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
+    cbuf_info2.commandBuffer = cb2;
+    VkSubmitInfo2 submit2 = vku::InitStructHelper();
+    submit2.commandBufferInfoCount = 1;
+    submit2.pCommandBufferInfos = &cbuf_info2;
+    vk::QueueSubmit2(*m_default_queue, 1, &submit2, VK_NULL_HANDLE);
+
+    m_default_queue->wait();
+    transfer_queue->wait();
+}
+
+// TODO:
+// It has to be this test found a bug in the existing code, so it's disabled until it's fixed.
+// Draw access happen-after loadOp access so it's enough to synchronize with FRAGMENT_SHADER read.
+// last_reads contains both loadOp read access and draw (fragment shader) read access. The code
+// synchronizes only with draw (FRAGMENT_SHADER) but not with loadOp (COLOR_ATTACHMENT_OUTPUT),
+// and the syncval complains that COLOR_ATTACHMENT_OUTPUT access is not synchronized.
+TEST_F(PositiveSyncVal, DISABLED_RenderPassStoreOpNone) {
+    TEST_DESCRIPTION("Synchronization with draw command when render pass uses storeOp=NONE");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredExtensions(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME);
+    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
+    sync2_features.synchronization2 = VK_TRUE;
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+
+    const VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    const VkImageLayout input_attachment_layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+
+    RenderPassSingleSubpass rp(*this);
+    rp.AddAttachmentDescription(format, input_attachment_layout, input_attachment_layout, VK_ATTACHMENT_LOAD_OP_LOAD,
+                                VK_ATTACHMENT_STORE_OP_NONE);
+    rp.AddAttachmentReference({0, input_attachment_layout});
+    rp.AddInputAttachment(0);
+    rp.CreateRenderPass();
+
+    vkt::Image image(*m_device, 32, 32, 1, format, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    image.SetLayout(input_attachment_layout);
+    vkt::ImageView image_view = image.CreateView();
+    vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &image_view.handle());
+
+    VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
+    // Form an execution dependency with draw command (FRAGMENT_SHADER). Execution dependency is enough to sync with READ.
+    layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR;
+    layout_transition.srcAccessMask = VK_ACCESS_2_NONE;
+    layout_transition.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    layout_transition.dstAccessMask = VK_ACCESS_2_NONE;
+    layout_transition.oldLayout = input_attachment_layout;
+    layout_transition.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    layout_transition.image = image;
+    layout_transition.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &layout_transition;
+
+    // Fragment shader READs input attachment.
+    VkShaderObj fs(this, kFragmentSubpassLoadGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
+    const VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+    OneOffDescriptorSet descriptor_set(m_device, {binding});
+    descriptor_set.WriteDescriptorImageInfo(0, image_view, VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                                            input_attachment_layout);
+    descriptor_set.UpdateDescriptorSets();
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
+    CreatePipelineHelper pipe(*this);
+    pipe.shader_stages_[1] = fs.GetStageCreateInfo();
+    pipe.gp_ci_.layout = pipeline_layout.handle();
+    pipe.gp_ci_.renderPass = rp.Handle();
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(rp.Handle(), fb);
+    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0,
+                              nullptr);
+    vk::CmdDraw(*m_commandBuffer, 1, 0, 0, 0);
+    m_commandBuffer->EndRenderPass();
+
+    // This waits for the FRAGMENT_SHADER read before starting with transition.
+    // If storeOp other than NONE was used we had to wait for it instead.
+    vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
     m_commandBuffer->end();
 }

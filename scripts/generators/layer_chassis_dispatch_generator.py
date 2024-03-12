@@ -295,7 +295,7 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
             dispatch_table = 'instance_dispatch_table' if command.instance else 'device_dispatch_table'
 
             # first parameter is always dispatchable
-            out.append(f'auto layer_data = GetLayerDataPtr(get_dispatch_key({command.params[0].name}), layer_data_map);\n')
+            out.append(f'auto layer_data = GetLayerDataPtr(GetDispatchKey({command.params[0].name}), layer_data_map);\n')
             # Put all this together for the final down-chain call
             if not down_chain_call_only:
                 out.append(f'if (!wrap_handles) return layer_data->{dispatch_table}.{command.name[2:]}({paramstext});\n')
@@ -429,8 +429,8 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
                                     pre_code += f'{new_prefix}[{index}].initialize(&{member.name}[{index}]);\n'
                             else:
                                 pre_code += f'{new_prefix}[{index}] = {member.name}[{index}];\n'
-                            if process_pnext:
-                                pre_code += f'WrapPnextChainHandles(layer_data, {new_prefix}[{index}].pNext);\n'
+                        if process_pnext:
+                            pre_code += f'WrapPnextChainHandles(layer_data, {new_prefix}[{index}].pNext);\n'
                         local_prefix = f'{new_prefix}[{index}].'
                         # Process sub-structs in this struct
                         (tmp_decl, tmp_pre, tmp_post) = self.uniquifyMembers(struct.members, local_prefix, arrayIndex, isCreate, isDestroy, False)

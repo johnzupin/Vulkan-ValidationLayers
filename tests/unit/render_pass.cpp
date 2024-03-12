@@ -1787,7 +1787,6 @@ TEST_F(NegativeRenderPass, DrawWithPipelineIncompatibleWithRenderPass) {
     rp.CreateRenderPass();
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.gp_ci_.renderPass = rp.Handle();
     pipe.CreateGraphicsPipeline();
@@ -1869,7 +1868,6 @@ TEST_F(NegativeRenderPass, DrawWithPipelineIncompatibleWithRenderPassFragmentDen
     vkt::Framebuffer fb(*m_device, rp1.handle(), 1u, &iv.handle(), 128, 128);
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.gp_ci_.renderPass = rp2.handle();
     pipe.CreateGraphicsPipeline();
@@ -2499,7 +2497,6 @@ TEST_F(NegativeRenderPass, SamplingFromReadOnlyDepthStencilAttachment) {
     const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set_layout, &descriptor_set_layout});
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.gp_ci_.renderPass = rp.Handle();
     pipe.ds_ci_ = vku::InitStruct<VkPipelineDepthStencilStateCreateInfo>();
@@ -2898,9 +2895,8 @@ TEST_F(NegativeRenderPass, MultisampledRenderToSingleSampled) {
     ms_state.alphaToOneEnable = VK_FALSE;
 
     CreatePipelineHelper pipe_helper(*this);
-    pipe_helper.InitState();
     pipe_helper.gp_ci_.renderPass = test_rp.handle();
-    pipe_helper.pipe_ms_state_ci_ = ms_state;
+    pipe_helper.ms_ci_ = ms_state;
 
     // ms_render_to_ss.rasterizationSamples != ms_state.rasterizationSamples
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-renderPass-06854");
@@ -2908,7 +2904,7 @@ TEST_F(NegativeRenderPass, MultisampledRenderToSingleSampled) {
     m_errorMonitor->VerifyFound();
 
     // Actually create a usable pipeline
-    pipe_helper.pipe_ms_state_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
+    pipe_helper.ms_ci_.rasterizationSamples = VK_SAMPLE_COUNT_2_BIT;
     pipe_helper.CreateGraphicsPipeline();
 
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
@@ -3012,9 +3008,9 @@ TEST_F(NegativeRenderPass, MultisampledRenderToSingleSampled) {
     // Positive Test: Image view with VK_SAMPLE_COUNT_1_BIT should not get error 07285 in pipeline created with attachment with
     // VK_SAMPLE_COUNT_2_BIT
     CreatePipelineHelper dr_pipe_helper(*this);
-    dr_pipe_helper.InitState();
     dr_pipe_helper.gp_ci_.renderPass = VK_NULL_HANDLE;
-    dr_pipe_helper.pipe_ms_state_ci_ = ms_state;
+    dr_pipe_helper.ms_ci_ = ms_state;
+    dr_pipe_helper.cb_ci_.attachmentCount = 0;
     dr_pipe_helper.CreateGraphicsPipeline();
     begin_rendering_info.pNext = nullptr;
     color_attachment.resolveImageView = VK_NULL_HANDLE;
@@ -3027,8 +3023,7 @@ TEST_F(NegativeRenderPass, MultisampledRenderToSingleSampled) {
 
     // Positive Test: Same as previous test but using render pass and should not get error 07284
     CreatePipelineHelper test_pipe(*this);
-    test_pipe.InitState();
-    test_pipe.pipe_ms_state_ci_ = ms_state;
+    test_pipe.ms_ci_ = ms_state;
     test_pipe.CreateGraphicsPipeline();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, test_pipe.pipeline_);
@@ -3410,7 +3405,6 @@ TEST_F(NegativeRenderPass, IncompatibleRenderPassSubpassFlags) {
     clear_values[1].color = {{0, 0, 0, 0}};
 
     CreatePipelineHelper pipe(*this);
-    pipe.InitState();
     pipe.gp_ci_.renderPass = render_pass2.handle();
     pipe.CreateGraphicsPipeline();
 
@@ -4122,5 +4116,209 @@ TEST_F(NegativeRenderPass, ImageSubresourceOverlapBetweenCurrentRenderPassAndDes
     m_commandBuffer->BeginRenderPass(render_pass.handle(), framebuffer(), width, height, 2, clear_values);
     m_commandBuffer->end();
 
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeRenderPass, BeginRenderPassWithRenderPassStriped) {
+    TEST_DESCRIPTION("Various tests to validate begin renderpass begininfo with VK_ARM_render_pass_striped.");
+    AddRequiredExtensions(VK_ARM_RENDER_PASS_STRIPED_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::renderPassStriped);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkPhysicalDeviceRenderPassStripedPropertiesARM rp_striped_props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(rp_striped_props);
+
+    const uint32_t stripe_width = rp_striped_props.renderPassStripeGranularity.width;
+    const uint32_t stripe_height = rp_striped_props.renderPassStripeGranularity.height;
+
+    uint32_t stripe_count = rp_striped_props.maxRenderPassStripes + 1;
+    std::vector<VkRenderPassStripeInfoARM> stripe_infos(rp_striped_props.maxRenderPassStripes + 1);
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i] = vku::InitStructHelper();
+        stripe_infos[i].stripeArea.offset.x = stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    VkRenderPassStripeBeginInfoARM rp_stripe_info = vku::InitStructHelper();
+    rp_stripe_info.stripeInfoCount = stripe_count;
+    rp_stripe_info.pStripeInfos = stripe_infos.data();
+
+    m_renderPassBeginInfo.pNext = &rp_stripe_info;
+    m_renderPassBeginInfo.renderArea = {{0, 0}, {stripe_width * stripe_count, stripe_height}};
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeBeginInfoARM-stripeInfoCount-09450");
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    stripe_count = 8;
+    stripe_infos.resize(stripe_count);
+    rp_stripe_info.pStripeInfos = stripe_infos.data();
+    rp_stripe_info.stripeInfoCount = stripe_count;
+    m_renderPassBeginInfo.renderArea.extent = {stripe_width * stripe_count, stripe_height};
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = i > 1 && i <= 4 ? (stripe_width * (i - 1) / 2) : stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09452");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09452");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeBeginInfoARM-stripeArea-09451");
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    const uint32_t half_stripe_width = stripe_width / 2;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = (i == 1 ? half_stripe_width : stripe_width) * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = i == 2 ? half_stripe_width : stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeBeginInfoARM-stripeArea-09451");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09452");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09453");
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    const uint32_t non_align_stripe_width = stripe_width - 12;
+    m_renderPassBeginInfo.renderArea.extent.width = (stripe_width * (stripe_count - 1)) + non_align_stripe_width + 4;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = i == 7 ? non_align_stripe_width : stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09453");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassBeginInfo-pNext-09539");
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    m_renderPassBeginInfo.renderArea.extent = {stripe_width, stripe_height * stripe_count};
+    const uint32_t half_stripe_height = stripe_height / 2;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = 0;
+        stripe_infos[i].stripeArea.offset.y = (i == 1 ? half_stripe_height : stripe_height) * i;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = i == 2 ? half_stripe_height : stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeBeginInfoARM-stripeArea-09451");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09454");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09455");
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+
+    const uint32_t non_align_stripe_height = stripe_height - 12;
+    m_renderPassBeginInfo.renderArea.extent.height = (stripe_height * (stripe_count - 1)) + non_align_stripe_height + 4;
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i].stripeArea.offset.x = 0;
+        stripe_infos[i].stripeArea.offset.y = stripe_height * i;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = i == 7 ? non_align_stripe_height : stripe_height;
+    }
+
+    m_commandBuffer->begin();
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeInfoARM-stripeArea-09455");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassBeginInfo-pNext-09539");
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeRenderPass, RenderPassWithRenderPassStripedQueueSubmit2) {
+    TEST_DESCRIPTION("Test to validate VK_ARM_render_pass_striped with QueueSubmit2.");
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    AddRequiredExtensions(VK_ARM_RENDER_PASS_STRIPED_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::renderPassStriped);
+    AddRequiredExtensions(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::timelineSemaphore);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkPhysicalDeviceRenderPassStripedPropertiesARM rp_striped_props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(rp_striped_props);
+
+    const uint32_t stripe_width = rp_striped_props.renderPassStripeGranularity.width;
+    const uint32_t stripe_height = rp_striped_props.renderPassStripeGranularity.height;
+
+    const uint32_t stripe_count = 4;
+    std::vector<VkRenderPassStripeInfoARM> stripe_infos(stripe_count);
+    for (uint32_t i = 0; i < stripe_count; ++i) {
+        stripe_infos[i] = vku::InitStructHelper();
+        stripe_infos[i].stripeArea.offset.x = stripe_width * i;
+        stripe_infos[i].stripeArea.offset.y = 0;
+        stripe_infos[i].stripeArea.extent.width = stripe_width;
+        stripe_infos[i].stripeArea.extent.height = stripe_height;
+    }
+
+    VkRenderPassStripeBeginInfoARM rp_stripe_info = vku::InitStructHelper();
+    rp_stripe_info.stripeInfoCount = stripe_count;
+    rp_stripe_info.pStripeInfos = stripe_infos.data();
+
+    m_renderPassBeginInfo.pNext = &rp_stripe_info;
+    m_renderPassBeginInfo.renderArea = {{0, 0}, {stripe_width * stripe_count, stripe_height}};
+
+    vkt::CommandPool command_pool(*m_device, m_device->graphics_queue_node_index_);
+    vkt::CommandBuffer cmd_buffer(*m_device, &command_pool);
+
+    VkCommandBufferBeginInfo cmd_begin = vku::InitStructHelper();
+
+    cmd_buffer.begin(&cmd_begin);
+    cmd_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    cmd_buffer.EndRenderPass();
+    cmd_buffer.end();
+
+    VkCommandBufferSubmitInfo cb_submit_info = vku::InitStructHelper();
+    cb_submit_info.commandBuffer = cmd_buffer.handle();
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCommandBufferSubmitInfo-commandBuffer-09445");
+    VkSubmitInfo2KHR submit_info = vku::InitStructHelper();
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &cb_submit_info;
+    vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->wait();
+    m_errorMonitor->VerifyFound();
+
+    VkSemaphoreCreateInfo semaphore_create_info = vku::InitStructHelper();
+    VkSemaphoreTypeCreateInfoKHR semaphore_type_create_info = vku::InitStructHelper();
+    semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    VkSemaphoreCreateInfo semaphore_timeline_create_info = vku::InitStructHelper(&semaphore_type_create_info);
+    vkt::Semaphore semaphore[stripe_count + 1];
+    VkSemaphoreSubmitInfo semaphore_submit_infos[stripe_count + 1];
+
+    for (uint32_t i = 0; i < stripe_count + 1; ++i) {
+        VkSemaphoreCreateInfo create_info = i == 4 ? semaphore_timeline_create_info : semaphore_create_info;
+        semaphore[i].init(*m_device, create_info);
+
+        semaphore_submit_infos[i] = vku::InitStructHelper();
+        semaphore_submit_infos[i].semaphore = semaphore[i].handle();
+    }
+
+    VkRenderPassStripeSubmitInfoARM rp_stripe_submit_info = vku::InitStructHelper();
+    rp_stripe_submit_info.stripeSemaphoreInfoCount = stripe_count + 1;
+    rp_stripe_submit_info.pStripeSemaphoreInfos = semaphore_submit_infos;
+    cb_submit_info.pNext = &rp_stripe_submit_info;
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkCommandBufferSubmitInfo-pNext-09446");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkRenderPassStripeSubmitInfoARM-semaphore-09447");
+    vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_default_queue->wait();
     m_errorMonitor->VerifyFound();
 }

@@ -67,6 +67,7 @@ target_sources(VkLayer_utils PRIVATE
     utils/ray_tracing_utils.h
     utils/vk_layer_utils.cpp
     utils/vk_layer_utils.h
+    utils/vk_safe_struct_manual.cpp
     vk_layer_config.h
     vk_layer_config.cpp
 )
@@ -207,12 +208,6 @@ target_sources(vvl PRIVATE
     ${API_TYPE}/generated/thread_safety_counter_bodies.h
     ${API_TYPE}/generated/thread_safety_counter_definitions.h
     ${API_TYPE}/generated/thread_safety_counter_instances.h
-    ${API_TYPE}/generated/vk_safe_struct_utils.cpp
-    ${API_TYPE}/generated/vk_safe_struct_core.cpp
-    ${API_TYPE}/generated/vk_safe_struct_khr.cpp
-    ${API_TYPE}/generated/vk_safe_struct_ext.cpp
-    ${API_TYPE}/generated/vk_safe_struct_vendor.cpp
-    ${API_TYPE}/generated/vk_safe_struct.h
     gpu_validation/debug_printf.cpp
     gpu_validation/debug_printf.h
     gpu_validation/gpu_descriptor_set.cpp
@@ -232,6 +227,8 @@ target_sources(vvl PRIVATE
     gpu_validation/gpu_validation.h
     gpu_validation/gpu_vuids.cpp
     gpu_validation/gpu_vuids.h
+    gpu_shaders/gpu_error_codes.h
+    gpu_shaders/gpu_error_header.h
     gpu_shaders/gpu_shaders_constants.h
     object_tracker/object_lifetime_validation.h
     object_tracker/object_tracker_utils.cpp
@@ -342,6 +339,8 @@ elseif(APPLE)
 if(IOS)
     set_target_properties(vvl PROPERTIES
 		FRAMEWORK			TRUE
+                MACOSX_FRAMEWORK_BUNDLE_VERSION "${VulkanHeaders_VERSION}"
+                MACOSX_FRAMEWORK_SHORT_VERSION_STRING "${VulkanHeaders_VERSION}"
 		MACOSX_FRAMEWORK_IDENTIFIER 	com.khronos.validation
     )
 else()

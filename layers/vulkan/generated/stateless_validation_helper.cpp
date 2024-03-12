@@ -8211,6 +8211,9 @@ bool StatelessValidation::ValidatePnextStructContents(const Location& loc, const
             }
         } break;
 
+        // No Validation code for VkComputePipelineIndirectBufferInfoNV structure members  -- Covers
+        // VUID-VkComputePipelineIndirectBufferInfoNV-sType-sType
+
         // Validation code for VkPhysicalDeviceLinearColorAttachmentFeaturesNV structure members
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINEAR_COLOR_ATTACHMENT_FEATURES_NV: {  // Covers
                                                                                        // VUID-VkPhysicalDeviceLinearColorAttachmentFeaturesNV-sType-sType
@@ -9153,6 +9156,22 @@ bool StatelessValidation::ValidatePnextStructContents(const Location& loc, const
             }
         } break;
 
+        // Validation code for VkPhysicalDeviceRawAccessChainsFeaturesNV structure members
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV: {  // Covers
+                                                                                 // VUID-VkPhysicalDeviceRawAccessChainsFeaturesNV-sType-sType
+            if (is_const_param) {
+                [[maybe_unused]] const Location pNext_loc = loc.pNext(Struct::VkPhysicalDeviceRawAccessChainsFeaturesNV);
+                if (!IsExtEnabled(device_extensions.vk_nv_raw_access_chains)) {
+                    skip |= LogError(pnext_vuid, instance, pNext_loc,
+                                     "includes a pointer to a VkPhysicalDeviceRawAccessChainsFeaturesNV, but when creating "
+                                     "VkDevice, the parent extension "
+                                     "(VK_NV_raw_access_chains) was not included in ppEnabledExtensionNames.");
+                }
+                VkPhysicalDeviceRawAccessChainsFeaturesNV* structure = (VkPhysicalDeviceRawAccessChainsFeaturesNV*)header;
+                skip |= ValidateBool32(pNext_loc.dot(Field::shaderRawAccessChains), structure->shaderRawAccessChains);
+            }
+        } break;
+
         // Validation code for VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV structure members
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV: {  // Covers
                                                                                             // VUID-VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV-sType-sType
@@ -9167,6 +9186,22 @@ bool StatelessValidation::ValidatePnextStructContents(const Location& loc, const
                 VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV* structure =
                     (VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV*)header;
                 skip |= ValidateBool32(pNext_loc.dot(Field::shaderFloat16VectorAtomics), structure->shaderFloat16VectorAtomics);
+            }
+        } break;
+
+        // Validation code for VkPhysicalDeviceRayTracingValidationFeaturesNV structure members
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV: {  // Covers
+                                                                                      // VUID-VkPhysicalDeviceRayTracingValidationFeaturesNV-sType-sType
+            if (is_const_param) {
+                [[maybe_unused]] const Location pNext_loc = loc.pNext(Struct::VkPhysicalDeviceRayTracingValidationFeaturesNV);
+                if (!IsExtEnabled(device_extensions.vk_nv_ray_tracing_validation)) {
+                    skip |= LogError(pnext_vuid, instance, pNext_loc,
+                                     "includes a pointer to a VkPhysicalDeviceRayTracingValidationFeaturesNV, but when creating "
+                                     "VkDevice, the parent extension "
+                                     "(VK_NV_ray_tracing_validation) was not included in ppEnabledExtensionNames.");
+                }
+                VkPhysicalDeviceRayTracingValidationFeaturesNV* structure = (VkPhysicalDeviceRayTracingValidationFeaturesNV*)header;
+                skip |= ValidateBool32(pNext_loc.dot(Field::rayTracingValidation), structure->rayTracingValidation);
             }
         } break;
 
@@ -9662,12 +9697,14 @@ bool StatelessValidation::PreCallValidateCreateDevice(VkPhysicalDevice physicalD
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RGBA10X6_FORMATS_FEATURES_EXT,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT,
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MOTION_BLUR_FEATURES_NV,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR,
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RELAXED_LINE_RASTERIZATION_FEATURES_IMG,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_FEATURES_ARM,
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV,
@@ -11621,8 +11658,10 @@ bool StatelessValidation::PreCallValidateCreateComputePipelines(VkDevice device,
         for (uint32_t createInfoIndex = 0; createInfoIndex < createInfoCount; ++createInfoIndex) {
             [[maybe_unused]] const Location pCreateInfos_loc = loc.dot(Field::pCreateInfos, createInfoIndex);
             constexpr std::array allowed_structs_VkComputePipelineCreateInfo = {
+                VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_INDIRECT_BUFFER_INFO_NV,
                 VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD,
-                VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR, VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO,
+                VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR,
+                VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO,
                 VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT,
                 VK_STRUCTURE_TYPE_SUBPASS_SHADING_PIPELINE_CREATE_INFO_HUAWEI};
 
@@ -24647,8 +24686,6 @@ bool StatelessValidation::PreCallValidateCmdPreprocessGeneratedCommandsNV(VkComm
                                    pGeneratedCommandsInfo->pipelineBindPoint,
                                    "VUID-VkGeneratedCommandsInfoNV-pipelineBindPoint-parameter");
 
-        skip |= ValidateRequiredHandle(pGeneratedCommandsInfo_loc.dot(Field::pipeline), pGeneratedCommandsInfo->pipeline);
-
         skip |= ValidateRequiredHandle(pGeneratedCommandsInfo_loc.dot(Field::indirectCommandsLayout),
                                        pGeneratedCommandsInfo->indirectCommandsLayout);
 
@@ -24692,8 +24729,6 @@ bool StatelessValidation::PreCallValidateCmdExecuteGeneratedCommandsNV(VkCommand
         skip |= ValidateRangedEnum(pGeneratedCommandsInfo_loc.dot(Field::pipelineBindPoint), vvl::Enum::VkPipelineBindPoint,
                                    pGeneratedCommandsInfo->pipelineBindPoint,
                                    "VUID-VkGeneratedCommandsInfoNV-pipelineBindPoint-parameter");
-
-        skip |= ValidateRequiredHandle(pGeneratedCommandsInfo_loc.dot(Field::pipeline), pGeneratedCommandsInfo->pipeline);
 
         skip |= ValidateRequiredHandle(pGeneratedCommandsInfo_loc.dot(Field::indirectCommandsLayout),
                                        pGeneratedCommandsInfo->indirectCommandsLayout);
@@ -26805,8 +26840,11 @@ bool StatelessValidation::PreCallValidateGetPipelineIndirectMemoryRequirementsNV
     if (pCreateInfo != nullptr) {
         [[maybe_unused]] const Location pCreateInfo_loc = loc.dot(Field::pCreateInfo);
         constexpr std::array allowed_structs_VkComputePipelineCreateInfo = {
-            VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD, VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR,
-            VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO, VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT,
+            VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_INDIRECT_BUFFER_INFO_NV,
+            VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD,
+            VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR,
+            VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO,
+            VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT,
             VK_STRUCTURE_TYPE_SUBPASS_SHADING_PIPELINE_CREATE_INFO_HUAWEI};
 
         skip |= ValidateStructPnext(pCreateInfo_loc, pCreateInfo->pNext, allowed_structs_VkComputePipelineCreateInfo.size(),
