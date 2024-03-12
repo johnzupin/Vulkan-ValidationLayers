@@ -1,3 +1,169 @@
+vulkan-validationlayers (1.3.280.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ spencer-lunarg ]
+  * layers: Add VK_KHR_shader_subgroup_rotate
+  * layers: Ignore Vertex Input State when using Mesh Shader
+
+  [ Artem Kharytoniuk ]
+  * sync: Do not expand stages during sync1->sync2 conversion
+  * tests: Add regression test for sync1->sync2 conversion
+
+  [ Arno ]
+  * tests: Move recent RT tests to GPU-AV
+
+  [ spencer-lunarg ]
+  * layers: Add default colorAttachmentCount check
+  * tests: Fix sync test to use sparse binding queue
+
+  [ Jeremy Gebben ]
+  * tests: Enable core validation for GPU-AV and SyncVal tests
+  * tests: Fix NegativeGpuAVOOB.ObjectUniformBufferTooSmall
+
+  [ Artem Kharytoniuk ]
+  * sync: Filter accesses for async hazard detection
+  * tests: Add async hazard tests
+
+  [ Faith Ekstrand ]
+  * layers: Add validation for VK_EXT_map_memory_placed
+
+  [ spencer-lunarg ]
+  * layers: Add GPL Vertex Input State
+  * layers: Add GPL check for missing linked pipelines
+  * tests: Remove dead code
+  * gpu: Add OpRayQueryInitializeKHR validation
+  * tests: Add missing extensions from Max Profiles
+  * gpuav: Fix VUID from pipeline vs shaderObject
+
+  [ ziga-lunarg ]
+  * tests: Fix shader module identifier test
+
+  [ spencer-lunarg ]
+  * build: Add spirv-opt into external build
+  * gpuav: Update generated spirv
+  * gpu: Add RayQuery Finite float check
+
+  [ Jeremy Gebben ]
+  * tests: Enable NegativeGpuAVOOB.UniformBufferTooSmallNestedStruct
+  * build: Update SPIRV-Tools, -Headers and glslang to latest
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix resource in use error
+
+  [ Nathaniel Cesario ]
+  * cmake: Only require pkg-config if necessary
+
+  [ spencer-lunarg ]
+  * layers: Only print out a single interface error
+  * scripts: Add better detection for external directory
+
+  [ Mohd Faisal ]
+  * layers: Add VK_ARM_render_pass_striped support
+  * tests: Add VK_ARM_render_pass_striped support
+
+  [ Arno ]
+  * gpu: Fix spirv gen script
+
+  [ spencer-lunarg ]
+  * layers: Fix GPL not checking grouped substate
+  * layers: Fix Multiview VU for 07908
+  * gpu: Cleanup error message constants
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.279
+
+  [ spencer-lunarg ]
+  * layers: Ignore pStages for non shader GPL substate
+
+  [ Jeremy Gebben ]
+  * bp: Fix an integer size mismatch warning
+
+  [ Boris Zanin ]
+  * layers: Validation for VK_KHR_dynamic_rendering_local_read
+  * layers: Validation for VK_KHR_dynamic_rendering_local_read
+
+  [ spencer-lunarg ]
+  * layers: Cleanup util file
+  * scripts: Use pickle to cache the VkObject
+
+  [ Arno ]
+  * gpu: Renamings in gpu_error_constants.h
+
+  [ spencer-lunarg ]
+  * layers: Cleanup more error messages
+  * tests: Add more RayQuery GPU-AV tests
+
+  [ James Price ]
+  * gpu: Rename gpu_error_constants.h -> gpu_error_header.h
+
+  [ Arno ]
+  * gpu: Recompile shaders
+
+  [ spencer-lunarg ]
+  * build: Fix circular dependency
+  * layers: Give UNASSIGNED VUs unique name
+  * layers: Check for dynamic vertex input
+
+  [ Artem Kharytoniuk ]
+  * tests: Add tests inspired by issue 7486
+
+  [ spencer-lunarg ]
+  * gn: Use check_call for CI
+  * gn: Fix build
+  * tests: Cleanup pipeline class
+  * layers: Check for VK_FORMAT_UNDEFINED for dynamic rendering
+  * tests: Fix broken main
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Headers, -Tools and glslang to latest
+
+  [ Daniel Rakos ]
+  * layers: Upstream layer, script, and test fixes from SC VVL
+
+  [ Mike Schuchardt ]
+  * scripts: Remove manual header update step
+
+  [ spencer-lunarg ]
+  * scripts: Remove OpenCL SPIR-V from genearted helpers
+  * layers: Fix maxTessellationPatchSize check
+  * scripts: Cleanup the vk_safe_struct scripts
+
+  [ Jeremy Gebben ]
+  * gpu: Redo "Don't wait for idle after every submit"
+
+  [ Richard S. Wright Jr ]
+  * apple: Added version strings to framework plists
+
+  [ Daniel Rakos ]
+  * script: Fix object types generator include issue
+
+  [ spencer-lunarg ]
+  * layers: Check for non-zero stageCount
+  * scripts: Fix WrapPnextChainHandles
+
+  [ Daniel Rakos ]
+  * tests: Fixes related to feature requirement management
+
+  [ Jeremy Gebben ]
+  * layers: Use shared_ptr for CB ImageSubresourceLayoutMaps
+  * layers: Add a unique object id to StateObject
+  * layers: Store Image Ids in CB ImageSubresourceLayoutMaps
+  * layers: Fix set_index calculation in DescriptorValidator
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.280
+
+  [ Jeremy Gebben ]
+  * corechecks: Improve framebuffer usage messages
+
+  [ spencer-lunarg ]
+  * layers: Add missing vkCmdSetLineStippleKHR hook
+  * layers: Do shallow pNext pointer compare
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Tools and glslang for the next SDK
+
+ -- john <john@odin>  Tue, 12 Mar 2024 11:23:39 -0600
+
 vulkan-validationlayers (1.3.278.0~rc1-1lunarg20.04-1) focal; urgency=medium
 
   [ spencer-lunarg ]
