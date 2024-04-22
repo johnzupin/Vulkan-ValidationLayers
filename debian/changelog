@@ -1,3 +1,381 @@
+vulkan-validationlayers (1.3.282.0~rc1-1lunarg20.04-1) focal; urgency=medium
+
+  [ spencer-lunarg ]
+  * layers: Label new VUID from 280 spec
+  * layers: Fix Tessellation component limit check
+  * bp: Track vertex buffer through whole command buffer
+  * layers: Improve format feature error messages
+  * layers: Ignore dynamic color blend with no attachment
+  * layers: Cleanup error_msg name
+  * layers: Add GPL Layout union compatible check
+  * layers: Fix aliasing image bindings with different types
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix WaitForFences leak
+  * tests: Add regression tests for WaitForFences leak
+
+  [ spencer-lunarg ]
+  * layers: Remove strncmp for Location
+  * layers: Split up ValidatePnextStructContents
+  * layers: Fix checking null imported handle type
+  * layers: Fix std build error in main
+  * tests: Use Handle for pipeline helpers
+  * layers: Ignore attachmentCount with dynamic state
+  * build: Fix CI Sanitizer failures
+  * tests: Make dedicated Copy test files
+  * layers: Combined image region loop logic
+  * layers: Linear Sampler check for MinMax reduction mode
+
+  [ ziga-lunarg ]
+  * layers: Fix validating swapchain images
+  * tests: Test acquire before getting swapchain image
+
+  [ Artem Kharytoniuk ]
+  * layers: Add VkSwapchainPresentFenceInfoEXT fence sync support
+  * tests: Test VkSwapchainPresentFenceInfoEXT synchronization
+
+  [ spencer-lunarg ]
+  * layers: Check for valid fragment shader state
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix wsi test for the latest nvidia drivers
+
+  [ ziga-lunarg ]
+  * layers: Fix vuid 01214 message
+
+  [ spencer-lunarg ]
+  * scripts: Default caching the generated source file
+  * layers: Create VUID Map file
+  * layers: Fix crash from sampler pNext
+  * scripts: Create union of pointer group
+  * layers: Removed inline query VUID struct
+  * layers: Use IsPrimary() and IsSeconary()
+  * layers: Use handle name for state tracking
+  * layers: State tracking uses same create_info
+  * tests: Cleanup vkt::Fence inits
+  * layers: Don't check for used object if Device Lost
+  * layers: Move SubresourceRangeErrorCodes to map file
+  * layers: Check DEVICE_LOST for vkDestroyCommandPool
+
+  [ Ramy El Garawany ]
+  * layers: Fix Encode2D/3D for compressed textures
+
+  [ spencer-lunarg ]
+  * scripts: Split up object tracker no autogen
+
+  [ Artem Kharytoniuk ]
+  * tests: Simplify test and make it positive
+  * layers: Cleanup subresource adapter
+
+  [ Jeremy Gebben ]
+  * layers: Remove unused file sparse_containers.h
+
+  [ spencer-lunarg ]
+  * layers: Make more use of const ref
+
+  [ Arno ]
+  * gpu: Deprecate NV RT accel structs validation
+
+  [ spencer-lunarg ]
+  * tests: Add SetDesiredError
+  * tests: Use new SetDesiredError
+  * layers: Add proper vkGetDescriptorSetLayoutSupport support
+  * tests: Add proper vkGetDescriptorSetLayoutSupport support
+  * layers: Add Mesh DrawIndex undefined value
+  * layers: Track lifetime of pipeline libraries
+
+  [ Artem Kharytoniuk ]
+  * layers: Remove unused comparison operator
+  * layers: Do not store payload in timeline SemOps
+  * layers: Use OpType instead of SemOp in filter function
+  * layers: Do not store OpType in timeline SemOps
+  * layers: Do not store acquire command in timeline SemOps
+  * layers: Store submit reference instead of SemOp in timeline
+
+  [ Jeremy Gebben ]
+  * tests: Fix PositiveWsi.CreateXcbSurface on llvmpipe
+
+  [ Eearslya Sleiarion ]
+  * layers: Fix out-of-bounds memory access in BP
+
+  [ spencer-lunarg ]
+  * layers: Pass ValidationStateTracker as reference
+  * tests: Fix NegativeProtectedMemory.Memory
+
+  [ Corentin Noël ]
+  * layers: Mention the actual api version number of the device
+
+  [ spencer-lunarg ]
+  * tests: Split up NegativeDescriptorBuffer.BindingAndOffsets
+  * tests: Fix some test running on lavapipe
+  * scripts: Fix VkDisplayKHR handle wrapping
+  * scripts: Remove unnecessary commands from no autogen
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Headers, SPIRV-Tools and glslang to latest
+
+  [ ziga-lunarg ]
+  * layers: Fix nested cmd buffers with queries
+  * tests: Test nested cmd buffers with queries
+  * layers: Remove broken shader object vuids
+  * tests: Remove tests for removed vuids
+  * layers: Fix sync crash with local read
+  * tests: Test local read image barrier
+
+  [ spencer-lunarg ]
+  * layers: Move functions into DebugReport and rename
+  * gpuav: Don't crash if shader_map fails to find handle
+  * layers: Move some state tracking out of stateless
+  * layers: Remove void pointer with struct name
+  * layers: Make chassis namespace
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.281
+
+  [ spencer-lunarg ]
+  * layers: VU fixes for 1.3.281
+
+  [ ziga-lunarg ]
+  * layers: Fix vuid 09542 for buffer usage 2
+  * tests: Test get AS device address with buffer usage 2
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix arrayPitch computation for ASTC_10x10
+  * tests: Add regression tests for ASTC_10x10 issues
+
+  [ Gareth Webb ]
+  * tests: False failure of test
+  * tests: Test not checking for feature
+  * layers: Segfaulting test
+  * layers: Avoid UB in array validation
+
+  [ spencer-lunarg ]
+  * gpuav: Split debug instructions and make a switch case
+  * layers: Use VkBufferUsageFlags2 everywhere
+  * layers: Use vvl custom container
+
+  [ Artem Kharytoniuk ]
+  * layers: Remove WSI validation dependency on GetSwapchainImages
+
+  [ spencer-lunarg ]
+  * tests: Fix Host Image Copy for Lavapipe
+
+  [ Arno ]
+  * gpu: Move spir-v byte code to source files
+  * gpu: One error buffer per cmd buffer
+  * gpu: Add several errors in several cmd buffs test
+  * gpu: Rename debug_record to error_record
+
+  [ arno-lunarg ]
+  * gpu: Fix shader objects handling
+
+  [ spencer-lunarg ]
+  * glsl: Unify style and fix script for python3.10
+  * layers: Single name for chassis state
+  * layers: Cleanup pipeline class
+  * layers: Seperate Pipeline State tracking
+  * layers: Don't use safe struct when not needed
+  * gpuav: Pass Location down for DebugPrintF
+  * tests: Cleanup and split GPU-AV GPL tests
+  * tests: Add Host Image Copy support for Max Profile
+  * gpuav: Don't create an entire spirv::Module for errors
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup semaphore interface
+  * layers: Update SemOp constructor signature
+  * layers: Replace queue/seq pairs with SubmissionReference
+  * layers: Rename SubmissionReference variables
+  * layers: Update seq default value in SubmissionReference
+  * layers: Fix false-positive when reusing binary semaphore
+  * tests: Add regression test for binary semaphore reuse
+
+  [ ziga-lunarg ]
+  * tests: Add missing checks in coop matrix tests
+
+  [ spencer-lunarg ]
+  * layers: Add new vkCmdBeginTransformFeedbackEXT VU
+  * scripts: Use promoted SPIR-V names
+  * layers: Move things out of chassis.h
+  * printf: Add proper vk_layer_settings support
+  * gpuav: Add Multiple EntryPoint support
+
+  [ Artem Kharytoniuk ]
+  * tests: Add test to demo multiple entries in binary timeline
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Headers, -Tools and glslang to latest
+
+  [ Artem Kharytoniuk ]
+  * layers: Expose semaphore payload instead of operation object
+
+  [ spencer-lunarg ]
+  * layers: Move valid_enum_values.cpp out from Chassis level
+  * layers: Move valid_flag_values.cpp out from Chassis level
+  * layers: Move valid_enum_values.h out from Chassis level
+
+  [ Jeremy Gebben ]
+  * scripts: Fix PlatformGuardHelper.add_guard()
+  * layers: Use new safe struct code from VUL
+
+  [ Arno ]
+  * layers: Add back RT VUs 03703 03704 03705
+  * tests: Add back 03703 03704 03705
+  * gpu: Fix crash
+
+  [ spencer-lunarg ]
+  * tests: Remove comment with incorrect link
+  * chassis: Created dedicated are for chassis level logic
+
+  [ Artem Kharytoniuk ]
+  * layers: Add use cases when to ignore allocation size
+  * tests: Check that allocation size is ignored for DX import
+
+  [ spencer-lunarg ]
+  * tests: Add Multi EntryPoint tests for DebugPrintF
+
+  [ ziga-lunarg ]
+  * layers: Fix VUID 09510 message
+  * layers: Fix null render pass crash
+  * tests: Begin invalid command buffer with imageless framebuffer
+  * layers: Fix attachment check for vkCmdClearAttachments
+  * tests: Test local read clearing attachments
+  * layers: Fix swapped FSR VUIDs
+  * tests: Fix swapped FSR VUIDs
+
+  [ Artem Kharytoniuk ]
+  * layers: Ignore non-zero binary semaphore payload
+  * tests: Add regression test for binary semaphore payload
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Tools and glslang to latest
+
+  [ spencer-lunarg ]
+  * layers: Add util for stage flags
+
+  [ ziga-lunarg ]
+  * layers: Fix imageless framebuffer clear crash
+  * tests: Test clearing attachments of imageless framebuffer
+
+  [ spencer-lunarg ]
+  * tests: Add timer for shader instrumentation
+  * layers: Report VU for bad vkGetDeviceProcAddr
+  * tests: Create dedicated secondary command buffer tests
+
+  [ ziga-lunarg ]
+  * layers: Add missing skips
+
+  [ spencer-lunarg ]
+  * layers: Check if device struct is called from instance func
+  * ci: Add Artifact Uploads
+
+  [ Spencer Fricke ]
+  * ci: Fix job that is protected from main
+  * ci: Set retention-days to match repo settings
+
+  [ spencer-lunarg ]
+  * layers: Move Secondary CommandBuffer tracking to chassis
+
+  [ Artem Kharytoniuk ]
+  * layers: Refactor surface caps caching
+  * tests: Add regression test for issue 7786
+
+  [ ziga-lunarg ]
+  * layers: Validate render pass contents
+  * tests: Test invalid render pass contents
+
+  [ Spencer Fricke ]
+  * docs: Add how to get binaries to README
+
+  [ Arno ]
+  * gpu: Update to address validation
+  * gpu: Add new OOB tests
+
+  [ Artem Kharytoniuk ]
+  * layers: Add explanation why to cache surface caps
+
+  [ spencer-lunarg ]
+  * tests: Re-enable GPU-AV BDA tests
+
+  [ Arno ]
+  * gpu: Fix spirv struct length computation
+
+  [ spencer-lunarg ]
+  * scripts: Add InterceptId where possible
+
+  [ Artem Kharytoniuk ]
+  * layers: Clarify mock icd workaround
+
+  [ Christophe ]
+  * layers: Fix missing sync_queue_submit to true in Sync preset
+
+  [ spencer-lunarg ]
+  * layers: Create a core::CommandBuffer
+  * layers: Move UNASSIGNED to Warning
+  * layer: Cleanup of manual dispatch variables
+  * layers: Warn if Layer is written to a single layer FB
+
+  [ Arno ]
+  * layers: Add 03704 for host accel structs builds
+  * tests: Add 03704
+
+  [ spencer-lunarg ]
+  * gpu: Fix Descriptor Indexing assuming pipeline bound first
+
+  [ Jeremy Gebben ]
+  * build: Update glslang and SPIRV-Tools
+
+  [ spencer-lunarg ]
+  * layers: Unify all GPU-AV settings
+
+  [ ziga-lunarg ]
+  * layers: Fix clearing local read depth attachment
+  * tests: Test clearing local read depth attachment
+
+  [ Shahbaz Youssefi ]
+  * build: Add missing header to gn build
+
+  [ spencer-lunarg ]
+  * layers: Label 09631 VUID
+  * layers: Add draw time primitiveRestartEnable check
+
+  [ Daniel Rakos ]
+  * layers: Relax usage requirements for video formats
+
+  [ Alex Rønne Petersen ]
+  * update_deps.py: Fix to handle Windows Arm64
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix UpdateCapabilitiesCache
+  * tests: Rename xxx_queues() -> QueuesWithXXXCapability()
+  * tests: Add {Compute/Transfer}QueueFamily helpers
+  * tests: Update queue family matching routines
+  * tests: Add helpers to get queue directly
+
+  [ spencer-lunarg ]
+  * layers: Print Patch in interface error message
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.282
+
+  [ spencer-lunarg ]
+  * layers: Check linked GPL for stageCount not zero
+  * layers: Add VU 09635
+
+  [ Graeme Leese ]
+  * layer: Stop checking removed VU
+  * layers: Remove unneeded VUID plumbing
+  * tests: Fix image usage/layout confusion
+
+  [ Artem Kharytoniuk ]
+  * tests: Add second helper queue
+
+  [ spencer-lunarg ]
+  * tests: Fix MaxSampleMaskWords tests
+  * layers: Add robustness check to drawn time vertex buffer
+  * layers: Improve Shader Interface errors
+
+ -- john <john@odin>  Mon, 22 Apr 2024 16:27:15 -0600
+
 vulkan-validationlayers (1.3.280.0~rc2-1lunarg20.04-1) focal; urgency=medium
 
   [ spencer-lunarg ]
