@@ -145,7 +145,7 @@ void CoreChecks::TransitionFinalSubpassLayouts(vvl::CommandBuffer &cb_state) {
         return;
     }
 
-    const VkRenderPassCreateInfo2 *render_pass_info = render_pass_state->createInfo.ptr();
+    const VkRenderPassCreateInfo2 *render_pass_info = render_pass_state->create_info.ptr();
     for (uint32_t i = 0; i < render_pass_info->attachmentCount; ++i) {
         auto *view_state = cb_state.GetActiveAttachmentImageViewState(i);
         if (view_state) {
@@ -339,7 +339,7 @@ bool CoreChecks::ValidateMultipassRenderedToSingleSampledSampleCount(VkFramebuff
                                                                      vvl::Image &image_state, VkSampleCountFlagBits msrtss_samples,
                                                                      const Location &rasterization_samples_loc) const {
     bool skip = false;
-    const auto image_create_info = image_state.createInfo;
+    const auto image_create_info = image_state.create_info;
     if (!image_state.image_format_properties.sampleCounts) {
         skip |= GetPhysicalDeviceImageFormatProperties(image_state, "VUID-VkRenderPassAttachmentBeginInfo-pAttachments-07010",
                                                        rasterization_samples_loc);
@@ -374,8 +374,8 @@ bool CoreChecks::ValidateRenderPassLayoutAgainstFramebufferImageUsage(VkImageLay
     const auto &image = image_state->Handle();
     const bool use_rp2 = rp_loc.function != Func::vkCmdBeginRenderPass;
 
-    auto image_usage = image_state->createInfo.usage;
-    const auto stencil_usage_info = vku::FindStructInPNextChain<VkImageStencilUsageCreateInfo>(image_state->createInfo.pNext);
+    auto image_usage = image_state->create_info.usage;
+    const auto stencil_usage_info = vku::FindStructInPNextChain<VkImageStencilUsageCreateInfo>(image_state->create_info.pNext);
     if (stencil_usage_info) {
         image_usage |= stencil_usage_info->stencilUsage;
     }
@@ -451,8 +451,8 @@ bool CoreChecks::ValidateRenderPassStencilLayoutAgainstFramebufferImageUsage(VkI
     if (!image_state) {
         return skip;  // validated at VUID-VkRenderPassBeginInfo-framebuffer-parameter
     }
-    auto image_usage = image_state->createInfo.usage;
-    const auto stencil_usage_info = vku::FindStructInPNextChain<VkImageStencilUsageCreateInfo>(image_state->createInfo.pNext);
+    auto image_usage = image_state->create_info.usage;
+    const auto stencil_usage_info = vku::FindStructInPNextChain<VkImageStencilUsageCreateInfo>(image_state->create_info.pNext);
     if (stencil_usage_info) {
         image_usage |= stencil_usage_info->stencilUsage;
     }
@@ -471,21 +471,20 @@ bool CoreChecks::ValidateRenderPassStencilLayoutAgainstFramebufferImageUsage(VkI
     return skip;
 }
 
-bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(const vvl::CommandBuffer &cb_state,
-                                                       const VkRenderPassBeginInfo *pRenderPassBegin,
+bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(const vvl::CommandBuffer &cb_state, const VkRenderPassBeginInfo &begin_info,
                                                        const vvl::Framebuffer &framebuffer_state,
                                                        const Location &rp_begin_loc) const {
     bool skip = false;
-    auto render_pass_state = Get<vvl::RenderPass>(pRenderPassBegin->renderPass);
-    const auto *render_pass_info = render_pass_state->createInfo.ptr();
+    auto render_pass_state = Get<vvl::RenderPass>(begin_info.renderPass);
+    const auto *render_pass_info = render_pass_state->create_info.ptr();
     const VkRenderPass render_pass = render_pass_state->VkHandle();
-    auto const &framebuffer_info = framebuffer_state.createInfo;
+    auto const &framebuffer_info = framebuffer_state.create_info;
     const VkImageView *attachments = framebuffer_info.pAttachments;
 
     const VkFramebuffer framebuffer = framebuffer_state.VkHandle();
 
     if (render_pass_info->attachmentCount != framebuffer_info.attachmentCount) {
-        const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state.Handle());
+        const LogObjectList objlist(begin_info.renderPass, framebuffer_state.Handle());
         // VU bieng worked on at https://gitlab.khronos.org/vulkan/vulkan/-/issues/2267
         skip |= LogError("UNASSIGNED-CoreValidation-DrawState-InvalidRenderpass", objlist, rp_begin_loc,
                          "You cannot start a render pass using a framebuffer with a different number of attachments (%" PRIu32
@@ -493,7 +492,7 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(const vvl::CommandBuffer 
                          render_pass_info->attachmentCount, framebuffer_info.attachmentCount);
     }
 
-    const auto *attachment_info = vku::FindStructInPNextChain<VkRenderPassAttachmentBeginInfo>(pRenderPassBegin->pNext);
+    const auto *attachment_info = vku::FindStructInPNextChain<VkRenderPassAttachmentBeginInfo>(begin_info.pNext);
     if (((framebuffer_info.flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT) != 0) && attachment_info != nullptr) {
         attachments = attachment_info->pAttachments;
     }
@@ -513,7 +512,7 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(const vvl::CommandBuffer 
         auto view_state = Get<vvl::ImageView>(image_view);
 
         if (!view_state) {
-            const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state.Handle(), image_view);
+            const LogObjectList objlist(begin_info.renderPass, framebuffer_state.Handle(), image_view);
             skip |= LogError("VUID-VkRenderPassBeginInfo-framebuffer-parameter", objlist, attachment_loc, "%s is invalid.",
                              FormatHandle(image_view).c_str());
             continue;
@@ -523,13 +522,13 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(const vvl::CommandBuffer 
         const auto *image_state = view_state->image_state.get();
 
         if (!image_state) {
-            const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state.Handle(), image_view, image);
+            const LogObjectList objlist(begin_info.renderPass, framebuffer_state.Handle(), image_view, image);
             skip |= LogError("VUID-VkRenderPassBeginInfo-framebuffer-parameter", objlist, attachment_loc,
                              "%s references invalid image (%s).", FormatHandle(image_view).c_str(), FormatHandle(image).c_str());
             continue;
         }
         if (image_state->IsSwapchainImage() && image_state->owned_by_swapchain && !image_state->bind_swapchain) {
-            const LogObjectList objlist(pRenderPassBegin->renderPass, framebuffer_state.Handle(), image_view, image);
+            const LogObjectList objlist(begin_info.renderPass, framebuffer_state.Handle(), image_view, image);
             skip |= LogError("VUID-VkRenderPassBeginInfo-framebuffer-parameter", objlist, attachment_loc,
                              "%s references a swapchain image (%s) from a swapchain that has been destroyed.",
                              FormatHandle(image_view).c_str(), FormatHandle(image).c_str());
@@ -582,7 +581,7 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(const vvl::CommandBuffer 
             LayoutUseCheckAndMessage layout_check(check_layout, test_aspect);
 
             skip |= subresource_map->AnyInRange(
-                normalized_range, [this, &layout_check, i, cb = cb_state.Handle(), render_pass = pRenderPassBegin->renderPass,
+                normalized_range, [this, &layout_check, i, cb = cb_state.Handle(), render_pass = begin_info.renderPass,
                                    framebuffer = framebuffer_state.Handle(), image = view_state->image_state->Handle(),
                                    image_view = view_state->Handle(), attachment_loc,
                                    rp_begin_loc](const LayoutRange &range, const LayoutEntry &state) {
@@ -705,7 +704,7 @@ bool CoreChecks::VerifyFramebufferAndRenderPassLayouts(const vvl::CommandBuffer 
     return skip;
 }
 
-void CoreChecks::TransitionAttachmentRefLayout(vvl::CommandBuffer &cb_state, const safe_VkAttachmentReference2 &ref) {
+void CoreChecks::TransitionAttachmentRefLayout(vvl::CommandBuffer &cb_state, const vku::safe_VkAttachmentReference2 &ref) {
     if (ref.attachment != VK_ATTACHMENT_UNUSED) {
         vvl::ImageView *image_view = cb_state.GetActiveAttachmentImageViewState(ref.attachment);
         if (image_view) {
@@ -722,7 +721,7 @@ void CoreChecks::TransitionAttachmentRefLayout(vvl::CommandBuffer &cb_state, con
 
 void CoreChecks::TransitionSubpassLayouts(vvl::CommandBuffer &cb_state, const vvl::RenderPass &render_pass_state,
                                           const int subpass_index) {
-    auto const &subpass = render_pass_state.createInfo.pSubpasses[subpass_index];
+    auto const &subpass = render_pass_state.create_info.pSubpasses[subpass_index];
     for (uint32_t j = 0; j < subpass.inputAttachmentCount; ++j) {
         TransitionAttachmentRefLayout(cb_state, subpass.pInputAttachments[j]);
     }
@@ -739,7 +738,7 @@ void CoreChecks::TransitionSubpassLayouts(vvl::CommandBuffer &cb_state, const vv
 // 2. Transition from initialLayout to layout used in subpass 0
 void CoreChecks::TransitionBeginRenderPassLayouts(vvl::CommandBuffer &cb_state, const vvl::RenderPass &render_pass_state) {
     // First record expected initialLayout as a potential initial layout usage.
-    auto const rpci = render_pass_state.createInfo.ptr();
+    auto const rpci = render_pass_state.create_info.ptr();
     for (uint32_t i = 0; i < rpci->attachmentCount; ++i) {
         auto *view_state = cb_state.GetActiveAttachmentImageViewState(i);
         if (view_state) {
@@ -841,7 +840,7 @@ bool CoreChecks::UpdateCommandBufferImageLayoutMap(const vvl::CommandBuffer &cb_
         iter->second.map = write_subresource_map;
         new_write = true;
     } else {
-        write_subresource_map = iter->second.map; 
+        write_subresource_map = iter->second.map;
     }
     const auto &current_subresource_map = current_map.find(image_state->VkHandle());
     const auto read_subresource_map =
@@ -893,7 +892,7 @@ bool CoreChecks::FindLayouts(const vvl::Image &image_state, std::vector<VkImageL
     // TODO: what is this test and what is it supposed to do?! -- the logic doesn't match the comment below?!
 
     // TODO: Make this robust for >1 aspect mask. Now it will just say ignore potential errors in this case.
-    if (layout_range_map->size() >= (image_state.createInfo.arrayLayers * image_state.createInfo.mipLevels + 1)) {
+    if (layout_range_map->size() >= (image_state.create_info.arrayLayers * image_state.create_info.mipLevels + 1)) {
         return false;
     }
 
@@ -958,13 +957,13 @@ void CoreChecks::TransitionImageLayouts(vvl::CommandBuffer &cb_state, uint32_t b
 
 bool CoreChecks::IsCompliantSubresourceRange(const VkImageSubresourceRange &subres_range, const vvl::Image &image_state) const {
     if (!(subres_range.layerCount) || !(subres_range.levelCount)) return false;
-    if (subres_range.baseMipLevel + subres_range.levelCount > image_state.createInfo.mipLevels) return false;
-    if ((subres_range.baseArrayLayer + subres_range.layerCount) > image_state.createInfo.arrayLayers) {
+    if (subres_range.baseMipLevel + subres_range.levelCount > image_state.create_info.mipLevels) return false;
+    if ((subres_range.baseArrayLayer + subres_range.layerCount) > image_state.create_info.arrayLayers) {
         return false;
     }
-    if (!VerifyAspectsPresent(subres_range.aspectMask, image_state.createInfo.format)) return false;
-    if (((vkuFormatPlaneCount(image_state.createInfo.format) < 3) && (subres_range.aspectMask & VK_IMAGE_ASPECT_PLANE_2_BIT)) ||
-        ((vkuFormatPlaneCount(image_state.createInfo.format) < 2) && (subres_range.aspectMask & VK_IMAGE_ASPECT_PLANE_1_BIT)))
+    if (!VerifyAspectsPresent(subres_range.aspectMask, image_state.create_info.format)) return false;
+    if (((vkuFormatPlaneCount(image_state.create_info.format) < 3) && (subres_range.aspectMask & VK_IMAGE_ASPECT_PLANE_2_BIT)) ||
+        ((vkuFormatPlaneCount(image_state.create_info.format) < 2) && (subres_range.aspectMask & VK_IMAGE_ASPECT_PLANE_1_BIT)))
         return false;
     if (subres_range.aspectMask & VK_IMAGE_ASPECT_METADATA_BIT ||
         subres_range.aspectMask & VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT ||
@@ -976,18 +975,16 @@ bool CoreChecks::IsCompliantSubresourceRange(const VkImageSubresourceRange &subr
     return true;
 }
 
-bool CoreChecks::ValidateHostCopyCurrentLayout(VkDevice device, const VkImageLayout expected_layout,
-                                               const VkImageSubresourceLayers &subres_layers, uint32_t region_index,
-                                               const vvl::Image &image_state, const Location &loc, const char *image_label,
-                                               const char *vuid) const {
-    return ValidateHostCopyCurrentLayout(device, expected_layout, RangeFromLayers(subres_layers), region_index, image_state, loc,
+bool CoreChecks::ValidateHostCopyCurrentLayout(const VkImageLayout expected_layout, const VkImageSubresourceLayers &subres_layers,
+                                               uint32_t region_index, const vvl::Image &image_state, const Location &loc,
+                                               const char *image_label, const char *vuid) const {
+    return ValidateHostCopyCurrentLayout(expected_layout, RangeFromLayers(subres_layers), region_index, image_state, loc,
                                          image_label, vuid);
 }
 
-bool CoreChecks::ValidateHostCopyCurrentLayout(VkDevice device, const VkImageLayout expected_layout,
-                                               const VkImageSubresourceRange &validate_range, uint32_t region_index,
-                                               const vvl::Image &image_state, const Location &loc, const char *image_label,
-                                               const char *vuid) const {
+bool CoreChecks::ValidateHostCopyCurrentLayout(const VkImageLayout expected_layout, const VkImageSubresourceRange &validate_range,
+                                               uint32_t region_index, const vvl::Image &image_state, const Location &loc,
+                                               const char *image_label, const char *vuid) const {
     using Map = GlobalImageLayoutRangeMap;
     bool skip = false;
     if (disabled[image_layout_validation]) return false;
@@ -1025,12 +1022,11 @@ bool CoreChecks::ValidateHostCopyCurrentLayout(VkDevice device, const VkImageLay
 
     if (check_state.found_range.non_empty()) {
         const VkImageSubresource subres = image_state.subresource_encoder.IndexToVkSubresource(check_state.found_range.begin);
-        LogObjectList objlist(device, image_state.Handle());
         skip |=
-            LogError(vuid, objlist, loc,
+            LogError(vuid, image_state.Handle(), loc,
                      "expected to be %s. Incorrect image layout for %s %s. Current layout is %s for subresource in region %" PRIu32
                      " (aspectMask=%s, mipLevel=%" PRIu32 ", arrayLayer=%" PRIu32 ")",
-                     string_VkImageLayout(expected_layout), image_label, report_data->FormatHandle(image_state.Handle()).c_str(),
+                     string_VkImageLayout(expected_layout), image_label, debug_report->FormatHandle(image_state.Handle()).c_str(),
                      string_VkImageLayout(check_state.found_layout), region_index,
                      string_VkImageAspectFlags(subres.aspectMask).c_str(), subres.mipLevel, subres.arrayLayer);
     }

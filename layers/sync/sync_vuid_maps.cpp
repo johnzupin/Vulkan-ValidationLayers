@@ -1199,6 +1199,11 @@ static const std::map<ImageError, std::vector<Entry>> kImageErrors{
          {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-dynamicRenderingLocalRead-09551"},
          {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-dynamicRenderingLocalRead-09551"},
      }},
+    {ImageError::kAspectMask,
+     {
+         {Key(Struct::VkImageMemoryBarrier), "VUID-VkImageMemoryBarrier-subresourceRange-09601"},
+         {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-subresourceRange-09601"},
+     }},
 };
 
 const std::string &GetImageBarrierVUID(const Location &loc, ImageError error) {
@@ -1209,22 +1214,6 @@ const std::string &GetImageBarrierVUID(const Location &loc, ImageError error) {
         return unhandled;
     }
     return result;
-}
-
-const SubresourceRangeErrorCodes &GetSubResourceVUIDs(const Location &loc) {
-    static const SubresourceRangeErrorCodes v1{
-        "VUID-VkImageMemoryBarrier-subresourceRange-01486",
-        "VUID-VkImageMemoryBarrier-subresourceRange-01724",
-        "VUID-VkImageMemoryBarrier-subresourceRange-01488",
-        "VUID-VkImageMemoryBarrier-subresourceRange-01725",
-    };
-    static const SubresourceRangeErrorCodes v2{
-        "VUID-VkImageMemoryBarrier2-subresourceRange-01486",
-        "VUID-VkImageMemoryBarrier2-subresourceRange-01724",
-        "VUID-VkImageMemoryBarrier2-subresourceRange-01488",
-        "VUID-VkImageMemoryBarrier2-subresourceRange-01725",
-    };
-    return (loc.structure == Struct::VkImageMemoryBarrier2) ? v2 : v1;
 }
 
 static const std::map<SubmitError, std::vector<Entry>> kSubmitErrors{

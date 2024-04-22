@@ -52,6 +52,8 @@ struct DescSetState {
 struct DescBindingInfo {
     VkBuffer bindless_state_buffer;
     VmaAllocation bindless_state_buffer_allocation;
+    // Hold a buffer for each descriptor set
+    // Note: The index here is from vkCmdBindDescriptorSets::firstSet
     std::vector<DescSetState> descriptor_set_buffers;
 };
 
@@ -66,42 +68,74 @@ struct CmdIndirectState {
     VkDeviceAddress indirectDeviceAddress;
 };
 
-struct AccelerationStructureBuildValidationInfo {
-    // The acceleration structure that is being built.
-    VkAccelerationStructureNV acceleration_structure = VK_NULL_HANDLE;
-
-    // The descriptor pool and descriptor set being used to validate a given build.
-    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
-    VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
-
-    // The storage buffer used by the validating compute shader which contains info about
-    // the valid handles and which is written to communicate found invalid handles.
-    VkBuffer buffer = VK_NULL_HANDLE;
-    VmaAllocation buffer_allocation = VK_NULL_HANDLE;
-};
-
 class CommandBuffer : public gpu_tracker::CommandBuffer {
   public:
     // per validated command state
     std::vector<std::unique_ptr<CommandResources>> per_command_resources;
     // per vkCmdBindDescriptorSet() state
     std::vector<DescBindingInfo> di_input_buffer_list;
-    std::vector<AccelerationStructureBuildValidationInfo> as_validation_buffers;
     VkBuffer current_bindless_buffer = VK_NULL_HANDLE;
+    uint32_t draw_index = 0, compute_index = 0, trace_rays_index = 0;
 
-    CommandBuffer(Validator *ga, VkCommandBuffer cb, const VkCommandBufferAllocateInfo *pCreateInfo, const vvl::CommandPool *pool);
+    CommandBuffer(Validator &gpuav, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *pCreateInfo,
+                  const vvl::CommandPool *pool);
     ~CommandBuffer();
 
     bool PreProcess() final;
     void PostProcess(VkQueue queue, const Location &loc) final;
 
+    const VkDescriptorSetLayout &GetInstrumentationDescriptorSetLayout() const {
+        assert(instrumentation_desc_set_layout_ != VK_NULL_HANDLE);
+        return instrumentation_desc_set_layout_;
+    }
+
+    // Bindings: {error output buffer}
+    const VkDescriptorSet &GetValidationCmdCommonDescriptorSet() const {
+        assert(validation_cmd_desc_set_ != VK_NULL_HANDLE);
+        return validation_cmd_desc_set_;
+    }
+
+    const VkDescriptorSetLayout &GetValidationCmdCommonDescriptorSetLayout() const {
+        assert(validation_cmd_desc_set_layout_ != VK_NULL_HANDLE);
+        return validation_cmd_desc_set_layout_;
+    }
+
+    uint32_t GetValidationErrorBufferDescSetIndex() const { return 0; }
+
+    const VkBuffer &GetErrorOutputBuffer() const {
+        assert(error_output_buffer_.buffer != VK_NULL_HANDLE);
+        return error_output_buffer_.buffer;
+    }
+
+    VkDeviceSize GetCmdErrorsCountsBufferByteSize() const { return 8192 * sizeof(uint32_t); }
+
+    const VkBuffer &GetCmdErrorsCountsBuffer() const {
+        assert(cmd_errors_counts_buffer_.buffer != VK_NULL_HANDLE);
+        return cmd_errors_counts_buffer_.buffer;
+    }
+
+    void ClearCmdErrorsCountsBuffer() const;
+
     void Destroy() final;
     void Reset() final;
 
   private:
-    Validator &state_;
+    void AllocateResources();
     void ResetCBState();
-    void ProcessAccelerationStructure(VkQueue queue, const Location &loc);
+
+    Validator &state_;
+
+    VkDescriptorSetLayout instrumentation_desc_set_layout_ = VK_NULL_HANDLE;
+
+    VkDescriptorSetLayout validation_cmd_desc_set_layout_ = VK_NULL_HANDLE;
+    VkDescriptorSet validation_cmd_desc_set_ = VK_NULL_HANDLE;
+    VkDescriptorPool validation_cmd_desc_pool_ = VK_NULL_HANDLE;
+
+    // Buffer storing GPU-AV errors
+    DeviceMemoryBlock error_output_buffer_ = {};
+    // Buffer storing an error count per validated commands.
+    // Used to limit the number of errors a single command can emit.
+    DeviceMemoryBlock cmd_errors_counts_buffer_ = {};
 };
 
 class Queue : public gpu_tracker::Queue {
@@ -114,7 +148,7 @@ class Queue : public gpu_tracker::Queue {
 
 class Buffer : public vvl::Buffer {
   public:
-    Buffer(ValidationStateTracker *dev_data, VkBuffer buff, const VkBufferCreateInfo *pCreateInfo, DescriptorHeap &desc_heap_);
+    Buffer(ValidationStateTracker &dev_data, VkBuffer buff, const VkBufferCreateInfo *pCreateInfo, DescriptorHeap &desc_heap_);
 
     void Destroy() final;
     void NotifyInvalidate(const NodeList &invalid_nodes, bool unlink) final;

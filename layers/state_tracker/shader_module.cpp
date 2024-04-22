@@ -145,7 +145,7 @@ void ExecutionModeSet::Add(const Instruction& insn) {
             primitive_topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
             break;
         case spv::ExecutionModeOutputLineStrip:
-        case spv::ExecutionModeOutputLinesNV:
+        case spv::ExecutionModeOutputLinesEXT:  // alias ExecutionModeOutputLinesNV
             primitive_topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
             break;
         case spv::ExecutionModeTriangles:
@@ -163,7 +163,7 @@ void ExecutionModeSet::Add(const Instruction& insn) {
             tessellation_subdivision = spv::ExecutionModeQuads;
             break;
         case spv::ExecutionModeOutputTriangleStrip:
-        case spv::ExecutionModeOutputTrianglesNV:
+        case spv::ExecutionModeOutputTrianglesEXT:  // alias ExecutionModeOutputTrianglesNV
             primitive_topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
             break;
         case spv::ExecutionModeInputPoints:
@@ -609,7 +609,7 @@ ImageAccess::ImageAccess(const Module& module_state, const Instruction& image_in
 
     auto walk_to_variables = [this, &module_state, &sampler_insn_to_search](const Instruction* insn, bool sampler) {
         // Protect from loops
-        std::unordered_set<uint32_t> visited;
+        vvl::unordered_set<uint32_t> visited;
 
         // stack of function call sites to search through
         std::queue<const Instruction*> insn_to_search;
@@ -766,6 +766,9 @@ EntryPoint::EntryPoint(const Module& module_state, const Instruction& entrypoint
         if ((decoration_inst->GetBuiltIn() == spv::BuiltInPointSize) && module_state.IsBuiltInWritten(decoration_inst, *this)) {
             written_builtin_point_size = true;
         }
+        if ((decoration_inst->GetBuiltIn() == spv::BuiltInLayer) && module_state.IsBuiltInWritten(decoration_inst, *this)) {
+            written_builtin_layer = true;
+        }
         if ((decoration_inst->GetBuiltIn() == spv::BuiltInPrimitiveShadingRateKHR) &&
             module_state.IsBuiltInWritten(decoration_inst, *this)) {
             written_builtin_primitive_shading_rate_khr = true;
@@ -811,7 +814,7 @@ Module::StaticData::StaticData(const Module& module_state, StatelessData* statel
                 }
             }
 
-            instructions.push_back(insn);
+            instructions.emplace_back(insn);
             it += insn.Length();
         }
         instructions.shrink_to_fit();
@@ -827,7 +830,7 @@ Module::StaticData::StaticData(const Module& module_state, StatelessData* statel
 
     uint32_t last_func_id = 0;
     // < Function ID, OpFunctionParameter Ids >
-    std::unordered_map<uint32_t, std::vector<uint32_t>> func_parameter_list;
+    vvl::unordered_map<uint32_t, std::vector<uint32_t>> func_parameter_list;
 
     // Loop through once and build up the static data
     // Also process the entry points
@@ -887,10 +890,6 @@ Module::StaticData::StaticData(const Module& module_state, StatelessData* statel
                 if (stateless_data) {
                     stateless_data->transform_feedback_stream_inst.push_back(&insn);
                 }
-                break;
-
-            case spv::OpString:
-                debug_string_inst.push_back(&insn);
                 break;
 
             // Execution Mode
@@ -1077,15 +1076,18 @@ Module::StaticData::StaticData(const Module& module_state, StatelessData* statel
     }
 
     for (const Instruction* decoration_inst : builtin_decoration_inst) {
-        if (decoration_inst->GetBuiltIn() == spv::BuiltInLayer) {
+        const uint32_t built_in = decoration_inst->GetBuiltIn();
+        if (built_in == spv::BuiltInLayer) {
             has_builtin_layer = true;
-        } else if (decoration_inst->GetBuiltIn() == spv::BuiltInFullyCoveredEXT) {
+        } else if (built_in == spv::BuiltInFullyCoveredEXT) {
             if (stateless_data) {
                 stateless_data->has_builtin_fully_covered = true;
             }
-        } else if (decoration_inst->GetBuiltIn() == spv::BuiltInWorkgroupSize) {
+        } else if (built_in == spv::BuiltInWorkgroupSize) {
             has_builtin_workgroup_size = true;
             builtin_workgroup_size_id = decoration_inst->Word(1);
+        } else if (built_in == spv::BuiltInDrawIndex) {
+            has_builtin_draw_index = true;
         }
     }
 
@@ -1114,11 +1116,48 @@ Module::StaticData::StaticData(const Module& module_state, StatelessData* statel
     }
 }
 
+std::string Module::GetDecorations(uint32_t id) const {
+    std::ostringstream ss;
+    for (const spirv::Instruction& insn : GetInstructions()) {
+        if (insn.Opcode() == spv::OpFunction) {
+            break;  // decorations are found before first function block
+        } else if (insn.Opcode() == spv::OpDecorate && insn.Word(1) == id) {
+            ss << " " << string_SpvDecoration(insn.Word(2));
+        }
+    }
+    return ss.str();
+}
+
+std::string Module::GetName(uint32_t id) const {
+    for (const spirv::Instruction& insn : GetInstructions()) {
+        if (insn.Opcode() == spv::OpFunction) {
+            break;  // names are found before first function block
+        } else if (insn.Opcode() == spv::OpName && insn.Word(1) == id) {
+            return insn.GetAsString(2);
+        }
+    }
+    return "";
+}
+
+std::string Module::GetMemberName(uint32_t id, uint32_t member_index) const {
+    for (const spirv::Instruction& insn : GetInstructions()) {
+        if (insn.Opcode() == spv::OpFunction) {
+            break;  // names are found before first function block
+        } else if (insn.Opcode() == spv::OpMemberName && insn.Word(1) == id && insn.Word(2) == member_index) {
+            return insn.GetAsString(3);
+        }
+    }
+    return "";
+}
+
+// Used to pretty-print the OpType* for an error message
 void Module::DescribeTypeInner(std::ostringstream& ss, uint32_t type, uint32_t indent) const {
     const Instruction* insn = FindDef(type);
-    for (uint32_t i = 0; i < indent; i++) {
-        ss << "\t";
-    }
+    auto indent_by = [&ss](uint32_t i) {
+        for (uint32_t x = 0; x < i; x++) {
+            ss << "\t";
+        }
+    };
 
     switch (insn->Opcode()) {
         case spv::OpTypeBool:
@@ -1140,29 +1179,39 @@ void Module::DescribeTypeInner(std::ostringstream& ss, uint32_t type, uint32_t i
             break;
         case spv::OpTypeArray:
             ss << "array[" << GetConstantValueById(insn->Word(3)) << "] of ";
-            DescribeTypeInner(ss, insn->Word(2), 0);  // if struct, has pointer in between
+            DescribeTypeInner(ss, insn->Word(2), indent);
             break;
         case spv::OpTypeRuntimeArray:
             ss << "runtime array[] of ";
-            DescribeTypeInner(ss, insn->Word(2), 0);  // if struct, has pointer in between
+            DescribeTypeInner(ss, insn->Word(2), indent);
             break;
         case spv::OpTypePointer:
-            ss << "pointer to " << string_SpvStorageClass(insn->Word(2)) << " ->\n";
-            indent++;
+            ss << "pointer to " << string_SpvStorageClass(insn->Word(2)) << " -> ";
             DescribeTypeInner(ss, insn->Word(3), indent);
             break;
         case spv::OpTypeStruct: {
             ss << "struct of {\n";
             indent++;
             for (uint32_t i = 2; i < insn->Length(); i++) {
+                indent_by(indent);
+                ss << "- ";
                 DescribeTypeInner(ss, insn->Word(i), indent);
+
+                auto name = GetMemberName(type, i - 2);
+                if (!name.empty()) {
+                    ss << " \"" << name << "\"";
+                }
+
                 ss << "\n";
             }
             indent--;
-            for (uint32_t i = 0; i < indent; i++) {
-                ss << "\t";
-            }
+            indent_by(indent);
             ss << "}";
+
+            auto name = GetName(type);
+            if (!name.empty()) {
+                ss << " \"" << name << "\"";
+            }
             break;
         }
         case spv::OpTypeSampler:
@@ -1187,6 +1236,20 @@ void Module::DescribeTypeInner(std::ostringstream& ss, uint32_t type, uint32_t i
 std::string Module::DescribeType(uint32_t type) const {
     std::ostringstream ss;
     DescribeTypeInner(ss, type, 0);
+    return ss.str();
+}
+
+std::string Module::DescribeVariable(uint32_t id) const {
+    std::ostringstream ss;
+    auto name = GetName(id);
+    if (!name.empty()) {
+        ss << "Variable \"" << name << "\"";
+        auto decorations = GetDecorations(id);
+        if (!decorations.empty()) {
+            ss << " (Decorations:" << decorations << ")";
+        }
+        ss << "\n";
+    }
     return ss.str();
 }
 
@@ -1997,6 +2060,10 @@ ResourceInterfaceVariable::ResourceInterfaceVariable(const Module& module_state,
                 info.is_sampler_offset |= image_access.is_sampler_offset;
                 info.is_sign_extended |= image_access.is_sign_extended;
                 info.is_zero_extended |= image_access.is_zero_extended;
+
+                if (array_length > 1) {
+                    image_access_chain_indexes.insert(image_access.image_access_chain_index);
+                }
                 is_written_to |= image_access.is_written_to;
                 is_read_from |= image_access.is_read_from;
 

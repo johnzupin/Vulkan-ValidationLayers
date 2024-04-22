@@ -25,8 +25,14 @@ struct GpuAVSettings {
     bool warn_on_robust_oob = true;
     bool cache_instrumented_shaders = true;
     bool select_instrumented_shaders = false;
-    uint32_t gpuav_max_buffer_device_addresses = 10000;
+    uint32_t max_buffer_device_addresses = 10000;
 
-    bool gpuav_debug_validate_instrumented_shaders = false;
-    bool gpuav_debug_dump_instrumented_shaders = false;
+    bool debug_validate_instrumented_shaders = false;
+    bool debug_dump_instrumented_shaders = false;
+};
+
+struct DebugPrintfSettings {
+    bool to_stdout = false;
+    bool verbose = false;
+    uint32_t buffer_size = 1024;
 };

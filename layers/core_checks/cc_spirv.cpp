@@ -28,7 +28,7 @@
 #include "generated/spirv_grammar_helper.h"
 #include "utils/shader_utils.h"
 #include "utils/hash_util.h"
-#include "state_tracker/chassis_modification_state.h"
+#include "chassis/chassis_modification_state.h"
 #include "state_tracker/descriptor_sets.h"
 #include "state_tracker/render_pass_state.h"
 
@@ -49,7 +49,7 @@ bool CoreChecks::ValidateShaderInputAttachment(const spirv::Module &module_state
         if (!variable.input_attachment_index_read[i]) {
             continue;
         }
-        const auto rpci = rp_state->createInfo.ptr();
+        const auto rpci = rp_state->create_info.ptr();
         const uint32_t subpass = pipeline.Subpass();
         const auto subpass_description = rpci->pSubpasses[subpass];
         const auto input_attachments = subpass_description.pInputAttachments;
@@ -825,7 +825,7 @@ bool CoreChecks::ValidateShaderResolveQCOM(const spirv::Module &module_state, Vk
     // then the fragment shader must not enable the SPIRV SampleRateShading capability.
     if (stage == VK_SHADER_STAGE_FRAGMENT_BIT && module_state.HasCapability(spv::CapabilitySampleRateShading)) {
         const auto &rp_state = pipeline.RenderPassState();
-        auto subpass_flags = (!rp_state) ? 0 : rp_state->createInfo.pSubpasses[pipeline.Subpass()].flags;
+        auto subpass_flags = (!rp_state) ? 0 : rp_state->create_info.pSubpasses[pipeline.Subpass()].flags;
         if ((subpass_flags & VK_SUBPASS_DESCRIPTION_FRAGMENT_REGION_BIT_QCOM) != 0) {
             const LogObjectList objlist(module_state.handle(), rp_state->Handle());
             skip |= LogError("VUID-RuntimeSpirv-SampleRateShading-06378", objlist, loc,
@@ -1524,7 +1524,7 @@ bool CoreChecks::ValidateTransformFeedbackDecorations(const spirv::Module &modul
         }
     }
 
-    std::unordered_map<uint32_t, uint32_t> stream_data_size;
+    vvl::unordered_map<uint32_t, uint32_t> stream_data_size;
     for (const spirv::Instruction *xfb_stream : xfb_streams) {
         for (const auto &bds : buffer_data_sizes) {
             if (xfb_stream->Word(1) == bds.first) {
@@ -2080,11 +2080,11 @@ bool CoreChecks::ValidateShaderTileImage(const spirv::Module &module_state, cons
 
     if (create_info.pipeline) {
         const auto &pipeline = *create_info.pipeline;
-        if (pipeline.GetCreateInfo<VkGraphicsPipelineCreateInfo>().renderPass != VK_NULL_HANDLE) {
+        auto rp = pipeline.GraphicsCreateInfo().renderPass;
+        if (rp != VK_NULL_HANDLE) {
             skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-08710", module_state.handle(), loc,
                              "SPIR-V (Fragment stage) is using capabilities (%s), but renderpass (%s) is not VK_NULL_HANDLE.",
-                             GetShaderTileImageCapabilitiesString(module_state).c_str(),
-                             FormatHandle(pipeline.GetCreateInfo<VkGraphicsPipelineCreateInfo>().renderPass).c_str());
+                             GetShaderTileImageCapabilitiesString(module_state).c_str(), FormatHandle(rp).c_str());
         }
 
         const bool mode_early_fragment_test = entrypoint.execution_mode.Has(spirv::ExecutionModeSet::early_fragment_test_bit);
@@ -2359,7 +2359,7 @@ bool CoreChecks::ValidatePipelineShaderStage(const StageCreateInfo &stage_create
     }
     if (stage_create_info.pipeline) {
         if (stage == VK_SHADER_STAGE_FRAGMENT_BIT &&
-            stage_create_info.pipeline->GetCreateInfo<VkGraphicsPipelineCreateInfo>().renderPass == VK_NULL_HANDLE &&
+            stage_create_info.pipeline->GraphicsCreateInfo().renderPass == VK_NULL_HANDLE &&
             module_state.HasCapability(spv::CapabilityInputAttachment) && !enabled_features.dynamicRenderingLocalRead) {
             skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-06061", device, loc,
                              "is being created with fragment shader state and renderPass = VK_NULL_HANDLE, but fragment "
@@ -2475,25 +2475,23 @@ static ValidationCache *GetValidationCacheInfo(VkShaderModuleCreateInfo const *p
 // See diagram on https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/6230
 void CoreChecks::PreCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule,
-                                                 const RecordObject &record_obj, void *csm_state_data) {
-    // Normally would validate in PreCallValidate, but need a non-const function to update csm_state
+                                                 const RecordObject &record_obj, chassis::CreateShaderModule &chassis_state) {
+    // Normally would validate in PreCallValidate, but need a non-const function to update chassis_state
     // This is on the stack, we don't have to worry about threading hazards and this could be moved and used const_cast
     ValidationStateTracker::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, record_obj,
-                                                            csm_state_data);
-    create_shader_module_api_state *csm_state = static_cast<create_shader_module_api_state *>(csm_state_data);
-    csm_state->skip |= ValidateSpirvStateless(*csm_state->module_state, csm_state->stateless_data, record_obj.location);
+                                                            chassis_state);
+    chassis_state.skip |= ValidateSpirvStateless(*chassis_state.module_state, chassis_state.stateless_data, record_obj.location);
 }
 
 void CoreChecks::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
                                                const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
-                                               const RecordObject &record_obj, void *csm_state_data) {
+                                               const RecordObject &record_obj, chassis::ShaderObject &chassis_state) {
     ValidationStateTracker::PreCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj,
-                                                          csm_state_data);
-    create_shader_object_api_state *csm_state = static_cast<create_shader_object_api_state *>(csm_state_data);
+                                                          chassis_state);
     for (uint32_t i = 0; i < createInfoCount; ++i) {
-        if (csm_state->module_states[i]) {
-            csm_state->skip |= ValidateSpirvStateless(*csm_state->module_states[i], csm_state->stateless_data[i],
-                                                      record_obj.location.dot(Field::pCreateInfos, i));
+        if (chassis_state.module_states[i]) {
+            chassis_state.skip |= ValidateSpirvStateless(*chassis_state.module_states[i], chassis_state.stateless_data[i],
+                                                         record_obj.location.dot(Field::pCreateInfos, i));
         }
     }
 }

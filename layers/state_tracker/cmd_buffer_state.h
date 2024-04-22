@@ -56,6 +56,19 @@ static bool GetMetalExport(const VkEventCreateInfo *info) {
 }
 #endif  // VK_USE_PLATFORM_METAL_EXT
 
+// Only CoreChecks uses this, but the state tracker stores it.
+constexpr static auto kInvalidLayout = image_layout_map::kInvalidLayout;
+using ImageSubresourceLayoutMap = image_layout_map::ImageSubresourceLayoutMap;
+typedef vvl::unordered_map<VkEvent, VkPipelineStageFlags2KHR> EventToStageMap;
+
+enum class CbState {
+    New,                // Newly created CB w/o any cmds
+    Recording,          // BeginCB has been called on this CB
+    Recorded,           // EndCB has been called on this CB
+    InvalidComplete,    // had a complete recording, but was since invalidated
+    InvalidIncomplete,  // fouled before recording was completed
+};
+
 namespace vvl {
 
 class Event : public StateObject {
@@ -72,8 +85,8 @@ class Event : public StateObject {
     // Queue that signaled this event. It's null if event was signaled from the host
     VkQueue signaling_queue = VK_NULL_HANDLE;
 
-    Event(VkEvent event_, const VkEventCreateInfo *pCreateInfo)
-        : StateObject(event_, kVulkanObjectTypeEvent),
+    Event(VkEvent handle, const VkEventCreateInfo *pCreateInfo)
+        : StateObject(handle, kVulkanObjectTypeEvent),
           write_in_use(0),
 #ifdef VK_USE_PLATFORM_METAL_EXT
           metal_event_export(GetMetalExport(pCreateInfo)),
@@ -84,18 +97,10 @@ class Event : public StateObject {
     VkEvent VkHandle() const { return handle_.Cast<VkEvent>(); }
 };
 
-}  // namespace vvl
-
-// Only CoreChecks uses this, but the state tracker stores it.
-constexpr static auto kInvalidLayout = image_layout_map::kInvalidLayout;
-using ImageSubresourceLayoutMap = image_layout_map::ImageSubresourceLayoutMap;
-typedef vvl::unordered_map<VkEvent, VkPipelineStageFlags2KHR> EventToStageMap;
-
-namespace vvl {
 // Track command pools and their command buffers
 class CommandPool : public StateObject {
   public:
-    ValidationStateTracker *dev_data;
+    ValidationStateTracker &dev_data;
     const VkCommandPoolCreateFlags createFlags;
     const uint32_t queueFamilyIndex;
     const VkQueueFlags queue_flags;
@@ -103,7 +108,7 @@ class CommandPool : public StateObject {
     // Cmd buffers allocated from this pool
     vvl::unordered_map<VkCommandBuffer, CommandBuffer *> commandBuffers;
 
-    CommandPool(ValidationStateTracker *dev, VkCommandPool cp, const VkCommandPoolCreateInfo *pCreateInfo, VkQueueFlags flags);
+    CommandPool(ValidationStateTracker &dev, VkCommandPool handle, const VkCommandPoolCreateInfo *pCreateInfo, VkQueueFlags flags);
     virtual ~CommandPool() { Destroy(); }
 
     VkCommandPool VkHandle() const { return handle_.Cast<VkCommandPool>(); }
@@ -114,18 +119,6 @@ class CommandPool : public StateObject {
 
     void Destroy() override;
 };
-}  // namespace vvl
-
-enum class CbState {
-    New,                // Newly created CB w/o any cmds
-    Recording,          // BeginCB has been called on this CB
-    Recorded,           // EndCB has been called on this CB
-    InvalidComplete,    // had a complete recording, but was since invalidated
-    InvalidIncomplete,  // fouled before recording was completed
-};
-
-
-namespace vvl {
 
 class CommandBuffer : public RefcountedStateObject {
     using Func = vvl::Func;
@@ -137,12 +130,12 @@ class CommandBuffer : public RefcountedStateObject {
     using ImageLayoutMap = vvl::unordered_map<VkImage, LayoutState>;
     using AliasedLayoutMap = vvl::unordered_map<const GlobalImageLayoutRangeMap *, std::shared_ptr<ImageSubresourceLayoutMap>>;
 
-    VkCommandBufferAllocateInfo createInfo = {};
+    VkCommandBufferAllocateInfo allocate_info;
     VkCommandBufferBeginInfo beginInfo;
     VkCommandBufferInheritanceInfo inheritanceInfo;
     // since command buffers can only be destroyed by their command pool, this does not need to be a shared_ptr
     const vvl::CommandPool *command_pool;
-    ValidationStateTracker *dev_data;
+    ValidationStateTracker &dev_data;
     bool unprotected;  // can't be used for protected memory
     bool hasRenderPassInstance;
     bool suspendsRenderPassInstance;
@@ -230,6 +223,8 @@ class CommandBuffer : public RefcountedStateObject {
         bool logic_op_enable;
         // VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR
         VkExtent2D fragment_size;
+        // VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE
+        bool primitive_restart_enable;
 
         uint32_t color_write_enable_attachment_count;
 
@@ -361,7 +356,7 @@ class CommandBuffer : public RefcountedStateObject {
     bool has_render_pass_striped;
     uint32_t striped_count;
     // only when not using dynamic rendering
-    safe_VkRenderPassBeginInfo active_render_pass_begin_info;
+    vku::safe_VkRenderPassBeginInfo active_render_pass_begin_info;
     std::shared_ptr<std::vector<SubpassInfo>> active_subpasses;
     std::shared_ptr<std::vector<vvl::ImageView *>> active_attachments;
     std::set<std::shared_ptr<vvl::ImageView>> attachments_view_states;
@@ -455,6 +450,8 @@ class CommandBuffer : public RefcountedStateObject {
     VideoSessionUpdateMap video_session_updates;
 
     bool transform_feedback_active{false};
+    uint32_t transform_feedback_buffers_bound;
+
     bool conditional_rendering_active{false};
     bool conditional_rendering_inside_render_pass{false};
     uint32_t conditional_rendering_subpass{0};
@@ -464,7 +461,7 @@ class CommandBuffer : public RefcountedStateObject {
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock); }
     WriteLockGuard WriteLock() { return WriteLockGuard(lock); }
 
-    CommandBuffer(ValidationStateTracker *, VkCommandBuffer cb, const VkCommandBufferAllocateInfo *pCreateInfo,
+    CommandBuffer(ValidationStateTracker &dev, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *pAllocateInfo,
                   const vvl::CommandPool *cmd_pool);
 
     virtual ~CommandBuffer() { Destroy(); }
@@ -538,7 +535,7 @@ class CommandBuffer : public RefcountedStateObject {
 
     void BeginRenderPass(Func command, const VkRenderPassBeginInfo *pRenderPassBegin, VkSubpassContents contents);
     void NextSubpass(Func command, VkSubpassContents contents);
-    void UpdateSubpassAttachments(const safe_VkSubpassDescription2 &subpass, std::vector<SubpassInfo> &subpasses);
+    void UpdateSubpassAttachments(const vku::safe_VkSubpassDescription2 &subpass, std::vector<SubpassInfo> &subpasses);
     void EndRenderPass(Func command);
 
     void BeginRendering(Func command, const VkRenderingInfo *pRenderingInfo);
@@ -615,7 +612,8 @@ class CommandBuffer : public RefcountedStateObject {
     }
     void BindShader(VkShaderStageFlagBits shader_stage, vvl::ShaderObject *shader_object_state);
 
-    bool IsPrimary() const { return createInfo.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY; }
+    bool IsPrimary() const { return allocate_info.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY; }
+    bool IsSeconary() const { return allocate_info.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY; }
     void BeginLabel(const char *label_name);
     void EndLabel();
     int LabelStackDepth() const { return label_stack_depth_; }

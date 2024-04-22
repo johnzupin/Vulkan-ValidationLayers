@@ -70,6 +70,8 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/buffer_positive.cpp
     unit/command.cpp
     unit/command_positive.cpp
+    unit/copy_buffer_image.cpp
+    unit/copy_buffer_image_positive.cpp
     unit/debug_extensions.cpp
     unit/debug_extensions_positive.cpp
     unit/debug_printf.cpp
@@ -106,7 +108,6 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/gpu_av_spirv_positive.cpp
     unit/gpu_av_ray_query.cpp
     unit/gpu_av_ray_query_positive.cpp
-    unit/gpu_av_ray_tracing_nv.cpp
     unit/gpu_av_ray_tracing.cpp
     unit/gpu_av_ray_tracing_positive.cpp
     unit/graphics_library.cpp
@@ -161,6 +162,8 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/robustness_positive.cpp
     unit/sampler.cpp
     unit/sampler_positive.cpp
+    unit/secondary_command_buffer.cpp
+    unit/secondary_command_buffer_positive.cpp
     unit/shader_compute.cpp
     unit/shader_compute_positive.cpp
     unit/shader_cooperative_matrix.cpp

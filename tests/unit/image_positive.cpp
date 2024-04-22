@@ -41,13 +41,12 @@ TEST_F(PositiveImage, OwnershipTranfersImage) {
     TEST_DESCRIPTION("Valid image ownership transfers that shouldn't create errors");
     RETURN_IF_SKIP(Init());
 
-    const std::optional<uint32_t> no_gfx = m_device->QueueFamilyWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
-    if (!no_gfx) {
-        GTEST_SKIP() << "Required queue families not present (non-graphics non-compute capable required)";
+    vkt::Queue *no_gfx_queue = m_device->QueueWithoutCapabilities(VK_QUEUE_GRAPHICS_BIT);
+    if (!no_gfx_queue) {
+        GTEST_SKIP() << "Required queue not present (non-graphics non-compute capable required)";
     }
-    vkt::Queue *no_gfx_queue = m_device->queue_family_queues(no_gfx.value())[0].get();
 
-    vkt::CommandPool no_gfx_pool(*m_device, no_gfx.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    vkt::CommandPool no_gfx_pool(*m_device, no_gfx_queue->get_family_index(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     vkt::CommandBuffer no_gfx_cb(*m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, no_gfx_queue);
 
     // Create an "exclusive" image owned by the graphics queue.
@@ -57,13 +56,13 @@ TEST_F(PositiveImage, OwnershipTranfersImage) {
     auto image_subres = image.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
     auto image_barrier = image.image_memory_barrier(0, 0, image.Layout(), image.Layout(), image_subres);
     image_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
-    image_barrier.dstQueueFamilyIndex = no_gfx.value();
+    image_barrier.dstQueueFamilyIndex = no_gfx_queue->get_family_index();
 
     ValidOwnershipTransfer(m_errorMonitor, m_commandBuffer, &no_gfx_cb, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
                            VK_PIPELINE_STAGE_TRANSFER_BIT, nullptr, &image_barrier);
 
     // Change layouts while changing ownership
-    image_barrier.srcQueueFamilyIndex = no_gfx.value();
+    image_barrier.srcQueueFamilyIndex = no_gfx_queue->get_family_index();
     image_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
     image_barrier.oldLayout = image.Layout();
     // Make sure the new layout is different from the old
@@ -75,67 +74,6 @@ TEST_F(PositiveImage, OwnershipTranfersImage) {
 
     ValidOwnershipTransfer(m_errorMonitor, &no_gfx_cb, m_commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, nullptr, &image_barrier);
-}
-
-TEST_F(PositiveImage, UncompressedToCompressedImageCopy) {
-    TEST_DESCRIPTION("Image copies between compressed and uncompressed images");
-    RETURN_IF_SKIP(Init());
-
-    // Verify format support
-    // Size-compatible (64-bit) formats. Uncompressed is 64 bits per texel, compressed is 64 bits per 4x4 block (or 4bpt).
-    if (!FormatFeaturesAreSupported(gpu(), VK_FORMAT_R16G16B16A16_UINT, VK_IMAGE_TILING_OPTIMAL,
-                                    VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR | VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR) ||
-        !FormatFeaturesAreSupported(gpu(), VK_FORMAT_BC1_RGBA_SRGB_BLOCK, VK_IMAGE_TILING_OPTIMAL,
-                                    VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR | VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR)) {
-        GTEST_SKIP() << "Required formats/features not supported - UncompressedToCompressedImageCopy";
-    }
-
-    // Size = 10 * 10 * 64 = 6400
-    vkt::Image uncomp_10x10t_image(*m_device, 10, 10, 1, VK_FORMAT_R16G16B16A16_UINT,
-                                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    // Size = 40 * 40 * 4  = 6400
-    vkt::Image comp_10x10b_40x40t_image(*m_device, 40, 40, 1, VK_FORMAT_BC1_RGBA_SRGB_BLOCK,
-                                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-
-    if (!uncomp_10x10t_image.initialized() || !comp_10x10b_40x40t_image.initialized()) {
-        GTEST_SKIP() << "Unable to initialize surfaces - UncompressedToCompressedImageCopy";
-    }
-
-    // Both copies represent the same number of bytes. Bytes Per Texel = 1 for bc6, 16 for uncompressed
-    // Copy compressed to uncompressed
-    VkImageCopy copy_region = {};
-    copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy_region.srcSubresource.mipLevel = 0;
-    copy_region.srcSubresource.baseArrayLayer = 0;
-    copy_region.srcSubresource.layerCount = 1;
-    copy_region.dstSubresource = copy_region.srcSubresource;
-    copy_region.srcOffset = {0, 0, 0};
-    copy_region.dstOffset = {0, 0, 0};
-
-    m_commandBuffer->begin();
-
-    // Copy from uncompressed to compressed
-    copy_region.extent = {10, 10, 1};  // Dimensions in (uncompressed) texels
-    vk::CmdCopyImage(m_commandBuffer->handle(), uncomp_10x10t_image.handle(), VK_IMAGE_LAYOUT_GENERAL,
-                     comp_10x10b_40x40t_image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
-    // The next copy swaps source and dest s.t. we need an execution barrier on for the prior source and an access barrier for
-    // prior dest
-    VkImageMemoryBarrier image_barrier = vku::InitStructHelper();
-    image_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    image_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-    image_barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    image_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    image_barrier.image = comp_10x10b_40x40t_image.handle();
-    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
-                           0, nullptr, 1, &image_barrier);
-
-    // And from compressed to uncompressed
-    copy_region.extent = {40, 40, 1};  // Dimensions in (compressed) texels
-    vk::CmdCopyImage(m_commandBuffer->handle(), comp_10x10b_40x40t_image.handle(), VK_IMAGE_LAYOUT_GENERAL,
-                     uncomp_10x10t_image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
-
-    m_commandBuffer->end();
 }
 
 TEST_F(PositiveImage, AliasedMemoryTracking) {
@@ -579,8 +517,7 @@ TEST_F(PositiveImage, ImagelessLayoutTracking) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    vkt::Fence fence;
-    fence.init(*m_device, vkt::Fence::create_info());
+    vkt::Fence fence(*m_device);
     m_commandBuffer->QueueCommandBuffer(fence);
 
     VkPresentInfoKHR present = vku::InitStructHelper();
@@ -868,80 +805,6 @@ TEST_F(PositiveImage, SlicedCreateInfo) {
 
         vkt::ImageView image_view(*m_device, ivci);
     }
-}
-
-TEST_F(PositiveImage, CopyImageSubresource) {
-    RETURN_IF_SKIP(Init());
-
-    VkImageUsageFlags usage =
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 2, 5, format, usage);
-    vkt::Image image(*m_device, image_ci);
-
-    VkImageSubresourceLayers src_layer{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    VkImageSubresourceLayers dst_layer{VK_IMAGE_ASPECT_COLOR_BIT, 1, 3, 1};
-    VkOffset3D zero_offset{0, 0, 0};
-    VkExtent3D full_extent{128 / 2, 128 / 2, 1};  // <-- image type is 2D
-    VkImageCopy region = {src_layer, zero_offset, dst_layer, zero_offset, full_extent};
-    auto init_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    auto src_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    auto dst_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    auto final_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    m_commandBuffer->begin();
-
-    auto cb = m_commandBuffer->handle();
-
-    VkImageSubresourceRange src_range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-    VkImageMemoryBarrier image_barriers[2];
-
-    image_barriers[0] = vku::InitStructHelper();
-    image_barriers[0].srcAccessMask = 0;
-    image_barriers[0].dstAccessMask = 0;
-    image_barriers[0].image = image.handle();
-    image_barriers[0].subresourceRange = src_range;
-    image_barriers[0].oldLayout = init_layout;
-    image_barriers[0].newLayout = dst_layout;
-
-    vk::CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1,
-                           image_barriers);
-    VkClearColorValue clear_color{};
-    vk::CmdClearColorImage(cb, image.handle(), dst_layout, &clear_color, 1, &src_range);
-    m_commandBuffer->end();
-
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
-
-    m_commandBuffer->begin();
-
-    image_barriers[0].oldLayout = dst_layout;
-    image_barriers[0].newLayout = src_layout;
-
-    VkImageSubresourceRange dst_range{VK_IMAGE_ASPECT_COLOR_BIT, 1, 1, 3, 1};
-    image_barriers[1] = vku::InitStructHelper();
-    image_barriers[1].srcAccessMask = 0;
-    image_barriers[1].dstAccessMask = 0;
-    image_barriers[1].image = image.handle();
-    image_barriers[1].subresourceRange = dst_range;
-    image_barriers[1].oldLayout = init_layout;
-    image_barriers[1].newLayout = dst_layout;
-
-    vk::CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2,
-                           image_barriers);
-
-    vk::CmdCopyImage(cb, image.handle(), src_layout, image.handle(), dst_layout, 1, &region);
-
-    image_barriers[0].oldLayout = src_layout;
-    image_barriers[0].newLayout = final_layout;
-    image_barriers[1].oldLayout = dst_layout;
-    image_barriers[1].newLayout = final_layout;
-    vk::CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 2,
-                           image_barriers);
-    m_commandBuffer->end();
-
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
 }
 
 TEST_F(PositiveImage, DescriptorSubresourceLayout) {

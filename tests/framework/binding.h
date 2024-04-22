@@ -220,24 +220,34 @@ class Device : public internal::Handle<VkDevice> {
     // vkGetDeviceProcAddr()
     PFN_vkVoidFunction get_proc(const char *name) const { return vk::GetDeviceProcAddr(handle(), name); }
 
-    // vkGetDeviceQueue()
-    const std::vector<Queue *> &graphics_queues() const { return queues_[GRAPHICS]; }
-    const std::vector<Queue *> &compute_queues() { return queues_[COMPUTE]; }
-    const std::vector<Queue *> &dma_queues() { return queues_[DMA]; }
-    const std::vector<Queue *> &sparse_queues() { return queues_[SPARSE]; }
+    const std::vector<Queue *> &QueuesWithGraphicsCapability() const { return queues_[GRAPHICS]; }
+    const std::vector<Queue *> &QueuesWithComputeCapability() const { return queues_[COMPUTE]; }
+    const std::vector<Queue *> &QueuesWithTransferCapability() const { return queues_[TRANSFER]; }
+    const std::vector<Queue *> &QueuesWithSparseCapability() const { return queues_[SPARSE]; }
 
-    typedef std::vector<std::unique_ptr<Queue>> QueueFamilyQueues;
-    typedef std::vector<QueueFamilyQueues> QueueFamilies;
-    const QueueFamilyQueues &queue_family_queues(uint32_t queue_family) const;
+    using QueueFamilyQueues = std::vector<std::unique_ptr<Queue>>;
+    const QueueFamilyQueues &QueuesFromFamily(uint32_t queue_family) const;
 
-    // Find a queue family with and without desired capabilities
-    std::optional<uint32_t> QueueFamilyMatching(VkQueueFlags with, VkQueueFlags without, bool all_bits = true);
-    std::optional<uint32_t> QueueFamilyWithoutCapabilities(VkQueueFlags capabilities) {
-        // an all_bits match with 0 matches all
-        return QueueFamilyMatching(VkQueueFlags(0), capabilities, true /* all_bits with */);
-    }
+    // Queue family that has "with" capabilities and optionally without "without" capabilities.
+    std::optional<uint32_t> QueueFamily(VkQueueFlags with, VkQueueFlags without = 0) const;
 
-    uint32_t graphics_queue_node_index_;
+    // Queue family that does not have "without" capabilities
+    std::optional<uint32_t> QueueFamilyWithoutCapabilities(VkQueueFlags without) const;
+    Queue *QueueWithoutCapabilities(VkQueueFlags without) const;
+
+    // Dedicated compute queue family: has compute but no graphics
+    std::optional<uint32_t> ComputeOnlyQueueFamily() const;
+    Queue *ComputeOnlyQueue() const;
+
+    // Dedicated transfer queue family: has tranfer but no graphics/compute
+    std::optional<uint32_t> TransferOnlyQueueFamily() const;
+    Queue *TransferOnlyQueue() const;
+
+    // Compute or transfer
+    std::optional<uint32_t> NonGraphicsQueueFamily() const;
+    Queue *NonGraphicsQueue() const;
+
+    uint32_t graphics_queue_node_index_ = vvl::kU32Max;
 
     const PhysicalDevice phy_;
 
@@ -284,20 +294,20 @@ class Device : public internal::Handle<VkDevice> {
                                                    uint32_t count);
 
   private:
-    enum QueueIndex {
+    enum QueueCapabilityIndex {
         GRAPHICS = 0,
         COMPUTE = 1,
-        DMA = 2,
+        TRANSFER = 2,
         SPARSE = 3,
-        QUEUE_COUNT = 4,
+        QUEUE_CAPABILITY_COUNT = 4,
     };
 
     void init_queues(const VkDeviceCreateInfo &info);
 
     std::vector<const char *> enabled_extensions_;
 
-    QueueFamilies queue_families_;
-    std::vector<Queue *> queues_[QUEUE_COUNT];
+    std::vector<QueueFamilyQueues> queue_families_;
+    std::vector<Queue *> queues_[QUEUE_CAPABILITY_COUNT];
 };
 
 class Queue : public internal::Handle<VkQueue> {
@@ -357,6 +367,7 @@ class Fence : public internal::NonDispHandle<VkFence> {
     Fence() = default;
     Fence(const Device &dev) { init(dev, create_info()); }
     Fence(const Device &dev, const VkFenceCreateInfo &info) { init(dev, info); }
+    Fence(Fence &&rhs) noexcept : NonDispHandle(std::move(rhs)) {}
     ~Fence() noexcept;
     void destroy() noexcept;
 
@@ -1016,7 +1027,7 @@ class CommandBuffer : public internal::Handle<VkCommandBuffer> {
     void NextSubpass(VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
     void EndRenderPass();
     void BeginRendering(const VkRenderingInfoKHR &renderingInfo);
-    void BeginRenderingColor(const VkImageView imageView);
+    void BeginRenderingColor(const VkImageView imageView, VkRect2D render_area);
     void EndRendering();
 
     void BeginVideoCoding(const VkVideoBeginCodingInfoKHR &beginInfo);
@@ -1297,54 +1308,5 @@ inline VkCopyDescriptorSet Device::copy_descriptor_set(const DescriptorSet &src_
 
     return copy;
 }
-
-struct GraphicsPipelineLibraryStage {
-    vvl::span<const uint32_t> spv;
-    VkShaderModuleCreateInfo shader_ci;
-    VkPipelineShaderStageCreateInfo stage_ci;
-
-    GraphicsPipelineLibraryStage(vvl::span<const uint32_t> spv, VkShaderStageFlagBits stage, const char *name = "main") : spv(spv) {
-        shader_ci = vku::InitStructHelper();
-        shader_ci.codeSize = spv.size() * sizeof(uint32_t);
-        shader_ci.pCode = spv.data();
-
-        stage_ci = vku::InitStructHelper(&shader_ci);
-        stage_ci.stage = stage;
-        stage_ci.module = VK_NULL_HANDLE;
-        stage_ci.pName = name;
-    }
-};
-
-struct GraphicsPipelineFromLibraries {
-    vvl::span<VkPipeline> libs;
-    VkPipelineLibraryCreateInfoKHR link_info;
-    vkt::Pipeline pipe;
-
-    GraphicsPipelineFromLibraries(const Device &dev, vvl::span<VkPipeline> libs, VkPipelineLayout layout)
-        : GraphicsPipelineFromLibraries(libs) {
-        VkGraphicsPipelineCreateInfo exe_pipe_ci = vku::InitStructHelper(&link_info);
-        exe_pipe_ci.layout = layout;
-        pipe.init(dev, exe_pipe_ci);
-        pipe.initialized();
-    }
-
-    GraphicsPipelineFromLibraries(const Device &dev, vvl::span<VkPipeline> libs, VkGraphicsPipelineCreateInfo &ci)
-        : GraphicsPipelineFromLibraries(libs) {
-        link_info.pNext = ci.pNext;
-        ci.pNext = &link_info;
-        pipe.init(dev, ci);
-        pipe.initialized();
-    }
-
-    operator VkPipeline() const { return pipe.handle(); }
-    operator bool() const { return pipe.initialized(); }
-
-  private:
-    GraphicsPipelineFromLibraries(vvl::span<VkPipeline> libs) : libs(libs) {
-        link_info = vku::InitStructHelper();
-        link_info.libraryCount = static_cast<uint32_t>(libs.size());
-        link_info.pLibraries = libs.data();
-    }
-};
 
 }  // namespace vkt

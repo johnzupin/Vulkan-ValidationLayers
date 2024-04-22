@@ -1,7 +1,7 @@
-/* Copyright (c) 2021, 2023 The Khronos Group Inc.
- * Copyright (c) 2021, 2023 Valve Corporation
- * Copyright (c) 2022, 2023 LunarG, Inc.
- * Copyright (C) 2021, 2023 Google Inc.
+/* Copyright (c) 2021-2024 The Khronos Group Inc.
+ * Copyright (c) 2021-2024 Valve Corporation
+ * Copyright (c) 2021-2024 LunarG, Inc.
+ * Copyright (C) 2021-2024 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,6 +85,7 @@ enum class ImageError {
     kRenderPassLayoutChange,
     kDynamicRenderingLocalReadNew,
     kDynamicRenderingLocalReadOld,
+    kAspectMask,
 };
 
 const std::string &GetImageBarrierVUID(const Location &loc, ImageError error);
@@ -94,8 +95,6 @@ struct GetImageBarrierVUIDFunctor {
     GetImageBarrierVUIDFunctor(ImageError error_) : error(error_) {}
     const std::string &operator()(const Location &loc) const { return GetImageBarrierVUID(loc, error); }
 };
-
-const SubresourceRangeErrorCodes &GetSubResourceVUIDs(const Location &loc);
 
 enum class SubmitError {
     kTimelineSemSmallValue,

@@ -141,7 +141,7 @@ TEST_F(PositiveShaderCooperativeMatrix, CooperativeMatrixNV) {
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ =
         std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL, &specInfo);
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineShaderStageCreateInfo-pSpecializationInfo-06849");
+    m_errorMonitor->SetDesiredError("VUID-VkPipelineShaderStageCreateInfo-pSpecializationInfo-06849");
     pipe.CreateComputePipeline();
     m_errorMonitor->VerifyFound();
 }
@@ -156,6 +156,12 @@ TEST_F(PositiveShaderCooperativeMatrix, CooperativeMatrixKHR) {
     AddRequiredFeature(vkt::Feature::shaderFloat16);
     AddRequiredFeature(vkt::Feature::storageBuffer16BitAccess);
     RETURN_IF_SKIP(InitCooperativeMatrixKHR());
+
+    VkPhysicalDeviceCooperativeMatrixPropertiesKHR props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(props);
+    if ((props.cooperativeMatrixSupportedStages & VK_SHADER_STAGE_COMPUTE_BIT) == 0) {
+        GTEST_SKIP() << "Compute stage is not supported";
+    }
 
     VkCooperativeMatrixPropertiesKHR subgroup_prop = vku::InitStructHelper();
     bool found_scope_subgroup = false;

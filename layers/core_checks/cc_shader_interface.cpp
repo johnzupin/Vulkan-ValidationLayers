@@ -44,7 +44,7 @@ bool CoreChecks::ValidateInterfaceVertexInput(const vvl::Pipeline &pipeline, con
     // or have 2 variables in a location
     std::map<uint32_t, AttribInputPair> location_map;
 
-    safe_VkPipelineVertexInputStateCreateInfo const *input_state = pipeline.InputState();
+    vku::safe_VkPipelineVertexInputStateCreateInfo const *input_state = pipeline.InputState();
     if (!input_state) {
         // if using vertex and mesh, will hit an error, but still might get here
         return skip;
@@ -304,53 +304,46 @@ bool CoreChecks::ValidateShaderStageInputOutputLimits(const spirv::Module &modul
             }
             break;
 
+        // For tessellation, it is not clear if the built-ins should be part of the total component limits or not
+        // https://gitlab.khronos.org/vulkan/vulkan/-/issues/3448#note_459088
+        // But seems that from Zink, that GL allowed it, so likely there is some exceptions for tessellation
         case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
-            if (total_input_components >= limits.maxTessellationControlPerVertexInputComponents) {
+            if (max_input_slot.slot >= limits.maxTessellationControlPerVertexInputComponents) {
                 skip |= LogError("VUID-RuntimeSpirv-Location-06272", module_state.handle(), loc,
-                                 "SPIR-V (Tessellation control stage) input interface variable (%s) along with %" PRIu32
-                                 " built-in components,  "
+                                 "SPIR-V (Tessellation control stage) input interface variable (%s) "
                                  "exceeds component limit maxTessellationControlPerVertexInputComponents (%" PRIu32 ").",
-                                 max_input_slot.Describe().c_str(), entrypoint.builtin_input_components,
-                                 limits.maxTessellationControlPerVertexInputComponents);
+                                 max_input_slot.Describe().c_str(), limits.maxTessellationControlPerVertexInputComponents);
             }
             if (entrypoint.max_input_slot_variable) {
                 if (entrypoint.max_input_slot_variable->is_patch &&
-                    total_output_components >= limits.maxTessellationControlPerPatchOutputComponents) {
+                    max_output_slot.slot >= limits.maxTessellationControlPerPatchOutputComponents) {
                     skip |= LogError("VUID-RuntimeSpirv-Location-06272", module_state.handle(), loc,
-                                     "SPIR-V (Tessellation control stage) output interface variable (%s) along with %" PRIu32
-                                     " built-in components,  "
+                                     "SPIR-V (Tessellation control stage) output interface variable (%s) "
                                      "exceeds component limit maxTessellationControlPerPatchOutputComponents (%" PRIu32 ").",
-                                     max_output_slot.Describe().c_str(), entrypoint.builtin_output_components,
-                                     limits.maxTessellationControlPerPatchOutputComponents);
+                                     max_output_slot.Describe().c_str(), limits.maxTessellationControlPerPatchOutputComponents);
                 }
                 if (!entrypoint.max_input_slot_variable->is_patch &&
-                    total_output_components >= limits.maxTessellationControlPerVertexOutputComponents) {
+                    max_output_slot.slot >= limits.maxTessellationControlPerVertexOutputComponents) {
                     skip |= LogError("VUID-RuntimeSpirv-Location-06272", module_state.handle(), loc,
-                                     "SPIR-V (Tessellation control stage) output interface variable (%s) along with %" PRIu32
-                                     " built-in components,  "
+                                     "SPIR-V (Tessellation control stage) output interface variable (%s) "
                                      "exceeds component limit maxTessellationControlPerVertexOutputComponents (%" PRIu32 ").",
-                                     max_output_slot.Describe().c_str(), entrypoint.builtin_output_components,
-                                     limits.maxTessellationControlPerVertexOutputComponents);
+                                     max_output_slot.Describe().c_str(), limits.maxTessellationControlPerVertexOutputComponents);
                 }
             }
             break;
 
         case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
-            if (total_input_components >= limits.maxTessellationEvaluationInputComponents) {
+            if (max_input_slot.slot >= limits.maxTessellationEvaluationInputComponents) {
                 skip |= LogError("VUID-RuntimeSpirv-Location-06272", module_state.handle(), loc,
-                                 "SPIR-V (Tessellation evaluation stage) input interface variable (%s) along with %" PRIu32
-                                 " built-in components,  "
+                                 "SPIR-V (Tessellation evaluation stage) input interface variable (%s) "
                                  "exceeds component limit maxTessellationEvaluationInputComponents (%" PRIu32 ").",
-                                 max_input_slot.Describe().c_str(), entrypoint.builtin_input_components,
-                                 limits.maxTessellationEvaluationInputComponents);
+                                 max_input_slot.Describe().c_str(), limits.maxTessellationEvaluationInputComponents);
             }
-            if (total_output_components >= limits.maxTessellationEvaluationOutputComponents) {
+            if (max_output_slot.slot >= limits.maxTessellationEvaluationOutputComponents) {
                 skip |= LogError("VUID-RuntimeSpirv-Location-06272", module_state.handle(), loc,
-                                 "SPIR-V (Tessellation evaluation stage) output interface variable (%s) along with %" PRIu32
-                                 " built-in components,  "
+                                 "SPIR-V (Tessellation evaluation stage) output interface variable (%s) "
                                  "exceeds component limit maxTessellationEvaluationOutputComponents (%" PRIu32 ").",
-                                 max_output_slot.Describe().c_str(), entrypoint.builtin_output_components,
-                                 limits.maxTessellationEvaluationOutputComponents);
+                                 max_output_slot.Describe().c_str(), limits.maxTessellationEvaluationOutputComponents);
             }
             // Portability validation
             if (IsExtEnabled(device_extensions.vk_khr_portability_subset)) {
@@ -508,13 +501,14 @@ bool CoreChecks::ValidateInterfaceBetweenStages(const spirv::Module &producer, c
                 if ((component_info.output_type != component_info.input_type) ||
                     (component_info.output_width != component_info.input_width)) {
                     const LogObjectList objlist(producer.handle(), consumer.handle());
-                    skip |=
-                        LogError("VUID-RuntimeSpirv-OpEntryPoint-07754", objlist, create_info_loc,
-                                 "(SPIR-V Interface) Type mismatch on Location %" PRIu32 " Component %" PRIu32
-                                 ", between\n%s stage:\n%s\n%s stage:\n%s\n",
-                                 location, component, string_VkShaderStageFlagBits(producer_stage),
-                                 producer.DescribeType(output_var->type_id).c_str(), string_VkShaderStageFlagBits(consumer_stage),
-                                 consumer.DescribeType(input_var->type_id).c_str());
+                    skip |= LogError("VUID-RuntimeSpirv-OpEntryPoint-07754", objlist, create_info_loc,
+                                     "(SPIR-V Interface) Type mismatch on Location %" PRIu32 " Component %" PRIu32
+                                     ", between\n\n%s stage:\n%s%s\n\n%s stage:\n%s%s\n\n",
+                                     location, component, string_VkShaderStageFlagBits(producer_stage),
+                                     producer.DescribeVariable(output_var->id).c_str(),
+                                     producer.DescribeType(output_var->type_id).c_str(),
+                                     string_VkShaderStageFlagBits(consumer_stage), consumer.DescribeVariable(input_var->id).c_str(),
+                                     consumer.DescribeType(input_var->type_id).c_str());
                     break;  // Only need to report for the first component found
                 }
 
@@ -572,9 +566,9 @@ bool CoreChecks::ValidateInterfaceBetweenStages(const spirv::Module &producer, c
                 const LogObjectList objlist(producer.handle(), consumer.handle());
                 skip |= LogError("VUID-RuntimeSpirv-OpEntryPoint-08743", objlist, create_info_loc,
                                  "(SPIR-V Interface) %s declared input at Location %" PRIu32 " Component %" PRIu32
-                                 " but it is not an Output declared in %s",
+                                 " %sbut it is not an Output declared in %s",
                                  string_VkShaderStageFlagBits(consumer_stage), location, component,
-                                 string_VkShaderStageFlagBits(producer_stage));
+                                 input_var->is_patch ? "(Tessellation Patch) " : "", string_VkShaderStageFlagBits(producer_stage));
                 break;  // Only need to report for the first component found
             }
         }
@@ -651,7 +645,7 @@ bool CoreChecks::ValidateFsOutputsAgainstRenderPass(const spirv::Module &module_
 
     const auto &rp_state = pipeline.RenderPassState();
     if (rp_state && !rp_state->UsesDynamicRendering()) {
-        const auto rpci = rp_state->createInfo.ptr();
+        const auto rpci = rp_state->create_info.ptr();
         if (subpass_index < rpci->subpassCount) {
             const auto subpass = rpci->pSubpasses[subpass_index];
             for (uint32_t i = 0; i < subpass.colorAttachmentCount; ++i) {
@@ -691,8 +685,8 @@ bool CoreChecks::ValidateFsOutputsAgainstRenderPass(const spirv::Module &module_
             const auto attachment = location_it.second.attachment;
             const auto output = location_it.second.output;
             if (attachment && !output) {
-                const auto &attachments = pipeline.Attachments();
-                if (location < attachments.size() && attachments[location].colorWriteMask != 0) {
+                const auto &attachment_states = pipeline.AttachmentStates();
+                if (location < attachment_states.size() && attachment_states[location].colorWriteMask != 0) {
                     skip |= LogUndefinedValue("Undefined-Value-ShaderInputNotProduced", module_state.handle(), create_info_loc,
                                               "Attachment %" PRIu32
                                               " not written by fragment shader; undefined values will be written to attachment",
@@ -750,8 +744,8 @@ bool CoreChecks::ValidateFsOutputsAgainstDynamicRenderingRenderPass(const spirv:
         const auto output = location_map[location].output;
 
         const auto &rp_state = pipeline.RenderPassState();
-        const auto &attachments = pipeline.Attachments();
-        if (!output && location < attachments.size() && attachments[location].colorWriteMask != 0) {
+        const auto &attachment_states = pipeline.AttachmentStates();
+        if (!output && location < attachment_states.size() && attachment_states[location].colorWriteMask != 0) {
             skip |= LogUndefinedValue(
                 "Undefined-Value-ShaderInputNotProduced", module_state.handle(), create_info_loc,
                 "Attachment %" PRIu32 " not written by fragment shader; undefined values will be written to attachment", location);

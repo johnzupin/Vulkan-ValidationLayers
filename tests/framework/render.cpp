@@ -675,7 +675,31 @@ void VkRenderFramework::InitState(VkPhysicalDeviceFeatures *features, void *crea
         vk::InitDeviceExtension(instance_, *m_device, device_ext_name);
     }
 
-    m_default_queue = m_device->graphics_queues()[0];
+    m_default_queue = m_device->QueuesWithGraphicsCapability()[0];
+
+    m_second_queue = [this]() -> vkt::Queue * {
+        if (m_device->QueuesWithGraphicsCapability().size() > 1) {
+            return m_device->QueuesWithGraphicsCapability()[1];  // skip default queue
+        }
+        const auto &with_compute_caps = m_device->QueuesWithComputeCapability();
+        if (with_compute_caps.size() > 0 && with_compute_caps[0] != m_default_queue) {
+            return with_compute_caps[0];
+        }
+        if (with_compute_caps.size() > 1) {
+            return with_compute_caps[1];
+        }
+        const auto &with_transfer_caps = m_device->QueuesWithTransferCapability();
+        if (with_transfer_caps.size() > 0 && with_transfer_caps[0] != m_default_queue) {
+            return with_transfer_caps[0];
+        }
+        if (with_transfer_caps.size() > 1) {
+            return with_transfer_caps[1];
+        }
+        return nullptr;
+    }();
+    if (m_second_queue) {
+        m_second_queue_caps = m_device->phy().queue_properties_[m_second_queue->get_family_index()].queueFlags;
+    }
 
     m_depthStencil = new vkt::Image();
 
@@ -909,12 +933,7 @@ bool VkRenderFramework::CreateSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags
     swapchain_create_info.oldSwapchain = oldSwapchain;
 
     VkResult result = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &swapchain);
-    if (result != VK_SUCCESS) return false;
-    // We must call vkGetSwapchainImagesKHR after creating the swapchain because the Validation Layer variables
-    // for the swapchain image count are set inside that call. Otherwise, various validation fails due to
-    // thinking that the swapchain image count is zero.
-    GetSwapchainImages(swapchain);
-    return true;
+    return result == VK_SUCCESS;
 }
 
 std::vector<VkImage> VkRenderFramework::GetSwapchainImages(const VkSwapchainKHR swapchain) {
@@ -1082,6 +1101,8 @@ VkImageView VkRenderFramework::GetDynamicRenderTarget() const {
     assert(m_framebuffer_attachments.size() == 1);
     return m_framebuffer_attachments[0];
 }
+
+VkRect2D VkRenderFramework::GetRenderTargetArea() const { return {{0, 0}, {m_width, m_height}}; }
 
 void VkRenderFramework::DestroyRenderTarget() {
     vk::DestroyRenderPass(device(), m_renderPass, nullptr);

@@ -20,7 +20,6 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
-#include <unordered_map>
 #include <vector>
 
 #include "state_tracker/shader_instruction.h"
@@ -220,7 +219,7 @@ struct ImageAccess {
 using ImageAccessMap = vvl::unordered_map<uint32_t, std::vector<std::shared_ptr<const ImageAccess>>>;
 // < Variable ID, [ OpAccessChain ] >
 // Allows for grouping the access chains by which variables they are actually accessing
-using AccessChainVariableMap = std::unordered_map<uint32_t, std::vector<const Instruction *>>;
+using AccessChainVariableMap = vvl::unordered_map<uint32_t, std::vector<const Instruction *>>;
 
 // A slot is a <Location, Component> mapping
 struct InterfaceSlot {
@@ -383,6 +382,8 @@ struct ResourceInterfaceVariable : public VariableBase {
 
     bool is_read_from{false};   // has operation to reads from the variable
     bool is_written_to{false};  // has operation to writes to the variable
+    // If dealing with an image array, only check the indexes accesses
+    vvl::unordered_set<uint32_t> image_access_chain_indexes;
 
     // Type of resource type (vkspec.html#interfaces-resources-storage-class-correspondence)
     bool is_storage_image{false};
@@ -450,8 +451,8 @@ struct EntryPoint {
 
     // Lookup map from Interface slot to the variable in that spot
     // spirv-val guarantees no overlap so 2 variables won't have same slot
-    std::unordered_map<InterfaceSlot, const StageInteraceVariable *, InterfaceSlot::Hash> input_interface_slots;
-    std::unordered_map<InterfaceSlot, const StageInteraceVariable *, InterfaceSlot::Hash> output_interface_slots;
+    vvl::unordered_map<InterfaceSlot, const StageInteraceVariable *, InterfaceSlot::Hash> input_interface_slots;
+    vvl::unordered_map<InterfaceSlot, const StageInteraceVariable *, InterfaceSlot::Hash> output_interface_slots;
     // Uesd for limit check
     const StageInteraceVariable *max_input_slot_variable = nullptr;
     const StageInteraceVariable *max_output_slot_variable = nullptr;
@@ -462,6 +463,7 @@ struct EntryPoint {
 
     // Mark if a BuiltIn is written to
     bool written_builtin_point_size{false};
+    bool written_builtin_layer{false};
     bool written_builtin_primitive_shading_rate_khr{false};
     bool written_builtin_viewport_index{false};
     bool written_builtin_viewport_mask_nv{false};
@@ -534,14 +536,14 @@ struct Module {
         std::vector<const Instruction *> variable_inst;
         // both OpDecorate and OpMemberDecorate builtin instructions
         std::vector<const Instruction *> builtin_decoration_inst;
-        // OpString - used to find debug information
-        std::vector<const Instruction *> debug_string_inst;
         // For shader tile image - OpDepthAttachmentReadEXT/OpStencilAttachmentReadEXT/OpColorAttachmentReadEXT
         bool has_shader_tile_image_depth_read{false};
         bool has_shader_tile_image_stencil_read{false};
         bool has_shader_tile_image_color_read{false};
         // BuiltIn we just care about existing or not, don't have to be written to
+        // TODO - Make bitmask
         bool has_builtin_layer{false};
+        bool has_builtin_draw_index{false};
         bool has_builtin_workgroup_size{false};
         uint32_t builtin_workgroup_size_id = 0;
 
@@ -643,8 +645,12 @@ struct Module {
     }
 
     // Used to get human readable strings for error messages
+    std::string GetDecorations(uint32_t id) const;
+    std::string GetName(uint32_t id) const;
+    std::string GetMemberName(uint32_t id, uint32_t member_index) const;
     void DescribeTypeInner(std::ostringstream &ss, uint32_t type, uint32_t indent) const;
     std::string DescribeType(uint32_t type) const;
+    std::string DescribeVariable(uint32_t id) const;
 
     std::optional<VkPrimitiveTopology> GetTopology(const EntryPoint &entrypoint) const;
 
@@ -685,8 +691,8 @@ struct Module {
 // Represents a VkShaderModule handle
 namespace vvl {
 struct ShaderModule : public StateObject {
-    ShaderModule(VkShaderModule shader_module, std::shared_ptr<spirv::Module> &spirv_module, uint32_t unique_shader_id)
-        : StateObject(shader_module, kVulkanObjectTypeShaderModule), spirv(spirv_module), gpu_validation_shader_id(unique_shader_id) {
+    ShaderModule(VkShaderModule handle, std::shared_ptr<spirv::Module> &spirv_module, uint32_t unique_shader_id)
+        : StateObject(handle, kVulkanObjectTypeShaderModule), spirv(spirv_module), gpu_validation_shader_id(unique_shader_id) {
         spirv->handle_ = handle_;
     }
 

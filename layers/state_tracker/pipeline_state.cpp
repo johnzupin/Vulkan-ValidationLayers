@@ -23,7 +23,7 @@
 #include "state_tracker/state_object.h"
 #include "generated/enum_flag_bits.h"
 #include "state_tracker/shader_object_state.h"
-#include "state_tracker/chassis_modification_state.h"
+#include "chassis/chassis_modification_state.h"
 
 std::vector<VkPushConstantRange> const *StageCreateInfo::GetPushConstantRanges() const {
     if (pipeline) {
@@ -39,9 +39,9 @@ StageCreateInfo::StageCreateInfo(const VkShaderCreateInfoEXT &create_info)
 
 namespace vvl {
 
-Pipeline::CreateInfo::CreateInfo(const VkGraphicsPipelineCreateInfo &ci, std::shared_ptr<const vvl::RenderPass> rpstate,
-                                 const ValidationStateTracker *state_data)
-    : graphics() {
+static vku::safe_VkGraphicsPipelineCreateInfo MakeGraphicsCreateInfo(const VkGraphicsPipelineCreateInfo &ci,
+                                                                    std::shared_ptr<const vvl::RenderPass> rpstate,
+                                                                    const ValidationStateTracker &state_data) {
     bool use_color = false;
     bool use_depth_stencil = false;
 
@@ -60,15 +60,16 @@ Pipeline::CreateInfo::CreateInfo(const VkGraphicsPipelineCreateInfo &ci, std::sh
         use_depth_stencil = rpstate->UsesDepthStencilAttachment(ci.subpass);
     }
 
-    PNextCopyState copy_state = {[state_data, &ci](VkBaseOutStructure *safe_struct, const VkBaseOutStructure *in_struct) -> bool {
-        return Pipeline::PnextRenderingInfoCustomCopy(state_data, ci, safe_struct, in_struct);
-    }};
-    graphics.initialize(&ci, use_color, use_depth_stencil, &copy_state);
+    vku::PNextCopyState copy_state = {
+        [&state_data, &ci](VkBaseOutStructure *safe_struct, const VkBaseOutStructure *in_struct) -> bool {
+            return Pipeline::PnextRenderingInfoCustomCopy(&state_data, ci, safe_struct, in_struct);
+        }};
+    return vku::safe_VkGraphicsPipelineCreateInfo(&ci, use_color, use_depth_stencil, &copy_state);
 }
 
 // static
 StageStateVec Pipeline::GetStageStates(const ValidationStateTracker &state_data, const Pipeline &pipe_state,
-                                       CreateShaderModuleStates *csm_states) {
+                                       ShaderModuleUniqueIds *shader_unique_id_map) {
     StageStateVec stage_states;
 
     // stages such as VK_SHADER_STAGE_ALL are find as this code is only looking for exact matches, not bool logic
@@ -77,8 +78,9 @@ StageStateVec Pipeline::GetStageStates(const ValidationStateTracker &state_data,
         // shader stages need to be recorded in pipeline order
 
         for (size_t stage_index = 0; stage_index < pipe_state.shader_stages_ci.size(); ++stage_index) {
-            if (pipe_state.pipeline_type == VK_PIPELINE_BIND_POINT_GRAPHICS && !pipe_state.fragment_shader_state &&
-                !pipe_state.pre_raster_state) {
+            if (pipe_state.pipeline_type == VK_PIPELINE_BIND_POINT_GRAPHICS &&
+                !pipe_state.OwnsSubState(pipe_state.fragment_shader_state) &&
+                !pipe_state.OwnsSubState(pipe_state.pre_raster_state)) {
                 break;  // pStages are ignored if not using one of these substates
             }
 
@@ -98,7 +100,7 @@ StageStateVec Pipeline::GetStageStates(const ValidationStateTracker &state_data,
                     // If module is null and there is a VkShaderModuleCreateInfo in the pNext chain of the stage info, then this
                     // module is part of a library and the state must be created
                     const auto shader_ci = vku::FindStructInPNextChain<VkShaderModuleCreateInfo>(stage_ci.pNext);
-                    const uint32_t unique_shader_id = (csm_states) ? (*csm_states)[stage].unique_shader_id : 0;
+                    const uint32_t unique_shader_id = (shader_unique_id_map) ? (*shader_unique_id_map)[stage] : 0;
                     if (shader_ci) {
                         // don't need to worry about GroupDecoration in GPL
                         auto spirv_module = std::make_shared<spirv::Module>(shader_ci->codeSize, shader_ci->pCode);
@@ -116,7 +118,7 @@ StageStateVec Pipeline::GetStageStates(const ValidationStateTracker &state_data,
         if (!stage_found) {
             // Check if stage has been supplied by a library
             std::shared_ptr<const vvl::ShaderModule> module_state = nullptr;
-            const safe_VkPipelineShaderStageCreateInfo *stage_ci = nullptr;
+            const vku::safe_VkPipelineShaderStageCreateInfo *stage_ci = nullptr;
             switch (stage) {
                 case VK_SHADER_STAGE_VERTEX_BIT:
                     if (pipe_state.pre_raster_state && pipe_state.pre_raster_state->vertex_shader) {
@@ -176,8 +178,8 @@ StageStateVec Pipeline::GetStageStates(const ValidationStateTracker &state_data,
 
 static uint32_t GetCreateInfoShaders(const Pipeline &pipe_state) {
     uint32_t result = 0;
-    if (pipe_state.pipeline_type == VK_PIPELINE_BIND_POINT_GRAPHICS && !pipe_state.fragment_shader_state &&
-        !pipe_state.pre_raster_state) {
+    if (pipe_state.pipeline_type == VK_PIPELINE_BIND_POINT_GRAPHICS && !pipe_state.OwnsSubState(pipe_state.fragment_shader_state) &&
+        !pipe_state.OwnsSubState(pipe_state.pre_raster_state)) {
         return result;  // pStages are ignored if not using one of these substates
     }
 
@@ -212,7 +214,7 @@ static CBDynamicFlags GetGraphicsDynamicState(Pipeline &pipe_state) {
     const bool has_fragment_shader_state = pipe_state.OwnsSubState(pipe_state.fragment_shader_state);
     const bool has_fragment_output_state = pipe_state.OwnsSubState(pipe_state.fragment_output_state);
 
-    const auto *dynamic_state_ci = pipe_state.GetCreateInfo<VkGraphicsPipelineCreateInfo>().pDynamicState;
+    const auto *dynamic_state_ci = pipe_state.GraphicsCreateInfo().pDynamicState;
     if (dynamic_state_ci) {
         for (const VkDynamicState vk_dynamic_state :
              vvl::make_span(dynamic_state_ci->pDynamicStates, dynamic_state_ci->dynamicStateCount)) {
@@ -371,9 +373,7 @@ static CBDynamicFlags GetGraphicsDynamicState(Pipeline &pipe_state) {
 static CBDynamicFlags GetRayTracingDynamicState(Pipeline &pipe_state) {
     CBDynamicFlags flags = 0;
 
-    const auto *dynamic_state_ci = (pipe_state.GetCreateInfoSType() == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR)
-                                       ? pipe_state.GetCreateInfo<VkRayTracingPipelineCreateInfoKHR>().pDynamicState
-                                       : pipe_state.GetCreateInfo<VkRayTracingPipelineCreateInfoNV>().pDynamicState;
+    const auto *dynamic_state_ci = pipe_state.RayTracingCreateInfo().pDynamicState;
     if (dynamic_state_ci) {
         for (const VkDynamicState vk_dynamic_state :
              vvl::make_span(dynamic_state_ci->pDynamicStates, dynamic_state_ci->dynamicStateCount)) {
@@ -416,11 +416,32 @@ static bool UsesPipelineRobustness(const void *pNext, const Pipeline &pipe_state
     return result;
 }
 
-static bool IgnoreColorAttachments(const ValidationStateTracker *state_data, Pipeline &pipe_state) {
+static bool UsesPipelineVertexRobustness(const void *pNext, const Pipeline &pipe_state) {
+    bool result = false;
+    const auto robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfoEXT>(pNext);
+    if (!robustness_info) {
+        return false;
+    }
+    result |= (robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
+              (robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT);
+    if (!result) {
+        for (const auto &stage_ci : pipe_state.shader_stages_ci) {
+            const auto stage_robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfoEXT>(stage_ci.pNext);
+            if (stage_robustness_info) {
+                result |=
+                    (stage_robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
+                    (stage_robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT);
+            }
+        }
+    }
+    return result;
+}
+
+static bool IgnoreColorAttachments(const ValidationStateTracker &state_data, Pipeline &pipe_state) {
     // If the libraries used to create this pipeline are ignoring color attachments, this pipeline should as well
     if (pipe_state.library_create_info) {
         for (uint32_t i = 0; i < pipe_state.library_create_info->libraryCount; i++) {
-            const auto lib = state_data->Get<vvl::Pipeline>(pipe_state.library_create_info->pLibraries[i]);
+            const auto lib = state_data.Get<vvl::Pipeline>(pipe_state.library_create_info->pLibraries[i]);
             if (lib->ignore_color_attachments) return true;
         }
     }
@@ -492,7 +513,7 @@ static VkPipelineCreateFlags2KHR GetPipelineCreateFlags(const void *pNext, VkPip
 
 // static
 std::shared_ptr<VertexInputState> Pipeline::CreateVertexInputState(const Pipeline &p, const ValidationStateTracker &state,
-                                                                   const safe_VkGraphicsPipelineCreateInfo &create_info) {
+                                                                   const vku::safe_VkGraphicsPipelineCreateInfo &create_info) {
     const auto lib_type = GetGraphicsLibType(create_info);
     if (lib_type & VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) {  // Vertex input graphics library
         return std::make_shared<VertexInputState>(p, create_info);
@@ -515,7 +536,7 @@ std::shared_ptr<VertexInputState> Pipeline::CreateVertexInputState(const Pipelin
 
 // static
 std::shared_ptr<PreRasterState> Pipeline::CreatePreRasterState(const Pipeline &p, const ValidationStateTracker &state,
-                                                               const safe_VkGraphicsPipelineCreateInfo &create_info,
+                                                               const vku::safe_VkGraphicsPipelineCreateInfo &create_info,
                                                                const std::shared_ptr<const vvl::RenderPass> &rp) {
     const auto lib_type = GetGraphicsLibType(create_info);
     if (lib_type & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {  // Pre-raster graphics library
@@ -538,10 +559,9 @@ std::shared_ptr<PreRasterState> Pipeline::CreatePreRasterState(const Pipeline &p
 }
 
 // static
-std::shared_ptr<FragmentShaderState> Pipeline::CreateFragmentShaderState(const Pipeline &p, const ValidationStateTracker &state,
-                                                                         const VkGraphicsPipelineCreateInfo &create_info,
-                                                                         const safe_VkGraphicsPipelineCreateInfo &safe_create_info,
-                                                                         const std::shared_ptr<const vvl::RenderPass> &rp) {
+std::shared_ptr<FragmentShaderState> Pipeline::CreateFragmentShaderState(
+    const Pipeline &p, const ValidationStateTracker &state, const VkGraphicsPipelineCreateInfo &create_info,
+    const vku::safe_VkGraphicsPipelineCreateInfo &safe_create_info, const std::shared_ptr<const vvl::RenderPass> &rp) {
     const auto lib_type = GetGraphicsLibType(create_info);
 
     if (lib_type & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {  // Fragment shader graphics library
@@ -570,10 +590,9 @@ std::shared_ptr<FragmentShaderState> Pipeline::CreateFragmentShaderState(const P
 // static
 // Pointers that should be ignored have been set to null in safe_create_info, but if this is a graphics library we need the "raw"
 // create_info.
-std::shared_ptr<FragmentOutputState> Pipeline::CreateFragmentOutputState(const Pipeline &p, const ValidationStateTracker &state,
-                                                                         const VkGraphicsPipelineCreateInfo &create_info,
-                                                                         const safe_VkGraphicsPipelineCreateInfo &safe_create_info,
-                                                                         const std::shared_ptr<const vvl::RenderPass> &rp) {
+std::shared_ptr<FragmentOutputState> Pipeline::CreateFragmentOutputState(
+    const Pipeline &p, const ValidationStateTracker &state, const VkGraphicsPipelineCreateInfo &create_info,
+    const vku::safe_VkGraphicsPipelineCreateInfo &safe_create_info, const std::shared_ptr<const vvl::RenderPass> &rp) {
     // If this pipeline is being created a non-executable (i.e., does not contain complete state) pipeline with FO state, then
     // unconditionally set this pipeline's FO state.
     const auto lib_type = GetGraphicsLibType(create_info);
@@ -660,39 +679,39 @@ std::shared_ptr<const vvl::ShaderModule> Pipeline::GetSubStateShader(VkShaderSta
     }
 }
 
-Pipeline::Pipeline(const ValidationStateTracker *state_data, const VkGraphicsPipelineCreateInfo *pCreateInfo,
+Pipeline::Pipeline(const ValidationStateTracker &state_data, const VkGraphicsPipelineCreateInfo *pCreateInfo,
                    std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::RenderPass> &&rpstate,
-                   std::shared_ptr<const vvl::PipelineLayout> &&layout, CreateShaderModuleStates *csm_states)
+                   std::shared_ptr<const vvl::PipelineLayout> &&layout, ShaderModuleUniqueIds *shader_unique_id_map)
     : StateObject(static_cast<VkPipeline>(VK_NULL_HANDLE), kVulkanObjectTypePipeline),
       rp_state(rpstate),
-      create_info(*pCreateInfo, rpstate, state_data),
+      create_info(MakeGraphicsCreateInfo(*pCreateInfo, rpstate, state_data)),
       pipeline_cache(std::move(pipe_cache)),
-      rendering_create_info(vku::FindStructInPNextChain<VkPipelineRenderingCreateInfo>(PNext())),
-      library_create_info(vku::FindStructInPNextChain<VkPipelineLibraryCreateInfoKHR>(PNext())),
-      graphics_lib_type(GetGraphicsLibType(create_info.graphics)),
+      rendering_create_info(vku::FindStructInPNextChain<VkPipelineRenderingCreateInfo>(GraphicsCreateInfo().pNext)),
+      library_create_info(vku::FindStructInPNextChain<VkPipelineLibraryCreateInfoKHR>(GraphicsCreateInfo().pNext)),
+      graphics_lib_type(GetGraphicsLibType(GraphicsCreateInfo())),
       pipeline_type(VK_PIPELINE_BIND_POINT_GRAPHICS),
-      create_flags(GetPipelineCreateFlags(PNext(), create_info.graphics.flags)),
-      shader_stages_ci(create_info.graphics.pStages, create_info.graphics.stageCount),
+      create_flags(GetPipelineCreateFlags(GraphicsCreateInfo().pNext, GraphicsCreateInfo().flags)),
+      shader_stages_ci(GraphicsCreateInfo().pStages, GraphicsCreateInfo().stageCount),
       uses_shader_module_id(UsesShaderModuleId(*this)),
-      vertex_input_state(CreateVertexInputState(*this, *state_data, create_info.graphics)),
-      pre_raster_state(CreatePreRasterState(*this, *state_data, create_info.graphics, rpstate)),
-      fragment_shader_state(CreateFragmentShaderState(*this, *state_data, *pCreateInfo, create_info.graphics, rpstate)),
-      fragment_output_state(CreateFragmentOutputState(*this, *state_data, *pCreateInfo, create_info.graphics, rpstate)),
-      stage_states(GetStageStates(*state_data, *this, csm_states)),
+      vertex_input_state(CreateVertexInputState(*this, state_data, GraphicsCreateInfo())),
+      pre_raster_state(CreatePreRasterState(*this, state_data, GraphicsCreateInfo(), rpstate)),
+      fragment_shader_state(CreateFragmentShaderState(*this, state_data, *pCreateInfo, GraphicsCreateInfo(), rpstate)),
+      fragment_output_state(CreateFragmentOutputState(*this, state_data, *pCreateInfo, GraphicsCreateInfo(), rpstate)),
+      stage_states(GetStageStates(state_data, *this, shader_unique_id_map)),
       create_info_shaders(GetCreateInfoShaders(*this)),
-      linking_shaders(GetLinkingShaders(library_create_info, *state_data)),
+      linking_shaders(GetLinkingShaders(library_create_info, state_data)),
       active_shaders(create_info_shaders | linking_shaders),
       fragmentShader_writable_output_location_list(GetFSOutputLocations(stage_states)),
       active_slots(GetActiveSlots(stage_states)),
       max_active_slot(GetMaxActiveSlot(active_slots)),
       dynamic_state(GetGraphicsDynamicState(*this)),
       topology_at_rasterizer(GetTopologyAtRasterizer(*this)),
-      descriptor_buffer_mode((create_info.graphics.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
-      uses_pipeline_robustness(UsesPipelineRobustness(PNext(), *this)),
-      ignore_color_attachments(IgnoreColorAttachments(state_data, *this)),
-      csm_states(csm_states) {
+      descriptor_buffer_mode((GraphicsCreateInfo().flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
+      uses_pipeline_robustness(UsesPipelineRobustness(GraphicsCreateInfo().pNext, *this)),
+      uses_pipeline_vertex_robustness(UsesPipelineVertexRobustness(GraphicsCreateInfo().pNext, *this)),
+      ignore_color_attachments(IgnoreColorAttachments(state_data, *this)) {
     if (library_create_info) {
-        const auto &exe_layout_state = state_data->Get<vvl::PipelineLayout>(create_info.graphics.layout);
+        const auto &exe_layout_state = state_data.Get<vvl::PipelineLayout>(GraphicsCreateInfo().layout);
         const auto *exe_layout = exe_layout_state.get();
         const auto *pre_raster_layout =
             (pre_raster_state && pre_raster_state->pipeline_layout) ? pre_raster_state->pipeline_layout.get() : nullptr;
@@ -708,7 +727,7 @@ Pipeline::Pipeline(const ValidationStateTracker *state_data, const VkGraphicsPip
         // TODO Could store the graphics_lib_type in the sub-state rather than searching for it again here.
         //      Or, could store a pointer back to the owning Pipeline.
         for (uint32_t i = 0; i < library_create_info->libraryCount; ++i) {
-            const auto &state = state_data->Get<vvl::Pipeline>(library_create_info->pLibraries[i]);
+            const auto &state = state_data.Get<vvl::Pipeline>(library_create_info->pLibraries[i]);
             if (state) {
                 graphics_lib_type |= state->graphics_lib_type;
             }
@@ -716,82 +735,75 @@ Pipeline::Pipeline(const ValidationStateTracker *state_data, const VkGraphicsPip
     }
 }
 
-Pipeline::Pipeline(const ValidationStateTracker *state_data, const VkComputePipelineCreateInfo *pCreateInfo,
-                   std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout,
-                   CreateShaderModuleStates *csm_states)
+Pipeline::Pipeline(const ValidationStateTracker &state_data, const VkComputePipelineCreateInfo *pCreateInfo,
+                   std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout)
     : StateObject(static_cast<VkPipeline>(VK_NULL_HANDLE), kVulkanObjectTypePipeline),
       create_info(pCreateInfo),
       pipeline_cache(std::move(pipe_cache)),
       pipeline_type(VK_PIPELINE_BIND_POINT_COMPUTE),
-      create_flags(GetPipelineCreateFlags(PNext(), create_info.compute.flags)),
-      shader_stages_ci(&create_info.compute.stage, 1),
+      create_flags(GetPipelineCreateFlags(ComputeCreateInfo().pNext, ComputeCreateInfo().flags)),
+      shader_stages_ci(&ComputeCreateInfo().stage, 1),
       uses_shader_module_id(UsesShaderModuleId(*this)),
-      stage_states(GetStageStates(*state_data, *this, csm_states)),
+      stage_states(GetStageStates(state_data, *this, nullptr)),
       create_info_shaders(GetCreateInfoShaders(*this)),
       active_shaders(create_info_shaders),  // compute has no linking shaders
       active_slots(GetActiveSlots(stage_states)),
       max_active_slot(GetMaxActiveSlot(active_slots)),
       dynamic_state(0),  // compute has no dynamic state
-      descriptor_buffer_mode((create_info.compute.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
-      uses_pipeline_robustness(UsesPipelineRobustness(PNext(), *this)),
+      descriptor_buffer_mode((ComputeCreateInfo().flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
+      uses_pipeline_robustness(UsesPipelineRobustness(ComputeCreateInfo().pNext, *this)),
+      uses_pipeline_vertex_robustness(false),
       ignore_color_attachments(IgnoreColorAttachments(state_data, *this)),
-      csm_states(csm_states),
       merged_graphics_layout(layout) {
     assert(active_shaders == VK_SHADER_STAGE_COMPUTE_BIT);
 }
 
-Pipeline::Pipeline(const ValidationStateTracker *state_data, const VkRayTracingPipelineCreateInfoKHR *pCreateInfo,
-                   std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout,
-                   CreateShaderModuleStates *csm_states)
+Pipeline::Pipeline(const ValidationStateTracker &state_data, const VkRayTracingPipelineCreateInfoKHR *pCreateInfo,
+                   std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout)
     : StateObject(static_cast<VkPipeline>(VK_NULL_HANDLE), kVulkanObjectTypePipeline),
       create_info(pCreateInfo),
       pipeline_cache(std::move(pipe_cache)),
       pipeline_type(VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR),
-      create_flags(GetPipelineCreateFlags(PNext(), create_info.raytracing.flags)),
-      shader_stages_ci(create_info.raytracing.pStages, create_info.raytracing.stageCount),
-      ray_tracing_library_ci(create_info.raytracing.pLibraryInfo),
+      create_flags(GetPipelineCreateFlags(RayTracingCreateInfo().pNext, RayTracingCreateInfo().flags)),
+      shader_stages_ci(RayTracingCreateInfo().pStages, RayTracingCreateInfo().stageCount),
+      ray_tracing_library_ci(RayTracingCreateInfo().pLibraryInfo),
       uses_shader_module_id(UsesShaderModuleId(*this)),
-      stage_states(GetStageStates(*state_data, *this, csm_states)),
+      stage_states(GetStageStates(state_data, *this, nullptr)),
       create_info_shaders(GetCreateInfoShaders(*this)),
       active_shaders(create_info_shaders),  // RTX has no linking shaders
       active_slots(GetActiveSlots(stage_states)),
       max_active_slot(GetMaxActiveSlot(active_slots)),
       dynamic_state(GetRayTracingDynamicState(*this)),
-      descriptor_buffer_mode((create_info.raytracing.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
-      uses_pipeline_robustness(UsesPipelineRobustness(PNext(), *this)),
+      descriptor_buffer_mode((RayTracingCreateInfo().flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
+      uses_pipeline_robustness(UsesPipelineRobustness(RayTracingCreateInfo().pNext, *this)),
+      uses_pipeline_vertex_robustness(false),
       ignore_color_attachments(IgnoreColorAttachments(state_data, *this)),
-      csm_states(csm_states),
       merged_graphics_layout(std::move(layout)) {
-    assert(0 == (active_shaders &
-                 ~(VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-                   VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR)));
+    assert(0 == (active_shaders & ~(kShaderStageAllRayTracing)));
 }
 
-Pipeline::Pipeline(const ValidationStateTracker *state_data, const VkRayTracingPipelineCreateInfoNV *pCreateInfo,
-                   std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout,
-                   CreateShaderModuleStates *csm_states)
+Pipeline::Pipeline(const ValidationStateTracker &state_data, const VkRayTracingPipelineCreateInfoNV *pCreateInfo,
+                   std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::PipelineLayout> &&layout)
     : StateObject(static_cast<VkPipeline>(VK_NULL_HANDLE), kVulkanObjectTypePipeline),
       create_info(pCreateInfo),
       pipeline_cache(std::move(pipe_cache)),
       pipeline_type(VK_PIPELINE_BIND_POINT_RAY_TRACING_NV),
-      create_flags(GetPipelineCreateFlags(PNext(), create_info.raytracing.flags)),
-      shader_stages_ci(create_info.raytracing.pStages, create_info.raytracing.stageCount),
-      ray_tracing_library_ci(create_info.raytracing.pLibraryInfo),
+      create_flags(GetPipelineCreateFlags(RayTracingCreateInfo().pNext, RayTracingCreateInfo().flags)),
+      shader_stages_ci(RayTracingCreateInfo().pStages, RayTracingCreateInfo().stageCount),
+      ray_tracing_library_ci(RayTracingCreateInfo().pLibraryInfo),
       uses_shader_module_id(UsesShaderModuleId(*this)),
-      stage_states(GetStageStates(*state_data, *this, csm_states)),
+      stage_states(GetStageStates(state_data, *this, nullptr)),
       create_info_shaders(GetCreateInfoShaders(*this)),
       active_shaders(create_info_shaders),  // RTX has no linking shaders
       active_slots(GetActiveSlots(stage_states)),
       max_active_slot(GetMaxActiveSlot(active_slots)),
       dynamic_state(GetRayTracingDynamicState(*this)),
-      descriptor_buffer_mode((create_info.graphics.flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
-      uses_pipeline_robustness(UsesPipelineRobustness(PNext(), *this)),
+      descriptor_buffer_mode((RayTracingCreateInfo().flags & VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) != 0),
+      uses_pipeline_robustness(UsesPipelineRobustness(RayTracingCreateInfo().pNext, *this)),
+      uses_pipeline_vertex_robustness(false),
       ignore_color_attachments(IgnoreColorAttachments(state_data, *this)),
-      csm_states(csm_states),
       merged_graphics_layout(std::move(layout)) {
-    assert(0 == (active_shaders &
-                 ~(VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-                   VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR)));
+    assert(0 == (active_shaders & ~(kShaderStageAllRayTracing)));
 }
 
 }  // namespace vvl
@@ -984,6 +996,34 @@ bool LastBound::IsValidShaderBound(ShaderObjectStage stage) const {
 
 bool LastBound::IsValidShaderOrNullBound(ShaderObjectStage stage) const {
     return shader_object_bound[static_cast<uint32_t>(stage)];
+}
+
+std::vector<vvl::ShaderObject *> LastBound::GetAllBoundGraphicsShaders() {
+    std::vector<vvl::ShaderObject *> shaders;
+
+    if (IsValidShaderBound(ShaderObjectStage::VERTEX)) {
+        shaders.emplace_back(shader_object_states[static_cast<uint32_t>(ShaderObjectStage::VERTEX)]);
+    }
+    if (IsValidShaderBound(ShaderObjectStage::TESSELLATION_CONTROL)) {
+        shaders.emplace_back(shader_object_states[static_cast<uint32_t>(ShaderObjectStage::TESSELLATION_CONTROL)]);
+    }
+    if (IsValidShaderBound(ShaderObjectStage::TESSELLATION_EVALUATION)) {
+        shaders.emplace_back(shader_object_states[static_cast<uint32_t>(ShaderObjectStage::TESSELLATION_EVALUATION)]);
+    }
+    if (IsValidShaderBound(ShaderObjectStage::GEOMETRY)) {
+        shaders.emplace_back(shader_object_states[static_cast<uint32_t>(ShaderObjectStage::GEOMETRY)]);
+    }
+    if (IsValidShaderBound(ShaderObjectStage::FRAGMENT)) {
+        shaders.emplace_back(shader_object_states[static_cast<uint32_t>(ShaderObjectStage::FRAGMENT)]);
+    }
+    if (IsValidShaderBound(ShaderObjectStage::TASK)) {
+        shaders.emplace_back(shader_object_states[static_cast<uint32_t>(ShaderObjectStage::TASK)]);
+    }
+    if (IsValidShaderBound(ShaderObjectStage::MESH)) {
+        shaders.emplace_back(shader_object_states[static_cast<uint32_t>(ShaderObjectStage::MESH)]);
+    }
+
+    return shaders;
 }
 
 bool LastBound::IsAnyGraphicsShaderBound() const {

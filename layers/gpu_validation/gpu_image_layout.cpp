@@ -166,38 +166,6 @@ void gpuav::Validator::PreCallRecordDestroyImage(VkDevice device, VkImage image,
     BaseClass::PreCallRecordDestroyImage(device, image, pAllocator, record_obj);
 }
 
-void gpuav::Validator::PostCallRecordGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
-                                                           uint32_t *pSwapchainImageCount, VkImage *pSwapchainImages,
-                                                           const RecordObject &record_obj) {
-    // This function will run twice. The first is to get pSwapchainImageCount. The second is to get pSwapchainImages.
-    // The first time in StateTracker::PostCallRecordGetSwapchainImagesKHR only generates the container's size.
-    // The second time in StateTracker::PostCallRecordGetSwapchainImagesKHR will create VKImage and vvl::Image.
-
-    // So GlobalImageLayoutMap saving new vvl::Images has to run in the second time.
-    // pSwapchainImages is not nullptr and it needs to wait until StateTracker::PostCallRecordGetSwapchainImagesKHR.
-
-    uint32_t new_swapchain_image_index = 0;
-    if (((record_obj.result == VK_SUCCESS) || (record_obj.result == VK_INCOMPLETE)) && pSwapchainImages) {
-        auto swapchain_state = Get<vvl::Swapchain>(swapchain);
-        const auto image_vector_size = swapchain_state->images.size();
-
-        for (; new_swapchain_image_index < *pSwapchainImageCount; ++new_swapchain_image_index) {
-            if ((new_swapchain_image_index >= image_vector_size) ||
-                !swapchain_state->images[new_swapchain_image_index].image_state) {
-                break;
-            }
-        }
-    }
-    BaseClass::PostCallRecordGetSwapchainImagesKHR(device, swapchain, pSwapchainImageCount, pSwapchainImages, record_obj);
-
-    if (((record_obj.result == VK_SUCCESS) || (record_obj.result == VK_INCOMPLETE)) && pSwapchainImages) {
-        for (; new_swapchain_image_index < *pSwapchainImageCount; ++new_swapchain_image_index) {
-            auto image_state = Get<vvl::Image>(pSwapchainImages[new_swapchain_image_index]);
-            image_state->SetInitialLayoutMap();
-        }
-    }
-}
-
 void gpuav::Validator::PreCallRecordCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout,
                                                        const VkClearColorValue *pColor, uint32_t rangeCount,
                                                        const VkImageSubresourceRange *pRanges, const RecordObject &record_obj) {
@@ -555,7 +523,7 @@ void gpuav::Validator::PreCallRecordCmdPipelineBarrier2(VkCommandBuffer commandB
     TransitionImageLayouts(*cb_state, pDependencyInfo->imageMemoryBarrierCount, pDependencyInfo->pImageMemoryBarriers);
 }
 
-void gpuav::Validator::TransitionAttachmentRefLayout(vvl::CommandBuffer &cb_state, const safe_VkAttachmentReference2 &ref) {
+void gpuav::Validator::TransitionAttachmentRefLayout(vvl::CommandBuffer &cb_state, const vku::safe_VkAttachmentReference2 &ref) {
     if (ref.attachment != VK_ATTACHMENT_UNUSED) {
         vvl::ImageView *image_view = cb_state.GetActiveAttachmentImageViewState(ref.attachment);
         if (image_view) {
@@ -572,7 +540,7 @@ void gpuav::Validator::TransitionAttachmentRefLayout(vvl::CommandBuffer &cb_stat
 
 void gpuav::Validator::TransitionSubpassLayouts(vvl::CommandBuffer &cb_state, const vvl::RenderPass &render_pass_state,
                                                 const int subpass_index) {
-    auto const &subpass = render_pass_state.createInfo.pSubpasses[subpass_index];
+    auto const &subpass = render_pass_state.create_info.pSubpasses[subpass_index];
     for (uint32_t j = 0; j < subpass.inputAttachmentCount; ++j) {
         TransitionAttachmentRefLayout(cb_state, subpass.pInputAttachments[j]);
     }
@@ -589,7 +557,7 @@ void gpuav::Validator::TransitionSubpassLayouts(vvl::CommandBuffer &cb_state, co
 // 2. Transition from initialLayout to layout used in subpass 0
 void gpuav::Validator::TransitionBeginRenderPassLayouts(vvl::CommandBuffer &cb_state, const vvl::RenderPass &render_pass_state) {
     // First record expected initialLayout as a potential initial layout usage.
-    auto const rpci = render_pass_state.createInfo.ptr();
+    auto const rpci = render_pass_state.create_info.ptr();
     for (uint32_t i = 0; i < rpci->attachmentCount; ++i) {
         auto *view_state = cb_state.GetActiveAttachmentImageViewState(i);
         if (view_state) {
@@ -620,7 +588,7 @@ void gpuav::Validator::TransitionFinalSubpassLayouts(vvl::CommandBuffer &cb_stat
         return;
     }
 
-    const VkRenderPassCreateInfo2 *render_pass_info = render_pass_state->createInfo.ptr();
+    const VkRenderPassCreateInfo2 *render_pass_info = render_pass_state->create_info.ptr();
     for (uint32_t i = 0; i < render_pass_info->attachmentCount; ++i) {
         auto *view_state = cb_state.GetActiveAttachmentImageViewState(i);
         if (view_state) {

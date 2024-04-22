@@ -64,7 +64,6 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
     from generators.dynamic_state_generator import DynamicStateOutputGenerator
     from generators.sync_validation_generator import SyncValidationOutputGenerator
     from generators.object_types_generator import ObjectTypesOutputGenerator
-    from generators.safe_struct_generator import SafeStructOutputGenerator
     from generators.enum_flag_bits_generator import EnumFlagBitsOutputGenerator
     from generators.valid_enum_values_generator import ValidEnumValuesOutputGenerator
     from generators.valid_flag_values_generator import ValidFlagValuesOutputGenerator
@@ -168,31 +167,6 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
         },
         'vk_layer_dispatch_table.h' : {
             'generator' : LayerDispatchTableOutputGenerator,
-            'genCombined': True,
-        },
-        'vk_safe_struct.h' : {
-            'generator' : SafeStructOutputGenerator,
-            'genCombined': True,
-        },
-        'vk_safe_struct_utils.cpp' : {
-            'generator' : SafeStructOutputGenerator,
-            'genCombined': True,
-        },
-        'vk_safe_struct_core.cpp' : {
-            'generator' : SafeStructOutputGenerator,
-            'genCombined': True,
-            'regenerate' : True
-        },
-        'vk_safe_struct_khr.cpp' : {
-            'generator' : SafeStructOutputGenerator,
-            'genCombined': True,
-        },
-        'vk_safe_struct_ext.cpp' : {
-            'generator' : SafeStructOutputGenerator,
-            'genCombined': True,
-        },
-        'vk_safe_struct_vendor.cpp' : {
-            'generator' : SafeStructOutputGenerator,
             'genCombined': True,
         },
         'vk_object_types.h' : {
@@ -388,7 +362,13 @@ def main(argv):
     # The shaders requires glslangvalidator, so they are updated manually with generate_spirv when needed
     verify_exclude = [
         '.clang-format',
-        'gpu_as_inspection_comp.h',
+        'gpu_pre_dispatch_comp.cpp',
+        'gpu_pre_draw_vert.cpp',
+        'gpu_pre_trace_rays_rgen.cpp',
+        'gpu_pre_copy_buffer_to_image_comp.cpp',
+        'inst_buffer_device_address_comp.cpp',
+        'inst_bindless_descriptor_comp.cpp',
+        'inst_ray_query_comp.cpp',
         'gpu_pre_dispatch_comp.h',
         'gpu_pre_draw_vert.h',
         'gpu_pre_trace_rays_rgen.h',
@@ -412,7 +392,7 @@ def main(argv):
     group.add_argument('--target', nargs='+', help='only generate file names passed in')
     group.add_argument('-i', '--incremental', action='store_true', help='only update repo files that change')
     group.add_argument('-v', '--verify', action='store_true', help='verify repo files match generator output')
-    group.add_argument('--caching', action='store_true', help='Try to cache generator objects')
+    group.add_argument('--no-caching', action='store_true', help='Do not try to cache generator objects')
     args = parser.parse_args(argv)
 
     repo_dir = repo_relative(f'layers/{args.api}/generated')
@@ -456,7 +436,8 @@ def main(argv):
 
     registry = os.path.abspath(os.path.join(args.registry,  'vk.xml'))
     grammar = os.path.abspath(os.path.join(args.grammar, 'spirv.core.grammar.json'))
-    RunGenerators(args.api, registry, grammar, gen_dir, styleFile, args.target, args.caching)
+    caching = not args.no_caching
+    RunGenerators(args.api, registry, grammar, gen_dir, styleFile, args.target, caching)
 
     # Generate vk_validation_error_messages.h (ignore if targeting a single generator)
     if (not args.target):

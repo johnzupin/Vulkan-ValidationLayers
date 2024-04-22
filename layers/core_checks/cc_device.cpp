@@ -84,7 +84,7 @@ bool CoreChecks::ValidatePhysicalDeviceQueueFamilies(uint32_t queue_family_count
 bool CoreChecks::GetPhysicalDeviceImageFormatProperties(vvl::Image &image_state, const char *vuid_string,
                                                         const Location &loc) const {
     bool skip = false;
-    const auto image_create_info = image_state.createInfo;
+    const auto image_create_info = image_state.create_info;
     VkResult image_properties_result = VK_SUCCESS;
     Func command = Func::vkGetPhysicalDeviceImageFormatProperties;
     if (image_create_info.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
@@ -758,6 +758,8 @@ bool CoreChecks::PreCallValidateCreateCommandPool(VkDevice device, const VkComma
 bool CoreChecks::PreCallValidateDestroyCommandPool(VkDevice device, VkCommandPool commandPool,
                                                    const VkAllocationCallbacks *pAllocator, const ErrorObject &error_obj) const {
     bool skip = false;
+    // In case of DEVICE_LOST, all execution is considered over
+    if (is_device_lost) return false;
     auto cp_state = Get<vvl::CommandPool>(commandPool);
     if (!cp_state) { return false; }
     // Verify that command buffers in pool are complete (not in-flight)
@@ -792,6 +794,8 @@ bool CoreChecks::PreCallValidateResetCommandPool(VkDevice device, VkCommandPool 
 // For given obj node, if it is use, flag a validation error and return callback result, else return false
 bool CoreChecks::ValidateObjectNotInUse(const vvl::StateObject *obj_node, const Location &loc, const char *error_code) const {
     if (disabled[object_in_use]) return false;
+    // In case of DEVICE_LOST, all execution is considered over
+    if (is_device_lost) return false;
     auto obj_struct = obj_node->Handle();
     bool skip = false;
 

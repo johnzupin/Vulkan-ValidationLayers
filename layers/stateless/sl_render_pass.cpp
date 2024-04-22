@@ -408,14 +408,14 @@ bool StatelessValidation::ValidateCreateRenderPass(VkDevice device, const VkRend
 bool StatelessValidation::manual_PreCallValidateCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo *pCreateInfo,
                                                                  const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass,
                                                                  const ErrorObject &error_obj) const {
-    safe_VkRenderPassCreateInfo2 create_info_2 = ConvertVkRenderPassCreateInfoToV2KHR(*pCreateInfo);
+    vku::safe_VkRenderPassCreateInfo2 create_info_2 = ConvertVkRenderPassCreateInfoToV2KHR(*pCreateInfo);
     return ValidateCreateRenderPass(device, create_info_2.ptr(), pAllocator, pRenderPass, error_obj);
 }
 
 bool StatelessValidation::manual_PreCallValidateCreateRenderPass2(VkDevice device, const VkRenderPassCreateInfo2 *pCreateInfo,
                                                                   const VkAllocationCallbacks *pAllocator,
                                                                   VkRenderPass *pRenderPass, const ErrorObject &error_obj) const {
-    safe_VkRenderPassCreateInfo2 create_info_2(pCreateInfo);
+    vku::safe_VkRenderPassCreateInfo2 create_info_2(pCreateInfo);
     return ValidateCreateRenderPass(device, create_info_2.ptr(), pAllocator, pRenderPass, error_obj);
 }
 
@@ -424,10 +424,8 @@ void StatelessValidation::RecordRenderPass(VkRenderPass renderPass, const VkRend
     auto &renderpass_state = renderpasses_states[renderPass];
     lock.unlock();
 
-    renderpass_state.subpasses_flags.resize(pCreateInfo->subpassCount);
     for (uint32_t subpass = 0; subpass < pCreateInfo->subpassCount; ++subpass) {
         bool uses_color = false;
-        renderpass_state.color_attachment_count = pCreateInfo->pSubpasses[subpass].colorAttachmentCount;
 
         for (uint32_t i = 0; i < pCreateInfo->pSubpasses[subpass].colorAttachmentCount && !uses_color; ++i)
             if (pCreateInfo->pSubpasses[subpass].pColorAttachments[i].attachment != VK_ATTACHMENT_UNUSED) uses_color = true;
@@ -439,14 +437,13 @@ void StatelessValidation::RecordRenderPass(VkRenderPass renderPass, const VkRend
 
         if (uses_color) renderpass_state.subpasses_using_color_attachment.insert(subpass);
         if (uses_depthstencil) renderpass_state.subpasses_using_depthstencil_attachment.insert(subpass);
-        renderpass_state.subpasses_flags[subpass] = pCreateInfo->pSubpasses[subpass].flags;
     }
 }
 void StatelessValidation::PostCallRecordCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo *pCreateInfo,
                                                          const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass,
                                                          const RecordObject &record_obj) {
     if (record_obj.result != VK_SUCCESS) return;
-    safe_VkRenderPassCreateInfo2 create_info_2 = ConvertVkRenderPassCreateInfoToV2KHR(*pCreateInfo);
+    vku::safe_VkRenderPassCreateInfo2 create_info_2 = ConvertVkRenderPassCreateInfoToV2KHR(*pCreateInfo);
     RecordRenderPass(*pRenderPass, create_info_2.ptr());
 }
 
@@ -455,7 +452,7 @@ void StatelessValidation::PostCallRecordCreateRenderPass2KHR(VkDevice device, co
                                                              const RecordObject &record_obj) {
     // Track the state necessary for checking vkCreateGraphicsPipeline (subpass usage of depth and color attachments)
     if (record_obj.result != VK_SUCCESS) return;
-    safe_VkRenderPassCreateInfo2 create_info_2(pCreateInfo);
+    vku::safe_VkRenderPassCreateInfo2 create_info_2(pCreateInfo);
     RecordRenderPass(*pRenderPass, create_info_2.ptr());
 }
 

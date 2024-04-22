@@ -4,7 +4,7 @@
         "name": "VK_LAYER_KHRONOS_validation",
         "type": "GLOBAL",
         "library_path": "@JSON_LIBRARY_PATH@",
-        "api_version": "1.3.280",
+        "api_version": "1.3.282",
         "implementation_version": "1",
         "description": "Khronos Validation Layer",
         "introduction": "The main, comprehensive Khronos validation layer.\n\nVulkan is an Explicit API, enabling direct control over how GPUs actually work. By design, minimal error checking is done inside a Vulkan driver. Applications have full control and responsibility for correct operation. Any errors in how Vulkan is used can result in a crash. \n\nThe Khronos Valiation Layer can be enabled to assist development by enabling developers to verify their applications correctly use the Vulkan API.",
@@ -328,6 +328,10 @@
                         },
                         {
                             "key": "validate_sync",
+                            "value": true
+                        },
+                        {
+                            "key": "sync_queue_submit",
                             "value": true
                         },
                         {
@@ -831,7 +835,7 @@
                                             }
                                         },
                                         {
-                                            "key": "vma_linear_output",
+                                            "key": "gpuav_vma_linear_output",
                                             "label": "Linear Memory Allocation Mode",
                                             "description": "Use VMA linear memory allocations for GPU-AV output buffers instead of finding best place for new allocations among free regions to optimize memory usage. Enabling this setting reduces performance cost but disabling this method minimizes memory usage.",
                                             "type": "BOOL",
@@ -872,7 +876,7 @@
                                             },
                                             "settings": [
                                                 {
-                                                    "key": "warn_on_robust_oob",
+                                                    "key": "gpuav_warn_on_robust_oob",
                                                     "label": "Generate warning on out of bounds accesses even if buffer robustness is enabled",
                                                     "description": "Warn on out of bounds accesses even if robustness is enabled",
                                                     "type": "BOOL",
@@ -954,7 +958,7 @@
                                             }
                                         },
                                         {
-                                            "key": "use_instrumented_shader_cache",
+                                            "key": "gpuav_cache_instrumented_shaders",
                                             "label": "Cache instrumented shaders rather than instrumenting them on every run",
                                             "description": "Enable instrumented shader caching",
                                             "type": "BOOL",
@@ -974,7 +978,7 @@
                                             }
                                         },
                                         {
-                                            "key": "select_instrumented_shaders",
+                                            "key": "gpuav_select_instrumented_shaders",
                                             "label": "Enable instrumenting shaders selectively",
                                             "description": "Select which shaders to instrument passing a VkValidationFeaturesEXT struct with GPU-AV enabled in the VkShaderModuleCreateInfo pNext",
                                             "type": "BOOL",
