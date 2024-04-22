@@ -42,7 +42,7 @@ TEST_F(VkAmdBestPracticesLayerTest, TooManyPipelines) {
         }
         CreatePipelineHelper pipe(*this);
         pipe.CreateGraphicsPipeline();
-        pipeline_Array[i] = pipe.pipeline_;
+        pipeline_Array[i] = pipe.Handle();
         if (i == 1) {
             // change check to too many pipelines
             m_errorMonitor->VerifyFound();
@@ -461,7 +461,8 @@ TEST_F(VkAmdBestPracticesLayerTest, ImageToImageCopy) {
     vkt::Image image1D_1(*m_device, img_info, vkt::set_layout);
 
     img_info.tiling = VK_IMAGE_TILING_LINEAR;
-    img_info.usage = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    img_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    img_info.initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     vkt::Image image_1D_2(*m_device, img_info, vkt::set_layout);
     if (!image_1D_2.initialized()) {
         GTEST_SKIP() << "Could not initilize Linear image, skipping image to image copy test";
@@ -702,7 +703,7 @@ TEST_F(VkAmdBestPracticesLayerTest, SecondaryCmdBuffer) {
     // record a secondary command buffer
     secondary_cmd_buf.begin(&binfo);
 
-    vk::CmdBindPipeline(secondary_cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vk::CmdBindPipeline(secondary_cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     VkDeviceSize offset = 0;
     vk::CmdBindVertexBuffers(secondary_cmd_buf.handle(), 0, 1, &vertex_buffer.handle(), &offset);
     vk::CmdDraw(secondary_cmd_buf.handle(), 1, 0, 0, 0);

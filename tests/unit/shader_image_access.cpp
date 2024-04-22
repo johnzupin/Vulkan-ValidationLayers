@@ -94,7 +94,7 @@ TEST_F(NegativeShaderImageAccess, FunctionOpImage) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-format-07753");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-format-07753");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -151,7 +151,7 @@ TEST_F(NegativeShaderImageAccess, ComponentTypeMismatchFunctionTwoArgs) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-format-07753");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-format-07753");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -198,11 +198,11 @@ TEST_F(NegativeShaderImageAccess, UnnormalizedCoordinatesFunction) {
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.Handle());
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(), 0, 1,
                               &g_pipe.descriptor_set_->set_, 0, nullptr);
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08611");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08611");
     vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -251,7 +251,7 @@ TEST_F(NegativeShaderImageAccess, MultisampleMismatchWithPipeline) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-samples-08726");
+    m_errorMonitor->SetDesiredError("VUID-RuntimeSpirv-samples-08726");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -308,7 +308,7 @@ TEST_F(NegativeShaderImageAccess, NonMultisampleMismatchWithPipeline) {
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-RuntimeSpirv-samples-08725");
+    m_errorMonitor->SetDesiredError("VUID-RuntimeSpirv-samples-08725");
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -391,7 +391,62 @@ TEST_F(NegativeShaderImageAccess, MultipleFunctionCalls) {
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-magFilter-04553");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-magFilter-04553");
     vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeShaderImageAccess, AliasImageBinding) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7677");
+    RETURN_IF_SKIP(Init());
+
+    char const *csSource = R"glsl(
+        #version 460
+        #extension GL_EXT_samplerless_texture_functions : require
+
+        layout(set = 0, binding = 0) uniform texture2D float_textures[3];
+        layout(set = 0, binding = 0) uniform utexture2D uint_textures[3];
+        layout(set = 0, binding = 1) buffer output_buffer { vec4 data; }; // avoid optimization
+
+        void main() {
+            const vec4 value = texelFetch(float_textures[0], ivec2(0), 0); // good
+            const uint mask_a = texelFetch(uint_textures[1], ivec2(0), 0).x; // good
+            const uint mask_b = texelFetch(uint_textures[2], ivec2(0), 0).x; // bad
+            data = (mask_a + mask_b) > 0 ? value : vec4(0.0);
+        }
+    )glsl";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 3, VK_SHADER_STAGE_ALL, nullptr},
+                          {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.CreateComputePipeline();
+
+    auto image_ci = vkt::Image::ImageCreateInfo2D(64, 64, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image float_image(*m_device, image_ci, vkt::set_layout);
+    vkt::ImageView float_image_view = float_image.CreateView();
+
+    image_ci.format = VK_FORMAT_R8G8B8A8_UINT;
+    vkt::Image uint_image(*m_device, image_ci, vkt::set_layout);
+    vkt::ImageView uint_image_view = uint_image.CreateView();
+
+    vkt::Buffer buffer(*m_device, 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+    pipe.descriptor_set_->WriteDescriptorImageInfo(0, float_image_view.handle(), VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                                   VK_IMAGE_LAYOUT_GENERAL, 0);
+    pipe.descriptor_set_->WriteDescriptorImageInfo(0, uint_image_view.handle(), VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                                   VK_IMAGE_LAYOUT_GENERAL, 1);
+    pipe.descriptor_set_->WriteDescriptorImageInfo(0, float_image_view.handle(), VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                                   VK_IMAGE_LAYOUT_GENERAL, 2);
+    pipe.descriptor_set_->WriteDescriptorBufferInfo(1, buffer.handle(), 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    pipe.descriptor_set_->UpdateDescriptorSets();
+
+    m_commandBuffer->begin();
+    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_.handle(), 0, 1,
+                              &pipe.descriptor_set_->set_, 0, nullptr);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-format-07753");
+    vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
 }

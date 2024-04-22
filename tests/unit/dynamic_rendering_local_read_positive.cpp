@@ -131,3 +131,100 @@ TEST_F(PositiveDynamicRenderingLocalRead, BasicUsage) {
     m_commandBuffer->EndRendering();
     m_commandBuffer->end();
 }
+
+TEST_F(PositiveDynamicRenderingLocalRead, CmdClearAttachments) {
+    TEST_DESCRIPTION("Clear color attachment");
+    RETURN_IF_SKIP(InitBasicDynamicRenderingLocalRead());
+
+    VkFormat color_format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &color_format;
+
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
+    pipe.CreateGraphicsPipeline();
+
+    VkRenderingAttachmentInfoKHR color_attachments[2];
+    color_attachments[0] = vku::InitStructHelper();
+    color_attachments[0].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color_attachments[1] = vku::InitStructHelper();
+    color_attachments[1].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    m_commandBuffer->begin();
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+
+    VkRenderingInfo rendering_info = vku::InitStructHelper();
+    rendering_info.renderArea = {{0, 0}, {m_width, m_height}};
+    rendering_info.layerCount = 1;
+    rendering_info.colorAttachmentCount = 2;
+    rendering_info.pColorAttachments = color_attachments;
+
+    m_commandBuffer->BeginRendering(rendering_info);
+
+    uint32_t locations[2] = {0, VK_ATTACHMENT_UNUSED};
+    VkRenderingAttachmentLocationInfoKHR location_info = vku::InitStructHelper();
+    location_info.colorAttachmentCount = 2;
+    location_info.pColorAttachmentLocations = locations;
+
+    vk::CmdSetRenderingAttachmentLocationsKHR(m_commandBuffer->handle(), &location_info);
+
+    VkClearAttachment clear_attachment;
+    clear_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    clear_attachment.clearValue.color.float32[0] = 1.0;
+    clear_attachment.clearValue.color.float32[1] = 1.0;
+    clear_attachment.clearValue.color.float32[2] = 1.0;
+    clear_attachment.clearValue.color.float32[3] = 1.0;
+    clear_attachment.colorAttachment = 0;
+    VkClearRect clear_rect = {{{0, 0}, {m_width, m_height}}, 0, 1};
+
+    vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &clear_attachment, 1, &clear_rect);
+}
+
+TEST_F(PositiveDynamicRenderingLocalRead, CmdClearDepthAttachment) {
+    TEST_DESCRIPTION("Clear depth attachment.");
+
+    RETURN_IF_SKIP(InitBasicDynamicRenderingLocalRead());
+
+    const VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
+
+    vkt::Image depthImage(*m_device, 32, 32, 1, ds_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    vkt::ImageView depthImageView = depthImage.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    VkClearValue clearValue;
+    clearValue.depthStencil.depth = 1.0f;
+    clearValue.depthStencil.stencil = 0u;
+
+    VkRenderingAttachmentInfo depthAttachment = vku::InitStructHelper();
+    depthAttachment.imageView = depthImageView;
+    depthAttachment.imageLayout = VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.clearValue = clearValue;
+
+    VkRenderingInfo renderingInfo = vku::InitStructHelper();
+    renderingInfo.renderArea = {{0, 0}, {32u, 32u}};
+    renderingInfo.layerCount = 1u;
+    renderingInfo.pDepthAttachment = &depthAttachment;
+
+    VkRenderingAttachmentLocationInfoKHR locationInfo = vku::InitStructHelper();
+    locationInfo.colorAttachmentCount = 0u;
+    locationInfo.pColorAttachmentLocations = nullptr;
+
+    VkClearAttachment attachment;
+    attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    attachment.colorAttachment = 0u;
+    attachment.clearValue = clearValue;
+
+    VkClearRect rect;
+    rect.rect = {{0, 0}, {32u, 32u}};
+    rect.baseArrayLayer = 0u;
+    rect.layerCount = 1u;
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(renderingInfo);
+    vk::CmdSetRenderingAttachmentLocationsKHR(m_commandBuffer->handle(), &locationInfo);
+    vk::CmdClearAttachments(m_commandBuffer->handle(), 1u, &attachment, 1u, &rect);
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+}

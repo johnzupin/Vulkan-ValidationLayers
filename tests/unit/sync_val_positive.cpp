@@ -128,7 +128,7 @@ TEST_F(PositiveSyncVal, CmdClearAttachmentLayer) {
     m_commandBuffer->begin();
     // Write 1: Copy to render target's layer 0
     vk::CmdCopyImage(*m_commandBuffer, image, VK_IMAGE_LAYOUT_GENERAL, rt, VK_IMAGE_LAYOUT_GENERAL, 1, &copy_region);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     m_commandBuffer->BeginRenderPass(render_pass, framebuffer, width, height);
     // Write 2: Clear render target's layer 1
     vk::CmdClearAttachments(*m_commandBuffer, 1, &clear_attachment, 1, &clear_rect);
@@ -743,13 +743,13 @@ TEST_F(PositiveSyncVal, ImageArrayDynamicIndexing) {
     m_commandBuffer->begin();
     // Graphics pipeline writes
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.pipeline_);
+    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.Handle());
     vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.pipeline_layout_, 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(*m_commandBuffer, 3, 1, 0, 0);
     m_commandBuffer->EndRenderPass();
     // Compute pipeline reads
-    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_);
+    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.Handle());
     vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_layout_, 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
@@ -814,13 +814,13 @@ TEST_F(PositiveSyncVal, ImageArrayConstantIndexing) {
     m_commandBuffer->begin();
     // Graphics pipeline writes
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.pipeline_);
+    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.Handle());
     vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.pipeline_layout_, 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(*m_commandBuffer, 3, 1, 0, 0);
     m_commandBuffer->EndRenderPass();
     // Compute pipeline reads
-    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_);
+    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.Handle());
     vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_layout_, 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
@@ -889,13 +889,13 @@ TEST_F(PositiveSyncVal, TexelBufferArrayConstantIndexing) {
     m_commandBuffer->begin();
     // Graphics pipeline writes
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.pipeline_);
+    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.Handle());
     vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.pipeline_layout_, 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(*m_commandBuffer, 3, 1, 0, 0);
     m_commandBuffer->EndRenderPass();
     // Compute pipeline reads
-    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_);
+    vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.Handle());
     vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_layout_, 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
@@ -909,7 +909,7 @@ TEST_F(PositiveSyncVal, QSBufferCopyHazardsDisabled) {
     RETURN_IF_SKIP(InitSyncValFramework(true));  // Disable QueueSubmit validation
     RETURN_IF_SKIP(InitState());
 
-    QSTestContext test(m_device, m_device->graphics_queues()[0]);
+    QSTestContext test(m_device, m_device->QueuesWithGraphicsCapability()[0]);
     if (!test.Valid()) {
         GTEST_SKIP() << "Test requires a valid queue object.";
     }
@@ -966,7 +966,7 @@ TEST_F(PositiveSyncVal, QSTransitionWithSrcNoneStage) {
 
     vkt::CommandBuffer cb(*m_device, m_commandPool);
     cb.begin();
-    vk::CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_);
+    vk::CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.Handle());
     vk::CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_layout_, 0, 1, &descriptor_set.set_, 0, nullptr);
     vk::CmdDispatch(cb, 1, 1, 1);
     cb.end();
@@ -1153,7 +1153,7 @@ TEST_F(PositiveSyncVal, QSTransitionAndRead) {
 
     vkt::CommandBuffer cb2(*m_device, m_commandPool);
     cb2.begin();
-    vk::CmdBindPipeline(cb2, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_);
+    vk::CmdBindPipeline(cb2, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.Handle());
     vk::CmdBindDescriptorSets(cb2, VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipe.pipeline_layout_, 0, 1, &descriptor_set.set_, 0,
                               nullptr);
     vk::CmdDispatch(cb2, 1, 1, 1);
@@ -1355,12 +1355,10 @@ TEST_F(PositiveSyncVal, QSSynchronizedWritesAndAsyncWait) {
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
 
-    const std::optional<uint32_t> transfer_family =
-        m_device->QueueFamilyMatching(VK_QUEUE_TRANSFER_BIT, (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT));
-    if (!transfer_family) {
-        GTEST_SKIP() << "Transfer-only queue family is not present";
+    vkt::Queue *transfer_queue = m_device->TransferOnlyQueue();
+    if (!transfer_queue) {
+        GTEST_SKIP() << "Transfer-only queue is not present";
     }
-    vkt::Queue *transfer_queue = m_device->queue_family_queues(transfer_family.value())[0].get();
 
     vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     vkt::Buffer buffer(*m_device, 64 * 64, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
@@ -1498,5 +1496,327 @@ TEST_F(PositiveSyncVal, DISABLED_RenderPassStoreOpNone) {
     // This waits for the FRAGMENT_SHADER read before starting with transition.
     // If storeOp other than NONE was used we had to wait for it instead.
     vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, ThreadedSubmitAndFenceWait) {
+    TEST_DESCRIPTION("Minimal version of https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7250");
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState());
+
+    constexpr int N = 100;
+
+    vkt::Buffer src(*m_device, 1024, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer dst(*m_device, 1024, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    VkBufferCopy copy_info{};
+    copy_info.size = 1024;
+
+    // Allocate array of fences instead of calling ResetFences to minimize the number of
+    // API functions used by this test (leave only those that are part of the regression scenario).
+    std::vector<vkt::Fence> fences;
+    std::vector<vkt::Fence> thread_fences;
+    fences.reserve(N);
+    thread_fences.reserve(N);
+    for (int i = 0; i < N; i++) {
+        fences.emplace_back(*m_device);
+        thread_fences.emplace_back(*m_device);
+    }
+
+    vkt::CommandBuffer cmd(*m_device, m_commandPool);
+    cmd.begin();
+    vk::CmdCopyBuffer(cmd, src, dst, 1, &copy_info);
+    cmd.end();
+    VkSubmitInfo submit = vku::InitStructHelper();
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &cmd.handle();
+
+    vkt::CommandBuffer thread_cmd(*m_device, m_commandPool);
+    thread_cmd.begin();
+    thread_cmd.end();
+    VkSubmitInfo thread_submit = vku::InitStructHelper();
+    thread_submit.commandBufferCount = 1;
+    thread_submit.pCommandBuffers = &thread_cmd.handle();
+
+    std::mutex queue_mutex;
+    std::mutex queue_mutex2;
+
+    // Worker thread runs "submit empty buffer and wait" loop.
+    std::thread thread([&] {
+        for (int i = 0; i < N; i++) {
+            {
+                std::unique_lock<std::mutex> lock(queue_mutex);
+                vk::QueueSubmit(*m_default_queue, 1, &thread_submit, thread_fences[i]);
+            }
+            {
+                // WaitForFences does not require external synchronization.
+                // queue_mutex2 is not needed for correctness, but it was added to decrease
+                // the number of degrees of freedom of this test, so it's easier to analyze it.
+                std::unique_lock<std::mutex> lock(queue_mutex2);
+                vk::WaitForFences(device(), 1, &thread_fences[i].handle(), VK_TRUE, kWaitTimeout);
+            }
+        }
+    });
+    // Main thread runs "submit accesses and wait" loop.
+    {
+        for (int i = 0; i < N; i++) {
+            {
+                std::unique_lock<std::mutex> lock(queue_mutex);
+                vk::QueueSubmit(*m_default_queue, 1, &submit, fences[i]);
+            }
+            {
+                std::unique_lock<std::mutex> lock(queue_mutex2);
+                vk::WaitForFences(device(), 1, &fences[i].handle(), VK_TRUE, kWaitTimeout);
+            }
+        }
+    }
+    thread.join();
+}
+
+TEST_F(PositiveSyncVal, ThreadedSubmitAndFenceWaitAndPresent) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7250");
+    AddSurfaceExtension();
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(InitSwapchain());
+
+    const auto swapchain_images = GetSwapchainImages(m_swapchain);
+    {
+        vkt::CommandBuffer cmd(*m_device, m_commandPool);
+        cmd.begin();
+        for (VkImage image : swapchain_images) {
+            VkImageMemoryBarrier transition = vku::InitStructHelper();
+            transition.srcAccessMask = 0;
+            transition.dstAccessMask = 0;
+            transition.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            transition.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            transition.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            transition.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            transition.image = image;
+            transition.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            transition.subresourceRange.baseMipLevel = 0;
+            transition.subresourceRange.levelCount = 1;
+            transition.subresourceRange.baseArrayLayer = 0;
+            transition.subresourceRange.layerCount = 1;
+            vk::CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
+                                   nullptr, 1, &transition);
+        }
+        cmd.end();
+        cmd.QueueCommandBuffer();
+    }
+
+    constexpr int N = 1'000;
+    std::mutex queue_mutex;
+
+    // Worker thread submits accesses and waits on the fence.
+    std::thread thread([&] {
+        const int size = 1024 * 128;
+        vkt::Buffer src(*m_device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        vkt::Buffer dst(*m_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+        VkBufferCopy copy_info{};
+        copy_info.size = size;
+
+        vkt::Fence fence(*m_device);
+        VkSubmitInfo submit = vku::InitStructHelper();
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &m_commandBuffer->handle();
+
+        for (int i = 0; i < N; i++) {
+            m_commandBuffer->begin();
+            vk::CmdCopyBuffer(*m_commandBuffer, src, dst, 1, &copy_info);
+            m_commandBuffer->end();
+            {
+                std::unique_lock<std::mutex> lock(queue_mutex);
+                vk::QueueSubmit(*m_default_queue, 1, &submit, fence);
+            }
+            vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+            vk::ResetFences(device(), 1, &fence.handle());
+        }
+    });
+
+    // Main thread submits empty batches and presents images
+    {
+        vkt::Semaphore acquire_semaphore(*m_device);
+        vkt::Semaphore submit_semaphore(*m_device);
+        vkt::Fence fence(*m_device);
+
+        for (int i = 0; i < N; i++) {
+            uint32_t image_index = 0;
+            vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
+
+            constexpr VkPipelineStageFlags semaphore_wait_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            VkSubmitInfo submit = vku::InitStructHelper();
+            submit.waitSemaphoreCount = 1;
+            submit.pWaitSemaphores = &acquire_semaphore.handle();
+            submit.pWaitDstStageMask = &semaphore_wait_stage;
+            submit.signalSemaphoreCount = 1;
+            submit.pSignalSemaphores = &submit_semaphore.handle();
+
+            VkPresentInfoKHR present = vku::InitStructHelper();
+            present.waitSemaphoreCount = 1;
+            present.pWaitSemaphores = &submit_semaphore.handle();
+            present.swapchainCount = 1;
+            present.pSwapchains = &m_swapchain;
+            present.pImageIndices = &image_index;
+
+            {
+                std::unique_lock<std::mutex> lock(queue_mutex);
+                vk::QueueSubmit(*m_default_queue, 1, &submit, fence);
+                vk::QueuePresentKHR(*m_default_queue, &present);
+            }
+            vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+            vk::ResetFences(device(), 1, &fence.handle());
+        }
+    }
+    thread.join();
+}
+
+// https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/7713
+TEST_F(PositiveSyncVal, CopyBufferToCompressedImage) {
+    TEST_DESCRIPTION("Copy from a buffer to compressed image without overlap.");
+
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState());
+
+    VkFormatProperties format_properties;
+    VkFormat mp_format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+    vk::GetPhysicalDeviceFormatProperties(gpu(), mp_format, &format_properties);
+    if ((format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) == 0) {
+        GTEST_SKIP()
+            << "Device does not support VK_FORMAT_FEATURE_TRANSFER_DST_BIT for VK_FORMAT_BC1_RGBA_UNORM_BLOCK, skipping test.\n";
+    }
+
+    const VkDeviceSize buffer_size = 32;  // enough for 8x8 BC1 region
+    vkt::Buffer src_buffer(*m_device, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vkt::Image dst_image(*m_device, 16, 16, 1, mp_format, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferImageCopy buffer_copy[2] = {};
+    buffer_copy[0].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    buffer_copy[0].imageSubresource.mipLevel = 0;
+    buffer_copy[0].imageSubresource.baseArrayLayer = 0;
+    buffer_copy[0].imageSubresource.layerCount = 1;
+    buffer_copy[0].imageOffset = {0, 0, 0};
+    buffer_copy[0].imageExtent = {8, 8, 1};
+    buffer_copy[1].imageSubresource = buffer_copy[0].imageSubresource;
+    buffer_copy[1].imageOffset = {8, 0, 0};
+    buffer_copy[1].imageExtent = {8, 8, 1};
+
+    m_commandBuffer->begin();
+    vk::CmdCopyBufferToImage(*m_commandBuffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_copy[0]);
+    vk::CmdCopyBufferToImage(*m_commandBuffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_copy[1]);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, CopyBufferToCompressedImageASTC) {
+    TEST_DESCRIPTION("Copy from a buffer to 20x10 ASTC-compressed image without overlap.");
+
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState());
+
+    VkFormatProperties format_properties;
+    VkFormat format = VK_FORMAT_ASTC_10x10_UNORM_BLOCK;
+    vk::GetPhysicalDeviceFormatProperties(gpu(), format, &format_properties);
+    if ((format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) == 0) {
+        GTEST_SKIP()
+            << "Device does not support VK_FORMAT_FEATURE_TRANSFER_DST_BIT for VK_FORMAT_BC1_RGBA_UNORM_BLOCK, skipping test.\n";
+    }
+
+    const VkDeviceSize buffer_size = 32;  // enough for 20x10 ASTC_10x10 region
+    vkt::Buffer src_buffer(*m_device, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vkt::Image dst_image(*m_device, 20, 10, 1, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferImageCopy buffer_copy[2] = {};
+    buffer_copy[0].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    buffer_copy[0].imageSubresource.mipLevel = 0;
+    buffer_copy[0].imageSubresource.baseArrayLayer = 0;
+    buffer_copy[0].imageSubresource.layerCount = 1;
+    buffer_copy[0].imageOffset = {0, 0, 0};
+    buffer_copy[0].imageExtent = {10, 10, 1};
+    buffer_copy[1].imageSubresource = buffer_copy[0].imageSubresource;
+    buffer_copy[1].imageOffset = {10, 0, 0};
+    buffer_copy[1].imageExtent = {10, 10, 1};
+
+    m_commandBuffer->begin();
+    vk::CmdCopyBufferToImage(*m_commandBuffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_copy[0]);
+    vk::CmdCopyBufferToImage(*m_commandBuffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_copy[1]);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, CopyBufferToCompressedImageASTC2) {
+    TEST_DESCRIPTION("Copy from a buffer to 10x20 ASTC-compressed image without overlap.");
+
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState());
+
+    VkFormatProperties format_properties;
+    VkFormat format = VK_FORMAT_ASTC_10x10_UNORM_BLOCK;
+    vk::GetPhysicalDeviceFormatProperties(gpu(), format, &format_properties);
+    if ((format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) == 0) {
+        GTEST_SKIP()
+            << "Device does not support VK_FORMAT_FEATURE_TRANSFER_DST_BIT for VK_FORMAT_BC1_RGBA_UNORM_BLOCK, skipping test.\n";
+    }
+
+    const VkDeviceSize buffer_size = 32;  // enough for 10x20 ASTC_10x10 region
+    vkt::Buffer src_buffer(*m_device, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vkt::Image dst_image(*m_device, 10, 20, 1, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferImageCopy buffer_copy[2] = {};
+    buffer_copy[0].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    buffer_copy[0].imageSubresource.mipLevel = 0;
+    buffer_copy[0].imageSubresource.baseArrayLayer = 0;
+    buffer_copy[0].imageSubresource.layerCount = 1;
+    buffer_copy[0].imageOffset = {0, 0, 0};
+    buffer_copy[0].imageExtent = {10, 10, 1};
+    buffer_copy[1].imageSubresource = buffer_copy[0].imageSubresource;
+    buffer_copy[1].imageOffset = {0, 10, 0};
+    buffer_copy[1].imageExtent = {10, 10, 1};
+
+    m_commandBuffer->begin();
+    vk::CmdCopyBufferToImage(*m_commandBuffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_copy[0]);
+    vk::CmdCopyBufferToImage(*m_commandBuffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_copy[1]);
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, CopyBufferToCompressedImageASTC3) {
+    TEST_DESCRIPTION("Copy from a buffer to 20x20 ASTC-compressed with overlap protected by a barrier.");
+
+    RETURN_IF_SKIP(InitSyncValFramework());
+    RETURN_IF_SKIP(InitState());
+
+    VkFormatProperties format_properties;
+    VkFormat format = VK_FORMAT_ASTC_10x10_UNORM_BLOCK;
+    vk::GetPhysicalDeviceFormatProperties(gpu(), format, &format_properties);
+    if ((format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) == 0) {
+        GTEST_SKIP()
+            << "Device does not support VK_FORMAT_FEATURE_TRANSFER_DST_BIT for VK_FORMAT_BC1_RGBA_UNORM_BLOCK, skipping test.\n";
+    }
+
+    const VkDeviceSize buffer_size = 64;  // enough for 20x20 ASTC_10x10 region
+    vkt::Buffer src_buffer(*m_device, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vkt::Image dst_image(*m_device, 20, 20, 1, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferImageCopy buffer_copy[2] = {};
+    buffer_copy[0].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    buffer_copy[0].imageSubresource.mipLevel = 0;
+    buffer_copy[0].imageSubresource.baseArrayLayer = 0;
+    buffer_copy[0].imageSubresource.layerCount = 1;
+    buffer_copy[0].imageOffset = {10, 10, 0};
+    buffer_copy[0].imageExtent = {10, 10, 1};
+    buffer_copy[1].imageSubresource = buffer_copy[0].imageSubresource;
+    buffer_copy[1].imageOffset = {10, 0, 0};
+    buffer_copy[1].imageExtent = {10, 20, 1};
+
+    VkImageMemoryBarrier barrier = vku::InitStructHelper();
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.image = dst_image;
+    barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    m_commandBuffer->begin();
+    vk::CmdCopyBufferToImage(*m_commandBuffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_copy[0]);
+    vk::CmdPipelineBarrier(*m_commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                           nullptr, 1, &barrier);
+    vk::CmdCopyBufferToImage(*m_commandBuffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_copy[1]);
     m_commandBuffer->end();
 }

@@ -134,8 +134,7 @@ TEST_F(VkNvidiaBestPracticesLayerTest, QueueBindSparse_NotAsync) {
     general_queue_ci.queueCount = 1;
     general_queue_ci.pQueuePriorities = &defaultQueuePriority;
     {
-        const std::optional<uint32_t> familyIndex =
-            m_device->QueueFamilyMatching(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_SPARSE_BINDING_BIT, 0);
+        const std::optional<uint32_t> familyIndex = m_device->QueueFamily(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_SPARSE_BINDING_BIT);
         if (!familyIndex) {
             GTEST_SKIP() << "Required queue families not present";
         }
@@ -146,8 +145,8 @@ TEST_F(VkNvidiaBestPracticesLayerTest, QueueBindSparse_NotAsync) {
     transfer_queue_ci.queueCount = 1;
     transfer_queue_ci.pQueuePriorities = &defaultQueuePriority;
     {
-        const std::optional<uint32_t> familyIndex = m_device->QueueFamilyMatching(
-            VK_QUEUE_TRANSFER_BIT | VK_QUEUE_SPARSE_BINDING_BIT, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT);
+        const std::optional<uint32_t> familyIndex = m_device->QueueFamily(VK_QUEUE_TRANSFER_BIT | VK_QUEUE_SPARSE_BINDING_BIT,
+                                                                          VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT);
         if (!familyIndex) {
             GTEST_SKIP() << "Required queue families not present";
         }
@@ -247,11 +246,11 @@ TEST_F(VkNvidiaBestPracticesLayerTest, AccelerationStructure_NotAsync) {
     GetPhysicalDeviceFeatures2(bda_features);
     RETURN_IF_SKIP(InitState(nullptr, &bda_features));
 
-    vkt::Queue *graphics_queue = m_device->graphics_queues()[0];
+    vkt::Queue *graphics_queue = m_device->QueuesWithGraphicsCapability()[0];
 
     vkt::Queue *compute_queue = nullptr;
-    for (uint32_t i = 0; i < m_device->compute_queues().size(); ++i) {
-        auto cqi = m_device->compute_queues()[i];
+    for (uint32_t i = 0; i < m_device->QueuesWithComputeCapability().size(); ++i) {
+        auto cqi = m_device->QueuesWithComputeCapability()[i];
         if (cqi->get_family_index() != graphics_queue->get_family_index()) {
             compute_queue = cqi;
             break;
@@ -561,15 +560,15 @@ TEST_F(VkNvidiaBestPracticesLayerTest, BindPipeline_SwitchTessGeometryMesh)
     {
         m_errorMonitor->SetAllowedFailureMsg("BestPractices-Pipeline-SortAndBind");
         m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-BindPipeline-SwitchTessGeometryMesh");
-        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, vsPipe.pipeline_);
+        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, vsPipe.Handle());
         m_errorMonitor->Finish();
     }
     {
         m_errorMonitor->SetAllowedFailureMsg("BestPractices-Pipeline-SortAndBind");
         m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-BindPipeline-SwitchTessGeometryMesh");
         for (int i = 0; i < 10; ++i) {
-            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, vgsPipe.pipeline_);
-            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, vsPipe.pipeline_);
+            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, vgsPipe.Handle());
+            vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, vsPipe.Handle());
         }
         m_errorMonitor->VerifyFound();
     }

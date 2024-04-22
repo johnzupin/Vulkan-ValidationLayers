@@ -84,140 +84,140 @@ bool CoreChecks::PreCallValidateCreateShadersEXT(VkDevice device, uint32_t creat
     uint32_t linked_binary_index = invalid;
     for (uint32_t i = 0; i < createInfoCount; ++i) {
         const Location create_info_loc = error_obj.location.dot(Field::pCreateInfos, i);
-        const VkShaderCreateInfoEXT& createInfo = pCreateInfos[i];
-        if (createInfo.stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
-            createInfo.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
+        const VkShaderCreateInfoEXT& create_info = pCreateInfos[i];
+        if (create_info.stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
+            create_info.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
             if (enabled_features.tessellationShader == VK_FALSE) {
                 skip |= LogError("VUID-VkShaderCreateInfoEXT-stage-08419", device, create_info_loc.dot(Field::stage),
                                  "is %s, but the tessellationShader feature was not enabled.",
-                                 string_VkShaderStageFlagBits(createInfo.stage));
+                                 string_VkShaderStageFlagBits(create_info.stage));
             }
-        } else if (createInfo.stage == VK_SHADER_STAGE_GEOMETRY_BIT) {
+        } else if (create_info.stage == VK_SHADER_STAGE_GEOMETRY_BIT) {
             if (enabled_features.geometryShader == VK_FALSE) {
                 skip |= LogError("VUID-VkShaderCreateInfoEXT-stage-08420", device, create_info_loc.dot(Field::stage),
                                  "is VK_SHADER_STAGE_GEOMETRY_BIT, but the geometryShader feature was not enabled.");
             }
-        } else if (createInfo.stage == VK_SHADER_STAGE_TASK_BIT_EXT) {
+        } else if (create_info.stage == VK_SHADER_STAGE_TASK_BIT_EXT) {
             if (enabled_features.taskShader == VK_FALSE) {
                 skip |= LogError("VUID-VkShaderCreateInfoEXT-stage-08421", device, create_info_loc.dot(Field::stage),
                                  "is VK_SHADER_STAGE_TASK_BIT_EXT, but the taskShader feature was not enabled.");
             }
-        } else if (createInfo.stage == VK_SHADER_STAGE_MESH_BIT_EXT) {
+        } else if (create_info.stage == VK_SHADER_STAGE_MESH_BIT_EXT) {
             if (enabled_features.meshShader == VK_FALSE) {
                 skip |= LogError("VUID-VkShaderCreateInfoEXT-stage-08422", device, create_info_loc.dot(Field::stage),
                                  "is VK_SHADER_STAGE_MESH_BIT_EXT, but the meshShader feature was not enabled.");
             }
         }
 
-        if ((createInfo.flags & VK_SHADER_CREATE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_EXT) != 0 &&
+        if ((create_info.flags & VK_SHADER_CREATE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_EXT) != 0 &&
             enabled_features.attachmentFragmentShadingRate == VK_FALSE) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-flags-08487", device, create_info_loc.dot(Field::flags),
                              "is %s, but the attachmentFragmentShadingRate feature was not enabled.",
-                             string_VkShaderCreateFlagsEXT(createInfo.flags).c_str());
+                             string_VkShaderCreateFlagsEXT(create_info.flags).c_str());
         }
-        if ((createInfo.flags & VK_SHADER_CREATE_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT) != 0 &&
+        if ((create_info.flags & VK_SHADER_CREATE_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT) != 0 &&
             enabled_features.fragmentDensityMap == VK_FALSE) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-flags-08489", device, create_info_loc.dot(Field::flags),
                              "is %s, but the fragmentDensityMap feature was not enabled.",
-                             string_VkShaderCreateFlagsEXT(createInfo.flags).c_str());
+                             string_VkShaderCreateFlagsEXT(create_info.flags).c_str());
         }
 
-        if ((createInfo.flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) != 0) {
-            const auto nextStage = FindNextStage(createInfoCount, pCreateInfos, createInfo.stage);
-            if (nextStage != 0 && createInfo.nextStage != nextStage) {
-                skip |=
-                    LogError("VUID-vkCreateShadersEXT-pCreateInfos-08409", device, create_info_loc.dot(Field::flags),
-                             "is %s, but nextStage (%s) does not equal the "
-                             "logically next stage (%s) which also has the VK_SHADER_CREATE_LINK_STAGE_BIT_EXT bit.",
-                             string_VkShaderCreateFlagsEXT(createInfo.flags).c_str(),
-                             string_VkShaderStageFlags(createInfo.nextStage).c_str(), string_VkShaderStageFlags(nextStage).c_str());
+        if ((create_info.flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) != 0) {
+            const auto nextStage = FindNextStage(createInfoCount, pCreateInfos, create_info.stage);
+            if (nextStage != 0 && create_info.nextStage != nextStage) {
+                skip |= LogError("VUID-vkCreateShadersEXT-pCreateInfos-08409", device, create_info_loc.dot(Field::flags),
+                                 "is %s, but nextStage (%s) does not equal the "
+                                 "logically next stage (%s) which also has the VK_SHADER_CREATE_LINK_STAGE_BIT_EXT bit.",
+                                 string_VkShaderCreateFlagsEXT(create_info.flags).c_str(),
+                                 string_VkShaderStageFlags(create_info.nextStage).c_str(),
+                                 string_VkShaderStageFlags(nextStage).c_str());
             }
             for (uint32_t j = i; j < createInfoCount; ++j) {
-                if (i != j && createInfo.stage == pCreateInfos[j].stage) {
+                if (i != j && create_info.stage == pCreateInfos[j].stage) {
                     skip |= LogError("VUID-vkCreateShadersEXT-pCreateInfos-08410", device, create_info_loc,
                                      "and pCreateInfos[%" PRIu32
                                      "] both contain VK_SHADER_CREATE_LINK_STAGE_BIT_EXT and have the stage %s.",
-                                     j, string_VkShaderStageFlagBits(createInfo.stage));
+                                     j, string_VkShaderStageFlagBits(create_info.stage));
                 }
             }
 
             linked_stage = i;
-            if ((createInfo.stage & VK_SHADER_STAGE_VERTEX_BIT) != 0) {
+            if ((create_info.stage & VK_SHADER_STAGE_VERTEX_BIT) != 0) {
                 linked_vert_stage = i;
-            } else if ((createInfo.stage & VK_SHADER_STAGE_TASK_BIT_EXT) != 0) {
+            } else if ((create_info.stage & VK_SHADER_STAGE_TASK_BIT_EXT) != 0) {
                 linked_task_mesh_stage = i;
                 linked_task_stage = i;
-            } else if ((createInfo.stage & VK_SHADER_STAGE_MESH_BIT_EXT) != 0) {
+            } else if ((create_info.stage & VK_SHADER_STAGE_MESH_BIT_EXT) != 0) {
                 linked_task_mesh_stage = i;
-                if ((createInfo.flags & VK_SHADER_CREATE_NO_TASK_SHADER_BIT_EXT) != 0) {
+                if ((create_info.flags & VK_SHADER_CREATE_NO_TASK_SHADER_BIT_EXT) != 0) {
                     linked_mesh_no_task_stage = i;
                 }
             }
-            if (createInfo.codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT) {
+            if (create_info.codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT) {
                 linked_spirv_index = i;
-            } else if (createInfo.codeType == VK_SHADER_CODE_TYPE_BINARY_EXT) {
+            } else if (create_info.codeType == VK_SHADER_CODE_TYPE_BINARY_EXT) {
                 linked_binary_index = i;
             }
-        } else if ((createInfo.stage & (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT |
-                                        VK_SHADER_STAGE_FRAGMENT_BIT)) != 0) {
+        } else if ((create_info.stage & (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                                         VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT |
+                                         VK_SHADER_STAGE_FRAGMENT_BIT)) != 0) {
             non_linked_graphics_stage = i;
-        } else if ((createInfo.stage & (VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT)) != 0) {
+        } else if ((create_info.stage & (VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT)) != 0) {
             non_linked_task_mesh_stage = i;
         }
 
         if (enabled_features.tessellationShader == VK_FALSE &&
-            (createInfo.nextStage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
-             createInfo.nextStage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)) {
+            (create_info.nextStage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
+             create_info.nextStage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-nextStage-08428", device, create_info_loc.dot(Field::nextStage),
                              "is %s, but tessellationShader feature was not enabled.",
-                             string_VkShaderStageFlags(createInfo.nextStage).c_str());
+                             string_VkShaderStageFlags(create_info.nextStage).c_str());
         }
-        if (enabled_features.geometryShader == VK_FALSE && createInfo.nextStage == VK_SHADER_STAGE_GEOMETRY_BIT) {
+        if (enabled_features.geometryShader == VK_FALSE && create_info.nextStage == VK_SHADER_STAGE_GEOMETRY_BIT) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-nextStage-08429", device, create_info_loc.dot(Field::nextStage),
                              "is VK_SHADER_STAGE_GEOMETRY_BIT, but tessellationShader feature was not enabled.");
         }
-        if (createInfo.stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT &&
-            (createInfo.nextStage & ~VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) > 0) {
+        if (create_info.stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT &&
+            (create_info.nextStage & ~VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) > 0) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-nextStage-08430", device, create_info_loc.dot(Field::stage),
                              "is VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, but nextStage is %s.",
-                             string_VkShaderStageFlags(createInfo.nextStage).c_str());
+                             string_VkShaderStageFlags(create_info.nextStage).c_str());
         }
-        if (createInfo.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT &&
-            (createInfo.nextStage & ~(VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)) > 0) {
+        if (create_info.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT &&
+            (create_info.nextStage & ~(VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)) > 0) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-nextStage-08431", device, create_info_loc.dot(Field::stage),
                              "is VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, but nextStage is %s.",
-                             string_VkShaderStageFlags(createInfo.nextStage).c_str());
+                             string_VkShaderStageFlags(create_info.nextStage).c_str());
         }
-        if (createInfo.stage == VK_SHADER_STAGE_GEOMETRY_BIT && (createInfo.nextStage & ~VK_SHADER_STAGE_FRAGMENT_BIT) > 0) {
+        if (create_info.stage == VK_SHADER_STAGE_GEOMETRY_BIT && (create_info.nextStage & ~VK_SHADER_STAGE_FRAGMENT_BIT) > 0) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-nextStage-08433", device, create_info_loc.dot(Field::stage),
                              "is VK_SHADER_STAGE_GEOMETRY_BIT, but nextStage is %s.",
-                             string_VkShaderStageFlags(createInfo.nextStage).c_str());
+                             string_VkShaderStageFlags(create_info.nextStage).c_str());
         }
-        if ((createInfo.stage == VK_SHADER_STAGE_FRAGMENT_BIT || createInfo.stage == VK_SHADER_STAGE_COMPUTE_BIT) &&
-            createInfo.nextStage > 0) {
+        if ((create_info.stage == VK_SHADER_STAGE_FRAGMENT_BIT || create_info.stage == VK_SHADER_STAGE_COMPUTE_BIT) &&
+            create_info.nextStage > 0) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-nextStage-08434", device, create_info_loc.dot(Field::stage),
-                             "is %s, but nextStage is %s.", string_VkShaderStageFlagBits(createInfo.stage),
-                             string_VkShaderStageFlags(createInfo.nextStage).c_str());
+                             "is %s, but nextStage is %s.", string_VkShaderStageFlagBits(create_info.stage),
+                             string_VkShaderStageFlags(create_info.nextStage).c_str());
         }
-        if (createInfo.stage == VK_SHADER_STAGE_TASK_BIT_EXT && (createInfo.nextStage & ~VK_SHADER_STAGE_MESH_BIT_EXT) > 0) {
+        if (create_info.stage == VK_SHADER_STAGE_TASK_BIT_EXT && (create_info.nextStage & ~VK_SHADER_STAGE_MESH_BIT_EXT) > 0) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-nextStage-08435", device, create_info_loc.dot(Field::stage),
                              "is VK_SHADER_STAGE_TASK_BIT_EXT, but nextStage is %s.",
-                             string_VkShaderStageFlags(createInfo.nextStage).c_str());
+                             string_VkShaderStageFlags(create_info.nextStage).c_str());
         }
-        if (createInfo.stage == VK_SHADER_STAGE_MESH_BIT_EXT && (createInfo.nextStage & ~VK_SHADER_STAGE_FRAGMENT_BIT) > 0) {
+        if (create_info.stage == VK_SHADER_STAGE_MESH_BIT_EXT && (create_info.nextStage & ~VK_SHADER_STAGE_FRAGMENT_BIT) > 0) {
             skip |= LogError("VUID-VkShaderCreateInfoEXT-nextStage-08436", device, create_info_loc.dot(Field::stage),
                              "is VK_SHADER_STAGE_MESH_BIT_EXT, but nextStage is %s.",
-                             string_VkShaderStageFlags(createInfo.nextStage).c_str());
+                             string_VkShaderStageFlags(create_info.nextStage).c_str());
         }
 
-        if ((createInfo.flags & VK_SHADER_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0 &&
+        if ((create_info.flags & VK_SHADER_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0 &&
             enabled_features.subgroupSizeControl == VK_FALSE) {
             skip |= LogError(
                 "VUID-VkShaderCreateInfoEXT-flags-09404", device, create_info_loc.dot(Field::flags),
                 "contains VK_SHADER_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT, but subgroupSizeControl feature is not enabled.");
         }
-        if ((createInfo.flags & VK_SHADER_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT) != 0 &&
+        if ((create_info.flags & VK_SHADER_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT) != 0 &&
             enabled_features.computeFullSubgroups == VK_FALSE) {
             skip |= LogError(
                 "VUID-VkShaderCreateInfoEXT-flags-09405", device, create_info_loc.dot(Field::flags),
@@ -270,8 +270,6 @@ bool CoreChecks::PreCallValidateCreateShadersEXT(VkDevice device, uint32_t creat
     bool tese_linked_point_mode = false;
     uint32_t tesc_linked_spacing = 0u;
     uint32_t tese_linked_spacing = 0u;
-    uint32_t tesc_output_patch_size = 0u;
-    uint32_t tese_output_patch_size = 0u;
     for (uint32_t i = 0; i < createInfoCount; ++i) {
         if (pCreateInfos[i].codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT) {
             const Location create_info_loc = error_obj.location.dot(Field::pCreateInfos, i);
@@ -282,19 +280,14 @@ bool CoreChecks::PreCallValidateCreateShadersEXT(VkDevice device, uint32_t creat
             const StageCreateInfo stage_create_info(pCreateInfos[i]);
             const auto spirv =
                 std::make_shared<spirv::Module>(pCreateInfos[i].codeSize, static_cast<const uint32_t*>(pCreateInfos[i].pCode));
-            safe_VkShaderCreateInfoEXT safe_create_info = safe_VkShaderCreateInfoEXT(&pCreateInfos[i]);
+            vku::safe_VkShaderCreateInfoEXT safe_create_info = vku::safe_VkShaderCreateInfoEXT(&pCreateInfos[i]);
             const PipelineStageState stage_state(nullptr, &safe_create_info, nullptr, spirv);
             skip |= ValidatePipelineShaderStage(stage_create_info, stage_state, create_info_loc);
 
             // Validate tessellation stages
             if (stage_state.entrypoint && (pCreateInfos[i].stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
                                            pCreateInfos[i].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)) {
-                if (pCreateInfos[i].stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT) {
-                    if (stage_state.entrypoint->execution_mode.output_vertices == vvl::kU32Max) {
-                        skip |= LogError("VUID-VkShaderCreateInfoEXT-codeType-08875", device, create_info_loc.dot(Field::stage),
-                                         "is VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, but patch size is not specified.");
-                    }
-                } else if (pCreateInfos[i].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
+                if (pCreateInfos[i].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
                     if (stage_state.entrypoint->execution_mode.tessellation_subdivision == 0) {
                         skip |= LogError("VUID-VkShaderCreateInfoEXT-codeType-08872", device, create_info_loc.dot(Field::stage),
                                          "is VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, but subdivision is not specified.");
@@ -325,14 +318,12 @@ bool CoreChecks::PreCallValidateCreateShadersEXT(VkDevice device, uint32_t creat
                         tesc_linked_point_mode =
                             stage_state.entrypoint->execution_mode.flags & spirv::ExecutionModeSet::point_mode_bit;
                         tesc_linked_spacing = stage_state.entrypoint->execution_mode.tessellation_spacing;
-                        tesc_output_patch_size = stage_state.entrypoint->execution_mode.output_vertices;
                     } else if (pCreateInfos[i].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
                         tese_linked_subdivision = stage_state.entrypoint->execution_mode.tessellation_subdivision;
                         tese_linked_orientation = stage_state.entrypoint->execution_mode.tessellation_orientation;
                         tese_linked_point_mode =
                             stage_state.entrypoint->execution_mode.flags & spirv::ExecutionModeSet::point_mode_bit;
                         tese_linked_spacing = stage_state.entrypoint->execution_mode.tessellation_spacing;
-                        tese_output_patch_size = stage_state.entrypoint->execution_mode.output_vertices;
                     }
                 }
             }
@@ -362,12 +353,6 @@ bool CoreChecks::PreCallValidateCreateShadersEXT(VkDevice device, uint32_t creat
                          "tessellation evaluation shader (%s).",
                          string_SpvExecutionMode(tesc_linked_spacing), string_SpvExecutionMode(tese_linked_spacing));
     }
-    if (tesc_output_patch_size != tese_output_patch_size && tese_output_patch_size != vvl::kU32Max) {
-        skip |= LogError("VUID-vkCreateShadersEXT-pCreateInfos-08871", device, error_obj.location,
-                         "The output patch size in tessellation control shader (%" PRIu32
-                         ") does not match the output patch size in tessellation evaluation shader (%" PRIu32 ").",
-                         tesc_output_patch_size, tese_output_patch_size);
-    }
 
     return skip;
 }
@@ -379,6 +364,12 @@ bool CoreChecks::PreCallValidateDestroyShaderEXT(VkDevice device, VkShaderEXT sh
     if (enabled_features.shaderObject == VK_FALSE) {
         skip |=
             LogError("VUID-vkDestroyShaderEXT-None-08481", device, error_obj.location, "the shaderObject feature was not enabled.");
+    }
+
+    const auto shader_state = Get<vvl::ShaderObject>(shader);
+    if (shader_state) {
+        skip |= ValidateObjectNotInUse(shader_state.get(), error_obj.location.dot(Field::shader),
+                                       "VUID-vkDestroyShaderEXT-shader-08482");
     }
 
     return skip;
@@ -475,9 +466,7 @@ bool CoreChecks::PreCallValidateCmdBindShadersEXT(VkCommandBuffer commandBuffer,
             skip |= LogError("VUID-vkCmdBindShadersEXT-pStages-08464", commandBuffer, stage_loc, "is %s.",
                              string_VkShaderStageFlagBits(stage));
         }
-        if ((stage & (VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-                      VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR)) >
-            0) {
+        if (stage & kShaderStageAllRayTracing) {
             skip |= LogError("VUID-vkCmdBindShadersEXT-pStages-08465", commandBuffer, stage_loc, "is %s.",
                              string_VkShaderStageFlagBits(stage));
         }

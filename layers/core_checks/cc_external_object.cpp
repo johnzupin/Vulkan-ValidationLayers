@@ -47,7 +47,7 @@ bool CoreChecks::PreCallValidateGetMemoryFdKHR(VkDevice device, const VkMemoryGe
                                                const ErrorObject &error_obj) const {
     bool skip = false;
     if (const auto memory_state = Get<vvl::DeviceMemory>(pGetFdInfo->memory)) {
-        const auto export_info = vku::FindStructInPNextChain<VkExportMemoryAllocateInfo>(memory_state->alloc_info.pNext);
+        const auto export_info = vku::FindStructInPNextChain<VkExportMemoryAllocateInfo>(memory_state->allocate_info.pNext);
         if (!export_info) {
             skip |= LogError("VUID-VkMemoryGetFdInfoKHR-handleType-00671", pGetFdInfo->memory,
                              error_obj.location.dot(Field::pGetFdInfo).dot(Field::memory),
@@ -120,7 +120,7 @@ bool CoreChecks::PreCallValidateGetSemaphoreFdKHR(VkDevice device, const VkSemap
                              string_VkExternalSemaphoreHandleTypeFlags(sem_state->exportHandleTypes).c_str());
         }
 
-        if (sem_state->Scope() != vvl::Semaphore::kInternal &&
+        if (sem_state->Scope() != vvl::Semaphore::kInternal && sem_state->HasImportedHandleType() &&
             !CanSemaphoreExportFromImported(physical_device, pGetFdInfo->handleType, sem_state->ImportedHandleType())) {
             skip |= LogError("VUID-VkSemaphoreGetFdInfoKHR-semaphore-01133", sem_state->Handle(), info_loc.dot(Field::handleType),
                              "(%s) cannot be exported from semaphore with imported payload with handle type %s",
@@ -171,7 +171,7 @@ bool CoreChecks::PreCallValidateGetFenceFdKHR(VkDevice device, const VkFenceGetF
                              string_VkExternalFenceHandleTypeFlags(fence_state->exportHandleTypes).c_str());
         }
 
-        if (fence_state->Scope() != vvl::Fence::kInternal &&
+        if (fence_state->Scope() != vvl::Fence::kInternal && fence_state->HasImportedHandleType() &&
             !CanFenceExportFromImported(physical_device, pGetFdInfo->handleType, fence_state->ImportedHandleType())) {
             skip |= LogError("VUID-VkFenceGetFdInfoKHR-fence-01455", fence_state->Handle(), info_loc.dot(Field::handleType),
                              "(%s) cannot be exported from fence with imported payload with handle type %s",
@@ -193,7 +193,7 @@ bool CoreChecks::PreCallValidateGetMemoryWin32HandleKHR(VkDevice device, const V
                                                         HANDLE *pHandle, const ErrorObject &error_obj) const {
     bool skip = false;
     if (const auto memory_state = Get<vvl::DeviceMemory>(pGetWin32HandleInfo->memory)) {
-        const auto export_info = vku::FindStructInPNextChain<VkExportMemoryAllocateInfo>(memory_state->alloc_info.pNext);
+        const auto export_info = vku::FindStructInPNextChain<VkExportMemoryAllocateInfo>(memory_state->allocate_info.pNext);
         if (!export_info) {
             skip |= LogError("VUID-VkMemoryGetWin32HandleInfoKHR-handleType-00662", pGetWin32HandleInfo->memory,
                              error_obj.location.dot(Field::pGetWin32HandleInfo).dot(Field::memory),
@@ -243,7 +243,7 @@ bool CoreChecks::PreCallValidateGetSemaphoreWin32HandleKHR(VkDevice device,
                              string_VkExternalSemaphoreHandleTypeFlags(sem_state->exportHandleTypes).c_str());
         }
 
-        if (sem_state->Scope() != vvl::Semaphore::kInternal &&
+        if (sem_state->Scope() != vvl::Semaphore::kInternal && sem_state->HasImportedHandleType() &&
             !CanSemaphoreExportFromImported(physical_device, pGetWin32HandleInfo->handleType, sem_state->ImportedHandleType())) {
             skip |= LogError("VUID-VkSemaphoreGetWin32HandleInfoKHR-semaphore-01128", sem_state->Handle(),
                              error_obj.location.dot(Field::pGetWin32HandleInfo).dot(Field::handleType),
@@ -275,7 +275,7 @@ bool CoreChecks::PreCallValidateGetFenceWin32HandleKHR(VkDevice device, const Vk
                              string_VkExternalFenceHandleTypeFlags(fence_state->exportHandleTypes).c_str());
         }
 
-        if (fence_state->Scope() != vvl::Fence::kInternal &&
+        if (fence_state->Scope() != vvl::Fence::kInternal && fence_state->HasImportedHandleType() &&
             !CanFenceExportFromImported(physical_device, pGetWin32HandleInfo->handleType, fence_state->ImportedHandleType())) {
             skip |= LogError("VUID-VkFenceGetWin32HandleInfoKHR-fence-01450", fence_state->Handle(),
                              error_obj.location.dot(Field::pGetWin32HandleInfo).dot(Field::handleType),
@@ -402,7 +402,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "VkImageCreateInfo structure",
                                 FormatHandle(metal_texture_ptr->image).c_str());
                         }
-                        auto format_plane_count = vkuFormatPlaneCount(image_info->createInfo.format);
+                        auto format_plane_count = vkuFormatPlaneCount(image_info->create_info.format);
                         auto image_plane = metal_texture_ptr->plane;
                         if (!(format_plane_count > 1) && (image_plane != VK_IMAGE_ASPECT_PLANE_0_BIT)) {
                             skip |= LogError(
@@ -411,7 +411,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "%s, and plane = %s, but image was created with format %s, which is not multiplaner and plane is "
                                 "required to be VK_IMAGE_ASPECT_PLANE_0_BIT",
                                 FormatHandle(metal_texture_ptr->image).c_str(), string_VkImageAspectFlags(image_plane).c_str(),
-                                string_VkFormat(image_info->createInfo.format));
+                                string_VkFormat(image_info->create_info.format));
                         }
                         if ((format_plane_count == 2) && (image_plane == VK_IMAGE_ASPECT_PLANE_2_BIT)) {
                             skip |= LogError(
@@ -421,7 +421,7 @@ bool CoreChecks::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportM
                                 "cannot"
                                 "be VK_IMAGE_ASPECT_PLANE_2_BIT",
                                 FormatHandle(metal_texture_ptr->image).c_str(), string_VkImageAspectFlags(image_plane).c_str(),
-                                string_VkFormat(image_info->createInfo.format));
+                                string_VkFormat(image_info->create_info.format));
                         }
                     }
                 }

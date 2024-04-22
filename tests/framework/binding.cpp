@@ -51,29 +51,21 @@ namespace vkt {
 
 VkPhysicalDeviceProperties PhysicalDevice::properties() const {
     VkPhysicalDeviceProperties info;
-
     vk::GetPhysicalDeviceProperties(handle(), &info);
-
     return info;
 }
 
 std::vector<VkQueueFamilyProperties> PhysicalDevice::queue_properties() const {
-    std::vector<VkQueueFamilyProperties> info;
-    uint32_t count;
-
-    // Call once with NULL data to receive count
-    vk::GetPhysicalDeviceQueueFamilyProperties(handle(), &count, NULL);
-    info.resize(count);
+    uint32_t count = 0;
+    vk::GetPhysicalDeviceQueueFamilyProperties(handle(), &count, nullptr);
+    std::vector<VkQueueFamilyProperties> info(count);
     vk::GetPhysicalDeviceQueueFamilyProperties(handle(), &count, info.data());
-
     return info;
 }
 
 VkPhysicalDeviceMemoryProperties PhysicalDevice::memory_properties() const {
     VkPhysicalDeviceMemoryProperties info;
-
     vk::GetPhysicalDeviceMemoryProperties(handle(), &info);
-
     return info;
 }
 
@@ -285,8 +277,6 @@ void Device::init_queues(const VkDeviceCreateInfo &info) {
         QueueFamilyQueues &queue_storage = queue_families_[queue_family_i];
         queue_storage.reserve(queue_create_info.queueCount);
         for (uint32_t queue_i = 0; queue_i < queue_create_info.queueCount; ++queue_i) {
-            // TODO: Need to add support for separate MEMMGR and work queues,
-            // including synchronization
             VkQueue queue = VK_NULL_HANDLE;
             vk::GetDeviceQueue(handle(), queue_family_i, queue_i, &queue);
 
@@ -302,7 +292,7 @@ void Device::init_queues(const VkDeviceCreateInfo &info) {
             }
 
             if (queue_family_prop.queueFlags & VK_QUEUE_TRANSFER_BIT) {
-                queues_[DMA].push_back(queue_storage.back().get());
+                queues_[TRANSFER].push_back(queue_storage.back().get());
             }
 
             if (queue_family_prop.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
@@ -311,23 +301,72 @@ void Device::init_queues(const VkDeviceCreateInfo &info) {
         }
     }
 
-    ASSERT_TRUE(!queues_[GRAPHICS].empty() || !queues_[COMPUTE].empty() || !queues_[DMA].empty() || !queues_[SPARSE].empty());
+    ASSERT_TRUE(!queues_[GRAPHICS].empty() || !queues_[COMPUTE].empty() || !queues_[TRANSFER].empty() || !queues_[SPARSE].empty());
 }
 
-const Device::QueueFamilyQueues &Device::queue_family_queues(uint32_t queue_family) const {
+const Device::QueueFamilyQueues &Device::QueuesFromFamily(uint32_t queue_family) const {
     assert(queue_family < queue_families_.size());
     return queue_families_[queue_family];
 }
 
-std::optional<uint32_t> Device::QueueFamilyMatching(VkQueueFlags with, VkQueueFlags without, bool all_bits) {
+std::optional<uint32_t> Device::QueueFamily(VkQueueFlags with, VkQueueFlags without) const {
     for (uint32_t i = 0; i < phy_.queue_properties_.size(); i++) {
-        const auto flags = phy_.queue_properties_[i].queueFlags;
-        const bool matches = all_bits ? (flags & with) == with : (flags & with) != 0;
-        if (matches && ((flags & without) == 0) && (phy_.queue_properties_[i].queueCount > 0)) {
-            return i;
+        if (phy_.queue_properties_[i].queueCount > 0) {
+            const auto flags = phy_.queue_properties_[i].queueFlags;
+            const bool matches = (flags & with) == with;
+            if (matches && ((flags & without) == 0)) {
+                return i;
+            }
         }
     }
     return {};
+}
+
+std::optional<uint32_t> Device::QueueFamilyWithoutCapabilities(VkQueueFlags without) const {
+    for (uint32_t i = 0; i < phy_.queue_properties_.size(); i++) {
+        if (phy_.queue_properties_[i].queueCount > 0) {
+            const auto flags = phy_.queue_properties_[i].queueFlags;
+            if ((flags & without) == 0) {
+                return i;
+            }
+        }
+    }
+    return {};
+}
+
+Queue *Device::QueueWithoutCapabilities(VkQueueFlags without) const {
+    auto family_index = QueueFamilyWithoutCapabilities(without);
+    return family_index.has_value() ? QueuesFromFamily(*family_index)[0].get() : nullptr;
+}
+
+std::optional<uint32_t> Device::ComputeOnlyQueueFamily() const {
+    return QueueFamily(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
+}
+
+Queue *Device::ComputeOnlyQueue() const {
+    auto family_index = ComputeOnlyQueueFamily();
+    return family_index.has_value() ? QueuesFromFamily(*family_index)[0].get() : nullptr;
+}
+
+std::optional<uint32_t> Device::TransferOnlyQueueFamily() const {
+    return QueueFamily(VK_QUEUE_TRANSFER_BIT, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
+}
+
+Queue *Device::TransferOnlyQueue() const {
+    auto family_index = TransferOnlyQueueFamily();
+    return family_index.has_value() ? QueuesFromFamily(*family_index)[0].get() : nullptr;
+}
+
+std::optional<uint32_t> Device::NonGraphicsQueueFamily() const {
+    if (auto compute_qfi = ComputeOnlyQueueFamily(); compute_qfi.has_value()) {
+        return compute_qfi;
+    }
+    return TransferOnlyQueueFamily();
+}
+
+Queue *Device::NonGraphicsQueue() const {
+    auto family_index = NonGraphicsQueueFamily();
+    return family_index.has_value() ? QueuesFromFamily(*family_index)[0].get() : nullptr;
 }
 
 bool Device::IsEnabledExtension(const char *extension) const {
@@ -1326,7 +1365,7 @@ void CommandBuffer::Init(const Device &dev, const CommandPool *pool, VkCommandBu
     if (queue) {
         m_queue = queue;
     } else {
-        m_queue = dev.graphics_queues()[0];
+        m_queue = dev.QueuesWithGraphicsCapability()[0];
     }
     assert(m_queue);
 
@@ -1391,7 +1430,7 @@ void CommandBuffer::BeginRendering(const VkRenderingInfoKHR &renderingInfo) {
     }
 }
 
-void CommandBuffer::BeginRenderingColor(const VkImageView imageView) {
+void CommandBuffer::BeginRenderingColor(const VkImageView imageView, VkRect2D render_area) {
     VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
     color_attachment.imageView = imageView;
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1400,7 +1439,7 @@ void CommandBuffer::BeginRenderingColor(const VkImageView imageView) {
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &color_attachment;
     renderingInfo.layerCount = 1;
-    renderingInfo.renderArea = {{0, 0}, {1, 1}};
+    renderingInfo.renderArea = render_area;
 
     BeginRendering(renderingInfo);
 }

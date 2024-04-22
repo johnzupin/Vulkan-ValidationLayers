@@ -69,10 +69,10 @@ static uint32_t BitBufferSize(uint32_t num_bits) {
     return (((num_bits + (kBitsPerWord - 1)) & ~(kBitsPerWord - 1))/kBitsPerWord) * sizeof(uint32_t);
 }
 
-gpuav::DescriptorSet::DescriptorSet(const VkDescriptorSet set, vvl::DescriptorPool *pool,
+gpuav::DescriptorSet::DescriptorSet(const VkDescriptorSet handle, vvl::DescriptorPool *pool,
                                     const std::shared_ptr<vvl::DescriptorSetLayout const> &layout, uint32_t variable_count,
                                     ValidationStateTracker *state_data)
-    : vvl::DescriptorSet(set, pool, layout, variable_count, state_data) {}
+    : vvl::DescriptorSet(handle, pool, layout, variable_count, state_data) {}
 
 gpuav::DescriptorSet::~DescriptorSet() {
     Destroy();
@@ -164,7 +164,7 @@ static glsl::DescriptorState GetInData(const vvl::BufferDescriptor &desc) {
         return glsl::DescriptorState(DescriptorClass::GeneralBuffer, glsl::kDebugInputBindlessSkipId, vvl::kU32Max);
     }
     return glsl::DescriptorState(DescriptorClass::GeneralBuffer, buffer_state->id,
-                                 static_cast<uint32_t>(buffer_state->createInfo.size));
+                                 static_cast<uint32_t>(buffer_state->create_info.size));
 }
 
 static glsl::DescriptorState GetInData(const vvl::TexelDescriptor &desc) {
@@ -214,7 +214,7 @@ static glsl::DescriptorState GetInData(const vvl::MutableDescriptor &desc) {
             if (!buffer_state) {
                 return glsl::DescriptorState(desc_class, glsl::kDebugInputBindlessSkipId, vvl::kU32Max);
             }
-            return glsl::DescriptorState(desc_class, buffer_state->id, static_cast<uint32_t>(buffer_state->createInfo.size));
+            return glsl::DescriptorState(desc_class, buffer_state->id, static_cast<uint32_t>(buffer_state->create_info.size));
         }
         case DescriptorClass::TexelBuffer: {
             auto buffer_view_state = std::static_pointer_cast<const BufferView>(desc.GetSharedBufferViewState());

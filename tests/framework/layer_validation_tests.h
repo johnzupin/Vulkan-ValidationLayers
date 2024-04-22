@@ -22,6 +22,10 @@
 #include <android_native_app_glue.h>
 #endif
 
+#if defined(VK_USE_PLATFORM_WAYLAND_KHR)
+#include "wayland-client.h"
+#endif
+
 #include <vulkan/utility/vk_format_utils.h>
 #include <vulkan/utility/vk_struct_helper.hpp>
 
@@ -289,8 +293,8 @@ class GpuAVOOBTest : public GpuAVTest {};
 class NegativeGpuAVOOB : public GpuAVOOBTest {
   public:
     void ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSize binding_offset, VkDeviceSize binding_range,
-                              VkDescriptorType descriptor_type, const char *fragment_shader, const char *expected_error,
-                              bool shader_objects = false);
+                              VkDescriptorType descriptor_type, const char *fragment_shader,
+                              std::vector<const char *> expected_errors, bool shader_objects = false);
     void ComputeStorageBufferTest(const char *expected_error, const char *shader, VkDeviceSize buffer_size);
 };
 class PositiveGpuAVOOB : public GpuAVOOBTest {};
@@ -344,6 +348,14 @@ class PositiveBuffer : public BufferTest {};
 class CommandTest : public VkLayerTest {};
 class NegativeCommand : public CommandTest {};
 class PositiveCommand : public CommandTest {};
+
+class SecondaryCommandBufferTest : public VkLayerTest {};
+class NegativeSecondaryCommandBuffer : public SecondaryCommandBufferTest {};
+class PositiveSecondaryCommandBuffer : public SecondaryCommandBufferTest {};
+
+class CopyBufferImageTest : public VkLayerTest {};
+class NegativeCopyBufferImage : public CopyBufferImageTest {};
+class PositiveCopyBufferImage : public CopyBufferImageTest {};
 
 class DescriptorsTest : public VkLayerTest {};
 class NegativeDescriptors : public DescriptorsTest {};
@@ -427,13 +439,19 @@ class PositiveGraphicsLibrary : public GraphicsLibraryTest {};
 
 class HostImageCopyTest : public VkLayerTest {
   public:
-    void InitHostImageCopyTest(const VkImageCreateInfo &image_ci);
+    void InitHostImageCopyTest(const VkImageCreateInfo &create_info);
     bool CopyLayoutSupported(const std::vector<VkImageLayout> &copy_src_layouts, const std::vector<VkImageLayout> &copy_dst_layouts,
                              VkImageLayout layout);
     VkFormat compressed_format = VK_FORMAT_UNDEFINED;
     bool separate_depth_stencil = false;
     std::vector<VkImageLayout> copy_src_layouts;
     std::vector<VkImageLayout> copy_dst_layouts;
+
+    // Every test will use these, set the default most will use
+    uint32_t width = 32;
+    uint32_t height = 32;
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkImageCreateInfo image_ci;
 };
 class NegativeHostImageCopy : public HostImageCopyTest {};
 class PositiveHostImageCopy : public HostImageCopyTest {};
@@ -526,7 +544,6 @@ class PositiveRayTracingPipelineNV : public PositiveRayTracingPipeline {};
 class GpuAVRayTracingTest : public GpuAVTest, public RayTracingTest {};
 class NegativeGpuAVRayTracing : public GpuAVRayTracingTest {};
 class PositiveGpuAVRayTracing : public GpuAVRayTracingTest {};
-class NegativeGpuAVRayTracingNV : public NegativeGpuAVRayTracing {};
 
 class RenderPassTest : public VkLayerTest {};
 class NegativeRenderPass : public RenderPassTest {};
@@ -633,6 +650,19 @@ class WsiTest : public VkLayerTest {
     // most tests need images in VK_IMAGE_LAYOUT_PRESENT_SRC_KHR layout
     void SetImageLayoutPresentSrc(VkImage image);
     VkImageMemoryBarrier TransitionToPresent(VkImage swapchain_image, VkImageLayout old_layout, VkAccessFlags src_access_mask);
+
+  protected:
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    struct WaylandContext {
+        wl_display *display = nullptr;
+        wl_registry *registry = nullptr;
+        wl_surface *surface = nullptr;
+        wl_compositor *compositor = nullptr;
+    };
+    void InitWaylandContext(WaylandContext& context);
+    void ReleaseWaylandContext(WaylandContext& context);
+#endif
+
 };
 class NegativeWsi : public WsiTest {};
 class PositiveWsi : public WsiTest {};

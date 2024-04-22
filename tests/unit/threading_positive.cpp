@@ -204,7 +204,7 @@ TEST_F(PositiveThreading, DebugObjectNames) {
     std::atomic<bool> bailout{false};
 
     for (uint32_t i = 0; i < count; ++i) {
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdBindDescriptorSets-pDescriptorSets-00358");
+        m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorSets-pDescriptorSets-00358");
     }
 
     m_errorMonitor->SetBailout(&bailout);
@@ -254,7 +254,7 @@ TEST_F(PositiveThreading, Queue) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
 
-    const auto queue_family = m_device->graphics_queues()[0]->get_family_index();
+    const auto queue_family = m_device->QueuesWithGraphicsCapability()[0]->get_family_index();
     constexpr uint32_t queue_index = 0;
     vkt::CommandPool command_pool(*m_device, queue_family);
 

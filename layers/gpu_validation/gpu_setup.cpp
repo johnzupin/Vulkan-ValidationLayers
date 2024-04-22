@@ -23,9 +23,11 @@
 #include "utils/cast_utils.h"
 #include "utils/shader_utils.h"
 #include "utils/hash_util.h"
+#include "gpu_validation/gpu_constants.h"
 #include "gpu_validation/gpu_validation.h"
 #include "gpu_validation/gpu_subclasses.h"
 #include "state_tracker/device_state.h"
+#include "state_tracker/shader_object_state.h"
 #include "spirv-tools/instrument.hpp"
 #include "spirv-tools/linker.hpp"
 #include "generated/layer_chassis_dispatch.h"
@@ -36,11 +38,10 @@
 #include "generated/gpu_pre_draw_vert.h"
 #include "generated/gpu_pre_dispatch_comp.h"
 #include "generated/gpu_pre_trace_rays_rgen.h"
-#include "generated/gpu_as_inspection_comp.h"
 #include "generated/gpu_inst_shader_hash.h"
 
-std::shared_ptr<vvl::Buffer> gpuav::Validator::CreateBufferState(VkBuffer buf, const VkBufferCreateInfo *pCreateInfo) {
-    return std::make_shared<Buffer>(this, buf, pCreateInfo, *desc_heap);
+std::shared_ptr<vvl::Buffer> gpuav::Validator::CreateBufferState(VkBuffer handle, const VkBufferCreateInfo *pCreateInfo) {
+    return std::make_shared<Buffer>(*this, handle, pCreateInfo, *desc_heap);
 }
 
 std::shared_ptr<vvl::BufferView> gpuav::Validator::CreateBufferViewState(const std::shared_ptr<vvl::Buffer> &bf, VkBufferView bv,
@@ -55,16 +56,6 @@ std::shared_ptr<vvl::ImageView> gpuav::Validator::CreateImageViewState(
     return std::make_shared<ImageView>(image_state, iv, ci, ff, cubic_props, *desc_heap);
 }
 
-std::shared_ptr<vvl::AccelerationStructureNV> gpuav::Validator::CreateAccelerationStructureState(
-    VkAccelerationStructureNV as, const VkAccelerationStructureCreateInfoNV *ci) {
-    return std::make_shared<AccelerationStructureNV>(device, as, ci, *desc_heap);
-}
-
-std::shared_ptr<vvl::AccelerationStructureKHR> gpuav::Validator::CreateAccelerationStructureState(
-    VkAccelerationStructureKHR as, const VkAccelerationStructureCreateInfoKHR *ci, std::shared_ptr<vvl::Buffer> &&buf_state) {
-    return std::make_shared<AccelerationStructureKHR>(as, ci, std::move(buf_state), *desc_heap);
-}
-
 std::shared_ptr<vvl::Sampler> gpuav::Validator::CreateSamplerState(VkSampler s, const VkSamplerCreateInfo *ci) {
     return std::make_shared<Sampler>(s, ci, *desc_heap);
 }
@@ -75,10 +66,10 @@ std::shared_ptr<vvl::DescriptorSet> gpuav::Validator::CreateDescriptorSet(
     return std::static_pointer_cast<vvl::DescriptorSet>(std::make_shared<DescriptorSet>(set, pool, layout, variable_count, this));
 }
 
-std::shared_ptr<vvl::CommandBuffer> gpuav::Validator::CreateCmdBufferState(VkCommandBuffer cb,
+std::shared_ptr<vvl::CommandBuffer> gpuav::Validator::CreateCmdBufferState(VkCommandBuffer handle,
                                                                            const VkCommandBufferAllocateInfo *pCreateInfo,
                                                                            const vvl::CommandPool *pool) {
-    return std::static_pointer_cast<vvl::CommandBuffer>(std::make_shared<CommandBuffer>(this, cb, pCreateInfo, pool));
+    return std::static_pointer_cast<vvl::CommandBuffer>(std::make_shared<CommandBuffer>(*this, handle, pCreateInfo, pool));
 }
 
 std::shared_ptr<vvl::Queue> gpuav::Validator::CreateQueue(VkQueue q, uint32_t index, VkDeviceQueueCreateFlags flags,
@@ -96,19 +87,31 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const
             cb_state->SetImageViewInitialLayout(iv_state, layout);
         });
 
-    // BaseClass::CreateDevice will set up bindings
-    VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
-                                            VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT |
-                                                VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT |
-                                                gpu_tracker::kShaderStageAllRayTracing,
-                                            NULL};
     // Set up a stub implementation of the descriptor heap in case we abort.
     desc_heap.emplace(*this, 0);
-    bindings_.push_back(binding);
-    for (auto i = 1; i < 3; i++) {
-        binding.binding = i;
-        bindings_.push_back(binding);
-    }
+
+    // Setup bindings
+    const VkShaderStageFlags all_stages_flags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT |
+                                                VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT |
+                                                kShaderStageAllRayTracing;
+
+    validation_bindings_ = {
+        // Error output buffer
+        {glsl::kBindingInstErrorBuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, all_stages_flags, nullptr},
+        // Current bindless buffer
+        {glsl::kBindingInstBindlessDescriptor, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, all_stages_flags, nullptr},
+        // Buffer holding buffer device addresses
+        {glsl::kBindingInstBufferDeviceAddress, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, all_stages_flags, nullptr},
+        // Buffer holding action command index in command buffer
+        {glsl::kBindingInstActionIndex, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1, all_stages_flags, nullptr},
+        // Buffer holding a resource index from the per command buffer command resources list
+        {glsl::kBindingInstCmdResourceIndex, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1, all_stages_flags, nullptr},
+        // Commands errors counts buffer
+        {glsl::kBindingInstCmdErrorsCount, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, all_stages_flags, nullptr},
+    };
+
+    // TODO: Such a call is expected to be the first thing happening in this function,
+    // but moving it at the top breaks GPU-AV. Try to fix it
     BaseClass::CreateDevice(pCreateInfo, loc);
 
     if (api_version < VK_API_VERSION_1_1) {
@@ -141,12 +144,11 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const
         VkBufferCreateInfo buffer_info = vku::InitStructHelper();
         buffer_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         VmaAllocationCreateInfo alloc_info = {};
-        // We need 2 words per address (address and size), 1 word for the start of sizes index, 2 words for the address section
-        // bounds, and 2 more words for the size section bounds
-        app_bda_buffer_size =
-            (1 + (gpuav_settings.gpuav_max_buffer_device_addresses + 2) + (gpuav_settings.gpuav_max_buffer_device_addresses + 2)) *
-            8;  // 64 bit words
-        buffer_info.size = app_bda_buffer_size;
+        app_bda_buffer_byte_size = (1                                                 // 1 QWORD for the number of address ranges
+                                    + 2 * gpuav_settings.max_buffer_device_addresses  // 2 QWORDS to hold an address range
+                                    ) *
+                                   8;  // 64 bit words
+        buffer_info.size = app_bda_buffer_byte_size;
         // This buffer could be very large if an application uses many buffers. Allocating it as HOST_CACHED
         // and manually flushing it at the end of the state updates is faster than using HOST_COHERENT.
         alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
@@ -167,7 +169,7 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const
                    "Use of descriptor buffers will result in no descriptor checking");
     }
 
-    output_buffer_size = sizeof(uint32_t) * (glsl::kMaxErrorRecordSize + spvtools::kDebugOutputDataOffset);
+    output_buffer_byte_size = gpuav::glsl::kErrorBufferByteSize;
 
     if (gpuav_settings.validate_descriptors && !force_buffer_device_address) {
         gpuav_settings.validate_descriptors = false;
@@ -197,20 +199,28 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const
 
     if (gpuav_settings.vma_linear_output) {
         VkBufferCreateInfo output_buffer_create_info = vku::InitStructHelper();
-        output_buffer_create_info.size = output_buffer_size;
+        output_buffer_create_info.size = output_buffer_byte_size;
         output_buffer_create_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         VmaAllocationCreateInfo alloc_create_info = {};
         alloc_create_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         uint32_t mem_type_index;
-        vmaFindMemoryTypeIndexForBufferInfo(vmaAllocator, &output_buffer_create_info, &alloc_create_info, &mem_type_index);
+        VkResult result =
+            vmaFindMemoryTypeIndexForBufferInfo(vmaAllocator, &output_buffer_create_info, &alloc_create_info, &mem_type_index);
+        if (result != VK_SUCCESS) {
+            ReportSetupProblem(device, loc, "Unable to find memory type index");
+            aborted = true;
+            return;
+        }
         VmaPoolCreateInfo pool_create_info = {};
         pool_create_info.memoryTypeIndex = mem_type_index;
         pool_create_info.blockSize = 0;
         pool_create_info.maxBlockCount = 0;
         pool_create_info.flags = VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT;
-        VkResult result = vmaCreatePool(vmaAllocator, &pool_create_info, &output_buffer_pool);
+        result = vmaCreatePool(vmaAllocator, &pool_create_info, &output_buffer_pool);
         if (result != VK_SUCCESS) {
             ReportSetupProblem(device, loc, "Unable to create VMA memory pool");
+            aborted = true;
+            return;
         }
     }
 
@@ -244,353 +254,37 @@ void gpuav::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const
         }
     }
 
-    CreateAccelerationStructureBuildValidationState(pCreateInfo, loc);
-}
-
-void gpuav::Validator::CreateAccelerationStructureBuildValidationState(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) {
-    if (aborted) {
-        return;
-    }
-
-    auto &as_validation_state = acceleration_structure_validation_state;
-    if (as_validation_state.initialized) {
-        return;
-    }
-
-    if (!IsExtEnabled(device_extensions.vk_nv_ray_tracing)) {
-        return;
-    }
-
-    // Cannot use this validation without a queue that supports graphics
-    auto pd_state = Get<vvl::PhysicalDevice>(physical_device);
-    bool graphics_queue_exists = false;
-    uint32_t graphics_queue_family = 0;
-    for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
-        auto qfi = pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
-        if (pd_state->queue_family_properties[qfi].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            graphics_queue_family = qfi;
-            graphics_queue_exists = true;
-            break;
-        }
-    }
-    if (!graphics_queue_exists) {
-        LogWarning("WARNING-GPU-Assisted-Validation", device, loc, "No queue that supports graphics, GPU-AV aborted.");
-        aborted = true;
-        return;
-    }
-
-    // Outline:
-    //   - Create valid bottom level acceleration structure which acts as replacement
-    //      - Create and load vertex buffer
-    //      - Create and load index buffer
-    //      - Create, allocate memory for, and bind memory for acceleration structure
-    //      - Query acceleration structure handle
-    //      - Create command pool and command buffer
-    //      - Record build acceleration structure command
-    //      - Submit command buffer and wait for completion
-    //      - Cleanup
-    //  - Create compute pipeline for validating instance buffers
-    //      - Create descriptor set layout
-    //      - Create pipeline layout
-    //      - Create pipeline
-    //      - Cleanup
-
-    VkResult result = VK_SUCCESS;
-
-    VkBuffer vbo = VK_NULL_HANDLE;
-    VmaAllocation vbo_allocation = VK_NULL_HANDLE;
-    if (result == VK_SUCCESS) {
-        VkBufferCreateInfo vbo_ci = vku::InitStructHelper();
-        vbo_ci.size = sizeof(float) * 9;
-        vbo_ci.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
-
-        VmaAllocationCreateInfo vbo_ai = {};
-        vbo_ai.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-        vbo_ai.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-        result = vmaCreateBuffer(vmaAllocator, &vbo_ci, &vbo_ai, &vbo, &vbo_allocation, nullptr);
+    // Create command indices buffer
+    {
+        VkBufferCreateInfo buffer_info = vku::InitStructHelper();
+        buffer_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        buffer_info.size = cst::indices_count * sizeof(uint32_t);
+        VmaAllocationCreateInfo alloc_info = {};
+        assert(output_buffer_pool);
+        alloc_info.pool = output_buffer_pool;
+        alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        VkResult result =
+            vmaCreateBuffer(vmaAllocator, &buffer_info, &alloc_info, &indices_buffer.buffer, &indices_buffer.allocation, nullptr);
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create vertex buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Unable to allocate device memory for command indices. Device could become unstable.",
+                               true);
+            aborted = true;
+            return;
         }
-    }
 
-    if (result == VK_SUCCESS) {
-        uint8_t *mapped_vbo_buffer = nullptr;
-        result = vmaMapMemory(vmaAllocator, vbo_allocation, reinterpret_cast<void **>(&mapped_vbo_buffer));
+        uint32_t *indices_ptr = nullptr;
+        result = vmaMapMemory(vmaAllocator, indices_buffer.allocation, reinterpret_cast<void **>(&indices_ptr));
         if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to map vertex buffer for acceleration structure build validation.");
-        } else {
-            constexpr std::array vertices = {1.0f, 0.0f, 0.0f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-            std::memcpy(mapped_vbo_buffer, (uint8_t *)vertices.data(), sizeof(vertices[0]) * vertices.size());
-            vmaUnmapMemory(vmaAllocator, vbo_allocation);
-        }
-    }
-
-    VkBuffer ibo = VK_NULL_HANDLE;
-    VmaAllocation ibo_allocation = VK_NULL_HANDLE;
-    if (result == VK_SUCCESS) {
-        VkBufferCreateInfo ibo_ci = vku::InitStructHelper();
-        ibo_ci.size = sizeof(uint32_t) * 3;
-        ibo_ci.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
-
-        VmaAllocationCreateInfo ibo_ai = {};
-        ibo_ai.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-        ibo_ai.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-        result = vmaCreateBuffer(vmaAllocator, &ibo_ci, &ibo_ai, &ibo, &ibo_allocation, nullptr);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create index buffer for acceleration structure build validation.");
-        }
-    }
-
-    if (result == VK_SUCCESS) {
-        uint8_t *mapped_ibo_buffer = nullptr;
-        result = vmaMapMemory(vmaAllocator, ibo_allocation, reinterpret_cast<void **>(&mapped_ibo_buffer));
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to map index buffer for acceleration structure build validation.");
-        } else {
-            constexpr std::array<uint32_t, 3> indicies = {0, 1, 2};
-            std::memcpy(mapped_ibo_buffer, (uint8_t *)indicies.data(), sizeof(indicies[0]) * indicies.size());
-            vmaUnmapMemory(vmaAllocator, ibo_allocation);
-        }
-    }
-
-    VkGeometryNV geometry = vku::InitStructHelper();
-    geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_NV;
-    geometry.geometry.triangles = vku::InitStructHelper();
-    geometry.geometry.triangles.vertexData = vbo;
-    geometry.geometry.triangles.vertexOffset = 0;
-    geometry.geometry.triangles.vertexCount = 3;
-    geometry.geometry.triangles.vertexStride = 12;
-    geometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-    geometry.geometry.triangles.indexData = ibo;
-    geometry.geometry.triangles.indexOffset = 0;
-    geometry.geometry.triangles.indexCount = 3;
-    geometry.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
-    geometry.geometry.triangles.transformData = VK_NULL_HANDLE;
-    geometry.geometry.triangles.transformOffset = 0;
-    geometry.geometry.aabbs = vku::InitStructHelper();
-
-    VkAccelerationStructureCreateInfoNV as_ci = vku::InitStructHelper();
-    as_ci.info = vku::InitStructHelper();
-    as_ci.info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-    as_ci.info.instanceCount = 0;
-    as_ci.info.geometryCount = 1;
-    as_ci.info.pGeometries = &geometry;
-    if (result == VK_SUCCESS) {
-        result = DispatchCreateAccelerationStructureNV(device, &as_ci, nullptr, &as_validation_state.replacement_as);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create acceleration structure for acceleration structure build validation.");
-        }
-    }
-
-    VkMemoryRequirements2 as_mem_requirements = {};
-    if (result == VK_SUCCESS) {
-        VkAccelerationStructureMemoryRequirementsInfoNV as_mem_requirements_info = vku::InitStructHelper();
-        as_mem_requirements_info.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
-        as_mem_requirements_info.accelerationStructure = as_validation_state.replacement_as;
-
-        DispatchGetAccelerationStructureMemoryRequirementsNV(device, &as_mem_requirements_info, &as_mem_requirements);
-    }
-
-    VmaAllocationInfo as_memory_ai = {};
-    if (result == VK_SUCCESS) {
-        VmaAllocationCreateInfo as_memory_aci = {};
-        as_memory_aci.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-        result = vmaAllocateMemory(vmaAllocator, &as_mem_requirements.memoryRequirements, &as_memory_aci,
-                                   &as_validation_state.replacement_as_allocation, &as_memory_ai);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc,
-                               "Failed to alloc acceleration structure memory for acceleration structure build validation.");
-        }
-    }
-
-    if (result == VK_SUCCESS) {
-        VkBindAccelerationStructureMemoryInfoNV as_bind_info = vku::InitStructHelper();
-        as_bind_info.accelerationStructure = as_validation_state.replacement_as;
-        as_bind_info.memory = as_memory_ai.deviceMemory;
-        as_bind_info.memoryOffset = as_memory_ai.offset;
-
-        result = DispatchBindAccelerationStructureMemoryNV(device, 1, &as_bind_info);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc,
-                               "Failed to bind acceleration structure memory for acceleration structure build validation.");
-        }
-    }
-
-    if (result == VK_SUCCESS) {
-        result = DispatchGetAccelerationStructureHandleNV(device, as_validation_state.replacement_as, sizeof(uint64_t),
-                                                          &as_validation_state.replacement_as_handle);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc,
-                               "Failed to get acceleration structure handle for acceleration structure build validation.");
-        }
-    }
-
-    VkMemoryRequirements2 scratch_mem_requirements = {};
-    if (result == VK_SUCCESS) {
-        VkAccelerationStructureMemoryRequirementsInfoNV scratch_mem_requirements_info = vku::InitStructHelper();
-        scratch_mem_requirements_info.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-        scratch_mem_requirements_info.accelerationStructure = as_validation_state.replacement_as;
-
-        DispatchGetAccelerationStructureMemoryRequirementsNV(device, &scratch_mem_requirements_info, &scratch_mem_requirements);
-    }
-
-    VkBuffer scratch = VK_NULL_HANDLE;
-    VmaAllocation scratch_allocation = {};
-    if (result == VK_SUCCESS) {
-        VkBufferCreateInfo scratch_ci = vku::InitStructHelper();
-        scratch_ci.size = scratch_mem_requirements.memoryRequirements.size;
-        scratch_ci.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
-        VmaAllocationCreateInfo scratch_aci = {};
-        scratch_aci.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-        result = vmaCreateBuffer(vmaAllocator, &scratch_ci, &scratch_aci, &scratch, &scratch_allocation, nullptr);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create scratch buffer for acceleration structure build validation.");
-        }
-    }
-
-    VkCommandPool command_pool = VK_NULL_HANDLE;
-    if (result == VK_SUCCESS) {
-        VkCommandPoolCreateInfo command_pool_ci = vku::InitStructHelper();
-        command_pool_ci.queueFamilyIndex = 0;
-
-        result = DispatchCreateCommandPool(device, &command_pool_ci, nullptr, &command_pool);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create command pool for acceleration structure build validation.");
-        }
-    }
-
-    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
-
-    if (result == VK_SUCCESS) {
-        VkCommandBufferAllocateInfo command_buffer_ai = vku::InitStructHelper();
-        command_buffer_ai.commandPool = command_pool;
-        command_buffer_ai.commandBufferCount = 1;
-        command_buffer_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-        result = DispatchAllocateCommandBuffers(device, &command_buffer_ai, &command_buffer);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create command buffer for acceleration structure build validation.");
+            ReportSetupProblem(device, loc, "Unable to map device memory for command indices buffer.");
+            aborted = true;
+            return;
         }
 
-        // Hook up command buffer dispatch
-        vkSetDeviceLoaderData(device, command_buffer);
-    }
-
-    if (result == VK_SUCCESS) {
-        VkCommandBufferBeginInfo command_buffer_bi = vku::InitStructHelper();
-
-        result = DispatchBeginCommandBuffer(command_buffer, &command_buffer_bi);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to begin command buffer for acceleration structure build validation.");
+        for (uint32_t i = 0; i < cst::indices_count; ++i) {
+            indices_ptr[i] = i;
         }
-    }
 
-    if (result == VK_SUCCESS) {
-        DispatchCmdBuildAccelerationStructureNV(command_buffer, &as_ci.info, VK_NULL_HANDLE, 0, VK_FALSE,
-                                                as_validation_state.replacement_as, VK_NULL_HANDLE, scratch, 0);
-        DispatchEndCommandBuffer(command_buffer);
-    }
-
-    VkQueue queue = VK_NULL_HANDLE;
-    if (result == VK_SUCCESS) {
-        DispatchGetDeviceQueue(device, graphics_queue_family, 0, &queue);
-
-        // Hook up queue dispatch
-        vkSetDeviceLoaderData(device, queue);
-
-        VkSubmitInfo submit_info = vku::InitStructHelper();
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &command_buffer;
-        result = DispatchQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to submit command buffer for acceleration structure build validation.");
-        }
-    }
-
-    if (result == VK_SUCCESS) {
-        result = DispatchQueueWaitIdle(queue);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to wait for queue idle for acceleration structure build validation.");
-        }
-    }
-
-    if (vbo != VK_NULL_HANDLE) {
-        vmaDestroyBuffer(vmaAllocator, vbo, vbo_allocation);
-    }
-    if (ibo != VK_NULL_HANDLE) {
-        vmaDestroyBuffer(vmaAllocator, ibo, ibo_allocation);
-    }
-    if (scratch != VK_NULL_HANDLE) {
-        vmaDestroyBuffer(vmaAllocator, scratch, scratch_allocation);
-    }
-    if (command_pool != VK_NULL_HANDLE) {
-        DispatchDestroyCommandPool(device, command_pool, nullptr);
-    }
-
-    if (debug_desc_layout == VK_NULL_HANDLE) {
-        ReportSetupProblem(device, loc, "Failed to find descriptor set layout for acceleration structure build validation.");
-        result = VK_INCOMPLETE;
-    }
-
-    if (result == VK_SUCCESS) {
-        VkPipelineLayoutCreateInfo pipeline_layout_ci = vku::InitStructHelper();
-        pipeline_layout_ci.setLayoutCount = 1;
-        pipeline_layout_ci.pSetLayouts = &debug_desc_layout;
-        result = DispatchCreatePipelineLayout(device, &pipeline_layout_ci, 0, &as_validation_state.pipeline_layout);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create pipeline layout for acceleration structure build validation.");
-        }
-    }
-
-    VkShaderModule shader_module = VK_NULL_HANDLE;
-    if (result == VK_SUCCESS) {
-        VkShaderModuleCreateInfo shader_module_ci = vku::InitStructHelper();
-        shader_module_ci.codeSize = sizeof(gpu_as_inspection_comp);
-        shader_module_ci.pCode = gpu_as_inspection_comp;
-
-        result = DispatchCreateShaderModule(device, &shader_module_ci, nullptr, &shader_module);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create compute shader module for acceleration structure build validation.");
-        }
-    }
-
-    if (result == VK_SUCCESS) {
-        VkPipelineShaderStageCreateInfo pipeline_stage_ci = vku::InitStructHelper();
-        pipeline_stage_ci.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        pipeline_stage_ci.module = shader_module;
-        pipeline_stage_ci.pName = "main";
-
-        VkComputePipelineCreateInfo pipeline_ci = vku::InitStructHelper();
-        pipeline_ci.stage = pipeline_stage_ci;
-        pipeline_ci.layout = as_validation_state.pipeline_layout;
-
-        result = DispatchCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &as_validation_state.pipeline);
-        if (result != VK_SUCCESS) {
-            ReportSetupProblem(device, loc, "Failed to create compute pipeline for acceleration structure build validation.");
-        }
-    }
-
-    if (shader_module != VK_NULL_HANDLE) {
-        DispatchDestroyShaderModule(device, shader_module, nullptr);
-    }
-
-    if (result == VK_SUCCESS) {
-        as_validation_state.initialized = true;
-        LogInfo("WARNING-GPU-Assisted-Validation", device, loc, "Acceleration Structure Building GPU Validation Enabled.");
-    } else {
-        aborted = true;
-    }
-}
-
-void gpuav::Validator::Destroy(AccelerationStructureBuildValidationInfo &as_validation_info) {
-    vmaDestroyBuffer(vmaAllocator, as_validation_info.buffer, as_validation_info.buffer_allocation);
-
-    if (as_validation_info.descriptor_set != VK_NULL_HANDLE) {
-        desc_set_manager->PutBackDescriptorSet(as_validation_info.descriptor_pool, as_validation_info.descriptor_set);
+        vmaUnmapMemory(vmaAllocator, indices_buffer.allocation);
     }
 }
 
@@ -729,6 +423,16 @@ void gpuav::RestorablePipelineState::Create(vvl::CommandBuffer &cb_state, VkPipe
             push_constants_data = cb_state.push_constant_data;
             push_constants_ranges = pipeline_layout->push_constant_ranges;
         }
+    } else {
+        assert(shader_objects.empty());
+        if (lv_bind_point == BindPoint_Graphics) {
+            shader_objects = last_bound.GetAllBoundGraphicsShaders();
+        } else if (lv_bind_point == BindPoint_Compute) {
+            auto compute_shader = last_bound.GetShaderState(ShaderObjectStage::COMPUTE);
+            if (compute_shader) {
+                shader_objects.emplace_back(compute_shader);
+            }
+        }
     }
 }
 
@@ -758,18 +462,23 @@ void gpuav::RestorablePipelineState::Restore(VkCommandBuffer command_buffer) con
             }
         }
     }
+    if (!shader_objects.empty()) {
+        std::vector<VkShaderStageFlagBits> stages;
+        std::vector<VkShaderEXT> shaders;
+        for (const vvl::ShaderObject *shader_obj : shader_objects) {
+            stages.emplace_back(shader_obj->create_info.stage);
+            shaders.emplace_back(shader_obj->VkHandle());
+        }
+        DispatchCmdBindShadersEXT(command_buffer, static_cast<uint32_t>(shader_objects.size()), stages.data(), shaders.data());
+    }
 }
 
 void gpuav::CommandResources::Destroy(gpuav::Validator &validator) {
-    if (output_mem_block.buffer != VK_NULL_HANDLE) {
-        vmaDestroyBuffer(validator.vmaAllocator, output_mem_block.buffer, output_mem_block.allocation);
+    if (instrumentation_desc_set != VK_NULL_HANDLE) {
+        validator.desc_set_manager->PutBackDescriptorSet(instrumentation_desc_pool, instrumentation_desc_set);
+        instrumentation_desc_set = VK_NULL_HANDLE;
+        instrumentation_desc_pool = VK_NULL_HANDLE;
     }
-    if (output_buffer_desc_set != VK_NULL_HANDLE) {
-        validator.desc_set_manager->PutBackDescriptorSet(output_buffer_desc_pool, output_buffer_desc_set);
-    }
-    output_mem_block.buffer = VK_NULL_HANDLE;
-    output_mem_block.allocation = VK_NULL_HANDLE;
-    output_buffer_desc_set = VK_NULL_HANDLE;
 }
 
 void gpuav::PreDrawResources::Destroy(gpuav::Validator &validator) {
@@ -792,15 +501,7 @@ void gpuav::PreDispatchResources::Destroy(gpuav::Validator &validator) {
     CommandResources::Destroy(validator);
 }
 
-void gpuav::PreTraceRaysResources::Destroy(gpuav::Validator &validator) {
-    if (desc_set != VK_NULL_HANDLE) {
-        validator.desc_set_manager->PutBackDescriptorSet(desc_pool, desc_set);
-        desc_set = VK_NULL_HANDLE;
-        desc_pool = VK_NULL_HANDLE;
-    }
-
-    CommandResources::Destroy(validator);
-}
+void gpuav::PreTraceRaysResources::Destroy(gpuav::Validator &validator) { CommandResources::Destroy(validator); }
 
 void gpuav::PreCopyBufferToImageResources::Destroy(gpuav::Validator &validator) {
     if (desc_set != VK_NULL_HANDLE) {

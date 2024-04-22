@@ -19,7 +19,7 @@
  */
 
 #pragma once
-#include <array>
+#include <unordered_map>
 #include <vector>
 #include "state_tracker/shader_module.h"
 
@@ -27,8 +27,11 @@ namespace vvl {
 class Pipeline;
 }  // namespace vvl
 
-// This structure is used modify and pass parameters for the CreateShaderModule down-chain API call
-struct create_shader_module_api_state {
+// These structure are here as a way to bridge information down the chassis.
+// This allows the 4 different calls (PreCallValidate, PreCallRecord, Dispatch, PostCallRecord) to share information
+namespace chassis {
+
+struct CreateShaderModule {
     // allows PreCallRecord to return a value like PreCallValidate
     bool skip = false;
 
@@ -45,8 +48,8 @@ struct create_shader_module_api_state {
     std::vector<uint32_t> instrumented_spirv;
 };
 
-// same idea as create_shader_module_api_state but for VkShaderEXT (VK_EXT_shader_object)
-struct create_shader_object_api_state {
+// VkShaderEXT (VK_EXT_shader_object)
+struct ShaderObject {
     // allows PreCallRecord to return a value like PreCallValidate
     bool skip = false;
 
@@ -60,7 +63,7 @@ struct create_shader_object_api_state {
 
     std::vector<VkDescriptorSetLayout> new_layouts;
 
-    create_shader_object_api_state(uint32_t createInfoCount, const VkShaderCreateInfoEXT* pCreateInfos) {
+    ShaderObject(uint32_t createInfoCount, const VkShaderCreateInfoEXT* pCreateInfos) {
         instrumented_create_info = const_cast<VkShaderCreateInfoEXT*>(pCreateInfos);
         module_states.resize(createInfoCount);
         stateless_data.resize(createInfoCount);
@@ -69,47 +72,44 @@ struct create_shader_object_api_state {
     }
 };
 
-// This structure is used to save data across the CreateGraphicsPipelines down-chain API call
-// CreateShaderModuleStates[i] = ith shader state
-using CreateShaderModuleStates = std::array<create_shader_module_api_state, 32>;
-struct create_graphics_pipeline_api_state {
-    std::vector<safe_VkGraphicsPipelineCreateInfo> modified_create_infos;
-    std::vector<std::shared_ptr<vvl::Pipeline>> pipe_state;
-    std::vector<CreateShaderModuleStates> shader_states;
+// We hold one slot for each potential graphics stage
+// This is used to pass the unique_shader_id around for GPL
+// Tried to use `vvl::unordered_map` but caused compiler errors
+using ShaderModuleUniqueIds = std::unordered_map<VkShaderStageFlagBits, uint32_t>;
+
+struct CreateGraphicsPipelines {
+    std::vector<vku::safe_VkGraphicsPipelineCreateInfo> modified_create_infos;
+    std::vector<ShaderModuleUniqueIds> shader_unique_id_maps;
     const VkGraphicsPipelineCreateInfo* pCreateInfos;
 };
 
-// This structure is used to save data across the CreateComputePipelines down-chain API call
-struct create_compute_pipeline_api_state {
-    std::vector<safe_VkComputePipelineCreateInfo> modified_create_infos;
-    std::vector<std::shared_ptr<vvl::Pipeline>> pipe_state;
-    std::vector<CreateShaderModuleStates> shader_states;
+struct CreateComputePipelines {
+    std::vector<vku::safe_VkComputePipelineCreateInfo> modified_create_infos;
+    std::vector<ShaderModuleUniqueIds> shader_unique_id_maps;  // not used, here for template function
     const VkComputePipelineCreateInfo* pCreateInfos;
 };
 
-// This structure is used to save data across the CreateRayTracingPipelinesNV down-chain API call.
-struct create_ray_tracing_pipeline_api_state {
-    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> modified_create_infos;
-    std::vector<std::shared_ptr<vvl::Pipeline>> pipe_state;
-    std::vector<CreateShaderModuleStates> shader_states;
+struct CreateRayTracingPipelinesNV {
+    std::vector<vku::safe_VkRayTracingPipelineCreateInfoCommon> modified_create_infos;
+    std::vector<ShaderModuleUniqueIds> shader_unique_id_maps;  // not used, here for template function
     const VkRayTracingPipelineCreateInfoNV* pCreateInfos;
 };
 
-// This structure is used to save data across the CreateRayTracingPipelinesKHR down-chain API call.
-struct create_ray_tracing_pipeline_khr_api_state {
-    std::vector<safe_VkRayTracingPipelineCreateInfoCommon> modified_create_infos;
-    std::vector<std::shared_ptr<vvl::Pipeline>> pipe_state;
-    std::vector<CreateShaderModuleStates> shader_states;
+struct CreateRayTracingPipelinesKHR {
+    std::vector<vku::safe_VkRayTracingPipelineCreateInfoCommon> modified_create_infos;
+    std::vector<ShaderModuleUniqueIds> shader_unique_id_maps;  // not used, here for template function
     const VkRayTracingPipelineCreateInfoKHR* pCreateInfos;
 };
 
-// This structure is used modify parameters for the CreatePipelineLayout down-chain API call
-struct create_pipeline_layout_api_state {
+struct CreatePipelineLayout {
+    // This currently only works because GPU-AV is the only layer who creates this state
+    // If a 2nd layer starts to use it, can have conflicting values
     std::vector<VkDescriptorSetLayout> new_layouts;
     VkPipelineLayoutCreateInfo modified_create_info;
 };
 
-// This structure is used modify parameters for the CreateBuffer down-chain API call
-struct create_buffer_api_state {
+struct CreateBuffer {
     VkBufferCreateInfo modified_create_info;
 };
+
+}  // namespace chassis

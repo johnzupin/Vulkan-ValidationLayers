@@ -12,10 +12,6 @@
 #include "../framework/pipeline_helper.h"
 #include "generated/vk_extension_helper.h"
 
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-#include "wayland-client.h"
-#endif
-
 void WsiTest::SetImageLayoutPresentSrc(VkImage image) {
     vkt::CommandPool pool(*m_device, m_device->graphics_queue_node_index_);
     vkt::CommandBuffer cmd_buf(*m_device, &pool);
@@ -59,6 +55,54 @@ VkImageMemoryBarrier WsiTest::TransitionToPresent(VkImage swapchain_image, VkIma
     return transition;
 }
 
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+void WsiTest::InitWaylandContext(WaylandContext &context) {
+    context.display = wl_display_connect(nullptr);
+    if (!context.display) {
+        GTEST_SKIP() << "couldn't create wayland surface";
+    }
+
+    auto global = [](void *data, struct wl_registry *registry, uint32_t id, const char *interface, uint32_t version) {
+        (void)version;
+        const std::string_view interface_str = interface;
+        if (interface_str == "wl_compositor") {
+            auto compositor = reinterpret_cast<wl_compositor **>(data);
+            *compositor = reinterpret_cast<wl_compositor *>(wl_registry_bind(registry, id, &wl_compositor_interface, 1));
+        }
+    };
+
+    auto global_remove = [](void *data, struct wl_registry *registry, uint32_t id) {
+        (void)data;
+        (void)registry;
+        (void)id;
+    };
+
+    context.registry = wl_display_get_registry(context.display);
+    ASSERT_TRUE(context.registry != nullptr);
+
+    const wl_registry_listener registry_listener = {global, global_remove};
+
+    wl_registry_add_listener(context.registry, &registry_listener, &context.compositor);
+
+    wl_display_dispatch(context.display);
+    ASSERT_TRUE(context.compositor);
+
+    context.surface = wl_compositor_create_surface(context.compositor);
+    ASSERT_TRUE(context.surface);
+
+    const uint32_t version = wl_surface_get_version(context.surface);
+    ASSERT_TRUE(version > 0);
+}
+
+void WsiTest::ReleaseWaylandContext(WaylandContext &context) {
+    wl_surface_destroy(context.surface);
+    wl_compositor_destroy(context.compositor);
+    wl_registry_destroy(context.registry);
+    wl_display_disconnect(context.display);
+    context = WaylandContext{};
+}
+#endif  // VK_USE_PLATFORM_WAYLAND_KHR
+
 TEST_F(PositiveWsi, CreateWaylandSurface) {
     TEST_DESCRIPTION("Test creating wayland surface");
 
@@ -69,60 +113,18 @@ TEST_F(PositiveWsi, CreateWaylandSurface) {
     AddRequiredExtensions(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
-    wl_display *display = nullptr;
-    wl_registry *registry = nullptr;
-    wl_surface *surface = nullptr;
-    wl_compositor *compositor = nullptr;
-    {
-        display = wl_display_connect(nullptr);
-        if (!display) {
-            GTEST_SKIP() << "couldn't create wayland surface";
-        }
-
-        auto global = [](void *data, struct wl_registry *registry, uint32_t id, const char *interface, uint32_t version) {
-            (void)version;
-            const std::string_view interface_str = interface;
-            if (interface_str == "wl_compositor") {
-                auto compositor = reinterpret_cast<wl_compositor **>(data);
-                *compositor = reinterpret_cast<wl_compositor *>(wl_registry_bind(registry, id, &wl_compositor_interface, 1));
-            }
-        };
-
-        auto global_remove = [](void *data, struct wl_registry *registry, uint32_t id) {
-            (void)data;
-            (void)registry;
-            (void)id;
-        };
-
-        registry = wl_display_get_registry(display);
-        ASSERT_TRUE(registry != nullptr);
-
-        const wl_registry_listener registry_listener = {global, global_remove};
-
-        wl_registry_add_listener(registry, &registry_listener, &compositor);
-
-        wl_display_dispatch(display);
-        ASSERT_TRUE(compositor);
-
-        surface = wl_compositor_create_surface(compositor);
-        ASSERT_TRUE(surface);
-
-        const uint32_t version = wl_surface_get_version(surface);
-        ASSERT_TRUE(version > 0);
-    }
+    WaylandContext wayland_ctx;
+    RETURN_IF_SKIP(InitWaylandContext(wayland_ctx));
 
     VkWaylandSurfaceCreateInfoKHR surface_create_info = vku::InitStructHelper();
-    surface_create_info.display = display;
-    surface_create_info.surface = surface;
+    surface_create_info.display = wayland_ctx.display;
+    surface_create_info.surface = wayland_ctx.surface;
 
     VkSurfaceKHR vulkan_surface;
     vk::CreateWaylandSurfaceKHR(instance(), &surface_create_info, nullptr, &vulkan_surface);
 
     vk::DestroySurfaceKHR(instance(), vulkan_surface, nullptr);
-    wl_surface_destroy(surface);
-    wl_compositor_destroy(compositor);
-    wl_registry_destroy(registry);
-    wl_display_disconnect(display);
+    ReleaseWaylandContext(wayland_ctx);
 #endif
 }
 
@@ -148,7 +150,7 @@ TEST_F(PositiveWsi, CreateXcbSurface) {
     surface_create_info.connection = xcb_connection;
     surface_create_info.window = xcb_window;
 
-    VkSurfaceKHR vulkan_surface;
+    VkSurfaceKHR vulkan_surface{};
     vk::CreateXcbSurfaceKHR(instance(), &surface_create_info, nullptr, &vulkan_surface);
 
     vk::DestroySurfaceKHR(instance(), vulkan_surface, nullptr);
@@ -370,16 +372,16 @@ TEST_F(PositiveWsi, TransferImageToSwapchainDeviceGroup) {
     bind_info.memoryOffset = 0;
 
     vk::BindImageMemory2(device(), 1, &bind_info);
+    // Can transition layout after the memory is bound
+    peer_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
 
-    vkt::Fence fence;
-    fence.init(*m_device, vkt::Fence::create_info());
-    VkFence fence_handle = fence.handle();
+    vkt::Fence fence(*m_device);
 
     uint32_t image_index;
-    vk::AcquireNextImageKHR(m_device->handle(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, fence_handle, &image_index);
-    vk::WaitForFences(device(), 1, &fence_handle, VK_TRUE, kWaitTimeout);
+    vk::AcquireNextImageKHR(m_device->handle(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, fence.handle(), &image_index);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
     m_commandBuffer->begin();
 
@@ -798,8 +800,7 @@ TEST_F(PositiveWsi, SwapchainPresentShared) {
     const auto images = GetSwapchainImages(m_swapchain);
 
     uint32_t image_index;
-    vkt::Fence fence;
-    fence.init(*m_device, vkt::Fence::create_info());
+    vkt::Fence fence(*m_device);
     vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, fence.handle(), &image_index);
     vk::WaitForFences(device(), 1, &fence.handle(), true, kWaitTimeout);
 
@@ -1218,7 +1219,7 @@ TEST_F(PositiveWsi, ProtectedSwapchainImageColorAttachment) {
     VkRenderPassBeginInfo render_pass_begin =
         vku::InitStruct<VkRenderPassBeginInfo>(nullptr, m_renderPass, fb.handle(), render_area, 0u, nullptr);
     vk::CmdBeginRenderPass(protectedCommandBuffer.handle(), &render_pass_begin, VK_SUBPASS_CONTENTS_INLINE);
-    vk::CmdBindPipeline(protectedCommandBuffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vk::CmdBindPipeline(protectedCommandBuffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     // This should be valid since the framebuffer color attachment is a protected swapchain image
     vk::CmdDraw(protectedCommandBuffer.handle(), 3, 1, 0, 0);
     vk::CmdEndRenderPass(protectedCommandBuffer.handle());
@@ -1329,4 +1330,224 @@ TEST_F(PositiveWsi, PhysicalDeviceSurfaceSupport) {
         uint32_t count;
         vk::GetPhysicalDeviceSurfaceFormatsKHR(gpu(), m_surface, &count, nullptr);
     }
+}
+
+TEST_F(PositiveWsi, AcquireImageBeforeGettingSwapchainImages) {
+    TEST_DESCRIPTION("Call vkAcquireNextImageKHR before vkGetSwapchainImagesKHR");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddSurfaceExtension();
+    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitSurface());
+
+    VkBool32 supported;
+    vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), m_device->graphics_queue_node_index_, m_surface, &supported);
+    if (!supported) {
+        GTEST_SKIP() << "Surface not supported.";
+    }
+
+    SurfaceInformation info = GetSwapchainInfo(m_surface);
+    InitSwapchainInfo();
+
+    VkSwapchainCreateInfoKHR swapchain_create_info = vku::InitStructHelper();
+    swapchain_create_info.surface = m_surface;
+    swapchain_create_info.minImageCount = info.surface_capabilities.minImageCount;
+    swapchain_create_info.imageFormat = info.surface_formats[0].format;
+    swapchain_create_info.imageColorSpace = info.surface_formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {info.surface_capabilities.minImageExtent.width,
+                                         info.surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageArrayLayers = 1;
+    swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    swapchain_create_info.compositeAlpha = info.surface_composite_alpha;
+    swapchain_create_info.presentMode = info.surface_non_shared_present_mode;
+    swapchain_create_info.clipped = VK_FALSE;
+    swapchain_create_info.oldSwapchain = VK_NULL_HANDLE;
+
+    VkSwapchainKHR swapchain;
+    vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &swapchain);
+
+    vkt::Fence fence(*m_device);
+
+    uint32_t imageIndex;
+    vk::AcquireNextImageKHR(device(), swapchain, kWaitTimeout, VK_NULL_HANDLE, fence.handle(), &imageIndex);
+    vk::WaitForFences(device(), 1u, &fence.handle(), VK_FALSE, kWaitTimeout);
+
+    uint32_t imageCount;
+    vk::GetSwapchainImagesKHR(device(), swapchain, &imageCount, nullptr);
+    std::vector<VkImage> images(imageCount);
+    vk::GetSwapchainImagesKHR(device(), swapchain, &imageCount, images.data());
+
+    const VkImageMemoryBarrier present_transition = TransitionToPresent(images[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED, 0);
+    m_commandBuffer->begin();
+    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
+                           0, nullptr, 0, nullptr, 1, &present_transition);
+    m_commandBuffer->end();
+
+    VkSubmitInfo submit_info = vku::InitStructHelper();
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+
+    VkPresentInfoKHR present = vku::InitStructHelper();
+    present.waitSemaphoreCount = 0;
+    present.swapchainCount = 1;
+    present.pSwapchains = &swapchain;
+    present.pImageIndices = &imageIndex;
+    vk::QueuePresentKHR(m_default_queue->handle(), &present);
+
+    vk::DestroySwapchainKHR(device(), swapchain, nullptr);
+}
+
+// https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7025
+TEST_F(PositiveWsi, PresentFenceWaitsForSubmission) {
+    TEST_DESCRIPTION("Use present fence to wait for submission");
+    AddSurfaceExtension();
+    AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitSwapchain());
+
+    // Warm up. Show that we can reset command buffer after waiting on **submit** fence
+    {
+        m_commandBuffer->begin();
+        m_commandBuffer->end();
+
+        VkSubmitInfo submit_info = vku::InitStructHelper();
+        submit_info.commandBufferCount = 1;
+        submit_info.pCommandBuffers = &m_commandBuffer->handle();
+
+        vkt::Fence submit_fence(*m_device);
+        vk::QueueSubmit(*m_default_queue, 1, &submit_info, submit_fence);
+
+        vk::WaitForFences(device(), 1, &submit_fence.handle(), VK_TRUE, kWaitTimeout);
+
+        // It's safe to reset command buffer because we waited on the fence
+        m_commandBuffer->reset();
+    }
+
+    // Main performance. Show that we can reset command buffer after waiting on **present** fence
+    {
+        constexpr VkPipelineStageFlags wait_stage_mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        const vkt::Semaphore acquire_semaphore(*m_device);
+        const vkt::Semaphore submit_semaphore(*m_device);
+
+        const auto swapchain_images = GetSwapchainImages(m_swapchain);
+        uint32_t image_index = 0;
+        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
+        const VkImageMemoryBarrier present_transition =
+            TransitionToPresent(swapchain_images[image_index], VK_IMAGE_LAYOUT_UNDEFINED, 0);
+
+        m_commandBuffer->begin();
+        vk::CmdPipelineBarrier(*m_commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
+                               nullptr, 0, nullptr, 1, &present_transition);
+        m_commandBuffer->end();
+
+        VkSubmitInfo submit_info = vku::InitStructHelper();
+        submit_info.waitSemaphoreCount = 1;
+        submit_info.pWaitSemaphores = &acquire_semaphore.handle();
+        submit_info.pWaitDstStageMask = &wait_stage_mask;
+        submit_info.commandBufferCount = 1;
+        submit_info.pCommandBuffers = &m_commandBuffer->handle();
+        submit_info.signalSemaphoreCount = 1;
+        submit_info.pSignalSemaphores = &submit_semaphore.handle();
+        vk::QueueSubmit(*m_default_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+        vkt::Fence present_fence(*m_device);
+        VkSwapchainPresentFenceInfoEXT present_fence_info = vku::InitStructHelper();
+        present_fence_info.swapchainCount = 1;
+        present_fence_info.pFences = &present_fence.handle();
+
+        VkPresentInfoKHR present = vku::InitStructHelper(&present_fence_info);
+        present.waitSemaphoreCount = 1;
+        present.pWaitSemaphores = &submit_semaphore.handle();
+        present.swapchainCount = 1;
+        present.pSwapchains = &m_swapchain;
+        present.pImageIndices = &image_index;
+        vk::QueuePresentKHR(*m_default_queue, &present);
+
+        vk::WaitForFences(device(), 1, &present_fence.handle(), VK_TRUE, kWaitTimeout);
+
+        // It should be safe to reset command buffer after waiting on present fence:
+        //      wait on present fence ->
+        //      present was initiated ->
+        //      submit semaphore signaled ->
+        //      QueueSubmit workload has completed ->
+        //      command buffer is no longer in use and we can reset it.
+        m_commandBuffer->reset();
+    }
+    m_default_queue->wait();
+}
+
+TEST_F(PositiveWsi, DifferentPerPresentModeImageCount) {
+    TEST_DESCRIPTION("Create swapchain with per present mode minImageCount that is less than surface's general minImageCount");
+#ifndef VK_USE_PLATFORM_WAYLAND_KHR
+    GTEST_SKIP() << "Test requires wayland platform support";
+#else
+    AddSurfaceExtension();
+    AddRequiredExtensions(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    WaylandContext wayland_ctx;
+    RETURN_IF_SKIP(InitWaylandContext(wayland_ctx));
+
+    VkWaylandSurfaceCreateInfoKHR surface_create_info = vku::InitStructHelper();
+    surface_create_info.display = wayland_ctx.display;
+    surface_create_info.surface = wayland_ctx.surface;
+
+    VkSurfaceKHR surface;
+    vk::CreateWaylandSurfaceKHR(instance(), &surface_create_info, nullptr, &surface);
+
+    const auto present_mode = VK_PRESENT_MODE_FIFO_KHR;  // Implementations must support
+
+    VkSurfaceCapabilities2KHR surface_caps = vku::InitStructHelper();
+    VkPhysicalDeviceSurfaceInfo2KHR surface_info = vku::InitStructHelper();
+    surface_info.surface = surface;
+    vk::GetPhysicalDeviceSurfaceCapabilities2KHR(gpu(), &surface_info, &surface_caps);
+    const uint32_t general_min_image_count = surface_caps.surfaceCapabilities.minImageCount;
+
+    VkSurfacePresentModeEXT surface_present_mode = vku::InitStructHelper();
+    surface_present_mode.presentMode = present_mode;
+    surface_info.pNext = &surface_present_mode;
+    vk::GetPhysicalDeviceSurfaceCapabilities2KHR(gpu(), &surface_info, &surface_caps);
+    const uint32_t per_present_mode_min_image_count = surface_caps.surfaceCapabilities.minImageCount;
+
+    if (per_present_mode_min_image_count >= general_min_image_count) {
+        vk::DestroySurfaceKHR(instance(), surface, nullptr);
+        ReleaseWaylandContext(wayland_ctx);
+        GTEST_SKIP() << "Can't find present mode that uses less images than a general case";
+    }
+
+    auto info = GetSwapchainInfo(surface);
+
+    VkSwapchainPresentModesCreateInfoEXT swapchain_present_mode_create_info = vku::InitStructHelper();
+    swapchain_present_mode_create_info.presentModeCount = 1;
+    swapchain_present_mode_create_info.pPresentModes = &present_mode;
+
+    VkSwapchainCreateInfoKHR swapchain_create_info = vku::InitStructHelper(&swapchain_present_mode_create_info);
+    swapchain_create_info.surface = surface;
+    swapchain_create_info.minImageCount = surface_caps.surfaceCapabilities.minImageCount;
+    swapchain_create_info.imageFormat = info.surface_formats[0].format;
+    swapchain_create_info.imageColorSpace = info.surface_formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {surface_caps.surfaceCapabilities.minImageExtent.width,
+                                         surface_caps.surfaceCapabilities.minImageExtent.height};
+    swapchain_create_info.imageArrayLayers = 1;
+    swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchain_create_info.presentMode = present_mode;
+    swapchain_create_info.clipped = VK_FALSE;
+    swapchain_create_info.oldSwapchain = 0;
+
+    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+    vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &swapchain);
+    vk::DestroySwapchainKHR(device(), swapchain, nullptr);
+    vk::DestroySurfaceKHR(instance(), surface, nullptr);
+    ReleaseWaylandContext(wayland_ctx);
+#endif
 }

@@ -48,7 +48,7 @@ TEST_F(PositiveMesh, BasicUsage) {
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0, 1,
                               &pipe.descriptor_set_->set_, 0, nullptr);
     vk::CmdDrawMeshTasksEXT(m_commandBuffer->handle(), 1, 1, 1);
@@ -311,5 +311,75 @@ TEST_F(PositiveMesh, PrimitiveTopology) {
     pipe.shader_stages_ = {ms.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
     pipe.ia_ci_.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;  // requires primitiveTopologyListRestart
     pipe.ia_ci_.primitiveRestartEnable = VK_TRUE;
+    pipe.CreateGraphicsPipeline();
+}
+
+TEST_F(PositiveMesh, DrawIndexMesh) {
+    TEST_DESCRIPTION("use DrawIndex only with Mesh Shader.");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::meshShader);
+    AddRequiredFeature(vkt::Feature::shaderDrawParameters);
+    AddDisabledFeature(vkt::Feature::multiviewMeshShader);
+    AddDisabledFeature(vkt::Feature::primitiveFragmentShadingRateMeshShader);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    const char *mesh_source = R"glsl(
+        #version 460
+        #extension GL_EXT_mesh_shader : enable
+        layout(max_vertices = 32, max_primitives = 32, triangles) out;
+        void main() {
+            uint compacted_meshlet_index = uint(32768 * gl_DrawID) + gl_WorkGroupID.x;
+            SetMeshOutputsEXT(3,1);
+        }
+    )glsl";
+
+    VkShaderObj ms(this, mesh_source, VK_SHADER_STAGE_MESH_BIT_EXT, SPV_ENV_VULKAN_1_2);
+    VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_2);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.shader_stages_ = {ms.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipe.CreateGraphicsPipeline();
+}
+
+TEST_F(PositiveMesh, DrawIndexTask) {
+    TEST_DESCRIPTION("use DrawIndex only with Task Shader.");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::meshShader);
+    AddRequiredFeature(vkt::Feature::taskShader);
+    AddRequiredFeature(vkt::Feature::shaderDrawParameters);
+    AddDisabledFeature(vkt::Feature::multiviewMeshShader);
+    AddDisabledFeature(vkt::Feature::primitiveFragmentShadingRateMeshShader);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    const char *task_source = R"glsl(
+        #version 460
+        #extension GL_EXT_mesh_shader : enable
+        taskPayloadSharedEXT uint mesh_payload[32];
+        void main() {
+            mesh_payload[gl_LocalInvocationIndex] =  uint(32768 * gl_DrawID) + gl_GlobalInvocationID.x;
+            EmitMeshTasksEXT(32u, 1u, 1u);
+        }
+    )glsl";
+
+    const char *mesh_source = R"glsl(
+        #version 460
+        #extension GL_EXT_mesh_shader : enable
+        layout(max_vertices = 32, max_primitives = 32, triangles) out;
+        taskPayloadSharedEXT uint mesh_payload[32];
+        void main() {
+            SetMeshOutputsEXT(3,1);
+        }
+    )glsl";
+
+    VkShaderObj ts(this, task_source, VK_SHADER_STAGE_TASK_BIT_EXT, SPV_ENV_VULKAN_1_2);
+    VkShaderObj ms(this, mesh_source, VK_SHADER_STAGE_MESH_BIT_EXT, SPV_ENV_VULKAN_1_2);
+    VkShaderObj fs(this, kFragmentMinimalGlsl, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_2);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.shader_stages_ = {ts.GetStageCreateInfo(), ms.GetStageCreateInfo(), fs.GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 }

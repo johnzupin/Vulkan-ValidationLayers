@@ -28,213 +28,27 @@
 #include "spirv-tools/instrument.hpp"
 #include "spirv-tools/linker.hpp"
 #include "generated/layer_chassis_dispatch.h"
-#include "state_tracker/chassis_modification_state.h"
+#include "chassis/chassis_modification_state.h"
 
 // Generated shaders
 #include "generated/gpu_inst_shader_hash.h"
 
 void gpuav::Validator::PreCallRecordCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer,
-                                                 const RecordObject &record_obj, void *cb_state_data) {
-    create_buffer_api_state *cb_state = reinterpret_cast<create_buffer_api_state *>(cb_state_data);
-    if (cb_state) {
-        // Ray tracing acceleration structure instance buffers also need the storage buffer usage as
-        // acceleration structure build validation will find and replace invalid acceleration structure
-        // handles inside of a compute shader.
-        if (cb_state->modified_create_info.usage & VK_BUFFER_USAGE_RAY_TRACING_BIT_NV) {
-            cb_state->modified_create_info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        }
-
-        // Indirect buffers will require validation shader to bind the indirect buffers as a storage buffer.
-        if (gpuav_settings.validate_indirect_buffer &&
-            cb_state->modified_create_info.usage & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) {
-            cb_state->modified_create_info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        }
+                                                 const RecordObject &record_obj, chassis::CreateBuffer &chassis_state) {
+    // Ray tracing acceleration structure instance buffers also need the storage buffer usage as
+    // acceleration structure build validation will find and replace invalid acceleration structure
+    // handles inside of a compute shader.
+    if (chassis_state.modified_create_info.usage & VK_BUFFER_USAGE_RAY_TRACING_BIT_NV) {
+        chassis_state.modified_create_info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     }
 
-    BaseClass::PreCallRecordCreateBuffer(device, pCreateInfo, pAllocator, pBuffer, record_obj, cb_state_data);
-}
-
-void gpuav::Validator::PreCallRecordCmdBuildAccelerationStructureNV(VkCommandBuffer commandBuffer,
-                                                                    const VkAccelerationStructureInfoNV *pInfo,
-                                                                    VkBuffer instanceData, VkDeviceSize instanceOffset,
-                                                                    VkBool32 update, VkAccelerationStructureNV dst,
-                                                                    VkAccelerationStructureNV src, VkBuffer scratch,
-                                                                    VkDeviceSize scratchOffset, const RecordObject &record_obj) {
-    BaseClass::PreCallRecordCmdBuildAccelerationStructureNV(commandBuffer, pInfo, instanceData, instanceOffset, update, dst, src,
-                                                            scratch, scratchOffset, record_obj);
-    if (pInfo == nullptr || pInfo->type != VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV) {
-        return;
+    // Indirect buffers will require validation shader to bind the indirect buffers as a storage buffer.
+    if (gpuav_settings.validate_indirect_buffer && chassis_state.modified_create_info.usage & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) {
+        chassis_state.modified_create_info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     }
 
-    auto &as_validation_state = acceleration_structure_validation_state;
-    if (!as_validation_state.initialized) {
-        return;
-    }
-
-    // Empty acceleration structure is valid according to the spec.
-    if (pInfo->instanceCount == 0 || instanceData == VK_NULL_HANDLE) {
-        return;
-    }
-
-    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
-    assert(cb_state != nullptr);
-
-    std::vector<uint64_t> current_valid_handles;
-    ForEach<vvl::AccelerationStructureNV>([&current_valid_handles](const vvl::AccelerationStructureNV &as_state) {
-        if (as_state.built && as_state.create_infoNV.info.type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV) {
-            current_valid_handles.push_back(as_state.opaque_handle);
-        }
-    });
-
-    AccelerationStructureBuildValidationInfo as_validation_info = {};
-    as_validation_info.acceleration_structure = dst;
-
-    const VkDeviceSize validation_buffer_size =
-        // One uint for number of instances to validate
-        4 +
-        // Two uint for the replacement acceleration structure handle
-        8 +
-        // One uint for number of invalid handles found
-        4 +
-        // Two uint for the first invalid handle found
-        8 +
-        // One uint for the number of current valid handles
-        4 +
-        // Two uint for each current valid handle
-        (8 * current_valid_handles.size());
-
-    VkBufferCreateInfo validation_buffer_create_info = vku::InitStructHelper();
-    validation_buffer_create_info.size = validation_buffer_size;
-    validation_buffer_create_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-    VmaAllocationCreateInfo validation_buffer_alloc_info = {};
-    validation_buffer_alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-
-    VkResult result = vmaCreateBuffer(vmaAllocator, &validation_buffer_create_info, &validation_buffer_alloc_info,
-                                      &as_validation_info.buffer, &as_validation_info.buffer_allocation, nullptr);
-    if (result != VK_SUCCESS) {
-        ReportSetupProblem(commandBuffer, record_obj.location, "Unable to allocate device memory. Device could become unstable.");
-        aborted = true;
-        return;
-    }
-
-    glsl::AccelerationStructureBuildValidationBuffer *mapped_validation_buffer = nullptr;
-    result = vmaMapMemory(vmaAllocator, as_validation_info.buffer_allocation, reinterpret_cast<void **>(&mapped_validation_buffer));
-    if (result != VK_SUCCESS) {
-        ReportSetupProblem(commandBuffer, record_obj.location,
-                           "Unable to map device memory for acceleration structure build validation buffer.");
-        aborted = true;
-        return;
-    }
-
-    mapped_validation_buffer->instances_to_validate = pInfo->instanceCount;
-    {
-        const auto replacement_as_handle = vvl_bit_cast<std::array<uint32_t, 2>>(as_validation_state.replacement_as_handle);
-        mapped_validation_buffer->replacement_handle_bits_0 = replacement_as_handle[0];
-        mapped_validation_buffer->replacement_handle_bits_1 = replacement_as_handle[1];
-    }
-    mapped_validation_buffer->invalid_handle_found = 0;
-    mapped_validation_buffer->invalid_handle_bits_0 = 0;
-    mapped_validation_buffer->invalid_handle_bits_1 = 0;
-    mapped_validation_buffer->valid_handles_count = static_cast<uint32_t>(current_valid_handles.size());
-
-    uint32_t *mapped_valid_handles = reinterpret_cast<uint32_t *>(&mapped_validation_buffer[1]);
-    for (std::size_t i = 0; i < current_valid_handles.size(); i++) {
-        const auto current_valid_handle = vvl_bit_cast<std::array<uint32_t, 2>>(current_valid_handles[i]);
-
-        *mapped_valid_handles = current_valid_handle[0];
-        ++mapped_valid_handles;
-        *mapped_valid_handles = current_valid_handle[1];
-        ++mapped_valid_handles;
-    }
-
-    vmaUnmapMemory(vmaAllocator, as_validation_info.buffer_allocation);
-
-    static constexpr const VkDeviceSize k_instance_size = 64;
-    const VkDeviceSize instance_buffer_size = k_instance_size * pInfo->instanceCount;
-
-    result = desc_set_manager->GetDescriptorSet(&as_validation_info.descriptor_pool, debug_desc_layout,
-                                                &as_validation_info.descriptor_set);
-    if (result != VK_SUCCESS) {
-        ReportSetupProblem(commandBuffer, record_obj.location, "Unable to get descriptor set for acceleration structure build.");
-        aborted = true;
-        return;
-    }
-
-    VkDescriptorBufferInfo descriptor_buffer_infos[2] = {};
-    descriptor_buffer_infos[0].buffer = instanceData;
-    descriptor_buffer_infos[0].offset = instanceOffset;
-    descriptor_buffer_infos[0].range = instance_buffer_size;
-    descriptor_buffer_infos[1].buffer = as_validation_info.buffer;
-    descriptor_buffer_infos[1].offset = 0;
-    descriptor_buffer_infos[1].range = validation_buffer_size;
-
-    VkWriteDescriptorSet descriptor_set_writes[2] = {
-        vku::InitStruct<VkWriteDescriptorSet>(),
-        vku::InitStruct<VkWriteDescriptorSet>(),
-    };
-    descriptor_set_writes[0].dstSet = as_validation_info.descriptor_set;
-    descriptor_set_writes[0].dstBinding = 0;
-    descriptor_set_writes[0].descriptorCount = 1;
-    descriptor_set_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptor_set_writes[0].pBufferInfo = &descriptor_buffer_infos[0];
-    descriptor_set_writes[1].dstSet = as_validation_info.descriptor_set;
-    descriptor_set_writes[1].dstBinding = 1;
-    descriptor_set_writes[1].descriptorCount = 1;
-    descriptor_set_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptor_set_writes[1].pBufferInfo = &descriptor_buffer_infos[1];
-
-    DispatchUpdateDescriptorSets(device, 2, descriptor_set_writes, 0, nullptr);
-
-    // Issue a memory barrier to make sure anything writing to the instance buffer has finished.
-    VkMemoryBarrier memory_barrier = vku::InitStructHelper();
-    memory_barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-    memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    DispatchCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1,
-                               &memory_barrier, 0, nullptr, 0, nullptr);
-
-    // Save a copy of the compute pipeline state that needs to be restored.
-    RestorablePipelineState restorable_state(*cb_state, VK_PIPELINE_BIND_POINT_COMPUTE);
-
-    // Switch to and launch the validation compute shader to find, replace, and report invalid acceleration structure handles.
-    DispatchCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, as_validation_state.pipeline);
-    DispatchCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, as_validation_state.pipeline_layout, 0, 1,
-                                  &as_validation_info.descriptor_set, 0, nullptr);
-    DispatchCmdDispatch(commandBuffer, 1, 1, 1);
-
-    // Issue a buffer memory barrier to make sure that any invalid bottom level acceleration structure handles
-    // have been replaced by the validation compute shader before any builds take place.
-    VkBufferMemoryBarrier instance_buffer_barrier = vku::InitStructHelper();
-    instance_buffer_barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    instance_buffer_barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV;
-    instance_buffer_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    instance_buffer_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    instance_buffer_barrier.buffer = instanceData;
-    instance_buffer_barrier.offset = instanceOffset;
-    instance_buffer_barrier.size = instance_buffer_size;
-    DispatchCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                               VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 0, 0, nullptr, 1, &instance_buffer_barrier, 0,
-                               nullptr);
-
-    // Restore the previous compute pipeline state.
-    restorable_state.Restore(commandBuffer);
-
-    cb_state->as_validation_buffers.emplace_back(std::move(as_validation_info));
-}
-
-void gpuav::Validator::PostCallRecordBindAccelerationStructureMemoryNV(VkDevice device, uint32_t bindInfoCount,
-                                                                       const VkBindAccelerationStructureMemoryInfoNV *pBindInfos,
-                                                                       const RecordObject &record_obj) {
-    if (VK_SUCCESS != record_obj.result) return;
-    BaseClass::PostCallRecordBindAccelerationStructureMemoryNV(device, bindInfoCount, pBindInfos, record_obj);
-    for (uint32_t i = 0; i < bindInfoCount; i++) {
-        const VkBindAccelerationStructureMemoryInfoNV &info = pBindInfos[i];
-        auto as_state = Get<vvl::AccelerationStructureNV>(info.accelerationStructure);
-        if (as_state) {
-            DispatchGetAccelerationStructureHandleNV(device, info.accelerationStructure, 8, &as_state->opaque_handle);
-        }
-    }
+    BaseClass::PreCallRecordCreateBuffer(device, pCreateInfo, pAllocator, pBuffer, record_obj, chassis_state);
 }
 
 void gpuav::Validator::PostCallRecordGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,
@@ -282,12 +96,12 @@ void gpuav::Validator::PostCallRecordGetPhysicalDeviceProperties2(VkPhysicalDevi
 
 void gpuav::Validator::PreCallRecordDestroyRenderPass(VkDevice device, VkRenderPass renderPass,
                                                       const VkAllocationCallbacks *pAllocator, const RecordObject &record_obj) {
-    // Always passing false is kind of a hack since this Get call is expected to retrieve the shared resources from the map, not
-    // allocate them, so use_shader_object will not be used
-    PreDrawResources::SharedResources *shared_resources = GetSharedDrawIndirectValidationResources(false, record_obj.location);
-    auto pipeline = shared_resources->renderpass_to_pipeline.pop(renderPass);
-    if (pipeline != shared_resources->renderpass_to_pipeline.end()) {
-        DispatchDestroyPipeline(device, pipeline->second, nullptr);
+    PreDrawResources::SharedResources *shared_resources = GetSharedDrawIndirectValidationResources();
+    if (shared_resources) {
+        auto pipeline = shared_resources->renderpass_to_pipeline.pop(renderPass);
+        if (pipeline != shared_resources->renderpass_to_pipeline.end()) {
+            DispatchDestroyPipeline(device, pipeline->second, nullptr);
+        }
     }
     BaseClass::PreCallRecordDestroyRenderPass(device, renderPass, pAllocator, record_obj);
 }
@@ -295,14 +109,13 @@ void gpuav::Validator::PreCallRecordDestroyRenderPass(VkDevice device, VkRenderP
 // Create the instrumented shader data to provide to the driver.
 void gpuav::Validator::PreCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo,
                                                        const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule,
-                                                       const RecordObject &record_obj, void *csm_state_data) {
-    BaseClass::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, record_obj, csm_state_data);
-    create_shader_module_api_state *csm_state = static_cast<create_shader_module_api_state *>(csm_state_data);
+                                                       const RecordObject &record_obj, chassis::CreateShaderModule &chassis_state) {
+    BaseClass::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, record_obj, chassis_state);
     if (gpuav_settings.select_instrumented_shaders && !CheckForGpuAvEnabled(pCreateInfo->pNext)) return;
     uint32_t shader_id;
     if (gpuav_settings.cache_instrumented_shaders) {
         const uint32_t shader_hash = hash_util::ShaderHash(pCreateInfo->pCode, pCreateInfo->codeSize);
-        if (gpuav_settings.cache_instrumented_shaders && CheckForCachedInstrumentedShader(shader_hash, csm_state)) {
+        if (gpuav_settings.cache_instrumented_shaders && CheckForCachedInstrumentedShader(shader_hash, chassis_state)) {
             return;
         }
         shader_id = shader_hash;
@@ -310,14 +123,14 @@ void gpuav::Validator::PreCallRecordCreateShaderModule(VkDevice device, const Vk
         shader_id = unique_shader_module_id++;
     }
     const bool pass = InstrumentShader(vvl::make_span(pCreateInfo->pCode, pCreateInfo->codeSize / sizeof(uint32_t)),
-                                       csm_state->instrumented_spirv, shader_id, record_obj.location);
+                                       chassis_state.instrumented_spirv, shader_id, record_obj.location);
     if (pass) {
-        csm_state->instrumented_create_info.pCode = csm_state->instrumented_spirv.data();
-        csm_state->instrumented_create_info.codeSize = csm_state->instrumented_spirv.size() * sizeof(uint32_t);
-        csm_state->unique_shader_id = shader_id;
+        chassis_state.instrumented_create_info.pCode = chassis_state.instrumented_spirv.data();
+        chassis_state.instrumented_create_info.codeSize = chassis_state.instrumented_spirv.size() * sizeof(uint32_t);
+        chassis_state.unique_shader_id = shader_id;
         if (gpuav_settings.cache_instrumented_shaders) {
             instrumented_shaders.emplace(shader_id,
-                                         std::make_pair(csm_state->instrumented_spirv.size(), csm_state->instrumented_spirv));
+                                         std::make_pair(chassis_state.instrumented_spirv.size(), chassis_state.instrumented_spirv));
         }
     }
 }
@@ -325,31 +138,30 @@ void gpuav::Validator::PreCallRecordCreateShaderModule(VkDevice device, const Vk
 void gpuav::Validator::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount,
                                                      const VkShaderCreateInfoEXT *pCreateInfos,
                                                      const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
-                                                     const RecordObject &record_obj, void *csm_state_data) {
+                                                     const RecordObject &record_obj, chassis::ShaderObject &chassis_state) {
     BaseClass::PreCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj,
-                                             csm_state_data);
-    create_shader_object_api_state *csm_state = static_cast<create_shader_object_api_state *>(csm_state_data);
+                                             chassis_state);
     for (uint32_t i = 0; i < createInfoCount; ++i) {
         if (gpuav_settings.select_instrumented_shaders && !CheckForGpuAvEnabled(pCreateInfos[i].pNext)) continue;
         if (gpuav_settings.cache_instrumented_shaders) {
             const uint32_t shader_hash = hash_util::ShaderHash(pCreateInfos[i].pCode, pCreateInfos[i].codeSize);
-            if (CheckForCachedInstrumentedShader(i, csm_state->unique_shader_ids[i], csm_state)) {
+            if (CheckForCachedInstrumentedShader(i, chassis_state.unique_shader_ids[i], chassis_state)) {
                 continue;
             }
-            csm_state->unique_shader_ids[i] = shader_hash;
+            chassis_state.unique_shader_ids[i] = shader_hash;
         } else {
-            csm_state->unique_shader_ids[i] = unique_shader_module_id++;
+            chassis_state.unique_shader_ids[i] = unique_shader_module_id++;
         }
         const bool pass = InstrumentShader(
             vvl::make_span(static_cast<const uint32_t *>(pCreateInfos[i].pCode), pCreateInfos[i].codeSize / sizeof(uint32_t)),
-            csm_state->instrumented_spirv[i], csm_state->unique_shader_ids[i], record_obj.location);
+            chassis_state.instrumented_spirv[i], chassis_state.unique_shader_ids[i], record_obj.location);
         if (pass) {
-            csm_state->instrumented_create_info[i].pCode = csm_state->instrumented_spirv[i].data();
-            csm_state->instrumented_create_info[i].codeSize = csm_state->instrumented_spirv[i].size() * sizeof(uint32_t);
+            chassis_state.instrumented_create_info[i].pCode = chassis_state.instrumented_spirv[i].data();
+            chassis_state.instrumented_create_info[i].codeSize = chassis_state.instrumented_spirv[i].size() * sizeof(uint32_t);
             if (gpuav_settings.cache_instrumented_shaders) {
                 instrumented_shaders.emplace(
-                    csm_state->unique_shader_ids[i],
-                    std::make_pair(csm_state->instrumented_spirv[i].size(), csm_state->instrumented_spirv[i]));
+                    chassis_state.unique_shader_ids[i],
+                    std::make_pair(chassis_state.instrumented_spirv[i].size(), chassis_state.instrumented_spirv[i]));
             }
         }
     }
@@ -465,6 +277,12 @@ void gpuav::Validator::PostCallRecordCmdNextSubpass2(VkCommandBuffer commandBuff
                                                      const VkSubpassEndInfo *pSubpassEndInfo, const RecordObject &record_obj) {
     BaseClass::PostCallRecordCmdNextSubpass2(commandBuffer, pSubpassBeginInfo, pSubpassEndInfo, record_obj);
     RecordCmdNextSubpassLayouts(commandBuffer, pSubpassBeginInfo->contents);
+}
+
+void gpuav::Validator::PostCallRecordCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                                                     VkPipeline pipeline, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline, record_obj);
+    UpdateBoundPipeline(commandBuffer, pipelineBindPoint, pipeline, record_obj.location);
 }
 
 void gpuav::Validator::PostCallRecordCmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,

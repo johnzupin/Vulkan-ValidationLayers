@@ -33,8 +33,6 @@ class SpirvGrammarHelperOutputGenerator(BaseGenerator):
         self.opnames = []
         self.atomicsOps = []
         self.groupOps = []
-        self.debugOps = []
-        self.annotationOps = []
         self.imageGatherOps = []
         self.imageSampleOps = []
         self.imageFetchOps = []
@@ -106,11 +104,13 @@ class SpirvGrammarHelperOutputGenerator(BaseGenerator):
                         if enum['value'] not in values:
                             self.imageOperandsParamCount[count].append(enum['enumerant'])
                             values.append(enum['value'])
-                self.addToStringList(operandKind, 'StorageClass', self.storageClassList)
-                self.addToStringList(operandKind, 'ExecutionModel', self.executionModelList)
-                self.addToStringList(operandKind, 'ExecutionMode', self.executionModeList)
-                self.addToStringList(operandKind, 'Decoration', self.decorationList)
-                self.addToStringList(operandKind, 'BuiltIn', self.builtInList)
+                # Use EXT/KHR Alias names where possible
+                # Core issue is SPIR-V grammar sometimes puts alias both before/after the promotoed name
+                self.addToStringList(operandKind, 'StorageClass', self.storageClassList, ['CallableDataNV', 'IncomingCallableDataNV', 'RayPayloadNV', 'HitAttributeNV', 'IncomingRayPayloadNV', 'ShaderRecordBufferNV'])
+                self.addToStringList(operandKind, 'ExecutionModel', self.executionModelList, ['RayGenerationNV', 'IntersectionNV', 'AnyHitNV', 'ClosestHitNV', 'MissNV', 'CallableNV'])
+                self.addToStringList(operandKind, 'ExecutionMode', self.executionModeList, ['OutputLinesNV', 'OutputPrimitivesNV', 'OutputTrianglesNV'])
+                self.addToStringList(operandKind, 'Decoration', self.decorationList, ['PerPrimitiveNV'])
+                self.addToStringList(operandKind, 'BuiltIn', self.builtInList, ['BaryCoordNV', 'BaryCoordNoPerspNV', 'LaunchIdNV', 'LaunchSizeNV', 'WorldRayOriginNV', 'WorldRayDirectionNV', 'ObjectRayOriginNV', 'ObjectRayDirectionNV', 'RayTminNV', 'RayTmaxNV', 'InstanceCustomIndexNV', 'ObjectToWorldNV', 'WorldToObjectNV', 'HitKindNV', 'IncomingRayFlagsNV'])
                 self.addToStringList(operandKind, 'Dim', self.dimList)
                 self.addToStringList(operandKind, 'CooperativeMatrixOperands', self.cooperativeMatrixList, ['NoneKHR'])
 
@@ -162,10 +162,6 @@ class SpirvGrammarHelperOutputGenerator(BaseGenerator):
                     self.atomicsOps.append(opname)
                 if instruction['class'] == 'Non-Uniform':
                     self.groupOps.append(opname)
-                if instruction['class'] == 'Debug':
-                    self.debugOps.append(opname)
-                if instruction['class'] == 'Annotation':
-                    self.annotationOps.append(opname)
                 if re.search("OpImage.*Gather", opname) is not None:
                     self.imageGatherOps.append(opname)
                 if re.search("OpImageFetch.*", opname) is not None:
@@ -331,8 +327,6 @@ class SpirvGrammarHelperOutputGenerator(BaseGenerator):
         # \n is not allowed in f-string until 3.12
         atomicCase = "\n".join([f"        case spv::{f}:" for f in self.atomicsOps])
         groupCase = "\n".join([f"        case spv::{f}:" for f in self.groupOps])
-        debugCase = "\n".join([f"        case spv::{f}:" for f in self.debugOps])
-        annotationCase = "\n".join([f"        case spv::{f}:" for f in self.annotationOps])
         out.append(f'''
             // Any non supported operation will be covered with other VUs
             static constexpr bool AtomicOperation(uint32_t opcode) {{
@@ -348,24 +342,6 @@ class SpirvGrammarHelperOutputGenerator(BaseGenerator):
             static constexpr bool GroupOperation(uint32_t opcode) {{
                 switch (opcode) {{
             {groupCase}
-                        return true;
-                    default:
-                        return false;
-                }}
-            }}
-
-           static constexpr  bool DebugOperation(uint32_t opcode) {{
-                switch (opcode) {{
-            {debugCase}
-                        return true;
-                    default:
-                        return false;
-                }}
-            }}
-
-            static constexpr bool AnnotationOperation(uint32_t opcode) {{
-                switch (opcode) {{
-            {annotationCase}
                         return true;
                     default:
                         return false;

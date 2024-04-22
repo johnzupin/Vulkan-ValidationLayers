@@ -164,12 +164,8 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
 
     // VK_EXT_vertex_input_dynamic_state
     {
-        if (pipeline.IsDynamic(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT) &&
+        if (!pipeline.IsDynamic(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT) &&
             pipeline.IsDynamic(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT)) {
-            skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_VERTEX_INPUT_EXT, objlist, loc,
-                                              vuid.vertex_input_04912);
-        } else if (!pipeline.IsDynamic(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT) &&
-                   pipeline.IsDynamic(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT)) {
             skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE, objlist, loc,
                                               vuid.vertex_input_binding_stride_04913);
         }
@@ -356,6 +352,25 @@ bool CoreChecks::ValidateDrawDynamicState(const LastBound& last_bound_state, con
         }
     }
 
+    // "a shader object bound to the VK_SHADER_STAGE_VERTEX_BIT stage or the bound graphics pipeline state was created with the
+    // VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE"
+    if ((pipeline_state && pipeline_state->IsDynamic(VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE)) ||
+        (!pipeline_state && vertex_shader_bound)) {
+        if (!enabled_features.primitiveTopologyListRestart && cb_state.dynamic_state_value.primitive_restart_enable) {
+            VkPrimitiveTopology topology = pipeline_state
+                                               ? pipeline_state->InputAssemblyState()->topology
+                                               : last_bound_state.GetShaderState(ShaderObjectStage::VERTEX)->GetTopology();
+            if (IsValueIn(topology, {VK_PRIMITIVE_TOPOLOGY_POINT_LIST, VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+                                     VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+                                     VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY, VK_PRIMITIVE_TOPOLOGY_PATCH_LIST})) {
+                skip |= LogError(vuid.primitive_restart_list_09637, cb_state.Handle(), loc,
+                                 "the topology set is %s, the primitiveTopologyListRestart feature was not enabled, but "
+                                 "vkCmdSetPrimitiveRestartEnable last set primitiveRestartEnable to VK_TRUE.",
+                                 string_VkPrimitiveTopology(topology));
+            }
+        }
+    }
+
     if ((pipeline_state && pipeline_state->IsDynamic(VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT)) || fragment_shader_bound) {
         if (cb_state.dynamic_state_status.cb[CB_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT] &&
             cb_state.dynamic_state_value.sample_locations_enable) {
@@ -363,7 +378,7 @@ bool CoreChecks::ValidateDrawDynamicState(const LastBound& last_bound_state, con
                 for (const auto attachment : (*cb_state.active_attachments)) {
                     if (attachment && attachment->create_info.subresourceRange.aspectMask &
                                           (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-                        if ((attachment->image_state->createInfo.flags &
+                        if ((attachment->image_state->create_info.flags &
                              VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT) == 0) {
                             const LogObjectList objlist(cb_state.Handle(), frag_spirv_state->handle());
                             skip |=
@@ -452,7 +467,8 @@ bool CoreChecks::ValidateDrawDynamicStatePipeline(const LastBound& last_bound_st
     const vvl::DrawDispatchVuid& vuid = vvl::GetDrawDispatchVuid(loc.function);
 
     // vkCmdSetDiscardRectangleEXT needs to be set on each rectangle
-    const auto *discard_rectangle_state = vku::FindStructInPNextChain<VkPipelineDiscardRectangleStateCreateInfoEXT>(pipeline.PNext());
+    const auto* discard_rectangle_state =
+        vku::FindStructInPNextChain<VkPipelineDiscardRectangleStateCreateInfoEXT>(pipeline.GraphicsCreateInfo().pNext);
     if (discard_rectangle_state && pipeline.IsDynamic(VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT)) {
         for (uint32_t i = 0; i < discard_rectangle_state->discardRectangleCount; i++) {
             if (!cb_state.dynamic_state_value.discard_rectangles.test(i)) {
@@ -531,37 +547,38 @@ bool CoreChecks::ValidateDrawDynamicStatePipeline(const LastBound& last_bound_st
             skip |= LogError(vuid.color_blend_enable_07627, objlist, loc,
                              "Pipeline was created with VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT dynamic state, but "
                              "vkCmdSetColorBlendEnableEXT() was not called.");
-        }
-
-        const uint32_t attachment_count = static_cast<uint32_t>(cb_state.active_attachments->size());
-
-        bool advanced_blend = false;
-        for (uint32_t i = 0; i < attachment_count; ++i) {
-            if (cb_state.dynamic_state_value.color_blend_enabled[i]) {
+        } else {
+            const uint32_t attachment_count = static_cast<uint32_t>(cb_state.active_attachments->size());
+            for (uint32_t i = 0; i < attachment_count; ++i) {
+                if (!cb_state.dynamic_state_value.color_blend_enabled[i]) {
+                    continue;
+                }
                 if (cb_state.dynamic_state_value.color_blend_advanced_attachments[i]) {
-                    advanced_blend = true;
+                    if (pipeline.IsDynamic(VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT) &&
+                        attachment_count > phys_dev_ext_props.blend_operation_advanced_props.advancedBlendMaxColorAttachments) {
+                        const LogObjectList objlist(cb_state.Handle(), pipeline.Handle());
+                        skip |= LogError(vuid.blend_advanced_07480, objlist, loc,
+                                         "Color Attachment %" PRIu32
+                                         " blending is enabled, but the total color attachment count (%" PRIu32
+                                         ") is greater than advancedBlendMaxColorAttachments (%" PRIu32 ").",
+                                         i, attachment_count,
+                                         phys_dev_ext_props.blend_operation_advanced_props.advancedBlendMaxColorAttachments);
+                        break;
+                    }
                 }
 
                 const auto attachment = (*cb_state.active_attachments)[i];
                 if (attachment && ((attachment->format_features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) == 0)) {
                     const LogObjectList objlist(cb_state.Handle(), pipeline.Handle());
-                    skip |= LogError(vuid.blend_feature_07470, objlist, loc,
-                                     "Attachment %" PRIu32
-                                     " format features (%s) do not include VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT.",
-                                     i, string_VkFormatFeatureFlags2((*cb_state.active_attachments)[i]->format_features).c_str());
+                    skip |= LogError(
+                        vuid.blend_feature_07470, objlist, loc,
+                        "Color Attachment %" PRIu32
+                        " has an image view format (%s) that doesn't support VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT.\n"
+                        "(supported features: %s)",
+                        i, string_VkFormat(attachment->create_info.format),
+                        string_VkFormatFeatureFlags2((*cb_state.active_attachments)[i]->format_features).c_str());
+                    break;
                 }
-            }
-        }
-
-        if (pipeline.IsDynamic(VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT)) {
-            if (advanced_blend &&
-                attachment_count > phys_dev_ext_props.blend_operation_advanced_props.advancedBlendMaxColorAttachments) {
-                const LogObjectList objlist(cb_state.Handle(), pipeline.Handle());
-                skip |=
-                    LogError(vuid.blend_advanced_07480, objlist, loc,
-                             "Advanced blend is enabled, but color attachment count (%" PRIu32
-                             ") is greater than advancedBlendMaxColorAttachments (%" PRIu32 ").",
-                             attachment_count, phys_dev_ext_props.blend_operation_advanced_props.advancedBlendMaxColorAttachments);
             }
         }
     }
@@ -852,7 +869,7 @@ bool CoreChecks::ValidateDrawDynamicStatePipeline(const LastBound& last_bound_st
         bool pgq_active = false;
         for (const auto& active_query : cb_state.activeQueries) {
             auto query_pool_state = Get<vvl::QueryPool>(active_query.pool);
-            if (query_pool_state->createInfo.queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT) {
+            if (query_pool_state->create_info.queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT) {
                 pgq_active = true;
                 break;
             }
@@ -998,7 +1015,7 @@ bool CoreChecks::ValidateDrawRenderingAttachmentLocation(const vvl::CommandBuffe
     uint32_t pipeline_color_count = 0;
     const uint32_t* pipeline_color_locations = nullptr;
     if (const auto* pipeline_location_info =
-            vku::FindStructInPNextChain<VkRenderingAttachmentLocationInfoKHR>(pipeline_state.PNext())) {
+            vku::FindStructInPNextChain<VkRenderingAttachmentLocationInfoKHR>(pipeline_state.GraphicsCreateInfo().pNext)) {
         pipeline_color_count = pipeline_location_info->colorAttachmentCount;
         pipeline_color_locations = pipeline_location_info->pColorAttachmentLocations;
     } else if (const auto* pipeline_rendering_create_info = pipeline_state.GetPipelineRenderingCreateInfo()) {
@@ -1044,7 +1061,7 @@ bool CoreChecks::ValidateDrawRenderingInputAttachmentIndex(const vvl::CommandBuf
     const uint32_t* pipeline_depth_index = nullptr;
     const uint32_t* pipeline_stencil_index = nullptr;
     if (const auto* pipeline_index_info =
-            vku::FindStructInPNextChain<VkRenderingInputAttachmentIndexInfoKHR>(pipeline_state.PNext())) {
+            vku::FindStructInPNextChain<VkRenderingInputAttachmentIndexInfoKHR>(pipeline_state.GraphicsCreateInfo().pNext)) {
         pipeline_color_count = pipeline_index_info->colorAttachmentCount;
         pipeline_color_indexes = pipeline_index_info->pColorAttachmentInputIndices;
         pipeline_depth_index = pipeline_index_info->pDepthInputAttachmentIndex;
@@ -1452,15 +1469,21 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
                 skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_LOGIC_OP_EXT, objlist, loc,
                                                   vuid.set_logic_op_08641);
             }
-            skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT, objlist,
-                                              loc, vuid.set_color_blend_enable_08657);
-            skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT, objlist,
-                                              loc, vuid.set_blend_equation_09418);
+
+            const uint32_t attachment_count = cb_state.activeRenderPass->GetDynamicRenderingColorAttachmentCount();
+            if (attachment_count > 0) {
+                skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
+                                                  objlist, loc, vuid.set_color_blend_enable_08657);
+                skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
+                                                  objlist, loc, vuid.set_blend_equation_09418);
+                skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT, objlist,
+                                                  loc, vuid.set_color_write_mask_08659);
+            }
 
             const std::array<VkBlendFactor, 4> const_factors = {
                 VK_BLEND_FACTOR_CONSTANT_COLOR, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR, VK_BLEND_FACTOR_CONSTANT_ALPHA,
                 VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA};
-            for (uint32_t i = 0; i < cb_state.activeRenderPass->GetDynamicRenderingColorAttachmentCount(); ++i) {
+            for (uint32_t i = 0; i < attachment_count; ++i) {
                 if (!cb_state.dynamic_state_value.color_blend_enable_attachments[i]) {
                     skip |= LogError(vuid.set_blend_advanced_09417, objlist, loc,
                                      "%s state not set for this command buffer for attachment %" PRIu32 ".",
@@ -1499,8 +1522,6 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
                                      DynamicStateToString(CB_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT));
                 }
             }
-            skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT, objlist, loc,
-                                              vuid.set_color_write_mask_08659);
             if (enabled_features.pipelineFragmentShadingRate) {
                 skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR,
                                                   objlist, loc, vuid.set_fragment_shading_rate_09238);

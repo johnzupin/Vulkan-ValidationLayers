@@ -400,14 +400,6 @@ void StatelessValidation::PostCallRecordCreateDevice(VkPhysicalDevice physicalDe
             vertex_attribute_divisor_props.maxVertexAttribDivisor;
     }
 
-    if (IsExtEnabled(device_extensions.vk_ext_blend_operation_advanced)) {
-        // Get the needed blend operation advanced properties
-        VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT blend_operation_advanced_props = vku::InitStructHelper();
-        VkPhysicalDeviceProperties2 prop2 = vku::InitStructHelper(&blend_operation_advanced_props);
-        GetPhysicalDeviceProperties2(physicalDevice, prop2);
-        phys_dev_ext_props.blend_operation_advanced_props = blend_operation_advanced_props;
-    }
-
     if (IsExtEnabled(device_extensions.vk_khr_maintenance4)) {
         // Get the needed maintenance4 properties
         VkPhysicalDeviceMaintenance4PropertiesKHR maintance4_props = vku::InitStructHelper();
@@ -449,7 +441,7 @@ void StatelessValidation::PostCallRecordCreateDevice(VkPhysicalDevice physicalDe
     // Save app-enabled features in this device's validation object
     // The enabled features can come from either pEnabledFeatures, or from the pNext chain
     const auto *features2 = vku::FindStructInPNextChain<VkPhysicalDeviceFeatures2>(pCreateInfo->pNext);
-    safe_VkPhysicalDeviceFeatures2 tmp_features2_state;
+    vku::safe_VkPhysicalDeviceFeatures2 tmp_features2_state;
     tmp_features2_state.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     if (features2) {
         tmp_features2_state.features = features2->features;
@@ -459,7 +451,7 @@ void StatelessValidation::PostCallRecordCreateDevice(VkPhysicalDevice physicalDe
         tmp_features2_state.features = {};
     }
     // Use pCreateInfo->pNext to get full chain
-    stateless_validation->device_createinfo_pnext = SafePnextCopy(pCreateInfo->pNext);
+    stateless_validation->device_createinfo_pnext = vku::SafePnextCopy(pCreateInfo->pNext);
     stateless_validation->physical_device_features2 = tmp_features2_state;
 }
 
