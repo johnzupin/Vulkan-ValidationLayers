@@ -1,3 +1,174 @@
+vulkan-validationlayers (1.3.283.0~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.283
+
+  [ Artem Kharytoniuk ]
+  * layers: Add Sync1 host stage VUs
+  * tests: Test Sync1 host stage VUs
+
+  [ Charles Giessen ]
+  * test: Set VK_LAYER_PATH automatically if missing
+
+  [ Spencer Fricke ]
+  * scripts: Update VUL
+
+  [ spencer-lunarg ]
+  * layers: Add Draw VK_EXT_legacy_dithering VU
+  * layers: Label RenderPass 1 VUID for nestedCommandBuffer
+  * layers: Add Protected buffer usage flag combo
+  * layers: Nit cleanup in GPU-AV
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Tools and glslang to latest
+
+  [ spencer-lunarg ]
+  * layers: Add dynamic state VK_EXT_conservative_rasterization
+
+  [ Christophe ]
+  * layers: Fix CreateInstance layer setting msg
+
+  [ spencer-lunarg ]
+  * printf: Add way to disconnect from chassis on abort
+  * tests: Fix MaxSampleMaskWords
+  * layers: Ignore ColorBlendState attachmentCount
+
+  [ Tomek Bury ]
+  * tests: Avoid race in Sync2SignalSemaphoreValue
+
+  [ spencer-lunarg ]
+  * tests: Don't use max queueCount
+  * scripts: VkPipelineLayoutCreateInfo common parent
+  * layers: Rework DispatchGetDescriptorEXT
+
+  [ Artem Kharytoniuk ]
+  * layers: Notify queues in deterministic order
+  * layers: Cleanup queue's Notify/Wait
+  * layers: Fix vkDeviceWaitIdle deadlock
+  * tests: Add regression test for vkDeviceWaitIdle deadlock
+
+  [ spencer-lunarg ]
+  * layers: Fix drawtime vertex VU 04008
+  * layers: Don't count ImageQuery as image accesses
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix secondary buffer query deadlock
+  * tests: Add regression test for issue 7874
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Headers, -Tools and glslang to latest
+
+  [ Artem Kharytoniuk ]
+  * tests: Break vkt::CommandBuffer and vkt::Queue dependency
+  * tests: Remove QueueCommandBuffer method
+
+  [ Mehmet Oguz Derin ]
+  * layers: Fix typo in VUID 00344
+
+  [ spencer-lunarg ]
+  * scripts: Update VUL
+
+  [ Arno ]
+  * gpu: Update gpu_validation.md
+  * cmake: Remove MSVC specific sln option
+  * gpu: Require feature to validate copies
+  * gpu: Force timeline semaphore feature
+  * tests: Use SetDesiredError
+  * gpu: Add simultaneous use flag to barrier cmd buff
+  * gpu: Only create desc layout once
+  * gpu: Fix descriptor management
+  * gpu: Fix instrumentation desc set binding
+
+  [ spencer-lunarg ]
+  * layers: Improve Descriptor Buffer error message
+
+  [ ziga-lunarg ]
+  * layers: Fix reading pipeline create flags
+  * tests: Test descriptor buffer with pipeline create flags 2
+
+  [ spencer-lunarg ]
+  * layers: Remove attachments_view_states
+  * layers: Remove shared pointer from active subpasses
+  * icd: Create internal VVL Test Driver
+
+  [ Artem Kharytoniuk ]
+  * tests: Use span for multiple command buffers
+  * tests: Remove check for submit result
+  * tests: Rename submit helpers
+
+  [ Arno ]
+  * tests: Add gpu test
+  * gpu: Fix concurrent accesses to BDA buffer
+
+  [ spencer-lunarg ]
+  * layers: Fix pMultisampleState ignore logic
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix compilation error
+
+  [ spencer-lunarg ]
+  * scripts: Don't index sorted enums
+
+  [ Charles Hansen ]
+  * layers: Add semaphore tracking to LatencySleepNV
+
+  [ Arno ]
+  * gpu: Fix concurrent access of cmb buffer resources
+
+  [ spencer-lunarg ]
+  * build: Update SPIRV-Tools
+  * tests: Add Descriptor Indexing GPU-AV tests
+
+  [ Artem Kharytoniuk ]
+  * tests: Add submit with semaphore helpers
+
+  [ Charles Giessen ]
+  * build: Fix incremental builds using wrong VK_LAYER_PATH
+
+  [ spencer-lunarg ]
+  * gpuav: Fix crash in dota2
+  * layers: Move active attachments to a struct
+  * layers: Check attachment depending on type
+  * tests: Add GPU-AV Stress perf test
+
+  [ Arno ]
+  * gpu: Rework settings
+
+  [ spencer-lunarg ]
+  * build: Update glslang to latest
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove operator bool
+
+  [ spencer-lunarg ]
+  * layers: Option to print application name
+  * layers: Fix when updating binding never created in layout
+  * settings: Set warning/perf for Best Practice preset
+
+  [ Mike Schuchardt ]
+  * build: Update shader toochain for SDK
+
+  [ ziga-lunarg ]
+  * layers: Fix typo for vuid 08734
+
+  [ spencer-lunarg ]
+  * layers: Fix crash from null pCreateInfo
+
+  [ Arno ]
+  * gpu: Fix settings handling
+
+  [ spencer-lunarg ]
+  * gpuav: Track which set is used during descriptor indexing
+
+  [ Arno ]
+  * layers: Update buffer address related VU error msg
+
+  [ spencer-lunarg ]
+  * layers: Early return ValidateFsOutputsAgainstRenderPass
+  * layers: Prevent false positive when using fragment output array
+
+ -- john <john@odin>  Tue, 07 May 2024 09:30:07 -0600
+
 vulkan-validationlayers (1.3.282.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ spencer-lunarg ]
