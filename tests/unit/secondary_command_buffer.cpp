@@ -25,7 +25,7 @@ TEST_F(NegativeSecondaryCommandBuffer, AsPrimary) {
     secondary.begin();
     secondary.end();
 
-    m_default_queue->submit(secondary, false);
+    m_default_queue->Submit(secondary);
     m_errorMonitor->VerifyFound();
 }
 
@@ -194,7 +194,8 @@ TEST_F(NegativeSecondaryCommandBuffer, CascadedInvalidation) {
     vk::DestroyEvent(device(), event, nullptr);
 
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
-    m_commandBuffer->QueueCommandBuffer(false);
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
 

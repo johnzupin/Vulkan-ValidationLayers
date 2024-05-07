@@ -199,17 +199,17 @@ TEST_F(PositiveRenderPass, BeginStencilLoadOp) {
 
     vkt::ImageView depth_image_view = m_depthStencil->CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
     vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &depth_image_view.handle(), 100, 100);
-    vkt::Fence fence(*m_device);
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(rp.Handle(), fb.handle(), 100, 100, 1, &clear);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-    m_commandBuffer->QueueCommandBuffer(fence);
+
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 
     vkt::Image destImage(*m_device, 100, 100, 1, depth_stencil_fmt,
                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    fence.wait(kWaitTimeout);
     vkt::CommandBuffer cmdbuf(*m_device, m_commandPool);
     cmdbuf.begin();
 
@@ -242,8 +242,8 @@ TEST_F(PositiveRenderPass, BeginStencilLoadOp) {
     vk::CmdCopyImage(cmdbuf.handle(), m_depthStencil->handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destImage.handle(),
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cregion);
     cmdbuf.end();
-    m_default_queue->submit(cmdbuf);
-    m_default_queue->wait();
+    m_default_queue->Submit(cmdbuf);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveRenderPass, BeginInlineAndSecondaryCommandBuffers) {
@@ -305,7 +305,8 @@ TEST_F(PositiveRenderPass, BeginDepthStencilLayoutTransitionFromUndefined) {
     m_commandBuffer->BeginRenderPass(rp.Handle(), fb.handle(), 32, 32);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-    m_commandBuffer->QueueCommandBuffer(false);
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveRenderPass, DestroyPipeline) {
@@ -336,8 +337,8 @@ TEST_F(PositiveRenderPass, DestroyPipeline) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveRenderPass, ImagelessFramebufferNonZeroBaseMip) {
@@ -854,8 +855,8 @@ TEST_F(PositiveRenderPass, QueriesInMultiview) {
     vk::CmdCopyQueryPoolResults(m_commandBuffer->handle(), query_pool.handle(), 0, 2, buffer.handle(), 0, 4, 0);
     m_commandBuffer->end();
 
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveRenderPass, StoreOpNoneExt) {
@@ -916,7 +917,8 @@ TEST_F(PositiveRenderPass, FramebufferCreateDepthStencilLayoutTransitionForDepth
                            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &imb);
 
     m_commandBuffer->end();
-    m_commandBuffer->QueueCommandBuffer(false);
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveRenderPass, FramebufferWithAttachmentsTo3DImageMultipleSubpasses) {
@@ -1196,7 +1198,8 @@ TEST_F(PositiveRenderPass, SeparateDepthStencilSubresourceLayout) {
         vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
                                0, nullptr, 0, nullptr, 1, &stencil_barrier);
         m_commandBuffer->end();
-        m_commandBuffer->QueueCommandBuffer(false);
+        m_default_queue->Submit(*m_commandBuffer);
+        m_default_queue->Wait();
         m_commandBuffer->reset();
     }
 
@@ -1284,7 +1287,8 @@ TEST_F(PositiveRenderPass, SeparateDepthStencilSubresourceLayout) {
     m_commandBuffer->EndRenderPass();
 
     m_commandBuffer->end();
-    m_commandBuffer->QueueCommandBuffer(false);
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveRenderPass, InputResolve) {
@@ -1361,8 +1365,8 @@ TEST_F(PositiveRenderPass, TestDepthStencilRenderPassTransition) {
                                VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &img_barrier);
         m_commandBuffer->end();
 
-        m_default_queue->submit(*m_commandBuffer);
-        m_default_queue->wait();
+        m_default_queue->Submit(*m_commandBuffer);
+        m_default_queue->Wait();
     }
 }
 
@@ -1428,5 +1432,5 @@ TEST_F(PositiveRenderPass, BeginRenderPassWithRenderPassStriped) {
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &cb_submit_info;
     vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }

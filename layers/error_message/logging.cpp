@@ -182,6 +182,15 @@ bool DebugReport::DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, c
     callback_data.pObjects = object_name_infos.data();
 
     std::ostringstream oss;
+
+#if defined(BUILD_SELF_VVL)
+    oss << "Self ";
+#endif
+
+    if (message_format_settings.display_application_name && !message_format_settings.application_name.empty()) {
+        oss << "[AppName: " << message_format_settings.application_name << "] ";
+    }
+
     if (msg_flags & kErrorBit) {
         oss << "Validation Error: ";
     } else if (msg_flags & kWarningBit) {
@@ -193,6 +202,7 @@ bool DebugReport::DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, c
     } else if (msg_flags & kVerboseBit) {
         oss << "Verbose Information: ";
     }
+
     if (text_vuid != nullptr) {
         oss << "[ " << text_vuid << " ] ";
     }

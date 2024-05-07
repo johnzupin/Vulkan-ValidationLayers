@@ -247,8 +247,6 @@ elseif(MSVC)
         /wd4267 # Disable some signed/unsigned mismatch warnings.
     )
 
-    set_target_properties(vk_layer_validation_tests PROPERTIES VS_DEBUGGER_ENVIRONMENT "VK_LAYER_PATH=$<TARGET_FILE_DIR:vvl>")
-
     if (CMAKE_SIZEOF_VOID_P EQUAL 4)
         # Due to IHV driver issues, we need the extra 2GB of virtual address space for 32 bit testing
         target_link_options(vk_layer_validation_tests PRIVATE /LARGEADDRESSAWARE)
@@ -272,6 +270,15 @@ target_link_libraries(vk_layer_validation_tests PRIVATE
     $<TARGET_NAME_IF_EXISTS:PkgConfig::WAYlAND_CLIENT>
 )
 
+# setup framework/config.h using framework/config.h.in as a source
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/config_$<CONFIG>.h" INPUT "${CMAKE_CURRENT_SOURCE_DIR}/framework/config.h.in")
+
+# Since config_$<CONFIG>.h differs per build, set a compiler definition that files can use to include it
+target_compile_definitions(vk_layer_validation_tests PRIVATE CONFIG_HEADER_FILE="config_$<CONFIG>.h")
+
+target_sources(vk_layer_validation_tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/config_$<CONFIG>.h)
+target_include_directories(vk_layer_validation_tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
 # More details in tests/android/mock/README.md
 option(VVL_MOCK_ANDROID "Enable building for Android on desktop for testing with MockICD setup")
 if(VVL_MOCK_ANDROID)
@@ -291,3 +298,4 @@ gtest_discover_tests(vk_layer_validation_tests DISCOVERY_TIMEOUT 100)
 
 add_subdirectory(spirv)
 add_subdirectory(layers)
+add_subdirectory(icd)

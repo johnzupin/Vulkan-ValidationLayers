@@ -1570,8 +1570,25 @@ void ValidationStateTracker::PostCallRecordQueueWaitIdle(VkQueue queue, const Re
 
 void ValidationStateTracker::PostCallRecordDeviceWaitIdle(VkDevice device, const RecordObject &record_obj) {
     if (VK_SUCCESS != record_obj.result) return;
-    for (auto &queue : queue_map_.snapshot()) {
-        queue.second->NotifyAndWait(record_obj.location);
+
+    // Sort the queues by id to notify in deterministic order (queue creation order).
+    // This is not needed for correctness, but gives deterministic behavior to certain
+    // types of bugs in the queue thread.
+    std::vector<std::shared_ptr<vvl::Queue>> queues;
+    queues.reserve(queue_map_.size());
+    for (const auto &entry : queue_map_.snapshot()) {
+        queues.push_back(entry.second);
+    }
+    std::sort(queues.begin(), queues.end(), [](const auto &q1, const auto &q2) { return q1->GetId() < q2->GetId(); });
+
+    // Notify all queues before waiting.
+    // NotifyAndWait is not safe here. It deadlocks when a wait depends on the not yet issued notify.
+    for (auto &queue : queues) {
+        queue->Notify();
+    }
+    // All possible forward progress is initiated. Now it's safe to wait.
+    for (auto &queue : queues) {
+        queue->Wait(record_obj.location);
     }
 }
 
@@ -5615,4 +5632,21 @@ void ValidationStateTracker::PostCallRecordCmdBindTransformFeedbackBuffersEXT(Vk
                                                                               const RecordObject &record_obj) {
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     cb_state->transform_feedback_buffers_bound = bindingCount;
+}
+
+void ValidationStateTracker::PreCallRecordLatencySleepNV(VkDevice device, VkSwapchainKHR swapchain,
+                                                         const VkLatencySleepInfoNV *pSleepInfo, const RecordObject &record_obj) {
+    auto semaphore_state = Get<vvl::Semaphore>(pSleepInfo->signalSemaphore);
+    if (semaphore_state) {
+        auto value = pSleepInfo->value;
+        semaphore_state->EnqueueSignal(vvl::SubmissionReference{}, value);
+    }
+}
+
+void ValidationStateTracker::PostCallRecordLatencySleepNV(VkDevice device, VkSwapchainKHR swapchain,
+                                                          const VkLatencySleepInfoNV *pSleepInfo, const RecordObject &record_obj) {
+    auto semaphore_state = Get<vvl::Semaphore>(pSleepInfo->signalSemaphore);
+    if (semaphore_state) {
+        semaphore_state->Retire(nullptr, record_obj.location, pSleepInfo->value);
+    }
 }

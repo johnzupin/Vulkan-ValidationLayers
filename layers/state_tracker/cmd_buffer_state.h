@@ -28,7 +28,6 @@
 #include "containers/custom_containers.h"
 #include "generated/dynamic_state_helper.h"
 
-struct SubpassInfo;
 class CoreChecks;
 class ValidationStateTracker;
 
@@ -67,6 +66,48 @@ enum class CbState {
     Recorded,           // EndCB has been called on this CB
     InvalidComplete,    // had a complete recording, but was since invalidated
     InvalidIncomplete,  // fouled before recording was completed
+};
+
+enum class AttachmentSource {
+    Empty = 0,
+    RenderPass,
+    DynamicRendering,
+    Inheritance,  // secondary command buffer VkCommandBufferInheritanceInfo
+};
+
+struct AttachmentInfo {
+    enum class Type {
+        Empty = 0,
+        Input,
+        Color,
+        ColorResolve,
+        DepthStencil,
+        // Dynamic rendering split DepthStencil up
+        Depth,
+        DepthResolve,
+        Stencil,
+        StencilResolve,
+    };
+
+    vvl::ImageView *image_view;
+    Type type;
+
+    AttachmentInfo() : image_view(nullptr), type(Type::Empty) {}
+
+    bool IsResolve() const { return type == Type::ColorResolve || type == Type::DepthResolve || type == Type::StencilResolve; }
+    bool IsInput() const { return type == Type::Input; }
+
+    std::string Describe(AttachmentSource source, uint32_t index) const;
+};
+
+struct SubpassInfo {
+    bool used;
+    VkImageUsageFlagBits usage;
+    VkImageLayout layout;
+    VkImageAspectFlags aspectMask;
+
+    SubpassInfo()
+        : used(false), usage(VkImageUsageFlagBits(0)), layout(VK_IMAGE_LAYOUT_UNDEFINED), aspectMask(VkImageAspectFlags(0)) {}
 };
 
 namespace vvl {
@@ -351,15 +392,15 @@ class CommandBuffer : public RefcountedStateObject {
     // The RenderPass created from vkCmdBeginRenderPass or vkCmdBeginRendering
     std::shared_ptr<vvl::RenderPass> activeRenderPass;
     // Used for both type of renderPass
+    AttachmentSource attachment_source;
+    std::vector<AttachmentInfo> active_attachments;
     vvl::unordered_set<uint32_t> active_color_attachments_index;
     uint32_t active_render_pass_device_mask;
     bool has_render_pass_striped;
     uint32_t striped_count;
     // only when not using dynamic rendering
     vku::safe_VkRenderPassBeginInfo active_render_pass_begin_info;
-    std::shared_ptr<std::vector<SubpassInfo>> active_subpasses;
-    std::shared_ptr<std::vector<vvl::ImageView *>> active_attachments;
-    std::set<std::shared_ptr<vvl::ImageView>> attachments_view_states;
+    std::vector<SubpassInfo> active_subpasses;
 
     VkSubpassContents activeSubpassContents;
     uint32_t GetActiveSubpass() const { return active_subpass_; }
@@ -437,9 +478,6 @@ class CommandBuffer : public RefcountedStateObject {
 
     std::vector<uint8_t> push_constant_data;
     PushConstantRangesId push_constant_data_ranges;
-
-    // Used for Best Practices tracking
-    uint32_t small_indexed_draw_call_count;
 
     // Video coding related state tracking
     std::shared_ptr<vvl::VideoSession> bound_video_session;
@@ -535,7 +573,7 @@ class CommandBuffer : public RefcountedStateObject {
 
     void BeginRenderPass(Func command, const VkRenderPassBeginInfo *pRenderPassBegin, VkSubpassContents contents);
     void NextSubpass(Func command, VkSubpassContents contents);
-    void UpdateSubpassAttachments(const vku::safe_VkSubpassDescription2 &subpass, std::vector<SubpassInfo> &subpasses);
+    void UpdateSubpassAttachments();
     void EndRenderPass(Func command);
 
     void BeginRendering(Func command, const VkRenderingInfo *pRenderingInfo);

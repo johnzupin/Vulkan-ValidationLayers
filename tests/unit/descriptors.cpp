@@ -456,7 +456,7 @@ TEST_F(NegativeDescriptors, WriteDescriptorSetConsecutiveUpdates) {
     }
     // buffer2 just went out of scope and was destroyed
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
-    m_default_queue->submit(*m_commandBuffer, false);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
 }
 
@@ -504,7 +504,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetBufferDestroyed) {
     // Attempt to submit cmd buffer
     // Invalid VkBuffer
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
-    m_default_queue->submit(*m_commandBuffer, false);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
 }
 
@@ -710,8 +710,8 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     m_commandBuffer->end();
 
     // This first submit should be successful
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 
     // Now destroy imageview and reset cmdBuffer
     tmp_view.destroy();
@@ -744,7 +744,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     tmp_sampler.destroy();
     // Attempt to submit cmd buffer
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
-    m_default_queue->submit(*m_commandBuffer, false);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
 
     // Now re-update descriptor with valid sampler and delete image
@@ -766,7 +766,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     tmp_image.destroy();
 
     // Attempt to submit cmd buffer
-    m_default_queue->submit(*m_commandBuffer, false);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
     // Now update descriptor to be valid, but then update and free descriptor
     img_info.imageView = view2.handle();
@@ -785,7 +785,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     vk::CmdDraw(m_commandBuffer->handle(), 1, 0, 0, 0);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->Submit(*m_commandBuffer);
 
     // Immediately try to update the descriptor set in the active command buffer - failure expected
     m_errorMonitor->SetDesiredError("VUID-vkUpdateDescriptorSets-None-03047");
@@ -799,7 +799,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
 
     // Try again once the queue is idle - should succeed w/o error
     // TODO - though the particular error above doesn't re-occur, there are other 'unexpecteds' still to clean up
-    m_default_queue->wait();
+    m_default_queue->Wait();
     m_errorMonitor->SetUnexpectedError(
         "pDescriptorSets must be a valid pointer to an array of descriptorSetCount VkDescriptorSet handles, each element of which "
         "must either be a valid handle or VK_NULL_HANDLE");
@@ -808,7 +808,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
 
     // Attempt to submit cmd buffer containing the freed descriptor set
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
-    m_default_queue->submit(*m_commandBuffer, false);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
 }
 
@@ -981,8 +981,8 @@ TEST_F(NegativeDescriptors, ImageDescriptorLayoutMismatch) {
             if (test_type == kExternal) {
                 // The image layout is external to the command buffer we are recording to test.  Submit to push to instance scope.
                 cmd_buf.end();
-                m_default_queue->submit(cmd_buf);
-                m_default_queue->wait();
+                m_default_queue->Submit(cmd_buf);
+                m_default_queue->Wait();
                 cmd_buf.begin();
             }
 
@@ -1014,8 +1014,8 @@ TEST_F(NegativeDescriptors, ImageDescriptorLayoutMismatch) {
                     m_errorMonitor->SetDesiredError(err);
                 }
             }
-            m_default_queue->submit(cmd_buf, false);
-            m_default_queue->wait();
+            m_default_queue->Submit(cmd_buf);
+            m_default_queue->Wait();
             if (positive_test || (test_type == kInternal)) {
             } else {
                 m_errorMonitor->VerifyFound();
@@ -1087,12 +1087,12 @@ TEST_F(NegativeDescriptors, DescriptorPoolInUseResetSignaled) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
     // Submit cmd buffer to put pool in-flight
-    m_default_queue->submit(*m_commandBuffer);
+    m_default_queue->Submit(*m_commandBuffer);
     // Reset pool while in-flight, causing error
     m_errorMonitor->SetDesiredError("VUID-vkResetDescriptorPool-descriptorPool-00313");
     vk::ResetDescriptorPool(device(), descriptor_set.pool_, 0);
     m_errorMonitor->VerifyFound();
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeDescriptors, DescriptorImageUpdateNoMemoryBound) {
@@ -2056,20 +2056,30 @@ TEST_F(NegativeDescriptors, DSUpdateIndex) {
 }
 
 TEST_F(NegativeDescriptors, DSUpdateEmptyBinding) {
-    // Create layout w/ empty binding and attempt to update it
-
+    TEST_DESCRIPTION("Create layout w/ empty binding and attempt to update it");
     RETURN_IF_SKIP(Init());
-
     OneOffDescriptorSet descriptor_set(m_device, {
                                                      {0, VK_DESCRIPTOR_TYPE_SAMPLER, 0 /* !! */, VK_SHADER_STAGE_ALL, nullptr},
                                                  });
-
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
     // descriptor_write.descriptorCount = 1, Lie here to avoid parameter_validation error
     // This is the wrong type, but empty binding error will be flagged first
     descriptor_set.WriteDescriptorImageInfo(0, VK_NULL_HANDLE, sampler.handle(), VK_DESCRIPTOR_TYPE_SAMPLER);
 
+    m_errorMonitor->SetDesiredError("VUID-VkWriteDescriptorSet-dstBinding-00316");
+    descriptor_set.UpdateDescriptorSets();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptors, UpdateIndexSmaller) {
+    TEST_DESCRIPTION("Only have a binding 2, but try updating binding 1");
+    RETURN_IF_SKIP(Init());
+    OneOffDescriptorSet descriptor_set(m_device, {
+                                                     {2, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                 });
+    vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
+    descriptor_set.WriteDescriptorImageInfo(1, VK_NULL_HANDLE, sampler.handle(), VK_DESCRIPTOR_TYPE_SAMPLER);
     m_errorMonitor->SetDesiredError("VUID-VkWriteDescriptorSet-dstBinding-00316");
     descriptor_set.UpdateDescriptorSets();
     m_errorMonitor->VerifyFound();

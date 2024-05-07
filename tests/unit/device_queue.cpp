@@ -50,7 +50,7 @@ TEST_F(NegativeDeviceQueue, FamilyIndexUsage) {
     if (get_physical_device_properties2) {
         m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     }
-
+    all_queue_count_ = true;
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
     VkBufferCreateInfo buffCI = vku::InitStructHelper();
@@ -85,7 +85,8 @@ TEST_F(NegativeDeviceQueue, FamilyIndexUsage) {
         m_commandBuffer->begin();
         vk::CmdFillBuffer(m_commandBuffer->handle(), ib.handle(), 0, 16, 5);
         m_commandBuffer->end();
-        m_commandBuffer->QueueCommandBuffer(false);
+        m_default_queue->Submit(*m_commandBuffer);
+        m_default_queue->Wait();
         m_errorMonitor->VerifyFound();
     }
 

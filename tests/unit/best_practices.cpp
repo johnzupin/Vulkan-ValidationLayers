@@ -1062,7 +1062,7 @@ TEST_F(VkBestPracticesLayerTest, MissingQueryDetails) {
     }
 
     // Now get information correctly
-    vkt::QueueCreateInfoArray queue_info(phys_device_obj.queue_properties_);
+    vkt::QueueCreateInfoArray queue_info(phys_device_obj.queue_properties_, true);
     // Only request creation with queuefamilies that have at least one queue
     std::vector<VkDeviceQueueCreateInfo> create_queue_infos;
     auto qci = queue_info.data();
@@ -1425,7 +1425,7 @@ TEST_F(VkBestPracticesLayerTest, SemaphoreSetWhenCountIsZero) {
     vk::QueueSubmit(m_default_queue->handle(), 1, &wait_submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(VkBestPracticesLayerTest, OverAllocateFromDescriptorPool) {
@@ -1722,11 +1722,11 @@ TEST_F(VkBestPracticesLayerTest, DontCareThenLoad) {
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, kVUID_BestPractices_StoreOpDontCareThenLoadOpLoad);
 
     // This should give a warning
-    m_default_queue->submit(*m_commandBuffer, false);
+    m_default_queue->Submit(*m_commandBuffer);
 
     m_errorMonitor->VerifyFound();
 
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(VkBestPracticesLayerTest, LoadDeprecatedExtension) {
@@ -1779,7 +1779,7 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
     vkt::Queue *compute_queue = nullptr;
     for (uint32_t i = 0; i < m_device->QueuesWithComputeCapability().size(); ++i) {
         auto cqi = m_device->QueuesWithComputeCapability()[i];
-        if (cqi->get_family_index() != graphics_queue->get_family_index()) {
+        if (cqi->family_index != graphics_queue->family_index) {
             compute_queue = cqi;
             break;
         }
@@ -1836,9 +1836,9 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
     vkt::RenderPass rp(*m_device, rp_info);
     vkt::Framebuffer fb(*m_device, rp.handle(), 1, &image_view.handle(), w, h);
 
-    vkt::CommandPool graphics_pool(*m_device, graphics_queue->get_family_index());
+    vkt::CommandPool graphics_pool(*m_device, graphics_queue->family_index);
 
-    vkt::CommandBuffer graphics_buffer(*m_device, &graphics_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, graphics_queue);
+    vkt::CommandBuffer graphics_buffer(*m_device, &graphics_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     VkClearValue cv;
     cv.color = VkClearColorValue{};
@@ -1874,9 +1874,9 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
                                                    VK_IMAGE_LAYOUT_GENERAL);
     pipe.descriptor_set_->UpdateDescriptorSets();
 
-    vkt::CommandPool compute_pool(*m_device, compute_queue->get_family_index());
+    vkt::CommandPool compute_pool(*m_device, compute_queue->family_index);
 
-    vkt::CommandBuffer compute_buffer(*m_device, &compute_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, compute_queue);
+    vkt::CommandBuffer compute_buffer(*m_device, &compute_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     // Record command buffers without queue transition
 
@@ -1889,7 +1889,8 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
 
     graphics_buffer.end();
 
-    graphics_buffer.QueueCommandBuffer();
+    graphics_queue->Submit(graphics_buffer);
+    graphics_queue->Wait();
 
     // Record compute command buffer
     compute_buffer.begin();
@@ -1905,7 +1906,8 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
 
     // Warning should trigger as we are potentially accessing undefined resources
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "BestPractices-ConcurrentUsageOfExclusiveImage");
-    compute_buffer.QueueCommandBuffer();
+    compute_queue->Submit(compute_buffer);
+    compute_queue->Wait();
     m_errorMonitor->VerifyFound();
 
     vk::ResetCommandPool(device(), graphics_pool.handle(), 0);
@@ -1920,8 +1922,8 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;             // only matters for acquire
     barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
     barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    barrier.srcQueueFamilyIndex = graphics_queue->get_family_index();
-    barrier.dstQueueFamilyIndex = compute_queue->get_family_index();
+    barrier.srcQueueFamilyIndex = graphics_queue->family_index;
+    barrier.dstQueueFamilyIndex = compute_queue->family_index;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
     barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
@@ -1937,8 +1939,8 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
                            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &barrier);
 
     graphics_buffer.end();
-
-    graphics_buffer.QueueCommandBuffer();
+    graphics_queue->Submit(graphics_buffer);
+    graphics_queue->Wait();
 
     // Record compute command buffer
     compute_buffer.begin();
@@ -1957,7 +1959,8 @@ TEST_F(VkBestPracticesLayerTest, ExclusiveImageMultiQueueUsage) {
 
     // Warning shouldn't trigger
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "BestPractices-ConcurrentUsageOfExclusiveImage");
-    compute_buffer.QueueCommandBuffer();
+    compute_queue->Submit(compute_buffer);
+    compute_queue->Wait();
     m_errorMonitor->Finish();
 }
 
@@ -2146,8 +2149,8 @@ TEST_F(VkBestPracticesLayerTest, GetQueryPoolResultsWithoutBegin) {
     vk::CmdResetQueryPool(m_commandBuffer->handle(), query_pool.handle(), 0u, 1u);
     m_commandBuffer->end();
 
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 
     uint32_t data = 0u;
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "BestPractices-QueryPool-Unavailable");

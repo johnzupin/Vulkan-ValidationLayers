@@ -134,8 +134,8 @@ TEST_F(PositiveSyncVal, CmdClearAttachmentLayer) {
     vk::CmdClearAttachments(*m_commandBuffer, 1, &clear_attachment, 1, &clear_rect);
     vk::CmdEndRenderPass(*m_commandBuffer);
     m_commandBuffer->end();
-    m_commandBuffer->QueueCommandBuffer();
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 // Image transition ensures that image data is made visible and available when necessary.
@@ -397,13 +397,12 @@ TEST_F(PositiveSyncVal, PresentAfterSubmit2AutomaticVisibility) {
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState());
     RETURN_IF_SKIP(InitSwapchain());
-    const vkt::Semaphore acquire_semaphore(*m_device);
-    const vkt::Semaphore submit_semaphore(*m_device);
+    vkt::Semaphore acquire_semaphore(*m_device);
+    vkt::Semaphore submit_semaphore(*m_device);
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
 
     uint32_t image_index = 0;
-    ASSERT_EQ(VK_SUCCESS,
-        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index));
+    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
 
     VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
     // this creates execution dependency with submit's wait semaphore, so layout
@@ -438,25 +437,8 @@ TEST_F(PositiveSyncVal, PresentAfterSubmit2AutomaticVisibility) {
     vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
     m_commandBuffer->end();
 
-    VkSemaphoreSubmitInfo wait_info = vku::InitStructHelper();
-    wait_info.semaphore = acquire_semaphore;
-    wait_info.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-    VkCommandBufferSubmitInfo command_buffer_info = vku::InitStructHelper();
-    command_buffer_info.commandBuffer = *m_commandBuffer;
-
-    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
-    signal_info.semaphore = submit_semaphore;
-    signal_info.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-    VkSubmitInfo2 submit = vku::InitStructHelper();
-    submit.waitSemaphoreInfoCount = 1;
-    submit.pWaitSemaphoreInfos = &wait_info;
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &command_buffer_info;
-    submit.signalSemaphoreInfoCount = 1;
-    submit.pSignalSemaphoreInfos = &signal_info;
-    ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit2(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE));
+    m_default_queue->Submit2(*m_commandBuffer, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, submit_semaphore,
+                             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 1;
@@ -465,7 +447,7 @@ TEST_F(PositiveSyncVal, PresentAfterSubmit2AutomaticVisibility) {
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
     ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue->handle(), &present));
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
@@ -474,13 +456,12 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState());
     RETURN_IF_SKIP(InitSwapchain());
-    const vkt::Semaphore acquire_semaphore(*m_device);
-    const vkt::Semaphore submit_semaphore(*m_device);
+    vkt::Semaphore acquire_semaphore(*m_device);
+    vkt::Semaphore submit_semaphore(*m_device);
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
 
     uint32_t image_index = 0;
-    ASSERT_EQ(VK_SUCCESS,
-        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index));
+    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
 
     VkImageMemoryBarrier layout_transition = vku::InitStructHelper();
     layout_transition.srcAccessMask = 0;
@@ -505,16 +486,7 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
                            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &layout_transition);
     m_commandBuffer->end();
 
-    constexpr VkPipelineStageFlags semaphore_wait_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submit = vku::InitStructHelper();
-    submit.waitSemaphoreCount = 1;
-    submit.pWaitSemaphores = &acquire_semaphore.handle();
-    submit.pWaitDstStageMask = &semaphore_wait_stage;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &m_commandBuffer->handle();
-    submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &submit_semaphore.handle();
-    ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE));
+    m_default_queue->Submit(*m_commandBuffer, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, submit_semaphore);
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 1;
@@ -523,7 +495,7 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitAutomaticVisibility) {
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &image_index;
     ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue->handle(), &present));
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncVal, PresentAfterSubmitNoneDstStage) {
@@ -535,13 +507,12 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitNoneDstStage) {
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
     RETURN_IF_SKIP(InitSwapchain());
-    const vkt::Semaphore acquire_semaphore(*m_device);
-    const vkt::Semaphore submit_semaphore(*m_device);
+    vkt::Semaphore acquire_semaphore(*m_device);
+    vkt::Semaphore submit_semaphore(*m_device);
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
 
     uint32_t image_index = 0;
-    ASSERT_EQ(VK_SUCCESS,
-              vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index));
+    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
 
     VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
     layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -562,20 +533,10 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitNoneDstStage) {
     vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
     m_commandBuffer->end();
 
-    constexpr VkPipelineStageFlags semaphore_wait_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submit = vku::InitStructHelper();
-    submit.waitSemaphoreCount = 1;
-    submit.pWaitSemaphores = &acquire_semaphore.handle();
-    submit.pWaitDstStageMask = &semaphore_wait_stage;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &m_commandBuffer->handle();
-    submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &submit_semaphore.handle();
-
     // The goal of this test is to use QueueSubmit API (not QueueSubmit2) to
     // ensure syncval correctly converts SubmitInfo to SubmitInfo2 with
     // regard to signal semaphore.
-    vk::QueueSubmit(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE);
+    m_default_queue->Submit(*m_commandBuffer, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, submit_semaphore);
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 1;
@@ -585,7 +546,7 @@ TEST_F(PositiveSyncVal, PresentAfterSubmitNoneDstStage) {
     present.pImageIndices = &image_index;
 
     vk::QueuePresentKHR(m_default_queue->handle(), &present);
-    m_device->wait();
+    m_device->Wait();
 }
 
 TEST_F(PositiveSyncVal, SeparateAvailabilityAndVisibilityForBuffer) {
@@ -755,8 +716,8 @@ TEST_F(PositiveSyncVal, ImageArrayDynamicIndexing) {
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
     m_commandBuffer->end();
 
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncVal, ImageArrayConstantIndexing) {
@@ -826,8 +787,8 @@ TEST_F(PositiveSyncVal, ImageArrayConstantIndexing) {
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
     m_commandBuffer->end();
 
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncVal, TexelBufferArrayConstantIndexing) {
@@ -901,8 +862,8 @@ TEST_F(PositiveSyncVal, TexelBufferArrayConstantIndexing) {
     vk::CmdDispatch(*m_commandBuffer, 1, 1, 1);
     m_commandBuffer->end();
 
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncVal, QSBufferCopyHazardsDisabled) {
@@ -971,17 +932,7 @@ TEST_F(PositiveSyncVal, QSTransitionWithSrcNoneStage) {
     vk::CmdDispatch(cb, 1, 1, 1);
     cb.end();
 
-    VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
-    cbuf_info.commandBuffer = cb;
-    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
-    signal_info.semaphore = semaphore;
-    signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit = vku::InitStructHelper();
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &cbuf_info;
-    submit.signalSemaphoreInfoCount = 1;
-    submit.pSignalSemaphoreInfos = &signal_info;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit, VK_NULL_HANDLE);
+    m_default_queue->Submit2(cb, vkt::signal, semaphore);
 
     // Submit 1: transition image layout (write access)
     VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
@@ -1005,19 +956,8 @@ TEST_F(PositiveSyncVal, QSTransitionWithSrcNoneStage) {
     vk::CmdPipelineBarrier2(cb2, &dep_info);
     cb2.end();
 
-    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
-    cbuf_info2.commandBuffer = cb2;
-    VkSemaphoreSubmitInfo wait_info2 = vku::InitStructHelper();
-    wait_info2.semaphore = semaphore;
-    wait_info2.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit2 = vku::InitStructHelper();
-    submit2.waitSemaphoreInfoCount = 1;
-    submit2.pWaitSemaphoreInfos = &wait_info2;
-    submit2.commandBufferInfoCount = 1;
-    submit2.pCommandBufferInfos = &cbuf_info2;
-
-    vk::QueueSubmit2(*m_default_queue, 1, &submit2, VK_NULL_HANDLE);
-    m_default_queue->wait();
+    m_default_queue->Submit2(cb2, vkt::wait, semaphore);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncVal, QSTransitionWithSrcNoneStage2) {
@@ -1054,37 +994,15 @@ TEST_F(PositiveSyncVal, QSTransitionWithSrcNoneStage2) {
     cb.begin();
     vk::CmdClearColorImage(cb, image, VK_IMAGE_LAYOUT_GENERAL, &m_clear_color, 1, &layout_transition.subresourceRange);
     cb.end();
-
-    VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
-    cbuf_info.commandBuffer = cb;
-    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
-    signal_info.semaphore = semaphore;
-    signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit = vku::InitStructHelper();
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &cbuf_info;
-    submit.signalSemaphoreInfoCount = 1;
-    submit.pSignalSemaphoreInfos = &signal_info;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit, VK_NULL_HANDLE);
+    m_default_queue->Submit2(cb, vkt::signal, semaphore);
 
     // Submit 2: Transition layout (WRITE access)
     vkt::CommandBuffer cb2(*m_device, m_commandPool);
     cb2.begin();
     vk::CmdPipelineBarrier2(cb2, &dep_info);
     cb2.end();
-
-    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
-    cbuf_info2.commandBuffer = cb2;
-    VkSemaphoreSubmitInfo wait_info2 = vku::InitStructHelper();
-    wait_info2.semaphore = semaphore;
-    wait_info2.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit2 = vku::InitStructHelper();
-    submit2.waitSemaphoreInfoCount = 1;
-    submit2.pWaitSemaphoreInfos = &wait_info2;
-    submit2.commandBufferInfoCount = 1;
-    submit2.pCommandBufferInfos = &cbuf_info2;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit2, VK_NULL_HANDLE);
-    m_default_queue->wait();
+    m_default_queue->Submit2(cb2, vkt::wait, semaphore);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncVal, QSTransitionAndRead) {
@@ -1097,6 +1015,8 @@ TEST_F(PositiveSyncVal, QSTransitionAndRead) {
 
     vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT);
     vkt::ImageView view = image.CreateView();
+
+    vkt::Semaphore semaphore(*m_device);
 
     // Submit0: transition image and signal semaphore with ALL_COMMANDS scope
     VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
@@ -1117,20 +1037,7 @@ TEST_F(PositiveSyncVal, QSTransitionAndRead) {
     cb.begin();
     vk::CmdPipelineBarrier2(cb, &dep_info);
     cb.end();
-
-    vkt::Semaphore semaphore(*m_device);
-
-    VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
-    cbuf_info.commandBuffer = cb;
-    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
-    signal_info.semaphore = semaphore;
-    signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit = vku::InitStructHelper();
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &cbuf_info;
-    submit.signalSemaphoreInfoCount = 1;
-    submit.pSignalSemaphoreInfos = &signal_info;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit, VK_NULL_HANDLE);
+    m_default_queue->Submit2(cb, vkt::signal, semaphore);
 
     // Submit1: wait for the semaphore and read image in the shader
     const OneOffDescriptorSet::Bindings bindings = {{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr}};
@@ -1158,19 +1065,8 @@ TEST_F(PositiveSyncVal, QSTransitionAndRead) {
                               nullptr);
     vk::CmdDispatch(cb2, 1, 1, 1);
     cb2.end();
-
-    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
-    cbuf_info2.commandBuffer = cb2;
-    VkSemaphoreSubmitInfo wait_info2 = vku::InitStructHelper();
-    wait_info2.semaphore = semaphore;
-    wait_info2.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit2 = vku::InitStructHelper();
-    submit2.waitSemaphoreInfoCount = 1;
-    submit2.pWaitSemaphoreInfos = &wait_info2;
-    submit2.commandBufferInfoCount = 1;
-    submit2.pCommandBufferInfos = &cbuf_info2;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit2, VK_NULL_HANDLE);
-    m_default_queue->wait();
+    m_default_queue->Submit2(cb2, vkt::wait, semaphore);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncVal, DynamicRenderingColorResolve) {
@@ -1387,43 +1283,20 @@ TEST_F(PositiveSyncVal, QSSynchronizedWritesAndAsyncWait) {
     dep_info.pImageMemoryBarriers = &image_barrier;
     vk::CmdPipelineBarrier2(cb0, &dep_info);
     cb0.end();
-
-    VkCommandBufferSubmitInfo cbuf_info0 = vku::InitStructHelper();
-    cbuf_info0.commandBuffer = cb0;
-    VkSemaphoreSubmitInfo signal_info0 = vku::InitStructHelper();
-    signal_info0.semaphore = semaphore;
-    signal_info0.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit0 = vku::InitStructHelper();
-    submit0.commandBufferInfoCount = 1;
-    submit0.pCommandBufferInfos = &cbuf_info0;
-    submit0.signalSemaphoreInfoCount = 1;
-    submit0.pSignalSemaphoreInfos = &signal_info0;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit0, VK_NULL_HANDLE);
+    m_default_queue->Submit2(cb0, vkt::signal, semaphore);
 
     // Submit 1: empty submit on Transfer queue that waits for Submit 0.
-    VkSemaphoreSubmitInfo wait_info1 = vku::InitStructHelper();
-    wait_info1.semaphore = semaphore;
-    wait_info1.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit1 = vku::InitStructHelper();
-    submit1.waitSemaphoreInfoCount = 1;
-    submit1.pWaitSemaphoreInfos = &wait_info1;
-    vk::QueueSubmit2(*transfer_queue, 1, &submit1, VK_NULL_HANDLE);
+    transfer_queue->Submit2(vkt::no_cmd, vkt::wait, semaphore);
 
     // Submit 2: copy to image on Graphics queue. No synchronization is needed because of COPY+WRITE barrier from Submit 0.
     vkt::CommandBuffer cb2(*m_device, m_commandPool);
     cb2.begin();
     vk::CmdCopyBufferToImage(cb2, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     cb2.end();
+    m_default_queue->Submit2(cb2);
 
-    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
-    cbuf_info2.commandBuffer = cb2;
-    VkSubmitInfo2 submit2 = vku::InitStructHelper();
-    submit2.commandBufferInfoCount = 1;
-    submit2.pCommandBufferInfos = &cbuf_info2;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit2, VK_NULL_HANDLE);
-
-    m_default_queue->wait();
-    transfer_queue->wait();
+    m_default_queue->Wait();
+    transfer_queue->Wait();
 }
 
 // TODO:
@@ -1526,16 +1399,10 @@ TEST_F(PositiveSyncVal, ThreadedSubmitAndFenceWait) {
     cmd.begin();
     vk::CmdCopyBuffer(cmd, src, dst, 1, &copy_info);
     cmd.end();
-    VkSubmitInfo submit = vku::InitStructHelper();
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &cmd.handle();
 
     vkt::CommandBuffer thread_cmd(*m_device, m_commandPool);
     thread_cmd.begin();
     thread_cmd.end();
-    VkSubmitInfo thread_submit = vku::InitStructHelper();
-    thread_submit.commandBufferCount = 1;
-    thread_submit.pCommandBuffers = &thread_cmd.handle();
 
     std::mutex queue_mutex;
     std::mutex queue_mutex2;
@@ -1545,7 +1412,7 @@ TEST_F(PositiveSyncVal, ThreadedSubmitAndFenceWait) {
         for (int i = 0; i < N; i++) {
             {
                 std::unique_lock<std::mutex> lock(queue_mutex);
-                vk::QueueSubmit(*m_default_queue, 1, &thread_submit, thread_fences[i]);
+                m_default_queue->Submit(thread_cmd, thread_fences[i]);
             }
             {
                 // WaitForFences does not require external synchronization.
@@ -1561,7 +1428,7 @@ TEST_F(PositiveSyncVal, ThreadedSubmitAndFenceWait) {
         for (int i = 0; i < N; i++) {
             {
                 std::unique_lock<std::mutex> lock(queue_mutex);
-                vk::QueueSubmit(*m_default_queue, 1, &submit, fences[i]);
+                m_default_queue->Submit(cmd, fences[i]);
             }
             {
                 std::unique_lock<std::mutex> lock(queue_mutex2);
@@ -1601,7 +1468,8 @@ TEST_F(PositiveSyncVal, ThreadedSubmitAndFenceWaitAndPresent) {
                                    nullptr, 1, &transition);
         }
         cmd.end();
-        cmd.QueueCommandBuffer();
+        m_default_queue->Submit(cmd);
+        m_default_queue->Wait();
     }
 
     constexpr int N = 1'000;
@@ -1616,17 +1484,13 @@ TEST_F(PositiveSyncVal, ThreadedSubmitAndFenceWaitAndPresent) {
         copy_info.size = size;
 
         vkt::Fence fence(*m_device);
-        VkSubmitInfo submit = vku::InitStructHelper();
-        submit.commandBufferCount = 1;
-        submit.pCommandBuffers = &m_commandBuffer->handle();
-
         for (int i = 0; i < N; i++) {
             m_commandBuffer->begin();
             vk::CmdCopyBuffer(*m_commandBuffer, src, dst, 1, &copy_info);
             m_commandBuffer->end();
             {
                 std::unique_lock<std::mutex> lock(queue_mutex);
-                vk::QueueSubmit(*m_default_queue, 1, &submit, fence);
+                m_default_queue->Submit(*m_commandBuffer, fence);
             }
             vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
             vk::ResetFences(device(), 1, &fence.handle());
@@ -1642,25 +1506,18 @@ TEST_F(PositiveSyncVal, ThreadedSubmitAndFenceWaitAndPresent) {
         for (int i = 0; i < N; i++) {
             uint32_t image_index = 0;
             vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
-
-            constexpr VkPipelineStageFlags semaphore_wait_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            VkSubmitInfo submit = vku::InitStructHelper();
-            submit.waitSemaphoreCount = 1;
-            submit.pWaitSemaphores = &acquire_semaphore.handle();
-            submit.pWaitDstStageMask = &semaphore_wait_stage;
-            submit.signalSemaphoreCount = 1;
-            submit.pSignalSemaphores = &submit_semaphore.handle();
-
-            VkPresentInfoKHR present = vku::InitStructHelper();
-            present.waitSemaphoreCount = 1;
-            present.pWaitSemaphores = &submit_semaphore.handle();
-            present.swapchainCount = 1;
-            present.pSwapchains = &m_swapchain;
-            present.pImageIndices = &image_index;
-
             {
                 std::unique_lock<std::mutex> lock(queue_mutex);
-                vk::QueueSubmit(*m_default_queue, 1, &submit, fence);
+
+                m_default_queue->Submit(vkt::no_cmd, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                        submit_semaphore, fence);
+
+                VkPresentInfoKHR present = vku::InitStructHelper();
+                present.waitSemaphoreCount = 1;
+                present.pWaitSemaphores = &submit_semaphore.handle();
+                present.swapchainCount = 1;
+                present.pSwapchains = &m_swapchain;
+                present.pImageIndices = &image_index;
                 vk::QueuePresentKHR(*m_default_queue, &present);
             }
             vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);

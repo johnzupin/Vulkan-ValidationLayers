@@ -1160,12 +1160,6 @@ TEST_F(NegativeDynamicState, PipelineFeatureDisabledRasterizationStream) {
         "VUID-VkGraphicsPipelineCreateInfo-extendedDynamicState3RasterizationStream-07381");
 }
 
-TEST_F(NegativeDynamicState, PipelineFeatureDisabledConservativeRasterizationMode) {
-    ExtendedDynamicState3PipelineFeatureDisabled(
-        VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT,
-        "VUID-VkGraphicsPipelineCreateInfo-extendedDynamicState3ConservativeRasterizationMode-07382");
-}
-
 TEST_F(NegativeDynamicState, PipelineFeatureDisabledExtraPrimitiveOverestimationSize) {
     ExtendedDynamicState3PipelineFeatureDisabled(
         VK_DYNAMIC_STATE_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE_EXT,
@@ -2388,6 +2382,33 @@ TEST_F(NegativeDynamicState, PipelineColorWriteCreateInfoEXTDynaimcState3) {
     CreatePipelineHelper pipe(*this);
     pipe.cb_ci_.pNext = &color_write;
     m_errorMonitor->SetDesiredError("VUID-VkPipelineColorWriteCreateInfoEXT-attachmentCount-07608");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDynamicState, PipelineFeatureDisabledConservativeRasterizationMode) {
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    CreatePipelineHelper pipe(*this);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT);
+    m_errorMonitor->SetDesiredError("VUID-VkGraphicsPipelineCreateInfo-extendedDynamicState3ConservativeRasterizationMode-07382");
+    m_errorMonitor->SetDesiredError("VUID-VkGraphicsPipelineCreateInfo-pDynamicState-09639");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDynamicState, RasterizationConservative) {
+    AddRequiredExtensions(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ConservativeRasterizationMode);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    CreatePipelineHelper pipe(*this);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT);
+    m_errorMonitor->SetDesiredError("VUID-VkGraphicsPipelineCreateInfo-pDynamicState-09639");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 }
@@ -5048,7 +5069,7 @@ TEST_F(NegativeDynamicState, InvalidSampleMaskSamples) {
 
 TEST_F(NegativeDynamicState, InvalidConservativeRasterizationMode) {
     TEST_DESCRIPTION("Test pipeline with invalid dynamic conservative rasterization mode");
-
+    AddRequiredExtensions(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::extendedDynamicState3ConservativeRasterizationMode);
     RETURN_IF_SKIP(Init());
@@ -5061,9 +5082,14 @@ TEST_F(NegativeDynamicState, InvalidConservativeRasterizationMode) {
         GTEST_SKIP() << "conservativePointAndLineRasterization is required to be VK_FALSE";
     }
 
+    VkPipelineRasterizationConservativeStateCreateInfoEXT cs_info = vku::InitStructHelper();
+    cs_info.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
+    cs_info.extraPrimitiveOverestimationSize = 0.0f;
+
     CreatePipelineHelper pipe(*this);
     pipe.AddDynamicState(VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT);
     pipe.ia_ci_.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    pipe.rs_state_ci_.pNext = &cs_info;
     pipe.CreateGraphicsPipeline();
 
     m_commandBuffer->begin();
@@ -5591,5 +5617,65 @@ TEST_F(NegativeDynamicState, SetColorBlendWriteMaskArrayLength) {
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetColorWriteMaskEXT-attachmentCount-arraylength");
     vk::CmdSetColorWriteMaskEXT(m_commandBuffer->handle(), 0, 0, &write_mask);
     m_errorMonitor->VerifyFound();
+    m_commandBuffer->end();
+}
+
+TEST_F(NegativeDynamicState, RasterizationSamplesDynamicRendering) {
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3RasterizationSamples);
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(Init());
+
+    VkFormat color_format = VK_FORMAT_B8G8R8A8_UNORM;
+
+    VkImageCreateInfo image_ci = vku::InitStructHelper();
+    image_ci.imageType = VK_IMAGE_TYPE_2D;
+    image_ci.format = color_format;
+    image_ci.extent = {32u, 32u, 1u};
+    image_ci.mipLevels = 1u;
+    image_ci.arrayLayers = 1u;
+    image_ci.samples = VK_SAMPLE_COUNT_4_BIT;
+    image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
+    vkt::ImageView image_view = image.CreateView();
+
+    vkt::Image resolve_image(*m_device, 32u, 32u, 1, color_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::ImageView resolve_image_view = resolve_image.CreateView();
+
+    VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &color_format;
+
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT);
+    pipe.CreateGraphicsPipeline();
+
+    VkRenderingAttachmentInfo colorAttachment = vku::InitStructHelper();
+    colorAttachment.imageView = image_view.handle();
+    colorAttachment.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+    colorAttachment.resolveImageView = resolve_image_view.handle();
+    colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.clearValue.color = m_clear_color;
+
+    VkRenderingInfo rendering_info = vku::InitStructHelper();
+    rendering_info.renderArea = {{0, 0}, {32u, 32u}};
+    rendering_info.layerCount = 1u;
+    rendering_info.colorAttachmentCount = 1u;
+    rendering_info.pColorAttachments = &colorAttachment;
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(rendering_info);
+    vk::CmdSetRasterizationSamplesEXT(m_commandBuffer->handle(), VK_SAMPLE_COUNT_2_BIT);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-rasterizationSamples-07474");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-multisampledRenderToSingleSampled-07285");
+    vk::CmdDraw(m_commandBuffer->handle(), 4u, 1u, 0u, 0u);
+    m_errorMonitor->VerifyFound();
+    m_commandBuffer->EndRendering();
     m_commandBuffer->end();
 }

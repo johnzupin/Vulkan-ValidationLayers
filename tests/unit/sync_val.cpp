@@ -301,6 +301,7 @@ struct ClearAttachmentHazardHelper {
     const VkImageUsageFlags ds_usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | kTransferUsage;
     VkLayerTest& test;
     vkt::Device& device;
+    vkt::Queue& queue;
     vkt::CommandBuffer& command_buffer;
     const VkFormat ds_format;
     vkt::Image image;
@@ -310,9 +311,10 @@ struct ClearAttachmentHazardHelper {
     vkt::ImageView rt_view;
     vkt::ImageView ds_view;
 
-    ClearAttachmentHazardHelper(VkLayerTest& test_, vkt::Device& device_, vkt::CommandBuffer& cb_)
+    ClearAttachmentHazardHelper(VkLayerTest& test_, vkt::Device& device_, vkt::Queue& queue_, vkt::CommandBuffer& cb_)
         : test(test_),
           device(device_),
+          queue(queue_),
           command_buffer(cb_),
           ds_format(FindSupportedDepthStencilFormat(test_.gpu())),
           image(),
@@ -383,8 +385,9 @@ void ClearAttachmentHazardHelper::Test(BeginRenderFn& begin_render, EndRenderFn&
 
         end_render(command_buffer);
         command_buffer.end();
-        command_buffer.QueueCommandBuffer();
-        test.DefaultQueue()->wait();
+        queue.Submit(command_buffer);
+        queue.Wait();
+        test.DefaultQueue()->Wait();
     }
 
     // RAW hazard: clear render target then copy from it.
@@ -415,8 +418,9 @@ void ClearAttachmentHazardHelper::Test(BeginRenderFn& begin_render, EndRenderFn&
         test.VerifyFound();
 
         command_buffer.end();
-        command_buffer.QueueCommandBuffer();
-        test.DefaultQueue()->wait();
+        queue.Submit(command_buffer);
+        queue.Wait();
+        test.DefaultQueue()->Wait();
     }
 
     // RAW hazard: two regions with a single pixel overlap, otherwise the same as the previous scenario.
@@ -448,8 +452,9 @@ void ClearAttachmentHazardHelper::Test(BeginRenderFn& begin_render, EndRenderFn&
         test.VerifyFound();
 
         command_buffer.end();
-        command_buffer.QueueCommandBuffer();
-        test.DefaultQueue()->wait();
+        queue.Submit(command_buffer);
+        queue.Wait();
+        test.DefaultQueue()->Wait();
     }
 
     // Nudge regions by one pixel compared to the previous test, now they touch but do not overlap. There should be no errors.
@@ -478,8 +483,9 @@ void ClearAttachmentHazardHelper::Test(BeginRenderFn& begin_render, EndRenderFn&
         vk::CmdClearAttachments(command_buffer, 1, &clear_attachment, 1, &clear_rect);
         end_render(command_buffer);
         command_buffer.end();
-        command_buffer.QueueCommandBuffer();
-        test.DefaultQueue()->wait();
+        queue.Submit(command_buffer);
+        queue.Wait();
+        test.DefaultQueue()->Wait();
     }
 }
 
@@ -493,7 +499,7 @@ TEST_F(NegativeSyncVal, CmdClearAttachmentsHazards) {
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState());
 
-    ClearAttachmentHazardHelper helper(*this, *m_device, *m_commandBuffer);
+    ClearAttachmentHazardHelper helper(*this, *m_device, *m_default_queue, *m_commandBuffer);
     auto attachment_without_load_store = [](VkFormat format) {
         VkAttachmentDescription attachment = {};
         attachment.format = format;
@@ -553,7 +559,7 @@ TEST_F(NegativeSyncVal, CmdClearAttachmentsDynamicHazards) {
     }
     RETURN_IF_SKIP(InitState(nullptr, &dynamic_rendering_features));
 
-    ClearAttachmentHazardHelper helper(*this, *m_device, *m_commandBuffer);
+    ClearAttachmentHazardHelper helper(*this, *m_device, *m_default_queue, *m_commandBuffer);
 
     VkRenderingAttachmentInfo color_attachment = vku::InitStructHelper();
     color_attachment.imageView = helper.rt_view;
@@ -2178,6 +2184,7 @@ TEST_F(NegativeSyncVal, CmdClear) {
 
 TEST_F(NegativeSyncVal, CmdQuery) {
     // CmdCopyQueryPoolResults
+    all_queue_count_ = true;
     RETURN_IF_SKIP(InitSyncValFramework());
     RETURN_IF_SKIP(InitState());
     if ((m_device->phy().queue_properties_.empty()) || (m_device->phy().queue_properties_[0].queueCount < 2)) {
@@ -4080,8 +4087,8 @@ TEST_F(NegativeSyncVal, DestroyedUnusedDescriptors) {
     vk::CmdDrawIndexed(m_commandBuffer->handle(), 1, 1, 0, 0, 0);
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-    m_commandBuffer->QueueCommandBuffer();
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, TestInvalidExternalSubpassDependency) {
@@ -4578,7 +4585,7 @@ TEST_F(NegativeSyncVal, QSBufferCopyVsIdle) {
     test.QueueWait0();
     test.Submit0(test.cbb);
 
-    m_device->wait();
+    m_device->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSBufferCopyVsFence) {
@@ -4615,7 +4622,7 @@ TEST_F(NegativeSyncVal, QSBufferCopyVsFence) {
 
     if (wait_result != VK_SUCCESS) {
         ADD_FAILURE() << "Fence wait failed. Aborting test.";
-        m_device->wait();
+        m_device->Wait();
     }
 
     // A and B should be good to go...
@@ -4666,7 +4673,7 @@ TEST_F(NegativeSyncVal, QSBufferCopyQSORules) {
     // This is included in a "Sucess" section, just to verify CBA and CBB are set up correctly.
     test.Submit0(test.cba);
     test.Submit0(test.cbb);
-    m_device->wait();  // DeviceWaitIdle, clearing the field for the next subcase
+    m_device->Wait();  // DeviceWaitIdle, clearing the field for the next subcase
 
     // Submit A and B on the different queues. Since no semaphore is used between the queues, CB B hazards asynchronously with,
     // CB A with A being read and written on independent queues.
@@ -4674,7 +4681,7 @@ TEST_F(NegativeSyncVal, QSBufferCopyQSORules) {
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-RACING-READ");
     test.Submit1(test.cbb);
     m_errorMonitor->VerifyFound();
-    m_device->wait();  // DeviceWaitIdle, clearing the field for the next subcase
+    m_device->Wait();  // DeviceWaitIdle, clearing the field for the next subcase
 
     // Test full async detection
     test.Submit0(test.cba);
@@ -4685,7 +4692,7 @@ TEST_F(NegativeSyncVal, QSBufferCopyQSORules) {
 
     // Set up the semaphore for the next two cases
 
-    m_device->wait();
+    m_device->Wait();
 
     // Submit A and B on the different queues, with an ineffectual semaphore.  The wait mask is empty, thus nothing in CB B is in
     // the second excution scope of the waited signal.
@@ -4698,19 +4705,19 @@ TEST_F(NegativeSyncVal, QSBufferCopyQSORules) {
     // Include transfers in the second execution scope of the waited signal, s.t. the PipelineBarrier in CB B can chain with it.
     test.Submit1Wait(test.cbb, VK_PIPELINE_STAGE_TRANSFER_BIT);  //
 
-    m_device->wait();
+    m_device->Wait();
 
     // Draw A and then C to verify the second access scope of the signal
     test.Submit0Signal(test.cba);
     test.Submit1Wait(test.cbc, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    m_device->wait();
+    m_device->Wait();
 
     //  ... and again on the same queue
     test.Submit0Signal(test.cba);
     test.Submit0Wait(test.cbc, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    m_device->wait();
+    m_device->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSBufferEvents) {
@@ -4756,14 +4763,14 @@ TEST_F(NegativeSyncVal, QSBufferEvents) {
 
     // Reset the event s.t. I reuse it
     test.Submit0(reset);
-    m_device->wait();
+    m_device->Wait();
 
     test.Submit0(test.cba);
     test.Submit0(test.cbb);
 
     // Ensure that the wait doesn't apply to async queues
     test.Submit0(reset);
-    m_device->wait();
+    m_device->Wait();
 
     test.Submit0(test.cba);
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-RACING-READ");
@@ -4774,7 +4781,7 @@ TEST_F(NegativeSyncVal, QSBufferEvents) {
     m_errorMonitor->VerifyFound();
 
     // Ensure that the wait doesn't apply to access on other synchronized queues
-    m_device->wait();
+    m_device->Wait();
 
     test.Submit0Signal(test.cba);
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-READ");
@@ -4788,7 +4795,7 @@ TEST_F(NegativeSyncVal, QSBufferEvents) {
     test.BeginC();
     test.End();
     test.Submit1Wait(test.cbc, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-    m_device->wait();
+    m_device->Wait();
 
     // Next ensure that accesses from other queues aren't included in the first scope
     test.RecordCopy(test.cba, test.buffer_a, test.buffer_b);
@@ -4801,19 +4808,19 @@ TEST_F(NegativeSyncVal, QSBufferEvents) {
 
     // Sanity check that same queue works
     test.Submit0(reset);
-    m_device->wait();
+    m_device->Wait();
     test.Submit0(test.cba);
     test.Submit0(test.cbb);
 
     // Reset the signal
     test.Submit0(reset);
-    m_device->wait();
+    m_device->Wait();
 
     test.Submit0Signal(test.cba);
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-READ");
     test.Submit1Wait(test.cbb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     m_errorMonitor->VerifyFound();
-    m_device->wait();
+    m_device->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSOBarrierHazard) {
@@ -4868,7 +4875,7 @@ TEST_F(NegativeSyncVal, QSOBarrierHazard) {
     // Then prove qso works (note that with the failure, the semaphore hasn't been waited, nor the layout changed)
     test.Submit0Wait(test.cbb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
-    m_device->wait();
+    m_device->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSRenderPass) {
@@ -4880,7 +4887,7 @@ TEST_F(NegativeSyncVal, QSRenderPass) {
 
     rp_helper.InitImageAndView();
     rp_helper.InitAttachmentLayouts();  // Quiet any CoreChecks ImageLayout complaints
-    m_device->wait();                   // and quiesce the system
+    m_device->Wait();                   // and quiesce the system
 
     // The  dependency protects the input attachment but not the color attachment
     VkSubpassDependency protect_input_subpass_0 = {VK_SUBPASS_EXTERNAL,
@@ -4936,14 +4943,14 @@ TEST_F(NegativeSyncVal, QSRenderPass) {
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit2, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
-    m_device->wait();  // quiesce the system for the next subtest
+    m_device->Wait();  // quiesce the system for the next subtest
 
     CreateRenderPassHelper rp_helper2(m_device);
     rp_helper2.InitAllAttachmentsToLayoutGeneral();
 
     rp_helper2.InitImageAndView();
     rp_helper2.InitAttachmentLayouts();  // Quiet any CoreChecks ImageLayout complaints
-    m_device->wait();                    // and quiesce the system
+    m_device->Wait();                    // and quiesce the system
 
     // The  dependency protects the input attachment but not the color attachment
     VkSubpassDependency protect_input_subpass_1 = protect_input_subpass_0;
@@ -4984,7 +4991,7 @@ TEST_F(NegativeSyncVal, QSRenderPass) {
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit2, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 
-    m_device->wait();  // and quiesce the system
+    m_device->Wait();  // and quiesce the system
 }
 
 // Wrap FAIL:
@@ -4992,14 +4999,13 @@ TEST_F(NegativeSyncVal, QSRenderPass) {
 //  * for test stability reasons sometimes cleanup code is required *prior* to the return hidden in FAIL
 //  * result_arg_ *can* (should) have side-effect, but is referenced exactly once
 //  * label_ must be converitble to bool, and *should* *not* have side-effects
-//  * clean_ *can* (should) have side-effects
 //    * "{}" or ";" are valid clean_ values for noop
-#define REQUIRE_SUCCESS(result_arg_, label_, clean_)                    \
+#define REQUIRE_SUCCESS(result_arg_, label_)                            \
     {                                                                   \
         const VkResult result_ = (result_arg_);                         \
         if (result_ != VK_SUCCESS) {                                    \
             {                                                           \
-                clean_;                                                 \
+                m_device->Wait();                                       \
             }                                                           \
             if (bool(label_)) {                                         \
                 FAIL() << string_VkResult(result_) << ": " << (label_); \
@@ -5023,20 +5029,11 @@ TEST_F(NegativeSyncVal, QSPresentAcquire) {
     ASSERT_EQ(VK_SUCCESS, vk::GetSwapchainImagesKHR(device(), m_swapchain, &image_count, images.data()));
 
     std::vector<bool> image_used(images.size(), false);
-
-    const VkCommandBuffer cb = m_commandBuffer->handle();
-    const VkQueue q = m_default_queue->handle();
-    const VkDevice dev = m_device->handle();
-
     vkt::Fence fence(*m_device);
-    VkFence h_fence = fence.handle();
-
-    // Test stability requires that we wait on pending operations before returning starts the Vk*Obj destructors
-    auto cleanup = [this]() { m_device->wait(); };
 
     // Loop through the indices until we find one we are reusing...
     // When fence is non-null this can timeout so we need to track results
-    auto present_image = [this, q](uint32_t index, vkt::Semaphore* sem, vkt::Fence* fence) {
+    auto present_image = [this](uint32_t index, vkt::Semaphore* sem, vkt::Fence* fence) {
         VkResult result = VK_SUCCESS;
         if (fence) {
             result = fence->wait(kWaitTimeout);
@@ -5056,19 +5053,19 @@ TEST_F(NegativeSyncVal, QSPresentAcquire) {
                 present_info.waitSemaphoreCount = 1;
                 present_info.pWaitSemaphores = &h_sem;
             }
-            vk::QueuePresentKHR(q, &present_info);
+            vk::QueuePresentKHR(m_default_queue->handle(), &present_info);
         }
         return result;
     };
 
     // Acquire can always timeout, so we need to track results
-    auto acquire_used_image = [this, &image_used, dev, &present_image](vkt::Semaphore* sem, vkt::Fence* fence, uint32_t& index) {
+    auto acquire_used_image = [this, &image_used, &present_image](vkt::Semaphore* sem, vkt::Fence* fence, uint32_t& index) {
         VkSemaphore h_sem = sem ? sem->handle() : VK_NULL_HANDLE;
         VkFence h_fence = fence ? fence->handle() : VK_NULL_HANDLE;
         VkResult result = VK_SUCCESS;
 
         while (true) {
-            result = vk::AcquireNextImageKHR(dev, m_swapchain, kWaitTimeout, h_sem, h_fence, &index);
+            result = vk::AcquireNextImageKHR(m_device->handle(), m_swapchain, kWaitTimeout, h_sem, h_fence, &index);
             if ((result != VK_SUCCESS) || image_used[index]) break;
 
             result = present_image(index, sem, fence);
@@ -5097,64 +5094,50 @@ TEST_F(NegativeSyncVal, QSPresentAcquire) {
     // Transition swapchain images to PRESENT_SRC layout for presentation
     for (VkImage image : images) {
         write_barrier_cb(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-        VkSubmitInfo submit = vku::InitStructHelper();
-        submit.commandBufferCount = 1;
-        submit.pCommandBuffers = &cb;
-        vk::QueueSubmit(q, 1, &submit, VK_NULL_HANDLE);
-        m_device->wait();
+        m_default_queue->Submit(*m_commandBuffer);
+        m_device->Wait();
         m_commandBuffer->reset();
     }
 
     uint32_t acquired_index = 0;
-    REQUIRE_SUCCESS(acquire_used_image(nullptr, &fence, acquired_index), "acquire_used_image", cleanup());
+    REQUIRE_SUCCESS(acquire_used_image(nullptr, &fence, acquired_index), "acquire_used_image");
 
     write_barrier_cb(images[acquired_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     // Look for errors between the acquire and first use...
-    VkSubmitInfo submit1 = vku::InitStructHelper();
-    submit1.commandBufferCount = 1;
-    submit1.pCommandBuffers = &cb;
     // No sync operations...
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-PRESENT");
-    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
 
     // Sync operations that should ignore present operations
-    m_device->wait();
+    m_device->Wait();
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-PRESENT");
-    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
 
     // Finally we wait for the fence associated with the acquire
-    REQUIRE_SUCCESS(vk::WaitForFences(m_device->handle(), 1, &h_fence, VK_TRUE, kWaitTimeout), "WaitForFences", cleanup());
+    REQUIRE_SUCCESS(vk::WaitForFences(m_device->handle(), 1, &fence.handle(), VK_TRUE, kWaitTimeout), "WaitForFences");
     fence.reset();
-    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
-    m_device->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_device->Wait();
 
     // Release the image back to the present engine, so we don't run out
     present_image(acquired_index, nullptr, nullptr);  // present without fence can't timeout
 
-    auto semaphore_ci = vkt::Semaphore::create_info(0);
-    vkt::Semaphore sem(*m_device, semaphore_ci);
-    const VkSemaphore h_sem = sem.handle();
-    REQUIRE_SUCCESS(acquire_used_image(&sem, nullptr, acquired_index), "acquire_used_image", cleanup());
+    vkt::Semaphore sem(*m_device);
+    REQUIRE_SUCCESS(acquire_used_image(&sem, nullptr, acquired_index), "acquire_used_image");
 
     m_commandBuffer->reset();
     write_barrier_cb(images[acquired_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-    VkPipelineStageFlags wait_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    submit1.waitSemaphoreCount = 1;
-    submit1.pWaitDstStageMask = &wait_mask;
-    submit1.pWaitSemaphores = &h_sem;
-
     // The wait mask doesn't match the operations in the command buffer
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-READ");
-    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_default_queue->Submit(*m_commandBuffer, vkt::wait, sem, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     m_errorMonitor->VerifyFound();
 
     // Now then wait mask matches the operations in the command buffer
-    wait_mask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_default_queue->Submit(*m_commandBuffer, vkt::wait, sem, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     // Try presenting without waiting for the ILT to finish
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-PRESENT-AFTER-WRITE");
@@ -5162,29 +5145,24 @@ TEST_F(NegativeSyncVal, QSPresentAcquire) {
     m_errorMonitor->VerifyFound();
 
     // Let the ILT complete, and the release the image back
-    m_device->wait();
+    m_device->Wait();
     present_image(acquired_index, nullptr, nullptr);  // present without fence can't timeout
 
-    REQUIRE_SUCCESS(acquire_used_image(VK_NULL_HANDLE, &fence, acquired_index), "acquire_used_index", cleanup());
-    REQUIRE_SUCCESS(fence.wait(kWaitTimeout), "WaitForFences", cleanup());
+    REQUIRE_SUCCESS(acquire_used_image(VK_NULL_HANDLE, &fence, acquired_index), "acquire_used_index");
+    REQUIRE_SUCCESS(fence.wait(kWaitTimeout), "WaitForFences");
 
     m_commandBuffer->reset();
     write_barrier_cb(images[acquired_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     fence.reset();
-    submit1.waitSemaphoreCount = 0;
-    submit1.pWaitDstStageMask = nullptr;
-    submit1.pWaitSemaphores = nullptr;
-    submit1.signalSemaphoreCount = 1;
-    submit1.pSignalSemaphores = &h_sem;
-    vk::QueueSubmit(q, 1, &submit1, VK_NULL_HANDLE);
+    m_default_queue->Submit(*m_commandBuffer, vkt::signal, sem);
 
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-PRESENT-AFTER-WRITE");
     present_image(acquired_index, nullptr, nullptr);  // present without fence can't timeout
     m_errorMonitor->VerifyFound();
 
     present_image(acquired_index, &sem, nullptr);  // present without fence can't timeout
-    m_device->wait();
+    m_device->Wait();
 }
 
 TEST_F(NegativeSyncVal, PresentDoesNotWaitForSubmit2) {
@@ -5225,25 +5203,8 @@ TEST_F(NegativeSyncVal, PresentDoesNotWaitForSubmit2) {
     vk::CmdPipelineBarrier2(*m_commandBuffer, &dep_info);
     m_commandBuffer->end();
 
-    VkSemaphoreSubmitInfo wait_info = vku::InitStructHelper();
-    wait_info.semaphore = acquire_semaphore;
-    wait_info.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-    VkCommandBufferSubmitInfo command_buffer_info = vku::InitStructHelper();
-    command_buffer_info.commandBuffer = *m_commandBuffer;
-
-    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
-    signal_info.semaphore = submit_semaphore;
-    signal_info.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-    VkSubmitInfo2 submit = vku::InitStructHelper();
-    submit.waitSemaphoreInfoCount = 1;
-    submit.pWaitSemaphoreInfos = &wait_info;
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &command_buffer_info;
-    submit.signalSemaphoreInfoCount = 1;
-    submit.pSignalSemaphoreInfos = &signal_info;
-    ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit2(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE));
+    m_default_queue->Submit2(*m_commandBuffer, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, submit_semaphore,
+                             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 0;  // DO NOT wait on submit. This should generate present after write (ILT) harard.
@@ -5255,7 +5216,7 @@ TEST_F(NegativeSyncVal, PresentDoesNotWaitForSubmit2) {
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-PRESENT-AFTER-WRITE");
     vk::QueuePresentKHR(m_default_queue->handle(), &present);
     m_errorMonitor->VerifyFound();
-    m_device->wait();
+    m_device->Wait();
 }
 
 TEST_F(NegativeSyncVal, PresentDoesNotWaitForSubmit) {
@@ -5270,7 +5231,7 @@ TEST_F(NegativeSyncVal, PresentDoesNotWaitForSubmit) {
 
     uint32_t image_index = 0;
     ASSERT_EQ(VK_SUCCESS,
-        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index));
+              vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index));
 
     VkImageMemoryBarrier layout_transition = vku::InitStructHelper();
     layout_transition.srcAccessMask = 0;
@@ -5290,16 +5251,7 @@ TEST_F(NegativeSyncVal, PresentDoesNotWaitForSubmit) {
                            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &layout_transition);
     m_commandBuffer->end();
 
-    constexpr VkPipelineStageFlags semaphore_wait_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submit = vku::InitStructHelper();
-    submit.waitSemaphoreCount = 1;
-    submit.pWaitSemaphores = &acquire_semaphore.handle();
-    submit.pWaitDstStageMask = &semaphore_wait_stage;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &m_commandBuffer->handle();
-    submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &submit_semaphore.handle();
-    ASSERT_EQ(VK_SUCCESS, vk::QueueSubmit(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE));
+    m_default_queue->Submit(*m_commandBuffer, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, submit_semaphore);
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 0;  // DO NOT wait on submit. This should generate present after write (ILT) harard.
@@ -5311,7 +5263,7 @@ TEST_F(NegativeSyncVal, PresentDoesNotWaitForSubmit) {
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-PRESENT-AFTER-WRITE");
     vk::QueuePresentKHR(m_default_queue->handle(), &present);
     m_errorMonitor->VerifyFound();
-    m_device->wait();
+    m_device->Wait();
 }
 
 TEST_F(NegativeSyncVal, AvailabilityWithoutVisibilityForBuffer) {
@@ -5777,11 +5729,11 @@ TEST_F(NegativeSyncVal, QSDebugRegion) {
     vk::CmdEndDebugUtilsLabelEXT(cb1);
     cb1.end();
 
-    std::vector<const vkt::CommandBuffer*> command_buffers = {&cb0, &cb1};
+    std::array command_buffers = {&cb0, &cb1};
     m_errorMonitor->SetDesiredError("RegionA");
-    m_default_queue->submit(command_buffers, vkt::Fence{}, false);
+    m_default_queue->Submit(command_buffers);
     m_errorMonitor->VerifyFound();  // SYNC-HAZARD-WRITE-AFTER-READ error message
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSDebugRegion2) {
@@ -5805,16 +5757,16 @@ TEST_F(NegativeSyncVal, QSDebugRegion2) {
     vk::CmdCopyBuffer(cb0, buffer_a, buffer_b, 1, &region);
     vk::CmdEndDebugUtilsLabelEXT(cb0);
     cb0.end();
-    m_default_queue->submit(cb0);
+    m_default_queue->Submit(cb0);
 
     vkt::CommandBuffer cb1(*m_device, m_commandPool);
     cb1.begin();
     vk::CmdCopyBuffer(cb1, buffer_c, buffer_a, 1, &region);
     cb1.end();
     m_errorMonitor->SetDesiredError("RegionA");
-    m_default_queue->submit(cb1, vkt::Fence{}, false);
+    m_default_queue->Submit(cb1);
     m_errorMonitor->VerifyFound();  // SYNC-HAZARD-WRITE-AFTER-READ error message
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSDebugRegion3) {
@@ -5881,11 +5833,11 @@ TEST_F(NegativeSyncVal, QSDebugRegion3) {
     vk::CmdEndDebugUtilsLabelEXT(cb1);  // VulkanFrame_CommandBuffer1
     cb1.end();
 
-    std::vector<const vkt::CommandBuffer*> command_buffers = {&cb0, &cb1};
+    std::array command_buffers = {&cb0, &cb1};
     m_errorMonitor->SetDesiredError("VulkanFrame_CommandBuffer0::FirstPass::CopyAToB");
-    m_default_queue->submit(command_buffers, vkt::Fence{}, false);
+    m_default_queue->Submit(command_buffers);
     m_errorMonitor->VerifyFound();  // SYNC-HAZARD-WRITE-AFTER-READ error message
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSDebugRegion4) {
@@ -5907,7 +5859,7 @@ TEST_F(NegativeSyncVal, QSDebugRegion4) {
     label.pLabelName = "RegionA";
     vk::CmdBeginDebugUtilsLabelEXT(cb0, &label);
     cb0.end();
-    m_default_queue->submit(cb0);
+    m_default_queue->Submit(cb0);
 
     vkt::CommandBuffer cb1(*m_device, m_commandPool);
     cb1.begin();
@@ -5916,7 +5868,7 @@ TEST_F(NegativeSyncVal, QSDebugRegion4) {
     vk::CmdCopyBuffer(cb1, buffer_a, buffer_b, 1, &region);
     vk::CmdEndDebugUtilsLabelEXT(cb1);  // RegionB
     cb1.end();
-    m_default_queue->submit(cb1);
+    m_default_queue->Submit(cb1);
 
     vkt::CommandBuffer cb2(*m_device, m_commandPool);
     cb2.begin();
@@ -5924,9 +5876,9 @@ TEST_F(NegativeSyncVal, QSDebugRegion4) {
     vk::CmdEndDebugUtilsLabelEXT(cb2);  // RegionA
     cb2.end();
     m_errorMonitor->SetDesiredError("RegionA::RegionB");
-    m_default_queue->submit(cb2, vkt::Fence{}, false);
+    m_default_queue->Submit(cb2);
     m_errorMonitor->VerifyFound();  // SYNC-HAZARD-WRITE-AFTER-READ error message
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSDebugRegion5) {
@@ -5958,17 +5910,17 @@ TEST_F(NegativeSyncVal, QSDebugRegion5) {
     vk::CmdEndDebugUtilsLabelEXT(cb1);  // RegionA
     cb1.end();
 
-    std::vector<const vkt::CommandBuffer*> command_buffers = {&cb0, &cb1};
-    m_default_queue->submit(command_buffers, vkt::Fence{});
+    std::array command_buffers = {&cb0, &cb1};
+    m_default_queue->Submit(command_buffers);
 
     vkt::CommandBuffer cb2(*m_device, m_commandPool);
     cb2.begin();
     vk::CmdCopyBuffer(cb2, buffer_c, buffer_a, 1, &region);
     cb2.end();
     m_errorMonitor->SetDesiredError("RegionA::RegionB");
-    m_default_queue->submit(cb2, vkt::Fence{}, false);
+    m_default_queue->Submit(cb2);
     m_errorMonitor->VerifyFound();  // SYNC-HAZARD-WRITE-AFTER-READ error message
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSDebugRegion6) {
@@ -6014,9 +5966,9 @@ TEST_F(NegativeSyncVal, QSDebugRegion6) {
     vk::CmdCopyBuffer(cb2, buffer_c, buffer_a, 1, &region);
     cb2.end();
     m_errorMonitor->SetDesiredError("RegionA::RegionB");
-    m_default_queue->submit(cb2, vkt::Fence{}, false);
+    m_default_queue->Submit(cb2);
     m_errorMonitor->VerifyFound();  // SYNC-HAZARD-WRITE-AFTER-READ error message
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 // Regression test for part 1 of https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7502
@@ -6041,16 +5993,16 @@ TEST_F(NegativeSyncVal, QSDebugRegion7) {
     vk::CmdBeginDebugUtilsLabelEXT(cb0, &label);
     vk::CmdEndDebugUtilsLabelEXT(cb0);
     cb0.end();
-    m_default_queue->submit(cb0);
+    m_default_queue->Submit(cb0);
 
     vkt::CommandBuffer cb1(*m_device, m_commandPool);
     cb1.begin();
     vk::CmdCopyBuffer(cb1, buffer_c, buffer_a, 1, &region);
     cb1.end();
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-READ");
-    m_default_queue->submit(cb1, vkt::Fence{}, false);
+    m_default_queue->Submit(cb1);
     m_errorMonitor->VerifyFound();
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSDebugRegion_Secondary) {
@@ -6082,16 +6034,16 @@ TEST_F(NegativeSyncVal, QSDebugRegion_Secondary) {
     vk::CmdExecuteCommands(cb0, 1, &secondary_cb.handle());
     vk::CmdEndDebugUtilsLabelEXT(cb0);
     cb0.end();
-    m_default_queue->submit(cb0);
+    m_default_queue->Submit(cb0);
 
     vkt::CommandBuffer cb1(*m_device, m_commandPool);
     cb1.begin();
     vk::CmdCopyBuffer(cb1, buffer_c, buffer_a, 1, &region);
     cb1.end();
     m_errorMonitor->SetDesiredError("RegionA::RegionB");
-    m_default_queue->submit(cb1, vkt::Fence{}, false);
+    m_default_queue->Submit(cb1);
     m_errorMonitor->VerifyFound();  // SYNC-HAZARD-WRITE-AFTER-READ error message
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 // TODO: this test should be removed after timeline semaphore support is added to sync validation
@@ -6113,10 +6065,7 @@ TEST_F(NegativeSyncVal, QSDebugRegion_TimelineStability) {
     VkBufferCopy region = {0, 0, 256};
     VkDebugUtilsLabelEXT label = vku::InitStructHelper();
 
-    VkSemaphoreTypeCreateInfo semaphore_type_info = vku::InitStructHelper();
-    semaphore_type_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-    const VkSemaphoreCreateInfo semaphore_ci = vku::InitStructHelper(&semaphore_type_info);
-    vkt::Semaphore semaphore(*m_device, semaphore_ci);
+    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE_KHR);
 
     m_commandBuffer->begin();
     // Issue a bunch of label commands
@@ -6130,29 +6079,12 @@ TEST_F(NegativeSyncVal, QSDebugRegion_TimelineStability) {
     vk::CmdCopyBuffer(*m_commandBuffer, buffer_a, buffer_b, 1, &region);
     m_commandBuffer->end();
 
-    VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
-    cbuf_info.commandBuffer = *m_commandBuffer;
-    VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
-    signal_info.semaphore = semaphore;
-    signal_info.value = 1;
-    signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit = vku::InitStructHelper();
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &cbuf_info;
-    submit.signalSemaphoreInfoCount = 1;
-    submit.pSignalSemaphoreInfos = &signal_info;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit, VK_NULL_HANDLE);
-
-    const uint64_t wait_value = 1;
-    VkSemaphoreWaitInfo wait_info = vku::InitStructHelper();
-    wait_info.semaphoreCount = 1;
-    wait_info.pSemaphores = &semaphore.handle();
-    wait_info.pValues = &wait_value;
+    m_default_queue->Submit2WithTimelineSemaphore(*m_commandBuffer, vkt::signal, semaphore, 1);
 
     // This command will retire the previous submission in Core Validation.
     // But not in Sync Validation... because it's not supported yet.
     // Still usage of timeline semaphores should not cause crashes.
-    vk::WaitSemaphores(*m_device, &wait_info, kWaitTimeout);
+    semaphore.Wait(1, kWaitTimeout);
 
     // We are free to re-use command buffer after we waited on the semaphore.
     // Because sync validation does not support timelines yet, it will
@@ -6166,9 +6098,9 @@ TEST_F(NegativeSyncVal, QSDebugRegion_TimelineStability) {
     vk::CmdCopyBuffer(*m_commandBuffer, buffer_c, buffer_a, 1, &region);
     m_commandBuffer->end();
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-READ");
-    m_default_queue->submit(*m_commandBuffer, vkt::Fence{}, false);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, UseShaderReadAccessForUniformBuffer) {
@@ -6382,30 +6314,20 @@ TEST_F(NegativeSyncVal, QSWriteRacingWrite) {
     vk::CmdPipelineBarrier2(cb0, &dep_info);
     cb0.end();
 
-    VkCommandBufferSubmitInfo cbuf_info0 = vku::InitStructHelper();
-    cbuf_info0.commandBuffer = cb0;
-    VkSubmitInfo2 submit0 = vku::InitStructHelper();
-    submit0.commandBufferInfoCount = 1;
-    submit0.pCommandBufferInfos = &cbuf_info0;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit0, VK_NULL_HANDLE);
+    m_default_queue->Submit2(cb0);
 
     // Submit from Transfer queue: write image data (racing WRITE access)
-    vkt::CommandPool transfer_pool(*m_device, transfer_queue->get_family_index());
+    vkt::CommandPool transfer_pool(*m_device, transfer_queue->family_index);
     vkt::CommandBuffer cb1(*m_device, &transfer_pool);
     cb1.begin();
     vk::CmdCopyBufferToImage(cb1, buffer, image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
     cb1.end();
 
-    VkCommandBufferSubmitInfo cbuf_info1 = vku::InitStructHelper();
-    cbuf_info1.commandBuffer = cb1;
-    VkSubmitInfo2 submit1 = vku::InitStructHelper();
-    submit1.commandBufferInfoCount = 1;
-    submit1.pCommandBufferInfos = &cbuf_info1;
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-RACING-WRITE");
-    vk::QueueSubmit2(*transfer_queue, 1, &submit1, VK_NULL_HANDLE);
+    transfer_queue->Submit2(cb1);
     m_errorMonitor->VerifyFound();
 
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, QSWriteRacingWrite2) {
@@ -6432,13 +6354,7 @@ TEST_F(NegativeSyncVal, QSWriteRacingWrite2) {
     vkt::Semaphore semaphore(*m_device);
 
     // Submit on Graphics queue: empty batch just so Transfer queue can synchronize with.
-    VkSemaphoreSubmitInfo signal_info0 = vku::InitStructHelper();
-    signal_info0.semaphore = semaphore;
-    signal_info0.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit0 = vku::InitStructHelper();
-    submit0.signalSemaphoreInfoCount = 1;
-    submit0.pSignalSemaphoreInfos = &signal_info0;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit0, VK_NULL_HANDLE);
+    m_default_queue->Submit2(vkt::no_cmd, vkt::signal, semaphore);
 
     // Submit on Graphics queue: image layout transition (WRITE access).
     vkt::CommandBuffer cb1(*m_device, m_commandPool);
@@ -6458,35 +6374,20 @@ TEST_F(NegativeSyncVal, QSWriteRacingWrite2) {
     vk::CmdPipelineBarrier2(cb1, &dep_info);
     cb1.end();
 
-    VkCommandBufferSubmitInfo cbuf_info1 = vku::InitStructHelper();
-    cbuf_info1.commandBuffer = cb1;
-    VkSubmitInfo2 submit1 = vku::InitStructHelper();
-    submit1.commandBufferInfoCount = 1;
-    submit1.pCommandBufferInfos = &cbuf_info1;
-    vk::QueueSubmit2(*m_default_queue, 1, &submit1, VK_NULL_HANDLE);
+    m_default_queue->Submit2(cb1);
 
     // Submit on Transfer queue: write image data (racing WRITE access)
-    vkt::CommandPool transfer_pool(*m_device, transfer_queue->get_family_index());
+    vkt::CommandPool transfer_pool(*m_device, transfer_queue->family_index);
     vkt::CommandBuffer cb2(*m_device, &transfer_pool);
     cb2.begin();
     vk::CmdCopyBufferToImage(cb2, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     cb2.end();
 
-    VkCommandBufferSubmitInfo cbuf_info2 = vku::InitStructHelper();
-    cbuf_info2.commandBuffer = cb2;
-    VkSemaphoreSubmitInfo wait_info2 = vku::InitStructHelper();
-    wait_info2.semaphore = semaphore;
-    wait_info2.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkSubmitInfo2 submit2 = vku::InitStructHelper();
-    submit2.waitSemaphoreInfoCount = 1;
-    submit2.pWaitSemaphoreInfos = &wait_info2;
-    submit2.commandBufferInfoCount = 1;
-    submit2.pCommandBufferInfos = &cbuf_info2;
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-RACING-WRITE");
-    vk::QueueSubmit2(*transfer_queue, 1, &submit2, VK_NULL_HANDLE);
+    transfer_queue->Submit2(cb2, vkt::wait, semaphore);
     m_errorMonitor->VerifyFound();
 
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 // Gfx      :   Submit 0: [Read A, signal sem]  Submit 1: [Read A]
@@ -6507,19 +6408,19 @@ TEST_F(NegativeSyncVal, QSWriteRacingRead) {
     RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
 
     vkt::Queue* gfx_queue = m_default_queue;
-    vkt::CommandPool gfx_pool(*m_device, gfx_queue->get_family_index());
+    vkt::CommandPool gfx_pool(*m_device, gfx_queue->family_index);
 
     vkt::Queue* compute_queue = m_device->ComputeOnlyQueue();
     if (!compute_queue) {
         GTEST_SKIP() << "Compute-only queue is not present";
     }
-    vkt::CommandPool compute_pool(*m_device, compute_queue->get_family_index());
+    vkt::CommandPool compute_pool(*m_device, compute_queue->family_index);
 
     vkt::Queue* transfer_queue = m_device->TransferOnlyQueue();
     if (!transfer_queue) {
         GTEST_SKIP() << "Transfer-only queue is not present";
     }
-    vkt::CommandPool transfer_pool(*m_device, transfer_queue->get_family_index());
+    vkt::CommandPool transfer_pool(*m_device, transfer_queue->family_index);
 
     constexpr VkDeviceSize size = 1024;
     vkt::Buffer buffer(*m_device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -6540,56 +6441,22 @@ TEST_F(NegativeSyncVal, QSWriteRacingRead) {
     vkt::Semaphore semaphore2(*m_device);
 
     // Submit 0 (gfx queue): buffer read
-    {
-        gfx_cb.begin();
-        vk::CmdCopyBuffer(gfx_cb, buffer, gfx_dst_buffer, 1, &region);
-        gfx_cb.end();
-
-        VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
-        cbuf_info.commandBuffer = gfx_cb;
-        VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
-        signal_info.semaphore = semaphore;
-        signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-        VkSubmitInfo2 submit = vku::InitStructHelper();
-        submit.commandBufferInfoCount = 1;
-        submit.pCommandBufferInfos = &cbuf_info;
-        submit.signalSemaphoreInfoCount = 1;
-        submit.pSignalSemaphoreInfos = &signal_info;
-        vk::QueueSubmit2(*gfx_queue, 1, &submit, VK_NULL_HANDLE);
-    }
+    gfx_cb.begin();
+    vk::CmdCopyBuffer(gfx_cb, buffer, gfx_dst_buffer, 1, &region);
+    gfx_cb.end();
+    gfx_queue->Submit2(gfx_cb, vkt::signal, semaphore);
 
     // Submit 1 (gfx queue): another read from the same buffer
-    {
-        gfx_cb2.begin();
-        vk::CmdCopyBuffer(gfx_cb2, buffer, gfx_dst_buffer2, 1, &region);
-        gfx_cb2.end();
-
-        VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
-        cbuf_info.commandBuffer = gfx_cb2;
-        VkSubmitInfo2 submit = vku::InitStructHelper();
-        submit.commandBufferInfoCount = 1;
-        submit.pCommandBufferInfos = &cbuf_info;
-        vk::QueueSubmit2(*gfx_queue, 1, &submit, VK_NULL_HANDLE);
-    }
+    gfx_cb2.begin();
+    vk::CmdCopyBuffer(gfx_cb2, buffer, gfx_dst_buffer2, 1, &region);
+    gfx_cb2.end();
+    gfx_queue->Submit2(gfx_cb2);
 
     // Submit 2 (compute queue): compute buffer copy (does not interract with other buffers)
-    {
-        compute_cb.begin();
-        vk::CmdCopyBuffer(compute_cb, compute_src_buffer, compute_dst_buffer, 1, &region);
-        compute_cb.end();
-
-        VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
-        cbuf_info.commandBuffer = compute_cb;
-        VkSemaphoreSubmitInfo signal_info = vku::InitStructHelper();
-        signal_info.semaphore = semaphore2;
-        signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-        VkSubmitInfo2 submit = vku::InitStructHelper();
-        submit.commandBufferInfoCount = 1;
-        submit.pCommandBufferInfos = &cbuf_info;
-        submit.signalSemaphoreInfoCount = 1;
-        submit.pSignalSemaphoreInfos = &signal_info;
-        vk::QueueSubmit2(*compute_queue, 1, &submit, VK_NULL_HANDLE);
-    }
+    compute_cb.begin();
+    vk::CmdCopyBuffer(compute_cb, compute_src_buffer, compute_dst_buffer, 1, &region);
+    compute_cb.end();
+    compute_queue->Submit2(compute_cb, vkt::signal, semaphore2);
 
     // Submit 3 (transfer queue): wait for gfx/compute semaphores
     {
@@ -6616,9 +6483,9 @@ TEST_F(NegativeSyncVal, QSWriteRacingRead) {
         m_errorMonitor->VerifyFound();
     }
 
-    gfx_queue->wait();
-    compute_queue->wait();
-    transfer_queue->wait();
+    gfx_queue->Wait();
+    compute_queue->Wait();
+    transfer_queue->Wait();
 }
 
 TEST_F(NegativeSyncVal, RenderPassStoreOpNone) {
