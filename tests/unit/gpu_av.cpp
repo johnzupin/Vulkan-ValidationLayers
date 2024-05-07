@@ -139,8 +139,8 @@ TEST_F(NegativeGpuAV, SelectInstrumentedShaders) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
     // Should not get a warning since shader wasn't instrumented
-    m_commandBuffer->QueueCommandBuffer();
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     VkValidationFeatureEnableEXT enabled[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT};
     VkValidationFeaturesEXT features = vku::InitStructHelper();
     features.enabledValidationFeatureCount = 1;
@@ -163,8 +163,8 @@ TEST_F(NegativeGpuAV, SelectInstrumentedShaders) {
     // Should get a warning since shader was instrumented
     m_errorMonitor->ExpectSuccess(kWarningBit | kErrorBit);
     m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "VUID-vkCmdDraw-storageBuffers-06936");
-    m_commandBuffer->QueueCommandBuffer();
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
 
@@ -274,8 +274,8 @@ TEST_F(NegativeGpuAV, DISABLED_InvalidAtomicStorageOperation) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_default_queue->submit(*m_commandBuffer, false);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
 
@@ -383,8 +383,8 @@ TEST_F(NegativeGpuAV, DISABLED_UnnormalizedCoordinatesInBoundsAccess) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_default_queue->submit(*m_commandBuffer, false);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
 
@@ -568,8 +568,8 @@ TEST_F(NegativeGpuAV, UnnormalizedCoordinatesSeparateSamplerSharedSampler) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08609");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08610");
-    m_default_queue->submit(*m_commandBuffer, false);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
 
@@ -678,8 +678,8 @@ TEST_F(NegativeGpuAV, ShareOpSampledImage) {
     m_commandBuffer->end();
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-None-08610");
-    m_default_queue->submit(*m_commandBuffer, false);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
 
@@ -781,6 +781,8 @@ TEST_F(NegativeGpuAV, CopyBufferToImageD32) {
     TEST_DESCRIPTION(
         "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
         "VK_FORMAT_D32_SFLOAT.");
+    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
     RETURN_IF_SKIP(InitGpuAvFramework());
     RETURN_IF_SKIP(InitState());
 
@@ -833,9 +835,9 @@ TEST_F(NegativeGpuAV, CopyBufferToImageD32) {
     m_commandBuffer->end();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 16376 that is not in the range [0, 1]");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 16376 that is not in the range [0, 1]");
-    m_commandBuffer->QueueCommandBuffer();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
-    vk::DeviceWaitIdle(*m_device);
 }
 
 TEST_F(NegativeGpuAV, CopyBufferToImageD32Vk13) {
@@ -843,11 +845,9 @@ TEST_F(NegativeGpuAV, CopyBufferToImageD32Vk13) {
         "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
         "VK_FORMAT_D32_SFLOAT.");
     SetTargetApiVersion(VK_API_VERSION_1_3);
-    VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
-    RETURN_IF_SKIP(InitFramework(&validation_features));
-    if (!CanEnableGpuAV(*this)) {
-        GTEST_SKIP() << "Requirements for GPU-AV are not met";
-    }
+    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
+    RETURN_IF_SKIP(InitGpuAvFramework());
     RETURN_IF_SKIP(InitState());
 
     vkt::Buffer copy_src_buffer(*m_device, sizeof(float) * 64 * 64,
@@ -903,15 +903,17 @@ TEST_F(NegativeGpuAV, CopyBufferToImageD32Vk13) {
     m_commandBuffer->end();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 16376 that is not in the range [0, 1]");
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 16376 that is not in the range [0, 1]");
-    m_commandBuffer->QueueCommandBuffer();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
-    vk::DeviceWaitIdle(*m_device);
 }
 
 TEST_F(NegativeGpuAV, CopyBufferToImageD32U8) {
     TEST_DESCRIPTION(
         "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
         "VK_FORMAT_D32_SFLOAT_S8_UINT.");
+    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
     RETURN_IF_SKIP(InitGpuAvFramework());
     RETURN_IF_SKIP(InitState());
 
@@ -961,9 +963,9 @@ TEST_F(NegativeGpuAV, CopyBufferToImageD32U8) {
 
     m_commandBuffer->end();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 20475 that is not in the range [0, 1]");
-    m_commandBuffer->QueueCommandBuffer();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
-    vk::DeviceWaitIdle(*m_device);
 }
 
 TEST_F(NegativeGpuAV, CopyBufferToImageD32U8Vk13) {
@@ -971,11 +973,9 @@ TEST_F(NegativeGpuAV, CopyBufferToImageD32U8Vk13) {
         "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
         "VK_FORMAT_D32_SFLOAT_S8_UINT.");
     SetTargetApiVersion(VK_API_VERSION_1_3);
-    VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
-    RETURN_IF_SKIP(InitFramework(&validation_features));
-    if (!CanEnableGpuAV(*this)) {
-        GTEST_SKIP() << "Requirements for GPU-AV are not met";
-    }
+    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
+    RETURN_IF_SKIP(InitGpuAvFramework());
     RETURN_IF_SKIP(InitState());
 
     vkt::Buffer copy_src_buffer(*m_device, 5 * 64 * 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -1030,7 +1030,7 @@ TEST_F(NegativeGpuAV, CopyBufferToImageD32U8Vk13) {
 
     m_commandBuffer->end();
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "has a float value at offset 20475 that is not in the range [0, 1]");
-    m_commandBuffer->QueueCommandBuffer();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
-    vk::DeviceWaitIdle(*m_device);
 }

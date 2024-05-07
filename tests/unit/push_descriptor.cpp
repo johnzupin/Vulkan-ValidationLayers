@@ -323,7 +323,8 @@ TEST_F(NegativePushDescriptor, ImageLayout) {
         m_commandBuffer->EndRenderPass();
         m_commandBuffer->end();
 
-        m_commandBuffer->QueueCommandBuffer(false);
+        m_default_queue->Submit(*m_commandBuffer);
+        m_default_queue->Wait();
         m_errorMonitor->VerifyFound();
     }
 }

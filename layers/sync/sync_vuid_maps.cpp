@@ -942,6 +942,8 @@ static const std::map<QueueError, std::vector<Entry>> kBarrierQueueErrors{
      {
          {Key(Struct::VkBufferMemoryBarrier2), "VUID-VkBufferMemoryBarrier2-srcStageMask-03851"},
          {Key(Struct::VkImageMemoryBarrier2), "VUID-VkImageMemoryBarrier2-srcStageMask-03854"},
+         {Key(Struct::VkBufferMemoryBarrier), "VUID-vkCmdPipelineBarrier-srcStageMask-09634"},
+         {Key(Struct::VkImageMemoryBarrier), "VUID-vkCmdPipelineBarrier-srcStageMask-09633"},
      }},
 };
 
@@ -1244,8 +1246,8 @@ static const std::map<SubmitError, std::vector<Entry>> kSubmitErrors{
          {Key(Struct::VkSubmitInfo, Field::pWaitSemaphores), "VUID-VkSubmitInfo-pWaitSemaphores-03243"},
          {Key(Struct::VkSubmitInfo, Field::pSignalSemaphores), "VUID-VkSubmitInfo-pSignalSemaphores-03244"},
          {Key(Struct::VkSemaphoreSignalInfo), "VUID-VkSemaphoreSignalInfo-value-03260"},
-         {Key(Struct::VkSubmitInfo2, Field::pWaitSemaphoreInfos, true), "VUID-VkSubmitInfo2-semaphore-03883"},
-         {Key(Struct::VkSubmitInfo2, Field::pSignalSemaphoreInfos, true), "VUID-VkSubmitInfo2-semaphore-03884"},
+         {Key(Struct::VkSubmitInfo2, Field::pWaitSemaphoreInfos, true), "VUID-VkSubmitInfo2-semaphore-03884"},
+         {Key(Struct::VkSubmitInfo2, Field::pSignalSemaphoreInfos, true), "VUID-VkSubmitInfo2-semaphore-03883"},
      }},
     {SubmitError::kProtectedFeatureDisabled,
      {

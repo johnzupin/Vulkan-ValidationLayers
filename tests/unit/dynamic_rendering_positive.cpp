@@ -303,10 +303,9 @@ TEST_F(PositiveDynamicRendering, SuspendResumeDraw) {
     cb2.EndRendering();
     cb2.end();
 
-    vkt::Fence fence;
-    std::vector<const vkt::CommandBuffer*> cbs = {m_commandBuffer, &cb1, &cb2};
-    m_default_queue->submit(cbs, fence);
-    m_default_queue->wait();
+    std::array cbs = {m_commandBuffer, &cb1, &cb2};
+    m_default_queue->Submit(cbs);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveDynamicRendering, CreateGraphicsPipeline) {
@@ -600,8 +599,8 @@ TEST_F(PositiveDynamicRendering, SuspendPrimaryResumeInSecondary) {
     vk::CmdExecuteCommands(m_commandBuffer->handle(), 1, &secondary.handle());
 
     m_commandBuffer->end();
-    m_default_queue->submit(*m_commandBuffer);
-    m_default_queue->wait();
+    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveDynamicRendering, SuspendSecondaryResumeInPrimary) {
@@ -657,10 +656,9 @@ TEST_F(PositiveDynamicRendering, SuspendSecondaryResumeInPrimary) {
     cb.EndRendering();
     cb.end();
 
-    vkt::Fence fence;
-    std::vector<const vkt::CommandBuffer*> cbs = {m_commandBuffer, &cb};
-    m_default_queue->submit(cbs, fence);
-    m_default_queue->wait();
+    std::array cbs = {m_commandBuffer, &cb};
+    m_default_queue->Submit(cbs);
+    m_default_queue->Wait();
 }
 
 TEST_F(PositiveDynamicRendering, WithShaderTileImageAndBarrier) {
@@ -1179,5 +1177,70 @@ TEST_F(PositiveDynamicRendering, BeginRenderingWithRenderPassStriped) {
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &cb_submit_info;
     vk::QueueSubmit2KHR(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
-    m_default_queue->wait();
+    m_default_queue->Wait();
+}
+
+TEST_F(PositiveDynamicRendering, LegacyDithering) {
+    AddRequiredExtensions(VK_EXT_LEGACY_DITHERING_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::legacyDithering);
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+
+    VkPipelineCreateFlags2CreateInfoKHR create_flags_2 = vku::InitStructHelper();
+    create_flags_2.flags = VK_PIPELINE_CREATE_2_ENABLE_LEGACY_DITHERING_BIT_EXT;
+
+    VkFormat color_formats = VK_FORMAT_UNDEFINED;
+    VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper(&create_flags_2);
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &color_formats;
+
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.CreateGraphicsPipeline();
+
+    VkRenderingAttachmentInfoKHR color_attachment = vku::InitStructHelper();
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkRenderingInfoKHR begin_rendering_info = vku::InitStructHelper();
+    begin_rendering_info.flags = VK_RENDERING_ENABLE_LEGACY_DITHERING_BIT_EXT;
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.layerCount = 1;
+    begin_rendering_info.renderArea = {{0, 0}, {1, 1}};
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRendering(begin_rendering_info);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_commandBuffer->EndRendering();
+    m_commandBuffer->end();
+}
+
+TEST_F(PositiveDynamicRendering, AttachmentCountDynamicState) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7881");
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEnable);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendEquation);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorWriteMask);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState3ColorBlendAdvanced);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+    InitRenderTarget();
+
+    VkPipelineColorBlendStateCreateInfo color_blend_state_create_info = vku::InitStructHelper();
+    color_blend_state_create_info.attachmentCount = 0;
+    color_blend_state_create_info.pAttachments = nullptr;
+
+    VkFormat color_format = VK_FORMAT_UNDEFINED;
+    VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = vku::InitStructHelper();
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &color_format;
+
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT);
+    pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
+    pipe.cb_ci_ = color_blend_state_create_info;
+    pipe.CreateGraphicsPipeline();
 }

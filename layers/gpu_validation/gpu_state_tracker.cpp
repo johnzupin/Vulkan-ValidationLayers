@@ -27,7 +27,7 @@ gpu_tracker::DescriptorSetManager::DescriptorSetManager(VkDevice device, uint32_
 
 gpu_tracker::DescriptorSetManager::~DescriptorSetManager() {
     for (auto &pool : desc_pool_map_) {
-        DispatchDestroyDescriptorPool(device, pool.first, NULL);
+        DispatchDestroyDescriptorPool(device, pool.first, nullptr);
     }
     desc_pool_map_.clear();
 }
@@ -88,7 +88,7 @@ VkResult gpu_tracker::DescriptorSetManager::GetDescriptorSets(uint32_t count, Vk
         desc_pool_info.maxSets = pool_count;
         desc_pool_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
         desc_pool_info.pPoolSizes = pool_sizes.data();
-        result = DispatchCreateDescriptorPool(device, &desc_pool_info, NULL, &pool_to_use);
+        result = DispatchCreateDescriptorPool(device, &desc_pool_info, nullptr, &pool_to_use);
         assert(result == VK_SUCCESS);
         if (result != VK_SUCCESS) {
             return result;
@@ -98,7 +98,7 @@ VkResult gpu_tracker::DescriptorSetManager::GetDescriptorSets(uint32_t count, Vk
     }
     std::vector<VkDescriptorSetLayout> desc_layouts(count, ds_layout);
 
-    VkDescriptorSetAllocateInfo alloc_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, pool_to_use, count,
+    VkDescriptorSetAllocateInfo alloc_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, nullptr, pool_to_use, count,
                                               desc_layouts.data()};
 
     result = DispatchAllocateDescriptorSets(device, &alloc_info, out_desc_sets->data());
@@ -122,7 +122,7 @@ void gpu_tracker::DescriptorSetManager::PutBackDescriptorSet(VkDescriptorPool de
         }
         desc_pool_map_[desc_pool].used--;
         if (0 == desc_pool_map_[desc_pool].used) {
-            DispatchDestroyDescriptorPool(device, desc_pool, NULL);
+            DispatchDestroyDescriptorPool(device, desc_pool, nullptr);
             desc_pool_map_.erase(desc_pool);
         }
     }
@@ -302,6 +302,33 @@ void gpu_tracker::Validator::PreCallRecordCreateDevice(VkPhysicalDevice gpu, con
         delete modified_create_info->pEnabledFeatures;
         modified_create_info->pEnabledFeatures = new VkPhysicalDeviceFeatures(new_features);
     }
+
+    auto add_missing_features = [this, modified_create_info]() {
+        if (force_buffer_device_address) {
+            // Add buffer device address feature
+            auto *bda_features = const_cast<VkPhysicalDeviceBufferDeviceAddressFeatures *>(
+                vku::FindStructInPNextChain<VkPhysicalDeviceBufferDeviceAddressFeatures>(modified_create_info));
+            if (bda_features) {
+                bda_features->bufferDeviceAddress = VK_TRUE;
+            } else {
+                VkPhysicalDeviceBufferDeviceAddressFeatures new_bda_features = vku::InitStructHelper();
+                new_bda_features.bufferDeviceAddress = VK_TRUE;
+                vku::AddToPnext(*modified_create_info, new_bda_features);
+            }
+        }
+
+        // Add timeline semaphore feature
+        auto *ts_features = const_cast<VkPhysicalDeviceTimelineSemaphoreFeatures *>(
+            vku::FindStructInPNextChain<VkPhysicalDeviceTimelineSemaphoreFeatures>(modified_create_info));
+        if (ts_features) {
+            ts_features->timelineSemaphore = VK_TRUE;
+        } else {
+            VkPhysicalDeviceTimelineSemaphoreFeatures new_ts_features = vku::InitStructHelper();
+            new_ts_features.timelineSemaphore = VK_TRUE;
+            vku::AddToPnext(*modified_create_info, new_ts_features);
+        }
+    };
+
     // TODO How to handle multi-device
     if (api_version > VK_API_VERSION_1_1) {
         auto *features12 = const_cast<VkPhysicalDeviceVulkan12Features *>(
@@ -312,19 +339,10 @@ void gpu_tracker::Validator::PreCallRecordCreateDevice(VkPhysicalDevice gpu, con
                 features12->bufferDeviceAddress = VK_TRUE;
             }
         } else {
-            auto *bda_features = const_cast<VkPhysicalDeviceBufferDeviceAddressFeatures *>(
-                vku::FindStructInPNextChain<VkPhysicalDeviceBufferDeviceAddressFeatures>(modified_create_info->pNext));
-            if (bda_features) {
-                bda_features->bufferDeviceAddress = VK_TRUE;
-            } else {
-                VkPhysicalDeviceBufferDeviceAddressFeatures new_bda_features = vku::InitStructHelper();
-                new_bda_features.bufferDeviceAddress = VK_TRUE;
-                new_bda_features.pNext = const_cast<void *>(modified_create_info->pNext);
-                modified_create_info->pNext = new VkPhysicalDeviceBufferDeviceAddressFeatures(new_bda_features);
-            }
+            add_missing_features();
         }
     } else if (api_version == VK_API_VERSION_1_1) {
-        static const std::string bda_ext{"VK_KHR_buffer_device_address"};
+        const std::string_view bda_ext{"VK_KHR_buffer_device_address"};
         bool found_bda = false;
         for (uint32_t i = 0; i < modified_create_info->enabledExtensionCount; i++) {
             if (bda_ext == modified_create_info->ppEnabledExtensionNames[i]) {
@@ -332,7 +350,7 @@ void gpu_tracker::Validator::PreCallRecordCreateDevice(VkPhysicalDevice gpu, con
                 break;
             }
         }
-        static const std::string ts_ext{"VK_KHR_timeline_semaphore"};
+        const std::string_view ts_ext{"VK_KHR_timeline_semaphore"};
         bool found_ts = false;
         for (uint32_t i = 0; i < modified_create_info->enabledExtensionCount; i++) {
             if (ts_ext == modified_create_info->ppEnabledExtensionNames[i]) {
@@ -341,55 +359,15 @@ void gpu_tracker::Validator::PreCallRecordCreateDevice(VkPhysicalDevice gpu, con
             }
         }
 
-        if (!found_bda || !found_ts) {
-            size_t modify_count = modified_create_info->enabledExtensionCount;
-            if (!found_bda) {
-                modify_count++;
-            }
-            if (!found_ts) {
-                modify_count++;
-            }
-            const char **ext_names = new const char *[modify_count];
-            // Copy the existing pointer table
-            std::copy(modified_create_info->ppEnabledExtensionNames,
-                      modified_create_info->ppEnabledExtensionNames + modified_create_info->enabledExtensionCount, ext_names);
-            // Add our new extensions
-            if (!found_bda) {
-                char *bda_ext_copy = new char[bda_ext.size() + 1]{};
-                bda_ext.copy(bda_ext_copy, bda_ext.size());
-                bda_ext_copy[bda_ext.size()] = '\0';
-                ext_names[modified_create_info->enabledExtensionCount++] = bda_ext_copy;
-            }
-            if (!found_ts) {
-                char *ts_ext_copy = new char[ts_ext.size() + 1]{};
-                ts_ext.copy(ts_ext_copy, ts_ext.size());
-                ts_ext_copy[ts_ext.size()] = '\0';
-                ext_names[modified_create_info->enabledExtensionCount++] = ts_ext_copy;
-            }
-            // Patch up the safe struct
-            delete[] modified_create_info->ppEnabledExtensionNames;
-            modified_create_info->ppEnabledExtensionNames = ext_names;
+        // Add our new extensions
+        if (!found_bda) {
+            vku::AddExtension(*modified_create_info, bda_ext.data());
         }
-        auto *bda_features = const_cast<VkPhysicalDeviceBufferDeviceAddressFeatures *>(
-            vku::FindStructInPNextChain<VkPhysicalDeviceBufferDeviceAddressFeatures>(modified_create_info));
-        if (bda_features) {
-            bda_features->bufferDeviceAddress = VK_TRUE;
-        } else {
-            VkPhysicalDeviceBufferDeviceAddressFeatures new_bda_features = vku::InitStructHelper();
-            new_bda_features.bufferDeviceAddress = VK_TRUE;
-            new_bda_features.pNext = const_cast<void *>(modified_create_info->pNext);
-            modified_create_info->pNext = new VkPhysicalDeviceBufferDeviceAddressFeatures(new_bda_features);
+        if (!found_ts) {
+            vku::AddExtension(*modified_create_info, ts_ext.data());
         }
-        auto *ts_features = const_cast<VkPhysicalDeviceTimelineSemaphoreFeatures *>(
-            vku::FindStructInPNextChain<VkPhysicalDeviceTimelineSemaphoreFeatures>(modified_create_info));
-        if (ts_features) {
-            ts_features->timelineSemaphore = VK_TRUE;
-        } else {
-            VkPhysicalDeviceTimelineSemaphoreFeatures new_ts_features = vku::InitStructHelper();
-            new_ts_features.timelineSemaphore = VK_TRUE;
-            new_ts_features.pNext = const_cast<void *>(modified_create_info->pNext);
-            modified_create_info->pNext = new VkPhysicalDeviceTimelineSemaphoreFeatures(new_ts_features);
-        }
+
+        add_missing_features();
     } else {
         force_buffer_device_address = false;
     }
@@ -426,38 +404,42 @@ void gpu_tracker::Validator::CreateDevice(const VkDeviceCreateInfo *pCreateInfo,
     assert(result1 == VK_SUCCESS);
     desc_set_manager = std::make_unique<DescriptorSetManager>(device, static_cast<uint32_t>(validation_bindings_.size()));
 
-    const VkDescriptorSetLayoutCreateInfo debug_desc_layout_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, NULL, 0,
+    const VkDescriptorSetLayoutCreateInfo debug_desc_layout_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, nullptr, 0,
                                                                     static_cast<uint32_t>(validation_bindings_.size()),
                                                                     validation_bindings_.data()};
 
-    const VkDescriptorSetLayoutCreateInfo dummy_desc_layout_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, NULL, 0, 0,
-                                                                    NULL};
+    const VkDescriptorSetLayoutCreateInfo dummy_desc_layout_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, nullptr, 0,
+                                                                    0, nullptr};
 
-    result1 = DispatchCreateDescriptorSetLayout(device, &debug_desc_layout_info, NULL, &debug_desc_layout_);
+    result1 = DispatchCreateDescriptorSetLayout(device, &debug_desc_layout_info, nullptr, &debug_desc_layout_);
 
-    // This is a layout used to "pad" a pipeline layout to fill in any gaps to the selected bind index.
-    VkResult result2 = DispatchCreateDescriptorSetLayout(device, &dummy_desc_layout_info, NULL, &dummy_desc_layout_);
+    VkResult result2 = DispatchCreateDescriptorSetLayout(device, &dummy_desc_layout_info, nullptr, &dummy_desc_layout_);
 
     std::vector<VkDescriptorSetLayout> debug_layouts;
     for (uint32_t j = 0; j < adjusted_max_desc_sets - 1; ++j) {
         debug_layouts.push_back(dummy_desc_layout_);
     }
     debug_layouts.push_back(debug_desc_layout_);
-    const VkPipelineLayoutCreateInfo debug_pipeline_layout_info = {
-        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, NULL, 0u, static_cast<uint32_t>(debug_layouts.size()), debug_layouts.data(), 0u, NULL};
-    VkResult result3 = DispatchCreatePipelineLayout(device, &debug_pipeline_layout_info, NULL, &debug_pipeline_layout);
+    const VkPipelineLayoutCreateInfo debug_pipeline_layout_info = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                                                                   nullptr,
+                                                                   0u,
+                                                                   static_cast<uint32_t>(debug_layouts.size()),
+                                                                   debug_layouts.data(),
+                                                                   0u,
+                                                                   nullptr};
+    VkResult result3 = DispatchCreatePipelineLayout(device, &debug_pipeline_layout_info, nullptr, &debug_pipeline_layout);
 
     assert((result1 == VK_SUCCESS) && (result2 == VK_SUCCESS) && (result3 == VK_SUCCESS));
     if ((result1 != VK_SUCCESS) || (result2 != VK_SUCCESS) || (result3 != VK_SUCCESS)) {
         ReportSetupProblem(device, loc, "Unable to create descriptor set layout.");
         if (result1 == VK_SUCCESS) {
-            DispatchDestroyDescriptorSetLayout(device, debug_desc_layout_, NULL);
+            DispatchDestroyDescriptorSetLayout(device, debug_desc_layout_, nullptr);
         }
         if (result2 == VK_SUCCESS) {
-            DispatchDestroyDescriptorSetLayout(device, dummy_desc_layout_, NULL);
+            DispatchDestroyDescriptorSetLayout(device, dummy_desc_layout_, nullptr);
         }
         if (result3 == VK_SUCCESS) {
-            DispatchDestroyPipelineLayout(device, debug_pipeline_layout, NULL);
+            DispatchDestroyPipelineLayout(device, debug_pipeline_layout, nullptr);
         }
         debug_desc_layout_ = VK_NULL_HANDLE;
         dummy_desc_layout_ = VK_NULL_HANDLE;
@@ -472,15 +454,15 @@ void gpu_tracker::Validator::PreCallRecordDestroyDevice(VkDevice device, const V
     indices_buffer.Destroy(vmaAllocator);
 
     if (debug_desc_layout_) {
-        DispatchDestroyDescriptorSetLayout(device, debug_desc_layout_, NULL);
+        DispatchDestroyDescriptorSetLayout(device, debug_desc_layout_, nullptr);
         debug_desc_layout_ = VK_NULL_HANDLE;
     }
     if (dummy_desc_layout_) {
-        DispatchDestroyDescriptorSetLayout(device, dummy_desc_layout_, NULL);
+        DispatchDestroyDescriptorSetLayout(device, dummy_desc_layout_, nullptr);
         dummy_desc_layout_ = VK_NULL_HANDLE;
     }
     if (debug_pipeline_layout) {
-        DispatchDestroyPipelineLayout(device, debug_pipeline_layout, NULL);
+        DispatchDestroyPipelineLayout(device, debug_pipeline_layout, nullptr);
     }
     BaseClass::PreCallRecordDestroyDevice(device, pAllocator, record_obj);
     // State Tracker can end up making vma calls through callbacks - don't destroy allocator until ST is done
@@ -503,8 +485,12 @@ gpu_tracker::Queue::~Queue() {
         barrier_command_buffer_ = VK_NULL_HANDLE;
     }
     if (barrier_command_pool_) {
-        DispatchDestroyCommandPool(state_.device, barrier_command_pool_, NULL);
+        DispatchDestroyCommandPool(state_.device, barrier_command_pool_, nullptr);
         barrier_command_pool_ = VK_NULL_HANDLE;
+    }
+    if (barrier_sem_) {
+        DispatchDestroySemaphore(state_.device, barrier_sem_, nullptr);
+        barrier_sem_ = VK_NULL_HANDLE;
     }
 }
 
@@ -555,8 +541,9 @@ void gpu_tracker::Queue::SubmitBarrier(const Location &loc, uint64_t seq) {
         state_.vkSetDeviceLoaderData(state_.device, barrier_command_buffer_);
 
         // Record a global memory barrier to force availability of device memory operations to the host domain.
-        VkCommandBufferBeginInfo command_buffer_begin_info = vku::InitStructHelper();
-        result = DispatchBeginCommandBuffer(barrier_command_buffer_, &command_buffer_begin_info, false);
+        VkCommandBufferBeginInfo barrier_cmd_buffer_begin_info = vku::InitStructHelper();
+        barrier_cmd_buffer_begin_info.flags |= VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+        result = DispatchBeginCommandBuffer(barrier_command_buffer_, &barrier_cmd_buffer_begin_info, false);
         if (result == VK_SUCCESS) {
             VkMemoryBarrier memory_barrier = vku::InitStructHelper();
             memory_barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;

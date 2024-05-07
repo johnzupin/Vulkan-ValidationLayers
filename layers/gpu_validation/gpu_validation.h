@@ -111,7 +111,6 @@ class Validator : public gpu_tracker::Validator {
     bool CheckForCachedInstrumentedShader(const uint32_t shader_hash, chassis::CreateShaderModule& chassis_state);
     bool CheckForCachedInstrumentedShader(const uint32_t index, const uint32_t shader_hash, chassis::ShaderObject& chassis_state);
     void UpdateInstrumentationBuffer(CommandBuffer* cb_node);
-    void UpdateBDABuffer(const Location& loc);
 
     void UpdateBoundPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline,
                              const Location& loc);
@@ -124,6 +123,9 @@ class Validator : public gpu_tracker::Validator {
     // Should only be used by action commands.
     // Allocate per action (draw, dispatch, trace rays) command validation resources,
     // and bind descriptor sets needed for shader instrumentation.
+    [[nodiscard]] gpuav::CommandResources AllocateActionCommandResources(
+        const LockedSharedPtr<gpuav::CommandBuffer, WriteLockGuard>& cmd_buffer, VkPipelineBindPoint bind_point,
+        const Location& loc, const CmdIndirectState* indirect_state = nullptr);
     [[nodiscard]] gpuav::CommandResources AllocateActionCommandResources(VkCommandBuffer cmd_buffer, VkPipelineBindPoint bind_point,
                                                                          const Location& loc,
                                                                          const CmdIndirectState* indirect_state = nullptr);
@@ -486,11 +488,8 @@ class Validator : public gpu_tracker::Validator {
     VkBool32 shaderInt64 = false;
     std::string instrumented_shader_cache_path{};
     AccelerationStructureBuildValidationState acceleration_structure_validation_state{};
-    DeviceMemoryBlock app_buffer_device_addresses{};
-    size_t app_bda_buffer_byte_size{};
-    uint32_t gpuav_bda_buffer_version = 0;
 
-    bool buffer_device_address_enabled = false;
+    bool bda_validation_possible = false;
 
     std::optional<DescriptorHeap> desc_heap{};  // optional only to defer construction
 };

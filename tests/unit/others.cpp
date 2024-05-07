@@ -401,12 +401,6 @@ TEST_F(VkLayerTest, RequiredParameter) {
     vk::CmdSetViewport(m_commandBuffer->handle(), 0, 0, &viewport);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredError("VUID-vkCreateImage-pCreateInfo-parameter");
-    // Specify a null pImageCreateInfo struct pointer
-    VkImage test_image;
-    vk::CreateImage(device(), NULL, NULL, &test_image);
-    m_errorMonitor->VerifyFound();
-
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetViewport-pViewports-parameter");
     // Specify NULL for a required array
     // Expected to trigger an error with StatelessValidation::ValidateArray
@@ -468,11 +462,6 @@ TEST_F(VkLayerTest, RequiredParameter) {
     submitInfo.pWaitSemaphores = &semaphore;
     submitInfo.pWaitDstStageMask = nullptr;
     vk::QueueSubmit(m_default_queue->handle(), 1, &submitInfo, VK_NULL_HANDLE);
-    m_errorMonitor->VerifyFound();
-
-    m_errorMonitor->SetDesiredError("VUID-vkCreateRenderPass-pCreateInfo-parameter");
-    VkRenderPass render_pass;
-    vk::CreateRenderPass(device(), nullptr, nullptr, &render_pass);
     m_errorMonitor->VerifyFound();
 }
 
@@ -1123,7 +1112,7 @@ TEST_F(VkLayerTest, ExecuteUnrecordedCB) {
     // never record m_commandBuffer
 
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
-    m_default_queue->submit(*m_commandBuffer, false);
+    m_default_queue->Submit(*m_commandBuffer);
     m_errorMonitor->VerifyFound();
 
     // Testing an "unfinished secondary CB" crashes on some HW/drivers (notably Pixel 3 and RADV)
@@ -1712,7 +1701,7 @@ TEST_F(VkLayerTest, RayTracingStageFlagWithoutFeature) {
 
     m_commandBuffer->end();
 
-    m_default_queue->wait();
+    m_default_queue->Wait();
 }
 
 TEST_F(VkLayerTest, ExtensionXmlDependsLogic) {
@@ -2050,6 +2039,120 @@ TEST_F(VkLayerTest, Features11WithoutVulkan12) {
     }
 }
 
+TEST_F(VkLayerTest, MissingCreateInfo) {
+    RETURN_IF_SKIP(Init());
+
+    VkBuffer buffer;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateBuffer-pCreateInfo-parameter");
+    vk::CreateBuffer(device(), nullptr, nullptr, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    VkImage image;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateImage-pCreateInfo-parameter");
+    vk::CreateImage(device(), nullptr, nullptr, &image);
+    m_errorMonitor->VerifyFound();
+
+    VkBufferView buffer_view;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateBufferView-pCreateInfo-parameter");
+    vk::CreateBufferView(device(), nullptr, nullptr, &buffer_view);
+    m_errorMonitor->VerifyFound();
+
+    VkImageView image_view;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateImageView-pCreateInfo-parameter");
+    vk::CreateImageView(device(), nullptr, nullptr, &image_view);
+    m_errorMonitor->VerifyFound();
+
+    VkRenderPass render_pass;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateRenderPass-pCreateInfo-parameter");
+    vk::CreateRenderPass(device(), nullptr, nullptr, &render_pass);
+    m_errorMonitor->VerifyFound();
+
+    VkFramebuffer framebuffer;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateFramebuffer-pCreateInfo-parameter");
+    vk::CreateFramebuffer(device(), nullptr, nullptr, &framebuffer);
+    m_errorMonitor->VerifyFound();
+
+    VkQueryPool query_pool;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateQueryPool-pCreateInfo-parameter");
+    vk::CreateQueryPool(device(), nullptr, nullptr, &query_pool);
+    m_errorMonitor->VerifyFound();
+
+    VkPipelineLayout pipeline_layout;
+    m_errorMonitor->SetDesiredError("VUID-vkCreatePipelineLayout-pCreateInfo-parameter");
+    vk::CreatePipelineLayout(device(), nullptr, nullptr, &pipeline_layout);
+    m_errorMonitor->VerifyFound();
+
+    VkPipelineCache pipeline_cache;
+    m_errorMonitor->SetDesiredError("VUID-vkCreatePipelineCache-pCreateInfo-parameter");
+    vk::CreatePipelineCache(device(), nullptr, nullptr, &pipeline_cache);
+    m_errorMonitor->VerifyFound();
+
+    VkShaderModule shader_module;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateShaderModule-pCreateInfo-parameter");
+    vk::CreateShaderModule(device(), nullptr, nullptr, &shader_module);
+    m_errorMonitor->VerifyFound();
+
+    VkFence fence;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateFence-pCreateInfo-parameter");
+    vk::CreateFence(device(), nullptr, nullptr, &fence);
+    m_errorMonitor->VerifyFound();
+
+    VkSemaphore semaphore;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateSemaphore-pCreateInfo-parameter");
+    vk::CreateSemaphore(device(), nullptr, nullptr, &semaphore);
+    m_errorMonitor->VerifyFound();
+
+    VkEvent event;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateEvent-pCreateInfo-parameter");
+    vk::CreateEvent(device(), nullptr, nullptr, &event);
+    m_errorMonitor->VerifyFound();
+
+    VkSampler sampler;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateSampler-pCreateInfo-parameter");
+    vk::CreateSampler(device(), nullptr, nullptr, &sampler);
+    m_errorMonitor->VerifyFound();
+
+    VkCommandPool command_pool;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateCommandPool-pCreateInfo-parameter");
+    vk::CreateCommandPool(device(), nullptr, nullptr, &command_pool);
+    m_errorMonitor->VerifyFound();
+
+    VkDescriptorSetLayout set_layout;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateDescriptorSetLayout-pCreateInfo-parameter");
+    vk::CreateDescriptorSetLayout(device(), nullptr, nullptr, &set_layout);
+    m_errorMonitor->VerifyFound();
+
+    VkDescriptorPool descriptor_pool;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateDescriptorPool-pCreateInfo-parameter");
+    vk::CreateDescriptorPool(device(), nullptr, nullptr, &descriptor_pool);
+    m_errorMonitor->VerifyFound();
+
+    VkCommandBuffer command_buffer;
+    m_errorMonitor->SetDesiredError("VUID-vkAllocateCommandBuffers-pAllocateInfo-parameter");
+    vk::AllocateCommandBuffers(device(), nullptr, &command_buffer);
+    m_errorMonitor->VerifyFound();
+
+    // TODO - vvl::AllocateDescriptorSetsData currently doesn't null check pAllocateInfo
+    // VkDescriptorSet descriptor_set;
+    // m_errorMonitor->SetDesiredError("VUID-vkAllocateDescriptorSets-pAllocateInfo-parameter");
+    // vk::AllocateDescriptorSets(device(), nullptr, &descriptor_set);
+    // m_errorMonitor->VerifyFound();
+
+    VkDeviceMemory device_memory;
+    m_errorMonitor->SetDesiredError("VUID-vkAllocateMemory-pAllocateInfo-parameter");
+    vk::AllocateMemory(device(), nullptr, nullptr, &device_memory);
+    m_errorMonitor->VerifyFound();
+
+    VkPipeline pipeline;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateGraphicsPipelines-pCreateInfos-parameter");
+    vk::CreateGraphicsPipelines(device(), VK_NULL_HANDLE, 1, nullptr, nullptr, &pipeline);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredError("VUID-vkCreateComputePipelines-pCreateInfos-parameter");
+    vk::CreateComputePipelines(device(), VK_NULL_HANDLE, 1, nullptr, nullptr, &pipeline);
+    m_errorMonitor->VerifyFound();
+}
+
 // Android loader returns an error in this case, so never makes it to the VVL
 #if !defined(VK_USE_PLATFORM_ANDROID_KHR)
 TEST_F(VkLayerTest, GetDeviceProcAddrInstance) {
@@ -2060,3 +2163,41 @@ TEST_F(VkLayerTest, GetDeviceProcAddrInstance) {
     m_errorMonitor->VerifyFound();
 }
 #endif
+
+// TODO - Can reproduce locally when setting VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME
+// but need to unset variable and make sure works on Android before having CI run this
+TEST_F(VkLayerTest, DISABLED_DisplayApplicationName) {
+    TEST_DESCRIPTION("Test message_format_display_application_name");
+    const char *name_0 = "first instance";
+    app_info_.pApplicationName = name_0;
+    RETURN_IF_SKIP(Init());
+
+    const char *name_1 = "second instance";
+    app_info_.pApplicationName = name_1;
+    const auto instance_create_info = GetInstanceCreateInfo();
+    VkInstance instance2;
+    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2));
+
+    uint32_t gpu_count = 0;
+    vk::EnumeratePhysicalDevices(instance2, &gpu_count, nullptr);
+    std::vector<VkPhysicalDevice> physical_devices(gpu_count);
+    vk::EnumeratePhysicalDevices(instance2, &gpu_count, physical_devices.data());
+    VkPhysicalDevice instance2_physical_device = physical_devices[0];
+    // scope so device is destroyed before instance
+    {
+        vkt::Device device2(instance2_physical_device, m_device_extension_names);
+
+        // VUID-vkCreateImage-pCreateInfo-parameter
+        VkImage image;
+
+        m_errorMonitor->SetDesiredError("AppName: first instance");
+        vk::CreateImage(device(), nullptr, nullptr, &image);
+        m_errorMonitor->VerifyFound();
+
+        // TODO - The second instance is not hooked up to the callback so will crash in corecheck or the driver
+        m_errorMonitor->SetDesiredError("AppName: second instance");
+        vk::CreateImage(device2.handle(), nullptr, nullptr, &image);
+        m_errorMonitor->VerifyFound();
+    }
+    ASSERT_NO_FATAL_FAILURE(vk::DestroyInstance(instance2, nullptr));
+}
