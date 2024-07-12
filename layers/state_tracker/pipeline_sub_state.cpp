@@ -56,7 +56,8 @@ VertexInputState::VertexInputState(const vvl::Pipeline &p, const vku::safe_VkGra
 }
 
 PreRasterState::PreRasterState(const vvl::Pipeline &p, const ValidationStateTracker &state_data,
-                               const vku::safe_VkGraphicsPipelineCreateInfo &create_info, std::shared_ptr<const vvl::RenderPass> rp)
+                               const vku::safe_VkGraphicsPipelineCreateInfo &create_info, std::shared_ptr<const vvl::RenderPass> rp,
+                               spirv::StatelessData stateless_data[kCommonMaxGraphicsShaderStages])
     : PipelineSubState(p),
       pipeline_layout(state_data.Get<vvl::PipelineLayout>(create_info.layout)),
       viewport_state(create_info.pViewportState),
@@ -78,12 +79,17 @@ PreRasterState::PreRasterState(const vvl::Pipeline &p, const ValidationStateTrac
         auto module_state = state_data.Get<vvl::ShaderModule>(stage_ci.module);
         if (!module_state) {
             // If module is null and there is a VkShaderModuleCreateInfo in the pNext chain of the stage info, then this
-            // module is part of a library and the state must be created
-            const auto shader_ci = vku::FindStructInPNextChain<VkShaderModuleCreateInfo>(stage_ci.pNext);
-            if (shader_ci) {
+            // module is part of a library and the state must be created.
+            // This support was also added in VK_KHR_maintenance5
+            if (const auto shader_ci = vku::FindStructInPNextChain<VkShaderModuleCreateInfo>(stage_ci.pNext)) {
                 // don't need to worry about GroupDecoration in GPL
-                auto spirv_module = std::make_shared<spirv::Module>(shader_ci->codeSize, shader_ci->pCode);
+                spirv::StatelessData *stateless_data_stage =
+                    (stateless_data && i < kCommonMaxGraphicsShaderStages) ? &stateless_data[i] : nullptr;
+                auto spirv_module = std::make_shared<spirv::Module>(shader_ci->codeSize, shader_ci->pCode, stateless_data_stage);
                 module_state = std::make_shared<vvl::ShaderModule>(VK_NULL_HANDLE, spirv_module, 0);
+                if (stateless_data_stage) {
+                    stateless_data_stage->pipeline_pnext_module = spirv_module;
+                }
             }
         }
 
@@ -181,18 +187,25 @@ std::unique_ptr<const vku::safe_VkPipelineShaderStageCreateInfo> ToShaderStageCI
 
 template <typename CreateInfo>
 void SetFragmentShaderInfoPrivate(FragmentShaderState &fs_state, const ValidationStateTracker &state_data,
-                                  const CreateInfo &create_info) {
+                                  const CreateInfo &create_info,
+                                  spirv::StatelessData stateless_data[kCommonMaxGraphicsShaderStages]) {
     for (uint32_t i = 0; i < create_info.stageCount; ++i) {
         if (create_info.pStages[i].stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
             auto module_state = state_data.Get<vvl::ShaderModule>(create_info.pStages[i].module);
             if (!module_state) {
                 // If module is null and there is a VkShaderModuleCreateInfo in the pNext chain of the stage info, then this
                 // module is part of a library and the state must be created
-                const auto shader_ci = vku::FindStructInPNextChain<VkShaderModuleCreateInfo>(create_info.pStages[i].pNext);
-                if (shader_ci) {
+                // This support was also added in VK_KHR_maintenance5
+                if (const auto shader_ci = vku::FindStructInPNextChain<VkShaderModuleCreateInfo>(create_info.pStages[i].pNext)) {
                     // don't need to worry about GroupDecoration in GPL
-                    auto spirv_module = std::make_shared<spirv::Module>(shader_ci->codeSize, shader_ci->pCode);
+                    spirv::StatelessData *stateless_data_stage =
+                        (stateless_data && i < kCommonMaxGraphicsShaderStages) ? &stateless_data[i] : nullptr;
+                    auto spirv_module =
+                        std::make_shared<spirv::Module>(shader_ci->codeSize, shader_ci->pCode, stateless_data_stage);
                     module_state = std::make_shared<vvl::ShaderModule>(VK_NULL_HANDLE, spirv_module, 0);
+                    if (stateless_data_stage) {
+                        stateless_data_stage->pipeline_pnext_module = spirv_module;
+                    }
                 }
             }
 
@@ -220,14 +233,16 @@ void SetFragmentShaderInfoPrivate(FragmentShaderState &fs_state, const Validatio
 
 // static
 void FragmentShaderState::SetFragmentShaderInfo(FragmentShaderState &fs_state, const ValidationStateTracker &state_data,
-                                                const VkGraphicsPipelineCreateInfo &create_info) {
-    SetFragmentShaderInfoPrivate(fs_state, state_data, create_info);
+                                                const VkGraphicsPipelineCreateInfo &create_info,
+                                                spirv::StatelessData stateless_data[kCommonMaxGraphicsShaderStages]) {
+    SetFragmentShaderInfoPrivate(fs_state, state_data, create_info, stateless_data);
 }
 
 // static
 void FragmentShaderState::SetFragmentShaderInfo(FragmentShaderState &fs_state, const ValidationStateTracker &state_data,
-                                                const vku::safe_VkGraphicsPipelineCreateInfo &create_info) {
-    SetFragmentShaderInfoPrivate(fs_state, state_data, create_info);
+                                                const vku::safe_VkGraphicsPipelineCreateInfo &create_info,
+                                                spirv::StatelessData stateless_data[kCommonMaxGraphicsShaderStages]) {
+    SetFragmentShaderInfoPrivate(fs_state, state_data, create_info, stateless_data);
 }
 
 FragmentShaderState::FragmentShaderState(const vvl::Pipeline &p, const ValidationStateTracker &dev_data,
@@ -256,23 +271,4 @@ bool FragmentOutputState::IsBlendConstantsEnabled(const AttachmentStateVector &a
         }
     }
     return result;
-}
-
-// static
-bool FragmentOutputState::GetDualSourceBlending(const vku::safe_VkPipelineColorBlendStateCreateInfo *color_blend_state) {
-    if (!color_blend_state) {
-        return false;
-    }
-    for (uint32_t i = 0; i < color_blend_state->attachmentCount; ++i) {
-        const auto &attachment = color_blend_state->pAttachments[i];
-        if (attachment.blendEnable) {
-            if (IsSecondaryColorInputBlendFactor(attachment.srcColorBlendFactor) ||
-                IsSecondaryColorInputBlendFactor(attachment.dstColorBlendFactor) ||
-                IsSecondaryColorInputBlendFactor(attachment.srcAlphaBlendFactor) ||
-                IsSecondaryColorInputBlendFactor(attachment.dstAlphaBlendFactor)) {
-                return true;
-            }
-        }
-    }
-    return false;
 }

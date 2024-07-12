@@ -665,11 +665,14 @@ bool CoreChecks::ValidateBufferImageCopyData(const vvl::CommandBuffer &cb_state,
         }
 
         if (SafeModulo(bufferOffset, 4) != 0) {
-            std::stringstream ss;
-            ss << "(" << bufferOffset << ") is not a multiple of 4, but is ";
-            const char *vuid = GetCopyBufferImageDeviceVUID(region_loc, vvl::CopyError::BufferOffset_07737).c_str();
-            skip |= ValidateCmdQueueFlags(cb_state, region_loc.dot(Field::bufferOffset),
-                                          VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, vuid, ss.str().c_str());
+            const VkQueueFlags required_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+            if (!HasRequiredQueueFlags(cb_state, *physical_device_state, required_flags)) {
+                const char *vuid = GetCopyBufferImageDeviceVUID(region_loc, vvl::CopyError::BufferOffset_07737).c_str();
+                const LogObjectList objlist(cb_state.Handle(), cb_state.command_pool->Handle());
+                skip |=
+                    LogError(vuid, objlist, region_loc.dot(Field::bufferOffset), "(%" PRIu64 ") is not a multiple of 4, but is %s",
+                             bufferOffset, DescribeRequiredQueueFlag(cb_state, *physical_device_state, required_flags).c_str());
+            }
         }
     }
 
@@ -1385,9 +1388,8 @@ bool CoreChecks::ValidateCmdCopyImage(VkCommandBuffer commandBuffer, VkImage src
     auto cb_state_ptr = GetRead<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(srcImage);
     auto dst_image_state = Get<vvl::Image>(dstImage);
-    if (!cb_state_ptr || !src_image_state || !dst_image_state) {
-        return skip;
-    }
+    ASSERT_AND_RETURN_SKIP(src_image_state && dst_image_state);
+
     const vvl::CommandBuffer &cb_state = *cb_state_ptr;
     const VkFormat src_format = src_image_state->create_info.format;
     const VkFormat dst_format = dst_image_state->create_info.format;
@@ -1780,30 +1782,30 @@ void CoreChecks::PreCallRecordCmdCopyImage(VkCommandBuffer commandBuffer, VkImag
                                            const VkImageCopy *pRegions, const RecordObject &record_obj) {
     StateTracker::PreCallRecordCmdCopyImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount,
                                             pRegions, record_obj);
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(srcImage);
     auto dst_image_state = Get<vvl::Image>(dstImage);
-    if (cb_state_ptr && src_image_state && dst_image_state) {
-        // Make sure that all image slices are updated to correct layout
-        for (uint32_t i = 0; i < regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*src_image_state, pRegions[i].srcSubresource, srcImageLayout);
-            cb_state_ptr->SetImageInitialLayout(*dst_image_state, pRegions[i].dstSubresource, dstImageLayout);
-        }
+    ASSERT_AND_RETURN(src_image_state && dst_image_state);
+
+    // Make sure that all image slices are updated to correct layout
+    for (uint32_t i = 0; i < regionCount; ++i) {
+        cb_state->SetImageInitialLayout(*src_image_state, pRegions[i].srcSubresource, srcImageLayout);
+        cb_state->SetImageInitialLayout(*dst_image_state, pRegions[i].dstSubresource, dstImageLayout);
     }
 }
 
 void CoreChecks::RecordCmdCopyImage2(VkCommandBuffer commandBuffer, const VkCopyImageInfo2 *pCopyImageInfo) {
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(pCopyImageInfo->srcImage);
     auto dst_image_state = Get<vvl::Image>(pCopyImageInfo->dstImage);
-    if (cb_state_ptr && src_image_state && dst_image_state) {
-        // Make sure that all image slices are updated to correct layout
-        for (uint32_t i = 0; i < pCopyImageInfo->regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*src_image_state, pCopyImageInfo->pRegions[i].srcSubresource,
-                                                pCopyImageInfo->srcImageLayout);
-            cb_state_ptr->SetImageInitialLayout(*dst_image_state, pCopyImageInfo->pRegions[i].dstSubresource,
-                                                pCopyImageInfo->dstImageLayout);
-        }
+    ASSERT_AND_RETURN(src_image_state && dst_image_state);
+
+    // Make sure that all image slices are updated to correct layout
+    for (uint32_t i = 0; i < pCopyImageInfo->regionCount; ++i) {
+        cb_state->SetImageInitialLayout(*src_image_state, pCopyImageInfo->pRegions[i].srcSubresource,
+                                        pCopyImageInfo->srcImageLayout);
+        cb_state->SetImageInitialLayout(*dst_image_state, pCopyImageInfo->pRegions[i].dstSubresource,
+                                        pCopyImageInfo->dstImageLayout);
     }
 }
 
@@ -1826,8 +1828,10 @@ void CoreChecks::RecordCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer src
 
     auto src_buffer_state = Get<vvl::Buffer>(srcBuffer);
     auto dst_buffer_state = Get<vvl::Buffer>(dstBuffer);
+    ASSERT_AND_RETURN(src_buffer_state && dst_buffer_state);
+
     if (src_buffer_state->sparse || dst_buffer_state->sparse) {
-        auto cb_state_ptr = Get<vvl::CommandBuffer>(commandBuffer);
+        auto cb_state = Get<vvl::CommandBuffer>(commandBuffer);
 
         std::vector<sparse_container::range<VkDeviceSize>> src_ranges;
         std::vector<sparse_container::range<VkDeviceSize>> dst_ranges;
@@ -1864,7 +1868,7 @@ void CoreChecks::RecordCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer src
             return skip;
         };
 
-        cb_state_ptr->queue_submit_functions.emplace_back(queue_submit_validation);
+        cb_state->queue_submit_functions.emplace_back(queue_submit_validation);
     }
 }
 
@@ -2056,9 +2060,8 @@ bool CoreChecks::ValidateCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkI
     auto cb_state_ptr = GetRead<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(srcImage);
     auto dst_buffer_state = Get<vvl::Buffer>(dstBuffer);
-    if (!cb_state_ptr || !src_image_state || !dst_buffer_state) {
-        return skip;
-    }
+    ASSERT_AND_RETURN_SKIP(src_image_state && dst_buffer_state);
+
     const vvl::CommandBuffer &cb_state = *cb_state_ptr;
 
     const bool is_2 = loc.function == Func::vkCmdCopyImageToBuffer2 || loc.function == Func::vkCmdCopyImageToBuffer2KHR;
@@ -2178,13 +2181,13 @@ void CoreChecks::PreCallRecordCmdCopyImageToBuffer(VkCommandBuffer commandBuffer
     StateTracker::PreCallRecordCmdCopyImageToBuffer(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions,
                                                     record_obj);
 
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(srcImage);
-    if (cb_state_ptr && src_image_state) {
-        // Make sure that all image slices record referenced layout
-        for (uint32_t i = 0; i < regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*src_image_state, pRegions[i].imageSubresource, srcImageLayout);
-        }
+    ASSERT_AND_RETURN(src_image_state);
+
+    // Make sure that all image slices record referenced layout
+    for (uint32_t i = 0; i < regionCount; ++i) {
+        cb_state->SetImageInitialLayout(*src_image_state, pRegions[i].imageSubresource, srcImageLayout);
     }
 }
 
@@ -2199,14 +2202,14 @@ void CoreChecks::PreCallRecordCmdCopyImageToBuffer2(VkCommandBuffer commandBuffe
                                                     const RecordObject &record_obj) {
     StateTracker::PreCallRecordCmdCopyImageToBuffer2(commandBuffer, pCopyImageToBufferInfo, record_obj);
 
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(pCopyImageToBufferInfo->srcImage);
-    if (cb_state_ptr && src_image_state) {
-        // Make sure that all image slices record referenced layout
-        for (uint32_t i = 0; i < pCopyImageToBufferInfo->regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*src_image_state, pCopyImageToBufferInfo->pRegions[i].imageSubresource,
-                                                pCopyImageToBufferInfo->srcImageLayout);
-        }
+    ASSERT_AND_RETURN(src_image_state);
+
+    // Make sure that all image slices record referenced layout
+    for (uint32_t i = 0; i < pCopyImageToBufferInfo->regionCount; ++i) {
+        cb_state->SetImageInitialLayout(*src_image_state, pCopyImageToBufferInfo->pRegions[i].imageSubresource,
+                                        pCopyImageToBufferInfo->srcImageLayout);
     }
 }
 
@@ -2218,9 +2221,8 @@ bool CoreChecks::ValidateCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkB
     auto cb_state_ptr = GetRead<vvl::CommandBuffer>(commandBuffer);
     auto src_buffer_state = Get<vvl::Buffer>(srcBuffer);
     auto dst_image_state = Get<vvl::Image>(dstImage);
-    if (!cb_state_ptr || !src_buffer_state || !dst_image_state) {
-        return skip;
-    }
+    ASSERT_AND_RETURN_SKIP(src_buffer_state && dst_image_state);
+
     const vvl::CommandBuffer &cb_state = *cb_state_ptr;
 
     const bool is_2 = loc.function == Func::vkCmdCopyBufferToImage2 || loc.function == Func::vkCmdCopyBufferToImage2KHR;
@@ -2291,11 +2293,14 @@ bool CoreChecks::ValidateCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkB
 
         const VkImageAspectFlags region_aspect_mask = region.imageSubresource.aspectMask;
         if ((region_aspect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) != 0) {
-            std::stringstream ss;
-            ss << "is " << string_VkImageAspectFlags(region_aspect_mask) << ", but is ";
-            vuid = is_2 ? "VUID-vkCmdCopyBufferToImage2-commandBuffer-07739" : "VUID-vkCmdCopyBufferToImage-commandBuffer-07739";
-            skip |= ValidateCmdQueueFlags(cb_state, subresource_loc.dot(Field::aspectMask), VK_QUEUE_GRAPHICS_BIT, vuid,
-                                          ss.str().c_str());
+            if (!HasRequiredQueueFlags(cb_state, *physical_device_state, VK_QUEUE_GRAPHICS_BIT)) {
+                vuid =
+                    is_2 ? "VUID-vkCmdCopyBufferToImage2-commandBuffer-07739" : "VUID-vkCmdCopyBufferToImage-commandBuffer-07739";
+                const LogObjectList objlist(cb_state.Handle(), cb_state.command_pool->Handle());
+                skip |= LogError(vuid, objlist, subresource_loc.dot(Field::aspectMask), "is %s, but is %s",
+                                 string_VkImageAspectFlags(region_aspect_mask).c_str(),
+                                 DescribeRequiredQueueFlag(cb_state, *physical_device_state, VK_QUEUE_GRAPHICS_BIT).c_str());
+            }
         }
     }
 
@@ -2335,13 +2340,13 @@ void CoreChecks::PreCallRecordCmdCopyBufferToImage(VkCommandBuffer commandBuffer
     StateTracker::PreCallRecordCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions,
                                                     record_obj);
 
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto dst_image_state = Get<vvl::Image>(dstImage);
-    if (cb_state_ptr && dst_image_state) {
-        // Make sure that all image slices are record referenced layout
-        for (uint32_t i = 0; i < regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*dst_image_state, pRegions[i].imageSubresource, dstImageLayout);
-        }
+    ASSERT_AND_RETURN(dst_image_state);
+
+    // Make sure that all image slices are record referenced layout
+    for (uint32_t i = 0; i < regionCount; ++i) {
+        cb_state->SetImageInitialLayout(*dst_image_state, pRegions[i].imageSubresource, dstImageLayout);
     }
 }
 
@@ -2356,14 +2361,14 @@ void CoreChecks::PreCallRecordCmdCopyBufferToImage2(VkCommandBuffer commandBuffe
                                                     const RecordObject &record_obj) {
     StateTracker::PreCallRecordCmdCopyBufferToImage2(commandBuffer, pCopyBufferToImageInfo, record_obj);
 
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto dst_image_state = Get<vvl::Image>(pCopyBufferToImageInfo->dstImage);
-    if (cb_state_ptr && dst_image_state) {
-        // Make sure that all image slices are record referenced layout
-        for (uint32_t i = 0; i < pCopyBufferToImageInfo->regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*dst_image_state, pCopyBufferToImageInfo->pRegions[i].imageSubresource,
-                                                pCopyBufferToImageInfo->dstImageLayout);
-        }
+    ASSERT_AND_RETURN(dst_image_state);
+
+    // Make sure that all image slices are record referenced layout
+    for (uint32_t i = 0; i < pCopyBufferToImageInfo->regionCount; ++i) {
+        cb_state->SetImageInitialLayout(*dst_image_state, pCopyBufferToImageInfo->pRegions[i].imageSubresource,
+                                        pCopyBufferToImageInfo->dstImageLayout);
     }
 }
 
@@ -2434,6 +2439,7 @@ bool CoreChecks::ValidateMemoryImageCopyCommon(InfoPointer info_ptr, const Locat
     bool skip = false;
     VkImage image = GetImage(*info_ptr);
     auto image_state = Get<vvl::Image>(image);
+    ASSERT_AND_RETURN_SKIP(image_state);
     auto image_layout = GetImageLayout(*info_ptr);
     auto regionCount = info_ptr->regionCount;
     const bool from_image = loc.function == Func::vkCopyImageToMemoryEXT;
@@ -2657,7 +2663,6 @@ bool CoreChecks::PreCallValidateCopyMemoryToImageEXT(VkDevice device, const VkCo
     bool skip = false;
     const Location copy_loc = error_obj.location.dot(Field::pCopyMemoryToImageInfo);
     auto dst_image = pCopyMemoryToImageInfo->dstImage;
-    auto image_state = Get<vvl::Image>(dst_image);
 
     skip |= ValidateMemoryImageCopyCommon(pCopyMemoryToImageInfo, copy_loc);
     auto *props = &phys_dev_ext_props.host_image_copy_props;
@@ -2672,7 +2677,6 @@ bool CoreChecks::PreCallValidateCopyImageToMemoryEXT(VkDevice device, const VkCo
     bool skip = false;
     const Location copy_loc = error_obj.location.dot(Field::pCopyImageToMemoryInfo);
     auto src_image = pCopyImageToMemoryInfo->srcImage;
-    auto image_state = Get<vvl::Image>(src_image);
 
     skip |= ValidateMemoryImageCopyCommon(pCopyImageToMemoryInfo, copy_loc);
     auto *props = &phys_dev_ext_props.host_image_copy_props;
@@ -2737,6 +2741,8 @@ bool CoreChecks::PreCallValidateCopyImageToImageEXT(VkDevice device, const VkCop
     const Location loc = error_obj.location.dot(Field::pCopyImageToImageInfo);
     auto src_image_state = Get<vvl::Image>(info_ptr->srcImage);
     auto dst_image_state = Get<vvl::Image>(info_ptr->dstImage);
+    ASSERT_AND_RETURN_SKIP(src_image_state && dst_image_state);
+
     // Formats are required to match, but check each image anyway
     auto src_plane_count = vkuFormatPlaneCount(src_image_state->create_info.format);
     auto dst_plane_count = vkuFormatPlaneCount(dst_image_state->create_info.format);
@@ -2820,9 +2826,7 @@ bool CoreChecks::ValidateCmdBlitImage(VkCommandBuffer commandBuffer, VkImage src
     auto cb_state_ptr = GetRead<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(srcImage);
     auto dst_image_state = Get<vvl::Image>(dstImage);
-    if (!cb_state_ptr || !src_image_state || !src_image_state) {
-        return skip;
-    }
+    ASSERT_AND_RETURN_SKIP(src_image_state && dst_image_state);
 
     const bool is_2 = loc.function == Func::vkCmdBlitImage2 || loc.function == Func::vkCmdBlitImage2KHR;
     const Location src_image_loc = loc.dot(Field::srcImage);
@@ -3200,15 +3204,15 @@ template <typename RegionType>
 void CoreChecks::RecordCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage,
                                     VkImageLayout dstImageLayout, uint32_t regionCount, const RegionType *pRegions,
                                     VkFilter filter) {
-    auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(srcImage);
     auto dst_image_state = Get<vvl::Image>(dstImage);
-    if (cb_state_ptr && src_image_state && dst_image_state) {
-        // Make sure that all image slices are updated to correct layout
-        for (uint32_t i = 0; i < regionCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(*src_image_state, pRegions[i].srcSubresource, srcImageLayout);
-            cb_state_ptr->SetImageInitialLayout(*dst_image_state, pRegions[i].dstSubresource, dstImageLayout);
-        }
+    ASSERT_AND_RETURN(src_image_state && dst_image_state);
+
+    // Make sure that all image slices are updated to correct layout
+    for (uint32_t i = 0; i < regionCount; ++i) {
+        cb_state->SetImageInitialLayout(*src_image_state, pRegions[i].srcSubresource, srcImageLayout);
+        cb_state->SetImageInitialLayout(*dst_image_state, pRegions[i].dstSubresource, dstImageLayout);
     }
 }
 
@@ -3241,9 +3245,7 @@ bool CoreChecks::ValidateCmdResolveImage(VkCommandBuffer commandBuffer, VkImage 
     auto cb_state_ptr = GetRead<vvl::CommandBuffer>(commandBuffer);
     auto src_image_state = Get<vvl::Image>(srcImage);
     auto dst_image_state = Get<vvl::Image>(dstImage);
-    if (!cb_state_ptr || !src_image_state || !dst_image_state) {
-        return skip;
-    }
+    ASSERT_AND_RETURN_SKIP(src_image_state && dst_image_state);
 
     const bool is_2 = loc.function == Func::vkCmdResolveImage2 || loc.function == Func::vkCmdResolveImage2KHR;
     const char *vuid;

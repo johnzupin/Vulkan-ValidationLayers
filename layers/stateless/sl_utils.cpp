@@ -159,6 +159,31 @@ bool StatelessValidation::ValidateRequiredPointer(const Location &loc, const voi
     return skip;
 }
 
+bool StatelessValidation::ValidateAllocationCallbacks(const VkAllocationCallbacks &callback, const Location &loc) const {
+    bool skip = false;
+    skip |= ValidateRequiredPointer(loc.dot(Field::pfnAllocation), reinterpret_cast<const void *>(callback.pfnAllocation),
+                                    "VUID-VkAllocationCallbacks-pfnAllocation-00632");
+
+    skip |= ValidateRequiredPointer(loc.dot(Field::pfnReallocation), reinterpret_cast<const void *>(callback.pfnReallocation),
+                                    "VUID-VkAllocationCallbacks-pfnReallocation-00633");
+
+    skip |= ValidateRequiredPointer(loc.dot(Field::pfnFree), reinterpret_cast<const void *>(callback.pfnFree),
+                                    "VUID-VkAllocationCallbacks-pfnFree-00634");
+
+    if (callback.pfnInternalAllocation) {
+        skip |=
+            ValidateRequiredPointer(loc.dot(Field::pfnInternalAllocation), reinterpret_cast<const void *>(callback.pfnInternalFree),
+                                    "VUID-VkAllocationCallbacks-pfnInternalAllocation-00635");
+    }
+
+    if (callback.pfnInternalFree) {
+        skip |=
+            ValidateRequiredPointer(loc.dot(Field::pfnInternalFree), reinterpret_cast<const void *>(callback.pfnInternalAllocation),
+                                    "VUID-VkAllocationCallbacks-pfnInternalAllocation-00635");
+    }
+    return skip;
+}
+
 /**
  * Validate string array count and content.
  *
@@ -225,7 +250,7 @@ bool StatelessValidation::ValidateStructPnext(const Location &loc, const void *n
             "header, in which case the use of %s is undefined and may not work correctly with validation enabled";
 
         const Location pNext_loc = loc.dot(Field::pNext);
-        if ((allowed_type_count == 0) && (custom_stype_info.size() == 0)) {
+        if ((allowed_type_count == 0) && (custom_stype_info.empty())) {
             std::string message = "must be NULL. ";
             message += disclaimer;
             skip |= LogError(pnext_vuid, device, pNext_loc, message.c_str(), header_version, pNext_loc.Fields().c_str());

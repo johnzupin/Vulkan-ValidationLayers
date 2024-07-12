@@ -131,9 +131,9 @@ bool CoreChecks::PreCallValidateCreateBuffer(VkDevice device, const VkBufferCrea
                                              const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer,
                                              const ErrorObject &error_obj) const {
     bool skip = false;
+    skip |= ValidateDeviceQueueSupport(error_obj.location);
     const Location create_info_loc = error_obj.location.dot(Field::pCreateInfo);
-    auto chained_devaddr_struct = vku::FindStructInPNextChain<VkBufferDeviceAddressCreateInfoEXT>(pCreateInfo->pNext);
-    if (chained_devaddr_struct) {
+    if (auto chained_devaddr_struct = vku::FindStructInPNextChain<VkBufferDeviceAddressCreateInfoEXT>(pCreateInfo->pNext)) {
         if (!(pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) &&
             chained_devaddr_struct->deviceAddress != 0) {
             skip |= LogError("VUID-VkBufferCreateInfo-deviceAddress-02604", device,
@@ -143,8 +143,7 @@ bool CoreChecks::PreCallValidateCreateBuffer(VkDevice device, const VkBufferCrea
         }
     }
 
-    auto chained_opaqueaddr_struct = vku::FindStructInPNextChain<VkBufferOpaqueCaptureAddressCreateInfo>(pCreateInfo->pNext);
-    if (chained_opaqueaddr_struct) {
+    if (auto chained_opaqueaddr_struct = vku::FindStructInPNextChain<VkBufferOpaqueCaptureAddressCreateInfo>(pCreateInfo->pNext)) {
         if (!(pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) &&
             chained_opaqueaddr_struct->opaqueCaptureAddress != 0) {
             skip |= LogError("VUID-VkBufferCreateInfo-opaqueCaptureAddress-03337", device,
@@ -312,12 +311,12 @@ bool CoreChecks::PreCallValidateCreateBufferView(VkDevice device, const VkBuffer
                                                  const VkAllocationCallbacks *pAllocator, VkBufferView *pView,
                                                  const ErrorObject &error_obj) const {
     bool skip = false;
+    skip |= ValidateDeviceQueueSupport(error_obj.location);
     auto buffer_state_ptr = Get<vvl::Buffer>(pCreateInfo->buffer);
     const Location create_info_loc = error_obj.location.dot(Field::pCreateInfo);
     // If this isn't a sparse buffer, it needs to have memory backing it at CreateBufferView time
-    if (!buffer_state_ptr) {
-        return skip;
-    }
+    if (!buffer_state_ptr) return skip;
+
     const auto &buffer_state = *buffer_state_ptr;
     const LogObjectList objlist(device, pCreateInfo->buffer);
 
@@ -429,10 +428,8 @@ bool CoreChecks::PreCallValidateCreateBufferView(VkDevice device, const VkBuffer
 
 bool CoreChecks::PreCallValidateDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks *pAllocator,
                                               const ErrorObject &error_obj) const {
-    auto buffer_state = Get<vvl::Buffer>(buffer);
-
     bool skip = false;
-    if (buffer_state) {
+    if (auto buffer_state = Get<vvl::Buffer>(buffer)) {
         skip |= ValidateObjectNotInUse(buffer_state.get(), error_obj.location, "VUID-vkDestroyBuffer-buffer-00922");
     }
     return skip;
@@ -440,9 +437,8 @@ bool CoreChecks::PreCallValidateDestroyBuffer(VkDevice device, VkBuffer buffer, 
 
 bool CoreChecks::PreCallValidateDestroyBufferView(VkDevice device, VkBufferView bufferView, const VkAllocationCallbacks *pAllocator,
                                                   const ErrorObject &error_obj) const {
-    auto buffer_view_state = Get<vvl::BufferView>(bufferView);
     bool skip = false;
-    if (buffer_view_state) {
+    if (auto buffer_view_state = Get<vvl::BufferView>(bufferView)) {
         skip |= ValidateObjectNotInUse(buffer_view_state.get(), error_obj.location, "VUID-vkDestroyBufferView-bufferView-00936");
     }
     return skip;
@@ -453,9 +449,8 @@ bool CoreChecks::PreCallValidateCmdFillBuffer(VkCommandBuffer commandBuffer, VkB
     bool skip = false;
     auto cb_state_ptr = GetRead<vvl::CommandBuffer>(commandBuffer);
     auto buffer_state = Get<vvl::Buffer>(dstBuffer);
-    if (!cb_state_ptr || !buffer_state) {
-        return skip;
-    }
+    ASSERT_AND_RETURN_SKIP(cb_state_ptr && buffer_state);
+
     const LogObjectList objlist(commandBuffer, dstBuffer);
     const vvl::CommandBuffer &cb_state = *cb_state_ptr;
     const Location buffer_loc = error_obj.location.dot(Field::dstBuffer);
@@ -481,8 +476,12 @@ bool CoreChecks::PreCallValidateCmdFillBuffer(VkCommandBuffer commandBuffer, VkB
     }
 
     if (!IsExtEnabled(device_extensions.vk_khr_maintenance1)) {
-        skip |= ValidateCmdQueueFlags(cb_state, error_obj.location, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT,
-                                      "VUID-vkCmdFillBuffer-apiVersion-07894");
+        const VkQueueFlags required_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+        if (!HasRequiredQueueFlags(cb_state, *physical_device_state, required_flags)) {
+            const LogObjectList objlist_pool(cb_state.Handle(), cb_state.command_pool->Handle());
+            skip |= LogError("VUID-vkCmdFillBuffer-apiVersion-07894", objlist_pool, error_obj.location, "%s",
+                             DescribeRequiredQueueFlag(cb_state, *physical_device_state, required_flags).c_str());
+        }
     }
 
     return skip;

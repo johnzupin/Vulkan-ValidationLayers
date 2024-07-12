@@ -33,6 +33,8 @@ void RayTracingTest::InitFrameworkForRayTracingTest(VkValidationFeaturesEXT* ena
     RETURN_IF_SKIP(InitFramework(enabled_features));
 }
 
+class PositiveRayTracing : public RayTracingTest {};
+
 TEST_F(PositiveRayTracing, GetAccelerationStructureBuildSizes) {
     TEST_DESCRIPTION("Test enabled features for GetAccelerationStructureBuildSizes");
 
@@ -177,7 +179,6 @@ TEST_F(PositiveRayTracing, StridedDeviceAddressRegion) {
     buffer_ci.usage =
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR;
     buffer_ci.size = 4096;
-    buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     vkt::Buffer buffer(*m_device, buffer_ci, vkt::no_mem);
 
     VkMemoryRequirements mem_reqs;
@@ -253,7 +254,7 @@ TEST_F(PositiveRayTracing, BarrierAccessMaskAccelerationStructureRayQueryEnabled
     mem_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
     mem_barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
 
-    vkt::Buffer buffer(*m_device, 32);
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     VkBufferMemoryBarrier2 buffer_barrier = vku::InitStructHelper();
     buffer_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
@@ -318,7 +319,7 @@ TEST_F(PositiveRayTracing, BarrierAccessMaskAccelerationStructureRayQueryEnabled
     mem_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
     mem_barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
 
-    vkt::Buffer buffer(*m_device, 32);
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     VkBufferMemoryBarrier2 buffer_barrier = vku::InitStructHelper();
     buffer_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
@@ -469,7 +470,6 @@ TEST_F(PositiveRayTracing, AccelerationStructuresOverlappingMemory) {
     // The scratch buffer is used in multiple builds but bound at different offsets, so no validation error should be issued
     {
         VkBufferCreateInfo scratch_buffer_ci = vku::InitStructHelper();
-        scratch_buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         scratch_buffer_ci.size = alloc_info.allocationSize;
         scratch_buffer_ci.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -514,9 +514,9 @@ TEST_F(PositiveRayTracing, AccelerationStructuresReuseScratchMemory) {
     alloc_info.allocationSize = 1u << 18;
     vkt::DeviceMemory common_scratch_memory(*m_device, alloc_info);
 
-    vkt::CommandBuffer cmd_buffer_frame_0(*m_device, m_commandPool);
-    vkt::CommandBuffer cmd_buffer_frame_1(*m_device, m_commandPool);
-    vkt::CommandBuffer cmd_buffer_frame_2(*m_device, m_commandPool);
+    vkt::CommandBuffer cmd_buffer_frame_0(*m_device, m_command_pool);
+    vkt::CommandBuffer cmd_buffer_frame_1(*m_device, m_command_pool);
+    vkt::CommandBuffer cmd_buffer_frame_2(*m_device, m_command_pool);
 
     std::vector<vkt::as::BuildGeometryInfoKHR> blas_vec_frame_0;
     std::vector<vkt::as::BuildGeometryInfoKHR> blas_vec_frame_1;
@@ -536,7 +536,6 @@ TEST_F(PositiveRayTracing, AccelerationStructuresReuseScratchMemory) {
 
         // Create scratch buffer
         VkBufferCreateInfo scratch_buffer_ci = vku::InitStructHelper();
-        scratch_buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         scratch_buffer_ci.size = alloc_info.allocationSize;
         scratch_buffer_ci.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -570,7 +569,6 @@ TEST_F(PositiveRayTracing, AccelerationStructuresReuseScratchMemory) {
 
         // Create scratch buffer
         VkBufferCreateInfo scratch_buffer_ci = vku::InitStructHelper();
-        scratch_buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         scratch_buffer_ci.size = alloc_info.allocationSize;
         scratch_buffer_ci.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -619,7 +617,6 @@ TEST_F(PositiveRayTracing, AccelerationStructuresReuseScratchMemory) {
 
         // Create scratch buffer
         VkBufferCreateInfo scratch_buffer_ci = vku::InitStructHelper();
-        scratch_buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         scratch_buffer_ci.size = alloc_info.allocationSize;
         scratch_buffer_ci.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -664,9 +661,9 @@ TEST_F(PositiveRayTracing, AccelerationStructuresDedicatedScratchMemory) {
     RETURN_IF_SKIP(InitFrameworkForRayTracingTest());
     RETURN_IF_SKIP(InitState());
 
-    vkt::CommandBuffer cmd_buffer_frame_0(*m_device, m_commandPool);
-    vkt::CommandBuffer cmd_buffer_frame_1(*m_device, m_commandPool);
-    vkt::CommandBuffer cmd_buffer_frame_2(*m_device, m_commandPool);
+    vkt::CommandBuffer cmd_buffer_frame_0(*m_device, m_command_pool);
+    vkt::CommandBuffer cmd_buffer_frame_1(*m_device, m_command_pool);
+    vkt::CommandBuffer cmd_buffer_frame_2(*m_device, m_command_pool);
 
     std::vector<vkt::as::BuildGeometryInfoKHR> blas_vec_frame_0;
     std::vector<vkt::as::BuildGeometryInfoKHR> blas_vec_frame_1;
@@ -797,7 +794,6 @@ TEST_F(PositiveRayTracing, ScratchBufferCorrectAddressSpaceOpBuild) {
     vkt::DeviceMemory buffer_memory(*m_device, alloc_info);
 
     VkBufferCreateInfo small_buffer_ci = vku::InitStructHelper();
-    small_buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     small_buffer_ci.size = 64;
     small_buffer_ci.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
@@ -836,50 +832,50 @@ TEST_F(PositiveRayTracing, BasicTraceRays) {
     // Set shaders
 
     const char* ray_gen = R"glsl(
-    #version 460
-    #extension GL_EXT_ray_tracing : require // Requires SPIR-V 1.5 (Vulkan 1.2)
+        #version 460
+        #extension GL_EXT_ray_tracing : require // Requires SPIR-V 1.5 (Vulkan 1.2)
 
-    layout(binding = 0, set = 0) uniform accelerationStructureEXT tlas;
+        layout(binding = 0, set = 0) uniform accelerationStructureEXT tlas;
 
-    layout(location = 0) rayPayloadEXT vec3 hit;
+        layout(location = 0) rayPayloadEXT vec3 hit;
 
-    void main() {
-      traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, vec3(0,0,1), 0.1, vec3(0,0,1), 1000.0, 0);
-    }
-)glsl";
-    pipeline.SetRayGenShader(ray_gen);
+        void main() {
+            traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, vec3(0,0,1), 0.1, vec3(0,0,1), 1000.0, 0);
+        }
+    )glsl";
+    pipeline.SetGlslRayGenShader(ray_gen);
 
     const char* miss = R"glsl(
-    #version 460
-    #extension GL_EXT_ray_tracing : require
+        #version 460
+        #extension GL_EXT_ray_tracing : require
 
-    layout(location = 0) rayPayloadInEXT vec3 hit;
+        layout(location = 0) rayPayloadInEXT vec3 hit;
 
-    void main() {
-        hit = vec3(0.1, 0.2, 0.3);
-    }
-)glsl";
-    pipeline.AddMissShader(miss);
+        void main() {
+            hit = vec3(0.1, 0.2, 0.3);
+        }
+    )glsl";
+    pipeline.AddGlslMissShader(miss);
 
     const char* closest_hit = R"glsl(
-    #version 460
-    #extension GL_EXT_ray_tracing : require
+        #version 460
+        #extension GL_EXT_ray_tracing : require
 
-    layout(location = 0) rayPayloadInEXT vec3 hit;
-    hitAttributeEXT vec2 baryCoord;
+        layout(location = 0) rayPayloadInEXT vec3 hit;
+        hitAttributeEXT vec2 baryCoord;
 
-    void main() {
-      const vec3 barycentricCoords = vec3(1.0f - baryCoord.x - baryCoord.y, baryCoord.x, baryCoord.y);
-      hit = barycentricCoords;
+        void main() {
+            const vec3 barycentricCoords = vec3(1.0f - baryCoord.x - baryCoord.y, baryCoord.x, baryCoord.y);
+            hit = barycentricCoords;
+        }
+    )glsl";
+    pipeline.AddGlslClosestHitShader(closest_hit);
 
-    }
-)glsl";
-    pipeline.AddClosestHitShader(closest_hit);
-
-    // Add TLAS binding
-    auto tlas = std::make_shared<vkt::as::BuildGeometryInfoKHR>(
-        vkt::as::blueprint::BuildOnDeviceTopLevel(*m_device, *m_default_queue, *m_commandBuffer));
-    pipeline.AddTopLevelAccelStructBinding(std::move(tlas), 0);
+    pipeline.AddBinding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 0);
+    pipeline.CreateDescriptorSet();
+    vkt::as::BuildGeometryInfoKHR tlas(vkt::as::blueprint::BuildOnDeviceTopLevel(*m_device, *m_default_queue, *m_commandBuffer));
+    pipeline.GetDescriptorSet().WriteDescriptorAccelStruct(0, 1, &tlas.GetDstAS()->handle());
+    pipeline.GetDescriptorSet().UpdateDescriptorSets();
 
     // Build pipeline
     pipeline.Build();
@@ -887,7 +883,7 @@ TEST_F(PositiveRayTracing, BasicTraceRays) {
     // Bind descriptor set, pipeline, and trace rays
     m_commandBuffer->begin();
     vk::CmdBindDescriptorSets(*m_commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline.GetPipelineLayout(), 0, 1,
-                              &pipeline.GetDescriptorSet()->set_, 0, nullptr);
+                              &pipeline.GetDescriptorSet().set_, 0, nullptr);
     vk::CmdBindPipeline(*m_commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline.Handle());
     vkt::rt::TraceRaysSbt trace_rays_sbt = pipeline.GetTraceRaysSbt();
     vk::CmdTraceRaysKHR(*m_commandBuffer, &trace_rays_sbt.ray_gen_sbt, &trace_rays_sbt.miss_sbt, &trace_rays_sbt.hit_sbt,
@@ -897,7 +893,7 @@ TEST_F(PositiveRayTracing, BasicTraceRays) {
     m_device->Wait();
 }
 
-TEST_F(PositiveRayTracing, GetAccelerationStructureAddressBabBuffer) {
+TEST_F(PositiveRayTracing, GetAccelerationStructureAddressBadBuffer) {
     TEST_DESCRIPTION(
         "Call vkGetAccelerationStructureDeviceAddressKHR on an acceleration structure whose buffer is missing usage "
         "VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, and whose memory has been destroyed");
@@ -940,4 +936,44 @@ TEST_F(PositiveRayTracing, GetAccelerationStructureAddressBabBuffer) {
     as_address_info.accelerationStructure = as;
     vk::GetAccelerationStructureDeviceAddressKHR(device(), &as_address_info);
     vk::DestroyAccelerationStructureKHR(device(), as, nullptr);
+}
+
+// Use to be invalid, but VUID-vkCmdBuildAccelerationStructuresKHR-firstVertex-03770 was removed in
+// https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/6733
+TEST_F(PositiveRayTracing, UpdatedFirstVertex) {
+    TEST_DESCRIPTION(
+        "Build a list of destination acceleration structures, then do an update build on that same list but with a different "
+        "VkAccelerationStructureBuildRangeInfoKHR::firstVertex");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredFeature(vkt::Feature::accelerationStructure);
+    AddRequiredFeature(vkt::Feature::rayQuery);
+    RETURN_IF_SKIP(InitFrameworkForRayTracingTest());
+    RETURN_IF_SKIP(InitState());
+
+    m_commandBuffer->begin();
+    auto blas = vkt::as::blueprint::BuildGeometryInfoSimpleOnDeviceBottomLevel(*m_device);
+    blas.AddFlags(VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
+
+    blas.BuildCmdBuffer(m_commandBuffer->handle());
+
+    m_commandBuffer->end();
+
+    m_default_queue->Submit(*m_commandBuffer);
+    m_device->Wait();
+
+    m_commandBuffer->begin();
+
+    blas.SetMode(VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR);
+    blas.SetSrcAS(blas.GetDstAS());
+
+    // Create custom build ranges, with the default valid as a template, then somehow supply it?
+    auto build_range_infos = blas.GetDefaultBuildRangeInfos();
+    build_range_infos[0].firstVertex = 666;
+    blas.SetBuildRanges(build_range_infos);
+
+    blas.BuildCmdBuffer(m_commandBuffer->handle());
+    m_commandBuffer->end();
 }

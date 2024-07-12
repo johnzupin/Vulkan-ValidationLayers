@@ -76,14 +76,22 @@ static inline std::chrono::time_point<std::chrono::steady_clock> GetCondWaitTime
     return std::chrono::steady_clock::now() + std::chrono::seconds(10);
 }
 
-class Queue: public StateObject {
+struct PreSubmitResult {
+    uint64_t last_submission_seq = 0;
+
+    bool has_external_fence = false;
+    uint64_t submission_with_external_fence_seq = 0;
+};
+
+class Queue : public StateObject {
   public:
-    Queue(ValidationStateTracker &dev_data, VkQueue handle, uint32_t index, VkDeviceQueueCreateFlags flags,
-          const VkQueueFamilyProperties &queueFamilyProperties)
+    Queue(ValidationStateTracker &dev_data, VkQueue handle, uint32_t family_index, uint32_t queue_index,
+          VkDeviceQueueCreateFlags flags, const VkQueueFamilyProperties &queueFamilyProperties)
         : StateObject(handle, kVulkanObjectTypeQueue),
-          queueFamilyIndex(index),
-          flags(flags),
-          queueFamilyProperties(queueFamilyProperties),
+          queue_family_index(family_index),
+          queue_index(queue_index),
+          create_flags(flags),
+          queue_family_properties(queueFamilyProperties),
           dev_data_(dev_data) {}
 
     ~Queue() { Destroy(); }
@@ -92,7 +100,7 @@ class Queue: public StateObject {
     VkQueue VkHandle() const { return handle_.Cast<VkQueue>(); }
 
     // called from the various PreCallRecordQueueSubmit() methods
-    virtual uint64_t PreSubmit(std::vector<QueueSubmission> &&submissions);
+    virtual PreSubmitResult PreSubmit(std::vector<QueueSubmission> &&submissions);
     // called from the various PostCallRecordQueueSubmit() methods
     void PostSubmit();
 
@@ -107,9 +115,15 @@ class Queue: public StateObject {
     // Helper that combines Notify and Wait
     void NotifyAndWait(const Location &loc, uint64_t until_seq = kU64Max);
 
-    const uint32_t queueFamilyIndex;
-    const VkDeviceQueueCreateFlags flags;
-    const VkQueueFamilyProperties queueFamilyProperties;
+  public:
+    // Queue family index. As queueFamilyIndex parameter in vkGetDeviceQueue.
+    const uint32_t queue_family_index;
+
+    // Index of the queue within a queue family. As queueIndex parameter in vkGetDeviceQueue.
+    const uint32_t queue_index;
+
+    const VkDeviceQueueCreateFlags create_flags;
+    const VkQueueFamilyProperties queue_family_properties;
 
     // Track command buffer label stack accross all command buffers submitted to this queue.
     // Access to this variable relies on external queue synchronization.
@@ -122,6 +136,7 @@ class Queue: public StateObject {
     // Stop per-queue label tracking after the first label mismatch error.
     // Access to this variable relies on external queue synchronization.
     bool found_unbalanced_cmdbuf_label = false;
+
   protected:
     // called from the various PostCallRecordQueueSubmit() methods
     virtual void PostSubmit(QueueSubmission &submission) {}
@@ -147,4 +162,4 @@ class Queue: public StateObject {
     // condition to wake up the queue's thread
     std::condition_variable cond_;
 };
-} // namespace vvl
+}  // namespace vvl

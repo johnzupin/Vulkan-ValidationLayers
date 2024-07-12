@@ -14,6 +14,8 @@
 
 #include "../framework/layer_validation_tests.h"
 
+class NegativeDebugExtensions : public VkLayerTest {};
+
 TEST_F(NegativeDebugExtensions, DebugMarkerName) {
     TEST_DESCRIPTION("Ensure debug marker object names are printed in debug report output");
     AddRequiredExtensions(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
@@ -49,7 +51,7 @@ TEST_F(NegativeDebugExtensions, DebugMarkerName) {
     vk::BindBufferMemory(device(), buffer.handle(), memory_1.handle(), 0);
 
     // Test core_validation layer
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, memory_name);
+    m_errorMonitor->SetDesiredError(memory_name.c_str());
     vk::BindBufferMemory(device(), buffer.handle(), memory_2.handle(), 0);
     m_errorMonitor->VerifyFound();
 
@@ -80,12 +82,12 @@ TEST_F(NegativeDebugExtensions, DebugMarkerName) {
     const VkRect2D scissors[] = {scissor, scissor};
 
     // Test parameter_validation layer
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, commandBuffer_name);
+    m_errorMonitor->SetDesiredError(commandBuffer_name.c_str());
     vk::CmdSetScissor(commandBuffer, 0, 1, scissors);
     m_errorMonitor->VerifyFound();
 
     // Test object_tracker layer
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, commandBuffer_name);
+    m_errorMonitor->SetDesiredError(commandBuffer_name.c_str());
     vk::FreeCommandBuffers(device(), command_pool_2.handle(), 1, &commandBuffer);
     m_errorMonitor->VerifyFound();
 }
@@ -198,7 +200,7 @@ TEST_F(NegativeDebugExtensions, DebugUtilsName) {
     vk::BindBufferMemory(device(), buffer.handle(), memory_1.handle(), 0);
 
     // Test core_validation layer
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, memory_name);
+    m_errorMonitor->SetDesiredError(memory_name.c_str());
     vk::BindBufferMemory(device(), buffer.handle(), memory_2.handle(), 0);
     m_errorMonitor->VerifyFound();
 
@@ -247,7 +249,7 @@ TEST_F(NegativeDebugExtensions, DebugUtilsName) {
 
     vk::CmdInsertDebugUtilsLabelEXT(commandBuffer, &command_label);
     // Test parameter_validation layer
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, commandBuffer_name);
+    m_errorMonitor->SetDesiredError(commandBuffer_name.c_str());
     vk::CmdSetScissor(commandBuffer, 0, 1, scissors);
     m_errorMonitor->VerifyFound();
 
@@ -257,7 +259,7 @@ TEST_F(NegativeDebugExtensions, DebugUtilsName) {
     }
 
     // Test object_tracker layer
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, commandBuffer_name);
+    m_errorMonitor->SetDesiredError(commandBuffer_name.c_str());
     vk::FreeCommandBuffers(device(), command_pool_2.handle(), 1, &commandBuffer);
     m_errorMonitor->VerifyFound();
 
@@ -472,13 +474,13 @@ TEST_F(NegativeDebugExtensions, DebugLabelPrimaryCommandBuffer2) {
 
     VkDebugUtilsLabelEXT label = vku::InitStructHelper();
     label.pLabelName = "regionA";
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
     cb0.begin();
     vk::CmdBeginDebugUtilsLabelEXT(cb0, &label);
     cb0.end();
     m_default_queue->Submit(cb0);
 
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
     cb1.begin();
     vk::CmdEndDebugUtilsLabelEXT(cb1);
     vk::CmdEndDebugUtilsLabelEXT(cb1);
@@ -496,13 +498,13 @@ TEST_F(NegativeDebugExtensions, DebugLabelPrimaryCommandBuffer3) {
 
     VkDebugUtilsLabelEXT label = vku::InitStructHelper();
     label.pLabelName = "regionA";
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
     cb0.begin();
     vk::CmdBeginDebugUtilsLabelEXT(cb0, &label);
     vk::CmdEndDebugUtilsLabelEXT(cb0);
     cb0.end();
 
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
     label.pLabelName = "regionB";
     cb1.begin();
     vk::CmdBeginDebugUtilsLabelEXT(cb1, &label);
@@ -521,7 +523,7 @@ TEST_F(NegativeDebugExtensions, DebugLabelSecondaryCommandBuffer) {
     AddRequiredExtensions(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
-    vkt::CommandBuffer cb(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer cb(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     cb.begin();
     m_errorMonitor->SetDesiredError("VUID-vkCmdEndDebugUtilsLabelEXT-commandBuffer-01913");
     vk::CmdEndDebugUtilsLabelEXT(cb);

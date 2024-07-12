@@ -16,6 +16,8 @@
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
 
+class NegativeMesh : public VkLayerTest {};
+
 TEST_F(NegativeMesh, BasicUsage) {
     TEST_DESCRIPTION("Test VK_EXT_mesh_shader.");
 
@@ -667,9 +669,7 @@ TEST_F(NegativeMesh, BasicUsageNV) {
     VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
     buffer_create_info.size = sizeof(uint32_t);
     buffer_create_info.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    VkBuffer buffer;
-    VkResult result = vk::CreateBuffer(device(), &buffer_create_info, nullptr, &buffer);
-    ASSERT_EQ(VK_SUCCESS, result);
+    vkt::Buffer buffer(*m_device, buffer_create_info, vkt::no_mem);
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
@@ -684,8 +684,6 @@ TEST_F(NegativeMesh, BasicUsageNV) {
 
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
-
-    vk::DestroyBuffer(device(), buffer, 0);
 }
 
 TEST_F(NegativeMesh, ExtensionDisabledNV) {
@@ -913,13 +911,8 @@ TEST_F(NegativeMesh, DrawCmds) {
 
     VkShaderObj mesh_shader(this, mesh_src, VK_SHADER_STAGE_MESH_BIT_EXT, SPV_ENV_VULKAN_1_3, SPV_SOURCE_ASM);
 
-    VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
-    buffer_create_info.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    buffer_create_info.size = 2 * sizeof(VkDrawMeshTasksIndirectCommandEXT);
-    vkt::Buffer buffer(*m_device, buffer_create_info);
-
-    buffer_create_info.size = 64;
-    vkt::Buffer count_buffer(*m_device, buffer_create_info);
+    vkt::Buffer buffer(*m_device, 2 * sizeof(VkDrawMeshTasksIndirectCommandEXT), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    vkt::Buffer count_buffer(*m_device, 64, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_[0] = mesh_shader.GetStageCreateInfo();
@@ -1161,13 +1154,8 @@ TEST_F(NegativeMesh, DrawCmdsNV) {
 
     VkShaderObj mesh_shader(this, mesh_src, VK_SHADER_STAGE_MESH_BIT_NV);
 
-    VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
-    buffer_create_info.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    buffer_create_info.size = 2 * sizeof(VkDrawMeshTasksIndirectCommandNV);
-    vkt::Buffer buffer(*m_device, buffer_create_info);
-
-    buffer_create_info.size = 64;
-    vkt::Buffer count_buffer(*m_device, buffer_create_info);
+    vkt::Buffer buffer(*m_device, 2 * sizeof(VkDrawMeshTasksIndirectCommandNV), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    vkt::Buffer count_buffer(*m_device, 64, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_[0] = mesh_shader.GetStageCreateInfo();
@@ -1470,7 +1458,38 @@ TEST_F(NegativeMesh, DrawIndexMesh) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {ts.GetStageCreateInfo(), ms.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkGraphicsPipelineCreateInfo-pStages-09631");
+    m_errorMonitor->SetDesiredError("VUID-VkGraphicsPipelineCreateInfo-pStages-09631");
     pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeMesh, DrawIndexMeshShaderObject) {
+    TEST_DESCRIPTION("use DrawIndex in Mesh shader but there is a Task Shader.");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_SHADER_OBJECT_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderObject);
+    AddRequiredFeature(vkt::Feature::shaderDrawParameters);
+    AddRequiredFeature(vkt::Feature::meshShader);
+    AddRequiredFeature(vkt::Feature::taskShader);
+    AddDisabledFeature(vkt::Feature::multiviewMeshShader);
+    AddDisabledFeature(vkt::Feature::primitiveFragmentShadingRateMeshShader);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    const char *mesh_src = R"glsl(
+        #version 460
+        #extension GL_EXT_mesh_shader : enable
+        layout(max_vertices = 32, max_primitives = 32, triangles) out;
+        taskPayloadSharedEXT uint mesh_payload[32];
+        void main() {
+            uint compacted_meshlet_index = uint(32768 * gl_DrawID) + gl_WorkGroupID.x;
+            SetMeshOutputsEXT(3,1);
+        }
+    )glsl";
+
+    m_errorMonitor->SetDesiredError("VUID-vkCreateShadersEXT-pCreateInfos-09632");
+    const vkt::Shader meshShader(*m_device, VK_SHADER_STAGE_MESH_BIT_EXT,
+                                 GLSLToSPV(VK_SHADER_STAGE_MESH_BIT_EXT, mesh_src, SPV_ENV_VULKAN_1_2));
     m_errorMonitor->VerifyFound();
 }

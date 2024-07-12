@@ -14,7 +14,7 @@
 
 void WsiTest::SetImageLayoutPresentSrc(VkImage image) {
     vkt::CommandPool pool(*m_device, m_device->graphics_queue_node_index_);
-    vkt::CommandBuffer cmd_buf(*m_device, &pool);
+    vkt::CommandBuffer cmd_buf(*m_device, pool);
 
     cmd_buf.begin();
     VkImageMemoryBarrier layout_barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -103,6 +103,8 @@ void WsiTest::ReleaseWaylandContext(WaylandContext &context) {
     context = WaylandContext{};
 }
 #endif  // VK_USE_PLATFORM_WAYLAND_KHR
+
+class PositiveWsi : public WsiTest {};
 
 TEST_F(PositiveWsi, CreateWaylandSurface) {
     TEST_DESCRIPTION("Test creating wayland surface");
@@ -279,11 +281,8 @@ TEST_F(PositiveWsi, CmdCopySwapchainImage) {
     vk::BindImageMemory2(device(), 1, &bind_info);
 
     VkImageCopy copy_region = {};
-    copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy_region.srcSubresource.mipLevel = 0;
-    copy_region.srcSubresource.baseArrayLayer = 0;
-    copy_region.srcSubresource.layerCount = 1;
-    copy_region.dstSubresource = copy_region.srcSubresource;
+    copy_region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    copy_region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     copy_region.srcOffset = {0, 0, 0};
     copy_region.dstOffset = {0, 0, 0};
     copy_region.extent = {std::min(10u, m_surface_capabilities.minImageExtent.width),
@@ -401,11 +400,8 @@ TEST_F(PositiveWsi, TransferImageToSwapchainDeviceGroup) {
                            nullptr, 0, nullptr, 1, &img_barrier);
 
     VkImageCopy copy_region = {};
-    copy_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy_region.srcSubresource.mipLevel = 0;
-    copy_region.srcSubresource.baseArrayLayer = 0;
-    copy_region.srcSubresource.layerCount = 1;
-    copy_region.dstSubresource = copy_region.srcSubresource;
+    copy_region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    copy_region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     copy_region.srcOffset = {0, 0, 0};
     copy_region.dstOffset = {0, 0, 0};
     copy_region.extent = {test_extent_value, test_extent_value, 1};
@@ -550,7 +546,7 @@ TEST_F(PositiveWsi, RetireSubmissionUsingAcquireFence) {
     std::vector<vkt::CommandBuffer> command_buffers;
     std::vector<vkt::Semaphore> submit_semaphores;
     for (size_t i = 0; i < swapchain_images.size(); i++) {
-        command_buffers.emplace_back(*m_device, m_commandPool);
+        command_buffers.emplace_back(*m_device, m_command_pool);
         submit_semaphores.emplace_back(*m_device);
     }
     const vkt::Fence acquire_fence(*m_device);
@@ -601,7 +597,7 @@ TEST_F(PositiveWsi, RetireSubmissionUsingAcquireFence2) {
     std::vector<vkt::CommandBuffer> command_buffers;
     std::vector<vkt::Semaphore> submit_semaphores;
     for (size_t i = 0; i < swapchain_images.size(); i++) {
-        command_buffers.emplace_back(*m_device, m_commandPool);
+        command_buffers.emplace_back(*m_device, m_command_pool);
         submit_semaphores.emplace_back(*m_device);
     }
     const vkt::Fence acquire_fence(*m_device);
@@ -974,7 +970,7 @@ TEST_F(PositiveWsi, SwapchainImageFormatProps) {
     vkt::ImageView image_view(*m_device, ivci);
     vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1, &image_view.handle(), 1, 1);
 
-    vkt::CommandBuffer cmdbuff(*m_device, m_commandPool);
+    vkt::CommandBuffer cmdbuff(*m_device, m_command_pool);
     cmdbuff.begin();
     cmdbuff.BeginRenderPass(render_pass.handle(), framebuffer.handle());
 
@@ -1186,7 +1182,7 @@ TEST_F(PositiveWsi, ProtectedSwapchainImageColorAttachment) {
 
     // Create a protected command buffer/pool to use
     vkt::CommandPool protectedCommandPool(*m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_PROTECTED_BIT);
-    vkt::CommandBuffer protectedCommandBuffer(*m_device, &protectedCommandPool);
+    vkt::CommandBuffer protectedCommandBuffer(*m_device, protectedCommandPool);
 
     protectedCommandBuffer.begin();
     VkRect2D render_area = {{0, 0}, swapchain_create_info.imageExtent};
@@ -1432,6 +1428,81 @@ TEST_F(PositiveWsi, PresentFenceWaitsForSubmission) {
         //      QueueSubmit workload has completed ->
         //      command buffer is no longer in use and we can reset it.
         m_commandBuffer->reset();
+    }
+    m_default_queue->Wait();
+}
+
+TEST_F(PositiveWsi, PresentFenceRetiresPresentQueueOperation) {
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8047
+    // The regression will cause occasional failures of this test. The reproducibility
+    // is very machine dependent and in some configurations the failures can be
+    // extremely rare. We also found configurations (slower laptop) where it was relatively
+    // easy to reproduce (still could take some time, tens of seconds and up to few minutes).
+    //
+    // NOTE: there are known bugs in the current queue progress tracking, when
+    // a submission might retire too early (happens for multiple queues, but present
+    // operation might be an example for a single queue). Reworking queue tracking
+    // from threading approach to a single manager that collects submits and resolves
+    // them on request should fix the known issues, but also will bring deterministic
+    // behavior to the issues like the one being tested here. The idea that resolve
+    // operation, even if non trivial, still will be a localized piece of code comparing
+    // to conceptually simple model of queues that process submissions one at a time
+    // but with more complex synchronization and non-deterministic behavior.
+    TEST_DESCRIPTION("Check that the wait on the present fence retires present queue operation");
+    AddSurfaceExtension();
+    AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitSwapchain());
+
+    const auto swapchain_images = GetSwapchainImages(m_swapchain);
+    for (auto image : swapchain_images) {
+        SetImageLayoutPresentSrc(image);
+    }
+
+    struct Frame {
+        vkt::Semaphore image_acquired;
+        vkt::Semaphore submit_finished;
+        vkt::Fence present_finished_fence;
+        uint32_t frame = 0;  // for debugging
+    };
+    std::vector<Frame> frames;
+
+    // TODO: iteration count can be reduced (100?) if queue simulation is done in more deterministic way
+    for (uint32_t i = 0; i < 500; i++) {
+        // Remove completed frames
+        for (auto it = frames.begin(); it != frames.end();) {
+            if (it->present_finished_fence.status() == VK_SUCCESS) {
+                // NOTE: Root cause of the issue. The present fence processed regular queue submissions,
+                // but not the one associated with a present operation. The present batch usually was
+                // lucky enough to get through, before we start the following "erase", which deletes the
+                // present batch semaphore. When the queue thread was not fast enough, then in-use state
+                // of present semaphore was properly detected (VUID-vkDestroySemaphore-semaphore-05149).
+                it = frames.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        // Add new frame
+        frames.emplace_back(Frame{vkt::Semaphore(*m_device), vkt::Semaphore(*m_device), vkt::Fence(*m_device), i});
+        const Frame &frame = frames.back();
+
+        uint32_t image_index = 0;
+        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, frame.image_acquired.handle(), VK_NULL_HANDLE, &image_index);
+
+        m_default_queue->Submit(vkt::no_cmd, frame.image_acquired, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, frame.submit_finished);
+
+        VkSwapchainPresentFenceInfoEXT present_fence_info = vku::InitStructHelper();
+        present_fence_info.swapchainCount = 1;
+        present_fence_info.pFences = &frame.present_finished_fence.handle();
+
+        VkPresentInfoKHR present = vku::InitStructHelper(&present_fence_info);
+        present.waitSemaphoreCount = 1;
+        present.pWaitSemaphores = &frame.submit_finished.handle();
+        present.swapchainCount = 1;
+        present.pSwapchains = &m_swapchain;
+        present.pImageIndices = &image_index;
+        vk::QueuePresentKHR(*m_default_queue, &present);
     }
     m_default_queue->Wait();
 }

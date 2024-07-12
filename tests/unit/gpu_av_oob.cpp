@@ -15,7 +15,15 @@
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
 #include "../framework/gpu_av_helper.h"
-#include "../layers/gpu_shaders/gpu_shaders_constants.h"
+#include "../layers/gpu/shaders/gpu_shaders_constants.h"
+
+class NegativeGpuAVOOB : public GpuAVTest {
+  public:
+    void ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSize binding_offset, VkDeviceSize binding_range,
+                              VkDescriptorType descriptor_type, const char *fragment_shader,
+                              std::vector<const char *> expected_errors, bool shader_objects = false);
+    void ComputeStorageBufferTest(const char *expected_error, const char *shader, VkDeviceSize buffer_size);
+};
 
 TEST_F(NegativeGpuAVOOB, RobustBuffer) {
     TEST_DESCRIPTION("Check buffer oob validation when per pipeline robustness is enabled");
@@ -24,13 +32,8 @@ TEST_F(NegativeGpuAVOOB, RobustBuffer) {
     AddRequiredExtensions(VK_EXT_PIPELINE_ROBUSTNESS_EXTENSION_NAME);
     RETURN_IF_SKIP(InitGpuAvFramework());
 
-    VkPhysicalDevicePipelineRobustnessFeaturesEXT pipeline_robustness_features = vku::InitStructHelper();
-    auto features2 = GetPhysicalDeviceFeatures2(pipeline_robustness_features);
-    features2.features.robustBufferAccess = VK_FALSE;
-    if (!pipeline_robustness_features.pipelineRobustness) {
-        GTEST_SKIP() << "pipelineRobustness feature not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredFeature(vkt::Feature::pipelineRobustness);
+    RETURN_IF_SKIP(InitState());
     InitRenderTarget();
     VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     vkt::Buffer uniform_buffer(*m_device, 4, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, reqs);
@@ -161,22 +164,19 @@ void NegativeGpuAVOOB::ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSi
     }
     RETURN_IF_SKIP(InitGpuAvFramework());
 
-    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = vku::InitStructHelper();
-    dynamic_rendering_features.dynamicRendering = VK_TRUE;
-    VkPhysicalDeviceShaderObjectFeaturesEXT shader_object_features = vku::InitStructHelper(&dynamic_rendering_features);
-    shader_object_features.shaderObject = VK_TRUE;
-    VkPhysicalDeviceFeatures2 features = vku::InitStructHelper();  // Make sure robust buffer access is not enabled
+    AddDisabledFeature(vkt::Feature::robustBufferAccess);
     if (shader_objects) {
-        features.pNext = &shader_object_features;
+        AddRequiredFeature(vkt::Feature::dynamicRendering);
+        AddRequiredFeature(vkt::Feature::shaderObject);
     }
-    RETURN_IF_SKIP(InitState(nullptr, &features));
+    RETURN_IF_SKIP(InitState());
     if (shader_objects) {
         InitDynamicRenderTarget();
     } else {
         InitRenderTarget();
     }
     for (const char *error : expected_errors) {
-        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, error);
+        m_errorMonitor->SetDesiredError(error);
     }
 
     OneOffDescriptorSet ds(m_device, {{0, descriptor_type, 1, VK_SHADER_STAGE_ALL, nullptr}});
@@ -187,19 +187,8 @@ void NegativeGpuAVOOB::ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSi
                        (descriptor_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
                                                                               : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
-    VkDescriptorBufferInfo buffer_info;
-    buffer_info.buffer = buffer.handle();
-    buffer_info.offset = binding_offset;
-    buffer_info.range = binding_range;
-
-    VkWriteDescriptorSet descriptor_write = vku::InitStructHelper();
-    descriptor_write.dstSet = ds.set_;
-    descriptor_write.dstBinding = 0;
-    descriptor_write.descriptorCount = 1;
-    descriptor_write.descriptorType = descriptor_type;
-    descriptor_write.pBufferInfo = &buffer_info;
-
-    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
+    ds.WriteDescriptorBufferInfo(0, buffer, binding_offset, binding_range, descriptor_type);
+    ds.UpdateDescriptorSets();
 
     vkt::Shader *vso = nullptr;
     vkt::Shader *fso = nullptr;
@@ -243,7 +232,7 @@ void NegativeGpuAVOOB::ShaderBufferSizeTest(VkDeviceSize buffer_size, VkDeviceSi
                                                 VK_SHADER_STAGE_FRAGMENT_BIT};
         const VkShaderEXT shaders[] = {vso->handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, fso->handle()};
         vk::CmdBindShadersEXT(m_commandBuffer->handle(), 5u, stages, shaders);
-        SetDefaultDynamicStates(m_commandBuffer->handle());
+        SetDefaultDynamicStatesAll(m_commandBuffer->handle());
     } else {
         vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     }
@@ -921,13 +910,10 @@ TEST_F(NegativeGpuAVOOB, StorageBuffer) {
     pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipe.CreateComputePipeline();
 
-    VkMemoryPropertyFlags mem_props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    VkMemoryAllocateFlagsInfo allocate_flag_info = vku::InitStructHelper();
-    allocate_flag_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-    vkt::Buffer block_buffer(*m_device, 16, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR, mem_props, &allocate_flag_info);
-
+    vkt::Buffer block_buffer(*m_device, 16, 0, vkt::device_address);
     // too small
-    vkt::Buffer in_buffer(*m_device, 8, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, mem_props);
+    vkt::Buffer in_buffer(*m_device, 8, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     VkDeviceAddress block_ptr = block_buffer.address();
 
@@ -945,7 +931,7 @@ TEST_F(NegativeGpuAVOOB, StorageBuffer) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-storageBuffers-06936");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-storageBuffers-06936");
     m_default_queue->Submit(*m_commandBuffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
@@ -976,7 +962,7 @@ void NegativeGpuAVOOB::ComputeStorageBufferTest(const char *expected_error, cons
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, expected_error);
+    m_errorMonitor->SetDesiredError(expected_error);
     m_default_queue->Submit(*m_commandBuffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
@@ -1069,7 +1055,7 @@ TEST_F(NegativeGpuAVOOB, TexelFetch) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-uniformBuffers-06935");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-uniformBuffers-06935");
     m_default_queue->Submit(*m_commandBuffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
@@ -1123,7 +1109,7 @@ TEST_F(NegativeGpuAVOOB, ImageLoad) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-storageBuffers-06936");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-storageBuffers-06936");
     m_default_queue->Submit(*m_commandBuffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
@@ -1170,8 +1156,7 @@ TEST_F(NegativeGpuAVOOB, ImageStore) {
     vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-storageBuffers-06936");
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDispatch-storageBuffers-06936");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-storageBuffers-06936", 2);
     m_default_queue->Submit(*m_commandBuffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
@@ -1224,7 +1209,7 @@ TEST_F(NegativeGpuAVOOB, Geometry) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-storageBuffers-06936");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-storageBuffers-06936");
     m_default_queue->Submit(*m_commandBuffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
@@ -1284,7 +1269,7 @@ TEST_F(NegativeGpuAVOOB, DISABLED_TessellationControl) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-storageBuffers-06936");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-storageBuffers-06936");
     m_default_queue->Submit(*m_commandBuffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
@@ -1342,7 +1327,7 @@ TEST_F(NegativeGpuAVOOB, DISABLED_TessellationEvaluation) {
     m_commandBuffer->EndRenderPass();
     m_commandBuffer->end();
 
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCmdDraw-storageBuffers-06936");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-storageBuffers-06936");
     m_default_queue->Submit(*m_commandBuffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();

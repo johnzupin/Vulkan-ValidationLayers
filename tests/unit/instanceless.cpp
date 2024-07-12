@@ -35,6 +35,8 @@
 
 static VkInstance dummy_instance;
 
+class NegativeInstanceless : public VkLayerTest {};
+
 TEST_F(NegativeInstanceless, InstanceExtensionDependencies) {
     TEST_DESCRIPTION("Test enabling instance extension without dependencies met.");
 
@@ -250,7 +252,7 @@ TEST_F(NegativeInstanceless, DestroyInstanceAllocationCallbacksCompatibility) {
     }
 }
 
-// TODO - Currently can not be ran with Profile layer
+// When address/tread sanitizer is on, this tends to fail tests after it
 TEST_F(NegativeInstanceless, DISABLED_DestroyInstanceHandleLeak) {
     TEST_DESCRIPTION("Test vkDestroyInstance while leaking a VkDevice object.");
     RETURN_IF_SKIP(InitFramework());

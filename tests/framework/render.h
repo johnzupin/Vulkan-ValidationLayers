@@ -111,6 +111,11 @@ class VkRenderFramework : public VkTestFramework {
     VkRect2D GetRenderTargetArea() const;
     void DestroyRenderTarget();
 
+    // Used for VK_EXT_shader_object
+    void SetDefaultDynamicStatesExclude(const std::vector<VkDynamicState> &exclude = {}, bool tessellation = false,
+                                        VkCommandBuffer commandBuffer = VK_NULL_HANDLE);
+    void SetDefaultDynamicStatesAll(VkCommandBuffer cmdBuffer);
+
     static bool IgnoreDisableChecks();
     bool IsPlatformMockICD();
     void GetPhysicalDeviceFeatures(VkPhysicalDeviceFeatures *features);
@@ -149,8 +154,6 @@ class VkRenderFramework : public VkTestFramework {
     // Add a feature that will be disabled when creating the device. The currently targeted API version is used to add the correct
     // struct, so be sure to call SetTargetApiVersion before
     void AddDisabledFeature(vkt::Feature feature);
-
-    void *SetupValidationSettings(void *first_pnext);
 
     template <typename GLSLContainer>
     std::vector<uint32_t> GLSLToSPV(VkShaderStageFlagBits stage, const GLSLContainer &code,
@@ -195,9 +198,12 @@ class VkRenderFramework : public VkTestFramework {
 
     uint32_t m_gpu_index;
     vkt::Device *m_device;
-    vkt::CommandPool *m_commandPool;
-    vkt::CommandBuffer *m_commandBuffer;
+    vkt::CommandPool m_command_pool;
+    vkt::CommandBuffer *m_commandBuffer;  // DEPRECATED: use m_command_buffer
+    vkt::CommandBuffer m_command_buffer;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
+
+    vkt::Buffer *m_vertex_buffer;
 
     // WSI items
     SurfaceContext m_surface_context{};
@@ -225,6 +231,9 @@ class VkRenderFramework : public VkTestFramework {
     vkt::Queue *m_second_queue = nullptr;
     VkQueueFlags m_second_queue_caps = 0;
 
+    vkt::CommandPool m_second_command_pool;  // associated with a queue family of the second command queue
+    vkt::CommandBuffer m_second_command_buffer;
+
     // Requested extensions to enable at device creation time
     std::vector<const char *> m_required_extensions;
     // Optional extensions to try and enable at device creation time
@@ -233,13 +242,6 @@ class VkRenderFramework : public VkTestFramework {
     std::vector<const char *> m_wsi_extensions;
     // Device extensions to enable
     std::vector<const char *> m_device_extension_names;
-
-    VkValidationFeaturesEXT m_validation_features;
-    VkValidationFeatureEnableEXT validation_enable_all[4] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
-                                                             VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-                                                             VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
-                                                             VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
-    VkValidationFeatureDisableEXT validation_disable_all = VK_VALIDATION_FEATURE_DISABLE_ALL_EXT;
 
   private:
     // TODO - move to own helper logic

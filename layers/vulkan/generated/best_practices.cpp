@@ -180,6 +180,8 @@ std::string GetSpecialUse(vvl::Extension extension_name) {
         {vvl::Extension::_VK_EXT_legacy_dithering, "glemulation"},
         {vvl::Extension::_VK_ANDROID_external_format_resolve, "glemulation"},
         {vvl::Extension::_VK_EXT_mutable_descriptor_type, "d3demulation"},
+        {vvl::Extension::_VK_EXT_legacy_vertex_attributes, "glemulation"},
+        {vvl::Extension::_VK_MESA_image_alignment_control, "d3demulation"},
     };
 
     auto it = special_use_extensions.find(extension_name);
@@ -745,6 +747,7 @@ void BestPractices::PostCallRecordResetCommandBuffer(VkCommandBuffer commandBuff
 void BestPractices::PostCallRecordBindBufferMemory2(VkDevice device, uint32_t bindInfoCount,
                                                     const VkBindBufferMemoryInfo* pBindInfos, const RecordObject& record_obj) {
     ValidationStateTracker::PostCallRecordBindBufferMemory2(device, bindInfoCount, pBindInfos, record_obj);
+    ManualPostCallRecordBindBufferMemory2(device, bindInfoCount, pBindInfos, record_obj);
 
     if (record_obj.result < VK_SUCCESS) {
         LogErrorCode(record_obj);
@@ -754,6 +757,7 @@ void BestPractices::PostCallRecordBindBufferMemory2(VkDevice device, uint32_t bi
 void BestPractices::PostCallRecordBindImageMemory2(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo* pBindInfos,
                                                    const RecordObject& record_obj) {
     ValidationStateTracker::PostCallRecordBindImageMemory2(device, bindInfoCount, pBindInfos, record_obj);
+    ManualPostCallRecordBindImageMemory2(device, bindInfoCount, pBindInfos, record_obj);
 
     if (record_obj.result < VK_SUCCESS) {
         LogErrorCode(record_obj);

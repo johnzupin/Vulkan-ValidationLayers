@@ -53,7 +53,8 @@
 #include "utils/vk_layer_utils.h"
 #include "vk_dispatch_table_helper.h"
 #include "vk_extension_helper.h"
-#include "gpu_validation/gpu_settings.h"
+#include "gpu/core/gpu_settings.h"
+#include "sync/sync_settings.h"
 
 extern std::atomic<uint64_t> global_unique_id;
 
@@ -1050,8 +1051,8 @@ VKAPI_ATTR void VKAPI_CALL CmdSetFragmentShadingRateKHR(VkCommandBuffer commandB
 VKAPI_ATTR void VKAPI_CALL CmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer commandBuffer,
                                                                  const VkRenderingAttachmentLocationInfoKHR* pLocationInfo);
 
-VKAPI_ATTR void VKAPI_CALL CmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer,
-                                                                    const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo);
+VKAPI_ATTR void VKAPI_CALL CmdSetRenderingInputAttachmentIndicesKHR(
+    VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo);
 
 VKAPI_ATTR VkResult VKAPI_CALL WaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t presentId, uint64_t timeout);
 
@@ -2227,6 +2228,7 @@ class ValidationObject {
     bool fine_grained_locking{true};
     GpuAVSettings gpuav_settings = {};
     DebugPrintfSettings printf_settings = {};
+    SyncValSettings syncval_settings = {};
 
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice physical_device = VK_NULL_HANDLE;
@@ -2234,6 +2236,7 @@ class ValidationObject {
     bool is_device_lost = false;
 
     std::vector<ValidationObject*> object_dispatch;
+    std::vector<ValidationObject*> aborted_object_dispatch;
     LayerObjectTypeId container_type;
     void ReleaseDeviceDispatchObject(LayerObjectTypeId type_id) const;
 
@@ -2422,6 +2425,23 @@ class ValidationObject {
         display_id_reverse_mapping.insert_or_assign(handle, unique_id);
         return (VkDisplayKHR)unique_id;
     }
+    // We make many internal dispatch calls to VK_KHR_get_physical_device_properties2 functions which can depend on the API version
+    void DispatchGetPhysicalDeviceFeatures2Helper(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures) const;
+    void DispatchGetPhysicalDeviceProperties2Helper(VkPhysicalDevice physicalDevice,
+                                                    VkPhysicalDeviceProperties2* pProperties) const;
+    void DispatchGetPhysicalDeviceFormatProperties2Helper(VkPhysicalDevice physicalDevice, VkFormat format,
+                                                          VkFormatProperties2* pFormatProperties) const;
+    VkResult DispatchGetPhysicalDeviceImageFormatProperties2Helper(VkPhysicalDevice physicalDevice,
+                                                                   const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
+                                                                   VkImageFormatProperties2* pImageFormatProperties) const;
+    void DispatchGetPhysicalDeviceQueueFamilyProperties2Helper(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount,
+                                                               VkQueueFamilyProperties2* pQueueFamilyProperties) const;
+    void DispatchGetPhysicalDeviceMemoryProperties2Helper(VkPhysicalDevice physicalDevice,
+                                                          VkPhysicalDeviceMemoryProperties2* pMemoryProperties) const;
+    void DispatchGetPhysicalDeviceSparseImageFormatProperties2Helper(VkPhysicalDevice physicalDevice,
+                                                                     const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo,
+                                                                     uint32_t* pPropertyCount,
+                                                                     VkSparseImageFormatProperties2* pProperties) const;
 
     // clang-format off
         // Pre/post hook point declarations
@@ -3410,9 +3430,9 @@ class ValidationObject {
         virtual bool PreCallValidateCmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer commandBuffer, const VkRenderingAttachmentLocationInfoKHR* pLocationInfo, const ErrorObject& error_obj) const { return false; };
         virtual void PreCallRecordCmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer commandBuffer, const VkRenderingAttachmentLocationInfoKHR* pLocationInfo, const RecordObject& record_obj) {};
         virtual void PostCallRecordCmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer commandBuffer, const VkRenderingAttachmentLocationInfoKHR* pLocationInfo, const RecordObject& record_obj) {};
-        virtual bool PreCallValidateCmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo, const ErrorObject& error_obj) const { return false; };
-        virtual void PreCallRecordCmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo, const RecordObject& record_obj) {};
-        virtual void PostCallRecordCmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo, const RecordObject& record_obj) {};
+        virtual bool PreCallValidateCmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo, const ErrorObject& error_obj) const { return false; };
+        virtual void PreCallRecordCmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo, const RecordObject& record_obj) {};
+        virtual void PostCallRecordCmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo, const RecordObject& record_obj) {};
         virtual bool PreCallValidateWaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t presentId, uint64_t timeout, const ErrorObject& error_obj) const { return false; };
         virtual void PreCallRecordWaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t presentId, uint64_t timeout, const RecordObject& record_obj) {};
         virtual void PostCallRecordWaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t presentId, uint64_t timeout, const RecordObject& record_obj) {};

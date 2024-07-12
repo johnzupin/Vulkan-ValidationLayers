@@ -21,7 +21,7 @@
 #include "state_tracker/state_object.h"
 #include "utils/hash_vk_types.h"
 #include "utils/vk_layer_utils.h"
-#include "utils/shader_utils.h"
+#include "state_tracker/shader_stage_state.h"
 #include "generated/vk_object_types.h"
 #include <vulkan/utility/vk_safe_struct.hpp>
 #include <map>
@@ -169,7 +169,10 @@ class DescriptorSetLayoutDef {
     uint32_t GetIndexFromBinding(uint32_t binding) const;
     // Various Get functions that can either be passed a binding#, which will
     //  be automatically translated into the appropriate index, or the index# can be passed in directly
-    uint32_t GetMaxBinding() const { return bindings_[bindings_.size() - 1].binding; }
+    uint32_t GetMaxBinding() const {
+        assert(!bindings_.empty());
+        return bindings_.empty() ? 0 : bindings_[bindings_.size() - 1].binding;
+    }
     VkDescriptorSetLayoutBinding const *GetDescriptorSetLayoutBindingPtrFromIndex(const uint32_t) const;
     VkDescriptorSetLayoutBinding const *GetDescriptorSetLayoutBindingPtrFromBinding(uint32_t binding) const {
         return GetDescriptorSetLayoutBindingPtrFromIndex(GetIndexFromBinding(binding));
@@ -209,6 +212,8 @@ class DescriptorSetLayoutDef {
         uint32_t non_dynamic_buffer_count;
     };
     const BindingTypeStats &GetBindingTypeStats() const { return binding_type_stats_; }
+
+    std::string DescribeDifference(uint32_t index, const DescriptorSetLayoutDef &other) const;
 
   private:
     // Only the first three data members are used for hash and equality checks, the other members are derived from them, and are
@@ -878,6 +883,12 @@ class DescriptorSet : public StateObject {
         auto pos = dynamic_offset_idx_to_descriptor_list_.at(index);
         return bindings_[pos.first]->GetDescriptor(pos.second);
     }
+
+    // Returns index in the dynamic offset array (specified by
+    // vkCmdBindDescriptorSets) for the given dynamic descriptor binding.
+    // The caller has to ensure that binding has dynamic descriptor type.
+    uint32_t GetDynamicOffsetIndexFromBinding(uint32_t dynamic_binding) const;
+
     uint64_t GetChangeCount() const { return change_count_; }
 
     const std::vector<vku::safe_VkWriteDescriptorSet> &GetWrites() const { return push_descriptor_set_writes; }

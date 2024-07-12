@@ -31,6 +31,7 @@
 #include "chassis.h"
 #include "layer_options.h"
 #include "layer_chassis_dispatch.h"
+#include "state_tracker/descriptor_sets.h"
 #include "chassis/chassis_modification_state.h"
 
 thread_local WriteLockGuard* ValidationObject::record_guard{};
@@ -57,8 +58,8 @@ bool wrap_handles = true;
 #include "object_tracker/object_lifetime_validation.h"
 #include "core_checks/core_validation.h"
 #include "best_practices/best_practices_validation.h"
-#include "gpu_validation/gpu_validation.h"
-#include "gpu_validation/debug_printf.h"
+#include "gpu/core/gpuav.h"
+#include "gpu/debug_printf/debug_printf.h"
 #include "sync/sync_validation.h"
 
 // This header file must be included after the above validation object class definitions
@@ -143,6 +144,72 @@ static void InitDeviceObjectDispatch(ValidationObject* instance_interceptor, Val
     }
 }
 
+void ValidationObject::DispatchGetPhysicalDeviceFeatures2Helper(VkPhysicalDevice physicalDevice,
+                                                                VkPhysicalDeviceFeatures2* pFeatures) const {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceFeatures2(physicalDevice, pFeatures);
+    } else {
+        return DispatchGetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures);
+    }
+}
+
+void ValidationObject::DispatchGetPhysicalDeviceProperties2Helper(VkPhysicalDevice physicalDevice,
+                                                                  VkPhysicalDeviceProperties2* pProperties) const {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceProperties2(physicalDevice, pProperties);
+    } else {
+        return DispatchGetPhysicalDeviceProperties2KHR(physicalDevice, pProperties);
+    }
+}
+
+void ValidationObject::DispatchGetPhysicalDeviceFormatProperties2Helper(VkPhysicalDevice physicalDevice, VkFormat format,
+                                                                        VkFormatProperties2* pFormatProperties) const {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceFormatProperties2(physicalDevice, format, pFormatProperties);
+    } else {
+        return DispatchGetPhysicalDeviceFormatProperties2KHR(physicalDevice, format, pFormatProperties);
+    }
+}
+
+VkResult ValidationObject::DispatchGetPhysicalDeviceImageFormatProperties2Helper(
+    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
+    VkImageFormatProperties2* pImageFormatProperties) const {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceImageFormatProperties2(physicalDevice, pImageFormatInfo, pImageFormatProperties);
+    } else {
+        return DispatchGetPhysicalDeviceImageFormatProperties2KHR(physicalDevice, pImageFormatInfo, pImageFormatProperties);
+    }
+}
+
+void ValidationObject::DispatchGetPhysicalDeviceQueueFamilyProperties2Helper(
+    VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties) const {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
+    } else {
+        return DispatchGetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice, pQueueFamilyPropertyCount,
+                                                                  pQueueFamilyProperties);
+    }
+}
+
+void ValidationObject::DispatchGetPhysicalDeviceMemoryProperties2Helper(
+    VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties) const {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceMemoryProperties2(physicalDevice, pMemoryProperties);
+    } else {
+        return DispatchGetPhysicalDeviceMemoryProperties2KHR(physicalDevice, pMemoryProperties);
+    }
+}
+
+void ValidationObject::DispatchGetPhysicalDeviceSparseImageFormatProperties2Helper(
+    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount,
+    VkSparseImageFormatProperties2* pProperties) const {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceSparseImageFormatProperties2(physicalDevice, pFormatInfo, pPropertyCount, pProperties);
+    } else {
+        return DispatchGetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice, pFormatInfo, pPropertyCount, pProperties);
+    }
+}
+
 // Global list of sType,size identifiers
 std::vector<std::pair<uint32_t, uint32_t>> custom_stype_info{};
 
@@ -188,7 +255,9 @@ void ValidationObject::ReleaseDeviceDispatchObject(LayerObjectTypeId type_id) co
                 }
             }
 
-            delete object;
+            // We can't destroy the object itself now as it might be unsafe (things are still being used)
+            // If the rare case happens we need to release, we will cleanup later when we normally would have cleaned this up
+            layer_data->aborted_object_dispatch.push_back(object);
             break;
         }
     }
@@ -255,7 +324,7 @@ void OutputLayerStatusInfo(ValidationObject* context) {
             list_of_enables.append(EnableFlagNameHelper[i]);
         }
     }
-    if (list_of_enables.size() == 0) {
+    if (list_of_enables.empty()) {
         list_of_enables.append("None");
     }
     for (uint32_t i = 0; i < kMaxDisableFlags; i++) {
@@ -264,7 +333,7 @@ void OutputLayerStatusInfo(ValidationObject* context) {
             list_of_disables.append(DisableFlagNameHelper[i]);
         }
     }
-    if (list_of_disables.size() == 0) {
+    if (list_of_disables.empty()) {
         list_of_disables.append("None");
     }
 
@@ -416,6 +485,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     bool lock_setting;
     GpuAVSettings local_gpuav_settings = {};
     DebugPrintfSettings local_printf_settings = {};
+    SyncValSettings local_syncval_settings = {};
     ConfigAndEnvSettings config_and_env_settings_data{OBJECT_LAYER_DESCRIPTION,
                                                       pCreateInfo,
                                                       local_enables,
@@ -425,7 +495,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
                                                       &debug_report->message_format_settings,
                                                       &lock_setting,
                                                       &local_gpuav_settings,
-                                                      &local_printf_settings};
+                                                      &local_printf_settings,
+                                                      &local_syncval_settings};
     ProcessConfigAndEnvSettings(&config_and_env_settings_data);
     LayerDebugMessengerActions(debug_report, OBJECT_LAYER_DESCRIPTION);
 
@@ -486,6 +557,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     framework->fine_grained_locking = lock_setting;
     framework->gpuav_settings = local_gpuav_settings;
     framework->printf_settings = local_printf_settings;
+    framework->syncval_settings = local_syncval_settings;
 
     framework->instance = *pInstance;
     layer_init_instance_dispatch_table(*pInstance, &framework->instance_dispatch_table, fpGetInstanceProcAddr);
@@ -506,6 +578,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
         intercept->fine_grained_locking = framework->fine_grained_locking;
         intercept->gpuav_settings = framework->gpuav_settings;
         intercept->printf_settings = framework->printf_settings;
+        intercept->syncval_settings = framework->syncval_settings;
         intercept->instance = *pInstance;
     }
 
@@ -536,6 +609,12 @@ VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkAllocati
         intercept->PreCallRecordDestroyInstance(instance, pAllocator, record_obj);
     }
 
+    // Before instance is destroyed, allow aborted objects to clean up
+    for (ValidationObject* intercept : layer_data->aborted_object_dispatch) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordDestroyInstance(instance, pAllocator, record_obj);
+    }
+
     layer_data->instance_dispatch_table.DestroyInstance(instance, pAllocator);
 
     for (ValidationObject* intercept : layer_data->object_dispatch) {
@@ -551,6 +630,10 @@ VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkAllocati
     for (auto item = layer_data->object_dispatch.begin(); item != layer_data->object_dispatch.end(); item++) {
         delete *item;
     }
+    for (auto item = layer_data->aborted_object_dispatch.begin(); item != layer_data->aborted_object_dispatch.end(); item++) {
+        delete *item;
+    }
+
     FreeLayerDataPtr(key, layer_data_map);
 }
 
@@ -581,6 +664,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const VkDevice
         item->device_extensions = device_extensions;
     }
 
+    // Make copy to modify as some ValidationObjects will want to add extensions/features on
     vku::safe_VkDeviceCreateInfo modified_create_info(pCreateInfo);
 
     bool skip = false;
@@ -608,7 +692,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const VkDevice
 
     // Save local info in device object
     device_interceptor->api_version = device_interceptor->device_extensions.InitFromDeviceCreateInfo(
-        &instance_interceptor->instance_extensions, effective_api_version, pCreateInfo);
+        &instance_interceptor->instance_extensions, effective_api_version,
+        reinterpret_cast<VkDeviceCreateInfo*>(&modified_create_info));
     device_interceptor->device_extensions = device_extensions;
 
     layer_init_device_dispatch_table(*pDevice, &device_interceptor->device_dispatch_table, fpGetDeviceProcAddr);
@@ -635,6 +720,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const VkDevice
         object->fine_grained_locking = instance_interceptor->fine_grained_locking;
         object->gpuav_settings = instance_interceptor->gpuav_settings;
         object->printf_settings = instance_interceptor->printf_settings;
+        object->syncval_settings = instance_interceptor->syncval_settings;
         object->instance_dispatch_table = instance_interceptor->instance_dispatch_table;
         object->instance_extensions = instance_interceptor->instance_extensions;
         object->device_extensions = device_interceptor->device_extensions;
@@ -642,7 +728,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const VkDevice
 
     for (ValidationObject* intercept : instance_interceptor->object_dispatch) {
         auto lock = intercept->WriteLock();
-        intercept->PostCallRecordCreateDevice(gpu, pCreateInfo, pAllocator, pDevice, record_obj);
+        // Send down modified create info as we want to mark enabled features that we sent down on behalf of the app
+        intercept->PostCallRecordCreateDevice(gpu, reinterpret_cast<VkDeviceCreateInfo*>(&modified_create_info), pAllocator,
+                                              pDevice, record_obj);
     }
 
     device_interceptor->InitObjectDispatchVectors();
@@ -659,7 +747,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const VkDevice
 VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) {
     dispatch_key key = GetDispatchKey(device);
     auto layer_data = GetLayerDataPtr(key, layer_data_map);
-    ErrorObject error_obj(vvl::Func::vkCreateDevice, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
+    ErrorObject error_obj(vvl::Func::vkDestroyDevice, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
     for (const ValidationObject* intercept : layer_data->object_dispatch) {
         auto lock = intercept->ReadLock();
         intercept->PreCallValidateDestroyDevice(device, pAllocator, error_obj);
@@ -667,6 +755,12 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
 
     RecordObject record_obj(vvl::Func::vkDestroyDevice);
     for (ValidationObject* intercept : layer_data->object_dispatch) {
+        auto lock = intercept->WriteLock();
+        intercept->PreCallRecordDestroyDevice(device, pAllocator, record_obj);
+    }
+
+    // Before device is destroyed, allow aborted objects to clean up
+    for (ValidationObject* intercept : layer_data->aborted_object_dispatch) {
         auto lock = intercept->WriteLock();
         intercept->PreCallRecordDestroyDevice(device, pAllocator, record_obj);
     }
@@ -684,6 +778,10 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     for (auto item = layer_data->object_dispatch.begin(); item != layer_data->object_dispatch.end(); item++) {
         delete *item;
     }
+    for (auto item = layer_data->aborted_object_dispatch.begin(); item != layer_data->aborted_object_dispatch.end(); item++) {
+        delete *item;
+    }
+
     FreeLayerDataPtr(key, layer_data_map);
 }
 
@@ -697,8 +795,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device, VkPipeli
     ErrorObject error_obj(vvl::Func::vkCreateGraphicsPipelines, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
     PipelineStates pipeline_states[LayerObjectTypeMaxEnum];
-    chassis::CreateGraphicsPipelines chassis_state{};
-    chassis_state.pCreateInfos = pCreateInfos;
+    chassis::CreateGraphicsPipelines chassis_state(pCreateInfos);
 
     for (const ValidationObject* intercept : layer_data->object_dispatch) {
         auto lock = intercept->ReadLock();
@@ -738,8 +835,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device, VkPipelin
     ErrorObject error_obj(vvl::Func::vkCreateComputePipelines, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
     PipelineStates pipeline_states[LayerObjectTypeMaxEnum];
-    chassis::CreateComputePipelines chassis_state{};
-    chassis_state.pCreateInfos = pCreateInfos;
+    chassis::CreateComputePipelines chassis_state(pCreateInfos);
 
     for (const ValidationObject* intercept : layer_data->object_dispatch) {
         auto lock = intercept->ReadLock();
@@ -777,8 +873,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateRayTracingPipelinesNV(VkDevice device, VkPi
     ErrorObject error_obj(vvl::Func::vkCreateRayTracingPipelinesNV, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
     PipelineStates pipeline_states[LayerObjectTypeMaxEnum];
-    chassis::CreateRayTracingPipelinesNV chassis_state{};
-    chassis_state.pCreateInfos = pCreateInfos;
+    chassis::CreateRayTracingPipelinesNV chassis_state(pCreateInfos);
 
     for (const ValidationObject* intercept : layer_data->object_dispatch) {
         auto lock = intercept->ReadLock();
@@ -818,8 +913,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateRayTracingPipelinesKHR(VkDevice device, VkD
     ErrorObject error_obj(vvl::Func::vkCreateRayTracingPipelinesKHR, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
     PipelineStates pipeline_states[LayerObjectTypeMaxEnum];
-    chassis::CreateRayTracingPipelinesKHR chassis_state{};
-    chassis_state.pCreateInfos = pCreateInfos;
+    chassis::CreateRayTracingPipelinesKHR chassis_state(pCreateInfos);
 
     for (const ValidationObject* intercept : layer_data->object_dispatch) {
         auto lock = intercept->ReadLock();
@@ -8604,8 +8698,8 @@ VKAPI_ATTR void VKAPI_CALL CmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer
     }
 }
 
-VKAPI_ATTR void VKAPI_CALL CmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer,
-                                                                    const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo) {
+VKAPI_ATTR void VKAPI_CALL CmdSetRenderingInputAttachmentIndicesKHR(
+    VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo) {
     auto layer_data = GetLayerDataPtr(GetDispatchKey(commandBuffer), layer_data_map);
     bool skip = false;
     ErrorObject error_obj(vvl::Func::vkCmdSetRenderingInputAttachmentIndicesKHR,
@@ -8613,20 +8707,21 @@ VKAPI_ATTR void VKAPI_CALL CmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuf
     for (const ValidationObject* intercept :
          layer_data->intercept_vectors[InterceptIdPreCallValidateCmdSetRenderingInputAttachmentIndicesKHR]) {
         auto lock = intercept->ReadLock();
-        skip |= intercept->PreCallValidateCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo, error_obj);
+        skip |=
+            intercept->PreCallValidateCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pInputAttachmentIndexInfo, error_obj);
         if (skip) return;
     }
     RecordObject record_obj(vvl::Func::vkCmdSetRenderingInputAttachmentIndicesKHR);
     for (ValidationObject* intercept :
          layer_data->intercept_vectors[InterceptIdPreCallRecordCmdSetRenderingInputAttachmentIndicesKHR]) {
         auto lock = intercept->WriteLock();
-        intercept->PreCallRecordCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo, record_obj);
+        intercept->PreCallRecordCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pInputAttachmentIndexInfo, record_obj);
     }
-    DispatchCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo);
+    DispatchCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pInputAttachmentIndexInfo);
     for (ValidationObject* intercept :
          layer_data->intercept_vectors[InterceptIdPostCallRecordCmdSetRenderingInputAttachmentIndicesKHR]) {
         auto lock = intercept->WriteLock();
-        intercept->PostCallRecordCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo, record_obj);
+        intercept->PostCallRecordCmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pInputAttachmentIndexInfo, record_obj);
     }
 }
 

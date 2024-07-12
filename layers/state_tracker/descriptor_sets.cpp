@@ -80,7 +80,7 @@ void vvl::DescriptorPool::Free(uint32_t count, const VkDescriptorSet *descriptor
     for (uint32_t i = 0; i < count; ++i) {
         if (descriptor_sets[i] != VK_NULL_HANDLE) {
             auto iter = sets_.find(descriptor_sets[i]);
-            assert(iter != sets_.end());
+            ASSERT_AND_CONTINUE(iter != sets_.end());
             auto *set_state = iter->second;
             const auto &layout = set_state->Layout();
             uint32_t type_index = 0, descriptor_count = 0;
@@ -214,6 +214,69 @@ bool operator==(const DescriptorSetLayoutDef &lhs, const DescriptorSetLayoutDef 
     return true;
 }
 
+std::string DescriptorSetLayoutDef::DescribeDifference(uint32_t index, const DescriptorSetLayoutDef &other) const {
+    std::ostringstream ss;
+    ss << "Set " << index << " ";
+    auto lhs_binding_flags = GetBindingFlags();
+    auto rhs_binding_flags = other.GetBindingFlags();
+    const auto &lhs_bindings = GetBindings();
+    const auto &rhs_bindings = other.GetBindings();
+
+    if (GetCreateFlags() != other.GetCreateFlags()) {
+        ss << "VkDescriptorSetLayoutCreateFlags " << string_VkDescriptorSetLayoutCreateFlags(GetCreateFlags()) << " doesn't match "
+           << string_VkDescriptorSetLayoutCreateFlags(other.GetCreateFlags());
+    } else if (lhs_binding_flags.size() != rhs_binding_flags.size()) {
+        ss << "VkDescriptorSetLayoutBindingFlagsCreateInfo::bindingCount " << lhs_binding_flags.size() << " doesn't match "
+           << rhs_binding_flags.size();
+    } else if (lhs_binding_flags != rhs_binding_flags) {
+        ss << "VkDescriptorSetLayoutBindingFlagsCreateInfo::pBindingFlags (";
+        for (auto flag : lhs_binding_flags) {
+            ss << string_VkDescriptorBindingFlags(flag) << " ";
+        }
+        ss << ") doesn't match (";
+        for (auto flag : rhs_binding_flags) {
+            ss << string_VkDescriptorBindingFlags(flag) << " ";
+        }
+        ss << ")";
+    } else if (GetMutableTypes() != other.GetMutableTypes()) {
+        // TODO - this is a 2d array, need a smarter way to print out details
+        ss << "Mutable types doesn't match";
+    } else if (lhs_bindings.size() != rhs_bindings.size()) {
+        ss << "binding count " << lhs_bindings.size() << " doesn't match " << rhs_bindings.size();
+    } else {
+        for (size_t i = 0; i < lhs_bindings.size(); i++) {
+            const auto &l = lhs_bindings[i];
+            const auto &r = rhs_bindings[i];
+            if (l.descriptorType != r.descriptorType) {
+                ss << "binding " << i << " descriptorType " << string_VkDescriptorType(l.descriptorType) << " doesn't match "
+                   << string_VkDescriptorType(r.descriptorType);
+                break;
+            } else if (l.descriptorCount != r.descriptorCount) {
+                ss << "binding " << i << " descriptorCount " << l.descriptorCount << " doesn't match " << r.descriptorCount;
+                break;
+            } else if (l.stageFlags != r.stageFlags) {
+                ss << "binding " << i << " stageFlags " << string_VkShaderStageFlags(l.stageFlags) << " doesn't match "
+                   << string_VkShaderStageFlags(r.stageFlags);
+                break;
+            } else if (l.pImmutableSamplers != r.pImmutableSamplers) {
+                ss << "binding " << i << " pImmutableSamplers " << l.pImmutableSamplers << " doesn't match "
+                   << r.pImmutableSamplers;
+                break;
+            } else if (l.pImmutableSamplers) {
+                for (uint32_t s = 0; s < l.descriptorCount; s++) {
+                    if (l.pImmutableSamplers[s] != r.pImmutableSamplers[s]) {
+                        ss << "binding " << i << " pImmutableSamplers[" << s << "] " << l.pImmutableSamplers[s] << " doesn't match "
+                           << r.pImmutableSamplers[s];
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    ss << "\n";
+    return ss.str();
+}
+
 // Construct DescriptorSetLayout instance from given create info
 // Proactively reserve and resize as possible, as the reallocation was visible in profiling
 vvl::DescriptorSetLayoutDef::DescriptorSetLayoutDef(const VkDescriptorSetLayoutCreateInfo *p_create_info)
@@ -345,7 +408,6 @@ const vvl::IndexRange &vvl::DescriptorSetLayoutDef::GetGlobalIndexRangeFromBindi
 // Move to next valid binding having a non-zero binding count
 uint32_t vvl::DescriptorSetLayoutDef::GetNextValidBinding(const uint32_t binding) const {
     auto it = non_empty_bindings_.upper_bound(binding);
-    assert(it != non_empty_bindings_.cend());
     if (it != non_empty_bindings_.cend()) return *it;
     return GetMaxBinding() + 1;
 }
@@ -425,7 +487,8 @@ vvl::DescriptorSet::DescriptorSet(const VkDescriptorSet handle, vvl::DescriptorP
     auto free_binding = bindings_store_.data();
     for (uint32_t i = 0; i < binding_count; ++i) {
         auto create_info = layout_->GetDescriptorSetLayoutBindingPtrFromIndex(i);
-        assert(create_info);
+        ASSERT_AND_CONTINUE(create_info);
+
         uint32_t descriptor_count = create_info->descriptorCount;
         auto flags = layout_->GetDescriptorBindingFlagsFromIndex(i);
         if (flags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT) {
@@ -499,7 +562,7 @@ vvl::DescriptorSet::DescriptorSet(const VkDescriptorSet handle, vvl::DescriptorP
                 break;
             }
             default:
-                assert(0);  // Bad descriptor type specified
+                assert(false);  // Bad descriptor type specified
                 break;
         }
     }
@@ -517,6 +580,21 @@ void vvl::DescriptorSet::NotifyInvalidate(const NodeList &invalid_nodes, bool un
     for (auto &binding : bindings_) {
         binding->NotifyInvalidate(invalid_nodes, unlink);
     }
+}
+
+uint32_t vvl::DescriptorSet::GetDynamicOffsetIndexFromBinding(uint32_t dynamic_binding) const {
+    const uint32_t index = layout_->GetIndexFromBinding(dynamic_binding);
+    if (index == bindings_.size()) {  // binding not found
+        return vvl::kU32Max;
+    }
+    assert(IsDynamicDescriptor(bindings_[index]->type));
+    uint32_t dynamic_offset_index = 0;
+    for (uint32_t i = 0; i < index; i++) {
+        if (IsDynamicDescriptor(bindings_[i]->type)) {
+            dynamic_offset_index += bindings_[i]->count;
+        }
+    }
+    return dynamic_offset_index;
 }
 
 void vvl::DescriptorSet::Destroy() {
@@ -544,7 +622,7 @@ void vvl::DescriptorSet::PerformWriteUpdate(const VkWriteDescriptorSet &update) 
     // Perform update on a per-binding basis as consecutive updates roll over to next binding
     auto descriptors_remaining = update.descriptorCount;
     auto iter = FindDescriptor(update.dstBinding, update.dstArrayElement);
-    assert(!iter.AtEnd());
+    ASSERT_AND_RETURN(!iter.AtEnd());
     auto &orig_binding = iter.CurrentBinding();
 
     // Verify next consecutive binding matches type, stage flags & immutable sampler use and if AtEnd
@@ -612,7 +690,8 @@ void vvl::DescriptorSet::UpdateDrawState(ValidationStateTracker *device_data, vv
     // resources
     for (const auto &binding_req_pair : binding_req_map) {
         auto *binding = GetBinding(binding_req_pair.first);
-        assert(binding);
+        ASSERT_AND_CONTINUE(binding);
+
         // core validation doesn't handle descriptor indexing, that is only done by GPU-AV
         if (SkipBinding(*binding, binding_req_pair.second.variable->is_dynamic_accessed)) {
             continue;

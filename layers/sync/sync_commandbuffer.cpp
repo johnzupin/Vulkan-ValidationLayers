@@ -39,17 +39,10 @@ SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType de
     }
 
     // Detect if variable is nonreadable (writeonly in glsl).
-    // NOTE: is_written_to can be used as a more general case instead of adding is_writeonly logic.
-    // At first we need to fix is_written_to support for buffers.
-    bool is_writeonly = variable.decorations.Has(spirv::DecorationBase::nonreadable_bit);
-    if (variable.type_struct_info) {
-        is_writeonly |= variable.type_struct_info->decorations.AllMemberHave(spirv::DecorationBase::nonreadable_bit);
-    }
-
     // If the desriptorSet is writable, we don't need to care SHADER_READ. SHADER_WRITE is enough.
     // Because if write hazard happens, read hazard might or might not happen.
     // But if write hazard doesn't happen, read hazard is impossible to happen.
-    if (variable.is_written_to || is_writeonly) {
+    if (variable.IsWrittenTo()) {
         return stage_accesses.storage_write;
     } else if (descriptor_type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
                descriptor_type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
@@ -60,22 +53,14 @@ SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType de
     }
 }
 
-ResourceUsageRange CommandExecutionContext::ImportRecordedAccessLog(const CommandBufferAccessContext &recorded_context) {
-    // The execution references ensure lifespan for the referenced child CB's...
-    ResourceUsageRange tag_range(GetTagLimit(), 0);
-    InsertRecordedAccessLogEntries(recorded_context);
-    tag_range.end = GetTagLimit();
-    return tag_range;
-}
-
 bool CommandExecutionContext::ValidForSyncOps() const {
     const bool valid = GetCurrentEventsContext() && GetCurrentAccessContext();
     assert(valid);
     return valid;
 }
 
-CommandBufferAccessContext::CommandBufferAccessContext(const SyncValidator *sync_validator)
-    : CommandExecutionContext(sync_validator),
+CommandBufferAccessContext::CommandBufferAccessContext(const SyncValidator &sync_validator)
+    : CommandExecutionContext(&sync_validator),
       cb_state_(),
       access_log_(std::make_shared<AccessLog>()),
       cbs_referenced_(std::make_shared<CommandBufferSet>()),
@@ -89,15 +74,24 @@ CommandBufferAccessContext::CommandBufferAccessContext(const SyncValidator *sync
       current_renderpass_context_(),
       sync_ops_() {}
 
+CommandBufferAccessContext::CommandBufferAccessContext(SyncValidator &sync_validator, vvl::CommandBuffer *cb_state)
+    : CommandBufferAccessContext(sync_validator) {
+    cb_state_ = cb_state;
+    sync_state_->stats.AddCommandBufferContext();
+}
+
 // NOTE: Make sure the proxy doesn't outlive from, as the proxy is pointing directly to access contexts owned by from.
 CommandBufferAccessContext::CommandBufferAccessContext(const CommandBufferAccessContext &from, AsProxyContext dummy)
-    : CommandBufferAccessContext(from.sync_state_) {
+    : CommandBufferAccessContext(*from.sync_state_) {
     // Copy only the needed fields out of from for a temporary, proxy command buffer context
     cb_state_ = from.cb_state_;
     access_log_ = std::make_shared<AccessLog>(*from.access_log_);  // potentially large, but no choice given tagging lookup.
     command_number_ = from.command_number_;
     subcommand_number_ = from.subcommand_number_;
     reset_count_ = from.reset_count_;
+
+    handles_ = from.handles_;
+    sync_state_->stats.AddHandleRecord((uint32_t)from.handles_.size());
 
     const auto *from_context = from.GetCurrentAccessContext();
     assert(from_context);
@@ -110,6 +104,12 @@ CommandBufferAccessContext::CommandBufferAccessContext(const CommandBufferAccess
     events_context_ = from.events_context_;
 
     // We don't want to copy the full render_pass_context_ history just for the proxy.
+    sync_state_->stats.AddCommandBufferContext();
+}
+
+CommandBufferAccessContext::~CommandBufferAccessContext() {
+    sync_state_->stats.RemoveCommandBufferContext();
+    sync_state_->stats.RemoveHandleRecord((uint32_t)handles_.size());
 }
 
 void CommandBufferAccessContext::Reset() {
@@ -122,7 +122,11 @@ void CommandBufferAccessContext::Reset() {
     command_number_ = 0;
     subcommand_number_ = 0;
     reset_count_++;
-    command_handles_.clear();
+
+    sync_state_->stats.RemoveHandleRecord((uint32_t)handles_.size());
+    handles_.clear();
+
+    current_command_tag_ = vvl::kNoIndex32;
     cb_access_context_.Reset();
     render_pass_contexts_.clear();
     current_context_ = &cb_access_context_;
@@ -131,14 +135,14 @@ void CommandBufferAccessContext::Reset() {
     dynamic_rendering_info_.reset();
 }
 
-std::string CommandBufferAccessContext::FormatUsage(const ResourceUsageTag tag) const {
-    if (tag >= access_log_->size()) return std::string();
+std::string CommandBufferAccessContext::FormatUsage(ResourceUsageTagEx tag_ex) const {
+    if (tag_ex.tag >= access_log_->size()) return std::string();
 
     std::stringstream out;
-    assert(tag < access_log_->size());
-    const auto &record = (*access_log_)[tag];
+    assert(tag_ex.tag < access_log_->size());
+    const auto &record = (*access_log_)[tag_ex.tag];
     const auto debug_name_provider = (record.label_command_index == vvl::kU32Max) ? nullptr : this;
-    out << record.Formatter(*sync_state_, cb_state_, debug_name_provider);
+    out << record.Formatter(*sync_state_, cb_state_, debug_name_provider, tag_ex.handle_index);
     return out.str();
 }
 
@@ -146,7 +150,7 @@ std::string CommandBufferAccessContext::FormatUsage(const char *usage_string, co
     std::stringstream out;
     assert(access.usage_info);
     out << "(" << usage_string << ": " << access.usage_info->name;
-    out << ", " << FormatUsage(access.tag) << ")";
+    out << ", " << FormatUsage(access.TagEx()) << ")";
     return out.str();
 }
 
@@ -302,8 +306,7 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
     using TexelDescriptor = vvl::TexelDescriptor;
 
     for (const auto &stage_state : pipe->stage_states) {
-        const auto raster_state = pipe->RasterizationState();
-        if (stage_state.GetStage() == VK_SHADER_STAGE_FRAGMENT_BIT && raster_state && raster_state->rasterizerDiscardEnable) {
+        if (stage_state.GetStage() == VK_SHADER_STAGE_FRAGMENT_BIT && pipe->RasterizationDisabled()) {
             continue;
         } else if (!stage_state.entrypoint) {
             continue;
@@ -313,7 +316,8 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
                 // This should be caught by Core validation, but if core checks are disabled SyncVal should not crash.
                 continue;
             }
-            const auto *descriptor_set = (*per_sets)[variable.decorations.set].bound_descriptor_set.get();
+            const auto &per_set = (*per_sets)[variable.decorations.set];
+            const auto *descriptor_set = per_set.bound_descriptor_set.get();
             if (!descriptor_set) continue;
             auto binding = descriptor_set->GetBinding(variable.decorations.binding);
             const auto descriptor_type = binding->type;
@@ -405,9 +409,18 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
                         if (buffer_descriptor->Invalid()) {
                             continue;
                         }
+                        VkDeviceSize offset = buffer_descriptor->GetOffset();
+                        if (vvl::IsDynamicDescriptor(descriptor_type)) {
+                            const uint32_t dynamic_offset_index =
+                                descriptor_set->GetDynamicOffsetIndexFromBinding(binding->binding);
+                            if (dynamic_offset_index >= per_set.dynamicOffsets.size()) {
+                                continue;  // core validation error
+                            }
+                            offset += per_set.dynamicOffsets[dynamic_offset_index];
+                        }
                         const auto *buf_state = buffer_descriptor->GetBufferState();
                         const ResourceAccessRange range =
-                            MakeRange(*buf_state, buffer_descriptor->GetOffset(), buffer_descriptor->GetRange());
+                            MakeRange(*buf_state, offset, buffer_descriptor->GetRange());
                         auto hazard = current_context_->DetectHazard(*buf_state, sync_index, range);
                         if (hazard.IsHazard() && !sync_state_->SupressedBoundDescriptorWAW(hazard)) {
                             skip |= sync_state_->LogError(
@@ -432,6 +445,7 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
     return skip;
 }
 
+// TODO: Record structure repeats Validate. Unify this code, it was the source of bugs few times already.
 void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindPoint pipelineBindPoint,
                                                                  const ResourceUsageTag tag) {
     const vvl::Pipeline *pipe = nullptr;
@@ -447,8 +461,7 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
     using TexelDescriptor = vvl::TexelDescriptor;
 
     for (const auto &stage_state : pipe->stage_states) {
-        const auto raster_state = pipe->RasterizationState();
-        if (stage_state.GetStage() == VK_SHADER_STAGE_FRAGMENT_BIT && raster_state && raster_state->rasterizerDiscardEnable) {
+        if (stage_state.GetStage() == VK_SHADER_STAGE_FRAGMENT_BIT && pipe->RasterizationDisabled()) {
             continue;
         } else if (!stage_state.entrypoint) {
             continue;
@@ -458,7 +471,8 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
                 // This should be caught by Core validation, but if core checks are disabled SyncVal should not crash.
                 continue;
             }
-            const auto *descriptor_set = (*per_sets)[variable.decorations.set].bound_descriptor_set.get();
+            const auto &per_set = (*per_sets)[variable.decorations.set];
+            const auto *descriptor_set = per_set.bound_descriptor_set.get();
             if (!descriptor_set) continue;
             auto binding = descriptor_set->GetBinding(variable.decorations.binding);
             const auto descriptor_type = binding->type;
@@ -496,6 +510,7 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
                         } else {
                             current_context_->UpdateAccessState(*img_view_state, sync_index, SyncOrdering::kNonAttachment, tag);
                         }
+                        AddCommandHandle(tag, img_view_state->Handle());
                         break;
                     }
                     case DescriptorClass::TexelBuffer: {
@@ -506,7 +521,8 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
                         const auto *buf_view_state = texel_descriptor->GetBufferViewState();
                         const auto *buf_state = buf_view_state->buffer_state.get();
                         const ResourceAccessRange range = MakeRange(*buf_view_state);
-                        current_context_->UpdateAccessState(*buf_state, sync_index, SyncOrdering::kNonAttachment, range, tag);
+                        const ResourceUsageTagEx tag_ex = AddCommandHandle(tag, buf_view_state->Handle());
+                        current_context_->UpdateAccessState(*buf_state, sync_index, SyncOrdering::kNonAttachment, range, tag_ex);
                         break;
                     }
                     case DescriptorClass::GeneralBuffer: {
@@ -514,10 +530,19 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
                         if (buffer_descriptor->Invalid()) {
                             continue;
                         }
+                        VkDeviceSize offset = buffer_descriptor->GetOffset();
+                        if (vvl::IsDynamicDescriptor(descriptor_type)) {
+                            const uint32_t dynamic_offset_index =
+                                descriptor_set->GetDynamicOffsetIndexFromBinding(binding->binding);
+                            if (dynamic_offset_index >= per_set.dynamicOffsets.size()) {
+                                continue;  // core validation error
+                            }
+                            offset += per_set.dynamicOffsets[dynamic_offset_index];
+                        }
                         const auto *buf_state = buffer_descriptor->GetBufferState();
-                        const ResourceAccessRange range =
-                            MakeRange(*buf_state, buffer_descriptor->GetOffset(), buffer_descriptor->GetRange());
-                        current_context_->UpdateAccessState(*buf_state, sync_index, SyncOrdering::kNonAttachment, range, tag);
+                        const ResourceAccessRange range = MakeRange(*buf_state, offset, buffer_descriptor->GetRange());
+                        const ResourceUsageTagEx tag_ex = AddCommandHandle(tag, buf_state->Handle());
+                        current_context_->UpdateAccessState(*buf_state, sync_index, SyncOrdering::kNonAttachment, range, tag_ex);
                         break;
                     }
                     // TODO: INLINE_UNIFORM_BLOCK_EXT, ACCELERATION_STRUCTURE_KHR
@@ -585,8 +610,9 @@ void CommandBufferAccessContext::RecordDrawVertex(const std::optional<uint32_t> 
             if (!buf_state) continue;  // also skips if using nullDescriptor
 
             const ResourceAccessRange range = MakeRange(binding_buffer, firstVertex, vertexCount, binding_description.stride);
+            const ResourceUsageTagEx tag_ex = AddCommandHandle(tag, buf_state->Handle());
             current_context_->UpdateAccessState(*buf_state, SYNC_VERTEX_ATTRIBUTE_INPUT_VERTEX_ATTRIBUTE_READ,
-                                                SyncOrdering::kNonAttachment, range, tag);
+                                                SyncOrdering::kNonAttachment, range, tag_ex);
         }
     }
 }
@@ -596,9 +622,7 @@ bool CommandBufferAccessContext::ValidateDrawVertexIndex(const std::optional<uin
     bool skip = false;
     const auto &index_binding = cb_state_->index_buffer_binding;
     const auto index_buf_state = sync_state_->Get<vvl::Buffer>(index_binding.buffer);
-    if (!index_buf_state) {
-        return skip;
-    }
+    if (!index_buf_state) return skip;
 
     const auto index_size = GetIndexAlignment(index_binding.index_type);
     const ResourceAccessRange range = MakeRange(index_binding, firstIndex, index_count, index_size);
@@ -625,7 +649,8 @@ void CommandBufferAccessContext::RecordDrawVertexIndex(const std::optional<uint3
 
     const auto index_size = GetIndexAlignment(index_binding.index_type);
     const ResourceAccessRange range = MakeRange(index_binding, firstIndex, indexCount, index_size);
-    current_context_->UpdateAccessState(*index_buf_state, SYNC_INDEX_INPUT_INDEX_READ, SyncOrdering::kNonAttachment, range, tag);
+    const ResourceUsageTagEx tag_ex = AddCommandHandle(tag, index_buf_state->Handle());
+    current_context_->UpdateAccessState(*index_buf_state, SYNC_INDEX_INPUT_INDEX_READ, SyncOrdering::kNonAttachment, range, tag_ex);
 
     // TODO: For now, we detect the whole vertex buffer. Index buffer could be changed until SubmitQueue.
     //       We will detect more accurate range in the future.
@@ -647,14 +672,7 @@ bool CommandBufferAccessContext::ValidateDrawDynamicRenderingAttachment(const Lo
     const auto lv_bind_point = ConvertToLvlBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS);
     const auto &last_bound_state = cb_state_->lastBound[lv_bind_point];
     const auto *pipe = last_bound_state.pipeline_state;
-    if (!pipe) {
-        return skip;
-    }
-
-    const auto raster_state = pipe->RasterizationState();
-    if (raster_state && raster_state->rasterizerDiscardEnable) {
-        return skip;
-    }
+    if (!pipe || pipe->RasterizationDisabled()) return skip;
 
     const auto &list = pipe->fragmentShader_writable_output_location_list;
     const auto &access_context = *GetCurrentAccessContext();
@@ -716,10 +734,7 @@ void CommandBufferAccessContext::RecordDrawDynamicRenderingAttachment(ResourceUs
     const auto lv_bind_point = ConvertToLvlBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS);
     const auto &last_bound_state = cb_state_->lastBound[lv_bind_point];
     const auto *pipe = last_bound_state.pipeline_state;
-    if (!pipe) return;
-
-    const auto raster_state = pipe->RasterizationState();
-    if (raster_state && raster_state->rasterizerDiscardEnable) return;
+    if (!pipe || pipe->RasterizationDisabled()) return;
 
     const auto &list = pipe->fragmentShader_writable_output_location_list;
     auto &access_context = *GetCurrentAccessContext();
@@ -791,8 +806,8 @@ ResourceUsageTag CommandBufferAccessContext::RecordBeginRenderPass(
     vvl::Func command, const vvl::RenderPass &rp_state, const VkRect2D &render_area,
     const std::vector<const syncval_state::ImageViewState *> &attachment_views) {
     // Create an access context the current renderpass.
-    const auto barrier_tag = NextCommandTag(command, NamedHandle("renderpass", rp_state.Handle()),
-                                            ResourceUsageRecord::SubcommandType::kSubpassTransition);
+    const auto barrier_tag = NextCommandTag(command, ResourceUsageRecord::SubcommandType::kSubpassTransition);
+    AddCommandHandle(barrier_tag, rp_state.Handle());
     const auto load_tag = NextSubcommandTag(command, ResourceUsageRecord::SubcommandType::kLoadOp);
     render_pass_contexts_.emplace_back(
         std::make_unique<RenderPassAccessContext>(rp_state, render_area, GetQueueFlags(), attachment_views, &cb_access_context_));
@@ -806,8 +821,9 @@ ResourceUsageTag CommandBufferAccessContext::RecordNextSubpass(vvl::Func command
     assert(current_renderpass_context_);
     if (!current_renderpass_context_) return NextCommandTag(command);
 
-    auto store_tag = NextCommandTag(command, NamedHandle("renderpass", current_renderpass_context_->GetRenderPassState()->Handle()),
-                                    ResourceUsageRecord::SubcommandType::kStoreOp);
+    auto store_tag = NextCommandTag(command, ResourceUsageRecord::SubcommandType::kStoreOp);
+    AddCommandHandle(store_tag, current_renderpass_context_->GetRenderPassState()->Handle());
+
     auto barrier_tag = NextSubcommandTag(command, ResourceUsageRecord::SubcommandType::kSubpassTransition);
     auto load_tag = NextSubcommandTag(command, ResourceUsageRecord::SubcommandType::kLoadOp);
 
@@ -820,8 +836,9 @@ ResourceUsageTag CommandBufferAccessContext::RecordEndRenderPass(vvl::Func comma
     assert(current_renderpass_context_);
     if (!current_renderpass_context_) return NextCommandTag(command);
 
-    auto store_tag = NextCommandTag(command, NamedHandle("renderpass", current_renderpass_context_->GetRenderPassState()->Handle()),
-                                    ResourceUsageRecord::SubcommandType::kStoreOp);
+    auto store_tag = NextCommandTag(command, ResourceUsageRecord::SubcommandType::kStoreOp);
+    AddCommandHandle(store_tag, current_renderpass_context_->GetRenderPassState()->Handle());
+
     auto barrier_tag = NextSubcommandTag(command, ResourceUsageRecord::SubcommandType::kSubpassTransition);
 
     current_renderpass_context_->RecordEndRenderPass(&cb_access_context_, store_tag, barrier_tag);
@@ -837,16 +854,15 @@ void CommandBufferAccessContext::RecordExecutedCommandBuffer(const CommandBuffer
     assert(recorded_context);
 
     // Just run through the barriers ignoring the usage from the recorded context, as Resolve will overwrite outdated state
-    const ResourceUsageTag base_tag = GetTagLimit();
+    const ResourceUsageTag base_tag = GetTagCount();
     for (const auto &sync_op : recorded_cb_context.GetSyncOps()) {
         // we update the range to any include layout transition first use writes,
         // as they are stored along with the source scope (as effective barrier) when recorded
         sync_op.sync_op->ReplayRecord(*this, base_tag + sync_op.tag);
     }
 
-    ResourceUsageRange tag_range = ImportRecordedAccessLog(recorded_cb_context);
-    assert(base_tag == tag_range.begin);  // to ensure the to offset calculation agree
-    ResolveExecutedCommandBuffer(*recorded_context, tag_range.begin);
+    ImportRecordedAccessLog(recorded_cb_context);
+    ResolveExecutedCommandBuffer(*recorded_context, base_tag);
 }
 
 void CommandBufferAccessContext::ResolveExecutedCommandBuffer(const AccessContext &recorded_context, ResourceUsageTag offset) {
@@ -854,7 +870,7 @@ void CommandBufferAccessContext::ResolveExecutedCommandBuffer(const AccessContex
     GetCurrentAccessContext()->ResolveFromContext(tag_offset, recorded_context);
 }
 
-void CommandBufferAccessContext::InsertRecordedAccessLogEntries(const CommandBufferAccessContext &recorded_context) {
+void CommandBufferAccessContext::ImportRecordedAccessLog(const CommandBufferAccessContext &recorded_context) {
     cbs_referenced_->emplace_back(recorded_context.GetCBStateShared());
     access_log_->insert(access_log_->end(), recorded_context.access_log_->cbegin(), recorded_context.access_log_->cend());
 
@@ -873,53 +889,80 @@ void CommandBufferAccessContext::InsertRecordedAccessLogEntries(const CommandBuf
     }
 }
 
-ResourceUsageTag CommandBufferAccessContext::NextSubcommandTag(vvl::Func command, ResourceUsageRecord::SubcommandType subcommand) {
-    return NextSubcommandTag(command, NamedHandle(), subcommand);
-}
-ResourceUsageTag CommandBufferAccessContext::NextSubcommandTag(vvl::Func command, NamedHandle &&handle,
-                                                               ResourceUsageRecord::SubcommandType subcommand) {
-    ResourceUsageTag next = access_log_->size();
-    access_log_->emplace_back(command, command_number_, subcommand, ++subcommand_number_, cb_state_, reset_count_);
-    if (command_handles_.size()) {
-        // This is a duplication, but it keeps tags->log information flat (i.e not depending on some "command tag" entry
-        access_log_->back().handles = command_handles_;
-    }
-    if (handle) {
-        access_log_->back().AddHandle(std::move(handle));
-    }
-    if (!cb_state_->GetLabelCommands().empty()) {
-        access_log_->back().label_command_index = static_cast<uint32_t>(cb_state_->GetLabelCommands().size() - 1);
-    }
-    return next;
-}
-
 ResourceUsageTag CommandBufferAccessContext::NextCommandTag(vvl::Func command, ResourceUsageRecord::SubcommandType subcommand) {
-    return NextCommandTag(command, NamedHandle(), subcommand);
-}
-
-ResourceUsageTag CommandBufferAccessContext::NextCommandTag(vvl::Func command, NamedHandle &&handle,
-                                                            ResourceUsageRecord::SubcommandType subcommand) {
     command_number_++;
-    command_handles_.clear();
     subcommand_number_ = 0;
-    ResourceUsageTag next = access_log_->size();
-    access_log_->emplace_back(command, command_number_, subcommand, subcommand_number_, cb_state_, reset_count_);
-    if (handle) {
-        access_log_->back().AddHandle(handle);
-        command_handles_.emplace_back(std::move(handle));
-    }
+    current_command_tag_ = access_log_->size();
+
+    auto &record = access_log_->emplace_back(command, command_number_, subcommand, subcommand_number_, cb_state_, reset_count_);
+
     if (!cb_state_->GetLabelCommands().empty()) {
-        access_log_->back().label_command_index = static_cast<uint32_t>(cb_state_->GetLabelCommands().size() - 1);
+        record.label_command_index = static_cast<uint32_t>(cb_state_->GetLabelCommands().size() - 1);
     }
     CheckCommandTagDebugCheckpoint();
-    return next;
+    return current_command_tag_;
 }
 
-ResourceUsageTag CommandBufferAccessContext::NextIndexedCommandTag(vvl::Func command, uint32_t index) {
-    if (index == 0) {
-        return NextCommandTag(command, ResourceUsageRecord::SubcommandType::kIndex);
+ResourceUsageTag CommandBufferAccessContext::NextSubcommandTag(vvl::Func command, ResourceUsageRecord::SubcommandType subcommand) {
+    subcommand_number_++;
+
+    const ResourceUsageTag tag = access_log_->size();
+    auto &record = access_log_->emplace_back(command, command_number_, subcommand, subcommand_number_, cb_state_, reset_count_);
+
+    // By default copy handle range from the main command, but can be overwritten with AddSubcommandHandle.
+    const auto &main_command_record = (*access_log_)[current_command_tag_];
+    record.first_handle_index = main_command_record.first_handle_index;
+    record.handle_count = main_command_record.handle_count;
+
+    if (!cb_state_->GetLabelCommands().empty()) {
+        record.label_command_index = static_cast<uint32_t>(cb_state_->GetLabelCommands().size() - 1);
     }
-    return NextSubcommandTag(command, ResourceUsageRecord::SubcommandType::kIndex);
+    return tag;
+}
+
+uint32_t CommandBufferAccessContext::AddHandle(const VulkanTypedHandle &typed_handle, uint32_t index) {
+    const uint32_t handle_index = static_cast<uint32_t>(handles_.size());
+    handles_.emplace_back(HandleRecord(typed_handle, index));
+    sync_state_->stats.AddHandleRecord();
+    return handle_index;
+}
+
+ResourceUsageTagEx CommandBufferAccessContext::AddCommandHandle(ResourceUsageTag tag, const VulkanTypedHandle &typed_handle,
+                                                                uint32_t index) {
+    assert(tag < access_log_->size());
+    const uint32_t handle_index = AddHandle(typed_handle, index);
+    // TODO: the following range check is not needed. Test and remove.
+    if (tag < access_log_->size()) {
+        auto &record = (*access_log_)[tag];
+        if (record.first_handle_index == vvl::kNoIndex32) {
+            record.first_handle_index = handle_index;
+            record.handle_count = 1;
+        } else {
+            // assert that command handles occupy continuous range
+            assert(handle_index - record.first_handle_index == record.handle_count);
+            record.handle_count++;
+        }
+    }
+    return {tag, handle_index};
+}
+
+void CommandBufferAccessContext::AddSubcommandHandle(ResourceUsageTag tag, const VulkanTypedHandle &typed_handle, uint32_t index) {
+    assert(tag < access_log_->size());
+    const uint32_t handle_index = AddHandle(typed_handle, index);
+    // TODO: the following range check is not needed. Test and remove.
+    if (tag < access_log_->size()) {
+        auto &record = (*access_log_)[tag];
+        const auto &main_command_record = (*access_log_)[current_command_tag_];
+        if (record.first_handle_index == main_command_record.first_handle_index) {
+            // override default behavior that subcommand references the same handles as the main command
+            record.first_handle_index = handle_index;
+            record.handle_count = 1;
+        } else {
+            // assert that command handles occupy continuous range
+            assert(handle_index - record.first_handle_index == record.handle_count);
+            record.handle_count++;
+        }
+    }
 }
 
 std::string CommandBufferAccessContext::GetDebugRegionName(const ResourceUsageRecord &record) const {
@@ -1099,13 +1142,23 @@ std::ostream &operator<<(std::ostream &out, const SyncNodeFormatter &formatter) 
     return out;
 }
 
-std::ostream &operator<<(std::ostream &out, const NamedHandle::FormatterState &formatter) {
-    const NamedHandle &handle = formatter.that;
+std::ostream &operator<<(std::ostream &out, const HandleRecord::FormatterState &formatter) {
+    const HandleRecord &handle = formatter.that;
     bool labeled = false;
-    if (!handle.name.empty()) {
-        out << handle.name;
+
+    // Hardcode possible options in order not to store string per HandleRecord object.
+    // If more general solution is needed the preference should be to store const char*
+    // literal (8 bytes on 64 bit) instead of std::string which, even if empty,
+    // can occupy 40 bytes, as was observed in one implementation. HandleRecord is memory
+    // sensitive object (there can be a lot of instances).
+    if (handle.type == kVulkanObjectTypeRenderPass) {
+        out << "renderpass";
+        labeled = true;
+    } else if (handle.type == kVulkanObjectTypeCommandBuffer && handle.IsIndexed()) {
+        out << "pCommandBuffers";
         labeled = true;
     }
+
     if (handle.IsIndexed()) {
         out << "[" << handle.index << "]";
         labeled = true;
@@ -1113,7 +1166,7 @@ std::ostream &operator<<(std::ostream &out, const NamedHandle::FormatterState &f
     if (labeled) {
         out << ": ";
     }
-    out << formatter.state.FormatHandle(handle.handle);
+    out << formatter.state.FormatHandle(handle.TypedHandle());
     return out;
 }
 
@@ -1131,11 +1184,14 @@ std::ostream &operator<<(std::ostream &out, const ResourceUsageRecord::Formatter
         if (record.sub_command != 0) {
             out << ", subcmd: " << record.sub_command;
         }
-        for (const auto &named_handle : record.handles) {
-            out << ", " << named_handle.Formatter(formatter.sync_state);
-        }
         out << ", reset_no: " << std::to_string(record.reset_count);
 
+        // Associated resource
+        if (formatter.handle_index != vvl::kNoIndex32) {
+            auto cb_context = static_cast<const syncval_state::CommandBuffer *>(record.cb_state);
+            const HandleRecord &handle_record = cb_context->access_context.GetHandleRecord(formatter.handle_index);
+            out << ", resource: " << handle_record.Formatter(formatter.sync_state);
+        }
         // Report debug region name. Empty name means that we are not inside any debug region.
         if (formatter.debug_name_provider) {
             const std::string debug_region_name = formatter.debug_name_provider->GetDebugRegionName(record);
@@ -1184,7 +1240,7 @@ std::string SyncValidationInfo::FormatHazard(const HazardResult &hazard) const {
     std::stringstream out;
     assert(hazard.IsHazard());
     out << hazard.State();
-    out << ", " << FormatUsage(hazard.Tag()) << ")";
+    out << ", " << FormatUsage(hazard.TagEx()) << ")";
     return out.str();
 }
 

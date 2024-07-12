@@ -21,6 +21,8 @@
 #include <poll.h>
 #endif
 
+class PositiveSyncObject : public SyncObjectTest {};
+
 TEST_F(PositiveSyncObject, Sync2OwnershipTranfersImage) {
     TEST_DESCRIPTION("Valid image ownership transfers that shouldn't create errors");
     SetTargetApiVersion(VK_API_VERSION_1_2);
@@ -34,7 +36,7 @@ TEST_F(PositiveSyncObject, Sync2OwnershipTranfersImage) {
     }
 
     vkt::CommandPool no_gfx_pool(*m_device, no_gfx_queue->family_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer no_gfx_cb(*m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    vkt::CommandBuffer no_gfx_cb(*m_device, no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     // Create an "exclusive" image owned by the graphics queue.
     VkFlags image_use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -77,7 +79,7 @@ TEST_F(PositiveSyncObject, Sync2OwnershipTranfersBuffer) {
     }
 
     vkt::CommandPool no_gfx_pool(*m_device, no_gfx_queue->family_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer no_gfx_cb(*m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    vkt::CommandBuffer no_gfx_cb(*m_device, no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
     auto buffer_barrier =
@@ -129,7 +131,7 @@ TEST_F(PositiveSyncObject, LayoutFromPresentWithoutAccessMemoryRead) {
     range.baseArrayLayer = 0;
     range.layerCount = 1;
     barrier.subresourceRange = range;
-    vkt::CommandBuffer cmdbuf(*m_device, m_commandPool);
+    vkt::CommandBuffer cmdbuf(*m_device, m_command_pool);
     cmdbuf.begin();
     vk::CmdPipelineBarrier(cmdbuf.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr,
                            0, nullptr, 1, &barrier);
@@ -148,7 +150,7 @@ TEST_F(PositiveSyncObject, QueueSubmitSemaphoresAndLayoutTracking) {
     VkCommandBuffer cmd_bufs[4];
     VkCommandBufferAllocateInfo alloc_info = vku::InitStructHelper();
     alloc_info.commandBufferCount = 4;
-    alloc_info.commandPool = m_commandPool->handle();
+    alloc_info.commandPool = m_command_pool.handle();
     alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     vk::AllocateCommandBuffers(device(), &alloc_info, cmd_bufs);
     vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM,
@@ -269,7 +271,7 @@ TEST_F(PositiveSyncObject, TwoFencesThreeFrames) {
     vkt::Fence fences[NUM_OBJECTS];
 
     for (uint32_t i = 0; i < NUM_OBJECTS; ++i) {
-        cmd_buffers[i].Init(*m_device, m_commandPool);
+        cmd_buffers[i].Init(*m_device, m_command_pool);
         fences[i].init(*m_device, vku::InitStruct<VkFenceCreateInfo>());
     }
     for (uint32_t frame = 0; frame < NUM_FRAMES; ++frame) {
@@ -299,8 +301,8 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
 
     vkt::Semaphore semaphore(*m_device);
     vkt::CommandPool pool0(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer cb0(*m_device, &pool0);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, pool0);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -339,8 +341,8 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     vkt::Fence fence(*m_device);
     vkt::Semaphore semaphore(*m_device);
     vkt::CommandPool pool0(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer cb0(*m_device, &pool0);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, pool0);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -379,8 +381,8 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     vkt::Fence fence(*m_device);
     vkt::Semaphore semaphore(*m_device);
     vkt::CommandPool pool0(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer cb0(*m_device, &pool0);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, pool0);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -441,8 +443,8 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     vkt::Fence fence(*m_device);
     vkt::Semaphore semaphore(*m_device);
     vkt::CommandPool pool0(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer cb0(*m_device, &pool0);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, pool0);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -483,8 +485,8 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithTimelineSemaphoreAnd
     vkt::Fence fence(*m_device);
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     vkt::CommandPool pool0(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer cb0(*m_device, &pool0);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, pool0);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -517,8 +519,8 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueWithSemaphoreAndOneFence) {
     RETURN_IF_SKIP(Init());
     vkt::Fence fence(*m_device);
     vkt::Semaphore semaphore(*m_device);
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -550,8 +552,8 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueNullQueueSubmitWithFence) {
 
     RETURN_IF_SKIP(Init());
     vkt::Fence fence(*m_device);
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -584,8 +586,8 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueOneFence) {
 
     RETURN_IF_SKIP(Init());
     vkt::Fence fence(*m_device);
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -617,8 +619,8 @@ TEST_F(PositiveSyncObject, TwoSubmitInfosWithSemaphoreOneQueueSubmitsOneFence) {
     RETURN_IF_SKIP(Init());
     vkt::Fence fence(*m_device);
     vkt::Semaphore semaphore(*m_device);
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkViewport viewport{};
     viewport.maxDepth = 1.0f;
@@ -668,7 +670,7 @@ TEST_F(PositiveSyncObject, WaitBeforeSignalOnDifferentQueuesSignalLargerThanWait
         GTEST_SKIP() << "Two queues are needed";
     }
     vkt::CommandPool second_pool(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer second_cb(*m_device, &second_pool);
+    vkt::CommandBuffer second_cb(*m_device, second_pool);
 
     const VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     vkt::Buffer buffer_a(*m_device, 256, buffer_usage);
@@ -1205,13 +1207,13 @@ TEST_F(PositiveSyncObject, QueueSubmitTimelineSemaphore2Queue) {
     VkBufferCopy region = {0, 0, 256};
 
     vkt::CommandPool pool0(*m_device, m_default_queue->family_index);
-    vkt::CommandBuffer cb0(*m_device, &pool0);
+    vkt::CommandBuffer cb0(*m_device, pool0);
     cb0.begin();
     vk::CmdCopyBuffer(cb0.handle(), buffer_a.handle(), buffer_b.handle(), 1, &region);
     cb0.end();
 
     vkt::CommandPool pool1(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer cb1(*m_device, &pool1);
+    vkt::CommandBuffer cb1(*m_device, pool1);
     cb1.begin();
     vk::CmdCopyBuffer(cb1.handle(), buffer_c.handle(), buffer_b.handle(), 1, &region);
     cb1.end();
@@ -1248,8 +1250,8 @@ TEST_F(PositiveSyncObject, ResetQueryPoolFromDifferentCBWithFenceAfter) {
         GTEST_SKIP() << "Device graphic queue has timestampValidBits of 0, skipping.\n";
     }
 
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
 
     VkFenceCreateInfo fence_info = vku::InitStructHelper();
     fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -1434,7 +1436,7 @@ struct SemBufferRaceData {
         std::thread thread(&SemBufferRaceData::ThreadFunc, this);
         auto queue = dev.QueuesWithGraphicsCapability()[0];
         for (uint32_t i = 0; i < iterations; i++) {
-            vkt::CommandBuffer cb(dev, &command_pool);
+            vkt::CommandBuffer cb(dev, command_pool);
 
             VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
             auto buffer = std::make_unique<vkt::Buffer>();
@@ -1487,7 +1489,7 @@ TEST_F(PositiveSyncObject, WaitTimelineSemThreadRace) {
     RETURN_IF_SKIP(Init());
     SemBufferRaceData data(*m_device);
 
-    data.Run(*m_commandPool, *m_errorMonitor);
+    data.Run(m_command_pool, *m_errorMonitor);
 }
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
@@ -1676,7 +1678,7 @@ TEST_F(PositiveSyncObject, BarrierWithHostStage) {
     RETURN_IF_SKIP(Init());
 
     // HOST stage as source
-    vkt::Buffer buffer(*m_device, 32);
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     VkBufferMemoryBarrier2 buffer_barrier = vku::InitStructHelper();
     buffer_barrier.srcStageMask = VK_PIPELINE_STAGE_2_HOST_BIT;
     buffer_barrier.srcAccessMask = VK_ACCESS_2_HOST_WRITE_BIT;
@@ -1774,7 +1776,7 @@ TEST_F(PositiveSyncObject, DynamicRenderingLocalReadImageBarrier) {
     AddRequiredFeature(vkt::Feature::dynamicRenderingLocalRead);
     RETURN_IF_SKIP(Init());
 
-    vkt::CommandBuffer secondary(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM,
                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
@@ -1938,4 +1940,76 @@ TEST_F(PositiveSyncObject, SubmitImportedBinarySemaphoreWithNonZeroValue) {
 
     vk::QueueSubmit2(*m_default_queue, 2, submits, VK_NULL_HANDLE);
     m_default_queue->Wait();
+}
+
+TEST_F(PositiveSyncObject, IgnoreAcquireOpSrcStage) {
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7928
+    TEST_DESCRIPTION("Test that graphics src stage is ignored during acquire operation on the transfer queue");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+
+    std::optional<uint32_t> transfer_only_family = m_device->TransferOnlyQueueFamily();
+    if (!transfer_only_family.has_value()) {
+        GTEST_SKIP() << "Transfer-only queue family is required";
+    }
+    vkt::CommandPool transfer_pool(*m_device, transfer_only_family.value());
+    vkt::CommandBuffer transfer_cb(*m_device, transfer_pool);
+
+    vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferMemoryBarrier2 acquire_barrier = vku::InitStructHelper();
+    acquire_barrier.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    acquire_barrier.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    acquire_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    acquire_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    acquire_barrier.srcQueueFamilyIndex = m_default_queue->family_index;
+    acquire_barrier.dstQueueFamilyIndex = transfer_only_family.value();
+    acquire_barrier.buffer = buffer.handle();
+    acquire_barrier.offset = 0;
+    acquire_barrier.size = 256;
+
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.bufferMemoryBarrierCount = 1;
+    dep_info.pBufferMemoryBarriers = &acquire_barrier;
+
+    transfer_cb.begin();
+    vk::CmdPipelineBarrier2(transfer_cb.handle(), &dep_info);
+    transfer_cb.end();
+}
+
+TEST_F(PositiveSyncObject, IgnoreReleaseOpDstStage) {
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7928
+    TEST_DESCRIPTION("Test that graphics dst stage is ignored during release operation on the transfer queue");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+
+    std::optional<uint32_t> transfer_only_family = m_device->TransferOnlyQueueFamily();
+    if (!transfer_only_family.has_value()) {
+        GTEST_SKIP() << "Transfer-only queue family is required";
+    }
+    vkt::CommandPool release_pool(*m_device, transfer_only_family.value());
+    vkt::CommandBuffer release_cb(*m_device, release_pool);
+
+    vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferMemoryBarrier2 release_barrier = vku::InitStructHelper();
+    release_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    release_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    release_barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    release_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    release_barrier.srcQueueFamilyIndex = transfer_only_family.value();
+    release_barrier.dstQueueFamilyIndex = m_default_queue->family_index;
+    release_barrier.buffer = buffer.handle();
+    release_barrier.offset = 0;
+    release_barrier.size = 256;
+
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.bufferMemoryBarrierCount = 1;
+    dep_info.pBufferMemoryBarriers = &release_barrier;
+
+    release_cb.begin();
+    vk::CmdPipelineBarrier2(release_cb.handle(), &dep_info);
+    release_cb.end();
 }

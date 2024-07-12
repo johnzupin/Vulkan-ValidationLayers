@@ -27,6 +27,13 @@ struct VertexBufferBinding;
 struct IndexBufferBinding;
 }  // namespace vvl
 
+namespace syncval_state {
+class CommandBuffer;
+class ImageState;
+class ImageViewState;
+class Swapchain;
+}  // namespace syncval_state
+
 class HazardResult;
 class SyncValidator;
 
@@ -34,8 +41,7 @@ using ImageRangeGen = subresource_adapter::ImageRangeGenerator;
 
 // The resource tag index is relative to the command buffer or queue in which it's found
 using QueueId = uint32_t;
-constexpr static QueueId kQueueIdBase = QueueId(0);
-constexpr static QueueId kQueueIdInvalid = ~kQueueIdBase;
+constexpr static QueueId kQueueIdInvalid = QueueId(vvl::kU32Max);
 constexpr static QueueId kQueueAny = kQueueIdInvalid - 1;
 
 using ResourceUsageTag = size_t;
@@ -45,6 +51,12 @@ constexpr static ResourceUsageTag kInvalidTag = kMaxIndex;
 using ResourceUsageRange = sparse_container::range<ResourceUsageTag>;
 using ResourceAddress = VkDeviceSize;
 using ResourceAccessRange = sparse_container::range<ResourceAddress>;
+
+// Usage tag extended with resource handle information
+struct ResourceUsageTagEx {
+    ResourceUsageTag tag = kInvalidTag;
+    uint32_t handle_index = vvl::kNoIndex32;
+};
 
 template <typename T>
 ResourceAccessRange MakeRange(const T &has_offset_and_size) {
@@ -73,7 +85,7 @@ class SyncValidationInfo {
         return *sync_state_;
     }
     std::string FormatHazard(const HazardResult& hazard) const;
-    virtual std::string FormatUsage(ResourceUsageTag tag) const = 0;
+    virtual std::string FormatUsage(ResourceUsageTagEx tag_ex) const = 0;
 
   protected:
     const SyncValidator* sync_state_;
@@ -160,34 +172,3 @@ class SingleRangeGenerator {
     const KeyType range_;
     KeyType current_;
 };
-namespace syncval_state {
-class CommandBuffer;
-class Swapchain;
-class ImageState;
-class ImageViewState;
-
-// Utilities to DRY up Get... calls
-template <typename Map, typename Key = typename Map::key_type, typename RetVal = std::optional<typename Map::mapped_type>>
-RetVal GetMappedOptional(const Map &map, const Key &key) {
-    RetVal ret_val;
-    auto it = map.find(key);
-    if (it != map.cend()) {
-        ret_val.emplace(it->second);
-    }
-    return ret_val;
-}
-template <typename Map, typename Fn>
-typename Map::mapped_type GetMapped(const Map &map, const typename Map::key_type &key, Fn &&default_factory) {
-    auto value = GetMappedOptional(map, key);
-    return (value) ? *value : default_factory();
-}
-
-template <typename Map, typename Key = typename Map::key_type, typename Mapped = typename Map::mapped_type,
-          typename Value = typename Mapped::element_type>
-Value *GetMappedPlainFromShared(const Map &map, const Key &key) {
-    auto value = GetMappedOptional<Map, Key>(map, key);
-    if (value) return value->get();
-    return nullptr;
-}
-
-}  // namespace syncval_state

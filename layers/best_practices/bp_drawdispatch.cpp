@@ -18,7 +18,6 @@
  */
 
 #include "best_practices/best_practices_validation.h"
-#include "best_practices/best_practices_error_enums.h"
 #include "best_practices/bp_state.h"
 #include "state_tracker/buffer_state.h"
 #include "state_tracker/render_pass_state.h"
@@ -28,10 +27,8 @@
 bool BestPractices::ValidateCmdDrawType(VkCommandBuffer cmd_buffer, const Location& loc) const {
     bool skip = false;
     const auto cb_state = GetRead<bp_state::CommandBuffer>(cmd_buffer);
-    const auto* pipe = cb_state->GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
-    if (pipe) {
-        const auto& rp_state = pipe->RenderPassState();
-        if (rp_state) {
+    if (const auto* pipe = cb_state->GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS)) {
+        if (const auto rp_state = pipe->RenderPassState()) {
             for (uint32_t i = 0; i < rp_state->create_info.subpassCount; ++i) {
                 const auto& subpass = rp_state->create_info.pSubpasses[i];
                 const auto* ds_state = pipe->DepthStencilState();
@@ -40,7 +37,7 @@ bool BestPractices::ValidateCmdDrawType(VkCommandBuffer cmd_buffer, const Locati
                 const auto* raster_state = pipe->RasterizationState();
                 if ((depth_stencil_attachment == VK_ATTACHMENT_UNUSED) && raster_state &&
                     raster_state->depthBiasEnable == VK_TRUE) {
-                    skip |= LogWarning(kVUID_BestPractices_DepthBiasNoAttachment, cb_state->Handle(), loc,
+                    skip |= LogWarning("BestPractices-vkCmdDraw-DepthBiasNoAttachment", cb_state->Handle(), loc,
                                        "depthBiasEnable == VK_TRUE without a depth-stencil attachment.");
                 }
             }
@@ -51,15 +48,34 @@ bool BestPractices::ValidateCmdDrawType(VkCommandBuffer cmd_buffer, const Locati
 }
 
 bool BestPractices::ValidatePushConstants(VkCommandBuffer cmd_buffer, const Location& loc) const {
+    using Range = sparse_container::range<uint32_t>;
+
     bool skip = false;
 
     const auto cb_state = GetRead<bp_state::CommandBuffer>(cmd_buffer);
-    for (size_t i = 0; i < cb_state->push_constant_data_set.size(); ++i) {
-        if (!cb_state->push_constant_data_set[i]) {
-            skip |= LogWarning(kVUID_BestPractices_PushConstants, cmd_buffer, loc,
-                               "Pipeline uses push constants with %" PRIu32 " bytes, but byte %" PRIu32
-                               " was never set with vkCmdPushConstants.",
-                               static_cast<uint32_t>(cb_state->push_constant_data_set.size()), static_cast<uint32_t>(i));
+
+    if (!cb_state->push_constant_ranges_layout) {
+        return skip;
+    }
+
+    for (const VkPushConstantRange& push_constant_range : *cb_state->push_constant_ranges_layout) {
+        Range layout_range(push_constant_range.offset, push_constant_range.offset + push_constant_range.size);
+        uint32_t size_not_set = push_constant_range.size;
+        for (const vvl::CommandBuffer::PushConstantData& filled_pcr : cb_state->push_constant_data_chunks) {
+            Range filled_range(filled_pcr.offset, filled_pcr.offset + static_cast<uint32_t>(filled_pcr.values.size()));
+            Range intersection = layout_range & filled_range;
+            if (intersection.valid()) {
+                size_not_set -= std::min(intersection.distance(), size_not_set);
+            }
+            if (size_not_set == 0) {
+                break;
+            }
+        }
+        if (size_not_set > 0) {
+            skip |= LogWarning("BestPractices-PushConstants", cmd_buffer, loc,
+                               "Pipeline uses a push constant range with offset %" PRIu32 " and size %" PRIu32 ", but %" PRIu32
+                               " bytes were never set with vkCmdPushConstants.",
+                               push_constant_range.offset, push_constant_range.size, size_not_set);
             break;
         }
     }
@@ -69,7 +85,6 @@ bool BestPractices::ValidatePushConstants(VkCommandBuffer cmd_buffer, const Loca
 
 void BestPractices::RecordCmdDrawType(VkCommandBuffer cmd_buffer, uint32_t draw_count) {
     auto cb_state = GetWrite<bp_state::CommandBuffer>(cmd_buffer);
-    assert(cb_state);
     if (VendorCheckEnabled(kBPVendorArm)) {
         RecordCmdDrawTypeArm(*cb_state, draw_count);
     }
@@ -85,8 +100,7 @@ void BestPractices::RecordCmdDrawType(VkCommandBuffer cmd_buffer, uint32_t draw_
         cb_state->render_pass_state.drawTouchAttachments = false;
     }
 
-    const auto lv_bind_point = ConvertToLvlBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS);
-    const auto* pipeline_state = cb_state->lastBound[lv_bind_point].pipeline_state;
+    const auto* pipeline_state = cb_state->GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
     if (pipeline_state && pipeline_state->vertex_input_state && !pipeline_state->vertex_input_state->binding_descriptions.empty()) {
         cb_state->uses_vertex_buffer = true;
     }
@@ -121,7 +135,8 @@ bool BestPractices::PreCallValidateCmdDraw(VkCommandBuffer commandBuffer, uint32
     bool skip = false;
 
     if (instanceCount == 0) {
-        skip |= LogWarning(kVUID_BestPractices_CmdDraw_InstanceCountZero, device, error_obj.location, "instanceCount is zero.");
+        skip |= LogWarning("BestPractices-vkCmdDraw-instance-count-zero", device, error_obj.location.dot(Field::instanceCount),
+                           "is zero.");
     }
     skip |= ValidateCmdDrawType(commandBuffer, error_obj.location);
 
@@ -140,7 +155,8 @@ bool BestPractices::PreCallValidateCmdDrawIndexed(VkCommandBuffer commandBuffer,
     bool skip = false;
 
     if (instanceCount == 0) {
-        skip |= LogWarning(kVUID_BestPractices_CmdDraw_InstanceCountZero, device, error_obj.location, "instanceCount is zero.");
+        skip |= LogWarning("BestPractices-vkCmdDrawIndexed-instance-count-zero", device,
+                           error_obj.location.dot(Field::instanceCount), "is zero.");
     }
     skip |= ValidateCmdDrawType(commandBuffer, error_obj.location);
 
@@ -150,7 +166,7 @@ bool BestPractices::PreCallValidateCmdDrawIndexed(VkCommandBuffer commandBuffer,
     if ((indexCount * instanceCount) <= kSmallIndexedDrawcallIndices &&
         (cmd_state->small_indexed_draw_call_count == kMaxSmallIndexedDrawcalls - 1) &&
         (VendorCheckEnabled(kBPVendorArm) || VendorCheckEnabled(kBPVendorIMG))) {
-        skip |= LogPerformanceWarning(kVUID_BestPractices_CmdDrawIndexed_ManySmallIndexedDrawcalls, device, error_obj.location,
+        skip |= LogPerformanceWarning("BestPractices-vkCmdDrawIndexed-many-small-indexed-drawcalls", device, error_obj.location,
                                       "%s %s: The command buffer contains many small indexed drawcalls "
                                       "(at least %u drawcalls with less than %u indices each). This may cause pipeline bubbles. "
                                       "You can try batching drawcalls or instancing when applicable.",
@@ -159,7 +175,8 @@ bool BestPractices::PreCallValidateCmdDrawIndexed(VkCommandBuffer commandBuffer,
     }
 
     if (VendorCheckEnabled(kBPVendorArm)) {
-        ValidateIndexBufferArm(*cmd_state, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance, error_obj.location);
+        skip |= ValidateIndexBufferArm(*cmd_state, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance,
+                                       error_obj.location);
     }
 
     return skip;
@@ -197,16 +214,17 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cmd_st
 
     // check for sparse/underutilised index buffer, and post-transform cache thrashing
     const auto ib_state = Get<vvl::Buffer>(cmd_state.index_buffer_binding.buffer);
-    if (!ib_state) return skip;
+    ASSERT_AND_RETURN_SKIP(ib_state);
 
     const VkIndexType ib_type = cmd_state.index_buffer_binding.index_type;
-    const auto& ib_mem_state = *ib_state->MemState();
-    const void* ib_mem = ib_mem_state.p_driver_data;
+    const auto ib_mem_state = ib_state->MemState();
+    if (!ib_mem_state) return skip;
+
+    const void* ib_mem = ib_mem_state->p_driver_data;
     bool primitive_restart_enable = false;
 
-    const auto lv_bind_point = ConvertToLvlBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS);
-    const auto& last_bound = cmd_state.lastBound[lv_bind_point];
-    const auto* pipeline_state = last_bound.pipeline_state;
+    const auto* pipeline_state = cmd_state.GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
+    ASSERT_AND_RETURN_SKIP(pipeline_state);
 
     const auto* ia_state = pipeline_state->InputAssemblyState();
     if (ia_state) {
@@ -214,7 +232,7 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cmd_st
     }
 
     // no point checking index buffer if the memory is nonexistant/unmapped, or if there is no graphics pipeline bound to this CB
-    if (ib_mem && last_bound.IsUsing()) {
+    if (ib_mem) {
         const uint32_t scan_stride = GetIndexAlignment(ib_type);
         const uint8_t* scan_begin = static_cast<const uint8_t*>(ib_mem) + firstIndex * scan_stride;
         const uint8_t* scan_end = scan_begin + indexCount * scan_stride;
@@ -271,7 +289,7 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cmd_st
 
         if (max_index - min_index >= indexCount) {
             skip |=
-                LogPerformanceWarning(kVUID_BestPractices_CmdDrawIndexed_SparseIndexBuffer, device, loc,
+                LogPerformanceWarning("BestPractices-Arm-vkCmdDrawIndexed-sparse-index-buffer", device, loc,
                                       "%s The indices which were specified for the draw call only utilise approximately %.02f%% of "
                                       "index buffer value range. Arm Mali architectures before G71 do not have IDVS (Index-Driven "
                                       "Vertex Shading), meaning all vertices corresponding to indices between the minimum and "
@@ -322,7 +340,7 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cmd_st
         float cache_hit_rate = static_cast<float>(vertex_reference_count) / static_cast<float>(vertex_shade_count);
 
         if (utilization < 0.5f) {
-            skip |= LogPerformanceWarning(kVUID_BestPractices_CmdDrawIndexed_SparseIndexBuffer, device, loc,
+            skip |= LogPerformanceWarning("BestPractices-Arm-vkCmdDrawIndexed-sparse-index-buffer", device, loc,
                                           "%s The indices which were specified for the draw call only utilise approximately "
                                           "%.02f%% of the bound vertex buffer.",
                                           VendorSpecificTag(kBPVendorArm), utilization);
@@ -330,7 +348,7 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cmd_st
 
         if (cache_hit_rate <= 0.5f) {
             skip |=
-                LogPerformanceWarning(kVUID_BestPractices_CmdDrawIndexed_PostTransformCacheThrashing, device, loc,
+                LogPerformanceWarning("BestPractices-Arm-vkCmdDrawIndexed-post-transform-cache-thrashing", device, loc,
                                       "%s The indices which were specified for the draw call are estimated to cause thrashing of "
                                       "the post-transform vertex cache, with a hit-rate of %.02f%%. "
                                       "I.e. the ordering of the index buffer may not make optimal use of indices associated with "
@@ -369,7 +387,8 @@ bool BestPractices::PreCallValidateCmdDrawIndirect(VkCommandBuffer commandBuffer
     bool skip = false;
 
     if (drawCount == 0) {
-        skip |= LogWarning(kVUID_BestPractices_CmdDraw_DrawCountZero, device, error_obj.location, "drawCount is zero.");
+        skip |= LogWarning("BestPractices-vkCmdDrawIndirect-draw-count-zero", device, error_obj.location.dot(Field::drawCount),
+                           "is zero.");
     }
 
     skip |= ValidateCmdDrawType(commandBuffer, error_obj.location);
@@ -388,7 +407,8 @@ bool BestPractices::PreCallValidateCmdDrawIndexedIndirect(VkCommandBuffer comman
     bool skip = false;
 
     if (drawCount == 0) {
-        skip |= LogWarning(kVUID_BestPractices_CmdDraw_DrawCountZero, device, error_obj.location, "drawCount is zero.");
+        skip |= LogWarning("BestPractices-vkCmdDrawIndexedIndirect-draw-count-zero", device,
+                           error_obj.location.dot(Field::drawCount), "is zero.");
     }
 
     skip |= ValidateCmdDrawType(commandBuffer, error_obj.location);
@@ -660,7 +680,7 @@ bool BestPractices::PreCallValidateCmdDispatch(VkCommandBuffer commandBuffer, ui
     bool skip = false;
 
     if ((groupCountX == 0) || (groupCountY == 0) || (groupCountZ == 0)) {
-        skip |= LogWarning(kVUID_BestPractices_CmdDispatch_GroupCountZero, device, error_obj.location,
+        skip |= LogWarning("BestPractices-vkCmdDispatch-group-count-zero", device, error_obj.location,
                            "one or more groupCounts are zero (groupCountX = %" PRIu32 ", groupCountY = %" PRIu32
                            ", groupCountZ = %" PRIu32 ").",
                            groupCountX, groupCountY, groupCountZ);
@@ -686,9 +706,10 @@ bool BestPractices::PreCallValidateEndCommandBuffer(VkCommandBuffer commandBuffe
     const auto cb_state = GetRead<bp_state::CommandBuffer>(commandBuffer);
 
     if (!cb_state->current_vertex_buffer_binding_info.empty() && !cb_state->uses_vertex_buffer) {
-        skip |= LogPerformanceWarning(kVUID_BestPractices_DrawState_VtxIndexOutOfBounds, cb_state->Handle(), error_obj.location,
-                                      "Vertex buffers was bound to %s but no draws had a pipeline that used the vertex buffer.",
-                                      FormatHandle(cb_state->Handle()).c_str());
+        skip |=
+            LogPerformanceWarning("BestPractices-vkEndCommandBuffer-VtxIndexOutOfBounds", cb_state->Handle(), error_obj.location,
+                                  "Vertex buffers was bound to %s but no draws had a pipeline that used the vertex buffer.",
+                                  FormatHandle(cb_state->Handle()).c_str());
     }
     return skip;
 }

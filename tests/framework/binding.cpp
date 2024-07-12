@@ -800,6 +800,12 @@ VkMemoryAllocateInfo DeviceMemory::get_resource_alloc_info(const Device &dev, co
 
 NON_DISPATCHABLE_HANDLE_DTOR(Fence, vk::DestroyFence)
 
+Fence &Fence::operator=(Fence &&rhs) noexcept {
+    destroy();
+    NonDispHandle<VkFence>::operator=(std::move(rhs));
+    return *this;
+}
+
 void Fence::init(const Device &dev, const VkFenceCreateInfo &info) { NON_DISPATCHABLE_HANDLE_INIT(vk::CreateFence, dev, &info); }
 
 VkResult Fence::wait(uint64_t timeout) const {
@@ -858,6 +864,12 @@ Semaphore::Semaphore(const Device &dev, VkSemaphoreType type, uint64_t initial_v
         VkSemaphoreCreateInfo semaphore_ci = vku::InitStructHelper(&semaphore_type_ci);
         init(dev, semaphore_ci);
     }
+}
+
+Semaphore &Semaphore::operator=(Semaphore &&rhs) noexcept {
+    destroy();
+    NonDispHandle<VkSemaphore>::operator=(std::move(rhs));
+    return *this;
 }
 
 void Semaphore::init(const Device &dev, const VkSemaphoreCreateInfo &info) {
@@ -1284,7 +1296,7 @@ void Image::SetLayout(VkImageAspectFlags aspect, VkImageLayout image_layout) {
     }
 
     CommandPool pool(*device_, device_->graphics_queue_node_index_);
-    CommandBuffer cmd_buf(*device_, &pool);
+    CommandBuffer cmd_buf(*device_, pool);
 
     /* Build command buffer to set image layout in the driver */
     cmd_buf.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -1309,10 +1321,11 @@ VkImageViewCreateInfo Image::BasicViewCreatInfo(VkImageAspectFlags aspect_mask) 
     return ci;
 }
 
-ImageView Image::CreateView(VkImageAspectFlags aspect) const {
+ImageView Image::CreateView(VkImageAspectFlags aspect, void *pNext) const {
     VkImageViewCreateInfo ci = BasicViewCreatInfo(aspect);
     ci.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
     ci.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+    ci.pNext = pNext;
     return ImageView(*device_, ci);
 }
 
@@ -1492,18 +1505,6 @@ Shader::Shader(const Device &dev, const VkShaderStageFlagBits stage, const std::
     init(dev, createInfo);
 }
 
-Shader::Shader(const Device &dev, const VkShaderStageFlagBits stage, const std::vector<uint32_t> &spv,
-               VkShaderCreateFlagsEXT flags) {
-    VkShaderCreateInfoEXT createInfo = vku::InitStructHelper();
-    createInfo.flags = flags;
-    createInfo.stage = stage;
-    createInfo.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
-    createInfo.codeSize = spv.size() * sizeof(spv[0]);
-    createInfo.pCode = spv.data();
-    createInfo.pName = "main";
-    init(dev, createInfo);
-}
-
 NON_DISPATCHABLE_HANDLE_DTOR(PipelineCache, vk::DestroyPipelineCache)
 
 void PipelineCache::init(const Device &dev, const VkPipelineCacheCreateInfo &info) {
@@ -1635,8 +1636,19 @@ DescriptorSet::~DescriptorSet() noexcept { destroy(); }
 
 NON_DISPATCHABLE_HANDLE_DTOR(CommandPool, vk::DestroyCommandPool)
 
-void CommandPool::init(const Device &dev, const VkCommandPoolCreateInfo &info) {
+void CommandPool::Init(const Device &dev, const VkCommandPoolCreateInfo &info) {
     NON_DISPATCHABLE_HANDLE_INIT(vk::CreateCommandPool, dev, &info);
+}
+
+void CommandPool::Init(const Device &dev, uint32_t queue_family_index, VkCommandPoolCreateFlags flags) {
+    VkCommandPoolCreateInfo pool_ci = vku::InitStructHelper();
+    pool_ci.flags = flags;
+    pool_ci.queueFamilyIndex = queue_family_index;
+    Init(dev, pool_ci);
+}
+
+CommandPool::CommandPool(const Device &dev, uint32_t queue_family_index, VkCommandPoolCreateFlags flags) {
+    Init(dev, queue_family_index, flags);
 }
 
 void CommandBuffer::destroy() noexcept {
@@ -1661,8 +1673,8 @@ void CommandBuffer::init(const Device &dev, const VkCommandBufferAllocateInfo &i
     cmd_pool_ = info.commandPool;
 }
 
-void CommandBuffer::Init(const Device &dev, const CommandPool *pool, VkCommandBufferLevel level) {
-    auto create_info = CommandBuffer::create_info(pool->handle());
+void CommandBuffer::Init(const Device &dev, const CommandPool &pool, VkCommandBufferLevel level) {
+    auto create_info = CommandBuffer::create_info(pool.handle());
     create_info.level = level;
     init(dev, create_info);
 }
@@ -1745,6 +1757,20 @@ void CommandBuffer::EndRendering() {
     }
 }
 
+void CommandBuffer::BindVertFragShader(const vkt::Shader &vert_shader, const vkt::Shader &frag_shader) {
+    const VkShaderStageFlagBits stages[] = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+                                            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, VK_SHADER_STAGE_GEOMETRY_BIT,
+                                            VK_SHADER_STAGE_FRAGMENT_BIT};
+    const VkShaderEXT shaders[] = {vert_shader.handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, frag_shader.handle()};
+    vk::CmdBindShadersEXT(handle(), 5, stages, shaders);
+}
+
+void CommandBuffer::BindCompShader(const vkt::Shader &comp_shader) {
+    const VkShaderStageFlagBits stages[] = {VK_SHADER_STAGE_COMPUTE_BIT};
+    const VkShaderEXT shaders[] = {comp_shader.handle()};
+    vk::CmdBindShadersEXT(handle(), 1, stages, shaders);
+}
+
 void CommandBuffer::BeginVideoCoding(const VkVideoBeginCodingInfoKHR &beginInfo) {
     PFN_vkCmdBeginVideoCodingKHR vkCmdBeginVideoCodingKHR =
         (PFN_vkCmdBeginVideoCodingKHR)vk::GetDeviceProcAddr(dev_handle_, "vkCmdBeginVideoCodingKHR");
@@ -1784,6 +1810,14 @@ void CommandBuffer::EndVideoCoding(const VkVideoEndCodingInfoKHR &endInfo) {
 
     vkCmdEndVideoCodingKHR(handle(), &endInfo);
 }
+
+void CommandBuffer::Copy(const Buffer &src, const Buffer &dst) {
+    assert(src.create_info().size == dst.create_info().size);
+    const VkBufferCopy region = {0, 0, src.create_info().size};
+    vk::CmdCopyBuffer(handle(), src.handle(), dst.handle(), 1, &region);
+}
+
+void CommandBuffer::ExecuteCommands(const CommandBuffer &secondary) { vk::CmdExecuteCommands(handle(), 1, &secondary.handle()); }
 
 void RenderPass::init(const Device &dev, const VkRenderPassCreateInfo &info) {
     NON_DISPATCHABLE_HANDLE_INIT(vk::CreateRenderPass, dev, &info);

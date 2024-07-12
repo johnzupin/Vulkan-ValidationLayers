@@ -310,7 +310,8 @@ class OutputDatabase:
                         sep = ', '
                         test = sep.join(test_list)
 
-                    txt.write(f'{vuid} | {checked} | {test} | {spirv} | {db_entry["type"]} | {db_entry["api"]} | {db_entry["ext"]}\n')
+                    vuid_text = db_entry["text"].replace('\n', ' ')
+                    txt.write(f'{vuid} | {checked} | {test} | {spirv} | {db_entry["type"]} | {db_entry["api"]} | {vuid_text}\n')
 
     def dump_csv(self, filename, only_unimplemented=False):
         print(f'\nDumping database to csv file: {filename}')
@@ -457,11 +458,7 @@ def main(argv):
 
     layer_source_files = [repo_relative(path) for path in [
         'layers/error_message/unimplementable_validation.h',
-        'layers/state_tracker/cmd_buffer_state.cpp', # some Video VUIDs are in here
-        'layers/state_tracker/descriptor_sets.cpp',
         'layers/state_tracker/video_session_state.cpp',
-        'layers/gpu_validation/gpu_vuids.h',
-        'layers/stateless/stateless_validation.h',
         f'layers/{args.api}/generated/stateless_validation_helper.cpp',
         f'layers/{args.api}/generated/object_tracker.cpp',
         f'layers/{args.api}/generated/spirv_validation_helper.cpp',
@@ -473,7 +470,9 @@ def main(argv):
     layer_source_files.extend(glob.glob(os.path.join(repo_relative('layers/sync/'), '*.cpp')))
     layer_source_files.extend(glob.glob(os.path.join(repo_relative('layers/object_tracker/'), '*.cpp')))
     layer_source_files.extend(glob.glob(os.path.join(repo_relative('layers/drawdispatch/'), '*.cpp')))
-    layer_source_files.extend(glob.glob(os.path.join(repo_relative('layers/gpu_validation/'), '*.cpp')))
+    layer_source_files.extend(glob.glob(os.path.join(repo_relative('layers/gpu/'), '*.cpp')))
+    layer_source_files.extend(glob.glob(os.path.join(repo_relative('layers/gpu/error_message'), '*.cpp')))
+    layer_source_files.extend(glob.glob(os.path.join(repo_relative('layers/gpu/instrumentation'), '*.cpp')))
 
     test_source_files = glob.glob(os.path.join(repo_relative('tests/unit'), '*.cpp'))
 

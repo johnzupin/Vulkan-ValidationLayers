@@ -399,28 +399,28 @@ class ViewportInheritanceTestData {
     }
 };
 
+class NegativeViewportInheritance : public VkLayerTest {};
+
 TEST_F(NegativeViewportInheritance, BasicUsage) {
 #if defined(VVL_ENABLE_TSAN)
     GTEST_SKIP() << "https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5965";
 #endif
     TEST_DESCRIPTION("Simple correct and incorrect usage of VK_NV_inherited_viewport_scissor");
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    bool has_features = false;
-    const char* missing_feature_string = nullptr;
-    auto self = this;
-    RETURN_IF_SKIP(has_features = ViewportInheritanceTestData::InitState(
-                       this, [self](const char* extension) { self->m_device_extension_names.push_back(extension); },
-                       &missing_feature_string, true, false));
-    if (!has_features) {
-        GTEST_SKIP() << missing_feature_string;
-    }
+    AddRequiredExtensions(VK_NV_INHERITED_VIEWPORT_SCISSOR_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_NESTED_COMMAND_BUFFER_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::multiViewport);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState);
+    AddRequiredFeature(vkt::Feature::inheritedViewportScissor2D);
+    AddRequiredFeature(vkt::Feature::nestedCommandBuffer);
+    AddRequiredFeature(vkt::Feature::nestedCommandBufferSimultaneousUse);
+    RETURN_IF_SKIP(Init());
 
     ViewportInheritanceTestData test_data(m_device, gpu());
     if (test_data.FailureReason()) {
         GTEST_SKIP() << "Test internal failure: " << test_data.FailureReason();
     }
-    VkCommandPool pool = m_commandPool->handle();
+    VkCommandPool pool = m_command_pool.handle();
 
     VkCommandBuffer subpass_cmd = test_data.MakeBeginSubpassCommandBuffer(pool, 1, test_data.kViewportDepthOnlyArray);
     test_data.BindGraphicsPipeline(subpass_cmd, true, 1);
@@ -653,7 +653,7 @@ TEST_F(NegativeViewportInheritance, MissingFeature) {
     if (test_data.FailureReason()) {
         GTEST_SKIP() << "Test internal failure: " << test_data.FailureReason();
     }
-    VkCommandPool pool = m_commandPool->handle();
+    VkCommandPool pool = m_command_pool.handle();
 
     test_data.MakeBeginSubpassCommandBuffer(pool, 0, nullptr);
 
@@ -668,22 +668,20 @@ TEST_F(NegativeViewportInheritance, MultiViewport) {
 #endif
     TEST_DESCRIPTION("VK_NV_inherited_viewport_scissor tests with multiple viewports/scissors");
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    bool has_features = false;
-    const char* missing_feature_string = nullptr;
-    auto self = this;
-    RETURN_IF_SKIP(has_features = ViewportInheritanceTestData::InitState(
-                       this, [self](const char* extension) { self->m_device_extension_names.push_back(extension); },
-                       &missing_feature_string, true, true));
-    if (!has_features) {
-        GTEST_SKIP() << missing_feature_string;
-    }
+    AddRequiredExtensions(VK_NV_INHERITED_VIEWPORT_SCISSOR_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_NESTED_COMMAND_BUFFER_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::multiViewport);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState);
+    AddRequiredFeature(vkt::Feature::inheritedViewportScissor2D);
+    AddRequiredFeature(vkt::Feature::nestedCommandBuffer);
+    AddRequiredFeature(vkt::Feature::nestedCommandBufferSimultaneousUse);
+    RETURN_IF_SKIP(Init());
 
     ViewportInheritanceTestData test_data(m_device, gpu());
     if (test_data.FailureReason()) {
         GTEST_SKIP() << "Test internal failure: " << test_data.FailureReason();
     }
-    VkCommandPool pool = m_commandPool->handle();
+    VkCommandPool pool = m_command_pool.handle();
 
     // Test using viewport/scissor with count state without providing it to be inherited.
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-07850");  // viewport
@@ -913,7 +911,7 @@ TEST_F(NegativeViewportInheritance, ScissorMissingFeature) {
     if (test_data.FailureReason()) {
         GTEST_SKIP() << "Test internal failure: " << test_data.FailureReason();
     }
-    VkCommandPool pool = m_commandPool->handle();
+    VkCommandPool pool = m_command_pool.handle();
 
     m_errorMonitor->SetDesiredError("VUID-VkCommandBufferInheritanceViewportScissorInfoNV-viewportScissor2D-04783");
     test_data.MakeBeginSubpassCommandBuffer(pool, 2, test_data.kViewportArray);
@@ -945,7 +943,7 @@ TEST_F(NegativeViewportInheritance, PipelineMissingDynamicStateDiscardRectangle)
     InitRenderTarget();
 
     vkt::CommandPool pool(*m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer secondary(*m_device, &pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     ViewportInheritanceTestData test_data(m_device, gpu());
     if (test_data.FailureReason()) {

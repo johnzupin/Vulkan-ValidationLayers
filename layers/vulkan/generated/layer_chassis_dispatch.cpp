@@ -334,7 +334,7 @@ void WrapPnextChainHandles(ValidationObject* layer_data, const void* pNext) {
     }
 }
 
-static bool NotDispatchableHandle(VkObjectType object_type) {
+[[maybe_unused]] static bool NotDispatchableHandle(VkObjectType object_type) {
     switch (object_type) {
         case VK_OBJECT_TYPE_INSTANCE:
         case VK_OBJECT_TYPE_PHYSICAL_DEVICE:
@@ -4494,10 +4494,10 @@ void DispatchCmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer commandBuffer
 }
 
 void DispatchCmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer,
-                                                      const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo) {
+                                                      const VkRenderingInputAttachmentIndexInfoKHR* pInputAttachmentIndexInfo) {
     auto layer_data = GetLayerDataPtr(GetDispatchKey(commandBuffer), layer_data_map);
 
-    layer_data->device_dispatch_table.CmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pLocationInfo);
+    layer_data->device_dispatch_table.CmdSetRenderingInputAttachmentIndicesKHR(commandBuffer, pInputAttachmentIndexInfo);
 }
 
 VkResult DispatchWaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t presentId, uint64_t timeout) {

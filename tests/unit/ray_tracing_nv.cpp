@@ -33,6 +33,11 @@ void RayTracingTest::NvInitFrameworkForRayTracingTest(VkPhysicalDeviceFeatures2K
     }
 }
 
+class NegativeRayTracingNV : public RayTracingTest {
+  public:
+    void OOBRayTracingShadersTestBodyNV(bool gpu_assisted);
+};
+
 void NegativeRayTracingNV::OOBRayTracingShadersTestBodyNV(bool gpu_assisted) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_NV_RAY_TRACING_EXTENSION_NAME);
@@ -87,7 +92,7 @@ void NegativeRayTracingNV::OOBRayTracingShadersTestBodyNV(bool gpu_assisted) {
 
     vkt::CommandPool ray_tracing_command_pool(*m_device, ray_tracing_queue_family_index,
                                               VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer ray_tracing_command_buffer(*m_device, &ray_tracing_command_pool);
+    vkt::CommandBuffer ray_tracing_command_buffer(*m_device, ray_tracing_command_pool);
 
     constexpr std::array<VkAabbPositionsKHR, 1> aabbs = {{{-1.0f, -1.0f, -1.0f, +1.0f, +1.0f, +1.0f}}};
 

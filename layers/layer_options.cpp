@@ -20,8 +20,10 @@
 #include "utils/hash_util.h"
 #include <vulkan/layer/vk_layer_settings.hpp>
 
-#include "gpu_validation/gpu_settings.h"
+#include "gpu/core/gpu_settings.h"
 #include "error_message/logging.h"
+
+#include "sync/sync_settings.h"
 
 // Include new / delete overrides if using mimalloc. This needs to be include exactly once in a file that is
 // part of the VVL but not the layer utils library.
@@ -71,19 +73,19 @@ const char *VK_LAYER_PRINTF_BUFFER_SIZE = "printf_buffer_size";
 // GPU-AV
 // ---
 const char *VK_LAYER_GPUAV_SHADER_INSTRUMENTATION = "gpuav_shader_instrumentation";
-const char *VK_LAYER_GPUAV_VALIDATE_DESCRIPTORS = "gpuav_descriptor_checks";
+const char *VK_LAYER_GPUAV_DESCRIPTORS_CHECKS = "gpuav_descriptor_checks";
 const char *VK_LAYER_GPUAV_WARN_ON_ROBUST_OOB = "gpuav_warn_on_robust_oob";
 const char *VK_LAYER_GPUAV_BUFFER_ADDRESS_OOB = "gpuav_buffer_address_oob";
-const char *VK_LAYER_GPUAV_MAX_BUFFER_DEVICE_ADDRESS_BUFFERS = "gpuav_max_buffer_device_addresses";
+const char *VK_LAYER_GPUAV_MAX_BUFFER_DEVICE_ADDRESSES = "gpuav_max_buffer_device_addresses";
 const char *VK_LAYER_GPUAV_VALIDATE_RAY_QUERY = "gpuav_validate_ray_query";
 const char *VK_LAYER_GPUAV_CACHE_INSTRUMENTED_SHADERS = "gpuav_cache_instrumented_shaders";
 const char *VK_LAYER_GPUAV_SELECT_INSTRUMENTED_SHADERS = "gpuav_select_instrumented_shaders";
 
 const char *VK_LAYER_GPUAV_BUFFERS_VALIDATION = "gpuav_buffers_validation";
-const char *VK_LAYER_GPUAV_VALIDATE_INDIRECT_DRAWS_BUFFERS = "gpuav_indirect_draws_buffers";
-const char *VK_LAYER_GPUAV_VALIDATE_INDIRECT_DISPATCHES_BUFFERS = "gpuav_indirect_dispatches_buffers";
-const char *VK_LAYER_GPUAV_VALIDATE_INDIRECT_TRACE_RAYS_BUFFERS = "gpuav_indirect_trace_rays_buffers";
-const char *VK_LAYER_GPUAV_VALIDATE_BUFFER_COPIES = "gpuav_buffer_copies";
+const char *VK_LAYER_GPUAV_INDIRECT_DRAWS_BUFFERS = "gpuav_indirect_draws_buffers";
+const char *VK_LAYER_GPUAV_INDIRECT_DISPATCHES_BUFFERS = "gpuav_indirect_dispatches_buffers";
+const char *VK_LAYER_GPUAV_INDIRECT_TRACE_RAYS_BUFFERS = "gpuav_indirect_trace_rays_buffers";
+const char *VK_LAYER_GPUAV_BUFFER_COPIES = "gpuav_buffer_copies";
 
 const char *VK_LAYER_GPUAV_RESERVE_BINDING_SLOT = "gpuav_reserve_binding_slot";
 const char *VK_LAYER_GPUAV_VMA_LINEAR_OUTPUT = "gpuav_vma_linear_output";
@@ -122,7 +124,7 @@ void SetValidationDisable(CHECK_DISABLED &disable_data, const ValidationCheckDis
             disable_data[sync_validation_queue_submit] = true;
             break;
         default:
-            assert(true);
+            assert(false);
     }
 }
 
@@ -181,7 +183,7 @@ void SetValidationEnable(CHECK_ENABLED &enable_data, const ValidationCheckEnable
             enable_data[vendor_specific_nvidia] = true;
             break;
         default:
-            assert(true);
+            assert(false);
     }
 }
 
@@ -201,16 +203,6 @@ void SetValidationFeatureEnable(CHECK_ENABLED &enable_data, const VkValidationFe
             enable_data[debug_printf_validation] = true;
             break;
         case VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT:
-            enable_data[sync_validation] = true;
-            break;
-        default:
-            break;
-    }
-}
-
-void SetValidationFeatureEnable2(CHECK_ENABLED &enable_data, const VkValidationFeatureEnable feature_enable) {
-    switch (feature_enable) {
-        case VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION:
             enable_data[sync_validation] = true;
             break;
         default:
@@ -277,11 +269,6 @@ void SetLocalEnableSetting(std::string list_of_enables, const std::string &delim
             auto result = VkValFeatureEnableLookup.find(token);
             if (result != VkValFeatureEnableLookup.end()) {
                 SetValidationFeatureEnable(enables, result->second);
-            } else {
-                auto result2 = VkValFeatureEnableLookup2.find(token);
-                if (result2 != VkValFeatureEnableLookup2.end()) {
-                    SetValidationFeatureEnable2(enables, result2->second);
-                }
             }
         } else if (token.find("VALIDATION_CHECK_ENABLE_") != std::string::npos) {
             auto result = ValidationEnableLookup.find(token);
@@ -403,7 +390,7 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_ENABLES)) {
         vkuGetLayerSettingValues(layer_setting_set, VK_LAYER_ENABLES, enables);
     }
-    const std::string &string_enables = Merge(enables);
+    const std::string string_enables = Merge(enables);
     SetLocalEnableSetting(string_enables, ",", settings_data->enables);
 
     // Read legacy "disables" flags for backward compatibility
@@ -411,7 +398,7 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_DISABLES)) {
         vkuGetLayerSettingValues(layer_setting_set, VK_LAYER_DISABLES, disables);
     }
-    const std::string &string_disables = Merge(disables);
+    const std::string string_disables = Merge(disables);
     SetLocalDisableSetting(string_disables, ",", settings_data->disables);
 
     // Fine Grained Locking
@@ -425,7 +412,7 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_MESSAGE_ID_FILTER)) {
         vkuGetLayerSettingValues(layer_setting_set, VK_LAYER_MESSAGE_ID_FILTER, message_id_filter);
     }
-    const std::string &string_message_id_filter = Merge(message_id_filter);
+    const std::string string_message_id_filter = Merge(message_id_filter);
     CreateFilterMessageIdList(string_message_id_filter, ",", settings_data->message_filter_list);
 
     // Duplicate message limit
@@ -462,8 +449,8 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     if (!gpuav_settings.shader_instrumentation_enabled) {
         gpuav_settings.DisableShaderInstrumentationAndOptions();
     } else {
-        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_DESCRIPTORS)) {
-            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_DESCRIPTORS, gpuav_settings.validate_descriptors);
+        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_DESCRIPTORS_CHECKS)) {
+            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_DESCRIPTORS_CHECKS, gpuav_settings.validate_descriptors);
         }
 
         if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_WARN_ON_ROBUST_OOB)) {
@@ -477,9 +464,8 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
         if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_BUFFER_ADDRESS_OOB)) {
             vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_BUFFER_ADDRESS_OOB, gpuav_settings.validate_bda);
         }
-        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_MAX_BUFFER_DEVICE_ADDRESS_BUFFERS)) {
-            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_MAX_BUFFER_DEVICE_ADDRESS_BUFFERS,
-                                    gpuav_settings.max_bda_in_use);
+        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_MAX_BUFFER_DEVICE_ADDRESSES)) {
+            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_MAX_BUFFER_DEVICE_ADDRESSES, gpuav_settings.max_bda_in_use);
         }
 
         if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_RAY_QUERY)) {
@@ -518,26 +504,25 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     if (!gpuav_settings.buffers_validation_enabled) {
         gpuav_settings.SetBufferValidationEnabled(false);
     } else {
-        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_INDIRECT_DRAWS_BUFFERS)) {
-            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_INDIRECT_DRAWS_BUFFERS,
+        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_INDIRECT_DRAWS_BUFFERS)) {
+            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_INDIRECT_DRAWS_BUFFERS,
                                     gpuav_settings.validate_indirect_draws_buffers);
         }
-        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_INDIRECT_DISPATCHES_BUFFERS)) {
-            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_INDIRECT_DISPATCHES_BUFFERS,
+        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_INDIRECT_DISPATCHES_BUFFERS)) {
+            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_INDIRECT_DISPATCHES_BUFFERS,
                                     gpuav_settings.validate_indirect_dispatches_buffers);
         }
-        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_INDIRECT_TRACE_RAYS_BUFFERS)) {
-            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_INDIRECT_TRACE_RAYS_BUFFERS,
+        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_INDIRECT_TRACE_RAYS_BUFFERS)) {
+            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_INDIRECT_TRACE_RAYS_BUFFERS,
                                     gpuav_settings.validate_indirect_trace_rays_buffers);
         }
-        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_BUFFER_COPIES)) {
-            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_VALIDATE_BUFFER_COPIES,
-                                    gpuav_settings.validate_buffer_copies);
+        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_BUFFER_COPIES)) {
+            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_BUFFER_COPIES, gpuav_settings.validate_buffer_copies);
         } else if (vkuHasLayerSetting(layer_setting_set, DEPRECATED_VK_LAYER_GPUAV_VALIDATE_COPIES)) {
             vkuGetLayerSettingValue(layer_setting_set, DEPRECATED_VK_LAYER_GPUAV_VALIDATE_COPIES,
                                     gpuav_settings.validate_buffer_copies);
             printf("Validation Setting Warning - %s was set, this is deprecated, please use %s\n",
-                   DEPRECATED_VK_LAYER_GPUAV_VALIDATE_COPIES, VK_LAYER_GPUAV_VALIDATE_BUFFER_COPIES);
+                   DEPRECATED_VK_LAYER_GPUAV_VALIDATE_COPIES, VK_LAYER_GPUAV_BUFFER_COPIES);
         }
     }
 
