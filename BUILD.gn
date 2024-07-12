@@ -20,28 +20,7 @@ if (is_win) {
   vulkan_undefine_configs += [ "//build/config/win:unicode" ]
 }
 
-vulkan_gen_dir = "$target_gen_dir/$vulkan_gen_subdir"
-raw_vulkan_gen_dir = rebase_path(vulkan_gen_dir, root_build_dir)
-
 vulkan_data_dir = "$root_out_dir/$vulkan_data_subdir"
-raw_vulkan_data_dir = rebase_path(vulkan_data_dir, root_build_dir)
-
-raw_root_out_dir = rebase_path(root_out_dir, root_build_dir)
-
-# This special action is needed to remove old VVL objects that are now renamed.
-action("vulkan_clean_old_validation_layer_objects") {
-  script = "scripts/gn/remove_files.py"
-
-  # inputs is a (random) new file since the vvl roll, used to ensure the cleanup is done only once
-  inputs = [ "layers/gpu_validation/gpu_validation.cpp" ]
-  outputs = [ "$vulkan_gen_dir/old_vvl_files_are_removed" ]
-  args = [
-    "$raw_vulkan_gen_dir/old_vvl_files_are_removed",
-    "$raw_root_out_dir/libVkLayer*",
-    "$raw_root_out_dir/VkLayer*",
-    "$raw_vulkan_data_dir/VkLayer*.json",
-  ]
-}
 
 config("generated_layers_config") {
   if (is_clang) {
@@ -95,7 +74,6 @@ config("vulkan_layer_config") {
 vvl_sources = [
   "$vulkan_headers_dir/include/vulkan/vk_layer.h",
   "$vulkan_headers_dir/include/vulkan/vulkan.h",
-  "layers/best_practices/best_practices_error_enums.h",
   "layers/best_practices/best_practices_utils.cpp",
   "layers/best_practices/best_practices_validation.h",
   "layers/best_practices/bp_buffer.cpp",
@@ -163,47 +141,63 @@ vvl_sources = [
   "layers/external/vma/vk_mem_alloc.h",
   "layers/external/vma/vma.cpp",
   "layers/external/vma/vma.h",
-  "layers/gpu_shaders/gpu_error_codes.h",
-  "layers/gpu_shaders/gpu_error_header.h",
-  "layers/gpu_shaders/gpu_shaders_constants.h",
-  "layers/gpu_validation/debug_printf.cpp",
-  "layers/gpu_validation/debug_printf.h",
-  "layers/gpu_validation/gpu_constants.h",
-  "layers/gpu_validation/gpu_descriptor_set.cpp",
-  "layers/gpu_validation/gpu_descriptor_set.h",
-  "layers/gpu_validation/gpu_error_message.cpp",
-  "layers/gpu_validation/gpu_error_message.h",
-  "layers/gpu_validation/gpu_image_layout.cpp",
-  "layers/gpu_validation/gpu_settings.h",
-  "layers/gpu_validation/gpu_state_tracker.cpp",
-  "layers/gpu_validation/gpu_state_tracker.h",
-  "layers/gpu_validation/gpu_subclasses.cpp",
-  "layers/gpu_validation/gpu_subclasses.h",
-  "layers/gpu_validation/gpu_record.cpp",
-  "layers/gpu_validation/gpu_resources.h",
-  "layers/gpu_validation/gpu_settings.h",
-  "layers/gpu_validation/gpu_setup.cpp",
-  "layers/gpu_validation/gpu_validation.cpp",
-  "layers/gpu_validation/gpu_validation.h",
-  "layers/gpu_validation/gpu_vuids.cpp",
-  "layers/gpu_validation/gpu_vuids.h",
-  "layers/gpu_validation/spirv/function_basic_block.cpp",
-  "layers/gpu_validation/spirv/function_basic_block.h",
-  "layers/gpu_validation/spirv/instruction.cpp",
-  "layers/gpu_validation/spirv/instruction.h",
-  "layers/gpu_validation/spirv/link.h",
-  "layers/gpu_validation/spirv/module.cpp",
-  "layers/gpu_validation/spirv/module.h",
-  "layers/gpu_validation/spirv/pass.cpp",
-  "layers/gpu_validation/spirv/pass.h",
-  "layers/gpu_validation/spirv/type_manager.cpp",
-  "layers/gpu_validation/spirv/type_manager.h",
-  "layers/gpu_validation/spirv/bindless_descriptor_pass.h",
-  "layers/gpu_validation/spirv/bindless_descriptor_pass.cpp",
-  "layers/gpu_validation/spirv/buffer_device_address_pass.h",
-  "layers/gpu_validation/spirv/buffer_device_address_pass.cpp",
-  "layers/gpu_validation/spirv/ray_query_pass.h",
-  "layers/gpu_validation/spirv/ray_query_pass.cpp",
+  "layers/external/inplace_function.h",
+  "layers/external/xxhash.h",
+  "layers/gpu/core/gpu_settings.h",
+  "layers/gpu/core/gpuav_constants.h",
+  "layers/gpu/cmd_validation/gpuav_cmd_validation_common.h",
+  "layers/gpu/cmd_validation/gpuav_cmd_validation_common.cpp",
+  "layers/gpu/cmd_validation/gpuav_draw.h",
+  "layers/gpu/cmd_validation/gpuav_draw.cpp",
+  "layers/gpu/cmd_validation/gpuav_dispatch.h",
+  "layers/gpu/cmd_validation/gpuav_dispatch.cpp",
+  "layers/gpu/cmd_validation/gpuav_trace_rays.h",
+  "layers/gpu/cmd_validation/gpuav_trace_rays.cpp",
+  "layers/gpu/cmd_validation/gpuav_copy_buffer_to_image.h",
+  "layers/gpu/cmd_validation/gpuav_copy_buffer_to_image.cpp",
+  "layers/gpu/descriptor_validation/gpuav_descriptor_validation.h",
+  "layers/gpu/descriptor_validation/gpuav_descriptor_validation.cpp",
+  "layers/gpu/descriptor_validation/gpuav_descriptor_set.cpp",
+  "layers/gpu/descriptor_validation/gpuav_descriptor_set.h",
+  "layers/gpu/descriptor_validation/gpuav_image_layout.h",
+  "layers/gpu/descriptor_validation/gpuav_image_layout.cpp",
+  "layers/gpu/core/gpuav.h",
+  "layers/gpu/core/gpu_state_tracker.cpp",
+  "layers/gpu/core/gpu_state_tracker.h",
+  "layers/gpu/core/gpuav_record.cpp",
+  "layers/gpu/core/gpuav_setup.cpp",
+  "layers/gpu/debug_printf/debug_printf.cpp",
+  "layers/gpu/debug_printf/debug_printf.h",
+  "layers/gpu/error_message/gpuav_vuids.cpp",
+  "layers/gpu/error_message/gpuav_vuids.h",
+  "layers/gpu/instrumentation/gpu_shader_instrumentor.cpp",
+  "layers/gpu/instrumentation/gpu_shader_instrumentor.h",
+  "layers/gpu/instrumentation/gpuav_instrumentation.h",
+  "layers/gpu/instrumentation/gpuav_instrumentation.cpp",
+  "layers/gpu/resources/gpuav_subclasses.cpp",
+  "layers/gpu/resources/gpuav_subclasses.h",
+  "layers/gpu/resources/gpu_resources.h",
+  "layers/gpu/resources/gpu_resources.cpp",
+  "layers/gpu/spirv/function_basic_block.cpp",
+  "layers/gpu/spirv/function_basic_block.h",
+  "layers/gpu/spirv/instruction.cpp",
+  "layers/gpu/spirv/instruction.h",
+  "layers/gpu/spirv/link.h",
+  "layers/gpu/spirv/module.cpp",
+  "layers/gpu/spirv/module.h",
+  "layers/gpu/spirv/pass.cpp",
+  "layers/gpu/spirv/pass.h",
+  "layers/gpu/spirv/type_manager.cpp",
+  "layers/gpu/spirv/type_manager.h",
+  "layers/gpu/spirv/bindless_descriptor_pass.h",
+  "layers/gpu/spirv/bindless_descriptor_pass.cpp",
+  "layers/gpu/spirv/buffer_device_address_pass.h",
+  "layers/gpu/spirv/buffer_device_address_pass.cpp",
+  "layers/gpu/spirv/ray_query_pass.h",
+  "layers/gpu/spirv/ray_query_pass.cpp",
+  "layers/gpu/shaders/gpu_error_codes.h",
+  "layers/gpu/shaders/gpu_error_header.h",
+  "layers/gpu/shaders/gpu_shaders_constants.h",
   "layers/layer_options.cpp",
   "layers/layer_options.h",
   "layers/object_tracker/object_lifetime_validation.h",
@@ -216,6 +210,7 @@ vvl_sources = [
   "layers/state_tracker/descriptor_sets.h",
   "layers/state_tracker/device_memory_state.cpp",
   "layers/state_tracker/device_memory_state.h",
+  "layers/state_tracker/device_state.cpp",
   "layers/state_tracker/device_state.h",
   "layers/state_tracker/fence_state.cpp",
   "layers/state_tracker/fence_state.h",
@@ -244,6 +239,8 @@ vvl_sources = [
   "layers/state_tracker/shader_module.h",
   "layers/state_tracker/shader_object_state.cpp",
   "layers/state_tracker/shader_object_state.h",
+  "layers/state_tracker/shader_stage_state.cpp",
+  "layers/state_tracker/shader_stage_state.h",
   "layers/state_tracker/state_object.cpp",
   "layers/state_tracker/state_object.h",
   "layers/state_tracker/state_tracker.cpp",
@@ -282,6 +279,9 @@ vvl_sources = [
   "layers/sync/sync_op.h",
   "layers/sync/sync_renderpass.cpp",
   "layers/sync/sync_renderpass.h",
+  "layers/sync/sync_settings.h",
+  "layers/sync/sync_stats.cpp",
+  "layers/sync/sync_stats.h",
   "layers/sync/sync_submit.cpp",
   "layers/sync/sync_submit.h",
   "layers/sync/sync_utils.cpp",
@@ -306,21 +306,21 @@ vvl_sources = [
   "layers/vulkan/generated/dynamic_state_helper.cpp",
   "layers/vulkan/generated/dynamic_state_helper.h",
   "layers/vulkan/generated/enum_flag_bits.h",
-  "layers/vulkan/generated/gpu_inst_shader_hash.h",
-  "layers/vulkan/generated/gpu_pre_dispatch_comp.h",
-  "layers/vulkan/generated/gpu_pre_dispatch_comp.cpp",
-  "layers/vulkan/generated/gpu_pre_draw_vert.h",
-  "layers/vulkan/generated/gpu_pre_draw_vert.cpp",
-  "layers/vulkan/generated/gpu_pre_trace_rays_rgen.h",
-  "layers/vulkan/generated/gpu_pre_trace_rays_rgen.cpp",
-  "layers/vulkan/generated/gpu_pre_copy_buffer_to_image_comp.h",
-  "layers/vulkan/generated/gpu_pre_copy_buffer_to_image_comp.cpp",
-  "layers/vulkan/generated/inst_bindless_descriptor_comp.h",
-  "layers/vulkan/generated/inst_bindless_descriptor_comp.cpp",
-  "layers/vulkan/generated/inst_buffer_device_address_comp.h",
-  "layers/vulkan/generated/inst_buffer_device_address_comp.cpp",
-  "layers/vulkan/generated/inst_ray_query_comp.h",
-  "layers/vulkan/generated/inst_ray_query_comp.cpp",
+  "layers/vulkan/generated/gpu_av_shader_hash.h",
+  "layers/vulkan/generated/cmd_validation_dispatch_comp.h",
+  "layers/vulkan/generated/cmd_validation_dispatch_comp.cpp",
+  "layers/vulkan/generated/cmd_validation_draw_vert.h",
+  "layers/vulkan/generated/cmd_validation_draw_vert.cpp",
+  "layers/vulkan/generated/cmd_validation_trace_rays_rgen.h",
+  "layers/vulkan/generated/cmd_validation_trace_rays_rgen.cpp",
+  "layers/vulkan/generated/cmd_validation_copy_buffer_to_image_comp.h",
+  "layers/vulkan/generated/cmd_validation_copy_buffer_to_image_comp.cpp",
+  "layers/vulkan/generated/instrumentation_bindless_descriptor_comp.h",
+  "layers/vulkan/generated/instrumentation_bindless_descriptor_comp.cpp",
+  "layers/vulkan/generated/instrumentation_buffer_device_address_comp.h",
+  "layers/vulkan/generated/instrumentation_buffer_device_address_comp.cpp",
+  "layers/vulkan/generated/instrumentation_ray_query_comp.h",
+  "layers/vulkan/generated/instrumentation_ray_query_comp.cpp",
   "layers/vulkan/generated/layer_chassis_dispatch.cpp",
   "layers/vulkan/generated/layer_chassis_dispatch.h",
   "layers/vulkan/generated/object_tracker.cpp",
@@ -329,8 +329,8 @@ vvl_sources = [
   "layers/vulkan/generated/spirv_grammar_helper.h",
   "layers/vulkan/generated/spirv_tools_commit_id.h",
   "layers/vulkan/generated/spirv_validation_helper.cpp",
-  "layers/vulkan/generated/state_tracker_helper.cpp",
-  "layers/vulkan/generated/state_tracker_helper.h",
+  "layers/vulkan/generated/device_features.cpp",
+  "layers/vulkan/generated/device_features.h",
   "layers/vulkan/generated/stateless_validation_helper.cpp",
   "layers/vulkan/generated/stateless_validation_helper.h",
   "layers/vulkan/generated/sync_validation_types.cpp",
@@ -350,7 +350,6 @@ vvl_sources = [
   "layers/error_message/logging.h",
   "layers/error_message/logging.cpp",
   "layers/error_message/record_object.h",
-  "layers/external/xxhash.h",
   "layers/utils/android_ndk_types.h",
   "layers/utils/cast_utils.h",
   "layers/utils/convert_utils.cpp",
@@ -364,6 +363,8 @@ vvl_sources = [
   "layers/utils/vk_layer_extension_utils.h",
   "layers/utils/vk_layer_utils.cpp",
   "layers/utils/vk_layer_utils.h",
+  "layers/utils/vk_struct_compare.cpp",
+  "layers/utils/vk_struct_compare.h",
   "layers/vk_layer_config.cpp",
   "layers/vk_layer_config.h",
   "layers/vulkan/generated/error_location_helper.cpp",
@@ -397,10 +398,6 @@ if (!is_android) {
     script = "scripts/gn/generate_vulkan_layers_json.py"
 
     deps = [ "$vulkan_headers_dir:vulkan_headers" ]
-    if (!is_fuchsia) {
-      # Make sure that the cleanup of old layer JSON files happens before the new ones are generated.
-      deps += [ ":vulkan_clean_old_validation_layer_objects" ]
-    }
 
     sources = [ "layers/VkLayer_khronos_validation.json.in" ]
     outputs = [ "$vulkan_data_dir/VkLayer_khronos_validation.json" ]
@@ -515,12 +512,6 @@ foreach(layer_info, layers) {
       ":vulkan_layer_utils",
       "$vulkan_utility_libraries_dir:vulkan_layer_settings",
     ]
-    if (!is_fuchsia) {
-      deps += [
-        # Make sure the cleanup of old layers happen before the new ones are compiled.
-        ":vulkan_clean_old_validation_layer_objects",
-      ]
-    }
     if (layer_info[2] != "") {
       deps += layer_info[2]
     }

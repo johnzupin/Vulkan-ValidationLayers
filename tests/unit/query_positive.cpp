@@ -23,6 +23,8 @@ bool QueryTest::HasZeroTimestampValidBits() {
     return (queue_props[m_device->graphics_queue_node_index_].timestampValidBits == 0);
 }
 
+class PositiveQuery : public QueryTest {};
+
 TEST_F(PositiveQuery, OutsideRenderPass) {
     AddRequiredFeature(vkt::Feature::pipelineStatisticsQuery);
     RETURN_IF_SKIP(Init());
@@ -72,7 +74,7 @@ TEST_F(PositiveQuery, ResetQueryPoolFromDifferentCB) {
 
     VkCommandBuffer command_buffer[2];
     VkCommandBufferAllocateInfo command_buffer_allocate_info = vku::InitStructHelper();
-    command_buffer_allocate_info.commandPool = m_commandPool->handle();
+    command_buffer_allocate_info.commandPool = m_command_pool.handle();
     command_buffer_allocate_info.commandBufferCount = 2;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     vk::AllocateCommandBuffers(device(), &command_buffer_allocate_info, command_buffer);
@@ -108,7 +110,7 @@ TEST_F(PositiveQuery, ResetQueryPoolFromDifferentCB) {
 
     m_default_queue->Wait();
 
-    vk::FreeCommandBuffers(device(), m_commandPool->handle(), 2, command_buffer);
+    vk::FreeCommandBuffers(device(), m_command_pool.handle(), 2, command_buffer);
 }
 
 TEST_F(PositiveQuery, BasicQuery) {
@@ -116,14 +118,7 @@ TEST_F(PositiveQuery, BasicQuery) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    uint32_t qfi = 0;
-    VkBufferCreateInfo bci = vku::InitStructHelper();
-    bci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    bci.size = 4 * sizeof(uint64_t);
-    bci.queueFamilyIndexCount = 1;
-    bci.pQueueFamilyIndices = &qfi;
-    VkMemoryPropertyFlags mem_props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    vkt::Buffer buffer(*m_device, bci, mem_props);
+    vkt::Buffer buffer(*m_device, 4 * sizeof(uint64_t), VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_OCCLUSION, 2);
 
@@ -175,14 +170,7 @@ TEST_F(PositiveQuery, DestroyQueryPoolBasedOnQueryPoolResults) {
     constexpr uint64_t sizeof_samples_passed = samples_passed.size() * sizeof(uint64_t);
     constexpr VkDeviceSize sample_stride = sizeof(uint64_t);
 
-    uint32_t qfi = 0;
-    VkBufferCreateInfo bci = vku::InitStructHelper();
-    bci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    bci.size = sizeof_samples_passed;
-    bci.queueFamilyIndexCount = 1;
-    bci.pQueueFamilyIndices = &qfi;
-    VkMemoryPropertyFlags mem_props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    vkt::Buffer buffer(*m_device, bci, mem_props);
+    vkt::Buffer buffer(*m_device, sizeof_samples_passed, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
     constexpr uint32_t query_count = 2;
 
@@ -245,20 +233,13 @@ TEST_F(PositiveQuery, QueryAndCopySecondaryCommandBuffers) {
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_TIMESTAMP, 1);
 
     vkt::CommandPool command_pool(*m_device, m_device->graphics_queue_node_index_, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer primary_buffer(*m_device, &command_pool);
-    vkt::CommandBuffer secondary_buffer(*m_device, &command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer primary_buffer(*m_device, command_pool);
+    vkt::CommandBuffer secondary_buffer(*m_device, command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     VkQueue queue = VK_NULL_HANDLE;
     vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 1, &queue);
 
-    uint32_t qfi = 0;
-    VkBufferCreateInfo buff_create_info = vku::InitStructHelper();
-    buff_create_info.size = 1024;
-    buff_create_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    buff_create_info.queueFamilyIndexCount = 1;
-    buff_create_info.pQueueFamilyIndices = &qfi;
-
-    vkt::Buffer buffer(*m_device, buff_create_info);
+    vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
     VkCommandBufferInheritanceInfo hinfo = vku::InitStructHelper();
     hinfo.renderPass = VK_NULL_HANDLE;
@@ -317,14 +298,7 @@ TEST_F(PositiveQuery, QueryAndCopyMultipleCommandBuffers) {
     VkQueue queue = VK_NULL_HANDLE;
     vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 1, &queue);
 
-    uint32_t qfi = 0;
-    VkBufferCreateInfo buff_create_info = vku::InitStructHelper();
-    buff_create_info.size = 1024;
-    buff_create_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    buff_create_info.queueFamilyIndexCount = 1;
-    buff_create_info.pQueueFamilyIndices = &qfi;
-
-    vkt::Buffer buffer(*m_device, buff_create_info);
+    vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
     {
         VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -407,7 +381,7 @@ TEST_F(PositiveQuery, CommandBufferInheritanceFlags) {
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_OCCLUSION, 1);
 
-    vkt::CommandBuffer secondary(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     VkCommandBufferInheritanceInfo cbii = vku::InitStructHelper();
     cbii.renderPass = m_renderPass;
@@ -494,7 +468,7 @@ TEST_F(PositiveQuery, PerformanceQueries) {
         m_device->Wait();
     }
 
-    vkt::CommandBuffer cmd_buffer(*m_device, m_commandPool);
+    vkt::CommandBuffer cmd_buffer(*m_device, m_command_pool);
 
     auto acquire_profiling_lock_info = vku::InitStruct<VkAcquireProfilingLockInfoKHR>();
     acquire_profiling_lock_info.timeout = std::numeric_limits<uint64_t>::max();
@@ -557,7 +531,7 @@ TEST_F(PositiveQuery, ReuseSecondaryWithQueryCommand) {
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_TIMESTAMP, 1);
 
-    vkt::CommandBuffer secondary_buffer(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary_buffer(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     secondary_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     vk::CmdWriteTimestamp(secondary_buffer.handle(), VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, query_pool, 0);
     secondary_buffer.end();

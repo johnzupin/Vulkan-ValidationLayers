@@ -198,8 +198,24 @@ class CommandBuffer : public vvl::CommandBuffer {
     bool uses_vertex_buffer = false;
     uint32_t small_indexed_draw_call_count = 0;
 
-    std::vector<uint8_t> push_constant_data_set;
-    void UnbindResources() { push_constant_data_set.clear(); }
+    // This function used to not be empty. It has been left empty because
+    // the logic to decide to call this function is not simple, so adding this
+    // function back could tedious.
+    void UnbindResources() {}
+
+    struct SignalingInfo {
+        // True, if the event's first state change within a command buffer is a signal (SetEvent)
+        // rather than an unsignal (ResetEvent). It is used to do validation on the boundary
+        // between two command buffers.
+        const bool first_state_change_is_signal = false;
+
+        // Tracks how the event signaling state changes as the command buffer recording progresses.
+        // When recording is finished, this is the event state "at the end of the command buffer".
+        bool signaled = false;
+
+        SignalingInfo(bool signal) : first_state_change_is_signal(signal), signaled(signal) {}
+    };
+    vvl::unordered_map<VkEvent, SignalingInfo> event_signaling_state;
 };
 
 class DescriptorPool : public vvl::DescriptorPool {

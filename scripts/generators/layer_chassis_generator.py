@@ -67,12 +67,12 @@ class APISpecific:
                         'enabled': 'enables[best_practices]'
                     },
                     {
-                        'include': 'gpu_validation/gpu_validation.h',
+                        'include': 'gpu/core/gpuav.h',
                         'class': 'gpuav::Validator',
                         'enabled': 'enables[gpu_validation]'
                     },
                     {
-                        'include': 'gpu_validation/debug_printf.h',
+                        'include': 'gpu/debug_printf/debug_printf.h',
                         'class': 'debug_printf::Validator',
                         'enabled': 'enables[debug_printf_validation]'
                     },
@@ -186,7 +186,6 @@ void ValidationObject::InitObjectDispatchVectors() {
 
     intercept_vectors.resize(InterceptIdCount);
 '''
-
 
 # Generates a LayerFactory layer that intercepts all API entrypoints
 #  This is intended to be used as a starting point for creating custom layers
@@ -316,7 +315,8 @@ class LayerChassisOutputGenerator(BaseGenerator):
             #include "utils/vk_layer_utils.h"
             #include "vk_dispatch_table_helper.h"
             #include "vk_extension_helper.h"
-            #include "gpu_validation/gpu_settings.h"
+            #include "gpu/core/gpu_settings.h"
+            #include "sync/sync_settings.h"
 
             extern std::atomic<uint64_t> global_unique_id;
 
@@ -425,6 +425,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 bool fine_grained_locking{true};
                 GpuAVSettings gpuav_settings = {};
                 DebugPrintfSettings printf_settings = {};
+                SyncValSettings syncval_settings = {};
 
                 VkInstance instance = VK_NULL_HANDLE;
                 VkPhysicalDevice physical_device = VK_NULL_HANDLE;
@@ -432,6 +433,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 bool is_device_lost = false;
 
                 std::vector<ValidationObject*> object_dispatch;
+                std::vector<ValidationObject*> aborted_object_dispatch;
                 LayerObjectTypeId container_type;
                 void ReleaseDeviceDispatchObject(LayerObjectTypeId type_id) const;
 
@@ -617,6 +619,11 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 }
             ''')
 
+        out.append('// We make many internal dispatch calls to VK_KHR_get_physical_device_properties2 functions which can depend on the API version\n')
+        for command in self.vk.extensions['VK_KHR_get_physical_device_properties2'].commands:
+            parameters = (command.cPrototype.split('(')[1])[:-2] # leaves just the parameters
+            out.append(f'{command.returnType} Dispatch{command.alias[2:]}Helper({parameters}) const;\n')
+
         out.append('''
         // clang-format off
         // Pre/post hook point declarations
@@ -735,6 +742,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
             #include "chassis.h"
             #include "layer_options.h"
             #include "layer_chassis_dispatch.h"
+            #include "state_tracker/descriptor_sets.h"
             #include "chassis/chassis_modification_state.h"
 
             thread_local WriteLockGuard* ValidationObject::record_guard{};
@@ -817,6 +825,18 @@ class LayerChassisOutputGenerator(BaseGenerator):
         out.append('\n')
         out.append('}\n')
 
+        for command in self.vk.extensions['VK_KHR_get_physical_device_properties2'].commands:
+            parameters = (command.cPrototype.split('(')[1])[:-2] # leaves just the parameters
+            arguments = ','.join([x.name for x in command.params])
+            out.append(f'''\n{command.returnType} ValidationObject::Dispatch{command.alias[2:]}Helper({parameters}) const {{
+                if (api_version >= VK_API_VERSION_1_1) {{
+                    return Dispatch{command.alias[2:]}({arguments});
+                }} else {{
+                    return Dispatch{command.name[2:]}({arguments});
+                }}
+            }}
+            ''')
+
         out.append('''
             // Global list of sType,size identifiers
             std::vector<std::pair<uint32_t, uint32_t>> custom_stype_info{};
@@ -863,7 +883,9 @@ class LayerChassisOutputGenerator(BaseGenerator):
                             }
                         }
 
-                        delete object;
+                        // We can't destroy the object itself now as it might be unsafe (things are still being used)
+                        // If the rare case happens we need to release, we will cleanup later when we normally would have cleaned this up
+                        layer_data->aborted_object_dispatch.push_back(object);
                         break;
                     }
                 }
@@ -930,7 +952,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                         list_of_enables.append(EnableFlagNameHelper[i]);
                     }
                 }
-                if (list_of_enables.size() == 0) {
+                if (list_of_enables.empty()) {
                     list_of_enables.append("None");
                 }
                 for (uint32_t i = 0; i < kMaxDisableFlags; i++) {
@@ -939,7 +961,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                         list_of_disables.append(DisableFlagNameHelper[i]);
                     }
                 }
-                if (list_of_disables.size() == 0) {
+                if (list_of_disables.empty()) {
                     list_of_disables.append("None");
                 }
 
@@ -1091,6 +1113,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 bool lock_setting;
                 GpuAVSettings local_gpuav_settings = {};
                 DebugPrintfSettings local_printf_settings = {};
+                SyncValSettings local_syncval_settings = {};
                 ConfigAndEnvSettings config_and_env_settings_data{OBJECT_LAYER_DESCRIPTION,
                                                                 pCreateInfo,
                                                                 local_enables,
@@ -1100,7 +1123,8 @@ class LayerChassisOutputGenerator(BaseGenerator):
                                                                 &debug_report->message_format_settings,
                                                                 &lock_setting,
                                                                 &local_gpuav_settings,
-                                                                &local_printf_settings};
+                                                                &local_printf_settings,
+                                                                &local_syncval_settings};
                 ProcessConfigAndEnvSettings(&config_and_env_settings_data);
                 LayerDebugMessengerActions(debug_report, OBJECT_LAYER_DESCRIPTION);
 
@@ -1161,6 +1185,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 framework->fine_grained_locking = lock_setting;
                 framework->gpuav_settings = local_gpuav_settings;
                 framework->printf_settings = local_printf_settings;
+                framework->syncval_settings = local_syncval_settings;
 
                 framework->instance = *pInstance;
                 layer_init_instance_dispatch_table(*pInstance, &framework->instance_dispatch_table, fpGetInstanceProcAddr);
@@ -1181,6 +1206,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                     intercept->fine_grained_locking = framework->fine_grained_locking;
                     intercept->gpuav_settings = framework->gpuav_settings;
                     intercept->printf_settings = framework->printf_settings;
+                    intercept->syncval_settings = framework->syncval_settings;
                     intercept->instance = *pInstance;
                 }
 
@@ -1211,6 +1237,12 @@ class LayerChassisOutputGenerator(BaseGenerator):
                     intercept->PreCallRecordDestroyInstance(instance, pAllocator, record_obj);
                 }
 
+                // Before instance is destroyed, allow aborted objects to clean up
+                for (ValidationObject* intercept : layer_data->aborted_object_dispatch) {
+                    auto lock = intercept->WriteLock();
+                    intercept->PreCallRecordDestroyInstance(instance, pAllocator, record_obj);
+                }
+
                 layer_data->instance_dispatch_table.DestroyInstance(instance, pAllocator);
 
                 for (ValidationObject* intercept : layer_data->object_dispatch) {
@@ -1226,6 +1258,10 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 for (auto item = layer_data->object_dispatch.begin(); item != layer_data->object_dispatch.end(); item++) {
                     delete *item;
                 }
+                for (auto item = layer_data->aborted_object_dispatch.begin(); item != layer_data->aborted_object_dispatch.end(); item++) {
+                    delete *item;
+                }
+
                 FreeLayerDataPtr(key, layer_data_map);
             }
 
@@ -1256,6 +1292,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                     item->device_extensions = device_extensions;
                 }
 
+                // Make copy to modify as some ValidationObjects will want to add extensions/features on
                 vku::safe_VkDeviceCreateInfo modified_create_info(pCreateInfo);
 
                 bool skip = false;
@@ -1283,7 +1320,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
 
                 // Save local info in device object
                 device_interceptor->api_version = device_interceptor->device_extensions.InitFromDeviceCreateInfo(
-                    &instance_interceptor->instance_extensions, effective_api_version, pCreateInfo);
+                    &instance_interceptor->instance_extensions, effective_api_version, reinterpret_cast<VkDeviceCreateInfo*>(&modified_create_info));
                 device_interceptor->device_extensions = device_extensions;
 
                 layer_init_device_dispatch_table(*pDevice, &device_interceptor->device_dispatch_table, fpGetDeviceProcAddr);
@@ -1310,6 +1347,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                     object->fine_grained_locking = instance_interceptor->fine_grained_locking;
                     object->gpuav_settings = instance_interceptor->gpuav_settings;
                     object->printf_settings = instance_interceptor->printf_settings;
+                    object->syncval_settings = instance_interceptor->syncval_settings;
                     object->instance_dispatch_table = instance_interceptor->instance_dispatch_table;
                     object->instance_extensions = instance_interceptor->instance_extensions;
                     object->device_extensions = device_interceptor->device_extensions;
@@ -1317,7 +1355,8 @@ class LayerChassisOutputGenerator(BaseGenerator):
 
                 for (ValidationObject* intercept : instance_interceptor->object_dispatch) {
                     auto lock = intercept->WriteLock();
-                    intercept->PostCallRecordCreateDevice(gpu, pCreateInfo, pAllocator, pDevice, record_obj);
+                    // Send down modified create info as we want to mark enabled features that we sent down on behalf of the app
+                    intercept->PostCallRecordCreateDevice(gpu, reinterpret_cast<VkDeviceCreateInfo*>(&modified_create_info), pAllocator, pDevice, record_obj);
                 }
 
                 device_interceptor->InitObjectDispatchVectors();
@@ -1334,7 +1373,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
             VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) {
                 dispatch_key key = GetDispatchKey(device);
                 auto layer_data = GetLayerDataPtr(key, layer_data_map);
-                ErrorObject error_obj(vvl::Func::vkCreateDevice, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
+                ErrorObject error_obj(vvl::Func::vkDestroyDevice, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
                 for (const ValidationObject* intercept : layer_data->object_dispatch) {
                     auto lock = intercept->ReadLock();
                     intercept->PreCallValidateDestroyDevice(device, pAllocator, error_obj);
@@ -1342,6 +1381,12 @@ class LayerChassisOutputGenerator(BaseGenerator):
 
                 RecordObject record_obj(vvl::Func::vkDestroyDevice);
                 for (ValidationObject* intercept : layer_data->object_dispatch) {
+                    auto lock = intercept->WriteLock();
+                    intercept->PreCallRecordDestroyDevice(device, pAllocator, record_obj);
+                }
+
+                // Before device is destroyed, allow aborted objects to clean up
+                for (ValidationObject* intercept : layer_data->aborted_object_dispatch) {
                     auto lock = intercept->WriteLock();
                     intercept->PreCallRecordDestroyDevice(device, pAllocator, record_obj);
                 }
@@ -1359,6 +1404,10 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 for (auto item = layer_data->object_dispatch.begin(); item != layer_data->object_dispatch.end(); item++) {
                     delete *item;
                 }
+                for (auto item = layer_data->aborted_object_dispatch.begin(); item != layer_data->aborted_object_dispatch.end(); item++) {
+                    delete *item;
+                }
+
                 FreeLayerDataPtr(key, layer_data_map);
             }
 
@@ -1372,8 +1421,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 ErrorObject error_obj(vvl::Func::vkCreateGraphicsPipelines, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
                 PipelineStates pipeline_states[LayerObjectTypeMaxEnum];
-                chassis::CreateGraphicsPipelines chassis_state{};
-                chassis_state.pCreateInfos = pCreateInfos;
+                chassis::CreateGraphicsPipelines chassis_state(pCreateInfos);
 
                 for (const ValidationObject* intercept : layer_data->object_dispatch) {
                     auto lock = intercept->ReadLock();
@@ -1410,8 +1458,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 ErrorObject error_obj(vvl::Func::vkCreateComputePipelines, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
                 PipelineStates pipeline_states[LayerObjectTypeMaxEnum];
-                chassis::CreateComputePipelines chassis_state{};
-                chassis_state.pCreateInfos = pCreateInfos;
+                chassis::CreateComputePipelines chassis_state(pCreateInfos);
 
                 for (const ValidationObject* intercept : layer_data->object_dispatch) {
                     auto lock = intercept->ReadLock();
@@ -1447,8 +1494,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 ErrorObject error_obj(vvl::Func::vkCreateRayTracingPipelinesNV, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
                 PipelineStates pipeline_states[LayerObjectTypeMaxEnum];
-                chassis::CreateRayTracingPipelinesNV chassis_state{};
-                chassis_state.pCreateInfos = pCreateInfos;
+                chassis::CreateRayTracingPipelinesNV chassis_state(pCreateInfos);
 
                 for (const ValidationObject* intercept : layer_data->object_dispatch) {
                     auto lock = intercept->ReadLock();
@@ -1486,8 +1532,7 @@ class LayerChassisOutputGenerator(BaseGenerator):
                 ErrorObject error_obj(vvl::Func::vkCreateRayTracingPipelinesKHR, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
                 PipelineStates pipeline_states[LayerObjectTypeMaxEnum];
-                chassis::CreateRayTracingPipelinesKHR chassis_state{};
-                chassis_state.pCreateInfos = pCreateInfos;
+                chassis::CreateRayTracingPipelinesKHR chassis_state(pCreateInfos);
 
                 for (const ValidationObject* intercept : layer_data->object_dispatch) {
                     auto lock = intercept->ReadLock();

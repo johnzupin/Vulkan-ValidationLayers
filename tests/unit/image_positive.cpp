@@ -37,6 +37,8 @@ VkImageCreateInfo ImageTest::DefaultImageInfo() {
     return ci;
 }
 
+class PositiveImage : public ImageTest {};
+
 TEST_F(PositiveImage, OwnershipTranfersImage) {
     TEST_DESCRIPTION("Valid image ownership transfers that shouldn't create errors");
     RETURN_IF_SKIP(Init());
@@ -47,7 +49,7 @@ TEST_F(PositiveImage, OwnershipTranfersImage) {
     }
 
     vkt::CommandPool no_gfx_pool(*m_device, no_gfx_queue->family_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer no_gfx_cb(*m_device, &no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    vkt::CommandBuffer no_gfx_cb(*m_device, no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     // Create an "exclusive" image owned by the graphics queue.
     VkFlags image_use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -155,22 +157,10 @@ TEST_F(PositiveImage, CreateImageViewFollowsParameterCompatibilityRequirements) 
 }
 
 TEST_F(PositiveImage, BasicUsage) {
-    TEST_DESCRIPTION("Verify that creating an image view from an image with valid usage doesn't generate validation errors");
-
+    TEST_DESCRIPTION("Verify that we can create a view with usage INPUT_ATTACHMENT");
     RETURN_IF_SKIP(Init());
-
-    // Verify that we can create a view with usage INPUT_ATTACHMENT
     vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-    VkImageViewCreateInfo ivci = vku::InitStructHelper();
-    ivci.image = image.handle();
-    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    ivci.format = VK_FORMAT_R8G8B8A8_UNORM;
-    ivci.subresourceRange.layerCount = 1;
-    ivci.subresourceRange.baseMipLevel = 0;
-    ivci.subresourceRange.levelCount = 1;
-    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-    vkt::ImageView view(*m_device, ivci);
+    vkt::ImageView view = image.CreateView();
 }
 
 TEST_F(PositiveImage, BarrierLayoutToImageUsage) {
@@ -553,10 +543,6 @@ TEST_F(PositiveImage, ExtendedUsageWithDifferentFormatViews) {
     image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
     image_ci.usage =
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    image_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    image_ci.queueFamilyIndexCount = 0;
-    image_ci.pQueueFamilyIndices = nullptr;
 
     VkImageFormatProperties image_properties;
     VkResult err = vk::GetPhysicalDeviceImageFormatProperties(gpu(), image_ci.format, image_ci.imageType, image_ci.tiling,
@@ -686,16 +672,7 @@ TEST_F(PositiveImage, Create3DImageView) {
     ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     vkt::Image image(*m_device, ci, vkt::set_layout);
-
-    VkImageViewCreateInfo ivci = vku::InitStructHelper();
-    ivci.image = image.handle();
-    ivci.viewType = VK_IMAGE_VIEW_TYPE_3D;
-    ivci.format = VK_FORMAT_R8G8B8A8_UNORM;
-    ivci.subresourceRange.layerCount = 1;
-    ivci.subresourceRange.baseMipLevel = 0;
-    ivci.subresourceRange.levelCount = 1;
-    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    vkt::ImageView image_view(*m_device, ivci);
+    vkt::ImageView image_view = image.CreateView(VK_IMAGE_VIEW_TYPE_3D);
 }
 
 TEST_F(PositiveImage, SlicedCreateInfo) {
@@ -817,8 +794,6 @@ TEST_F(PositiveImage, DescriptorSubresourceLayout) {
                                        {
                                            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr},
                                        });
-    VkDescriptorSet descriptorSet = descriptor_set.set_;
-
     const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
 
     // Create image, view, and sampler
@@ -837,21 +812,10 @@ TEST_F(PositiveImage, DescriptorSubresourceLayout) {
     image_view_create_info.subresourceRange = view_range;
 
     vkt::ImageView view(*m_device, image_view_create_info);
+    vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
-    // Create Sampler
-    VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
-    vkt::Sampler sampler(*m_device, sampler_ci);
-
-    // Setup structure for descriptor update with sampler, for update in do_test below
-    VkDescriptorImageInfo img_info = {};
-    img_info.sampler = sampler.handle();
-
-    VkWriteDescriptorSet descriptor_write = vku::InitStructHelper();
-    descriptor_write.dstSet = descriptorSet;
-    descriptor_write.dstBinding = 0;
-    descriptor_write.descriptorCount = 1;
-    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptor_write.pImageInfo = &img_info;
+    descriptor_set.WriteDescriptorImageInfo(0, view, sampler);
+    descriptor_set.UpdateDescriptorSets();
 
     // Create PSO to be used for draw-time errors below
     VkShaderObj fs(this, kFragmentSamplerGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -860,18 +824,13 @@ TEST_F(PositiveImage, DescriptorSubresourceLayout) {
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
 
-    vkt::CommandBuffer cmd_buf(*m_device, m_commandPool);
+    vkt::CommandBuffer cmd_buf(*m_device, m_command_pool);
 
     enum TestType {
         kInternal,  // Image layout mismatch is *within* a given command buffer
         kExternal   // Image layout mismatch is with the current state of the image, found at QueueSubmit
     };
     std::array<TestType, 2> test_list = {{kInternal, kExternal}};
-
-    // Set up the descriptor
-    img_info.imageView = view.handle();
-    img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
 
     for (TestType test_type : test_list) {
         auto init_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -910,8 +869,8 @@ TEST_F(PositiveImage, DescriptorSubresourceLayout) {
 
         cmd_buf.BeginRenderPass(m_renderPassBeginInfo);
         vk::CmdBindPipeline(cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-        vk::CmdBindDescriptorSets(cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1, &descriptorSet,
-                                  0, NULL);
+        vk::CmdBindDescriptorSets(cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+                                  &descriptor_set.set_, 0, NULL);
 
         vk::CmdDraw(cmd_buf.handle(), 1, 0, 0, 0);
 
@@ -934,8 +893,6 @@ TEST_F(PositiveImage, Descriptor3D2DSubresourceLayout) {
                                        {
                                            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr},
                                        });
-    VkDescriptorSet descriptorSet = descriptor_set.set_;
-
     const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
 
     // Create image, view, and sampler
@@ -1027,16 +984,8 @@ TEST_F(PositiveImage, Descriptor3D2DSubresourceLayout) {
     VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
     vkt::Sampler sampler(*m_device, sampler_ci);
 
-    // Setup structure for descriptor update with sampler, for update in do_test below
-    VkDescriptorImageInfo img_info = {};
-    img_info.sampler = sampler.handle();
-
-    VkWriteDescriptorSet descriptor_write = vku::InitStructHelper();
-    descriptor_write.dstSet = descriptorSet;
-    descriptor_write.dstBinding = 0;
-    descriptor_write.descriptorCount = 1;
-    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptor_write.pImageInfo = &img_info;
+    descriptor_set.WriteDescriptorImageInfo(0, other_view, sampler);
+    descriptor_set.UpdateDescriptorSets();
 
     vkt::RenderPass rp(*m_device, rpci);
 
@@ -1048,18 +997,13 @@ TEST_F(PositiveImage, Descriptor3D2DSubresourceLayout) {
     pipe.gp_ci_.renderPass = rp.handle();
     pipe.CreateGraphicsPipeline();
 
-    vkt::CommandBuffer cmd_buf(*m_device, m_commandPool);
+    vkt::CommandBuffer cmd_buf(*m_device, m_command_pool);
 
     enum TestType {
         kInternal,  // Image layout mismatch is *within* a given command buffer
         kExternal   // Image layout mismatch is with the current state of the image, found at QueueSubmit
     };
     std::array<TestType, 2> test_list = {{kInternal, kExternal}};
-
-    // Set up the descriptor
-    img_info.imageView = other_view.handle();
-    img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
 
     for (TestType test_type : test_list) {
         VkImageMemoryBarrier image_barrier = vku::InitStructHelper();
@@ -1094,9 +1038,8 @@ TEST_F(PositiveImage, Descriptor3D2DSubresourceLayout) {
 
         cmd_buf.BeginRenderPass(m_renderPassBeginInfo);
         vk::CmdBindPipeline(cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-        vk::CmdBindDescriptorSets(cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1, &descriptorSet,
-                                  0, NULL);
-
+        vk::CmdBindDescriptorSets(cmd_buf.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+                                  &descriptor_set.set_, 0, nullptr);
         vk::CmdDraw(cmd_buf.handle(), 1, 0, 0, 0);
 
         cmd_buf.EndRenderPass();
@@ -1133,14 +1076,8 @@ TEST_F(PositiveImage, BlitRemainingArrayLayers) {
     vkt::Image image(*m_device, ci, vkt::set_layout);
 
     VkImageBlit blitRegion = {};
-    blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    blitRegion.srcSubresource.baseArrayLayer = 2;
-    blitRegion.srcSubresource.layerCount = VK_REMAINING_ARRAY_LAYERS;
-    blitRegion.srcSubresource.mipLevel = 0;
-    blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    blitRegion.dstSubresource.baseArrayLayer = 1;
-    blitRegion.dstSubresource.layerCount = VK_REMAINING_ARRAY_LAYERS;
-    blitRegion.dstSubresource.mipLevel = 0;
+    blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 2, VK_REMAINING_ARRAY_LAYERS};
+    blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, VK_REMAINING_ARRAY_LAYERS};
     blitRegion.srcOffsets[0] = {0, 0, 0};
     blitRegion.srcOffsets[1] = {16, 16, 1};
     blitRegion.dstOffsets[0] = {32, 32, 0};
@@ -1199,4 +1136,90 @@ TEST_F(PositiveImage, BlockTexelViewCompatibleMultipleLayers) {
     ivci.subresourceRange.levelCount = 1;
     ivci.subresourceRange.layerCount = 2;
     vkt::ImageView view(*m_device, ivci);
+}
+
+TEST_F(PositiveImage, ImageAlignmentControl) {
+    AddRequiredExtensions(VK_MESA_IMAGE_ALIGNMENT_CONTROL_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::imageAlignmentControl);
+    RETURN_IF_SKIP(Init());
+
+    const uint32_t alignment = 0x1;
+    VkPhysicalDeviceImageAlignmentControlPropertiesMESA props = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(props);
+    if (!(props.supportedImageAlignmentMask & alignment)) {
+        GTEST_SKIP() << "supportedImageAlignmentMask doesn't support testing alignment";
+    }
+    VkImageAlignmentControlCreateInfoMESA alignment_control = vku::InitStructHelper();
+    alignment_control.maximumRequestedAlignment = alignment;
+
+    VkImageCreateInfo image_create_info = DefaultImageInfo();
+    image_create_info.pNext = &alignment_control;
+    vkt::Image image(*m_device, image_create_info, vkt::no_mem);
+}
+
+TEST_F(PositiveImage, ImageAlignmentControlZero) {
+    AddRequiredExtensions(VK_MESA_IMAGE_ALIGNMENT_CONTROL_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::imageAlignmentControl);
+    RETURN_IF_SKIP(Init());
+
+    VkImageAlignmentControlCreateInfoMESA alignment_control = vku::InitStructHelper();
+    alignment_control.maximumRequestedAlignment = 0;  // Should ignore
+
+    VkImageCreateInfo image_create_info = DefaultImageInfo();
+    image_create_info.pNext = &alignment_control;
+    vkt::Image image(*m_device, image_create_info, vkt::no_mem);
+}
+
+TEST_F(PositiveImage, RemainingMipLevels2DViewOf3D) {
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_IMAGE_2D_VIEW_OF_3D_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    VkImageCreateInfo image_ci = vku::InitStructHelper();
+    image_ci.flags = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT | VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT;
+    image_ci.imageType = VK_IMAGE_TYPE_3D;
+    image_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+    image_ci.extent.width = 32;
+    image_ci.extent.height = 32;
+    image_ci.extent.depth = 2;
+    image_ci.mipLevels = 1;
+    image_ci.arrayLayers = 1;
+    image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_ci.usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
+
+    vkt::ImageView view = image.CreateView(VK_IMAGE_VIEW_TYPE_2D, 0, VK_REMAINING_MIP_LEVELS, 0, 1);
+}
+
+TEST_F(PositiveImage, RemainingMipLevelsBlockTexelView) {
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.flags = VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+    image_create_info.extent.width = 32;
+    image_create_info.extent.height = 32;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 1;
+    image_create_info.arrayLayers = 2;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+
+    VkFormatProperties image_fmt;
+    vk::GetPhysicalDeviceFormatProperties(m_device->phy().handle(), image_create_info.format, &image_fmt);
+    if (!vkt::Image::IsCompatible(*m_device, image_create_info.usage, image_fmt.optimalTilingFeatures)) {
+        GTEST_SKIP() << "Image usage and format not compatible on device";
+    }
+    vkt::Image image(*m_device, image_create_info, vkt::set_layout);
+
+    VkImageViewCreateInfo ivci = vku::InitStructHelper();
+    ivci.image = image.handle();
+    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    ivci.format = VK_FORMAT_R16G16B16A16_UNORM;
+    ivci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, 1};
+    CreateImageViewTest(*this, &ivci);
 }

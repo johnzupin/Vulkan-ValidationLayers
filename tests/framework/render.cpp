@@ -44,9 +44,9 @@ typename C::iterator RemoveIf(C &container, F &&fn) {
 VkRenderFramework::VkRenderFramework()
     : instance_(nullptr),
       m_device(nullptr),
-      m_commandPool(VK_NULL_HANDLE),
       m_commandBuffer(nullptr),
       m_renderPass(VK_NULL_HANDLE),
+      m_vertex_buffer(nullptr),
       m_width(256),   // default window width
       m_height(256),  // default window height
       m_render_target_fmt(VK_FORMAT_R8G8B8A8_UNORM),
@@ -80,7 +80,6 @@ const VkPhysicalDeviceProperties &VkRenderFramework::physDevProps() const {
 // Return true if layer name is found and spec+implementation values are >= requested values
 bool VkRenderFramework::InstanceLayerSupported(const char *const layer_name, const uint32_t spec_version,
                                                const uint32_t impl_version) {
-
     if (available_layers_.empty()) {
         available_layers_ = vkt::GetGlobalLayers();
     }
@@ -153,34 +152,6 @@ VkInstanceCreateInfo VkRenderFramework::GetInstanceCreateInfo() const {
     return info;
 }
 
-void *VkRenderFramework::SetupValidationSettings(void *first_pnext) {
-    auto validation = GetEnvironment("VK_LAYER_TESTS_VALIDATION_FEATURES");
-    vvl::ToLower(validation);
-    VkValidationFeaturesEXT *features = vku::FindStructInPNextChain<VkValidationFeaturesEXT>(first_pnext);
-    if (validation == "all" || validation == "core" || validation == "none") {
-        if (!features) {
-            features = &m_validation_features;
-            features->sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-            features->pNext = first_pnext;
-            first_pnext = features;
-        }
-
-        if (validation == "all") {
-            features->enabledValidationFeatureCount = 4;
-            features->pEnabledValidationFeatures = validation_enable_all;
-            features->disabledValidationFeatureCount = 0;
-        } else if (validation == "core") {
-            features->disabledValidationFeatureCount = 0;
-        } else if (validation == "none") {
-            features->disabledValidationFeatureCount = 1;
-            features->pDisabledValidationFeatures = &validation_disable_all;
-            features->enabledValidationFeatureCount = 0;
-        }
-    }
-
-    return first_pnext;
-}
-
 void VkRenderFramework::InitFramework(void *instance_pnext) {
     ASSERT_EQ((VkInstance)0, instance_);
 
@@ -241,10 +212,6 @@ void VkRenderFramework::InitFramework(void *instance_pnext) {
     RemoveIf(m_instance_extension_names, ExtensionNotSupportedWithReporting);
 
     auto ici = GetInstanceCreateInfo();
-
-    // If is validation features then check for disabled validation
-
-    instance_pnext = SetupValidationSettings(instance_pnext);
 
     // concatenate pNexts
     void *last_pnext = nullptr;
@@ -518,10 +485,18 @@ void VkRenderFramework::ShutdownFramework() {
         m_device->Wait();
     }
 
-    delete m_commandBuffer;
+    m_command_buffer.destroy();
     m_commandBuffer = nullptr;
-    delete m_commandPool;
-    m_commandPool = nullptr;
+    m_command_pool.destroy();
+
+    if (m_second_queue) {
+        m_second_command_buffer.destroy();
+        m_second_command_pool.destroy();
+    }
+
+    delete m_vertex_buffer;
+    m_vertex_buffer = nullptr;
+
     delete m_framebuffer;
     m_framebuffer = nullptr;
     if (m_renderPass) vk::DestroyRenderPass(device(), m_renderPass, NULL);
@@ -707,15 +682,23 @@ void VkRenderFramework::InitState(VkPhysicalDeviceFeatures *features, void *crea
 
     m_render_target_fmt = GetRenderTargetFormat();
 
-    m_commandPool = new vkt::CommandPool(*m_device, m_device->graphics_queue_node_index_, flags);
+    m_command_pool.Init(*m_device, m_device->graphics_queue_node_index_, flags);
+    m_command_buffer.Init(*m_device, m_command_pool);
+    m_commandBuffer = &m_command_buffer;
 
-    m_commandBuffer = new vkt::CommandBuffer(*m_device, m_commandPool);
+    if (m_second_queue) {
+        m_second_command_pool.Init(*m_device, m_second_queue->family_index, flags);
+        m_second_command_buffer.Init(*m_device, m_second_command_pool);
+    }
 }
 
 void VkRenderFramework::InitSurface() {
     // NOTE: Currently InitSurface can leak the WIN32 handle if called multiple times without first calling DestroySurfaceContext.
     // This is intentional. Each swapchain/surface combo needs a unique HWND.
-    ASSERT_EQ(VK_SUCCESS, CreateSurface(m_surface_context, m_surface));
+    VkResult result = CreateSurface(m_surface_context, m_surface);
+    if (result != VK_SUCCESS) {
+        GTEST_SKIP() << "Failed to create surface.";
+    }
     ASSERT_TRUE(m_surface != VK_NULL_HANDLE);
 }
 
@@ -782,7 +765,8 @@ VkResult VkRenderFramework::CreateSurface(SurfaceContext &surface_context, VkSur
 #if defined(VK_USE_PLATFORM_XCB_KHR)
     if (IsExtensionsEnabled(VK_KHR_XCB_SURFACE_EXTENSION_NAME)) {
         surface_context.m_surface_xcb_conn = xcb_connect(nullptr, nullptr);
-        if (surface_context.m_surface_xcb_conn) {
+        int err = xcb_connection_has_error(surface_context.m_surface_xcb_conn);
+        if (surface_context.m_surface_xcb_conn && !err) {
             xcb_window_t window = xcb_generate_id(surface_context.m_surface_xcb_conn);
             VkXcbSurfaceCreateInfoKHR surface_create_info = vku::InitStructHelper();
             surface_create_info.connection = surface_context.m_surface_xcb_conn;
@@ -792,7 +776,7 @@ VkResult VkRenderFramework::CreateSurface(SurfaceContext &surface_context, VkSur
     }
 #endif
 
-    return VK_SUCCESS;
+    return VK_ERROR_UNKNOWN;
 }
 
 void VkRenderFramework::DestroySurface() {
@@ -1111,4 +1095,125 @@ void VkRenderFramework::DestroyRenderTarget() {
     m_renderPass = VK_NULL_HANDLE;
     delete m_framebuffer;
     m_framebuffer = nullptr;
+}
+
+void VkRenderFramework::SetDefaultDynamicStatesExclude(const std::vector<VkDynamicState> &exclude, bool tessellation,
+                                                       VkCommandBuffer commandBuffer) {
+    const auto excluded = [&exclude](VkDynamicState state) {
+        return std::find(exclude.begin(), exclude.end(), state) != exclude.end();
+    };
+    if (!m_vertex_buffer) {
+        m_vertex_buffer = new vkt::Buffer(*m_device, 32u, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    }
+
+    VkCommandBuffer cmdBuffer = commandBuffer ? commandBuffer : m_commandBuffer->handle();
+    VkViewport viewport = {0, 0, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f};
+    VkRect2D scissor = {{0, 0}, {m_width, m_height}};
+    if (!excluded(VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT)) vk::CmdSetViewportWithCountEXT(cmdBuffer, 1u, &viewport);
+    if (!excluded(VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT)) vk::CmdSetScissorWithCountEXT(cmdBuffer, 1u, &scissor);
+    if (!excluded(VK_DYNAMIC_STATE_LINE_WIDTH)) vk::CmdSetLineWidth(cmdBuffer, 1.0f);
+    if (!excluded(VK_DYNAMIC_STATE_DEPTH_BIAS)) vk::CmdSetDepthBias(cmdBuffer, 1.0f, 0.0f, 1.0f);
+    float blendConstants[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    if (!excluded(VK_DYNAMIC_STATE_BLEND_CONSTANTS)) vk::CmdSetBlendConstants(cmdBuffer, blendConstants);
+    if (!excluded(VK_DYNAMIC_STATE_DEPTH_BOUNDS)) vk::CmdSetDepthBounds(cmdBuffer, 0.0f, 1.0f);
+    if (!excluded(VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK))
+        vk::CmdSetStencilCompareMask(cmdBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFFFFFFFF);
+    if (!excluded(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK))
+        vk::CmdSetStencilWriteMask(cmdBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFFFFFFFF);
+    if (!excluded(VK_DYNAMIC_STATE_STENCIL_REFERENCE))
+        vk::CmdSetStencilReference(cmdBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFFFFFFFF);
+    VkDeviceSize offset = 0u;
+    VkDeviceSize size = sizeof(float);
+    if (!excluded(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE))
+        vk::CmdBindVertexBuffers2EXT(cmdBuffer, 0, 1, &m_vertex_buffer->handle(), &offset, &size, &size);
+    if (!excluded(VK_DYNAMIC_STATE_CULL_MODE)) vk::CmdSetCullModeEXT(cmdBuffer, VK_CULL_MODE_NONE);
+    if (!excluded(VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE)) vk::CmdSetDepthBoundsTestEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_DEPTH_COMPARE_OP)) vk::CmdSetDepthCompareOpEXT(cmdBuffer, VK_COMPARE_OP_NEVER);
+    if (!excluded(VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE)) vk::CmdSetDepthTestEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE)) vk::CmdSetDepthWriteEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_FRONT_FACE)) vk::CmdSetFrontFaceEXT(cmdBuffer, VK_FRONT_FACE_CLOCKWISE);
+    if (!excluded(VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY))
+        vk::CmdSetPrimitiveTopologyEXT(cmdBuffer,
+                                       tessellation ? VK_PRIMITIVE_TOPOLOGY_PATCH_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
+    if (!excluded(VK_DYNAMIC_STATE_STENCIL_OP))
+        vk::CmdSetStencilOpEXT(cmdBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP,
+                               VK_STENCIL_OP_KEEP, VK_COMPARE_OP_NEVER);
+    if (!excluded(VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE)) vk::CmdSetStencilTestEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE)) vk::CmdSetDepthBiasEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE)) vk::CmdSetPrimitiveRestartEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)) vk::CmdSetRasterizerDiscardEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT)) vk::CmdSetVertexInputEXT(cmdBuffer, 0u, nullptr, 0u, nullptr);
+    if (!excluded(VK_DYNAMIC_STATE_LOGIC_OP_EXT)) vk::CmdSetLogicOpEXT(cmdBuffer, VK_LOGIC_OP_COPY);
+    if (!excluded(VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT)) vk::CmdSetPatchControlPointsEXT(cmdBuffer, 4u);
+    if (!excluded(VK_DYNAMIC_STATE_TESSELLATION_DOMAIN_ORIGIN_EXT))
+        vk::CmdSetTessellationDomainOriginEXT(cmdBuffer, VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT);
+    if (!excluded(VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT)) vk::CmdSetDepthClampEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_POLYGON_MODE_EXT)) vk::CmdSetPolygonModeEXT(cmdBuffer, VK_POLYGON_MODE_FILL);
+    if (!excluded(VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT)) vk::CmdSetRasterizationSamplesEXT(cmdBuffer, VK_SAMPLE_COUNT_1_BIT);
+    VkSampleMask sampleMask = 0xFFFFFFFF;
+    if (!excluded(VK_DYNAMIC_STATE_SAMPLE_MASK_EXT)) vk::CmdSetSampleMaskEXT(cmdBuffer, VK_SAMPLE_COUNT_1_BIT, &sampleMask);
+    if (!excluded(VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT)) vk::CmdSetAlphaToCoverageEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT)) vk::CmdSetAlphaToOneEnableEXT(cmdBuffer, VK_FALSE);
+    if (!excluded(VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT)) vk::CmdSetLogicOpEnableEXT(cmdBuffer, VK_FALSE);
+    VkBool32 colorBlendEnable = VK_FALSE;
+    if (!excluded(VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT)) vk::CmdSetColorBlendEnableEXT(cmdBuffer, 0u, 1u, &colorBlendEnable);
+    VkColorBlendEquationEXT colorBlendEquation = {
+        VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD,
+    };
+    if (!excluded(VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT))
+        vk::CmdSetColorBlendEquationEXT(cmdBuffer, 0u, 1u, &colorBlendEquation);
+    VkColorComponentFlags colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    if (!excluded(VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT)) vk::CmdSetColorWriteMaskEXT(cmdBuffer, 0u, 1u, &colorWriteMask);
+}
+
+void VkRenderFramework::SetDefaultDynamicStatesAll(VkCommandBuffer cmdBuffer) {
+    uint32_t width = 32;
+    uint32_t height = 32;
+    VkViewport viewport = {0, 0, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f};
+    VkRect2D scissor = {{0, 0}, {width, height}};
+    vk::CmdSetViewportWithCountEXT(cmdBuffer, 1u, &viewport);
+    vk::CmdSetScissorWithCountEXT(cmdBuffer, 1u, &scissor);
+    vk::CmdSetLineWidth(cmdBuffer, 1.0f);
+    vk::CmdSetDepthBias(cmdBuffer, 1.0f, 0.0f, 1.0f);
+    float blendConstants[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    vk::CmdSetBlendConstants(cmdBuffer, blendConstants);
+    vk::CmdSetDepthBounds(cmdBuffer, 0.0f, 1.0f);
+    vk::CmdSetStencilCompareMask(cmdBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFFFFFFFF);
+    vk::CmdSetStencilWriteMask(cmdBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFFFFFFFF);
+    vk::CmdSetStencilReference(cmdBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFFFFFFFF);
+    vk::CmdSetCullModeEXT(cmdBuffer, VK_CULL_MODE_NONE);
+    vk::CmdSetDepthBoundsTestEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetDepthCompareOpEXT(cmdBuffer, VK_COMPARE_OP_NEVER);
+    vk::CmdSetDepthTestEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetDepthWriteEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetFrontFaceEXT(cmdBuffer, VK_FRONT_FACE_CLOCKWISE);
+    vk::CmdSetPrimitiveTopologyEXT(cmdBuffer, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
+    vk::CmdSetStencilOpEXT(cmdBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP,
+                           VK_COMPARE_OP_NEVER);
+    vk::CmdSetStencilTestEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetDepthBiasEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetPrimitiveRestartEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetRasterizerDiscardEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetVertexInputEXT(cmdBuffer, 0u, nullptr, 0u, nullptr);
+    vk::CmdSetLogicOpEXT(cmdBuffer, VK_LOGIC_OP_COPY);
+    vk::CmdSetPatchControlPointsEXT(cmdBuffer, 4u);
+    vk::CmdSetTessellationDomainOriginEXT(cmdBuffer, VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT);
+    vk::CmdSetDepthClampEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetPolygonModeEXT(cmdBuffer, VK_POLYGON_MODE_FILL);
+    vk::CmdSetRasterizationSamplesEXT(cmdBuffer, VK_SAMPLE_COUNT_1_BIT);
+    VkSampleMask sampleMask = 0xFFFFFFFF;
+    vk::CmdSetSampleMaskEXT(cmdBuffer, VK_SAMPLE_COUNT_1_BIT, &sampleMask);
+    vk::CmdSetAlphaToCoverageEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetAlphaToOneEnableEXT(cmdBuffer, VK_FALSE);
+    vk::CmdSetLogicOpEnableEXT(cmdBuffer, VK_FALSE);
+    VkBool32 colorBlendEnable = VK_FALSE;
+    vk::CmdSetColorBlendEnableEXT(cmdBuffer, 0u, 1u, &colorBlendEnable);
+    VkColorBlendEquationEXT colorBlendEquation = {
+        VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD,
+    };
+    vk::CmdSetColorBlendEquationEXT(cmdBuffer, 0u, 1u, &colorBlendEquation);
+    VkColorComponentFlags colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    vk::CmdSetColorWriteMaskEXT(cmdBuffer, 0u, 1u, &colorWriteMask);
 }

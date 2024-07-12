@@ -238,6 +238,7 @@ static const std::unordered_multimap<uint32_t, RequiredSpirvInfo> spirvCapabilit
     // Not found in current SPIR-V Headers
     //    {spv::CapabilityClusterCullingShadingHUAWEI, {0, &DeviceFeatures::clustercullingShader, nullptr, ""}},
     {spv::CapabilityRayTracingPositionFetchKHR, {0, &DeviceFeatures::rayTracingPositionFetch, nullptr, ""}},
+    {spv::CapabilityRayQueryPositionFetchKHR, {0, &DeviceFeatures::rayTracingPositionFetch, nullptr, ""}},
     {spv::CapabilityTileImageColorReadAccessEXT, {0, &DeviceFeatures::shaderTileImageColorReadAccess, nullptr, ""}},
     {spv::CapabilityTileImageDepthReadAccessEXT, {0, &DeviceFeatures::shaderTileImageDepthReadAccess, nullptr, ""}},
     {spv::CapabilityTileImageStencilReadAccessEXT, {0, &DeviceFeatures::shaderTileImageStencilReadAccess, nullptr, ""}},
@@ -247,9 +248,8 @@ static const std::unordered_multimap<uint32_t, RequiredSpirvInfo> spirvCapabilit
     {spv::CapabilityExpectAssumeKHR, {0, &DeviceFeatures::shaderExpectAssume, nullptr, ""}},
     {spv::CapabilityFloatControls2, {0, &DeviceFeatures::shaderFloatControls2, nullptr, ""}},
     {spv::CapabilityQuadControlKHR, {0, &DeviceFeatures::shaderQuadControl, nullptr, ""}},
-    // Not found in current SPIR-V Headers
-    //    {spv::CapabilityMaximallyReconvergesKHR, {0, &DeviceFeatures::shaderMaximalReconvergence, nullptr, ""}},
     {spv::CapabilityRawAccessChainsNV, {0, &DeviceFeatures::shaderRawAccessChains, nullptr, ""}},
+    {spv::CapabilityReplicatedCompositesEXT, {0, &DeviceFeatures::shaderReplicatedComposites, nullptr, ""}},
 };
 // clang-format on
 
@@ -355,6 +355,8 @@ static const std::unordered_multimap<std::string_view, RequiredSpirvInfo> spirvE
     {"SPV_KHR_float_controls2", {0, nullptr, &DeviceExtensions::vk_khr_shader_float_controls2, ""}},
     {"SPV_KHR_quad_control", {0, nullptr, &DeviceExtensions::vk_khr_shader_quad_control, ""}},
     {"SPV_NV_raw_access_chains", {0, nullptr, &DeviceExtensions::vk_nv_raw_access_chains, ""}},
+    {"SPV_EXT_replicated_composites", {0, nullptr, &DeviceExtensions::vk_ext_shader_replicated_composites, ""}},
+    {"SPV_KHR_relaxed_extended_instruction", {0, nullptr, &DeviceExtensions::vk_khr_shader_relaxed_extended_instruction, ""}},
 };
 // clang-format on
 
@@ -484,6 +486,8 @@ static inline const char *string_SpvCapability(uint32_t input_value) {
             return "TileImageDepthReadAccessEXT";
         case spv::CapabilityTileImageStencilReadAccessEXT:
             return "TileImageStencilReadAccessEXT";
+        case spv::CapabilityCooperativeMatrixLayoutsARM:
+            return "CooperativeMatrixLayoutsARM";
         case spv::CapabilityFragmentShadingRateKHR:
             return "FragmentShadingRateKHR";
         case spv::CapabilitySubgroupBallotKHR:
@@ -688,6 +692,8 @@ static inline const char *string_SpvCapability(uint32_t input_value) {
             return "RayCullMaskKHR";
         case spv::CapabilityCooperativeMatrixKHR:
             return "CooperativeMatrixKHR";
+        case spv::CapabilityReplicatedCompositesEXT:
+            return "ReplicatedCompositesEXT";
         case spv::CapabilityBitInstructions:
             return "BitInstructions";
         case spv::CapabilityGroupNonUniformRotateKHR:
@@ -947,6 +953,7 @@ static inline const char* SpvCapabilityRequirements(uint32_t capability) {
     {spv::CapabilityCoreBuiltinsARM, "VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM::shaderCoreBuiltins"},
     {spv::CapabilityShaderInvocationReorderNV, "VK_NV_ray_tracing_invocation_reorder"},
     {spv::CapabilityRayTracingPositionFetchKHR, "VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR::rayTracingPositionFetch"},
+    {spv::CapabilityRayQueryPositionFetchKHR, "VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR::rayTracingPositionFetch"},
     {spv::CapabilityTileImageColorReadAccessEXT, "VkPhysicalDeviceShaderTileImageFeaturesEXT::shaderTileImageColorReadAccess"},
     {spv::CapabilityTileImageDepthReadAccessEXT, "VkPhysicalDeviceShaderTileImageFeaturesEXT::shaderTileImageDepthReadAccess"},
     {spv::CapabilityTileImageStencilReadAccessEXT, "VkPhysicalDeviceShaderTileImageFeaturesEXT::shaderTileImageStencilReadAccess"},
@@ -957,6 +964,7 @@ static inline const char* SpvCapabilityRequirements(uint32_t capability) {
     {spv::CapabilityFloatControls2, "VkPhysicalDeviceShaderFloatControls2FeaturesKHR::shaderFloatControls2"},
     {spv::CapabilityQuadControlKHR, "VkPhysicalDeviceShaderQuadControlFeaturesKHR::shaderQuadControl"},
     {spv::CapabilityRawAccessChainsNV, "VkPhysicalDeviceRawAccessChainsFeaturesNV::shaderRawAccessChains"},
+    {spv::CapabilityReplicatedCompositesEXT, "VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT::shaderReplicatedComposites"},
     };
 
     // VUs before catch unknown capabilities
@@ -1051,6 +1059,8 @@ static inline std::string SpvExtensionRequirments(std::string_view extension) {
     {"SPV_KHR_float_controls2", {{vvl::Extension::_VK_KHR_shader_float_controls2}}},
     {"SPV_KHR_quad_control", {{vvl::Extension::_VK_KHR_shader_quad_control}}},
     {"SPV_NV_raw_access_chains", {{vvl::Extension::_VK_NV_raw_access_chains}}},
+    {"SPV_EXT_replicated_composites", {{vvl::Extension::_VK_EXT_shader_replicated_composites}}},
+    {"SPV_KHR_relaxed_extended_instruction", {{vvl::Extension::_VK_KHR_shader_relaxed_extended_instruction}}},
     };
 
     // VUs before catch unknown extensions
@@ -1059,9 +1069,9 @@ static inline std::string SpvExtensionRequirments(std::string_view extension) {
 }
 // clang-format on
 
-bool CoreChecks::ValidateShaderCapabilitiesAndExtensions(const spirv::Instruction &insn, const bool pipeline,
-                                                         const Location &loc) const {
+bool CoreChecks::ValidateShaderCapabilitiesAndExtensions(const spirv::Instruction &insn, const Location &loc) const {
     bool skip = false;
+    const bool pipeline = loc.function != vvl::Func::vkCreateShadersEXT;
 
     if (insn.Opcode() == spv::OpCapability) {
         // All capabilities are generated so if it is not in the list it is not supported by Vulkan

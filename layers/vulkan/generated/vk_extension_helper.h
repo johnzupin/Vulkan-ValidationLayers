@@ -377,6 +377,8 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_khr_calibrated_timestamps{kNotEnabled};
     ExtEnabled vk_khr_shader_expect_assume{kNotEnabled};
     ExtEnabled vk_khr_maintenance6{kNotEnabled};
+    ExtEnabled vk_khr_shader_relaxed_extended_instruction{kNotEnabled};
+    ExtEnabled vk_khr_maintenance7{kNotEnabled};
     ExtEnabled vk_nv_glsl_shader{kNotEnabled};
     ExtEnabled vk_ext_depth_range_unrestricted{kNotEnabled};
     ExtEnabled vk_img_filter_cubic{kNotEnabled};
@@ -590,6 +592,7 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_nv_ray_tracing_invocation_reorder{kNotEnabled};
     ExtEnabled vk_nv_extended_sparse_address_space{kNotEnabled};
     ExtEnabled vk_ext_mutable_descriptor_type{kNotEnabled};
+    ExtEnabled vk_ext_legacy_vertex_attributes{kNotEnabled};
     ExtEnabled vk_arm_shader_core_builtins{kNotEnabled};
     ExtEnabled vk_ext_pipeline_library_group_handles{kNotEnabled};
     ExtEnabled vk_ext_dynamic_rendering_unused_attachments{kNotEnabled};
@@ -606,7 +609,9 @@ struct DeviceExtensions : public InstanceExtensions {
     ExtEnabled vk_nv_descriptor_pool_overallocation{kNotEnabled};
     ExtEnabled vk_nv_raw_access_chains{kNotEnabled};
     ExtEnabled vk_nv_shader_atomic_float16_vector{kNotEnabled};
+    ExtEnabled vk_ext_shader_replicated_composites{kNotEnabled};
     ExtEnabled vk_nv_ray_tracing_validation{kNotEnabled};
+    ExtEnabled vk_mesa_image_alignment_control{kNotEnabled};
     ExtEnabled vk_khr_acceleration_structure{kNotEnabled};
     ExtEnabled vk_khr_ray_tracing_pipeline{kNotEnabled};
     ExtEnabled vk_khr_ray_query{kNotEnabled};
@@ -939,6 +944,10 @@ struct DeviceExtensions : public InstanceExtensions {
                                                                      VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
             {vvl::Extension::_VK_KHR_maintenance6,
              Info(&DeviceExtensions::vk_khr_maintenance6, {{{&DeviceExtensions::vk_feature_version_1_1, "VK_VERSION_1_1"}}})},
+            {vvl::Extension::_VK_KHR_shader_relaxed_extended_instruction,
+             Info(&DeviceExtensions::vk_khr_shader_relaxed_extended_instruction, {})},
+            {vvl::Extension::_VK_KHR_maintenance7,
+             Info(&DeviceExtensions::vk_khr_maintenance7, {{{&DeviceExtensions::vk_feature_version_1_1, "VK_VERSION_1_1"}}})},
             {vvl::Extension::_VK_NV_glsl_shader, Info(&DeviceExtensions::vk_nv_glsl_shader, {})},
             {vvl::Extension::_VK_EXT_depth_range_unrestricted, Info(&DeviceExtensions::vk_ext_depth_range_unrestricted, {})},
             {vvl::Extension::_VK_IMG_filter_cubic, Info(&DeviceExtensions::vk_img_filter_cubic, {})},
@@ -1586,6 +1595,9 @@ struct DeviceExtensions : public InstanceExtensions {
             {vvl::Extension::_VK_EXT_mutable_descriptor_type,
              Info(&DeviceExtensions::vk_ext_mutable_descriptor_type,
                   {{{&DeviceExtensions::vk_khr_maintenance3, VK_KHR_MAINTENANCE_3_EXTENSION_NAME}}})},
+            {vvl::Extension::_VK_EXT_legacy_vertex_attributes,
+             Info(&DeviceExtensions::vk_ext_legacy_vertex_attributes,
+                  {{{&DeviceExtensions::vk_ext_vertex_input_dynamic_state, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME}}})},
             {vvl::Extension::_VK_ARM_shader_core_builtins,
              Info(&DeviceExtensions::vk_arm_shader_core_builtins, {{{&DeviceExtensions::vk_khr_get_physical_device_properties2,
                                                                      VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
@@ -1641,7 +1653,12 @@ struct DeviceExtensions : public InstanceExtensions {
                   {{{&DeviceExtensions::vk_feature_version_1_1, "VK_VERSION_1_1"}}})},
             {vvl::Extension::_VK_NV_raw_access_chains, Info(&DeviceExtensions::vk_nv_raw_access_chains, {})},
             {vvl::Extension::_VK_NV_shader_atomic_float16_vector, Info(&DeviceExtensions::vk_nv_shader_atomic_float16_vector, {})},
+            {vvl::Extension::_VK_EXT_shader_replicated_composites,
+             Info(&DeviceExtensions::vk_ext_shader_replicated_composites, {})},
             {vvl::Extension::_VK_NV_ray_tracing_validation, Info(&DeviceExtensions::vk_nv_ray_tracing_validation, {})},
+            {vvl::Extension::_VK_MESA_image_alignment_control, Info(&DeviceExtensions::vk_mesa_image_alignment_control,
+                                                                    {{{&DeviceExtensions::vk_khr_get_physical_device_properties2,
+                                                                       VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME}}})},
             {vvl::Extension::_VK_KHR_acceleration_structure,
              Info(&DeviceExtensions::vk_khr_acceleration_structure,
                   {{{&DeviceExtensions::vk_feature_version_1_1, "VK_VERSION_1_1"},
@@ -1827,6 +1844,8 @@ constexpr bool IsDeviceExtension(vvl::Extension extension) {
         case vvl::Extension::_VK_KHR_calibrated_timestamps:
         case vvl::Extension::_VK_KHR_shader_expect_assume:
         case vvl::Extension::_VK_KHR_maintenance6:
+        case vvl::Extension::_VK_KHR_shader_relaxed_extended_instruction:
+        case vvl::Extension::_VK_KHR_maintenance7:
         case vvl::Extension::_VK_NV_glsl_shader:
         case vvl::Extension::_VK_EXT_depth_range_unrestricted:
         case vvl::Extension::_VK_IMG_filter_cubic:
@@ -2040,6 +2059,7 @@ constexpr bool IsDeviceExtension(vvl::Extension extension) {
         case vvl::Extension::_VK_NV_ray_tracing_invocation_reorder:
         case vvl::Extension::_VK_NV_extended_sparse_address_space:
         case vvl::Extension::_VK_EXT_mutable_descriptor_type:
+        case vvl::Extension::_VK_EXT_legacy_vertex_attributes:
         case vvl::Extension::_VK_ARM_shader_core_builtins:
         case vvl::Extension::_VK_EXT_pipeline_library_group_handles:
         case vvl::Extension::_VK_EXT_dynamic_rendering_unused_attachments:
@@ -2056,7 +2076,9 @@ constexpr bool IsDeviceExtension(vvl::Extension extension) {
         case vvl::Extension::_VK_NV_descriptor_pool_overallocation:
         case vvl::Extension::_VK_NV_raw_access_chains:
         case vvl::Extension::_VK_NV_shader_atomic_float16_vector:
+        case vvl::Extension::_VK_EXT_shader_replicated_composites:
         case vvl::Extension::_VK_NV_ray_tracing_validation:
+        case vvl::Extension::_VK_MESA_image_alignment_control:
         case vvl::Extension::_VK_KHR_acceleration_structure:
         case vvl::Extension::_VK_KHR_ray_tracing_pipeline:
         case vvl::Extension::_VK_KHR_ray_query:

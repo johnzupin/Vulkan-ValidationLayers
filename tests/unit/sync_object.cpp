@@ -18,6 +18,8 @@
 #include "../framework/barrier_queue_family.h"
 #include "../framework/render_pass_helper.h"
 
+class NegativeSyncObject : public SyncObjectTest {};
+
 TEST_F(NegativeSyncObject, ImageBarrierSubpassConflicts) {
     TEST_DESCRIPTION("Add a pipeline barrier within a subpass that has conflicting state");
     RETURN_IF_SKIP(Init());
@@ -711,7 +713,7 @@ TEST_F(NegativeSyncObject, Barriers) {
     m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-srcStageMask-06461");
 
     vkt::CommandPool command_pool(*m_device, queue_family_index.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer bad_command_buffer(*m_device, &command_pool);
+    vkt::CommandBuffer bad_command_buffer(*m_device, command_pool);
 
     bad_command_buffer.begin();
     // Set two bits that should both be supported as a bonus positive check
@@ -1118,46 +1120,6 @@ TEST_F(NegativeSyncObject, Sync2Barriers) {
     conc_test.buffer_barrier_.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     conc_test.buffer_barrier_.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     conc_test("", "VUID-VkBufferMemoryBarrier2-dstAccessMask-03911");
-
-    // Attempt to mismatch barriers/waitEvents calls with incompatible queues
-    // Create command pool with incompatible queueflags
-    const std::vector<VkQueueFamilyProperties> queue_props = m_device->phy().queue_properties_;
-    const std::optional<uint32_t> queue_family_index = m_device->ComputeOnlyQueueFamily();
-    if (!queue_family_index) {
-        GTEST_SKIP() << "No compute-only queue found";
-    }
-
-    VkBufferMemoryBarrier2KHR buf_barrier = vku::InitStructHelper();
-    buf_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    buf_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    buf_barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    buf_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    buf_barrier.buffer = buffer.handle();
-    buf_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    buf_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    buf_barrier.offset = 0;
-    buf_barrier.size = VK_WHOLE_SIZE;
-
-    dep_info = vku::InitStructHelper();
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &buf_barrier;
-
-    vk::CmdPipelineBarrier2KHR(m_commandBuffer->handle(), &dep_info);
-
-    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-srcStageMask-03849");
-
-    vkt::CommandPool command_pool(*m_device, queue_family_index.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    vkt::CommandBuffer bad_command_buffer(*m_device, &command_pool);
-
-    bad_command_buffer.begin();
-    buf_barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    // Set two bits that should both be supported as a bonus positive check
-    buf_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-    buf_barrier.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    buf_barrier.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-
-    vk::CmdPipelineBarrier2KHR(bad_command_buffer.handle(), &dep_info);
-    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeSyncObject, DepthStencilImageNonSeparate) {
@@ -1358,7 +1320,7 @@ TEST_F(NegativeSyncObject, BufferBarrierWithHostStage) {
     AddRequiredFeature(vkt::Feature::synchronization2);
     RETURN_IF_SKIP(Init());
 
-    vkt::Buffer buffer(*m_device, 32);
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     VkBufferMemoryBarrier2 barrier = vku::InitStructHelper();
     barrier.buffer = buffer.handle();
     barrier.size = VK_WHOLE_SIZE;
@@ -1444,7 +1406,7 @@ TEST_F(NegativeSyncObject, BufferBarrierWithHostStageSync1) {
     if (m_device->phy().queue_properties_.size() < 2) {
         GTEST_SKIP() << "Two queue families are required";
     }
-    vkt::Buffer buffer(*m_device, 32);
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     VkBufferMemoryBarrier barrier = vku::InitStructHelper();
     barrier.srcQueueFamilyIndex = 0;
@@ -3206,8 +3168,8 @@ TEST_F(NegativeSyncObject, EventStageMaskOneCommandBufferFail) {
 TEST_F(NegativeSyncObject, EventStageMaskTwoCommandBufferPass) {
     RETURN_IF_SKIP(Init());
 
-    vkt::CommandBuffer commandBuffer1(*m_device, m_commandPool);
-    vkt::CommandBuffer commandBuffer2(*m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer1(*m_device, m_command_pool);
+    vkt::CommandBuffer commandBuffer2(*m_device, m_command_pool);
     vkt::Event event(*m_device);
 
     commandBuffer1.begin();
@@ -3227,8 +3189,8 @@ TEST_F(NegativeSyncObject, EventStageMaskTwoCommandBufferPass) {
 TEST_F(NegativeSyncObject, EventStageMaskTwoCommandBufferFail) {
     RETURN_IF_SKIP(Init());
 
-    vkt::CommandBuffer commandBuffer1(*m_device, m_commandPool);
-    vkt::CommandBuffer commandBuffer2(*m_device, m_commandPool);
+    vkt::CommandBuffer commandBuffer1(*m_device, m_command_pool);
+    vkt::CommandBuffer commandBuffer2(*m_device, m_command_pool);
     vkt::Event event(*m_device);
 
     commandBuffer1.begin();
@@ -3258,13 +3220,13 @@ TEST_F(NegativeSyncObject, DetectInterQueueEventUsage) {
     }
     const vkt::Event event(*m_device);
 
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
     cb1.begin();
     vk::CmdSetEvent(cb1, event, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     cb1.end();
 
     vkt::CommandPool pool2(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer cb2(*m_device, &pool2);
+    vkt::CommandBuffer cb2(*m_device, pool2);
     cb2.begin();
     vk::CmdWaitEvents(cb2, 1, &event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, nullptr,
                       0, nullptr, 0, nullptr);
@@ -3301,13 +3263,13 @@ TEST_F(NegativeSyncObject, DetectInterQueueEventUsage2) {
 
     const vkt::Event event(*m_device);
 
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
     cb1.begin();
     vk::CmdSetEvent2(cb1, event, &dependency_info);
     cb1.end();
 
     vkt::CommandPool pool2(*m_device, m_second_queue->family_index);
-    vkt::CommandBuffer cb2(*m_device, &pool2);
+    vkt::CommandBuffer cb2(*m_device, pool2);
     cb2.begin();
     vk::CmdWaitEvents2(cb2, 1, &event.handle(), &dependency_info);
     cb2.end();
@@ -3326,7 +3288,7 @@ TEST_F(NegativeSyncObject, QueueForwardProgressFenceWait) {
     // TODO: the test works according to description but that's not what VUID describes
     const char *queue_forward_progress_message = "VUID-vkQueueSubmit-pCommandBuffers-00065";
 
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
     cb1.begin();
     cb1.end();
 
@@ -3359,7 +3321,7 @@ TEST_F(NegativeSyncObject, PipelineStageConditionalRenderingWithWrongQueue) {
     image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
     vkt::CommandPool commandPool(*m_device, only_transfer_queueFamilyIndex.value());
-    vkt::CommandBuffer commandBuffer(*m_device, &commandPool);
+    vkt::CommandBuffer commandBuffer(*m_device, commandPool);
 
     commandBuffer.begin();
 
@@ -3561,4 +3523,156 @@ TEST_F(NegativeSyncObject, RenderPassPipelineBarrierGraphicsStage) {
     vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
                            0, nullptr, 0, nullptr, 0, nullptr);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSyncObject, MemoryBarrierStageNotSupportedByQueue) {
+    TEST_DESCRIPTION("Memory barrier uses pipeline stages not supported by the queue family");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+
+    std::optional<uint32_t> transfer_only_family = m_device->TransferOnlyQueueFamily();
+    if (!transfer_only_family.has_value()) {
+        GTEST_SKIP() << "Transfer-only queue family is required";
+    }
+    vkt::CommandPool transfer_pool(*m_device, transfer_only_family.value());
+    vkt::CommandBuffer transfer_cb(*m_device, transfer_pool);
+
+    vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkMemoryBarrier2 barrier_src_gfx = vku::InitStructHelper();
+    barrier_src_gfx.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;  // graphics stage
+    barrier_src_gfx.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    barrier_src_gfx.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier_src_gfx.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+
+    VkMemoryBarrier2 barrier_dst_gfx = vku::InitStructHelper();
+    barrier_dst_gfx.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier_dst_gfx.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier_dst_gfx.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;  // graphics stage
+    barrier_dst_gfx.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+
+    VkDependencyInfo dep_info_src_gfx = vku::InitStructHelper();
+    dep_info_src_gfx.memoryBarrierCount = 1;
+    dep_info_src_gfx.pMemoryBarriers = &barrier_src_gfx;
+
+    VkDependencyInfo dep_info_dst_gfx = vku::InitStructHelper();
+    dep_info_dst_gfx.memoryBarrierCount = 1;
+    dep_info_dst_gfx.pMemoryBarriers = &barrier_dst_gfx;
+
+    transfer_cb.begin();
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-srcStageMask-09673");
+    vk::CmdPipelineBarrier2(transfer_cb.handle(), &dep_info_src_gfx);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-dstStageMask-09674");
+    vk::CmdPipelineBarrier2(transfer_cb.handle(), &dep_info_dst_gfx);
+    m_errorMonitor->VerifyFound();
+    transfer_cb.end();
+}
+
+TEST_F(NegativeSyncObject, BufferBarrierStageNotSupportedByQueue) {
+    TEST_DESCRIPTION("Buffer memory barrier without ownership transfer uses pipeline stages not supported by the queue family");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+
+    std::optional<uint32_t> compute_only_family = m_device->ComputeOnlyQueueFamily();
+    if (!compute_only_family.has_value()) {
+        GTEST_SKIP() << "Compute-only queue family is required";
+    }
+    vkt::CommandPool compute_pool(*m_device, compute_only_family.value());
+    vkt::CommandBuffer compute_cb(*m_device, compute_pool);
+
+    vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferMemoryBarrier2 barrier_src_gfx = vku::InitStructHelper();
+    barrier_src_gfx.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;  // graphics stage
+    barrier_src_gfx.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    barrier_src_gfx.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier_src_gfx.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier_src_gfx.buffer = buffer.handle();
+    barrier_src_gfx.offset = 0;
+    barrier_src_gfx.size = 256;
+
+    VkBufferMemoryBarrier2 barrier_dst_gfx = vku::InitStructHelper();
+    barrier_dst_gfx.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier_dst_gfx.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier_dst_gfx.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;  // graphics stage
+    barrier_dst_gfx.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    barrier_dst_gfx.buffer = buffer.handle();
+    barrier_dst_gfx.offset = 0;
+    barrier_dst_gfx.size = 256;
+
+    VkDependencyInfo dep_info_src_gfx = vku::InitStructHelper();
+    dep_info_src_gfx.bufferMemoryBarrierCount = 1;
+    dep_info_src_gfx.pBufferMemoryBarriers = &barrier_src_gfx;
+
+    VkDependencyInfo dep_info_dst_gfx = vku::InitStructHelper();
+    dep_info_dst_gfx.bufferMemoryBarrierCount = 1;
+    dep_info_dst_gfx.pBufferMemoryBarriers = &barrier_dst_gfx;
+
+    compute_cb.begin();
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-srcStageMask-09675");
+    vk::CmdPipelineBarrier2(compute_cb.handle(), &dep_info_src_gfx);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-dstStageMask-09676");
+    vk::CmdPipelineBarrier2(compute_cb.handle(), &dep_info_dst_gfx);
+    m_errorMonitor->VerifyFound();
+    compute_cb.end();
+}
+
+TEST_F(NegativeSyncObject, ImageBarrierStageNotSupportedByQueue) {
+    TEST_DESCRIPTION("Image memory barrier without ownership transfer uses pipeline stages not supported by the queue family");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+
+    std::optional<uint32_t> compute_only_family = m_device->ComputeOnlyQueueFamily();
+    if (!compute_only_family.has_value()) {
+        GTEST_SKIP() << "Compute-only queue family is required";
+    }
+    vkt::CommandPool compute_pool(*m_device, compute_only_family.value());
+    vkt::CommandBuffer compute_cb(*m_device, compute_pool);
+
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+
+    VkImageMemoryBarrier2 barrier_src_gfx = vku::InitStructHelper();
+    barrier_src_gfx.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;  // graphics stage
+    barrier_src_gfx.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    barrier_src_gfx.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier_src_gfx.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier_src_gfx.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier_src_gfx.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier_src_gfx.image = image.handle();
+    barrier_src_gfx.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    VkImageMemoryBarrier2 barrier_dst_gfx = vku::InitStructHelper();
+    barrier_dst_gfx.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier_dst_gfx.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier_dst_gfx.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;  // graphics stage
+    barrier_dst_gfx.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    barrier_dst_gfx.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier_dst_gfx.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier_dst_gfx.image = image.handle();
+    barrier_dst_gfx.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    VkDependencyInfo dep_info_src_gfx = vku::InitStructHelper();
+    dep_info_src_gfx.imageMemoryBarrierCount = 1;
+    dep_info_src_gfx.pImageMemoryBarriers = &barrier_src_gfx;
+
+    VkDependencyInfo dep_info_dst_gfx = vku::InitStructHelper();
+    dep_info_dst_gfx.imageMemoryBarrierCount = 1;
+    dep_info_dst_gfx.pImageMemoryBarriers = &barrier_dst_gfx;
+
+    compute_cb.begin();
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-srcStageMask-09675");
+    vk::CmdPipelineBarrier2(compute_cb.handle(), &dep_info_src_gfx);
+    m_errorMonitor->VerifyFound();
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-dstStageMask-09676");
+    vk::CmdPipelineBarrier2(compute_cb.handle(), &dep_info_dst_gfx);
+    m_errorMonitor->VerifyFound();
+    compute_cb.end();
 }

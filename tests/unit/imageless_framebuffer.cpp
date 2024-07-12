@@ -15,6 +15,8 @@
 #include "../framework/layer_validation_tests.h"
 #include "../framework/render_pass_helper.h"
 
+class NegativeImagelessFramebuffer : public VkLayerTest {};
+
 TEST_F(NegativeImagelessFramebuffer, RenderPassBeginImageViewMismatch) {
     TEST_DESCRIPTION(
         "Begin a renderPass where the image views specified do not match the parameters used to create the framebuffer and render "
@@ -938,17 +940,7 @@ TEST_F(NegativeImagelessFramebuffer, RenderPassBeginImageView3D) {
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.format = attachmentFormats[0];
     vkt::Image image3D(*m_device, imageCreateInfo, vkt::set_layout);
-
-    VkImageViewCreateInfo imageViewCreateInfo = vku::InitStructHelper();
-    imageViewCreateInfo.image = image3D;
-    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
-    imageViewCreateInfo.format = attachmentFormats[0];
-    imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-    imageViewCreateInfo.subresourceRange.levelCount = 1;
-    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-    imageViewCreateInfo.subresourceRange.layerCount = 1;
-    const vkt::ImageView imageView3D(*m_device, imageViewCreateInfo);
+    vkt::ImageView imageView3D = image3D.CreateView(VK_IMAGE_VIEW_TYPE_3D);
 
     VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfo = vku::InitStructHelper();
     framebufferAttachmentImageInfo.flags = 0;
@@ -1101,6 +1093,7 @@ TEST_F(NegativeImagelessFramebuffer, AttachmentImageFormat) {
 TEST_F(NegativeImagelessFramebuffer, MissingInheritanceRenderingInfo) {
     TEST_DESCRIPTION("Begin cmd buffer with imageless framebuffer and missing VkCommandBufferInheritanceRenderingInfo structure");
 
+    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::imagelessFramebuffer);
     RETURN_IF_SKIP(Init());
@@ -1152,7 +1145,7 @@ TEST_F(NegativeImagelessFramebuffer, MissingInheritanceRenderingInfo) {
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
     beginInfo.pInheritanceInfo = &inheritanceInfo;
 
-    vkt::CommandBuffer secondary(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     m_errorMonitor->SetDesiredError("VUID-VkCommandBufferBeginInfo-flags-06002");
     m_errorMonitor->SetDesiredError("VUID-VkCommandBufferBeginInfo-flags-09240");
     vk::BeginCommandBuffer(secondary.handle(), &beginInfo);

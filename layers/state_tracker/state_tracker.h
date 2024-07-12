@@ -23,7 +23,7 @@
 #include "utils/hash_vk_types.h"
 #include "state_tracker/video_session_state.h"
 #include "generated/layer_chassis_dispatch.h"
-#include "generated/state_tracker_helper.h"
+#include "generated/device_features.h"
 #include "error_message/logging.h"
 #include "containers/custom_containers.h"
 #include "utils/android_ndk_types.h"
@@ -74,6 +74,10 @@ struct ShaderObject;
 namespace chassis {
 struct CreateShaderModule;
 }  // namespace chassis
+
+namespace spirv {
+struct StatelessData;
+}  // namespace spirv
 
 // This is duplicated here because Best Practice pipeline is a derivative of vvl::Pipeline and we have a virtual function that needs
 // to know this. Idealy this will probably never need to change often, so likely won't cause issues
@@ -263,13 +267,13 @@ class ValidationStateTracker : public ValidationObject {
               typename MapTraits = MapTraits<BaseType>>
     typename MapTraits::MapType& GetStateMap() {
         auto map_member = MapTraits::Map();
-        return (MapTraits::kInstanceScope && (this->*map_member).size() == 0) ? instance_state->*map_member : this->*map_member;
+        return (MapTraits::kInstanceScope && (this->*map_member).empty()) ? instance_state->*map_member : this->*map_member;
     }
     template <typename State, typename BaseType = typename state_object::Traits<State>::BaseType,
               typename MapTraits = MapTraits<BaseType>>
     const typename MapTraits::MapType& GetStateMap() const {
         auto map_member = MapTraits::Map();
-        return (MapTraits::kInstanceScope && (this->*map_member).size() == 0) ? instance_state->*map_member : this->*map_member;
+        return (MapTraits::kInstanceScope && (this->*map_member).empty()) ? instance_state->*map_member : this->*map_member;
     }
 
   public:
@@ -304,14 +308,6 @@ class ValidationStateTracker : public ValidationObject {
     template <typename State, typename Fn>
     void ForEachShared(Fn&& fn) const {
         const auto& map = GetStateMap<State>();
-        for (const auto& entry : map.snapshot()) {
-            fn(entry.second);
-        }
-    }
-
-    template <typename State, typename Fn>
-    void ForEachShared(Fn&& fn) {
-        auto& map = GetStateMap<State>();
         for (const auto& entry : map.snapshot()) {
             fn(entry.second);
         }
@@ -474,7 +470,8 @@ class ValidationStateTracker : public ValidationObject {
                                                             VkVideoSessionMemoryRequirementsKHR* pMemoryRequirements,
                                                             const RecordObject& record_obj) override;
 
-    virtual std::shared_ptr<vvl::Queue> CreateQueue(VkQueue handle, uint32_t queue_family_index, VkDeviceQueueCreateFlags flags,
+    virtual std::shared_ptr<vvl::Queue> CreateQueue(VkQueue handle, uint32_t queue_family_index, uint32_t queue_index,
+                                                    VkDeviceQueueCreateFlags flags,
                                                     const VkQueueFamilyProperties& queueFamilyProperties);
 
     void PostCallRecordGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue,
@@ -605,7 +602,7 @@ class ValidationStateTracker : public ValidationObject {
     void PostCallRecordCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo* pCreateInfo,
                                     const VkAllocationCallbacks* pAllocator, VkDevice* pDevice,
                                     const RecordObject& record_obj) override;
-    virtual void CreateDevice(const VkDeviceCreateInfo* pCreateInfo, const Location& loc);
+    virtual void PostCreateDevice(const VkDeviceCreateInfo* pCreateInfo, const Location& loc);
 
     void PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator,
                                     const RecordObject& record_obj) override;
@@ -698,7 +695,8 @@ class ValidationStateTracker : public ValidationObject {
 
     virtual std::shared_ptr<vvl::Pipeline> CreateComputePipelineState(const VkComputePipelineCreateInfo* pCreateInfo,
                                                                       std::shared_ptr<const vvl::PipelineCache> pipeline_cache,
-                                                                      std::shared_ptr<const vvl::PipelineLayout>&& layout) const;
+                                                                      std::shared_ptr<const vvl::PipelineLayout>&& layout,
+                                                                      spirv::StatelessData* stateless_data) const;
     bool PreCallValidateCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
                                                const VkComputePipelineCreateInfo* pCreateInfos,
                                                const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
@@ -750,11 +748,10 @@ class ValidationStateTracker : public ValidationObject {
     void PreCallRecordDestroyPipelineCache(VkDevice device, VkPipelineCache pipelineCache, const VkAllocationCallbacks* pAllocator,
                                            const RecordObject& record_obj) override;
 
-    virtual std::shared_ptr<vvl::Pipeline> CreateGraphicsPipelineState(const VkGraphicsPipelineCreateInfo* pCreateInfo,
-                                                                       std::shared_ptr<const vvl::PipelineCache> pipeline_cache,
-                                                                       std::shared_ptr<const vvl::RenderPass>&& render_pass,
-                                                                       std::shared_ptr<const vvl::PipelineLayout>&& layout,
-                                                                       ShaderModuleUniqueIds* shader_unique_id_map) const;
+    virtual std::shared_ptr<vvl::Pipeline> CreateGraphicsPipelineState(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo, std::shared_ptr<const vvl::PipelineCache> pipeline_cache,
+        std::shared_ptr<const vvl::RenderPass>&& render_pass, std::shared_ptr<const vvl::PipelineLayout>&& layout,
+        spirv::StatelessData stateless_data[kCommonMaxGraphicsShaderStages], ShaderModuleUniqueIds* shader_unique_id_map) const;
 
     bool PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
                                                 const VkGraphicsPipelineCreateInfo* pCreateInfos,
@@ -813,7 +810,8 @@ class ValidationStateTracker : public ValidationObject {
 
     virtual std::shared_ptr<vvl::Pipeline> CreateRayTracingPipelineState(const VkRayTracingPipelineCreateInfoNV* pCreateInfo,
                                                                          std::shared_ptr<const vvl::PipelineCache> pipeline_cache,
-                                                                         std::shared_ptr<const vvl::PipelineLayout>&& layout) const;
+                                                                         std::shared_ptr<const vvl::PipelineLayout>&& layout,
+                                                                         spirv::StatelessData* stateless_data) const;
     bool PreCallValidateCreateRayTracingPipelinesNV(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
                                                     const VkRayTracingPipelineCreateInfoNV* pCreateInfos,
                                                     const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
@@ -826,7 +824,8 @@ class ValidationStateTracker : public ValidationObject {
                                                    chassis::CreateRayTracingPipelinesNV& chassis_state) override;
     virtual std::shared_ptr<vvl::Pipeline> CreateRayTracingPipelineState(const VkRayTracingPipelineCreateInfoKHR* pCreateInfo,
                                                                          std::shared_ptr<const vvl::PipelineCache> pipeline_cache,
-                                                                         std::shared_ptr<const vvl::PipelineLayout>&& layout) const;
+                                                                         std::shared_ptr<const vvl::PipelineLayout>&& layout,
+                                                                         spirv::StatelessData* stateless_data) const;
     bool PreCallValidateCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
                                                      VkPipelineCache pipelineCache, uint32_t count,
                                                      const VkRayTracingPipelineCreateInfoKHR* pCreateInfos,
@@ -1465,7 +1464,8 @@ class ValidationStateTracker : public ValidationObject {
     void RecordEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCounters(VkPhysicalDevice physicalDevice,
                                                                           uint32_t queueFamilyIndex, uint32_t* pCounterCount,
                                                                           VkPerformanceCounterKHR* pCounters);
-    void RecordGetDeviceQueueState(uint32_t queue_family_index, VkDeviceQueueCreateFlags flags, VkQueue queue);
+    void RecordGetDeviceQueueState(uint32_t queue_family_index, uint32_t queue_index, VkDeviceQueueCreateFlags flags,
+                                   VkQueue queue);
     void RecordGetExternalFenceState(VkFence fence, VkExternalFenceHandleTypeFlagBits handle_type, const Location& loc);
     void RecordGetImageMemoryRequirementsState(VkImage image, const VkImageMemoryRequirementsInfo2* pInfo);
     void RecordImportSemaphoreState(VkSemaphore semaphore, VkExternalSemaphoreHandleTypeFlagBits handle_type,
@@ -1665,13 +1665,8 @@ class ValidationStateTracker : public ValidationObject {
             if constexpr (init) {
                 *ext_prop = vku::InitStructHelper();
             }
-            if (api_version < VK_API_VERSION_1_1) {
-                VkPhysicalDeviceProperties2 prop2 = vku::InitStructHelper(ext_prop);
-                DispatchGetPhysicalDeviceProperties2KHR(gpu, &prop2);
-            } else {
-                VkPhysicalDeviceProperties2 prop2 = vku::InitStructHelper(ext_prop);
-                DispatchGetPhysicalDeviceProperties2(gpu, &prop2);
-            }
+            VkPhysicalDeviceProperties2 prop2 = vku::InitStructHelper(ext_prop);
+            DispatchGetPhysicalDeviceProperties2Helper(gpu, &prop2);
         }
     }
 
@@ -1679,14 +1674,13 @@ class ValidationStateTracker : public ValidationObject {
     void GetPhysicalDeviceExtProperties(VkPhysicalDevice gpu, ExtProp* ext_prop) {
         assert(ext_prop);
         *ext_prop = vku::InitStructHelper();
-        if (api_version < VK_API_VERSION_1_1) {
-            VkPhysicalDeviceProperties2 prop2 = vku::InitStructHelper(ext_prop);
-            DispatchGetPhysicalDeviceProperties2KHR(gpu, &prop2);
-        } else {
-            VkPhysicalDeviceProperties2 prop2 = vku::InitStructHelper(ext_prop);
-            DispatchGetPhysicalDeviceProperties2(gpu, &prop2);
-        }
+        VkPhysicalDeviceProperties2 prop2 = vku::InitStructHelper(ext_prop);
+        DispatchGetPhysicalDeviceProperties2Helper(gpu, &prop2);
     }
+
+    VkFormatFeatureFlags2KHR GetImageFormatFeatures(VkPhysicalDevice physical_device, bool has_format_feature2,
+                                                    bool has_drm_modifiers, VkDevice device, VkImage image, VkFormat format,
+                                                    VkImageTiling tiling);
 
     inline std::shared_ptr<vvl::ShaderModule> GetShaderModuleStateFromIdentifier(const VkShaderModuleIdentifierEXT& ident) {
         ReadLockGuard guard(shader_identifier_map_lock_);
@@ -1835,7 +1829,10 @@ class ValidationStateTracker : public ValidationObject {
         VkPhysicalDeviceSubgroupProperties subgroup_props;
         VkPhysicalDeviceExtendedDynamicState3PropertiesEXT extended_dynamic_state3_props;
         VkPhysicalDeviceImageProcessingPropertiesQCOM image_processing_props;
+        VkPhysicalDeviceImageAlignmentControlPropertiesMESA image_alignment_control_props;
         VkPhysicalDeviceMaintenance6PropertiesKHR maintenance6_props;
+        VkPhysicalDeviceMaintenance7PropertiesKHR maintenance7_props;
+        VkPhysicalDeviceNestedCommandBufferPropertiesEXT nested_command_buffer_props;
         VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_props;
         VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT descriptor_buffer_density_props;
         VkPhysicalDeviceHostImageCopyPropertiesEXT host_image_copy_props;

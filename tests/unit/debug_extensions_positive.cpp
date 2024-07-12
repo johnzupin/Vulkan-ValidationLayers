@@ -11,6 +11,8 @@
 
 #include "../framework/layer_validation_tests.h"
 
+class PositiveDebugExtensions : public VkLayerTest {};
+
 TEST_F(PositiveDebugExtensions, SetDebugUtilsObjectBuffer) {
     TEST_DESCRIPTION("call vkSetDebugUtilsObjectNameEXT on a VkBuffer");
     AddRequiredExtensions(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -36,7 +38,7 @@ TEST_F(PositiveDebugExtensions, SetDebugUtilsObjectBuffer) {
     VkDebugUtilsMessengerEXT my_messenger = VK_NULL_HANDLE;
     vk::CreateDebugUtilsMessengerEXT(instance(), &callback_create_info, nullptr, &my_messenger);
 
-    vkt::Buffer buffer(*m_device, 64);
+    vkt::Buffer buffer(*m_device, 64, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     const char* object_name = "buffer_object";
 
     VkDebugUtilsObjectNameInfoEXT name_info = vku::InitStructHelper();
@@ -107,13 +109,13 @@ TEST_F(PositiveDebugExtensions, DebugLabelPrimaryCommandBuffer2) {
 
     VkDebugUtilsLabelEXT label = vku::InitStructHelper();
     label.pLabelName = "test";
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
     cb0.begin();
     vk::CmdBeginDebugUtilsLabelEXT(cb0, &label);
     cb0.end();
     m_default_queue->Submit(cb0);
 
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
     cb1.begin();
     vk::CmdEndDebugUtilsLabelEXT(cb1);
     cb1.end();
@@ -129,12 +131,12 @@ TEST_F(PositiveDebugExtensions, DebugLabelPrimaryCommandBuffer3) {
 
     VkDebugUtilsLabelEXT label = vku::InitStructHelper();
     label.pLabelName = "test";
-    vkt::CommandBuffer cb0(*m_device, m_commandPool);
+    vkt::CommandBuffer cb0(*m_device, m_command_pool);
     cb0.begin();
     vk::CmdBeginDebugUtilsLabelEXT(cb0, &label);
     cb0.end();
 
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
     cb1.begin();
     vk::CmdEndDebugUtilsLabelEXT(cb1);
     cb1.end();
@@ -147,7 +149,7 @@ TEST_F(PositiveDebugExtensions, DebugLabelPrimaryCommandBuffer3) {
 TEST_F(PositiveDebugExtensions, DebugLabelSecondaryCommandBuffer) {
     AddRequiredExtensions(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    vkt::CommandBuffer cb(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer cb(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     cb.begin();
     {
         VkDebugUtilsLabelEXT label = vku::InitStructHelper();

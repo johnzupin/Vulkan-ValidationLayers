@@ -23,6 +23,8 @@ void DynamicRenderingTest::InitBasicDynamicRendering() {
     RETURN_IF_SKIP(Init());
 }
 
+class PositiveDynamicRendering : public DynamicRenderingTest {};
+
 TEST_F(PositiveDynamicRendering, BasicUsage) {
     TEST_DESCRIPTION("Most simple way to use dynamic rendering");
     RETURN_IF_SKIP(InitBasicDynamicRendering());
@@ -239,15 +241,14 @@ TEST_F(PositiveDynamicRendering, FragmentDensityMapSubsampledBit) {
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
     color_attachment.imageView = image_view;
 
-    VkRenderingInfoKHR begin_rendering_info = vku::InitStructHelper();
-    begin_rendering_info.colorAttachmentCount = 1;
-    begin_rendering_info.pColorAttachments = &color_attachment;
-    begin_rendering_info.renderArea = {{0, 0}, {1, 1}};
-
     VkRenderingFragmentDensityMapAttachmentInfoEXT fragment_density_map = vku::InitStructHelper();
     fragment_density_map.imageView = fdm_image_view;
     fragment_density_map.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    begin_rendering_info.pNext = &fragment_density_map;
+
+    VkRenderingInfoKHR begin_rendering_info = vku::InitStructHelper(&fragment_density_map);
+    begin_rendering_info.colorAttachmentCount = 1;
+    begin_rendering_info.pColorAttachments = &color_attachment;
+    begin_rendering_info.renderArea = {{0, 0}, {1, 1}};
     begin_rendering_info.layerCount = 1;
 
     m_commandBuffer->begin();
@@ -277,8 +278,8 @@ TEST_F(PositiveDynamicRendering, SuspendResumeDraw) {
     begin_rendering_info.layerCount = 1;
     begin_rendering_info.renderArea = {{0, 0}, {1, 1}};
 
-    vkt::CommandBuffer cb1(*m_device, m_commandPool);
-    vkt::CommandBuffer cb2(*m_device, m_commandPool);
+    vkt::CommandBuffer cb1(*m_device, m_command_pool);
+    vkt::CommandBuffer cb2(*m_device, m_command_pool);
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRendering(begin_rendering_info);
@@ -414,32 +415,10 @@ TEST_F(PositiveDynamicRendering, CommandDrawWithShaderTileImageRead) {
     pipe.CreateGraphicsPipeline();
 
     vkt::Image depth_image(*m_device, 32, 32, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-
-    VkImageViewCreateInfo depth_view_ci = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                           nullptr,
-                                           0,
-                                           depth_image.handle(),
-                                           VK_IMAGE_VIEW_TYPE_2D,
-                                           depth_format,
-                                           {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-                                            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
-                                           {VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1}};
-
-    vkt::ImageView depth_image_view(*m_device, depth_view_ci);
+    vkt::ImageView depth_image_view = depth_image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
     vkt::Image color_image(*m_device, 32, 32, 1, color_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-
-    VkImageViewCreateInfo color_view_ci = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                           nullptr,
-                                           0,
-                                           color_image.handle(),
-                                           VK_IMAGE_VIEW_TYPE_2D,
-                                           color_format,
-                                           {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-                                            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
-                                           {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-
-    vkt::ImageView color_image_view(*m_device, color_view_ci);
+    vkt::ImageView color_image_view = color_image.CreateView();
 
     VkRenderingAttachmentInfoKHR depth_attachment = vku::InitStructHelper();
     depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -536,7 +515,7 @@ TEST_F(PositiveDynamicRendering, ExecuteCommandsWithNullImageView) {
     begin_rendering_info.layerCount = 1;
     begin_rendering_info.renderArea = {{0, 0}, {1, 1}};
 
-    vkt::CommandBuffer secondary(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     const VkCommandBufferInheritanceInfo cmdbuff_ii = vku::InitStructHelper(&inheritance_rendering_info);
 
@@ -586,7 +565,7 @@ TEST_F(PositiveDynamicRendering, SuspendPrimaryResumeInSecondary) {
     m_commandBuffer->EndRendering();
 
     // Secondary resumes render
-    vkt::CommandBuffer secondary(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     begin_rendering_info.flags = VK_RENDERING_RESUMING_BIT_KHR;
     secondary.begin();
     secondary.BeginRendering(begin_rendering_info);
@@ -632,7 +611,7 @@ TEST_F(PositiveDynamicRendering, SuspendSecondaryResumeInPrimary) {
     vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
     m_commandBuffer->EndRendering();
 
-    vkt::CommandBuffer secondary(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     begin_rendering_info.flags = VK_RENDERING_SUSPENDING_BIT_KHR;
     secondary.begin();
     secondary.BeginRendering(begin_rendering_info);
@@ -647,7 +626,7 @@ TEST_F(PositiveDynamicRendering, SuspendSecondaryResumeInPrimary) {
     m_commandBuffer->end();
 
     // Second Primary resumes render
-    vkt::CommandBuffer cb(*m_device, m_commandPool);
+    vkt::CommandBuffer cb(*m_device, m_command_pool);
     begin_rendering_info.flags = VK_RENDERING_RESUMING_BIT_KHR;
     cb.begin();
     cb.BeginRendering(begin_rendering_info);
@@ -950,7 +929,7 @@ TEST_F(PositiveDynamicRendering, ExecuteCommandsFlags) {
     begin_rendering_info.layerCount = 1;
     begin_rendering_info.renderArea = {{0, 0}, {1, 1}};
 
-    vkt::CommandBuffer secondary(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     VkCommandBufferInheritanceInfo cb_inheritance_info = vku::InitStructHelper(&inheritance_rendering_info);
     cb_inheritance_info.renderPass = VK_NULL_HANDLE;
@@ -1101,7 +1080,7 @@ TEST_F(PositiveDynamicRendering, UnusedAttachmentsMismatchedFormats) {
     VkCommandBufferInheritanceRenderingInfoKHR inheritance_rendering_info = vku::InitStructHelper();
     inheritance_rendering_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    vkt::CommandBuffer secondary(*m_device, m_commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     const VkCommandBufferInheritanceInfo cmdbuff_ii = vku::InitStructHelper(&inheritance_rendering_info);
 
     VkCommandBufferBeginInfo cmdbuff_bi = vku::InitStructHelper();
@@ -1148,7 +1127,7 @@ TEST_F(PositiveDynamicRendering, BeginRenderingWithRenderPassStriped) {
     begin_rendering_info.renderArea = {{0, 0}, {width, height}};
 
     vkt::CommandPool command_pool(*m_device, m_device->graphics_queue_node_index_);
-    vkt::CommandBuffer cmd_buffer(*m_device, &command_pool);
+    vkt::CommandBuffer cmd_buffer(*m_device, command_pool);
 
     VkCommandBufferBeginInfo cmd_begin = vku::InitStructHelper();
     cmd_buffer.begin(&cmd_begin);
@@ -1242,5 +1221,33 @@ TEST_F(PositiveDynamicRendering, AttachmentCountDynamicState) {
     pipe.AddDynamicState(VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT);
     pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
     pipe.cb_ci_ = color_blend_state_create_info;
+    pipe.CreateGraphicsPipeline();
+}
+
+TEST_F(PositiveDynamicRendering, VertexOnlyDepth) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8015");
+    AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::extendedDynamicState2);
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+
+    const VkFormat depth_format = FindSupportedDepthOnlyFormat(gpu());
+    VkPipelineRenderingCreateInfo pipeline_rendering_info = vku::InitStructHelper();
+    pipeline_rendering_info.colorAttachmentCount = 0;
+    pipeline_rendering_info.depthAttachmentFormat = depth_format;
+
+    VkPipelineMultisampleStateCreateInfo ms_ci = vku::InitStructHelper();
+    ms_ci.sampleShadingEnable = VK_TRUE;
+    ms_ci.minSampleShading = 1.0;
+    ms_ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo ds_state = vku::InitStructHelper();
+    ds_state.depthWriteEnable = VK_TRUE;
+
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT);
+    pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
+    pipe.gp_ci_.pMultisampleState = &ms_ci;
+    pipe.gp_ci_.pDepthStencilState = &ds_state;
     pipe.CreateGraphicsPipeline();
 }

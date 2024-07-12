@@ -140,89 +140,83 @@ class ObjectTrackerOutputGenerator(BaseGenerator):
         # which is translated here into a good VU.  Saves ~40 checks.
         self.manual_vuids = dict()
         self.manual_vuids = {
-            "fence-compatalloc": "\"VUID-vkDestroyFence-fence-01121\"",
-            "fence-nullalloc": "\"VUID-vkDestroyFence-fence-01122\"",
-            "event-compatalloc": "\"VUID-vkDestroyEvent-event-01146\"",
-            "event-nullalloc": "\"VUID-vkDestroyEvent-event-01147\"",
-            "buffer-compatalloc": "\"VUID-vkDestroyBuffer-buffer-00923\"",
-            "buffer-nullalloc": "\"VUID-vkDestroyBuffer-buffer-00924\"",
-            "image-compatalloc": "\"VUID-vkDestroyImage-image-01001\"",
-            "image-nullalloc": "\"VUID-vkDestroyImage-image-01002\"",
-            "shaderModule-compatalloc": "\"VUID-vkDestroyShaderModule-shaderModule-01092\"",
-            "shaderModule-nullalloc": "\"VUID-vkDestroyShaderModule-shaderModule-01093\"",
-            "pipeline-compatalloc": "\"VUID-vkDestroyPipeline-pipeline-00766\"",
-            "pipeline-nullalloc": "\"VUID-vkDestroyPipeline-pipeline-00767\"",
-            "sampler-compatalloc": "\"VUID-vkDestroySampler-sampler-01083\"",
-            "sampler-nullalloc": "\"VUID-vkDestroySampler-sampler-01084\"",
-            "renderPass-compatalloc": "\"VUID-vkDestroyRenderPass-renderPass-00874\"",
-            "renderPass-nullalloc": "\"VUID-vkDestroyRenderPass-renderPass-00875\"",
-            "descriptorUpdateTemplate-compatalloc": "\"VUID-vkDestroyDescriptorUpdateTemplate-descriptorSetLayout-00356\"",
-            "descriptorUpdateTemplate-nullalloc": "\"VUID-vkDestroyDescriptorUpdateTemplate-descriptorSetLayout-00357\"",
-            "imageView-compatalloc": "\"VUID-vkDestroyImageView-imageView-01027\"",
-            "imageView-nullalloc": "\"VUID-vkDestroyImageView-imageView-01028\"",
-            "pipelineCache-compatalloc": "\"VUID-vkDestroyPipelineCache-pipelineCache-00771\"",
-            "pipelineCache-nullalloc": "\"VUID-vkDestroyPipelineCache-pipelineCache-00772\"",
-            "pipelineLayout-compatalloc": "\"VUID-vkDestroyPipelineLayout-pipelineLayout-00299\"",
-            "pipelineLayout-nullalloc": "\"VUID-vkDestroyPipelineLayout-pipelineLayout-00300\"",
-            "descriptorSetLayout-compatalloc": "\"VUID-vkDestroyDescriptorSetLayout-descriptorSetLayout-00284\"",
-            "descriptorSetLayout-nullalloc": "\"VUID-vkDestroyDescriptorSetLayout-descriptorSetLayout-00285\"",
-            "semaphore-compatalloc": "\"VUID-vkDestroySemaphore-semaphore-01138\"",
-            "semaphore-nullalloc": "\"VUID-vkDestroySemaphore-semaphore-01139\"",
-            "queryPool-compatalloc": "\"VUID-vkDestroyQueryPool-queryPool-00794\"",
-            "queryPool-nullalloc": "\"VUID-vkDestroyQueryPool-queryPool-00795\"",
-            "bufferView-compatalloc": "\"VUID-vkDestroyBufferView-bufferView-00937\"",
-            "bufferView-nullalloc": "\"VUID-vkDestroyBufferView-bufferView-00938\"",
-            "surface-compatalloc": "\"VUID-vkDestroySurfaceKHR-surface-01267\"",
-            "surface-nullalloc": "\"VUID-vkDestroySurfaceKHR-surface-01268\"",
-            "framebuffer-compatalloc": "\"VUID-vkDestroyFramebuffer-framebuffer-00893\"",
-            "framebuffer-nullalloc": "\"VUID-vkDestroyFramebuffer-framebuffer-00894\"",
-            "VkGraphicsPipelineCreateInfo-basePipelineHandle": "\"VUID-VkGraphicsPipelineCreateInfo-flags-07984\"",
-            "VkComputePipelineCreateInfo-basePipelineHandle": "\"VUID-VkComputePipelineCreateInfo-flags-07984\"",
-            "VkRayTracingPipelineCreateInfoNV-basePipelineHandle": "\"VUID-VkRayTracingPipelineCreateInfoNV-flags-07984\"",
-			"VkRayTracingPipelineCreateInfoKHR-basePipelineHandle": "\"VUID-VkRayTracingPipelineCreateInfoKHR-flags-07984\"",
-            "VkVideoSessionKHR-videoSession-compatalloc": "\"VUID-vkDestroyVideoSessionKHR-videoSession-07193\"",
-            "VkVideoSessionKHR-videoSession-nullalloc": "\"VUID-vkDestroyVideoSessionKHR-videoSession-07194\"",
-            "VkVideoSessionParametersKHR-videoSessionParameters-compatalloc": "\"VUID-vkDestroyVideoSessionParametersKHR-videoSessionParameters-07213\"",
-            "VkVideoSessionParametersKHR-videoSessionParameters-nullalloc": "\"VUID-vkDestroyVideoSessionParametersKHR-videoSessionParameters-07214\"",
-            "VkAccelerationStructureKHR-accelerationStructure-compatalloc": "\"VUID-vkDestroyAccelerationStructureKHR-accelerationStructure-02443\"",
-            "VkAccelerationStructureKHR-accelerationStructure-nullalloc": "\"VUID-vkDestroyAccelerationStructureKHR-accelerationStructure-02444\"",
-            "VkAccelerationStructureNV-accelerationStructure-compatalloc": "\"VUID-vkDestroyAccelerationStructureNV-accelerationStructure-03753\"",
-            "VkAccelerationStructureNV-accelerationStructure-nullalloc": "\"VUID-vkDestroyAccelerationStructureNV-accelerationStructure-03754\"",
-            "shader-compatalloc": "\"VUID-vkDestroyShaderEXT-pAllocator-08483\"",
-            "shader-nullalloc": "\"VUID-vkDestroyShaderEXT-pAllocator-08484\"",
-            "callback-compatalloc": "\"VUID-vkDestroyDebugReportCallbackEXT-instance-01242\"",
-            "callback-nullalloc": "\"VUID-vkDestroyDebugReportCallbackEXT-instance-01243\"",
-            "messenger-compatalloc": "\"VUID-vkDestroyDebugUtilsMessengerEXT-messenger-01915\"",
-            "messenger-nullalloc": "\"VUID-vkDestroyDebugUtilsMessengerEXT-messenger-01916\"",
-            "operation-compatalloc": "\"VUID-vkDestroyDeferredOperationKHR-operation-03434\"",
-            "operation-nullalloc": "\"VUID-vkDestroyDeferredOperationKHR-operation-03435\"",
-            "micromap-compatalloc": "\"VUID-vkDestroyMicromapEXT-micromap-07442\"",
-            "micromap-nullalloc": "\"VUID-vkDestroyMicromapEXT-micromap-07443\"",
-            "privateDataSlot-compatalloc": "\"VUID-vkDestroyPrivateDataSlot-privateDataSlot-04062\"",
-            "privateDataSlot-nullalloc": "\"VUID-vkDestroyPrivateDataSlot-privateDataSlot-04063\"",
-            "validationCache-compatalloc": "\"VUID-vkDestroyValidationCacheEXT-validationCache-01537\"",
-            "validationCache-nullalloc": "\"VUID-vkDestroyValidationCacheEXT-validationCache-01538\"",
-            "swapchain-compatalloc": "\"VUID-vkDestroySwapchainKHR-swapchain-01283\"",
-            "swapchain-nullalloc": "\"VUID-vkDestroySwapchainKHR-swapchain-01284\"",
+            "fence-compatalloc": '"VUID-vkDestroyFence-fence-01121"',
+            "fence-nullalloc": '"VUID-vkDestroyFence-fence-01122"',
+            "event-compatalloc": '"VUID-vkDestroyEvent-event-01146"',
+            "event-nullalloc": '"VUID-vkDestroyEvent-event-01147"',
+            "buffer-compatalloc": '"VUID-vkDestroyBuffer-buffer-00923"',
+            "buffer-nullalloc": '"VUID-vkDestroyBuffer-buffer-00924"',
+            "image-compatalloc": '"VUID-vkDestroyImage-image-01001"',
+            "image-nullalloc": '"VUID-vkDestroyImage-image-01002"',
+            "shaderModule-compatalloc": '"VUID-vkDestroyShaderModule-shaderModule-01092"',
+            "shaderModule-nullalloc": '"VUID-vkDestroyShaderModule-shaderModule-01093"',
+            "pipeline-compatalloc": '"VUID-vkDestroyPipeline-pipeline-00766"',
+            "pipeline-nullalloc": '"VUID-vkDestroyPipeline-pipeline-00767"',
+            "sampler-compatalloc": '"VUID-vkDestroySampler-sampler-01083"',
+            "sampler-nullalloc": '"VUID-vkDestroySampler-sampler-01084"',
+            "renderPass-compatalloc": '"VUID-vkDestroyRenderPass-renderPass-00874"',
+            "renderPass-nullalloc": '"VUID-vkDestroyRenderPass-renderPass-00875"',
+            "descriptorUpdateTemplate-compatalloc": '"VUID-vkDestroyDescriptorUpdateTemplate-descriptorSetLayout-00356"',
+            "descriptorUpdateTemplate-nullalloc": '"VUID-vkDestroyDescriptorUpdateTemplate-descriptorSetLayout-00357"',
+            "imageView-compatalloc": '"VUID-vkDestroyImageView-imageView-01027"',
+            "imageView-nullalloc": '"VUID-vkDestroyImageView-imageView-01028"',
+            "pipelineCache-compatalloc": '"VUID-vkDestroyPipelineCache-pipelineCache-00771"',
+            "pipelineCache-nullalloc": '"VUID-vkDestroyPipelineCache-pipelineCache-00772"',
+            "pipelineLayout-compatalloc": '"VUID-vkDestroyPipelineLayout-pipelineLayout-00299"',
+            "pipelineLayout-nullalloc": '"VUID-vkDestroyPipelineLayout-pipelineLayout-00300"',
+            "descriptorSetLayout-compatalloc": '"VUID-vkDestroyDescriptorSetLayout-descriptorSetLayout-00284"',
+            "descriptorSetLayout-nullalloc": '"VUID-vkDestroyDescriptorSetLayout-descriptorSetLayout-00285"',
+            "semaphore-compatalloc": '"VUID-vkDestroySemaphore-semaphore-01138"',
+            "semaphore-nullalloc": '"VUID-vkDestroySemaphore-semaphore-01139"',
+            "queryPool-compatalloc": '"VUID-vkDestroyQueryPool-queryPool-00794"',
+            "queryPool-nullalloc": '"VUID-vkDestroyQueryPool-queryPool-00795"',
+            "bufferView-compatalloc": '"VUID-vkDestroyBufferView-bufferView-00937"',
+            "bufferView-nullalloc": '"VUID-vkDestroyBufferView-bufferView-00938"',
+            "surface-compatalloc": '"VUID-vkDestroySurfaceKHR-surface-01267"',
+            "surface-nullalloc": '"VUID-vkDestroySurfaceKHR-surface-01268"',
+            "framebuffer-compatalloc": '"VUID-vkDestroyFramebuffer-framebuffer-00893"',
+            "framebuffer-nullalloc": '"VUID-vkDestroyFramebuffer-framebuffer-00894"',
+            "VkGraphicsPipelineCreateInfo-basePipelineHandle": '"VUID-VkGraphicsPipelineCreateInfo-flags-07984"',
+            "VkComputePipelineCreateInfo-basePipelineHandle": '"VUID-VkComputePipelineCreateInfo-flags-07984"',
+            "VkRayTracingPipelineCreateInfoNV-basePipelineHandle": '"VUID-VkRayTracingPipelineCreateInfoNV-flags-07984"',
+			"VkRayTracingPipelineCreateInfoKHR-basePipelineHandle": '"VUID-VkRayTracingPipelineCreateInfoKHR-flags-07984"',
+            "VkVideoSessionKHR-videoSession-compatalloc": '"VUID-vkDestroyVideoSessionKHR-videoSession-07193"',
+            "VkVideoSessionKHR-videoSession-nullalloc": '"VUID-vkDestroyVideoSessionKHR-videoSession-07194"',
+            "VkVideoSessionParametersKHR-videoSessionParameters-compatalloc": '"VUID-vkDestroyVideoSessionParametersKHR-videoSessionParameters-07213"',
+            "VkVideoSessionParametersKHR-videoSessionParameters-nullalloc": '"VUID-vkDestroyVideoSessionParametersKHR-videoSessionParameters-07214"',
+            "VkAccelerationStructureKHR-accelerationStructure-compatalloc": '"VUID-vkDestroyAccelerationStructureKHR-accelerationStructure-02443"',
+            "VkAccelerationStructureKHR-accelerationStructure-nullalloc": '"VUID-vkDestroyAccelerationStructureKHR-accelerationStructure-02444"',
+            "VkAccelerationStructureNV-accelerationStructure-compatalloc": '"VUID-vkDestroyAccelerationStructureNV-accelerationStructure-03753"',
+            "VkAccelerationStructureNV-accelerationStructure-nullalloc": '"VUID-vkDestroyAccelerationStructureNV-accelerationStructure-03754"',
+            "shader-compatalloc": '"VUID-vkDestroyShaderEXT-pAllocator-08483"',
+            "shader-nullalloc": '"VUID-vkDestroyShaderEXT-pAllocator-08484"',
+            "callback-compatalloc": '"VUID-vkDestroyDebugReportCallbackEXT-instance-01242"',
+            "callback-nullalloc": '"VUID-vkDestroyDebugReportCallbackEXT-instance-01243"',
+            "messenger-compatalloc": '"VUID-vkDestroyDebugUtilsMessengerEXT-messenger-01915"',
+            "messenger-nullalloc": '"VUID-vkDestroyDebugUtilsMessengerEXT-messenger-01916"',
+            "operation-compatalloc": '"VUID-vkDestroyDeferredOperationKHR-operation-03434"',
+            "operation-nullalloc": '"VUID-vkDestroyDeferredOperationKHR-operation-03435"',
+            "micromap-compatalloc": '"VUID-vkDestroyMicromapEXT-micromap-07442"',
+            "micromap-nullalloc": '"VUID-vkDestroyMicromapEXT-micromap-07443"',
+            "privateDataSlot-compatalloc": '"VUID-vkDestroyPrivateDataSlot-privateDataSlot-04062"',
+            "privateDataSlot-nullalloc": '"VUID-vkDestroyPrivateDataSlot-privateDataSlot-04063"',
+            "validationCache-compatalloc": '"VUID-vkDestroyValidationCacheEXT-validationCache-01537"',
+            "validationCache-nullalloc": '"VUID-vkDestroyValidationCacheEXT-validationCache-01538"',
+            "swapchain-compatalloc": '"VUID-vkDestroySwapchainKHR-swapchain-01283"',
+            "swapchain-nullalloc": '"VUID-vkDestroySwapchainKHR-swapchain-01284"',
            }
 
         # Structures that do not define parent/commonparent VUIDs for vulkan handles.
         # This overlaps with https://gitlab.khronos.org/vulkan/vulkan/-/issues/3553#note_424431
         self.structs_that_forgot_about_parent_vuids = [
-            'VkMappedMemoryRange',
             'VkSparseMemoryBind',
             'VkSparseImageMemoryBind',
-            'VkBufferViewCreateInfo',
             'VkPipelineShaderStageCreateInfo',
-            'VkBufferMemoryBarrier',
-            'VkImageMemoryBarrier',
             'VkImageMemoryRequirementsInfo2',
             'VkBufferMemoryRequirementsInfo2',
             'VkImageSparseMemoryRequirementsInfo2',
             'VkSemaphoreWaitInfo',
             'VkSemaphoreSignalInfo',
-            'VkBufferMemoryBarrier2',
-            'VkImageMemoryBarrier2',
             'VkSemaphoreSubmitInfo',
             'VkCommandBufferSubmitInfo',
             'VkBindVideoSessionMemoryInfoKHR',
@@ -295,6 +289,9 @@ class ObjectTrackerOutputGenerator(BaseGenerator):
             'VkDeviceMemoryOpaqueCaptureAddressInfo',
             'VkPipelineIndirectDeviceAddressInfoNV',
             'VkAccelerationStructureDeviceAddressInfoKHR',
+
+            # Handled in manual check
+            'VkDescriptorSetLayoutBinding',
             ]
 
         # Commands that define parent requirements using "-parent" instead of "-commonparent" VUID
@@ -623,29 +620,75 @@ bool ObjectLifetimes::ReportUndestroyedDeviceObjects(VkDevice device, const Loca
         # For other dispatchable handles it depends on the API function
         return commandName in self.dispatchable_has_parent_vuid_commands
 
+    # It is very complex for the spec handle walking through structs and finding Handles and generating implicit VUs,
+    # We instead just have to do it manually for now.
+    # (details at https://gitlab.khronos.org/vulkan/vulkan/-/issues/3553#note_424431)
+    def getManualParentVUID(self, memberName: str, structName: str, commandName: str):
+        # These are cases where there is only a single caller of the struct
+        # We check by command name incase a new command would use the struct
+        if commandName == 'vkCreateImageView' and memberName == 'image':
+            return '"VUID-vkCreateImageView-image-09179"'
+        if commandName =='vkGetPipelineExecutablePropertiesKHR' and memberName == 'pipeline':
+            return '"VUID-vkGetPipelineExecutablePropertiesKHR-pipeline-03271"'
+        if commandName == 'vkCmdCudaLaunchKernelNV' and memberName == 'function':
+            return '"UNASSIGNED-VkCudaLaunchInfoNV-function-parent"'
+        if commandName == 'vkLatencySleepNV' and memberName == 'signalSemaphore':
+            return '"UNASSIGNED-VkLatencySleepInfoNV-signalSemaphore-parent"'
+        if commandName == 'vkCreateCudaFunctionNV' and memberName == 'module':
+            return '"UNASSIGNED-VkCudaFunctionCreateInfoNV-module-parent"'
+        if commandName == 'vkCmdPushConstants2KHR' and memberName == 'layout':
+            return '"UNASSIGNED-VkPushConstantsInfoKHR-layout-parent"'
+        if commandName == 'vkCmdSetDescriptorBufferOffsets2EXT' and memberName == 'layout':
+            return '"UNASSIGNED-VkSetDescriptorBufferOffsetsInfoEXT-layout-parent"'
+        if commandName == 'vkCmdBindDescriptorBufferEmbeddedSamplers2EXT' and memberName == 'layout':
+            return '"UNASSIGNED-VkBindDescriptorBufferEmbeddedSamplersInfoEXT-layout-parent"'
+        if commandName == 'vkCreateBufferView' and memberName == 'buffer':
+            return '"UNASSIGNED-VkBufferViewCreateInfo-buffer-parent"'
+
+        # These are cases where multiple commands call the struct
+        if structName == 'VkPipelineExecutableInfoKHR' and memberName == 'pipeline':
+            if commandName == 'vkGetPipelineExecutableStatisticsKHR':
+                return '"VUID-vkGetPipelineExecutableStatisticsKHR-pipeline-03273"'
+            elif commandName == 'vkGetPipelineExecutableInternalRepresentationsKHR':
+                return '"VUID-vkGetPipelineExecutableInternalRepresentationsKHR-pipeline-03277"'
+        if structName == 'VkPipelineLayoutCreateInfo' and memberName == 'pSetLayouts':
+            return '"UNASSIGNED-VkPipelineLayoutCreateInfo-pSetLayouts-commonparent"'
+        if structName == 'VkVideoInlineQueryInfoKHR' and memberName == 'queryPool':
+            return '"UNASSIGNED-VkVideoInlineQueryInfoKHR-queryPool-parent"'
+        if structName == 'VkMappedMemoryRange':
+            if commandName == 'vkInvalidateMappedMemoryRanges':
+                return '"UNASSIGNED-vkInvalidateMappedMemoryRanges-memory-device"'
+            elif commandName == 'vkFlushMappedMemoryRanges':
+                return '"UNASSIGNED-vkFlushMappedMemoryRanges-memory-device"'
+
+        # Common parents because the structs have more then one handle that needs to be check
+        if (structName == 'VkBufferMemoryBarrier' and memberName == 'buffer') or (structName == 'VkImageMemoryBarrier' and memberName == 'image'):
+            if commandName == 'vkCmdPipelineBarrier':
+                return '"UNASSIGNED-vkCmdPipelineBarrier-commandBuffer-commonparent"'
+            elif commandName == 'vkCmdWaitEvents':
+                return '"UNASSIGNED-vkCmdWaitEvents-commandBuffer-commonparent"'
+        if (structName == 'VkBufferMemoryBarrier2' and memberName == 'buffer') or (structName == 'VkImageMemoryBarrier2' and memberName == 'image'):
+            if commandName.startswith('vkCmdPipelineBarrier2'):
+                return '"UNASSIGNED-vkCmdPipelineBarrier2-commandBuffer-commonparent"'
+            elif commandName.startswith('vkCmdWaitEvents2'):
+                return '"UNASSIGNED-vkCmdWaitEvents2-commandBuffer-commonparent"'
+            elif commandName.startswith('vkCmdSetEvent2'):
+                return '"UNASSIGNED-vkCmdSetEvent2-commandBuffer-commonparent"'
+
+        # Common parents
+        if structName =='VkRenderPassAttachmentBeginInfo' and memberName == 'pAttachments':
+            return '"VUID-VkRenderPassBeginInfo-framebuffer-02780"'
+
+        return None
 
     def getFieldParentVUID(self, member: Member, structName: str, commandName: str, singleParentVuid: bool) -> str:
         if not self.hasFieldParentVUID(member, structName):
             return 'kVUIDUndefined'
 
-        # Special cases
-        # Make sure function is not in 'structs_that_forgot_about_parent_vuids'
-        if commandName == 'vkCreateImageView' and member.name == 'image':
-            return "\"VUID-vkCreateImageView-image-09179\""
-        if 'vkCmdBeginRenderPass' in commandName and member.name == 'pAttachments':
-            return "\"VUID-VkRenderPassBeginInfo-framebuffer-02780\""
-        if 'vkGetPipelineExecutablePropertiesKHR' in commandName and member.name == 'pipeline':
-                return "\"VUID-vkGetPipelineExecutablePropertiesKHR-pipeline-03271\""
-        if 'VkPipelineExecutableInfoKHR' in structName and member.name == 'pipeline':
-            if commandName == 'vkGetPipelineExecutableStatisticsKHR':
-                return "\"VUID-vkGetPipelineExecutableStatisticsKHR-pipeline-03273\""
-            elif commandName == 'vkGetPipelineExecutableInternalRepresentationsKHR':
-                return "\"VUID-vkGetPipelineExecutableInternalRepresentationsKHR-pipeline-03277\""
-        # TODO - Need to get spec to generate these VUs
-        if structName == 'VkPipelineLayoutCreateInfo' and member.name == 'pSetLayouts':
-            return "\"UNASSIGNED-VkPipelineLayoutCreateInfo-pSetLayouts-commonparent\""
-
-        if singleParentVuid:
+        manualVuid = self.getManualParentVUID(member.name, structName, commandName)
+        if  manualVuid is not None:
+            return manualVuid
+        elif singleParentVuid:
             return getVUID(self.valid_vuids, f'VUID-{structName}-{member.name}-parent')
         else:
             return getVUID(self.valid_vuids, f'VUID-{structName}-commonparent')

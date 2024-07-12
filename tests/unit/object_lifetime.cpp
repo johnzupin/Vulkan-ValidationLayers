@@ -20,24 +20,7 @@
 #include "../framework/descriptor_helper.h"
 #include "../framework/external_memory_sync.h"
 
-// Validation of dispatchable handles is not performed until VVL's chassis will be
-// able to do this validation (if ever) instead of crashing (which is also an option).
-// If vulkan's loader trampoline is active, then it's also the place where invalid
-// dispatchable handle can cause a crash.
-TEST_F(NegativeObjectLifetime, DISABLED_CreateBufferUsingInvalidDevice) {
-    TEST_DESCRIPTION("Create buffer using invalid device handle.");
-    RETURN_IF_SKIP(Init());
-
-    VkBufferCreateInfo buffer_ci = vku::InitStructHelper();
-    buffer_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    buffer_ci.size = 256;
-    buffer_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VkBuffer buffer;
-    m_errorMonitor->SetDesiredError("VUID-vkCreateBuffer-device-parameter");
-    vk::CreateBuffer((VkDevice)0x123456ab, &buffer_ci, NULL, &buffer);
-    m_errorMonitor->VerifyFound();
-}
+class NegativeObjectLifetime : public VkLayerTest {};
 
 TEST_F(NegativeObjectLifetime, CmdBufferBufferDestroyed) {
     TEST_DESCRIPTION("Attempt to draw with a command buffer that is invalid due to a buffer dependency being destroyed.");
@@ -50,7 +33,6 @@ TEST_F(NegativeObjectLifetime, CmdBufferBufferDestroyed) {
     VkBufferCreateInfo buf_info = vku::InitStructHelper();
     buf_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     buf_info.size = 256;
-    buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkResult err = vk::CreateBuffer(device(), &buf_info, NULL, &buffer);
     ASSERT_EQ(VK_SUCCESS, err);
 
@@ -90,7 +72,6 @@ TEST_F(NegativeObjectLifetime, CmdBarrierBufferDestroyed) {
     VkBufferCreateInfo buf_info = vku::InitStructHelper();
     buf_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     buf_info.size = 256;
-    buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     vkt::Buffer buffer(*m_device, buf_info, vkt::no_mem);
 
     VkMemoryRequirements mem_reqs;
@@ -181,7 +162,6 @@ TEST_F(NegativeObjectLifetime, Sync2CmdBarrierBufferDestroyed) {
     VkBufferCreateInfo buf_info = vku::InitStructHelper();
     buf_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     buf_info.size = 256;
-    buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkResult err = vk::CreateBuffer(device(), &buf_info, NULL, &buffer);
     ASSERT_EQ(VK_SUCCESS, err);
 
@@ -301,11 +281,8 @@ TEST_F(NegativeObjectLifetime, CmdBufferBufferViewDestroyed) {
     VkBufferView view;
 
     {
-        uint32_t queue_family_index = 0;
         buffer_create_info.size = 1024;
         buffer_create_info.usage = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-        buffer_create_info.queueFamilyIndexCount = 1;
-        buffer_create_info.pQueueFamilyIndices = &queue_family_index;
         vkt::Buffer buffer(*m_device, buffer_create_info);
 
         bvci.buffer = buffer.handle();
@@ -899,14 +876,7 @@ TEST_F(NegativeObjectLifetime, BufferViewInUseDestroyedSignaled) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    uint32_t queue_family_index = 0;
-    VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
-    buffer_create_info.size = 1024;
-    buffer_create_info.usage = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-    buffer_create_info.queueFamilyIndexCount = 1;
-    buffer_create_info.pQueueFamilyIndices = &queue_family_index;
-    vkt::Buffer buffer(*m_device, buffer_create_info);
-
+    vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT);
     VkBufferView view;
     VkBufferViewCreateInfo bvci = vku::InitStructHelper();
     bvci.buffer = buffer.handle();
@@ -1202,12 +1172,12 @@ TEST_F(NegativeObjectLifetime, FreeCommandBuffersNull) {
     RETURN_IF_SKIP(Init());
 
     m_errorMonitor->SetDesiredError("VUID-vkFreeCommandBuffers-pCommandBuffers-00048");
-    vk::FreeCommandBuffers(device(), m_commandPool->handle(), 2, nullptr);
+    vk::FreeCommandBuffers(device(), m_command_pool.handle(), 2, nullptr);
     m_errorMonitor->VerifyFound();
 
     VkCommandBuffer invalid_cb = CastToHandle<VkCommandBuffer, uintptr_t>(0xbaadbeef);
     m_errorMonitor->SetDesiredError("VUID-vkFreeCommandBuffers-pCommandBuffers-00048");
-    vk::FreeCommandBuffers(device(), m_commandPool->handle(), 1, &invalid_cb);
+    vk::FreeCommandBuffers(device(), m_command_pool.handle(), 1, &invalid_cb);
     m_errorMonitor->VerifyFound();
 }
 
@@ -1230,5 +1200,26 @@ TEST_F(NegativeObjectLifetime, FreeDescriptorSetsNull) {
     VkDescriptorSet invalid_set = CastToHandle<VkDescriptorSet, uintptr_t>(0xbaadbeef);
     m_errorMonitor->SetDesiredError("VUID-vkFreeDescriptorSets-pDescriptorSets-00310");
     vk::FreeDescriptorSets(device(), ds_pool.handle(), 1, &invalid_set);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeObjectLifetime, DescriptorBufferInfoUpdate) {
+    TEST_DESCRIPTION("Destroy a buffer then try to update it in the descriptor set");
+    RETURN_IF_SKIP(Init());
+
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+    VkBuffer invalid_buffer = CastToHandle<VkBuffer, uintptr_t>(0xbaadbeef);
+
+    OneOffDescriptorSet descriptor_set(m_device, {
+                                                     {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                     {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                 });
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer.handle(), 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    descriptor_set.WriteDescriptorBufferInfo(1, invalid_buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+
+    buffer.destroy();
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferInfo-buffer-parameter");  // destroyed
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferInfo-buffer-parameter");  // invalid
+    descriptor_set.UpdateDescriptorSets();
     m_errorMonitor->VerifyFound();
 }

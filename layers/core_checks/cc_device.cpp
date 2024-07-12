@@ -22,18 +22,19 @@
 #include <fstream>
 #include <vector>
 
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__GNU__)
 #include <unistd.h>
 #endif
 
 #include <vulkan/vk_enum_string_helper.h>
 #include "generated/chassis.h"
 #include "core_validation.h"
-#include "utils/shader_utils.h"
+#include "state_tracker/shader_stage_state.h"
 #include "state_tracker/image_state.h"
 #include "state_tracker/device_state.h"
 #include "state_tracker/buffer_state.h"
 #include "state_tracker/render_pass_state.h"
+#include <spirv-tools/libspirv.h>
 
 bool CoreChecks::ValidateDeviceQueueFamily(uint32_t queue_family, const Location &loc, const char *vuid,
                                            bool optional = false) const {
@@ -101,7 +102,7 @@ bool CoreChecks::GetPhysicalDeviceImageFormatProperties(vvl::Image &image_state,
         image_format_info.flags = image_create_info.flags;
         VkImageFormatProperties2 image_format_properties = vku::InitStructHelper();
         image_properties_result =
-            DispatchGetPhysicalDeviceImageFormatProperties2(physical_device, &image_format_info, &image_format_properties);
+            DispatchGetPhysicalDeviceImageFormatProperties2Helper(physical_device, &image_format_info, &image_format_properties);
         image_state.image_format_properties = image_format_properties.imageFormatProperties;
     }
     if (image_properties_result != VK_SUCCESS) {
@@ -436,9 +437,9 @@ bool CoreChecks::PreCallValidateCreateDevice(VkPhysicalDevice gpu, const VkDevic
     return skip;
 }
 
-void CoreChecks::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) {
-    // The state tracker sets up the device state
-    StateTracker::CreateDevice(pCreateInfo, loc);
+void CoreChecks::PostCreateDevice(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) {
+    // The state tracker sets up the device state (also if extension and/or features are enabled)
+    StateTracker::PostCreateDevice(pCreateInfo, loc);
 
     // Add the callback hooks for the functions that are either broadly or deeply used and that the ValidationStateTracker refactor
     // would be messier without.
@@ -448,11 +449,13 @@ void CoreChecks::CreateDevice(const VkDeviceCreateInfo *pCreateInfo, const Locat
             cb_state->SetImageViewInitialLayout(iv_state, layout);
         });
 
+    AdjustValidatorOptions(device_extensions, enabled_features, spirv_val_options, &spirv_val_option_hash);
+
     // Allocate shader validation cache
     if (!disabled[shader_validation_caching] && !disabled[shader_validation] && !core_validation_cache) {
         auto tmp_path = GetTempFilePath();
         validation_cache_path = tmp_path + "/shader_validation_cache";
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__GNU__)
         validation_cache_path += "-" + std::to_string(getuid());
 #endif
         validation_cache_path += ".bin";
@@ -643,7 +646,7 @@ VkFormatProperties3KHR CoreChecks::GetPDFormatProperties(const VkFormat format) 
     VkFormatProperties2 fmt_props_2 = vku::InitStructHelper(&fmt_props_3);
 
     if (has_format_feature2) {
-        DispatchGetPhysicalDeviceFormatProperties2(physical_device, format, &fmt_props_2);
+        DispatchGetPhysicalDeviceFormatProperties2Helper(physical_device, format, &fmt_props_2);
         fmt_props_3.linearTilingFeatures |= fmt_props_2.formatProperties.linearTilingFeatures;
         fmt_props_3.optimalTilingFeatures |= fmt_props_2.formatProperties.optimalTilingFeatures;
         fmt_props_3.bufferFeatures |= fmt_props_2.formatProperties.bufferFeatures;
@@ -660,7 +663,7 @@ VkFormatProperties3KHR CoreChecks::GetPDFormatProperties(const VkFormat format) 
 VkResult CoreChecks::CoreLayerCreateValidationCacheEXT(VkDevice device, const VkValidationCacheCreateInfoEXT *pCreateInfo,
                                                        const VkAllocationCallbacks *pAllocator,
                                                        VkValidationCacheEXT *pValidationCache) {
-    *pValidationCache = ValidationCache::Create(pCreateInfo);
+    *pValidationCache = ValidationCache::Create(pCreateInfo, spirv_val_option_hash);
     return *pValidationCache ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
 
@@ -759,9 +762,9 @@ bool CoreChecks::PreCallValidateDestroyCommandPool(VkDevice device, VkCommandPoo
                                                    const VkAllocationCallbacks *pAllocator, const ErrorObject &error_obj) const {
     bool skip = false;
     // In case of DEVICE_LOST, all execution is considered over
-    if (is_device_lost) return false;
+    if (is_device_lost) return skip;
     auto cp_state = Get<vvl::CommandPool>(commandPool);
-    if (!cp_state) { return false; }
+    if (!cp_state) return skip;
     // Verify that command buffers in pool are complete (not in-flight)
     for (auto &entry : cp_state->commandBuffers) {
         auto cb_state = entry.second;
@@ -778,7 +781,7 @@ bool CoreChecks::PreCallValidateResetCommandPool(VkDevice device, VkCommandPool 
                                                  const ErrorObject &error_obj) const {
     bool skip = false;
     auto cp_state = Get<vvl::CommandPool>(commandPool);
-    if (!cp_state) { return false; }
+    ASSERT_AND_RETURN_SKIP(cp_state);
     // Verify that command buffers in pool are complete (not in-flight)
     for (auto &entry : cp_state->commandBuffers) {
         auto cb_state = entry.second;
@@ -821,7 +824,7 @@ bool CoreChecks::PreCallValidateGetCalibratedTimestampsKHR(VkDevice device, uint
                                                            const ErrorObject &error_obj) const {
     bool skip = false;
 
-    auto query_function = (error_obj.location.function == Func::vkGetPhysicalDeviceCalibrateableTimeDomainsKHR)
+    auto query_function = (error_obj.location.function == Func::vkGetCalibratedTimestampsKHR)
                               ? DispatchGetPhysicalDeviceCalibrateableTimeDomainsKHR
                               : DispatchGetPhysicalDeviceCalibrateableTimeDomainsEXT;
     uint32_t count = 0;
@@ -845,6 +848,99 @@ bool CoreChecks::PreCallValidateGetCalibratedTimestampsKHR(VkDevice device, uint
                              string_VkTimeDomainKHR(time_domain));
         }
         time_domain_map[time_domain] = i;
+    }
+    return skip;
+}
+
+// These were all added from https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/6672
+bool CoreChecks::ValidateDeviceQueueSupport(const Location &loc) const {
+    bool skip = false;
+    const char *vuid = kVUIDUndefined;
+    VkQueueFlags flags = 0;
+
+    switch (loc.function) {
+        case Func::vkCreateRayTracingPipelinesKHR:
+            vuid = "VUID-vkCreateRayTracingPipelinesKHR-device-09677";
+            flags = VK_QUEUE_COMPUTE_BIT;
+            break;
+        case Func::vkCreateRayTracingPipelinesNV:
+            vuid = "VUID-vkCreateRayTracingPipelinesNV-device-09677";
+            flags = VK_QUEUE_COMPUTE_BIT;
+            break;
+        case Func::vkCreateComputePipelines:
+            vuid = "VUID-vkCreateComputePipelines-device-09661";
+            flags = VK_QUEUE_COMPUTE_BIT;
+            break;
+        case Func::vkCreateGraphicsPipelines:
+            vuid = "VUID-vkCreateGraphicsPipelines-device-09662";
+            flags = VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateQueryPool:
+            vuid = "VUID-vkCreateQueryPool-device-09663";
+            flags = VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateBuffer:
+            vuid = "VUID-vkCreateBuffer-device-09664";
+            flags = VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_SPARSE_BINDING_BIT |
+                    VK_QUEUE_TRANSFER_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateBufferView:
+            vuid = "VUID-vkCreateBufferView-device-09665";
+            flags = VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateImage:
+            vuid = "VUID-vkCreateImage-device-09666";
+            flags = VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_OPTICAL_FLOW_BIT_NV |
+                    VK_QUEUE_SPARSE_BINDING_BIT | VK_QUEUE_TRANSFER_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateImageView:
+            vuid = "VUID-vkCreateImageView-device-09667";
+            flags = VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateSampler:
+            vuid = "VUID-vkCreateSampler-device-09668";
+            flags = VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateEvent:
+            vuid = "VUID-vkCreateEvent-device-09672";
+            flags = VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateShadersEXT:
+            vuid = "VUID-vkCreateShadersEXT-device-09669";
+            flags = VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateRenderPass:
+            vuid = "VUID-vkCreateRenderPass-device-10000";
+            flags = VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateRenderPass2:
+        case Func::vkCreateRenderPass2KHR:
+            vuid = "VUID-vkCreateRenderPass2-device-10001";
+            flags = VK_QUEUE_GRAPHICS_BIT;
+            break;
+        case Func::vkCreateFramebuffer:
+            vuid = "VUID-vkCreateFramebuffer-device-10002";
+            flags = VK_QUEUE_GRAPHICS_BIT;
+            break;
+        default:
+            assert(false);  // missing case
+            return skip;
+    }
+
+    if ((physical_device_state->supported_queues & flags) == 0) {
+        skip |= LogError(vuid, device, loc, "device only supports (%s) but require one of (%s).",
+                         string_VkQueueFlags(physical_device_state->supported_queues).c_str(), string_VkQueueFlags(flags).c_str());
+    }
+
+    return skip;
+}
+
+bool CoreChecks::PreCallValidateGetDeviceFaultInfoEXT(VkDevice device, VkDeviceFaultCountsEXT *pFaultCounts,
+                                                      VkDeviceFaultInfoEXT *pFaultInfo, const ErrorObject &error_obj) const {
+    bool skip = false;
+    if (!is_device_lost) {
+        skip |= LogError("VUID-vkGetDeviceFaultInfoEXT-device-07336", device, error_obj.location,
+                         "device has not been found to be in a lost state.");
     }
     return skip;
 }

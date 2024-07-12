@@ -16,6 +16,8 @@
 #include "generated/enum_flag_bits.h"
 #include "../framework/layer_validation_tests.h"
 
+class NegativeSparseBuffer : public VkLayerTest {};
+
 TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSize) {
     TEST_DESCRIPTION("Test QueueBindSparse with invalid sparse memory bind size");
     AddRequiredFeature(vkt::Feature::sparseBinding);
@@ -473,13 +475,11 @@ TEST_F(NegativeSparseBuffer, BufferFlagsFeature) {
 
 TEST_F(NegativeSparseBuffer, VkSparseMemoryBindMemory) {
     TEST_DESCRIPTION("test VkSparseMemoryBind::memory is valid");
-
     RETURN_IF_SKIP(Init());
 
     VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
     buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     buffer_create_info.size = 1024;
-    buffer_create_info.queueFamilyIndexCount = 0;
 
     if (m_device->phy().features().sparseResidencyBuffer) {
         buffer_create_info.flags = VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT | VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
@@ -511,13 +511,11 @@ TEST_F(NegativeSparseBuffer, VkSparseMemoryBindMemory) {
 
 TEST_F(NegativeSparseBuffer, VkSparseMemoryBindFlags) {
     TEST_DESCRIPTION("test VkSparseMemoryBind::flags is valid");
-
     RETURN_IF_SKIP(Init());
 
     VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
     buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     buffer_create_info.size = 1024;
-    buffer_create_info.queueFamilyIndexCount = 0;
 
     if (m_device->phy().features().sparseResidencyBuffer) {
         buffer_create_info.flags = VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT | VK_BUFFER_CREATE_SPARSE_BINDING_BIT;

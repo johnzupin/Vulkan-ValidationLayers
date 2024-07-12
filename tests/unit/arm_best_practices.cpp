@@ -18,6 +18,15 @@
 
 const char* kEnableArmValidation = "VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM";
 
+class VkArmBestPracticesLayerTest : public VkBestPracticesLayerTest {
+  public:
+    std::unique_ptr<vkt::Image> CreateImage(VkFormat format, const uint32_t width, const uint32_t height,
+                                            VkImageUsageFlags attachment_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    VkRenderPass CreateRenderPass(VkFormat format, VkAttachmentLoadOp load_op = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                  VkAttachmentStoreOp store_op = VK_ATTACHMENT_STORE_OP_STORE);
+    VkFramebuffer CreateFramebuffer(const uint32_t width, const uint32_t height, VkImageView image_view, VkRenderPass renderpass);
+};
+
 class VkConstantBufferObj : public vkt::Buffer {
   public:
     VkConstantBufferObj(vkt::Device* device, VkDeviceSize size, const void* data,
@@ -102,7 +111,8 @@ TEST_F(VkArmBestPracticesLayerTest, TooManySamples) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableArmValidation));
     RETURN_IF_SKIP(InitState());
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreateImage-too-large-sample-count");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreateImage-too-large-sample-count");
+    m_errorMonitor->SetAllowedFailureMsg("VUID-VkImageCreateInfo-samples-02258");
 
     VkImageCreateInfo image_info{};
     image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -131,7 +141,7 @@ TEST_F(VkArmBestPracticesLayerTest, NonTransientMSImage) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableArmValidation));
     RETURN_IF_SKIP(InitState());
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreateImage-non-transient-ms-image");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreateImage-non-transient-ms-image");
 
     VkImageCreateInfo image_info{};
     image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -156,11 +166,11 @@ TEST_F(VkArmBestPracticesLayerTest, SamplerCreation) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableArmValidation));
     RETURN_IF_SKIP(InitState());
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreateSampler-different-wrapping-modes");
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreateSampler-lod-clamping");
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreateSampler-lod-bias");
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreateSampler-border-clamp-color");
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreateSampler-unnormalized-coordinates");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreateSampler-different-wrapping-modes");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreateSampler-lod-clamping");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreateSampler-lod-bias");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreateSampler-border-clamp-color");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreateSampler-unnormalized-coordinates");
 
     VkSamplerCreateInfo sampler_info{};
     sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -185,7 +195,7 @@ TEST_F(VkArmBestPracticesLayerTest, MultisampledBlending) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableArmValidation));
     RETURN_IF_SKIP(InitState());
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreatePipelines-multisampled-blending");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreatePipelines-multisampled-blending");
 
     VkAttachmentDescription attachment{};
     attachment.samples = VK_SAMPLE_COUNT_4_BIT;
@@ -245,7 +255,7 @@ TEST_F(VkArmBestPracticesLayerTest, AttachmentNeedsReadback) {
     auto image_view = image.CreateView();
 
     RenderPassSingleSubpass rp(*this);
-    rp.AddAttachmentDescription(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_UNDEFINED,
+    rp.AddAttachmentDescription(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                 VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE);
     rp.AddAttachmentReference({0, VK_IMAGE_LAYOUT_GENERAL});
     rp.AddColorAttachment(0);
@@ -269,14 +279,11 @@ TEST_F(VkArmBestPracticesLayerTest, ManySmallIndexedDrawcalls) {
 
     // This test may also trigger other warnings
     m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkAllocateMemory-small-allocation");
-    m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkBindMemory-small-dedicated-allocation");
-
+    m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkBindBufferMemory-small-dedicated-allocation");
+    m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkBindImageMemory-small-dedicated-allocation");
     InitRenderTarget();
 
-    VkBufferCreateInfo buffer_ci = vku::InitStructHelper();
-    buffer_ci.size = sizeof(uint32_t) * 3;
-    buffer_ci.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    vkt::Buffer indexBuffer(*m_device, buffer_ci);
+    vkt::Buffer indexBuffer(*m_device, sizeof(uint32_t) * 3, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
     VkPipelineMultisampleStateCreateInfo pipe_ms_state_ci = {};
     pipe_ms_state_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -368,7 +375,7 @@ TEST_F(VkArmBestPracticesLayerTest, SuboptimalDescriptorReuseTest) {
     alloc_info.descriptorSetCount = 1;
     alloc_info.pSetLayouts = ds_layouts.data();
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkAllocateDescriptorSets-suboptimal-reuse");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkAllocateDescriptorSets-suboptimal-reuse");
 
     err = vk::AllocateDescriptorSets(device(), &alloc_info, ds);
 
@@ -437,7 +444,7 @@ TEST_F(VkArmBestPracticesLayerTest, SparseIndexBufferTest) {
         pr_pipe.ia_ci_.primitiveRestartEnable = VK_TRUE;
         pr_pipe.CreateGraphicsPipeline();
 
-        vk::ResetCommandPool(device(), m_commandPool->handle(), 0);
+        vk::ResetCommandPool(device(), m_command_pool.handle(), 0);
         m_commandBuffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
 
@@ -447,7 +454,7 @@ TEST_F(VkArmBestPracticesLayerTest, SparseIndexBufferTest) {
         // the validation layer will only be able to analyse mapped memory, it's too expensive otherwise to do in the layer itself
         ibo.memory().map();
         if (expect_error) {
-            m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCmdDrawIndexed-sparse-index-buffer");
+            m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCmdDrawIndexed-sparse-index-buffer");
         }
         vk::CmdDrawIndexed(m_commandBuffer->handle(), index_count, 0, 0, 0, 0);
         if (expect_error) {
@@ -457,7 +464,7 @@ TEST_F(VkArmBestPracticesLayerTest, SparseIndexBufferTest) {
         ibo.memory().unmap();
 
         if (expect_error) {
-            m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCmdDrawIndexed-sparse-index-buffer");
+            m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCmdDrawIndexed-sparse-index-buffer");
         }
         vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pr_pipe.Handle());
         vk::CmdBindIndexBuffer(m_commandBuffer->handle(), ibo.handle(), static_cast<VkDeviceSize>(0), VK_INDEX_TYPE_UINT16);
@@ -532,7 +539,8 @@ TEST_F(VkArmBestPracticesLayerTest, PostTransformVertexCacheThrashingIndicesTest
 
     // the validation layer will only be able to analyse mapped memory, it's too expensive otherwise to do in the layer itself
     worst_ibo.memory().map();
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCmdDrawIndexed-post-transform-cache-thrashing");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
+                                         "BestPractices-Arm-vkCmdDrawIndexed-post-transform-cache-thrashing");
     vk::CmdDrawIndexed(m_commandBuffer->handle(), worst_indices.size(), 0, 0, 0, 0);
     m_errorMonitor->VerifyFound();
     worst_ibo.memory().unmap();
@@ -593,7 +601,7 @@ TEST_F(VkArmBestPracticesLayerTest, PresentModeTest) {
     }
 
     {
-        m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "BestPractices-vkCreateSwapchainKHR-swapchain-presentmode-not-fifo");
+        m_errorMonitor->SetDesiredWarning("BestPractices-Arm-vkCreateSwapchainKHR-swapchain-presentmode-not-fifo");
 
         const auto err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
 
@@ -617,12 +625,11 @@ TEST_F(VkArmBestPracticesLayerTest, PipelineDepthBiasZeroTest) {
     pipe.rs_state_ci_.depthBiasConstantFactor = 0.0f;
     pipe.rs_state_ci_.depthBiasSlopeFactor = 0.0f;
 
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreatePipelines-depthbias-zero");
+    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-Arm-vkCreatePipelines-depthbias-zero");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 
     pipe.rs_state_ci_.depthBiasEnable = VK_FALSE;
-    m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-vkCreatePipelines-depthbias-zero");
     pipe.CreateGraphicsPipeline();
 }
 
@@ -779,12 +786,12 @@ TEST_F(VkArmBestPracticesLayerTest, ComputeShaderBadWorkGroupThreadAlignmentTest
         pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
         // this pipeline should cause a warning due to bad work group alignment
         m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                             "BestPractices-vkCreateComputePipelines-compute-thread-group-alignment");
+                                             "BestPractices-Arm-vkCreateComputePipelines-compute-thread-group-alignment");
         pipe.CreateComputePipeline();
         m_errorMonitor->VerifyFound();
     }
 
-    {
+    if (m_device->phy().limits_.maxComputeWorkGroupInvocations > 128) {
         char const* csSource = R"glsl(
             #version 450
             layout(local_size_x = 16, local_size_y = 9, local_size_z = 1) in;
@@ -793,7 +800,7 @@ TEST_F(VkArmBestPracticesLayerTest, ComputeShaderBadWorkGroupThreadAlignmentTest
 
         CreateComputePipelineHelper pipe(*this);
         pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
-        m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkCreateComputePipelines-compute-work-group-size");
+        m_errorMonitor->SetAllowedFailureMsg("BestPractices-Arm-vkCreateComputePipelines-compute-work-group-size");
         pipe.CreateComputePipeline();
     }
 }
@@ -826,7 +833,7 @@ TEST_F(VkArmBestPracticesLayerTest, ComputeShaderBadWorkGroupThreadCountTest) {
         )glsl";
         CreateComputePipelineHelper pipe(*this);
         pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
-        m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkCreateComputePipelines-compute-thread-group-alignment");
+        m_errorMonitor->SetAllowedFailureMsg("BestPractices-Arm-vkCreateComputePipelines-compute-thread-group-alignment");
         pipe.CreateComputePipeline();
     }
 
@@ -839,7 +846,7 @@ TEST_F(VkArmBestPracticesLayerTest, ComputeShaderBadWorkGroupThreadCountTest) {
         )glsl";
 
         m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                             "BestPractices-vkCreateComputePipelines-compute-work-group-size");
+                                             "BestPractices-Arm-vkCreateComputePipelines-compute-work-group-size");
         CreateComputePipelineHelper pipe(*this);
         pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
         pipe.CreateComputePipeline();
@@ -900,7 +907,7 @@ TEST_F(VkArmBestPracticesLayerTest, ComputeShaderBadSpatialLocalityTest) {
     auto test_spatial_locality = [=](const VkPipelineShaderStageCreateInfo& stage, bool positive_test) {
         if (!positive_test) {
             this_ptr->m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit,
-                                                           "BestPractices-vkCreateComputePipelines-compute-spatial-locality");
+                                                           "BestPractices-Arm-vkCreateComputePipelines-compute-spatial-locality");
         }
         make_pipeline_with_shader(stage);
         if (!positive_test) {
@@ -963,9 +970,10 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantRenderPassStore) {
     render_pass_begin_info.framebuffer = framebuffers[0];
     render_pass_begin_info.clearValueCount = 3;
     render_pass_begin_info.pClearValues = clear_values;
+    render_pass_begin_info.renderArea.extent = {32, 32};
 
     const auto execute_work = [&](const std::function<void(vkt::CommandBuffer & command_buffer)>& work) {
-        vk::ResetCommandPool(device(), m_commandPool->handle(), 0);
+        vk::ResetCommandPool(device(), m_command_pool.handle(), 0);
         m_commandBuffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
         work(*m_commandBuffer);
@@ -990,6 +998,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantRenderPassStore) {
         rpbi.framebuffer = framebuffers[1];
         rpbi.clearValueCount = 3;
         rpbi.pClearValues = clear_values;
+        rpbi.renderArea.extent = {32, 32};
 
         command_buffer.BeginRenderPass(rpbi);
 
@@ -1344,7 +1353,7 @@ TEST_F(VkArmBestPracticesLayerTest, BlitImageLoadOpLoad) {
 
     m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-RenderPass-blitimage-loadopload");
     m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkAllocateMemory-small-allocation");
-    m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkBindMemory-small-dedicated-allocation");
+    m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkBindImageMemory-small-dedicated-allocation");
     // On tiled renderers, this can also trigger a warning about LOAD_OP_LOAD causing a readback
     m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkCmdBeginRenderPass-attachment-needs-readback");
     m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkCmdEndRenderPass-redundant-attachment-on-tile");
