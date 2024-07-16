@@ -79,7 +79,7 @@ bool Validator::InstrumentShader(const vvl::span<const uint32_t> &input, uint32_
     spv_target_env target_env = PickSpirvEnv(api_version, IsExtEnabled(device_extensions.vk_khr_spirv_1_4));
 
     // Use the unique_shader_id as a shader ID so we can look up its handle later in the shader_map.
-    spirv::Module module(binaries[0], unique_shader_id, desc_set_bind_index_);
+    spirv::Module module(binaries[0], unique_shader_id, desc_set_bind_index_, gpuav_settings.debug_max_instrumented_count);
 
     // If descriptor indexing is enabled, enable length checks and updated descriptor checks
     if (gpuav_settings.validate_descriptors) {
@@ -92,6 +92,11 @@ bool Validator::InstrumentShader(const vvl::span<const uint32_t> &input, uint32_
 
     if (gpuav_settings.validate_ray_query) {
         module.RunPassRayQuery();
+    }
+
+    // If nothing was instrumented, leave early to save time
+    if (!module.IsInstrumented()) {
+        return false;
     }
 
     for (const auto info : module.link_info_) {

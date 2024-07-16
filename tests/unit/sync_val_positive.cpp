@@ -17,42 +17,57 @@
 #include "../framework/render_pass_helper.h"
 #include "../framework/thread_helper.h"
 #include "../framework/queue_submit_context.h"
+#include "../layers/sync/sync_settings.h"
 
 class PositiveSyncVal : public VkSyncValTest {};
 
-// TODO: refactor this and use p_next as in gpuav instead of passing parameters about all possible options.
-void VkSyncValTest::InitSyncValFramework(bool disable_queue_submit_validation) {
-    // Enable synchronization validation
-    features_ = {VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT, nullptr, 1u, enables_, 4, disables_};
+static const std::array syncval_enables = {VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
 
-    // Optionally enable core validation (by disabling nothing)
-    if (!m_syncval_disable_core) {
-        features_.disabledValidationFeatureCount = 0;
+static const std::array syncval_disables = {
+    VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
+    VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT, VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
+
+
+void VkSyncValTest::InitSyncValFramework(const SyncValSettings *p_sync_settings) {
+    std::vector<VkLayerSettingEXT> settings;
+
+    static const SyncValSettings test_default_sync_settings = [] {
+        // That's a separate set of defaults for testing purposes.
+        // The main layer configuration can have some options turned off by default,
+        // but we might still want that functionality to be available for testing.
+        SyncValSettings settings;
+        settings.submit_time_validation = true;
+        settings.shader_accesses_heuristic = true;
+        return settings;
+    }();
+    const SyncValSettings &sync_settings = p_sync_settings ? *p_sync_settings : test_default_sync_settings;
+
+    const auto submit_time_validation = static_cast<VkBool32>(sync_settings.submit_time_validation);
+    settings.emplace_back(VkLayerSettingEXT{OBJECT_LAYER_NAME, "syncval_submit_time_validation", VK_LAYER_SETTING_TYPE_BOOL32_EXT,
+                                            1, &submit_time_validation});
+
+    const auto shader_accesses_heuristic = static_cast<VkBool32>(sync_settings.shader_accesses_heuristic);
+    settings.emplace_back(VkLayerSettingEXT{OBJECT_LAYER_NAME, "syncval_shader_accesses_heuristic",
+                                            VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &shader_accesses_heuristic});
+
+    VkLayerSettingsCreateInfoEXT settings_create_info = vku::InitStructHelper();
+    settings_create_info.settingCount = size32(settings);
+    settings_create_info.pSettings = settings.data();
+
+    VkValidationFeaturesEXT validation_features = vku::InitStructHelper();
+    validation_features.enabledValidationFeatureCount = size32(syncval_enables);
+    validation_features.pEnabledValidationFeatures = syncval_enables.data();
+    if (m_syncval_disable_core) {
+        validation_features.disabledValidationFeatureCount = size32(syncval_disables);
+        validation_features.pDisabledValidationFeatures = syncval_disables.data();
     }
+    validation_features.pNext = &settings_create_info;
 
-    static VkLayerSettingEXT settings[2];
-    uint32_t setting_count = 0;
-
-    static const char *kDisableQueuSubmitSyncValidation[] = {"VALIDATION_CHECK_DISABLE_SYNCHRONIZATION_VALIDATION_QUEUE_SUBMIT"};
-    if (disable_queue_submit_validation) {
-        settings[setting_count++] = {OBJECT_LAYER_NAME, "disables", VK_LAYER_SETTING_TYPE_STRING_EXT, 1,
-                                     kDisableQueuSubmitSyncValidation};
-    }
-
-    // The pNext of syncval_setting is modified by InitFramework that's why it can't
-    // be static (should be separate instance per stack frame). Also we show
-    // explicitly that it's not const (InitFramework casts const pNext to non-const).
-    VkLayerSettingsCreateInfoEXT syncval_setting = {VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, setting_count,
-                                                    settings};
-
-    if (setting_count) {
-        features_.pNext = &syncval_setting;
-    }
-    InitFramework(&features_);
+    InitFramework(&validation_features);
 }
 
-void VkSyncValTest::InitSyncVal() {
-    RETURN_IF_SKIP(InitSyncValFramework());
+void VkSyncValTest::InitSyncVal(const SyncValSettings *p_sync_settings) {
+    RETURN_IF_SKIP(InitSyncValFramework(p_sync_settings));
     RETURN_IF_SKIP(InitState());
 }
 
@@ -720,7 +735,9 @@ TEST_F(PositiveSyncVal, TexelBufferArrayConstantIndexing) {
 }
 
 TEST_F(PositiveSyncVal, QSBufferCopyHazardsDisabled) {
-    RETURN_IF_SKIP(InitSyncValFramework(true));  // Disable QueueSubmit validation
+    SyncValSettings settings;
+    settings.submit_time_validation = false;
+    RETURN_IF_SKIP(InitSyncValFramework(&settings));
     RETURN_IF_SKIP(InitState());
 
     QSTestContext test(m_device, m_device->QueuesWithGraphicsCapability()[0]);
@@ -1704,4 +1721,211 @@ TEST_F(PositiveSyncVal, WriteAndReadNonOverlappedDynamicUniformBufferRegions2) {
     vk::CmdCopyBuffer(*m_commandBuffer, buffer_b, buffer_a, 1, &region);
 
     m_commandBuffer->end();
+}
+
+TEST_F(PositiveSyncVal, ImageUsedInShaderWithoutAccess) {
+    TEST_DESCRIPTION("Test that imageSize() query is not classified as image access");
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer copy_source(*m_device, 32 * 32 * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::ImageView view = image.CreateView();
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT}});
+    descriptor_set.WriteDescriptorImageInfo(0, view, VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_IMAGE_LAYOUT_GENERAL);
+    descriptor_set.UpdateDescriptorSets();
+
+    const char *cs_source = R"glsl(
+        #version 450
+        layout(set = 0, binding = 0, rgba8) uniform image2D image;
+        void main(){
+            uvec2 size = imageSize(image);
+        }
+    )glsl";
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    pipe.CreateComputePipeline();
+
+    VkBufferImageCopy region{};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageExtent = {32, 32, 1};
+
+    m_command_buffer.begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    // this should not cause WRITE-AFTER-READ because previous dispatch reads only image descriptor
+    vk::CmdCopyBufferToImage(m_command_buffer.handle(), copy_source, image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+    m_command_buffer.end();
+}
+
+// WARNING: this test passes due to LUCK. Currently syncval does not know about atomic
+// accesses and going to treat two atomic writes from different dispatches as WRITE-AFTER-WRITE
+// hazard. The reason it does not report WRITE-AFTER-WRITE here is because SPIR-V analysis reports
+// READ access for atomicAdd(data[0], 1).
+//
+// TODO:
+// The first step is to try to update SPIR-V static analysis so it reports WRITE and sets a
+// flag that variable was used in atomic operation. This change will expose the missing
+// syncval ability to detect atomic operation in the form that this test will fail with
+// WRITE-AFTER-WRITE report.
+//
+// The next step is to update syncval heuristic to take into account atomic flag so this test
+// passes again.
+TEST_F(PositiveSyncVal, AtomicAccessFromTwoDispatches) {
+    TEST_DESCRIPTION("Not synchronized dispatches/draws can write to the same memory location by using atomics");
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT}});
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    const char *cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0) buffer ssbo { uint data[]; };
+        void main(){
+            atomicAdd(data[0], 1);
+        }
+    )glsl";
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.end();
+}
+
+// WARNING: this test also passes due to LUCK. Same reason as the previous test.
+TEST_F(PositiveSyncVal, AtomicAccessFromTwoSubmits) {
+    TEST_DESCRIPTION("Not synchronized dispatches/draws can write to the same memory location by using atomics");
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT}});
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    const char *cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0) buffer ssbo { uint data[]; };
+        void main(){
+            atomicAdd(data[0], 1);
+        }
+    )glsl";
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.end();
+
+    m_default_queue->Submit(m_command_buffer);
+    m_default_queue->Submit(m_command_buffer);
+    m_default_queue->Wait();
+}
+
+// TODO: this test does not work due to SupressedBoundDescriptorWAW(). That workaround should be removed.
+// Two possible solutions:
+// a) Try to detect if there is atomic operation in the buffer access chain. If yes, skip validation.
+// b) If a) is hard to do, then this case is in the category that is not handled by the current heuristic
+//    and is part of "Shader access heuristic" is disabled by default direction.
+TEST_F(PositiveSyncVal, AtomicAccessFromTwoDispatches2) {
+    TEST_DESCRIPTION("Use atomic counter so parallel dispatches write to different locations");
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer counter_buffer(*m_device, 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    vkt::Buffer data_buffer(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
+                                                  {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT}});
+    descriptor_set.WriteDescriptorBufferInfo(0, counter_buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.WriteDescriptorBufferInfo(1, data_buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    const char *cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0) buffer i_am_counter { uint counter[]; };
+        layout(set=0, binding=1) buffer i_am_data { uint data[]; };
+        void main(){
+            uint index = atomicAdd(counter[0], 1);
+            data[index] = 42;
+        }
+    )glsl";
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.end();
+}
+
+// Demostrates false-positive from the client's report.
+TEST_F(PositiveSyncVal, AtomicAccessFromTwoSubmits2) {
+    TEST_DESCRIPTION("Use atomic counter so parallel dispatches write to different locations");
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer counter_buffer(*m_device, 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    vkt::Buffer data_buffer(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
+                                                  {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT}});
+    descriptor_set.WriteDescriptorBufferInfo(0, counter_buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.WriteDescriptorBufferInfo(1, data_buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    const char *cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0) buffer i_am_counter { uint counter[]; };
+        layout(set=0, binding=1) buffer i_am_data { uint data[]; };
+        void main(){
+            uint index = atomicAdd(counter[0], 1);
+            data[index] = 42;
+        }
+    )glsl";
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.end();
+
+    m_default_queue->Submit(m_command_buffer);
+
+    // TODO: this should be a positive test, but currenlty we have a false-positive.
+    // Remove error monitor check if we have better solution, or when we disable
+    // Shader access heuristic setting for this test (so will simulate configuration
+    // when the user disabled the feature).
+    m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-WRITE");
+    m_default_queue->Submit(m_command_buffer);
+    m_errorMonitor->VerifyFound();
+    m_default_queue->Wait();
 }

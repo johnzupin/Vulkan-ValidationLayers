@@ -17,4 +17,7 @@
 
 #pragma once
 
-struct SyncValSettings {};
+struct SyncValSettings {
+    bool submit_time_validation = true;
+    bool shader_accesses_heuristic = false;
+};
