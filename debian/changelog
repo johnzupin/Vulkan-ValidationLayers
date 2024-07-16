@@ -1,3 +1,653 @@
+vulkan-validationlayers (1.3.290.0~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove vkt::Buffer default usage
+  * tests: Add second command pool/buffer
+
+  [ spencer-lunarg ]
+  * gpuav: Use internal stream out constants
+  * tests: Remove deprecated m_commandPool
+
+  [ Arno ]
+  * layers: Fix skip management in RT validation
+  * gpu: Enclose in namespace gpuav
+
+  [ spencer-lunarg ]
+  * scripts: Fix generate_spirv.py needing clang-format
+  * layers: Improve invalid VkFlag error message
+  * tests: Fix option descriptions
+  * layers: Cleanup old subpass UNASSIGNED VUs
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.284
+
+  [ dan sinclair ]
+  * layer: Add header for std::tolower and std::toupper
+
+  [ spencer-lunarg ]
+  * layers: Check for VK_SHADER_CREATE_DISPATCH_BASE_BIT_EXT
+
+  [ Jeremy Gebben ]
+  * corechecks: Avoid crashing in ValidateBufferUpdate
+
+  [ spencer-lunarg ]
+  * layers: Fix Swapchain DebugMarker false positive
+  * layers: Add VK_EXT_legacy_vertex_attributes
+  * layers: Remove old Subpass dependency check for SyncVal
+
+  [ Artem Kharytoniuk ]
+  * sync: Cleanup GetMapped helpers
+
+  [ spencer-lunarg ]
+  * tests: Add extra object lifetime tests
+  * layers: Use VkPipelineCreateFlags2KHR for stateless pipeline
+  * layers: Fix swapchain image debug marker logic
+
+  [ Artem Kharytoniuk ]
+  * sync: Simplify SignaledSemaphores::Unsignal
+
+  [ spencer-lunarg ]
+  * layer: Add InputAttachmentIndex SPIR-V check
+  * layers: Refactor RequiredQueueFlags check
+  * tests: Add missing subpass pipeline barrier tests
+
+  [ Artem Kharytoniuk ]
+  * sync: Revert Simplify SignaledSemaphores::Unsignal
+  * tests: Add regression test for previous commit
+  * sync: Simplify SignaledSemaphores::Unsignal v2
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Headers, -Tools and glslang to latest
+
+  [ spencer-lunarg ]
+  * tests: Format glsl strings
+  * layer: Use empty() over size() == 0
+  * layers: Fix error message for VkSubpassDependency
+  * layers: Fix error message for VkSubpassDependency
+  * tests: Fix SelectInstrumentedShaders tests
+  * tests: Move ShaderObject helpers to Framework
+  * tests: Add shader_object_helper.cpp
+  * gpuav: Rename interface to GpuShaderInstrumentor
+
+  [ Faith Ekstrand ]
+  * layers: Don't require VK_WHOLE_SIZE WITH VK_MAP_MEMORY_PLACED
+
+  [ spencer-lunarg ]
+  * gpuav: Support all stages for gpuav
+
+  [ Arno ]
+  * gpu: Remove feature check
+  * tests: Use AddRequiredFeature
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.285
+
+  [ spencer-lunarg ]
+  * layers: Add VK_MESA_image_alignment_control
+  * tests: Add VK_MESA_image_alignment_control
+
+  [ Arno ]
+  * gpu: Fix VMA linear pool flag setting handling
+
+  [ Artem Kharytoniuk ]
+  * tests: Enable disabled syncval tests
+
+  [ spencer-lunarg ]
+  * layers: Add vk_struct_compare.h
+  * layers: Fix Image/Buffer comparing
+
+  [ Artem Kharytoniuk ]
+  * tests: Add lucky timelines tests
+  * tests: Move syncval wsi tests
+
+  [ spencer-lunarg ]
+  * scripts: Generate Dynamic State error messages
+  * layers: Pass CBDynamicFlags by ref
+  * scripts: Improve 08608 error message
+  * layers: Don't create bitset when updating CBDynamicFlags
+  * layers: Fix RTX Dynamic State
+
+  [ Arno ]
+  * layers: Move compare functions comment
+
+  [ Artem Kharytoniuk ]
+  * sync: Add SignaledSemaphoresUpdate
+  * tests: Add signal-unsignal-signal syncval tests
+
+  [ spencer-lunarg ]
+  * layers: Fix pMultisampleState
+  * layer: Remove Tessellation error until spec is resolved
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Tools and glslang to latest
+
+  [ spencer-lunarg ]
+  * layers: Null check vvl::Query
+  * layers: Null check vvl::AccelerationStructure
+  * layers: Null check Descriptor State
+  * layers: Null check vvl::DeviceMemory
+  * layers: Null check vvl::Buffer
+  * layers: Null check Sync State
+  * layers: Null check rp and fb State
+  * layers: Null check CommnadPool State
+  * layers: Null check WSI State
+  * layers: Null check Video State
+  * layers: Null check Image State
+  * layers: Null check Pipeline State
+  * layers: Null check bs_state
+  * layers: Null check ValidateImageUpdate
+  * layers: Move null check outside functions
+  * tests: Fix DeviceIDPropertiesExtensions tests
+
+  [ Arno ]
+  * gpu: Fix shader caching
+
+  [ spencer-lunarg ]
+  * gpu: Have InternalError disconnect from chassis
+
+  [ Artem Kharytoniuk ]
+  * bp: Report signaling already signaled event
+  * tests: Test event signaling best practice
+
+  [ spencer-lunarg ]
+  * layers: Fix VkPrimitiveTopology check
+  * layers: Fix Shader Cache to account for settings
+
+  [ Petr Kraus ]
+  * layers: Fix validation of structs from multiple extensions
+  * tests: Fix VkPhysicalDeviceIDProperties tests
+
+  [ spencer-lunarg ]
+  * layers: Add IsDynamicStateSet helper
+  * layers: Add Shader Val Cache for ShaderObject
+  * layers: Move Caching inside RunSpirvValidation
+  * layers: Invalidate dynamic state from previous static state
+  * layers: Use CBDynamicState
+  * layers: Cleanup Pipeline and ShaderObject Drawtime
+  * layers: Pass in DrawDispatchVuid over Location
+  * layers: Breakup Shader Object checks
+  * layers: Breakup Pipeline Draw checks
+  * layers: More cleanup of shader object var names
+  * layer: Cleanup ValidateDrawPipelineDynamicRenderpass
+
+  [ Artem Kharytoniuk ]
+  * layers: Return PreSubmitResult from PreSubmit
+  * layers: Retire present operation when waiting on present fence
+  * tests: Add regression test for issue 8047
+
+  [ spencer-lunarg ]
+  * layers: Fix accessing RasterizationState
+  * tests: Make use of Test framework
+  * layer: Fix VK_REMAINING_MIP_LEVELS/ARRAY_LAYERS
+  * tests: Use SetDesiredFailureMsg
+  * tests: Update targetSdkVersion version
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV-Tools and glslang to latest
+
+  [ spencer-lunarg ]
+  * layers: Rework shader variable access logic
+  * layers: Fix Interface typo
+  * layers: Use AccessBit namespace
+
+  [ Arno ]
+  * gpu: Renamings, cleanups
+  * gpu: Restructure gpu shaders folder
+  * gpu: Restructure gpu folder
+  * gpu: More renamings
+  * gpu: Post merge confilcts resolve
+  * gpu: Rename AllocateActionCommandResources
+  * gpu: Move DescriptorManager to gpu_resources
+  * gpu: Rename to gpu_shader_instrumentor
+  * gpu: Enclose debug printf in namespace
+  * gpu: Add gpuav_instrumentation
+  * gpu: Move relevant things to gpuav_instrumentation
+  * gpu: Move function to gpuav_cmd_validation_common
+  * gpu: Remove CheckForDescriptorIndexing
+  * gpu: Refacto spirv caching logic
+  * gpu: Remove unused declaration
+  * gpu: Create descriptor_validation folder
+  * gpu: Cleanup
+  * gpu: Cleanup InstrumentShaderPrototype
+  * gpu: Move gpuav::Validator methods
+  * gpu: Move more gpuav.h methods
+  * gpu: Rename cb_node to cb_state
+  * gpu: Move GetBufferDeviceAddress
+  * gpu: Override -> final
+
+  [ spencer-lunarg ]
+  * layers: Fix updating zero DSL with zero bindings
+  * tests: Add RayQueryPositionFetchKHR shader
+  * layers: Fix vk_validation_stats consistency check
+  * layers: Add remaining VK_EXT_nested_command_buffer
+
+  [ Artem Kharytoniuk ]
+  * layers: Update sync2 barrier stage mask validation
+  * tests: Test sync2 barrier stage masks
+
+  [ spencer-lunarg ]
+  * layers: Add Device Queue Type check
+  * gpu: Fix OpTypeArray logic in TypeLength
+
+  [ Spencer Fricke ]
+  * layers: Better name for length
+  * layer: Fix array_length
+
+  [ spencer-lunarg ]
+  * layers: Cleanup of Pipeline checks
+  * layer: Add ASSERT_AND_RETURN
+  * test: Fix Shader Object SelectInstrumentedShaders
+  * layer: Add Mesh DrawIndex check for Shader Object
+
+  [ Spencer Fricke ]
+  * layers: Fix grammar
+
+  [ spencer-lunarg ]
+  * layers: PipelineStageState to ShaderStageState
+  * layers: Create shader_stage_state.cpp
+  * layers: Rename to ValidateShaderStage
+  * layers: Remove StageCreateInfo
+
+  [ James Price ]
+  * tests: Use ALooper_pollOnce instead of ALooper_pollAll
+
+  [ spencer-lunarg ]
+  * gpu: Handle loading BDA ref from a struct
+
+  [ Spencer Fricke ]
+  * github: Remove redundant CI matrix
+
+  [ spencer-lunarg ]
+  * layers: Make state tracker more robust to pointer
+
+  [ Ludvig Lindau ]
+  * layers: Add VUID-VkFramebufferCreateInfo-renderPass-02553 check
+  * tests: Add VUID-VkFramebufferCreateInfo-renderPass-02553 test
+
+  [ Artem Kharytoniuk ]
+  * sync: Use vector to return last batches
+
+  [ Spencer Fricke ]
+  * tests: Revert Use ALooper_pollOnce instead of ALooper_pollAll
+
+  [ spencer-lunarg ]
+  * layers: Fix dynamic state error message
+  * layers: Fix AlaphToCoverage with Dual Source
+  * layers: Add Dual Source Blending check
+  * layers: Temporarily remove Drawtime FeedbackLoop check
+  * tests: Use ALooper_pollOnce instead of ALooper_pollAll
+  * layers: Add maxFragmentOutputAttachments
+
+  [ Artem Kharytoniuk ]
+  * sync: Refactor batch tag range initialization
+
+  [ Spencer Fricke ]
+  * github: Suspend running Window Tests
+
+  [ spencer-lunarg ]
+  * tests: Fix tests on RADV
+  * layers: Fix VK_AMD_shader_fragment_mask
+
+  [ Arno ]
+  * gpu: Refacto
+
+  [ Artem Kharytoniuk ]
+  * sync: Refactor ValidateQueueSubmit
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.287
+
+  [ spencer-lunarg ]
+  * tests: Fix MissingClearAttachment
+  * tests: Re-enable DISABLED tests
+  * layers: Fix CI
+
+  [ Artem Kharytoniuk ]
+  * docs: Update list of syncval limitations
+
+  [ Arno ]
+  * gpu: Call InternalError in GetOutputState
+  * gpu: Gracefully abort if in a bad state
+
+  [ Artem Kharytoniuk ]
+  * sync: Apply descriptor dynamic offset
+  * tests: Test syncval descriptor dynamic offset
+
+  [ spencer-lunarg ]
+  * layers: Use DeviceFeature helper instead of pNext checks
+  * layers: Remove safe_VkDeviceCreateInfo recursion
+
+  [ Artem Kharytoniuk ]
+  * sync: Turn QueueBatchContext cmdbuf state into a local variable
+
+  [ spencer-lunarg ]
+  * layers: Remove sType string in stateless
+  * layers: Rename DeviceFeature helper
+  * layers: Add more details about VariableBase access getters
+
+  [ Artem Kharytoniuk ]
+  * docs: Update list of syncval limitations
+
+  [ Arno ]
+  * gpu: Fix settings
+  * tests: Add GPU AV settings combinations tests
+
+  [ spencer-lunarg ]
+  * layers: Add Clearing 64-bit check
+  * layers: Fix InputAttachmentIndex SPIR-V check
+
+  [ Arno ]
+  * gpu: Rename/move gpu_shaders -> gpu/shaders
+
+  [ spencer-lunarg ]
+  * tests: Remove pNext warning for VkValidationFeaturesEXT
+  * layers: Move logic to stateless
+  * tests: DebugPrintf LocalSizeId
+  * layers: Fix ValidatePipelineShaderStage check
+  * layers: Handle VkShaderModuleCreateInfo from pNext
+
+  [ Artem Kharytoniuk ]
+  * sync: Make batch state local and devirtualization
+  * sync: Apply descriptor dynamic offset during Record phase
+  * tests: Test syncval descriptor dynamic offset again
+
+  [ spencer-lunarg ]
+  * layers: Create combined dynamic state draw check
+  * layers: Fix subpass contents check
+  * bp: Remove incorrect check to WSI query
+  * bp: Remove unneeded pSwapchainImageCount
+
+  [ Artem Kharytoniuk ]
+  * sync: Make async_batches state local
+  * sync: Make current_label_stack state local
+
+  [ spencer-lunarg ]
+  * bp: Remove best_practices_error_enums.h
+  * layers: Add missing parent VUs
+  * layers: Remove extra feature struct in stateless
+  * gpu: Fix missing SPV_KHR_physical_storage_buffer
+  * layers: Cleanup Sampler in Stateless
+  * layers: Move more dynamic state VUs as combined
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.288
+
+  [ Artem Kharytoniuk ]
+  * sync: Extract ResolveSubmitDependencies step
+
+  [ spencer-lunarg ]
+  * layers: Fix VUID strings formatting
+  * layers: Add DeviceQueueSupport check 288 header
+  * layers: Combine all VkAllocationCallbacks calls
+
+  [ Arno ]
+  * gpu: Fix user push constants state restoration
+  * bp: Redo push constant management
+
+  [ arno-lunarg ]
+  * layers: Update 00292 message
+
+  [ spencer-lunarg ]
+  * layers: Add StatelessData when shader is inline in pNext
+  * gpu:: Add support  when shader is inline in pNext
+  * layers: Update with suggestions
+  * tests: Remove VK_LAYER_TESTS_VALIDATION_FEATURES
+  * layers: Combine more Dynamic State
+  * layers: Improve VU 08600
+  * gpu: Fix protected memory on descriptor indexing
+  * tests: Add protected memory on descriptor indexing
+
+  [ Spencer Fricke ]
+  * tests: Fix MixingProtectedResources description
+
+  [ spencer-lunarg ]
+  * layers: Add MaxFragmentCombinedOutputResources check
+  * tests: Fix fragmentStoresAndAtomics for tests
+  * layers: Fix checks with runtime arrays
+  * layers: Add vkGetDeviceFaultInfoEXT check
+  * tests: Add GetDeviceFaultInfoEXT test
+
+  [ kocdemir ]
+  * layers: Avoid using references to out-of-scope strings
+
+  [ spencer-lunarg ]
+  * tests: Make sure we don't crash with bad layout
+
+  [ Pino Toscano ]
+  * layers: Add support for GNU/Hurd
+  * layers: Remove unused unistd.h includes
+
+  [ spencer-lunarg ]
+  * layers: Add empty check for GetMaxBinding
+  * layers: Move some RTX to Stateless
+  * layers: Remove old Sync Val enable enum
+  * gpu: Fix enabled_features
+  * layers: Extra null checks
+  * bp: Splitup pipeline call
+  * tests: Cleanup test to use framework more
+  * layers: Add GetFragmentEntryPoint helper
+  * layers: Use IsDynamicStateSet everywhere
+  * layers: Use GetCurrentPipeline where possible
+  * build: Automate self vvl renaming
+  * bp: Remove unused error enum header
+  * bp: Fix BP tests to work with validation
+  * gpu: Fix/Improve shader error messages
+  * layers: Handle partial bound image/buffer
+  * layers: Better name for indeterminate_state
+  * build: Fix GN build for JSON_LAYER_NAME
+
+  [ Arno ]
+  * tests: Add gpuav BasicTraceRaysMultiEntryPoint
+  * gpu: Fix 02967 error message
+  * gpu: Remove abstraction lvl to set output buf size
+  * gpu: Remove gpuav_error_message.cpp
+
+  [ Ralph Potter ]
+  * tests: Fix 'mismatch' typos
+  * tests: Improve error checking/reporting in test surface creation
+  * tests: Skip WSI tests if surface creation fails
+
+  [ spencer-lunarg ]
+  * layers: Add Variable Debug names to errors
+
+  [ Arno ]
+  * tests: Add support for regex lookup in error msg
+
+  [ spencer-lunarg ]
+  * gpu: Null check image/buffers
+
+  [ Artem Kharytoniuk ]
+  * sync: Update allocation scheme of HandleRecord objects
+  * tests: Test resource handle in sync message
+
+  [ spencer-lunarg ]
+  * tests: Move Test Class name to source file
+
+  [ Arno ]
+  * tests: Do not create lookup regex more that once
+
+  [ spencer-lunarg ]
+  * scripts: Update paths for vk_validation_stats.py
+
+  [ Artem Kharytoniuk ]
+  * sync: Add basic stats support
+
+  [ spencer-lunarg ]
+  * gpu: Fix maxBoundDescriptorSets logic
+
+  [ Artem Kharytoniuk ]
+  * sync: Store more resource handles for reporting
+
+  [ spencer-lunarg ]
+  * layers: Fix PresentMode check being hidden
+  * layers: ValidateGraphicsPipelineFragmentShadingRateState
+  * layers: ValidateGraphicsPipelineExternalFormatResolve
+  * layers: VK_EXT_rasterization_order_attachment_access
+  * layers: ValidateGraphicsPipelineNullState
+  * layers: ValidateGraphicsPipelineMultisampleState
+  * layers: ValidateGraphicsPipelineRenderPassRasterization
+  * layers: Misc pipeline renderpass cleanup
+
+  [ Nathaniel Cesario ]
+  * layers: Fix clang build on linux
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.289
+
+  [ spencer-lunarg ]
+  * layers: Fixes for 1.3.289 header
+  * tests: Improve Device Address Buffer creation
+
+  [ Jeremy Gebben ]
+  * build: Update spirv dependencies
+
+  [ spencer-lunarg ]
+  * layers: Add VK_KHR_maintenance7
+
+  [ Artem Kharytoniuk ]
+  * sync: Add VK_SYNCVAL_SHOW_STATS
+  * sync: Add settings to report descriptor resources
+  * sync: Report descriptor resources
+  * tests: Test syncval submit error has descriptor resource
+
+  [ ziga-lunarg ]
+  * layers: Fix VUID 09680 after spec update
+
+  [ Artem Kharytoniuk ]
+  * layers: Move SubmitInfoConverter to convert_utils
+  * layers: Refactor SubmitInfoConverter
+
+  [ Ralph Potter ]
+  * layers: Add VUID-VkFramebufferCreateInfo-pAttachments-02552
+  * tests: Add VUID-VkFramebufferCreateInfo-pAttachments-02552
+  * layers: Add fragment density map imageless size checks
+  * tests: Add tests for fragment density map imageless size
+  * scripts: Print VUID text correctly in vk_validation_stats.py
+
+  [ spencer-lunarg ]
+  * layers: Ignore pipeline state with dynamic state
+
+  [ Daniel Rakos ]
+  * layers: Miscellaneous fixes
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix stats object destroyed too early
+  * sync: Fix HandleRecord increased memory usage
+  * sync: Rename indexing operator to GetAccessRecord
+  * sync: Detect hazardous buffer resource
+  * tests: Test detection of hazardous buffer resource
+
+  [ Mark Lobodzinski ]
+  * gn: Remove legacy obsolete-file handling
+
+  [ Artem Kharytoniuk ]
+  * sync: Store QueueSyncState objects in a vector
+  * sync: Minor QueueSyncState cleanup
+  * layers: Add queue_index to allow queue ordering
+  * sync: Make QueueId deterministic
+  * layers: Rename vvl::Queue members
+
+  [ Thomas Paine ]
+  * layers: Fix typo
+
+  [ spencer-lunarg ]
+  * layers: Reorganize renderpass framebuffer checks
+  * layers: Add Dispatch helpers for GPDP2 calls
+  * layers: Clarify Query Reset Message
+
+  [ Spencer Fricke ]
+  * tests: Fix typo in binding.h
+
+  [ spencer-lunarg ]
+  * layers: Fix vertexPipelineStoresAndAtomics
+  * layers: Use GetCreateInfoPNext
+  * layers: Fix GPL with tessellation topology
+
+  [ Mike Schuchardt ]
+  * gn: Add standalone Android GN build
+  * gn: Add Android GN build to Github CI
+  * gn: Fix unused variable error on Android
+  * gn: Run gn --format BUILD.gn
+
+  [ Artem Kharytoniuk ]
+  * sync: Ignore not accessed variables and descriptor-only access
+  * tests: Test image query does not generate syncval accesses
+
+  [ ziga-lunarg ]
+  * layers: Fix shader object vuid 09418
+  * tests: Test shader object drawing with color blend disabled
+
+  [ spencer-lunarg ]
+  * bp: Fixe false positive for vkCmdBeginQuery
+
+  [ Arno ]
+  * gpu: Add shader objects push constants tests
+
+  [ Ralph Potter ]
+  * scripts: Allow vendor filtering in vk_validation_stats.py
+  * layers: Add fragment density map attachment reference check
+  * tests: Add fragment density map attachment reference tests
+
+  [ spencer-lunarg ]
+  * gpu: Don't run spirv-opt on non-instrumented shaders
+  * gpu: Add Shader Conditional Functions
+  * scripts: Fix clang-format on generate_spirv.py
+  * gpu: Pipe Location through for internal errors
+  * gpu: Add setting to limit shader instrumentation
+  * gpu: Add setting to override disable GPU-AV
+
+  [ Artem Kharytoniuk ]
+  * sync: Make submit time validation a regular layer setting
+  * docs: Update syncval configuration docs
+
+  [ Daniel Rakos ]
+  * layers: Add more tests and bounds checks for DPB slots
+
+  [ Artem Kharytoniuk ]
+  * sync: Add syncval_shader_access_heuristic setting
+  * tests: Add example when atomic increment is reported as READ
+
+  [ spencer-lunarg ]
+  * gpu: Add index cache for BDA check
+  * gpu: Fix when OpStore is used in first block
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.290
+
+  [ ziga-lunarg ]
+  * tests: Positive test for setting unused dynamic state
+
+  [ Artem Kharytoniuk ]
+  * tests: Update syncval tests initialization
+  * sync: Make shader_access_heuristic disabled by default
+
+  [ spencer-lunarg ]
+  * tests: Cleanup and Add DebugPrintF tests
+
+  [ Artem Kharytoniuk ]
+  * sync: Update setting name
+  * layers: Use decimal format for semaphore counter
+  * layers: Fix parameter name
+  * sync: Inline ClearPending into ApplyPendingBarriers
+
+  [ spencer-lunarg ]
+  * build: Add -fstandalone-debug for Clang Debug
+  * layers: Update VK_KHR_cooperative_matrix VUs
+  * layers: Remove 08921
+
+  [ clayjohn ]
+  * build: Correct Android NDK version in error message
+
+  [ Rodrigo Locatti ]
+  * layers: Acknowledge alloc memory priority in BP
+  * tests: Add BindMemory_StaticPriority
+
+  [ spencer-lunarg ]
+  * printf: More test and doc cleanup
+  * bp: Return on invalid image in zcull scope
+
+ -- john <john@odin>  Tue, 16 Jul 2024 11:51:36 -0600
+
 vulkan-validationlayers (1.3.283.0~rc2-1lunarg22.04-1) jammy; urgency=medium
 
   [ spencer-lunarg ]
