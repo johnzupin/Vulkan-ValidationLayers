@@ -37,7 +37,8 @@ struct ModuleHeader {
 // There are other helper classes that are charge of handling the various parts of the module.
 class Module {
   public:
-    Module(std::vector<uint32_t> words, uint32_t shader_id, uint32_t output_buffer_descriptor_set);
+    Module(std::vector<uint32_t> words, uint32_t shader_id, uint32_t output_buffer_descriptor_set,
+           uint32_t max_instrumented_count = 0);
 
     // Memory that holds all the actual SPIR-V data, replicate the "Logical Layout of a Module" of SPIR-V.
     // Divided into sections to make easier to modify each part at different times, but still keeps it simple to write out all the
@@ -65,6 +66,7 @@ class Module {
     // Order of functions that will try to be linked in
     std::vector<LinkInfo> link_info_;
     void LinkFunction(const LinkInfo& info);
+    bool IsInstrumented() const { return !link_info_.empty(); }
 
     // The class is designed to be written out to a binary file.
     void ToBinary(std::vector<uint32_t>& out);
@@ -78,6 +80,8 @@ class Module {
     bool HasCapability(spv::Capability capability);
     void AddCapability(spv::Capability capability);
     void AddExtension(const char* extension);
+
+    const uint32_t max_instrumented_count_ = 0;  // zero is same as "unlimited"
 
   private:
     // provides a way to map back and know which original SPIR-V this was from

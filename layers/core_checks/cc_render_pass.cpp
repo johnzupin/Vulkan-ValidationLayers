@@ -1377,6 +1377,9 @@ bool CoreChecks::ValidateRenderpassAttachmentUsage(const VkRenderPassCreateInfo2
     const bool use_rp2 = error_obj.location.function != Func::vkCreateRenderPass;
     const Location create_info_loc = error_obj.location.dot(Field::pCreateInfo);
 
+    const auto *fragment_density_map_info =
+        vku::FindStructInPNextChain<VkRenderPassFragmentDensityMapCreateInfoEXT>(pCreateInfo->pNext);
+
     // Track when we're observing the first use of an attachment
     std::vector<bool> attach_first_use(pCreateInfo->attachmentCount, true);
 
@@ -1448,6 +1451,16 @@ bool CoreChecks::ValidateRenderpassAttachmentUsage(const VkRenderPassCreateInfo2
                     use_rp2 ? "VUID-VkSubpassDescription2-attachment-06921" : "VUID-VkSubpassDescription-attachment-06921";
                 skip |= LogError(vuid, device, input_loc.dot(Field::layout), "(%s) is invalid.",
                                  string_VkImageLayout(attachment_layout));
+            }
+
+            if (fragment_density_map_info) {
+                const auto &fdm_attachment_index = fragment_density_map_info->fragmentDensityMapAttachment.attachment;
+                if ((fdm_attachment_index != VK_ATTACHMENT_UNUSED) && (attachment_index == fdm_attachment_index)) {
+                    skip |= LogError("VUID-VkRenderPassFragmentDensityMapCreateInfoEXT-fragmentDensityMapAttachment-02548", device,
+                                     input_loc,
+                                     "is also referenced by "
+                                     "VkRenderPassFragmentDensityMapCreateInfoEXT::fragmentDensityMapAttachment");
+                }
             }
 
             // safe to dereference pCreateInfo->pAttachments[]
@@ -1544,6 +1557,16 @@ bool CoreChecks::ValidateRenderpassAttachmentUsage(const VkRenderPassCreateInfo2
                     skip |= AddAttachmentUse(attachment_uses, attachment_layouts, attachment, ATTACHMENT_PRESERVE,
                                              VkImageLayout(0) /* preserve doesn't have any layout */, preserve_loc);
                 }
+
+                if (fragment_density_map_info) {
+                    const uint32_t fdm_attachment_index = fragment_density_map_info->fragmentDensityMapAttachment.attachment;
+                    if ((fdm_attachment_index != VK_ATTACHMENT_UNUSED) && (attachment == fdm_attachment_index)) {
+                        skip |= LogError("VUID-VkRenderPassFragmentDensityMapCreateInfoEXT-fragmentDensityMapAttachment-02548",
+                                         device, preserve_loc,
+                                         "is also referenced by "
+                                         "VkRenderPassFragmentDensityMapCreateInfoEXT::fragmentDensityMapAttachment");
+                    }
+                }
             }
         }
 
@@ -1590,6 +1613,16 @@ bool CoreChecks::ValidateRenderpassAttachmentUsage(const VkRenderPassCreateInfo2
                     use_rp2 ? "VUID-VkSubpassDescription2-attachment-06923" : "VUID-VkSubpassDescription-attachment-06923";
                 skip |= LogError(vuid, device, resolve_loc.dot(Field::layout), "(%s) is invalid.",
                                  string_VkImageLayout(attachment_layout));
+            }
+
+            if (fragment_density_map_info) {
+                const auto &fdm_attachment_index = fragment_density_map_info->fragmentDensityMapAttachment.attachment;
+                if ((fdm_attachment_index != VK_ATTACHMENT_UNUSED) && (attachment_ref.attachment == fdm_attachment_index)) {
+                    skip |= LogError("VUID-VkRenderPassFragmentDensityMapCreateInfoEXT-fragmentDensityMapAttachment-02548", device,
+                                     resolve_loc,
+                                     "is also referenced by "
+                                     "VkRenderPassFragmentDensityMapCreateInfoEXT::fragmentDensityMapAttachment");
+                }
             }
 
             // safe to dereference pCreateInfo->pAttachments[]
@@ -1665,6 +1698,16 @@ bool CoreChecks::ValidateRenderpassAttachmentUsage(const VkRenderPassCreateInfo2
                     const char *vuid = "VUID-VkSubpassDescription2-attachment-06251";
                     skip |= LogError(vuid, device, ds_loc.dot(Field::layout), "(%s) is invalid.",
                                      string_VkImageLayout(attachment_layout));
+                }
+            }
+
+            if (fragment_density_map_info) {
+                const auto &fdm_attachment_index = fragment_density_map_info->fragmentDensityMapAttachment.attachment;
+                if ((fdm_attachment_index != VK_ATTACHMENT_UNUSED) && (attachment == fdm_attachment_index)) {
+                    skip |= LogError("VUID-VkRenderPassFragmentDensityMapCreateInfoEXT-fragmentDensityMapAttachment-02548", device,
+                                     ds_loc,
+                                     "is also referenced by "
+                                     "VkRenderPassFragmentDensityMapCreateInfoEXT::fragmentDensityMapAttachment");
                 }
             }
 
@@ -1849,6 +1892,16 @@ bool CoreChecks::ValidateRenderpassAttachmentUsage(const VkRenderPassCreateInfo2
                         use_rp2 ? "VUID-VkSubpassDescription2-attachment-06922" : "VUID-VkSubpassDescription-attachment-06922";
                     skip |= LogError(vuid, device, color_loc.dot(Field::layout), "(%s) is invalid.",
                                      string_VkImageLayout(attachment_layout));
+                }
+
+                if (fragment_density_map_info) {
+                    const auto &fdm_attachment_index = fragment_density_map_info->fragmentDensityMapAttachment.attachment;
+                    if ((fdm_attachment_index != VK_ATTACHMENT_UNUSED) && (attachment_index == fdm_attachment_index)) {
+                        skip |= LogError("VUID-VkRenderPassFragmentDensityMapCreateInfoEXT-fragmentDensityMapAttachment-02548",
+                                         device, color_loc,
+                                         "is also referenced by "
+                                         "VkRenderPassFragmentDensityMapCreateInfoEXT::fragmentDensityMapAttachment");
+                    }
                 }
 
                 // safe to dereference pCreateInfo->pAttachments[]
@@ -2053,8 +2106,6 @@ bool CoreChecks::ValidateRenderpassAttachmentUsage(const VkRenderPassCreateInfo2
                             "is %" PRIu32 ".", fragment_shading_rate_info->pFragmentShadingRateAttachment->attachment);
                     }
 
-                    const auto *fragment_density_map_info =
-                        vku::FindStructInPNextChain<VkRenderPassFragmentDensityMapCreateInfoEXT>(pCreateInfo->pNext);
                     if (fragment_density_map_info &&
                         fragment_density_map_info->fragmentDensityMapAttachment.attachment != VK_ATTACHMENT_UNUSED) {
                         skip |= LogError(
@@ -4695,7 +4746,7 @@ bool CoreChecks::ValidateFrameBufferAttachmentsImageless(
                         fsr_non_zero_viewmasks = true;
                     }
                     if (aii.layerCount != 1 && static_cast<int32_t>(aii.layerCount) <= highest_view_bit) {
-                        skip |= LogError("VUID-VkFramebufferCreateInfo-renderPass-08921", create_info.renderPass, attachment_loc,
+                        skip |= LogError("VUID-VkFramebufferCreateInfo-flags-04587", create_info.renderPass, attachment_loc,
                                          "has a layer count (%" PRIu32
                                          ") "
                                          "less than or equal to the highest bit in the view mask (%i) of subpass %" PRIu32 ".",

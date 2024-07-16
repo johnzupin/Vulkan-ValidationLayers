@@ -28,6 +28,9 @@
 SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType descriptor_type,
                                                              const spirv::ResourceInterfaceVariable &variable,
                                                              VkShaderStageFlagBits stage_flag) {
+    if (!variable.IsAccessed()) {
+        return SYNC_ACCESS_INDEX_NONE;
+    }
     if (descriptor_type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) {
         assert(stage_flag == VK_SHADER_STAGE_FRAGMENT_BIT);
         return SYNC_FRAGMENT_SHADER_INPUT_ATTACHMENT_READ;
@@ -38,7 +41,6 @@ SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType de
         return stage_accesses.uniform_read;
     }
 
-    // Detect if variable is nonreadable (writeonly in glsl).
     // If the desriptorSet is writable, we don't need to care SHADER_READ. SHADER_WRITE is enough.
     // Because if write hazard happens, read hazard might or might not happen.
     // But if write hazard doesn't happen, read hazard is impossible to happen.
@@ -49,6 +51,10 @@ SyncStageAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType de
                descriptor_type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
         return stage_accesses.sampled_read;
     } else {
+        if (variable.IsImage() && !variable.IsImageReadFrom()) {
+            // only image descriptor was accessed, not the image data
+            return SYNC_ACCESS_INDEX_NONE;
+        }
         return stage_accesses.storage_read;
     }
 }
@@ -293,6 +299,9 @@ void CommandBufferAccessContext::RecordEndRendering(const RecordObject &record_o
 bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBindPoint pipelineBindPoint,
                                                                    const Location &loc) const {
     bool skip = false;
+    if (!sync_state_->syncval_settings.shader_accesses_heuristic) {
+        return skip;
+    }
     const vvl::Pipeline *pipe = nullptr;
     const std::vector<LastBound::PER_SET> *per_sets = nullptr;
     cb_state_->GetCurrentPipelineAndDesriptorSets(pipelineBindPoint, &pipe, &per_sets);
@@ -448,6 +457,9 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
 // TODO: Record structure repeats Validate. Unify this code, it was the source of bugs few times already.
 void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindPoint pipelineBindPoint,
                                                                  const ResourceUsageTag tag) {
+    if (!sync_state_->syncval_settings.shader_accesses_heuristic) {
+        return;
+    }
     const vvl::Pipeline *pipe = nullptr;
     const std::vector<LastBound::PER_SET> *per_sets = nullptr;
     cb_state_->GetCurrentPipelineAndDesriptorSets(pipelineBindPoint, &pipe, &per_sets);
@@ -1253,8 +1265,8 @@ void syncval_state::CommandBuffer::Destroy() {
     vvl::CommandBuffer::Destroy();
 }
 
-void syncval_state::CommandBuffer::Reset() {
-    vvl::CommandBuffer::Reset();
+void syncval_state::CommandBuffer::Reset(const Location &loc) {
+    vvl::CommandBuffer::Reset(loc);
     access_context.Reset();
 }
 

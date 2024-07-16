@@ -59,7 +59,6 @@ const char *VK_LAYER_UNIQUE_HANDLES = "unique_handles";
 const char *VK_LAYER_OBJECT_LIFETIME = "object_lifetime";
 const char *VK_LAYER_CHECK_SHADERS = "check_shaders";
 const char *VK_LAYER_CHECK_SHADERS_CACHING = "check_shaders_caching";
-const char *VK_LAYER_VALIDATE_SYNC_QUEUE_SUBMIT = "sync_queue_submit";
 
 const char *VK_LAYER_MESSAGE_ID_FILTER = "message_id_filter";
 const char *VK_LAYER_CUSTOM_STYPE_LIST = "custom_stype_list";
@@ -90,8 +89,15 @@ const char *VK_LAYER_GPUAV_BUFFER_COPIES = "gpuav_buffer_copies";
 const char *VK_LAYER_GPUAV_RESERVE_BINDING_SLOT = "gpuav_reserve_binding_slot";
 const char *VK_LAYER_GPUAV_VMA_LINEAR_OUTPUT = "gpuav_vma_linear_output";
 
+const char *VK_LAYER_GPUAV_DEBUG_DISABLE_ALL = "gpuav_debug_disable_all";
 const char *VK_LAYER_GPUAV_DEBUG_VALIDATE_INSTRUMENTED_SHADERS = "gpuav_debug_validate_instrumented_shaders";
 const char *VK_LAYER_GPUAV_DEBUG_DUMP_INSTRUMENTED_SHADERS = "gpuav_debug_dump_instrumented_shaders";
+const char *VK_LAYER_GPUAV_DEBUG_MAX_INSTRUMENTED_COUNT = "gpuav_debug_max_instrumented_count";
+
+// SyncVal
+// ---
+const char *VK_LAYER_SYNCVAL_SUBMIT_TIME_VALIDATION = "syncval_submit_time_validation";
+const char *VK_LAYER_SYNCVAL_SHADER_ACCESSES_HEURISTIC = "syncval_shader_accesses_heuristic";
 
 // Message Formatting
 const char *VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME = "message_format_display_application_name";
@@ -104,6 +110,9 @@ const char *DEPRECATED_GPUAV_VMA_LINEAR_OUTPUT = "vma_linear_output";
 const char *DEPRECATED_GPUAV_WARN_ON_ROBUST_OOB = "warn_on_robust_oob";
 const char *DEPRECATED_GPUAV_USE_INSTRUMENTED_SHADER_CACHE = "use_instrumented_shader_cache";
 const char *DEPRECATED_GPUAV_SELECT_INSTRUMENTED_SHADERS = "select_instrumented_shaders";
+
+// These were deprecated after the 1.3.283 SDK release
+const char *DEPRECATED_VK_LAYER_VALIDATE_SYNC_QUEUE_SUBMIT = "sync_queue_submit";
 
 // Set the local disable flag for the appropriate VALIDATION_CHECK_DISABLE enum
 void SetValidationDisable(CHECK_DISABLED &disable_data, const ValidationCheckDisables disable_id) {
@@ -119,9 +128,6 @@ void SetValidationDisable(CHECK_DISABLED &disable_data, const ValidationCheckDis
             break;
         case VALIDATION_CHECK_DISABLE_IMAGE_LAYOUT_VALIDATION:
             disable_data[image_layout_validation] = true;
-            break;
-        case VALIDATION_CHECK_DISABLE_SYNCHRONIZATION_VALIDATION_QUEUE_SUBMIT:
-            disable_data[sync_validation_queue_submit] = true;
             break;
         default:
             assert(false);
@@ -559,6 +565,27 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
         gpuav_settings.cache_instrumented_shaders = false;
     }
 
+    if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_DEBUG_MAX_INSTRUMENTED_COUNT)) {
+        vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_DEBUG_MAX_INSTRUMENTED_COUNT,
+                                gpuav_settings.debug_max_instrumented_count);
+    }
+
+    SyncValSettings &syncval_settings = *settings_data->syncval_settings;
+    if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_SYNCVAL_SUBMIT_TIME_VALIDATION)) {
+        vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_SYNCVAL_SUBMIT_TIME_VALIDATION,
+                                syncval_settings.submit_time_validation);
+    } else if (vkuHasLayerSetting(layer_setting_set, DEPRECATED_VK_LAYER_VALIDATE_SYNC_QUEUE_SUBMIT)) {
+        vkuGetLayerSettingValue(layer_setting_set, DEPRECATED_VK_LAYER_VALIDATE_SYNC_QUEUE_SUBMIT,
+                                syncval_settings.submit_time_validation);
+        printf("Validation Setting Warning - %s was set, this is deprecated, please use %s\n",
+               DEPRECATED_VK_LAYER_VALIDATE_SYNC_QUEUE_SUBMIT, VK_LAYER_SYNCVAL_SUBMIT_TIME_VALIDATION);
+    }
+
+    if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_SYNCVAL_SHADER_ACCESSES_HEURISTIC)) {
+        vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_SYNCVAL_SHADER_ACCESSES_HEURISTIC,
+                                syncval_settings.shader_accesses_heuristic);
+    }
+
     if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME)) {
         vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME,
                                 settings_data->message_format_settings->display_application_name);
@@ -576,6 +603,15 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     const auto *validation_flags_ext = vku::FindStructInPNextChain<VkValidationFlagsEXT>(settings_data->create_info);
     if (validation_flags_ext) {
         SetValidationFlags(settings_data->disables, validation_flags_ext);
+    }
+
+    // if app is setting VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT, we can use this to disable it for debugging
+    if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_DEBUG_DISABLE_ALL)) {
+        bool disable_gpuav = false;
+        vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_DEBUG_DISABLE_ALL, disable_gpuav);
+        if (disable_gpuav) {
+            settings_data->enables[gpu_validation] = false;
+        }
     }
 
     const bool use_fine_grained_settings = disables.empty() && enables.empty();
@@ -613,8 +649,6 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
         SetValidationSetting(layer_setting_set, settings_data->disables, object_tracking, VK_LAYER_OBJECT_LIFETIME);
         SetValidationSetting(layer_setting_set, settings_data->disables, shader_validation, VK_LAYER_CHECK_SHADERS);
         SetValidationSetting(layer_setting_set, settings_data->disables, shader_validation_caching, VK_LAYER_CHECK_SHADERS_CACHING);
-        SetValidationSetting(layer_setting_set, settings_data->disables, sync_validation_queue_submit,
-                             VK_LAYER_VALIDATE_SYNC_QUEUE_SUBMIT);
     }
 
     vkuDestroyLayerSettingSet(layer_setting_set, nullptr);

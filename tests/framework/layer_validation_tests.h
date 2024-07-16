@@ -266,18 +266,12 @@ class DebugPrintfTests : public VkLayerTest {
     void InitDebugPrintfFramework(void *p_next = nullptr, bool reserve_slot = false);
 };
 
+struct SyncValSettings;
 class VkSyncValTest : public VkLayerTest {
   public:
-    void InitSyncValFramework(bool disable_queue_submit_validation = false);
-    void InitSyncVal();
+    void InitSyncValFramework(const SyncValSettings *p_sync_settings = nullptr);
+    void InitSyncVal(const SyncValSettings *p_sync_settings = nullptr);
     void InitTimelineSemaphore();
-
-  protected:
-    const VkValidationFeatureEnableEXT enables_[1] = {VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
-    const VkValidationFeatureDisableEXT disables_[4] = {
-        VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
-        VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT, VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
-    VkValidationFeaturesEXT features_ = {};
 };
 
 class AndroidExternalResolveTest : public VkLayerTest {
