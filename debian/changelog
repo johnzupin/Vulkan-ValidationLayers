@@ -1,3 +1,10 @@
+vulkan-validationlayers (1.3.290.0~rc2-1lunarg24.04-1) noble; urgency=medium
+
+  [ Artem Kharytoniuk ]
+  * sync: Disable resource reporting due to stale index issue
+
+ -- john <john@odin>  Fri, 19 Jul 2024 14:34:32 -0600
+
 vulkan-validationlayers (1.3.290.0~rc1-1lunarg24.04-1) noble; urgency=medium
 
   [ Artem Kharytoniuk ]
