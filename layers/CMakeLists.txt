@@ -29,6 +29,7 @@ target_sources(VkLayer_utils PRIVATE
     error_message/error_location.h
     error_message/error_strings.h
     error_message/record_object.h
+    error_message/log_message_type.h
     external/xxhash.h
     external/inplace_function.h
     ${API_TYPE}/generated/error_location_helper.cpp
@@ -156,6 +157,7 @@ target_sources(vvl PRIVATE
     core_checks/cc_descriptor.cpp
     core_checks/cc_device.cpp
     core_checks/cc_device_memory.cpp
+    core_checks/cc_device_generated_commands.cpp
     core_checks/cc_drawdispatch.cpp
     core_checks/cc_external_object.cpp
     core_checks/cc_image.cpp
@@ -218,6 +220,7 @@ target_sources(vvl PRIVATE
     ${API_TYPE}/generated/cmd_validation_trace_rays_rgen.h
     ${API_TYPE}/generated/cmd_validation_trace_rays_rgen.cpp
     gpu/core/gpu_settings.h
+    gpu/core/gpu_shader_cache_hash.h
     gpu/core/gpuav_constants.h
     gpu/cmd_validation/gpuav_cmd_validation_common.h
     gpu/cmd_validation/gpuav_cmd_validation_common.cpp
@@ -250,6 +253,7 @@ target_sources(vvl PRIVATE
     gpu/instrumentation/gpuav_instrumentation.cpp
     gpu/resources/gpuav_subclasses.cpp
     gpu/resources/gpuav_subclasses.h
+    gpu/resources/gpu_shader_resources.h
     gpu/resources/gpu_resources.h
     gpu/resources/gpu_resources.cpp
     gpu/shaders/gpu_error_codes.h
@@ -263,6 +267,8 @@ target_sources(vvl PRIVATE
     state_tracker/cmd_buffer_state.h
     state_tracker/descriptor_sets.cpp
     state_tracker/descriptor_sets.h
+    state_tracker/device_generated_commands_state.cpp
+    state_tracker/device_generated_commands_state.h
     state_tracker/device_memory_state.cpp
     state_tracker/device_memory_state.h
     state_tracker/device_state.cpp
@@ -308,6 +314,7 @@ target_sources(vvl PRIVATE
     stateless/sl_cmd_buffer_dynamic.cpp
     stateless/sl_cmd_buffer.cpp
     stateless/sl_descriptor.cpp
+    stateless/sl_device_generated_commands.cpp
     stateless/sl_device_memory.cpp
     stateless/sl_external_object.cpp
     stateless/sl_framebuffer.cpp
@@ -319,6 +326,8 @@ target_sources(vvl PRIVATE
     stateless/sl_shader_object.cpp
     stateless/sl_synchronization.cpp
     stateless/sl_utils.cpp
+    stateless/sl_vuid_maps.cpp
+    stateless/sl_vuid_maps.h
     stateless/sl_wsi.cpp
     stateless/stateless_validation.h
     sync/sync_access_context.cpp
@@ -351,6 +360,7 @@ target_sources(vvl PRIVATE
     utils/shader_utils.h
     layer_options.cpp
     layer_options.h
+    profiling/profiling.h
 )
 get_target_property(LAYER_SOURCES vvl SOURCES)
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${LAYER_SOURCES})
@@ -416,6 +426,26 @@ target_link_libraries(vvl PRIVATE
     gpu_av_spirv
     VkLayer_utils
 )
+
+if (VVL_ENABLE_TRACY)
+    # Rely on FetchContent to get Tracy, it is simple
+    # update_deps.py is too chaotic. Quite ok since Tracy is intended as a dev tool
+    include(FetchContent)
+    FetchContent_Declare(
+        tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG v0.11.0
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE)
+
+    FetchContent_MakeAvailable(tracy)
+
+    target_sources(vvl PRIVATE
+        profiling/profiling.h
+        profiling/profiling.cpp
+    )
+    target_link_libraries(vvl PRIVATE TracyClient)
+endif()
 
 target_include_directories(vvl SYSTEM PRIVATE external)
 

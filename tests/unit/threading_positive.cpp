@@ -12,6 +12,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
+#include <thread>
 #include "../framework/layer_validation_tests.h"
 #include "../framework/descriptor_helper.h"
 #include "../framework/thread_helper.h"
@@ -223,12 +224,12 @@ TEST_F(PositiveThreading, DebugObjectNames) {
         }
     };
     const auto bind_descriptor = [&]() {
-        m_commandBuffer->begin();
+        m_command_buffer.begin();
         for (uint32_t i = 0; i < count; ++i) {
-            vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0u, 1u,
+            vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0u, 1u,
                                       &descriptor_sets[i], 0u, nullptr);
         }
-        m_commandBuffer->end();
+        m_command_buffer.end();
     };
 
     std::thread thread2(bind_descriptor);

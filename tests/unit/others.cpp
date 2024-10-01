@@ -12,11 +12,9 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "utils/cast_utils.h"
-#include "generated/enum_flag_bits.h"
+#include <vulkan/vulkan_core.h>
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
-#include "utils/vk_layer_utils.h"
 #include "utils/hash_util.h"
 #include "generated/vk_validation_error_messages.h"
 
@@ -379,13 +377,13 @@ TEST_F(VkLayerTest, RequiredParameter) {
     // Specify 0 for a required array count
     // Expected to trigger an error with StatelessValidation::ValidateArray
     VkViewport viewport = {0.0f, 0.0f, 64.0f, 64.0f, 0.0f, 1.0f};
-    vk::CmdSetViewport(m_commandBuffer->handle(), 0, 0, &viewport);
+    vk::CmdSetViewport(m_command_buffer.handle(), 0, 0, &viewport);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetViewport-pViewports-parameter");
     // Specify NULL for a required array
     // Expected to trigger an error with StatelessValidation::ValidateArray
-    vk::CmdSetViewport(m_commandBuffer->handle(), 0, 1, NULL);
+    vk::CmdSetViewport(m_command_buffer.handle(), 0, 1, NULL);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("UNASSIGNED-GeneralParameterError-RequiredHandle");
@@ -414,7 +412,7 @@ TEST_F(VkLayerTest, RequiredParameter) {
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetStencilReference-faceMask-requiredbitmask");
     // Specify 0 for a required VkFlags parameter
     // Expected to trigger an error with StatelessValidation::ValidateFlags
-    vk::CmdSetStencilReference(m_commandBuffer->handle(), 0, 0);
+    vk::CmdSetStencilReference(m_command_buffer.handle(), 0, 0);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-VkSubmitInfo-sType-sType");
@@ -678,8 +676,11 @@ TEST_F(VkLayerTest, InvalidStructPNext) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, UnrecognizedValueOutOfRange) {
+TEST_F(VkLayerTest, UnrecognizedEnumOutOfRange) {
     RETURN_IF_SKIP(Init());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        GTEST_SKIP() << "VK_KHR_maintenance5 is supported";
+    }
 
     m_errorMonitor->SetDesiredError("VUID-vkGetPhysicalDeviceFormatProperties-format-parameter");
     // Specify an invalid VkFormat value
@@ -690,8 +691,56 @@ TEST_F(VkLayerTest, UnrecognizedValueOutOfRange) {
     m_errorMonitor->VerifyFound();
 }
 
+TEST_F(VkLayerTest, UnrecognizedEnumOutOfRange2) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    RETURN_IF_SKIP(Init());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        GTEST_SKIP() << "VK_KHR_maintenance5 is supported";
+    }
+
+    m_errorMonitor->SetDesiredError("VUID-vkGetPhysicalDeviceFormatProperties2-format-parameter");
+    VkFormatProperties2 format_properties = vku::InitStructHelper();
+    vk::GetPhysicalDeviceFormatProperties2(gpu(), static_cast<VkFormat>(8000), &format_properties);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkLayerTest, UnrecognizedFlagOutOfRange) {
+    RETURN_IF_SKIP(Init());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        GTEST_SKIP() << "VK_KHR_maintenance5 is supported";
+    }
+
+    m_errorMonitor->SetDesiredError("VUID-vkGetPhysicalDeviceImageFormatProperties-usage-parameter");
+    VkImageFormatProperties format_properties;
+    vk::GetPhysicalDeviceImageFormatProperties(gpu(), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_1D, VK_IMAGE_TILING_OPTIMAL,
+                                               static_cast<VkImageUsageFlags>(0xffffffff), 0, &format_properties);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkLayerTest, UnrecognizedFlagOutOfRange2) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    RETURN_IF_SKIP(Init());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        GTEST_SKIP() << "VK_KHR_maintenance5 is supported";
+    }
+
+    m_errorMonitor->SetDesiredError("VUID-VkPhysicalDeviceImageFormatInfo2-usage-parameter");
+    VkImageFormatProperties2 format_properties = vku::InitStructHelper();
+    VkPhysicalDeviceImageFormatInfo2 format_info = vku::InitStructHelper();
+    format_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+    format_info.flags = 0;
+    format_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    format_info.type = VK_IMAGE_TYPE_1D;
+    format_info.usage = static_cast<VkImageUsageFlags>(0xffffffff);
+    vk::GetPhysicalDeviceImageFormatProperties2(gpu(), &format_info, &format_properties);
+    m_errorMonitor->VerifyFound();
+}
+
 TEST_F(VkLayerTest, UnrecognizedValueBadMask) {
     RETURN_IF_SKIP(Init());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        GTEST_SKIP() << "VK_KHR_maintenance5 is supported";
+    }
 
     m_errorMonitor->SetDesiredError("VUID-vkGetPhysicalDeviceImageFormatProperties-usage-parameter");
     // Specify an invalid VkFlags bitmask value
@@ -739,6 +788,9 @@ TEST_F(VkLayerTest, UnrecognizedValueBadBool) {
 
 TEST_F(VkLayerTest, UnrecognizedValueMaxEnum) {
     RETURN_IF_SKIP(Init());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        GTEST_SKIP() << "VK_KHR_maintenance5 is supported";
+    }
 
     // Specify MAX_ENUM
     VkFormatProperties format_properties;
@@ -1070,19 +1122,19 @@ TEST_F(VkLayerTest, UnclosedAndDuplicateQueries) {
     vk::GetDeviceQueue(device(), m_device->graphics_queue_node_index_, 0, &queue);
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_OCCLUSION, 5);
-    m_commandBuffer->begin();
-    vk::CmdResetQueryPool(m_commandBuffer->handle(), query_pool.handle(), 0, 5);
+    m_command_buffer.begin();
+    vk::CmdResetQueryPool(m_command_buffer.handle(), query_pool.handle(), 0, 5);
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdBeginQuery-queryPool-01922");
-    vk::CmdBeginQuery(m_commandBuffer->handle(), query_pool.handle(), 1, 0);
+    vk::CmdBeginQuery(m_command_buffer.handle(), query_pool.handle(), 1, 0);
     // Attempt to begin a query that has the same type as an active query
-    vk::CmdBeginQuery(m_commandBuffer->handle(), query_pool.handle(), 3, 0);
-    vk::CmdEndQuery(m_commandBuffer->handle(), query_pool.handle(), 1);
+    vk::CmdBeginQuery(m_command_buffer.handle(), query_pool.handle(), 3, 0);
+    vk::CmdEndQuery(m_command_buffer.handle(), query_pool.handle(), 1);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkEndCommandBuffer-commandBuffer-00061");
-    vk::CmdBeginQuery(m_commandBuffer->handle(), query_pool.handle(), 0, 0);
-    vk::EndCommandBuffer(m_commandBuffer->handle());
+    vk::CmdBeginQuery(m_command_buffer.handle(), query_pool.handle(), 0, 0);
+    vk::EndCommandBuffer(m_command_buffer.handle());
     m_errorMonitor->VerifyFound();
 }
 
@@ -1090,17 +1142,17 @@ TEST_F(VkLayerTest, ExecuteUnrecordedCB) {
     TEST_DESCRIPTION("Attempt vkQueueSubmit with a CB in the initial state");
 
     RETURN_IF_SKIP(Init());
-    // never record m_commandBuffer
+    // never record m_command_buffer
 
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_errorMonitor->VerifyFound();
 
     // Testing an "unfinished secondary CB" crashes on some HW/drivers (notably Pixel 3 and RADV)
     // vkt::CommandBuffer cb(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
-    // m_commandBuffer->begin();
-    // vk::CmdExecuteCommands(m_commandBuffer->handle(), 1u, &cb.handle());
-    // m_commandBuffer->end();
+    // m_command_buffer.begin();
+    // vk::CmdExecuteCommands(m_command_buffer.handle(), 1u, &cb.handle());
+    // m_command_buffer.end();
 
     // m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00072");
     // vk::QueueSubmit(m_default_queue->handle(), 1, &si, VK_NULL_HANDLE);
@@ -1487,6 +1539,10 @@ TEST_F(VkLayerTest, DuplicateValidPNextStructures) {
 
 TEST_F(VkLayerTest, GetPhysicalDeviceImageFormatPropertiesFlags) {
     RETURN_IF_SKIP(Init());
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        GTEST_SKIP() << "VK_KHR_maintenance5 is supported";
+    }
+
     VkImageFormatProperties dummy_props;
     m_errorMonitor->SetDesiredError("VUID-vkGetPhysicalDeviceImageFormatProperties-usage-requiredbitmask");
     vk::GetPhysicalDeviceImageFormatProperties(m_device->phy().handle(), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D,
@@ -1650,37 +1706,37 @@ TEST_F(VkLayerTest, RayTracingStageFlagWithoutFeature) {
     m_errorMonitor->VerifyFound();
 
     vkt::Event event(*m_device);
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetEvent-stageMask-07949");
-    vk::CmdSetEvent(m_commandBuffer->handle(), event.handle(), stage);
+    vk::CmdSetEvent(m_command_buffer.handle(), event.handle(), stage);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdResetEvent-stageMask-07949");
-    vk::CmdResetEvent(m_commandBuffer->handle(), event.handle(), stage);
+    vk::CmdResetEvent(m_command_buffer.handle(), event.handle(), stage);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdWaitEvents-srcStageMask-07949");
-    vk::CmdWaitEvents(m_commandBuffer->handle(), 1u, &event.handle(), stage, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0u, nullptr, 0u,
+    vk::CmdWaitEvents(m_command_buffer.handle(), 1u, &event.handle(), stage, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0u, nullptr, 0u,
                       nullptr, 0u, nullptr);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdWaitEvents-dstStageMask-07949");
-    vk::CmdWaitEvents(m_commandBuffer->handle(), 1u, &event.handle(), VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, stage, 0u, nullptr, 0u,
+    vk::CmdWaitEvents(m_command_buffer.handle(), 1u, &event.handle(), VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, stage, 0u, nullptr, 0u,
                       nullptr, 0u, nullptr);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-srcStageMask-07949");
-    vk::CmdPipelineBarrier(m_commandBuffer->handle(), stage, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0u, 0u, nullptr, 0u, nullptr, 0u,
+    vk::CmdPipelineBarrier(m_command_buffer.handle(), stage, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0u, 0u, nullptr, 0u, nullptr, 0u,
                            nullptr);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-dstStageMask-07949");
-    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, stage, 0u, 0u, nullptr, 0u, nullptr, 0u,
+    vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, stage, 0u, 0u, nullptr, 0u, nullptr, 0u,
                            nullptr);
     m_errorMonitor->VerifyFound();
 
-    m_commandBuffer->end();
+    m_command_buffer.end();
 
     m_default_queue->Wait();
 }
@@ -2217,5 +2273,12 @@ TEST_F(VkLayerTest, PhysicalDeviceLayeredApiVulkanPropertiesKHR) {
 
     m_errorMonitor->SetDesiredError("VUID-VkPhysicalDeviceLayeredApiVulkanPropertiesKHR-pNext-10011");
     vk::GetPhysicalDeviceProperties2(gpu(), &phys_dev_props_2);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkLayerTest, UnrecognizedEnumExtension) {
+    RETURN_IF_SKIP(Init());
+    m_errorMonitor->SetDesiredError("VUID-VkImageCreateInfo-format-parameter");
+    vkt::Image image(*m_device, 4, 4, 1, VK_FORMAT_A4B4G4R4_UNORM_PACK16, VK_IMAGE_USAGE_SAMPLED_BIT);
     m_errorMonitor->VerifyFound();
 }

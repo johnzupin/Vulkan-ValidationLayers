@@ -35,8 +35,23 @@ permissions:
   contents: read
 
 jobs:
+  code-format:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: clang-format version
+        run: clang-format --version
+      - name: Execute Source Code Format Checking Script
+        run: python3 scripts/check_code_format.py --fetch-main --target-refspec=FETCH_HEAD
+
   # Ensure we can build on an older Ubuntu distro with an older version of CMake.
   linux_back_compat:
+    needs: check_vvl
     runs-on: ubuntu-20.04
     name: "Ubuntu Backcompat"
     steps:
@@ -59,6 +74,7 @@ jobs:
       - run: cmake --install build --prefix /tmp
 
   linux:
+    needs: check_vvl
     runs-on: ubuntu-22.04
     name: "linux (${{matrix.sanitize}} sanitizer, ${{matrix.config}}, robinhood ${{matrix.robin_hood}} )"
     strategy:
@@ -100,10 +116,15 @@ jobs:
         env:
           VK_KHRONOS_PROFILES_PROFILE_FILE: ${{ github.workspace }}/tests/device_profiles/max_profile.json
       - name: Test Max Core
+        # Thread Sanitize will take about 9x longer to run than Address Sanitize.
+        # The main reason we have Max Core and Min Core is to catch issues with Vulkan 1.x vs Vulkan 1.y version issues.
+        # In effort to reduce the bottle neck time in testing, skipping these for Thread Sanitize.
+        if: ${{ matrix.sanitize != 'thread' }}
         run: python scripts/tests.py --test
         env:
           VK_KHRONOS_PROFILES_PROFILE_FILE: ${{ github.workspace }}/tests/device_profiles/max_core.json
       - name: Test Min Core
+        if: ${{ matrix.sanitize != 'thread' }}
         run: python scripts/tests.py --test
         env:
           VK_KHRONOS_PROFILES_PROFILE_FILE: ${{ github.workspace }}/tests/device_profiles/min_core.json
@@ -133,6 +154,7 @@ jobs:
           retention-days: 3
 
   androidOnLinux:
+    needs: check_vvl
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -157,6 +179,7 @@ jobs:
           VK_KHRONOS_PROFILES_PROFILE_FILE: ${{ github.workspace }}/tests/device_profiles/max_profile.json
 
   windows:
+    needs: check_vvl
     runs-on: windows-2022
     strategy:
       matrix:
@@ -221,6 +244,7 @@ jobs:
           retention-days: 3
 
   android:
+      needs: check_vvl
       runs-on: ubuntu-22.04
       strategy:
         matrix:
@@ -293,6 +317,9 @@ jobs:
             retention-days: 3
 
   iOS:
+    # iOS is 10x expensive to run on GitHub machines, so only run if we know something else fast/simple passed as well
+    # androidOnLinux does a basic build and only takes a 2 or 3 minutes to normally run
+    needs: androidOnLinux
     runs-on: macos-12
     steps:
       - uses: actions/checkout@v4
@@ -324,6 +351,7 @@ jobs:
       - run: vtool -show-build /tmp/lib/VkLayer_khronos_validation.framework/VkLayer_khronos_validation
 
   mingw:
+    needs: check_vvl
     runs-on: windows-latest
     defaults:
       run:
@@ -351,6 +379,7 @@ jobs:
       - run: cmake --install build --prefix /tmp
 
   chromium:
+    needs: check_vvl
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -363,6 +392,7 @@ jobs:
       - run: python scripts/gn/gn.py --args='${{ matrix.args }}'
 
   check_vvl:
+    needs: code-format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

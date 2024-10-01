@@ -12,9 +12,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#include "utils/cast_utils.h"
 #include "utils/vk_layer_utils.h"
-#include "generated/enum_flag_bits.h"
 #include "../framework/layer_validation_tests.h"
 #include "../framework/external_memory_sync.h"
 
@@ -222,7 +220,7 @@ TEST_F(NegativeSparseImage, MemoryBindOffset) {
 
     VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
     buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    buffer_create_info.size = 1024;
+    buffer_create_info.size = 0x10000;
 
     if (m_device->phy().features().sparseResidencyBuffer) {
         buffer_create_info.flags = VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT | VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
@@ -950,7 +948,7 @@ TEST_F(NegativeSparseImage, ImageMemoryBind) {
         GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
-    VkImageCreateInfo create_info = vkt::Image::create_info();
+    VkImageCreateInfo create_info = vkt::Image::CreateInfo();
     create_info.flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
     create_info.imageType = VK_IMAGE_TYPE_3D;
     create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -1060,6 +1058,172 @@ TEST_F(NegativeSparseImage, ImageMemoryBind) {
     image_bind.subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
+TEST_F(NegativeSparseImage, ImageMemoryBindInvalidMemory) {
+    TEST_DESCRIPTION("Try to bind sparse resident image with invalid VkSparseImageMemoryBind");
+
+    AddRequiredFeature(vkt::Feature::sparseBinding);
+    AddRequiredFeature(vkt::Feature::sparseResidencyImage3D);
+    RETURN_IF_SKIP(Init());
+
+    if (m_device->QueuesWithSparseCapability().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
+    }
+
+    VkImageCreateInfo create_info = vkt::Image::CreateInfo();
+    create_info.flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
+    create_info.imageType = VK_IMAGE_TYPE_3D;
+    create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    create_info.format = VK_FORMAT_B8G8R8A8_UNORM;
+    create_info.extent.width = 1024;
+    create_info.extent.height = 1024;
+    create_info.extent.depth = 1;
+    create_info.arrayLayers = 1;
+    vkt::Image image(*m_device, create_info, vkt::no_mem);
+
+    VkMemoryRequirements image_mem_reqs;
+    vk::GetImageMemoryRequirements(m_device->handle(), image.handle(), &image_mem_reqs);
+    const auto image_mem_alloc =
+        vkt::DeviceMemory::get_resource_alloc_info(*m_device, image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkt::DeviceMemory image_mem;
+    image_mem.init(*m_device, image_mem_alloc);
+
+    VkImageCreateInfo invalid_create_info = create_info;
+    vkt::Image invalid_image(*m_device, invalid_create_info, vkt::no_mem);
+
+    VkMemoryRequirements invalid_image_mem_reqs;
+    vk::GetImageMemoryRequirements(m_device->handle(), invalid_image.handle(), &invalid_image_mem_reqs);
+
+    // Make sure that the same memory type is not chosen.
+    invalid_image_mem_reqs.memoryTypeBits = ~image_mem_reqs.memoryTypeBits;
+
+    const auto invalid_image_mem_alloc =
+        vkt::DeviceMemory::get_resource_alloc_info(*m_device, invalid_image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkt::DeviceMemory invalid_image_mem;
+    invalid_image_mem.init(*m_device, invalid_image_mem_alloc);
+
+    uint32_t requirements_count = 0u;
+    vk::GetImageSparseMemoryRequirements(m_device->handle(), image.handle(), &requirements_count, nullptr);
+
+    if (requirements_count == 0u) {
+        GTEST_SKIP() << "No sparse image requirements for image format VK_FORMAT_B8G8R8A8_UNORM";
+    }
+
+    std::vector<VkSparseImageMemoryRequirements> sparse_reqs(requirements_count);
+    vk::GetImageSparseMemoryRequirements(m_device->handle(), image.handle(), &requirements_count, sparse_reqs.data());
+
+    VkExtent3D granularity = sparse_reqs[0].formatProperties.imageGranularity;
+    VkSparseImageMemoryBind image_bind{};
+    image_bind.subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_bind.memory = image_mem.handle();
+    image_bind.memoryOffset = 0;
+    image_bind.extent = granularity;
+
+    VkSparseImageMemoryBindInfo image_bind_info{};
+    image_bind_info.image = image.handle();
+    image_bind_info.bindCount = 1u;
+    image_bind_info.pBinds = &image_bind;
+
+    VkBindSparseInfo bind_info = vku::InitStructHelper();
+    bind_info.imageBindCount = 1u;
+    bind_info.pImageBinds = &image_bind_info;
+
+    VkQueue sparse_queue = m_device->QueuesWithSparseCapability()[0]->handle();
+
+    // Force invalid device memory
+    image_bind.memory = invalid_image_mem.handle();
+    m_errorMonitor->SetDesiredError("VUID-VkSparseImageMemoryBind-memory-01105");
+    vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSparseImage, ImageMemoryBindInvalidAlignment) {
+    TEST_DESCRIPTION("Try to bind sparse resident image with invalid VkSparseImageMemoryBind");
+
+    AddRequiredFeature(vkt::Feature::sparseBinding);
+    AddRequiredFeature(vkt::Feature::sparseResidencyImage3D);
+    RETURN_IF_SKIP(Init());
+
+    if (m_device->QueuesWithSparseCapability().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
+    }
+
+    VkImageCreateInfo create_info = vkt::Image::CreateInfo();
+    create_info.flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
+    create_info.imageType = VK_IMAGE_TYPE_3D;
+    create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    create_info.format = VK_FORMAT_B8G8R8A8_UNORM;
+    create_info.extent.width = 1024;
+    create_info.extent.height = 1024;
+    create_info.extent.depth = 1;
+    create_info.arrayLayers = 1;
+    vkt::Image image(*m_device, create_info, vkt::no_mem);
+
+    VkMemoryRequirements image_mem_reqs;
+    vk::GetImageMemoryRequirements(m_device->handle(), image.handle(), &image_mem_reqs);
+    if (image_mem_reqs.alignment == 1) {
+        GTEST_SKIP() << "Need image memory required alignment to be more than 1";
+    }
+
+    const auto image_mem_alloc =
+        vkt::DeviceMemory::get_resource_alloc_info(*m_device, image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkt::DeviceMemory image_mem;
+    image_mem.init(*m_device, image_mem_alloc);
+
+    VkImageCreateInfo invalid_create_info = create_info;
+    vkt::Image invalid_image(*m_device, invalid_create_info, vkt::no_mem);
+
+    VkMemoryRequirements invalid_image_mem_reqs;
+    vk::GetImageMemoryRequirements(m_device->handle(), invalid_image.handle(), &invalid_image_mem_reqs);
+
+    // Make sure that the same memory type is not chosen.
+    invalid_image_mem_reqs.memoryTypeBits = ~image_mem_reqs.memoryTypeBits;
+
+    const auto invalid_image_mem_alloc =
+        vkt::DeviceMemory::get_resource_alloc_info(*m_device, invalid_image_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkt::DeviceMemory invalid_image_mem;
+    invalid_image_mem.init(*m_device, invalid_image_mem_alloc);
+
+    uint32_t requirements_count = 0u;
+    vk::GetImageSparseMemoryRequirements(m_device->handle(), image.handle(), &requirements_count, nullptr);
+
+    if (requirements_count == 0u) {
+        GTEST_SKIP() << "No sparse image requirements for image format VK_FORMAT_B8G8R8A8_UNORM";
+    }
+
+    std::vector<VkSparseImageMemoryRequirements> sparse_reqs(requirements_count);
+    vk::GetImageSparseMemoryRequirements(m_device->handle(), image.handle(), &requirements_count, sparse_reqs.data());
+
+    VkExtent3D granularity = sparse_reqs[0].formatProperties.imageGranularity;
+    VkSparseImageMemoryBind image_bind{};
+    image_bind.subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_bind.memory = image_mem.handle();
+    image_bind.memoryOffset = 0;
+    image_bind.extent = granularity;
+
+    VkSparseImageMemoryBindInfo image_bind_info{};
+    image_bind_info.image = image.handle();
+    image_bind_info.bindCount = 1u;
+    image_bind_info.pBinds = &image_bind;
+
+    VkBindSparseInfo bind_info = vku::InitStructHelper();
+    bind_info.imageBindCount = 1u;
+    bind_info.pImageBinds = &image_bind_info;
+
+    VkQueue sparse_queue = m_device->QueuesWithSparseCapability()[0]->handle();
+
+    // Force memoryOffset to invalid value
+    image_bind.memoryOffset = image_mem_reqs.alignment + 1;
+
+    m_errorMonitor->SetDesiredError("VUID-VkSparseImageMemoryBind-memory-01105");
+    vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+    image_bind.memoryOffset = 0;
+}
+
 TEST_F(NegativeSparseImage, ImageMemoryBindInvalidExtent) {
     TEST_DESCRIPTION("Try to bind sparse resident image with an extent having a null size on one of its dimension");
 
@@ -1071,7 +1235,7 @@ TEST_F(NegativeSparseImage, ImageMemoryBindInvalidExtent) {
         GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
     }
 
-    VkImageCreateInfo create_info = vkt::Image::create_info();
+    VkImageCreateInfo create_info = vkt::Image::CreateInfo();
     create_info.flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
     create_info.imageType = VK_IMAGE_TYPE_3D;
     create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -1135,4 +1299,84 @@ TEST_F(NegativeSparseImage, ImageMemoryBindInvalidExtent) {
     m_errorMonitor->SetDesiredError("VUID-VkSparseImageMemoryBind-extent-09390");
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSparseImage, UnalignedBindOffsets) {
+    TEST_DESCRIPTION("VkSparseMemoryBind have unaligned memory offset and resource offset");
+
+    AddRequiredFeature(vkt::Feature::sparseBinding);
+    RETURN_IF_SKIP(Init());
+
+    auto index = m_device->graphics_queue_node_index_;
+    if (!(m_device->phy().queue_properties_[index].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT)) {
+        GTEST_SKIP() << "Graphics queue does not have sparse binding bit";
+    }
+
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_B8G8R8A8_UNORM;
+    image_create_info.extent.width = 1024;
+    image_create_info.extent.height = 1024;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 1;
+    image_create_info.arrayLayers = 1;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    image_create_info.flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
+    vkt::Image image(*m_device, image_create_info, vkt::no_mem);
+
+    VkMemoryRequirements memory_reqs;
+    vk::GetImageMemoryRequirements(device(), image, &memory_reqs);
+    if (memory_reqs.alignment == 1) {
+        GTEST_SKIP() << "Need image memory required alignment to be more than 1";
+    }
+    // Find an image big enough to allow sparse mapping of 2 memory regions
+    // Increase the image size until it is at least twice the
+    // size of the required alignment, to ensure we can bind both
+    // allocated memory blocks to the image on aligned offsets.
+    while (memory_reqs.size < (memory_reqs.alignment * 2)) {
+        image.destroy();
+        image_create_info.extent.width *= 2;
+        image_create_info.extent.height *= 2;
+        image.init_no_mem(*m_device, image_create_info);
+        vk::GetImageMemoryRequirements(device(), image, &memory_reqs);
+    }
+    // Allocate 2 memory regions of minimum alignment size, bind one at 0, the other
+    // at the end of the first
+    VkMemoryAllocateInfo memory_info = vku::InitStructHelper();
+    memory_info.allocationSize = 2 * memory_reqs.alignment;
+    bool pass = m_device->phy().SetMemoryType(memory_reqs.memoryTypeBits, &memory_info, 0);
+    ASSERT_TRUE(pass);
+    vkt::DeviceMemory memory_one(*m_device, memory_info);
+    vkt::DeviceMemory memory_two(*m_device, memory_info);
+
+    std::array<VkSparseMemoryBind, 2> binds = {};
+    binds[0].memory = memory_one;
+    binds[0].memoryOffset = 1;
+    binds[0].resourceOffset = memory_info.allocationSize / 2;
+    binds[0].size = memory_info.allocationSize / 2;
+    binds[1].memory = memory_two;
+    binds[1].memoryOffset = 0;
+    binds[1].resourceOffset = 1;
+    binds[1].size = memory_info.allocationSize / 2;
+
+    VkSparseImageOpaqueMemoryBindInfo opaqueBindInfo;
+    opaqueBindInfo.image = image;
+    opaqueBindInfo.bindCount = size32(binds);
+    opaqueBindInfo.pBinds = binds.data();
+
+    VkBindSparseInfo bindSparseInfo = vku::InitStructHelper();
+    bindSparseInfo.imageOpaqueBindCount = 1;
+    bindSparseInfo.pImageOpaqueBinds = &opaqueBindInfo;
+
+    // Unaligned memory bind offset
+    m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-memory-01096");
+    // Unaligned memory bind offset, and resource offset
+    m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-resourceOffset-09492", 2);
+    vk::QueueBindSparse(m_default_queue->handle(), 1, &bindSparseInfo, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // Wait for operations to finish before destroying anything
+    m_default_queue->Wait();
 }

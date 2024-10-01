@@ -13,7 +13,6 @@
  */
 
 #include "utils/cast_utils.h"
-#include "generated/enum_flag_bits.h"
 #include "../framework/layer_validation_tests.h"
 
 class NegativeSparseBuffer : public VkLayerTest {};
@@ -28,7 +27,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSize) {
     }
 
     VkBufferCreateInfo b_info =
-        vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+        vkt::Buffer::CreateInfo(0x10000, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
     vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
@@ -60,6 +59,66 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSize) {
     m_errorMonitor->VerifyFound();
 }
 
+TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindAlignments) {
+    TEST_DESCRIPTION("Test QueueBindSparse with invalid sparse memory bind size");
+    AddRequiredFeature(vkt::Feature::sparseBinding);
+    RETURN_IF_SKIP(Init());
+
+    if (m_device->QueuesWithSparseCapability().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
+    }
+
+    VkBufferCreateInfo b_info =
+        vkt::Buffer::CreateInfo(0x20000, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+    b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
+    vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
+
+    VkMemoryRequirements buffer_mem_reqs;
+    vk::GetBufferMemoryRequirements(device(), buffer_sparse.handle(), &buffer_mem_reqs);
+    if (buffer_mem_reqs.alignment == 1) {
+        GTEST_SKIP() << "Need buffer memory required alignment to be more than 1";
+    }
+    const auto buffer_mem_alloc =
+        vkt::DeviceMemory::get_resource_alloc_info(*m_device, buffer_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkt::DeviceMemory buffer_mem;
+    buffer_mem.init(*m_device, buffer_mem_alloc);
+
+    std::array<VkSparseMemoryBind, 3> buffer_memory_binds = {};
+    buffer_memory_binds[0].resourceOffset = 0;
+    buffer_memory_binds[0].size = 1u;  // Unaligned
+    buffer_memory_binds[0].memory = buffer_mem.handle();
+    buffer_memory_binds[0].memoryOffset = 0;
+
+    buffer_memory_binds[1].resourceOffset = 1;  // Unaligned
+    buffer_memory_binds[1].size = 0x10000;
+    buffer_memory_binds[1].memory = buffer_mem.handle();
+    buffer_memory_binds[1].memoryOffset = 0;
+
+    buffer_memory_binds[2].resourceOffset = 0;
+    buffer_memory_binds[2].size = 0x10000;
+    buffer_memory_binds[2].memory = buffer_mem.handle();
+    buffer_memory_binds[2].memoryOffset = 1;  // Unaligned
+
+    VkSparseBufferMemoryBindInfo buffer_memory_bind_info{};
+    buffer_memory_bind_info.buffer = buffer_sparse.handle();
+    buffer_memory_bind_info.bindCount = size32(buffer_memory_binds);
+    buffer_memory_bind_info.pBinds = buffer_memory_binds.data();
+
+    VkBindSparseInfo bind_info = vku::InitStructHelper();
+    bind_info.bufferBindCount = 1;
+    bind_info.pBufferBinds = &buffer_memory_bind_info;
+
+    VkQueue sparse_queue = m_device->QueuesWithSparseCapability()[0]->handle();
+
+    // Unaligned size, resourceOffset, memoryOffset
+    m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-resourceOffset-09491", 3);
+    // Also aligned memoryOffset
+    m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-memory-01096");
+    vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+}
+
 TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindResourceOffset) {
     TEST_DESCRIPTION("Test QueueBindSparse with invalid sparse memory bind resource offset");
     AddRequiredFeature(vkt::Feature::sparseBinding);
@@ -70,7 +129,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindResourceOffset) {
     }
 
     VkBufferCreateInfo b_info =
-        vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+        vkt::Buffer::CreateInfo(0x10000, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
     vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
@@ -114,7 +173,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSizeResourceOffset) {
     }
 
     VkBufferCreateInfo b_info =
-        vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+        vkt::Buffer::CreateInfo(0x10000, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
     vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
@@ -144,6 +203,9 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSizeResourceOffset) {
     VkQueue sparse_queue = m_device->QueuesWithSparseCapability()[0]->handle();
 
     m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-size-01100");
+    if (buffer_memory_bind.resourceOffset % buffer_mem_reqs.alignment != 0) {
+        m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-resourceOffset-09491");
+    }
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
 }
@@ -159,7 +221,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSizeMemoryOffset) {
     }
 
     VkBufferCreateInfo b_info =
-        vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+        vkt::Buffer::CreateInfo(0x10000, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
     vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
@@ -191,6 +253,7 @@ TEST_F(NegativeSparseBuffer, QueueBindSparseMemoryBindSizeMemoryOffset) {
     m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-size-01102");
     if (buffer_memory_bind.memoryOffset % buffer_mem_reqs.alignment != 0) {
         m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-memory-01096");
+        m_errorMonitor->SetDesiredError("VUID-VkSparseMemoryBind-resourceOffset-09491");
     }
     vk::QueueBindSparse(sparse_queue, 1, &bind_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
@@ -214,7 +277,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy) {
     copy_info.size = 256;
 
     VkBufferCreateInfo b_info =
-        vkt::Buffer::create_info(copy_info.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+        vkt::Buffer::CreateInfo(copy_info.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
     vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
     vkt::Buffer buffer_sparse2(*m_device, b_info, vkt::no_mem);
@@ -226,8 +289,6 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy) {
 
     vkt::DeviceMemory buffer_mem;
     buffer_mem.init(*m_device, buffer_mem_alloc);
-    vkt::DeviceMemory buffer_mem2;
-    buffer_mem2.init(*m_device, buffer_mem_alloc);
 
     VkSparseMemoryBind buffer_memory_bind = {};
     buffer_memory_bind.size = buffer_mem_reqs.size;
@@ -253,11 +314,11 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy) {
     ASSERT_EQ(VK_SUCCESS, sparse_queue_fence.wait(kWaitTimeout));
     // Set up complete
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
     // This copy is not legal since both buffers share same device memory range, and none of them will be rebound
     // to non overlapping device memory ranges. Reported at queue submit
-    vk::CmdCopyBuffer(m_commandBuffer->handle(), buffer_sparse.handle(), buffer_sparse2.handle(), 1, &copy_info);
-    m_commandBuffer->end();
+    vk::CmdCopyBuffer(m_command_buffer.handle(), buffer_sparse.handle(), buffer_sparse2.handle(), 1, &copy_info);
+    m_command_buffer.end();
 
     // Submitting copy command with overlapping device memory regions
     VkPipelineStageFlags mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -266,7 +327,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy) {
     submit_info.pWaitSemaphores = &semaphore.handle();
     submit_info.pWaitDstStageMask = &mask;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    submit_info.pCommandBuffers = &m_command_buffer.handle();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdCopyBuffer-pRegions-00117");
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
@@ -307,7 +368,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy2) {
     copy_info_list[3].size = copy_size;
 
     VkBufferCreateInfo b_info =
-        vkt::Buffer::create_info(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+        vkt::Buffer::CreateInfo(0x10000, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
     vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
 
@@ -340,10 +401,10 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy2) {
     ASSERT_EQ(VK_SUCCESS, sparse_queue_fence.wait(kWaitTimeout));
     // Set up complete
 
-    m_commandBuffer->begin();
-    vk::CmdCopyBuffer(m_commandBuffer->handle(), buffer_sparse.handle(), buffer_sparse.handle(), size32(copy_info_list),
+    m_command_buffer.begin();
+    vk::CmdCopyBuffer(m_command_buffer.handle(), buffer_sparse.handle(), buffer_sparse.handle(), size32(copy_info_list),
                       copy_info_list.data());
-    m_commandBuffer->end();
+    m_command_buffer.end();
 
     // Submitting copy command with overlapping device memory regions
     VkPipelineStageFlags mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -352,7 +413,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy2) {
     submit_info.pWaitSemaphores = &semaphore.handle();
     submit_info.pWaitDstStageMask = &mask;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    submit_info.pCommandBuffers = &m_command_buffer.handle();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdCopyBuffer-pRegions-00117", 3);
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
@@ -375,7 +436,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy3) {
     vkt::Semaphore semaphore(*m_device);
 
     VkBufferCreateInfo buffer_ci =
-        vkt::Buffer::create_info(4096 * 32, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+        vkt::Buffer::CreateInfo(4096 * 32, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
     buffer_ci.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
     vkt::Buffer buffer_sparse(*m_device, buffer_ci, vkt::no_mem);
 
@@ -424,9 +485,9 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy3) {
     copy_info.dstOffset = buffer_mem_reqs.alignment / 2;  // dstOffset is the start of buffer_mem_2, or 0 in this space
                                                           // => since overlaps are computed in buffer space, none should be detected
     copy_info.size = buffer_mem_reqs.alignment;
-    m_commandBuffer->begin();
-    vk::CmdCopyBuffer(m_commandBuffer->handle(), buffer_sparse.handle(), buffer_sparse.handle(), 1, &copy_info);
-    m_commandBuffer->end();
+    m_command_buffer.begin();
+    vk::CmdCopyBuffer(m_command_buffer.handle(), buffer_sparse.handle(), buffer_sparse.handle(), 1, &copy_info);
+    m_command_buffer.end();
 
     // Submitting copy command with overlapping device memory regions
     VkPipelineStageFlags mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -435,7 +496,7 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy3) {
     submit_info.pWaitSemaphores = &semaphore.handle();
     submit_info.pWaitDstStageMask = &mask;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    submit_info.pCommandBuffers = &m_command_buffer.handle();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdCopyBuffer-pRegions-00117");
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
@@ -444,6 +505,89 @@ TEST_F(NegativeSparseBuffer, OverlappingBufferCopy3) {
     // Wait for operations to finish before destroying anything
     m_default_queue->Wait();
     sparse_queue->Wait();
+}
+
+TEST_F(NegativeSparseBuffer, OverlappingBufferCopy4) {
+    TEST_DESCRIPTION("Test overlapping sparse buffers' copy were only one of the buffer is sparse");
+
+    AddRequiredFeature(vkt::Feature::sparseBinding);
+    RETURN_IF_SKIP(Init());
+
+    if (m_device->QueuesWithSparseCapability().empty()) {
+        GTEST_SKIP() << "Required SPARSE_BINDING queue families not present";
+    }
+
+    vkt::Semaphore semaphore(*m_device);
+
+    VkBufferCopy copy_info;
+    copy_info.srcOffset = 0;
+    copy_info.dstOffset = 0;
+    copy_info.size = 256;
+
+    VkBufferCreateInfo b_info =
+        vkt::Buffer::CreateInfo(copy_info.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, nullptr);
+    vkt::Buffer buffer_not_sparse(*m_device, b_info, vkt::no_mem);
+    b_info.flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
+    vkt::Buffer buffer_sparse(*m_device, b_info, vkt::no_mem);
+
+    VkMemoryRequirements buffer_sparse_mem_reqs = buffer_sparse.memory_requirements();
+    const VkMemoryRequirements buffer_not_sparse_mem_reqs = buffer_not_sparse.memory_requirements();
+
+    if ((buffer_sparse_mem_reqs.memoryTypeBits & buffer_not_sparse_mem_reqs.memoryTypeBits) == 0) {
+        GTEST_SKIP() << "Could not find common memory type for sparse and not sparse buffer, skipping test";
+    }
+    buffer_sparse_mem_reqs.memoryTypeBits &= buffer_not_sparse_mem_reqs.memoryTypeBits;
+
+    VkMemoryAllocateInfo buffer_mem_alloc =
+        vkt::DeviceMemory::get_resource_alloc_info(*m_device, buffer_sparse_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkt::DeviceMemory buffer_mem;
+    buffer_mem.init(*m_device, buffer_mem_alloc);
+
+    buffer_not_sparse.bind_memory(buffer_mem, 0);
+
+    VkSparseMemoryBind buffer_memory_bind = {};
+    buffer_memory_bind.size = buffer_sparse_mem_reqs.size;
+    buffer_memory_bind.memory = buffer_mem.handle();
+
+    VkSparseBufferMemoryBindInfo buffer_memory_bind_info = {};
+    buffer_memory_bind_info.buffer = buffer_sparse.handle();
+    buffer_memory_bind_info.bindCount = 1;
+    buffer_memory_bind_info.pBinds = &buffer_memory_bind;
+
+    VkBindSparseInfo bind_info = vku::InitStructHelper();
+    bind_info.bufferBindCount = 1;
+    bind_info.pBufferBinds = &buffer_memory_bind_info;
+    bind_info.signalSemaphoreCount = 1;
+    bind_info.pSignalSemaphores = &semaphore.handle();
+
+    VkQueue sparse_queue = m_device->QueuesWithSparseCapability()[0]->handle();
+    vkt::Fence sparse_queue_fence(*m_device);
+    vk::QueueBindSparse(sparse_queue, 1, &bind_info, sparse_queue_fence);
+    ASSERT_EQ(VK_SUCCESS, sparse_queue_fence.wait(kWaitTimeout));
+    // Set up complete
+
+    m_command_buffer.begin();
+    // This copy is not legal since both buffers share same device memory range, and none of them will be rebound
+    // to non overlapping device memory ranges. Reported at queue submit
+    vk::CmdCopyBuffer(m_command_buffer.handle(), buffer_not_sparse.handle(), buffer_sparse.handle(), 1, &copy_info);
+    m_command_buffer.end();
+
+    // Submitting copy command with overlapping device memory regions
+    VkPipelineStageFlags mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    VkSubmitInfo submit_info = vku::InitStructHelper();
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &semaphore.handle();
+    submit_info.pWaitDstStageMask = &mask;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &m_command_buffer.handle();
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdCopyBuffer-pRegions-00117");
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
+    m_errorMonitor->VerifyFound();
+
+    // Wait for operations to finish before destroying anything
+    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSparseBuffer, BufferFlagsFeature) {

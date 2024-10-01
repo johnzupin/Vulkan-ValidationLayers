@@ -456,6 +456,11 @@ PFN_vkCmdBindIndexBuffer2KHR CmdBindIndexBuffer2KHR;
 PFN_vkGetRenderingAreaGranularityKHR GetRenderingAreaGranularityKHR;
 PFN_vkGetDeviceImageSubresourceLayoutKHR GetDeviceImageSubresourceLayoutKHR;
 PFN_vkGetImageSubresourceLayout2KHR GetImageSubresourceLayout2KHR;
+PFN_vkCreatePipelineBinariesKHR CreatePipelineBinariesKHR;
+PFN_vkDestroyPipelineBinaryKHR DestroyPipelineBinaryKHR;
+PFN_vkGetPipelineKeyKHR GetPipelineKeyKHR;
+PFN_vkGetPipelineBinaryDataKHR GetPipelineBinaryDataKHR;
+PFN_vkReleaseCapturedPipelineDataKHR ReleaseCapturedPipelineDataKHR;
 PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR GetPhysicalDeviceCooperativeMatrixPropertiesKHR;
 PFN_vkCmdSetLineStippleKHR CmdSetLineStippleKHR;
 PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR GetPhysicalDeviceCalibrateableTimeDomainsKHR;
@@ -766,10 +771,12 @@ PFN_vkCreateOpticalFlowSessionNV CreateOpticalFlowSessionNV;
 PFN_vkDestroyOpticalFlowSessionNV DestroyOpticalFlowSessionNV;
 PFN_vkBindOpticalFlowSessionImageNV BindOpticalFlowSessionImageNV;
 PFN_vkCmdOpticalFlowExecuteNV CmdOpticalFlowExecuteNV;
+PFN_vkAntiLagUpdateAMD AntiLagUpdateAMD;
 PFN_vkCreateShadersEXT CreateShadersEXT;
 PFN_vkDestroyShaderEXT DestroyShaderEXT;
 PFN_vkGetShaderBinaryDataEXT GetShaderBinaryDataEXT;
 PFN_vkCmdBindShadersEXT CmdBindShadersEXT;
+PFN_vkCmdSetDepthClampRangeEXT CmdSetDepthClampRangeEXT;
 PFN_vkGetFramebufferTilePropertiesQCOM GetFramebufferTilePropertiesQCOM;
 PFN_vkGetDynamicRenderingTilePropertiesQCOM GetDynamicRenderingTilePropertiesQCOM;
 PFN_vkSetLatencySleepModeNV SetLatencySleepModeNV;
@@ -781,6 +788,15 @@ PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT CmdSetAttachmentFeedbackLoopEnableEX
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
 PFN_vkGetScreenBufferPropertiesQNX GetScreenBufferPropertiesQNX;
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+PFN_vkGetGeneratedCommandsMemoryRequirementsEXT GetGeneratedCommandsMemoryRequirementsEXT;
+PFN_vkCmdPreprocessGeneratedCommandsEXT CmdPreprocessGeneratedCommandsEXT;
+PFN_vkCmdExecuteGeneratedCommandsEXT CmdExecuteGeneratedCommandsEXT;
+PFN_vkCreateIndirectCommandsLayoutEXT CreateIndirectCommandsLayoutEXT;
+PFN_vkDestroyIndirectCommandsLayoutEXT DestroyIndirectCommandsLayoutEXT;
+PFN_vkCreateIndirectExecutionSetEXT CreateIndirectExecutionSetEXT;
+PFN_vkDestroyIndirectExecutionSetEXT DestroyIndirectExecutionSetEXT;
+PFN_vkUpdateIndirectExecutionSetPipelineEXT UpdateIndirectExecutionSetPipelineEXT;
+PFN_vkUpdateIndirectExecutionSetShaderEXT UpdateIndirectExecutionSetShaderEXT;
 PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR;
 PFN_vkDestroyAccelerationStructureKHR DestroyAccelerationStructureKHR;
 PFN_vkCmdBuildAccelerationStructuresKHR CmdBuildAccelerationStructuresKHR;
@@ -1748,6 +1764,15 @@ void InitDeviceExtension(VkInstance instance, VkDevice device, const char* exten
             }
         },
         {
+            "VK_KHR_pipeline_binary", [](VkInstance , VkDevice device) {
+                CreatePipelineBinariesKHR = reinterpret_cast<PFN_vkCreatePipelineBinariesKHR>(GetDeviceProcAddr(device, "vkCreatePipelineBinariesKHR"));
+                DestroyPipelineBinaryKHR = reinterpret_cast<PFN_vkDestroyPipelineBinaryKHR>(GetDeviceProcAddr(device, "vkDestroyPipelineBinaryKHR"));
+                GetPipelineKeyKHR = reinterpret_cast<PFN_vkGetPipelineKeyKHR>(GetDeviceProcAddr(device, "vkGetPipelineKeyKHR"));
+                GetPipelineBinaryDataKHR = reinterpret_cast<PFN_vkGetPipelineBinaryDataKHR>(GetDeviceProcAddr(device, "vkGetPipelineBinaryDataKHR"));
+                ReleaseCapturedPipelineDataKHR = reinterpret_cast<PFN_vkReleaseCapturedPipelineDataKHR>(GetDeviceProcAddr(device, "vkReleaseCapturedPipelineDataKHR"));
+            }
+        },
+        {
             "VK_KHR_cooperative_matrix", [](VkInstance instance, VkDevice ) {
                 GetPhysicalDeviceCooperativeMatrixPropertiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR>(GetInstanceProcAddr(instance, "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR"));
             }
@@ -2300,6 +2325,11 @@ void InitDeviceExtension(VkInstance instance, VkDevice device, const char* exten
             }
         },
         {
+            "VK_AMD_anti_lag", [](VkInstance , VkDevice device) {
+                AntiLagUpdateAMD = reinterpret_cast<PFN_vkAntiLagUpdateAMD>(GetDeviceProcAddr(device, "vkAntiLagUpdateAMD"));
+            }
+        },
+        {
             "VK_EXT_shader_object", [](VkInstance , VkDevice device) {
                 CreateShadersEXT = reinterpret_cast<PFN_vkCreateShadersEXT>(GetDeviceProcAddr(device, "vkCreateShadersEXT"));
                 DestroyShaderEXT = reinterpret_cast<PFN_vkDestroyShaderEXT>(GetDeviceProcAddr(device, "vkDestroyShaderEXT"));
@@ -2354,6 +2384,7 @@ void InitDeviceExtension(VkInstance instance, VkDevice device, const char* exten
                 CmdSetShadingRateImageEnableNV = reinterpret_cast<PFN_vkCmdSetShadingRateImageEnableNV>(GetDeviceProcAddr(device, "vkCmdSetShadingRateImageEnableNV"));
                 CmdSetRepresentativeFragmentTestEnableNV = reinterpret_cast<PFN_vkCmdSetRepresentativeFragmentTestEnableNV>(GetDeviceProcAddr(device, "vkCmdSetRepresentativeFragmentTestEnableNV"));
                 CmdSetCoverageReductionModeNV = reinterpret_cast<PFN_vkCmdSetCoverageReductionModeNV>(GetDeviceProcAddr(device, "vkCmdSetCoverageReductionModeNV"));
+                CmdSetDepthClampRangeEXT = reinterpret_cast<PFN_vkCmdSetDepthClampRangeEXT>(GetDeviceProcAddr(device, "vkCmdSetDepthClampRangeEXT"));
             }
         },
         {
@@ -2383,6 +2414,24 @@ void InitDeviceExtension(VkInstance instance, VkDevice device, const char* exten
             }
         },
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+        {
+            "VK_EXT_device_generated_commands", [](VkInstance , VkDevice device) {
+                GetGeneratedCommandsMemoryRequirementsEXT = reinterpret_cast<PFN_vkGetGeneratedCommandsMemoryRequirementsEXT>(GetDeviceProcAddr(device, "vkGetGeneratedCommandsMemoryRequirementsEXT"));
+                CmdPreprocessGeneratedCommandsEXT = reinterpret_cast<PFN_vkCmdPreprocessGeneratedCommandsEXT>(GetDeviceProcAddr(device, "vkCmdPreprocessGeneratedCommandsEXT"));
+                CmdExecuteGeneratedCommandsEXT = reinterpret_cast<PFN_vkCmdExecuteGeneratedCommandsEXT>(GetDeviceProcAddr(device, "vkCmdExecuteGeneratedCommandsEXT"));
+                CreateIndirectCommandsLayoutEXT = reinterpret_cast<PFN_vkCreateIndirectCommandsLayoutEXT>(GetDeviceProcAddr(device, "vkCreateIndirectCommandsLayoutEXT"));
+                DestroyIndirectCommandsLayoutEXT = reinterpret_cast<PFN_vkDestroyIndirectCommandsLayoutEXT>(GetDeviceProcAddr(device, "vkDestroyIndirectCommandsLayoutEXT"));
+                CreateIndirectExecutionSetEXT = reinterpret_cast<PFN_vkCreateIndirectExecutionSetEXT>(GetDeviceProcAddr(device, "vkCreateIndirectExecutionSetEXT"));
+                DestroyIndirectExecutionSetEXT = reinterpret_cast<PFN_vkDestroyIndirectExecutionSetEXT>(GetDeviceProcAddr(device, "vkDestroyIndirectExecutionSetEXT"));
+                UpdateIndirectExecutionSetPipelineEXT = reinterpret_cast<PFN_vkUpdateIndirectExecutionSetPipelineEXT>(GetDeviceProcAddr(device, "vkUpdateIndirectExecutionSetPipelineEXT"));
+                UpdateIndirectExecutionSetShaderEXT = reinterpret_cast<PFN_vkUpdateIndirectExecutionSetShaderEXT>(GetDeviceProcAddr(device, "vkUpdateIndirectExecutionSetShaderEXT"));
+            }
+        },
+        {
+            "VK_EXT_depth_clamp_control", [](VkInstance , VkDevice device) {
+                CmdSetDepthClampRangeEXT = reinterpret_cast<PFN_vkCmdSetDepthClampRangeEXT>(GetDeviceProcAddr(device, "vkCmdSetDepthClampRangeEXT"));
+            }
+        },
         {
             "VK_KHR_acceleration_structure", [](VkInstance , VkDevice device) {
                 CreateAccelerationStructureKHR = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(GetDeviceProcAddr(device, "vkCreateAccelerationStructureKHR"));
@@ -2593,6 +2642,11 @@ void ResetAllExtensions() {
     GetRenderingAreaGranularityKHR = nullptr;
     GetDeviceImageSubresourceLayoutKHR = nullptr;
     GetImageSubresourceLayout2KHR = nullptr;
+    CreatePipelineBinariesKHR = nullptr;
+    DestroyPipelineBinaryKHR = nullptr;
+    GetPipelineKeyKHR = nullptr;
+    GetPipelineBinaryDataKHR = nullptr;
+    ReleaseCapturedPipelineDataKHR = nullptr;
     GetPhysicalDeviceCooperativeMatrixPropertiesKHR = nullptr;
     CmdSetLineStippleKHR = nullptr;
     GetPhysicalDeviceCalibrateableTimeDomainsKHR = nullptr;
@@ -2903,10 +2957,12 @@ void ResetAllExtensions() {
     DestroyOpticalFlowSessionNV = nullptr;
     BindOpticalFlowSessionImageNV = nullptr;
     CmdOpticalFlowExecuteNV = nullptr;
+    AntiLagUpdateAMD = nullptr;
     CreateShadersEXT = nullptr;
     DestroyShaderEXT = nullptr;
     GetShaderBinaryDataEXT = nullptr;
     CmdBindShadersEXT = nullptr;
+    CmdSetDepthClampRangeEXT = nullptr;
     GetFramebufferTilePropertiesQCOM = nullptr;
     GetDynamicRenderingTilePropertiesQCOM = nullptr;
     SetLatencySleepModeNV = nullptr;
@@ -2918,6 +2974,15 @@ void ResetAllExtensions() {
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
     GetScreenBufferPropertiesQNX = nullptr;
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+    GetGeneratedCommandsMemoryRequirementsEXT = nullptr;
+    CmdPreprocessGeneratedCommandsEXT = nullptr;
+    CmdExecuteGeneratedCommandsEXT = nullptr;
+    CreateIndirectCommandsLayoutEXT = nullptr;
+    DestroyIndirectCommandsLayoutEXT = nullptr;
+    CreateIndirectExecutionSetEXT = nullptr;
+    DestroyIndirectExecutionSetEXT = nullptr;
+    UpdateIndirectExecutionSetPipelineEXT = nullptr;
+    UpdateIndirectExecutionSetShaderEXT = nullptr;
     CreateAccelerationStructureKHR = nullptr;
     DestroyAccelerationStructureKHR = nullptr;
     CmdBuildAccelerationStructuresKHR = nullptr;

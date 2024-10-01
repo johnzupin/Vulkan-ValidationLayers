@@ -53,6 +53,7 @@ c_VkDisplayModeKHR(kVulkanObjectTypeDisplayModeKHR, this),
 c_VkVideoSessionKHR(kVulkanObjectTypeVideoSessionKHR, this),
 c_VkVideoSessionParametersKHR(kVulkanObjectTypeVideoSessionParametersKHR, this),
 c_VkDeferredOperationKHR(kVulkanObjectTypeDeferredOperationKHR, this),
+c_VkPipelineBinaryKHR(kVulkanObjectTypePipelineBinaryKHR, this),
 c_VkDebugReportCallbackEXT(kVulkanObjectTypeDebugReportCallbackEXT, this),
 c_VkCuModuleNVX(kVulkanObjectTypeCuModuleNVX, this),
 c_VkCuFunctionNVX(kVulkanObjectTypeCuFunctionNVX, this),
@@ -70,6 +71,8 @@ c_VkBufferCollectionFUCHSIA(kVulkanObjectTypeBufferCollectionFUCHSIA, this),
 c_VkMicromapEXT(kVulkanObjectTypeMicromapEXT, this),
 c_VkOpticalFlowSessionNV(kVulkanObjectTypeOpticalFlowSessionNV, this),
 c_VkShaderEXT(kVulkanObjectTypeShaderEXT, this),
+c_VkIndirectExecutionSetEXT(kVulkanObjectTypeIndirectExecutionSetEXT, this),
+c_VkIndirectCommandsLayoutEXT(kVulkanObjectTypeIndirectCommandsLayoutEXT, this),
     // clang-format on
 
     // NOLINTEND

@@ -83,6 +83,10 @@
                 "VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV": {
                     "deviceGeneratedCommands": true
                 },
+                "VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT": {
+                    "deviceGeneratedCommandsEXT": true,
+                    "dynamicGeneratedPipelineLayout": true
+                },
                 "VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV": {
                     "deviceGeneratedCompute": true,
                     "deviceGeneratedComputePipelines": true,
@@ -102,6 +106,10 @@
                 },
                 "VkPhysicalDevicePresentIdFeaturesKHR": {
                     "presentId": true
+                },
+                "VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR": {
+                    "computeDerivativeGroupQuads": true,
+                    "computeDerivativeGroupLinear": true
                 },
                 "VkPhysicalDevicePresentWaitFeaturesKHR": {
                     "presentWait": true
@@ -791,6 +799,9 @@
                 "VkPhysicalDeviceDepthClampZeroOneFeaturesEXT": {
                     "depthClampZeroOne": true
                 },
+                "VkPhysicalDeviceDepthClampControlFeaturesEXT": {
+                    "depthClampControl": true
+                },
                 "VkPhysicalDeviceAddressBindingReportFeaturesEXT": {
                     "reportAddressBinding": true
                 },
@@ -898,6 +909,9 @@
                 },
                 "VkPhysicalDeviceDynamicRenderingLocalReadFeaturesKHR": {
                     "dynamicRenderingLocalRead": true
+                },
+                "VkPhysicalDevicePipelineBinaryFeaturesKHR": {
+                    "pipelineBinaries": true
                 }
             },
             "properties": {
@@ -1133,6 +1147,64 @@
                     "maxIndirectCommandsTokenOffset": 4294967000,
                     "maxIndirectCommandsStreamStride": 4294967000
                 },
+                "VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT": {
+                    "maxIndirectPipelineCount": 4096,
+                    "maxIndirectShaderObjectCount": 4096,
+                    "maxIndirectSequenceCount": 4096,
+                    "maxIndirectCommandsTokenCount": 16,
+                    "maxIndirectCommandsTokenOffset": 2048,
+                    "maxIndirectCommandsIndirectStride": 2048,
+                    "supportedIndirectCommandsShaderStages": [
+                        "VK_SHADER_STAGE_VERTEX_BIT",
+                        "VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT",
+                        "VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT",
+                        "VK_SHADER_STAGE_GEOMETRY_BIT",
+                        "VK_SHADER_STAGE_FRAGMENT_BIT",
+                        "VK_SHADER_STAGE_COMPUTE_BIT",
+                        "VK_SHADER_STAGE_RAYGEN_BIT_KHR",
+                        "VK_SHADER_STAGE_ANY_HIT_BIT_KHR",
+                        "VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR",
+                        "VK_SHADER_STAGE_MISS_BIT_KHR",
+                        "VK_SHADER_STAGE_INTERSECTION_BIT_KHR",
+                        "VK_SHADER_STAGE_CALLABLE_BIT_KHR",
+                        "VK_SHADER_STAGE_TASK_BIT_EXT",
+                        "VK_SHADER_STAGE_MESH_BIT_EXT"
+                    ],
+                    "supportedIndirectCommandsShaderStagesPipelineBinding": [
+                        "VK_SHADER_STAGE_VERTEX_BIT",
+                        "VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT",
+                        "VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT",
+                        "VK_SHADER_STAGE_GEOMETRY_BIT",
+                        "VK_SHADER_STAGE_FRAGMENT_BIT",
+                        "VK_SHADER_STAGE_COMPUTE_BIT",
+                        "VK_SHADER_STAGE_RAYGEN_BIT_KHR",
+                        "VK_SHADER_STAGE_ANY_HIT_BIT_KHR",
+                        "VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR",
+                        "VK_SHADER_STAGE_MISS_BIT_KHR",
+                        "VK_SHADER_STAGE_INTERSECTION_BIT_KHR",
+                        "VK_SHADER_STAGE_CALLABLE_BIT_KHR",
+                        "VK_SHADER_STAGE_TASK_BIT_EXT",
+                        "VK_SHADER_STAGE_MESH_BIT_EXT"
+                    ],
+                    "supportedIndirectCommandsShaderStagesShaderBinding": [
+                        "VK_SHADER_STAGE_VERTEX_BIT",
+                        "VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT",
+                        "VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT",
+                        "VK_SHADER_STAGE_GEOMETRY_BIT",
+                        "VK_SHADER_STAGE_FRAGMENT_BIT",
+                        "VK_SHADER_STAGE_COMPUTE_BIT",
+                        "VK_SHADER_STAGE_RAYGEN_BIT_KHR",
+                        "VK_SHADER_STAGE_ANY_HIT_BIT_KHR",
+                        "VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR",
+                        "VK_SHADER_STAGE_MISS_BIT_KHR",
+                        "VK_SHADER_STAGE_INTERSECTION_BIT_KHR",
+                        "VK_SHADER_STAGE_CALLABLE_BIT_KHR",
+                        "VK_SHADER_STAGE_TASK_BIT_EXT",
+                        "VK_SHADER_STAGE_MESH_BIT_EXT"
+                    ],
+                    "deviceGeneratedCommandsTransformFeedback": true,
+                    "deviceGeneratedCommandsMultiDrawIndirectCount": true
+                },
                 "VkPhysicalDeviceMultiDrawPropertiesEXT": {
                     "maxMultiDrawCount": 1024
                 },
@@ -1270,6 +1342,9 @@
                 },
                 "VkPhysicalDeviceMapMemoryPlacedPropertiesEXT": {
                     "minPlacedMemoryMapAlignment": 4096
+                },
+                "VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR": {
+                    "meshAndTaskShaderDerivatives": false
                 },
                 "VkPhysicalDeviceConservativeRasterizationPropertiesEXT": {
                     "primitiveUnderestimation": true,
@@ -1823,6 +1898,13 @@
                         "height": 64
                     },
                     "maxRenderPassStripes": 32
+                },
+                "VkPhysicalDevicePipelineBinaryPropertiesKHR": {
+                    "pipelineBinaryInternalCache": true,
+                    "pipelineBinaryInternalCacheControl": true,
+                    "pipelineBinaryPrefersInternalCache": true,
+                    "pipelineBinaryPrecompiledInternalCache": true,
+                    "pipelineBinaryCompressedData": true
                 }
             },
             "extensions": {
@@ -1873,6 +1955,7 @@
                 "VK_EXT_debug_report": 1,
                 "VK_EXT_debug_utils": 1,
                 "VK_EXT_depth_bias_control": 1,
+                "VK_EXT_depth_clamp_control": 1,
                 "VK_EXT_depth_clamp_zero_one": 1,
                 "VK_EXT_depth_clip_control": 1,
                 "VK_EXT_depth_clip_enable": 1,
@@ -1881,6 +1964,7 @@
                 "VK_EXT_descriptor_indexing": 1,
                 "VK_EXT_device_address_binding_report": 1,
                 "VK_EXT_device_fault": 1,
+                "VK_EXT_device_generated_commands": 1,
                 "VK_EXT_device_memory_report": 1,
                 "VK_EXT_direct_mode_display": 1,
                 "VK_EXT_directfb_surface": 1,
@@ -2010,6 +2094,7 @@
                 "VK_KHR_buffer_device_address": 1,
                 "VK_KHR_cooperative_matrix": 1,
                 "VK_KHR_copy_commands2": 1,
+                "VK_KHR_compute_shader_derivatives": 1,
                 "VK_KHR_create_renderpass2": 1,
                 "VK_KHR_dedicated_allocation": 1,
                 "VK_KHR_deferred_host_operations": 1,
@@ -2056,6 +2141,7 @@
                 "VK_KHR_maintenance7": 1,
                 "VK_KHR_multiview": 1,
                 "VK_KHR_performance_query": 1,
+                "VK_KHR_pipeline_binary": 1,
                 "VK_KHR_pipeline_executable_properties": 1,
                 "VK_KHR_pipeline_library": 1,
                 "VK_KHR_portability_enumeration": 1,

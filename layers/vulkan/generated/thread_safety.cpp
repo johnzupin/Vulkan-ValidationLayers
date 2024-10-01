@@ -4057,6 +4057,61 @@ void ThreadSafety::PostCallRecordGetImageSubresourceLayout2KHR(VkDevice device, 
     FinishReadObject(image, record_obj.location);
 }
 
+void ThreadSafety::PreCallRecordDestroyPipelineBinaryKHR(VkDevice device, VkPipelineBinaryKHR pipelineBinary,
+                                                         const VkAllocationCallbacks* pAllocator, const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+    StartWriteObject(pipelineBinary, record_obj.location);
+    // Host access to pipelineBinary must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordDestroyPipelineBinaryKHR(VkDevice device, VkPipelineBinaryKHR pipelineBinary,
+                                                          const VkAllocationCallbacks* pAllocator, const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+    FinishWriteObject(pipelineBinary, record_obj.location);
+    DestroyObject(pipelineBinary);
+    // Host access to pipelineBinary must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordGetPipelineKeyKHR(VkDevice device, const VkPipelineCreateInfoKHR* pPipelineCreateInfo,
+                                                  VkPipelineBinaryKeyKHR* pPipelineKey, const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PostCallRecordGetPipelineKeyKHR(VkDevice device, const VkPipelineCreateInfoKHR* pPipelineCreateInfo,
+                                                   VkPipelineBinaryKeyKHR* pPipelineKey, const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PreCallRecordGetPipelineBinaryDataKHR(VkDevice device, const VkPipelineBinaryDataInfoKHR* pInfo,
+                                                         VkPipelineBinaryKeyKHR* pPipelineBinaryKey,
+                                                         size_t* pPipelineBinaryDataSize, void* pPipelineBinaryData,
+                                                         const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PostCallRecordGetPipelineBinaryDataKHR(VkDevice device, const VkPipelineBinaryDataInfoKHR* pInfo,
+                                                          VkPipelineBinaryKeyKHR* pPipelineBinaryKey,
+                                                          size_t* pPipelineBinaryDataSize, void* pPipelineBinaryData,
+                                                          const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PreCallRecordReleaseCapturedPipelineDataKHR(VkDevice device, const VkReleaseCapturedPipelineDataInfoKHR* pInfo,
+                                                               const VkAllocationCallbacks* pAllocator,
+                                                               const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+    StartWriteObject(pInfo->pipeline, record_obj.location);
+    // Host access to pInfo->pipeline must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordReleaseCapturedPipelineDataKHR(VkDevice device, const VkReleaseCapturedPipelineDataInfoKHR* pInfo,
+                                                                const VkAllocationCallbacks* pAllocator,
+                                                                const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+    FinishWriteObject(pInfo->pipeline, record_obj.location);
+    // Host access to pInfo->pipeline must be externally synchronized
+}
+
 void ThreadSafety::PreCallRecordCmdSetLineStippleKHR(VkCommandBuffer commandBuffer, uint32_t lineStippleFactor,
                                                      uint16_t lineStipplePattern, const RecordObject& record_obj) {
     StartWriteObject(commandBuffer, record_obj.location);
@@ -7620,6 +7675,14 @@ void ThreadSafety::PostCallRecordCmdOpticalFlowExecuteNV(VkCommandBuffer command
     FinishReadObject(session, record_obj.location);
 }
 
+void ThreadSafety::PreCallRecordAntiLagUpdateAMD(VkDevice device, const VkAntiLagDataAMD* pData, const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PostCallRecordAntiLagUpdateAMD(VkDevice device, const VkAntiLagDataAMD* pData, const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+}
+
 void ThreadSafety::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount,
                                                  const VkShaderCreateInfoEXT* pCreateInfos, const VkAllocationCallbacks* pAllocator,
                                                  VkShaderEXT* pShaders, const RecordObject& record_obj) {
@@ -7689,6 +7752,20 @@ void ThreadSafety::PostCallRecordCmdBindShadersEXT(VkCommandBuffer commandBuffer
             FinishReadObject(pShaders[index], record_obj.location);
         }
     }
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdSetDepthClampRangeEXT(VkCommandBuffer commandBuffer, VkDepthClampModeEXT depthClampMode,
+                                                         const VkDepthClampRangeEXT* pDepthClampRange,
+                                                         const RecordObject& record_obj) {
+    StartWriteObject(commandBuffer, record_obj.location);
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdSetDepthClampRangeEXT(VkCommandBuffer commandBuffer, VkDepthClampModeEXT depthClampMode,
+                                                          const VkDepthClampRangeEXT* pDepthClampRange,
+                                                          const RecordObject& record_obj) {
+    FinishWriteObject(commandBuffer, record_obj.location);
     // Host access to commandBuffer must be externally synchronized
 }
 
@@ -7806,6 +7883,160 @@ void ThreadSafety::PostCallRecordGetScreenBufferPropertiesQNX(VkDevice device, c
 }
 
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+void ThreadSafety::PreCallRecordGetGeneratedCommandsMemoryRequirementsEXT(VkDevice device,
+                                                                          const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo,
+                                                                          VkMemoryRequirements2* pMemoryRequirements,
+                                                                          const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PostCallRecordGetGeneratedCommandsMemoryRequirementsEXT(
+    VkDevice device, const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo, VkMemoryRequirements2* pMemoryRequirements,
+    const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PreCallRecordCmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
+                                                                  const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo,
+                                                                  VkCommandBuffer stateCommandBuffer,
+                                                                  const RecordObject& record_obj) {
+    StartWriteObject(commandBuffer, record_obj.location);
+    StartWriteObject(stateCommandBuffer, record_obj.location);
+    // Host access to commandBuffer must be externally synchronized
+    // Host access to stateCommandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
+                                                                   const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo,
+                                                                   VkCommandBuffer stateCommandBuffer,
+                                                                   const RecordObject& record_obj) {
+    FinishWriteObject(commandBuffer, record_obj.location);
+    FinishWriteObject(stateCommandBuffer, record_obj.location);
+    // Host access to commandBuffer must be externally synchronized
+    // Host access to stateCommandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                                               const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo,
+                                                               const RecordObject& record_obj) {
+    StartWriteObject(commandBuffer, record_obj.location);
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                                                const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo,
+                                                                const RecordObject& record_obj) {
+    FinishWriteObject(commandBuffer, record_obj.location);
+    // Host access to commandBuffer must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCreateIndirectCommandsLayoutEXT(VkDevice device,
+                                                                const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo,
+                                                                const VkAllocationCallbacks* pAllocator,
+                                                                VkIndirectCommandsLayoutEXT* pIndirectCommandsLayout,
+                                                                const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PostCallRecordCreateIndirectCommandsLayoutEXT(VkDevice device,
+                                                                 const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo,
+                                                                 const VkAllocationCallbacks* pAllocator,
+                                                                 VkIndirectCommandsLayoutEXT* pIndirectCommandsLayout,
+                                                                 const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+    if (record_obj.result == VK_SUCCESS) {
+        CreateObject(*pIndirectCommandsLayout);
+    }
+}
+
+void ThreadSafety::PreCallRecordDestroyIndirectCommandsLayoutEXT(VkDevice device,
+                                                                 VkIndirectCommandsLayoutEXT indirectCommandsLayout,
+                                                                 const VkAllocationCallbacks* pAllocator,
+                                                                 const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+    StartWriteObject(indirectCommandsLayout, record_obj.location);
+    // Host access to indirectCommandsLayout must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordDestroyIndirectCommandsLayoutEXT(VkDevice device,
+                                                                  VkIndirectCommandsLayoutEXT indirectCommandsLayout,
+                                                                  const VkAllocationCallbacks* pAllocator,
+                                                                  const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+    FinishWriteObject(indirectCommandsLayout, record_obj.location);
+    DestroyObject(indirectCommandsLayout);
+    // Host access to indirectCommandsLayout must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordCreateIndirectExecutionSetEXT(VkDevice device,
+                                                              const VkIndirectExecutionSetCreateInfoEXT* pCreateInfo,
+                                                              const VkAllocationCallbacks* pAllocator,
+                                                              VkIndirectExecutionSetEXT* pIndirectExecutionSet,
+                                                              const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+}
+
+void ThreadSafety::PostCallRecordCreateIndirectExecutionSetEXT(VkDevice device,
+                                                               const VkIndirectExecutionSetCreateInfoEXT* pCreateInfo,
+                                                               const VkAllocationCallbacks* pAllocator,
+                                                               VkIndirectExecutionSetEXT* pIndirectExecutionSet,
+                                                               const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+    if (record_obj.result == VK_SUCCESS) {
+        CreateObject(*pIndirectExecutionSet);
+    }
+}
+
+void ThreadSafety::PreCallRecordDestroyIndirectExecutionSetEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                               const VkAllocationCallbacks* pAllocator,
+                                                               const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+    StartWriteObject(indirectExecutionSet, record_obj.location);
+    // Host access to indirectExecutionSet must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordDestroyIndirectExecutionSetEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                                const VkAllocationCallbacks* pAllocator,
+                                                                const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+    FinishWriteObject(indirectExecutionSet, record_obj.location);
+    DestroyObject(indirectExecutionSet);
+    // Host access to indirectExecutionSet must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordUpdateIndirectExecutionSetPipelineEXT(
+    VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount,
+    const VkWriteIndirectExecutionSetPipelineEXT* pExecutionSetWrites, const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+    StartWriteObject(indirectExecutionSet, record_obj.location);
+    // Host access to indirectExecutionSet must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordUpdateIndirectExecutionSetPipelineEXT(
+    VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount,
+    const VkWriteIndirectExecutionSetPipelineEXT* pExecutionSetWrites, const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+    FinishWriteObject(indirectExecutionSet, record_obj.location);
+    // Host access to indirectExecutionSet must be externally synchronized
+}
+
+void ThreadSafety::PreCallRecordUpdateIndirectExecutionSetShaderEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                                    uint32_t executionSetWriteCount,
+                                                                    const VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites,
+                                                                    const RecordObject& record_obj) {
+    StartReadObjectParentInstance(device, record_obj.location);
+    StartWriteObject(indirectExecutionSet, record_obj.location);
+    // Host access to indirectExecutionSet must be externally synchronized
+}
+
+void ThreadSafety::PostCallRecordUpdateIndirectExecutionSetShaderEXT(
+    VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount,
+    const VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites, const RecordObject& record_obj) {
+    FinishReadObjectParentInstance(device, record_obj.location);
+    FinishWriteObject(indirectExecutionSet, record_obj.location);
+    // Host access to indirectExecutionSet must be externally synchronized
+}
+
 void ThreadSafety::PreCallRecordCreateAccelerationStructureKHR(VkDevice device,
                                                                const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                                                const VkAllocationCallbacks* pAllocator,

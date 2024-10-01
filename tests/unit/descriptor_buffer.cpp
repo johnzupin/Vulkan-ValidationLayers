@@ -100,12 +100,8 @@ TEST_F(NegativeDescriptorBuffer, SetLayout) {
 
     {
         const VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-        const VkDescriptorSetLayoutCreateFlags flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-        const auto dslci1 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, flags, 1U, &binding);
-        vkt::DescriptorSetLayout dsl1(*m_device, dslci1);
-
-        const auto dslci2 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, 0U, 1U, &binding);
-        vkt::DescriptorSetLayout dsl2(*m_device, dslci2);
+        vkt::DescriptorSetLayout dsl1(*m_device, binding, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+        vkt::DescriptorSetLayout dsl2(*m_device, binding, 0);
 
         VkPipelineLayout pipeline_layout;
         const std::array<VkDescriptorSetLayout, 2> set_layouts{dsl1.handle(), dsl2.handle()};
@@ -120,9 +116,7 @@ TEST_F(NegativeDescriptorBuffer, SetLayout) {
 
     {
         const VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-        const VkDescriptorSetLayoutCreateFlags flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-        const auto dslci1 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, flags, 1U, &binding);
-        vkt::DescriptorSetLayout dsl1(*m_device, dslci1);
+        vkt::DescriptorSetLayout dsl1(*m_device, binding, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 
         VkDescriptorPoolSize pool_size = {binding.descriptorType, binding.descriptorCount};
         const auto dspci =
@@ -196,10 +190,7 @@ TEST_F(NegativeDescriptorBuffer, NotEnabled) {
     TEST_DESCRIPTION("Tests for when descriptor buffer is not enabled");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::accelerationStructure);
+    AddDisabledFeature(vkt::Feature::descriptorBuffer);
     RETURN_IF_SKIP(Init());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
@@ -208,15 +199,9 @@ TEST_F(NegativeDescriptorBuffer, NotEnabled) {
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
     const VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()};
-    const VkDescriptorSetLayoutCreateFlags flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
-                                                   VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
-    const auto dslci = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, flags, 1U, &binding);
-    vkt::DescriptorSetLayout dsl(*m_device, dslci);
-
-    VkPipelineLayoutCreateInfo plci = vku::InitStructHelper();
-    plci.setLayoutCount = 1;
-    plci.pSetLayouts = &dsl.handle();
-    vkt::PipelineLayout pipeline_layout(*m_device, plci);
+    vkt::DescriptorSetLayout dsl(*m_device, binding,
+                                 VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
+                                     VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT);
 
     {
         VkDeviceSize size;
@@ -246,131 +231,211 @@ TEST_F(NegativeDescriptorBuffer, NotEnabled) {
     }
 
     {
-        m_commandBuffer->begin();
+        VkPipelineLayoutCreateInfo plci = vku::InitStructHelper();
+        plci.setLayoutCount = 1;
+        plci.pSetLayouts = &dsl.handle();
+        vkt::PipelineLayout pipeline_layout(*m_device, plci);
+
+        m_command_buffer.begin();
         m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBufferEmbeddedSamplersEXT-None-08068");
-        vk::CmdBindDescriptorBufferEmbeddedSamplersEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vk::CmdBindDescriptorBufferEmbeddedSamplersEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                        pipeline_layout.handle(), 0);
         m_errorMonitor->VerifyFound();
 
-        m_commandBuffer->end();
+        m_command_buffer.end();
+    }
+}
+
+TEST_F(NegativeDescriptorBuffer, NotEnabledBufferDeviceAddress) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddDisabledFeature(vkt::Feature::descriptorBuffer);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Buffer d_buffer(*m_device, 4096,
+                         VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
+                         vkt::device_address);
+
+    VkDescriptorBufferBindingInfoEXT dbbi = vku::InitStructHelper();
+    dbbi.address = d_buffer.address();
+    dbbi.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+
+    d_buffer.memory().destroy();
+
+    m_command_buffer.begin();
+    m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-None-08047");
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.end();
+}
+
+TEST_F(NegativeDescriptorBuffer, NotEnabledGetBufferOpaqueCaptureDescriptorDataEXT) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    AddDisabledFeature(vkt::Feature::descriptorBufferCaptureReplay);
+    RETURN_IF_SKIP(Init());
+
+    uint8_t data[256];
+    vkt::Buffer temp_buffer(*m_device, 4096, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+    VkBufferCaptureDescriptorDataInfoEXT bcddi = vku::InitStructHelper();
+    bcddi.buffer = temp_buffer.handle();
+
+    m_errorMonitor->SetDesiredError("VUID-vkGetBufferOpaqueCaptureDescriptorDataEXT-None-08072");
+    m_errorMonitor->SetDesiredError("VUID-VkBufferCaptureDescriptorDataInfoEXT-buffer-08075");
+    vk::GetBufferOpaqueCaptureDescriptorDataEXT(device(), &bcddi, &data);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptorBuffer, NotEnabledGetImageOpaqueCaptureDescriptorDataEXT) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    AddDisabledFeature(vkt::Feature::descriptorBufferCaptureReplay);
+    RETURN_IF_SKIP(Init());
+
+    uint8_t data[256];
+
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.extent.width = 128;
+    image_create_info.extent.height = 128;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 1;
+    image_create_info.arrayLayers = 1;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.format = VK_FORMAT_D32_SFLOAT;
+    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    vkt::Image image(*m_device, image_create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    VkImageCaptureDescriptorDataInfoEXT icddi = vku::InitStructHelper();
+    icddi.image = image.handle();
+
+    m_errorMonitor->SetDesiredError("VUID-vkGetImageOpaqueCaptureDescriptorDataEXT-None-08076");
+    m_errorMonitor->SetDesiredError("VUID-VkImageCaptureDescriptorDataInfoEXT-image-08079");
+    vk::GetImageOpaqueCaptureDescriptorDataEXT(device(), &icddi, &data);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptorBuffer, NotEnabledGetImageViewOpaqueCaptureDescriptorDataEXT) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    AddDisabledFeature(vkt::Feature::descriptorBufferCaptureReplay);
+    RETURN_IF_SKIP(Init());
+    uint8_t data[256];
+
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.extent.width = 128;
+    image_create_info.extent.height = 128;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 1;
+    image_create_info.arrayLayers = 1;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.format = VK_FORMAT_D32_SFLOAT;
+    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    vkt::Image image(*m_device, image_create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    // missing VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+    vkt::ImageView dsv = image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    VkImageViewCaptureDescriptorDataInfoEXT icddi = vku::InitStructHelper();
+    icddi.imageView = dsv.handle();
+
+    m_errorMonitor->SetDesiredError("VUID-vkGetImageViewOpaqueCaptureDescriptorDataEXT-None-08080");
+    m_errorMonitor->SetDesiredError("VUID-VkImageViewCaptureDescriptorDataInfoEXT-imageView-08083");
+    vk::GetImageViewOpaqueCaptureDescriptorDataEXT(device(), &icddi, &data);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptorBuffer, NotEnabledGetSamplerOpaqueCaptureDescriptorDataEXT) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    AddDisabledFeature(vkt::Feature::descriptorBufferCaptureReplay);
+    RETURN_IF_SKIP(Init());
+
+    uint8_t data[256];
+
+    vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
+    VkSamplerCaptureDescriptorDataInfoEXT scddi = vku::InitStructHelper();
+    scddi.sampler = sampler.handle();
+
+    m_errorMonitor->SetDesiredError("VUID-vkGetSamplerOpaqueCaptureDescriptorDataEXT-None-08084");
+    m_errorMonitor->SetDesiredError("VUID-VkSamplerCaptureDescriptorDataInfoEXT-sampler-08087");
+    vk::GetSamplerOpaqueCaptureDescriptorDataEXT(device(), &scddi, &data);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptorBuffer, NotEnabledGetAccelerationStructureOpaqueCaptureDescriptorDataEXT) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredFeature(vkt::Feature::accelerationStructure);
+    AddDisabledFeature(vkt::Feature::descriptorBufferCaptureReplay);
+    RETURN_IF_SKIP(Init());
+
+    auto blas = vkt::as::blueprint::AccelStructSimpleOnDeviceBottomLevel(*m_device, 4096);
+    blas->Build();
+
+    uint8_t data[256];
+
+    VkAccelerationStructureCaptureDescriptorDataInfoEXT ascddi = vku::InitStructHelper();
+    ascddi.accelerationStructure = blas->handle();
+
+    m_errorMonitor->SetDesiredError("VUID-vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT-None-08088");
+    m_errorMonitor->SetDesiredError("VUID-VkAccelerationStructureCaptureDescriptorDataInfoEXT-accelerationStructure-08091");
+    vk::GetAccelerationStructureOpaqueCaptureDescriptorDataEXT(device(), &ascddi, &data);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptorBuffer, NotEnabledDescriptorBufferCaptureReplay) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddDisabledFeature(vkt::Feature::descriptorBuffer);
+    AddDisabledFeature(vkt::Feature::descriptorBufferPushDescriptors);
+    AddDisabledFeature(vkt::Feature::descriptorBufferCaptureReplay);
+    RETURN_IF_SKIP(Init());
+
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(descriptor_buffer_properties);
+
+    uint32_t data[128];
+    const auto ocddci = vku::InitStruct<VkOpaqueCaptureDescriptorDataCreateInfoEXT>(nullptr, &data);
+
+    {
+        VkBufferCreateInfo buffer_ci = vku::InitStructHelper();
+        buffer_ci.size = 4096;
+        buffer_ci.flags = VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+        buffer_ci.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+
+        buffer_ci.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+        CreateBufferTest(*this, &buffer_ci, "VUID-VkBufferCreateInfo-flags-08099");
+
+        buffer_ci.flags = 0;
+
+        if (descriptor_buffer_properties.bufferlessPushDescriptors) {
+            m_errorMonitor->SetDesiredError("VUID-VkBufferCreateInfo-usage-08102");
+        }
+        buffer_ci.usage =
+            VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+        CreateBufferTest(*this, &buffer_ci, "VUID-VkBufferCreateInfo-usage-08101");
+
+        buffer_ci.pNext = &ocddci;
+        buffer_ci.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+        CreateBufferTest(*this, &buffer_ci, "VUID-VkBufferCreateInfo-pNext-08100");
     }
 
     {
-        uint32_t data[128];
-        const auto ocddci = vku::InitStruct<VkOpaqueCaptureDescriptorDataCreateInfoEXT>(nullptr, &data);
-
-        {
-            VkBufferCreateInfo buffCI = vku::InitStructHelper();
-            buffCI.size = 4096;
-            buffCI.flags = VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-            buffCI.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
-
-            buffCI.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
-            CreateBufferTest(*this, &buffCI, "VUID-VkBufferCreateInfo-flags-08099");
-
-            buffCI.flags = 0;
-
-            if (descriptor_buffer_properties.bufferlessPushDescriptors) {
-                m_errorMonitor->SetDesiredError("VUID-VkBufferCreateInfo-usage-08102");
-            }
-            buffCI.usage =
-                VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
-            CreateBufferTest(*this, &buffCI, "VUID-VkBufferCreateInfo-usage-08101");
-
-            buffCI.pNext = &ocddci;
-            buffCI.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
-            CreateBufferTest(*this, &buffCI, "VUID-VkBufferCreateInfo-pNext-08100");
-        }
-
-        {
-            VkImageCreateInfo image_create_info = vku::InitStructHelper();
-            image_create_info.flags |= VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-            image_create_info.imageType = VK_IMAGE_TYPE_2D;
-            image_create_info.extent.width = 128;
-            image_create_info.extent.height = 128;
-            image_create_info.extent.depth = 1;
-            image_create_info.mipLevels = 1;
-            image_create_info.arrayLayers = 1;
-            image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-            image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-            image_create_info.format = VK_FORMAT_D32_SFLOAT;
-            image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-            image_create_info.pNext = &ocddci;
-            CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-flags-08104");
-
-            image_create_info.pNext = &ocddci;
-            image_create_info.flags &= ~VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-            CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-pNext-08105");
-        }
-
-        {
-            vkt::Image temp_image(*m_device, 64, 64, 1, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-
-            VkImageViewCreateInfo dsvci = vku::InitStructHelper();
-            dsvci.flags |= VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-            dsvci.image = temp_image.handle();
-            dsvci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            dsvci.format = VK_FORMAT_D32_SFLOAT;
-            dsvci.subresourceRange.layerCount = 1;
-            dsvci.subresourceRange.baseMipLevel = 0;
-            dsvci.subresourceRange.levelCount = 1;
-            dsvci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-            CreateImageViewTest(*this, &dsvci, "VUID-VkImageViewCreateInfo-flags-08106");
-
-            dsvci.pNext = &ocddci;
-            dsvci.flags &= ~VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-            CreateImageViewTest(*this, &dsvci, "VUID-VkImageViewCreateInfo-pNext-08107");
-        }
-
-        {
-            vkt::Buffer as_buffer(*m_device, 4096, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
-                                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-
-            VkAccelerationStructureKHR as;
-            VkAccelerationStructureCreateInfoKHR asci = vku::InitStructHelper();
-            asci.createFlags = VK_ACCELERATION_STRUCTURE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-            asci.buffer = as_buffer.handle();
-
-            m_errorMonitor->SetDesiredError("VUID-VkAccelerationStructureCreateInfoKHR-createFlags-08108");
-            vk::CreateAccelerationStructureKHR(device(), &asci, NULL, &as);
-            m_errorMonitor->VerifyFound();
-
-            asci.pNext = &ocddci;
-            asci.createFlags &= ~VK_ACCELERATION_STRUCTURE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-            m_errorMonitor->SetDesiredError("VUID-VkAccelerationStructureCreateInfoKHR-pNext-08109");
-            vk::CreateAccelerationStructureKHR(device(), &asci, NULL, &as);
-            m_errorMonitor->VerifyFound();
-        }
-
-        {
-            auto sampler_ci = SafeSaneSamplerCreateInfo();
-            sampler_ci.flags |= VK_SAMPLER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-
-            CreateSamplerTest(*this, &sampler_ci, "VUID-VkSamplerCreateInfo-flags-08110");
-
-            sampler_ci.pNext = &ocddci;
-            sampler_ci.flags &= ~VK_SAMPLER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-            CreateSamplerTest(*this, &sampler_ci, "VUID-VkSamplerCreateInfo-pNext-08111");
-        }
-    }
-
-    {
-        uint8_t data[256];
-        vkt::Buffer temp_buffer(*m_device, 4096, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-
-        VkBufferCaptureDescriptorDataInfoEXT bcddi = vku::InitStructHelper();
-        bcddi.buffer = temp_buffer.handle();
-
-        m_errorMonitor->SetDesiredError("VUID-vkGetBufferOpaqueCaptureDescriptorDataEXT-None-08072");
-        m_errorMonitor->SetDesiredError("VUID-VkBufferCaptureDescriptorDataInfoEXT-buffer-08075");
-        vk::GetBufferOpaqueCaptureDescriptorDataEXT(device(), &bcddi, &data);
-        m_errorMonitor->VerifyFound();
-    }
-
-    {
-        uint8_t data[256];
-
         VkImageCreateInfo image_create_info = vku::InitStructHelper();
+        image_create_info.flags |= VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
         image_create_info.imageType = VK_IMAGE_TYPE_2D;
         image_create_info.extent.width = 128;
         image_create_info.extent.height = 128;
@@ -381,101 +446,83 @@ TEST_F(NegativeDescriptorBuffer, NotEnabled) {
         image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
         image_create_info.format = VK_FORMAT_D32_SFLOAT;
         image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        image_create_info.pNext = &ocddci;
+        CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-flags-08104");
 
-        vkt::Image temp_image(*m_device, image_create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-        VkImageCaptureDescriptorDataInfoEXT icddi = vku::InitStructHelper();
-        icddi.image = temp_image.handle();
-
-        m_errorMonitor->SetDesiredError("VUID-vkGetImageOpaqueCaptureDescriptorDataEXT-None-08076");
-        m_errorMonitor->SetDesiredError("VUID-VkImageCaptureDescriptorDataInfoEXT-image-08079");
-        vk::GetImageOpaqueCaptureDescriptorDataEXT(device(), &icddi, &data);
-        m_errorMonitor->VerifyFound();
+        image_create_info.pNext = &ocddci;
+        image_create_info.flags &= ~VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+        CreateImageTest(*this, &image_create_info, "VUID-VkImageCreateInfo-pNext-08105");
     }
 
     {
-        uint8_t data[256];
+        vkt::Image temp_image(*m_device, 64, 64, 1, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-        VkImageCreateInfo image_create_info = vku::InitStructHelper();
-        image_create_info.imageType = VK_IMAGE_TYPE_2D;
-        image_create_info.extent.width = 128;
-        image_create_info.extent.height = 128;
-        image_create_info.extent.depth = 1;
-        image_create_info.mipLevels = 1;
-        image_create_info.arrayLayers = 1;
-        image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-        image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-        image_create_info.format = VK_FORMAT_D32_SFLOAT;
-        image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        vkt::Image temp_image(*m_device, image_create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        VkImageViewCreateInfo dsvci = vku::InitStructHelper();
+        dsvci.flags |= VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+        dsvci.image = temp_image.handle();
+        dsvci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        dsvci.format = VK_FORMAT_D32_SFLOAT;
+        dsvci.subresourceRange.layerCount = 1;
+        dsvci.subresourceRange.baseMipLevel = 0;
+        dsvci.subresourceRange.levelCount = 1;
+        dsvci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        CreateImageViewTest(*this, &dsvci, "VUID-VkImageViewCreateInfo-flags-08106");
 
-        // missing VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-        vkt::ImageView dsv = temp_image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
-
-        VkImageViewCaptureDescriptorDataInfoEXT icddi = vku::InitStructHelper();
-        icddi.imageView = dsv.handle();
-
-        m_errorMonitor->SetDesiredError("VUID-vkGetImageViewOpaqueCaptureDescriptorDataEXT-None-08080");
-        m_errorMonitor->SetDesiredError("VUID-VkImageViewCaptureDescriptorDataInfoEXT-imageView-08083");
-        vk::GetImageViewOpaqueCaptureDescriptorDataEXT(device(), &icddi, &data);
-        m_errorMonitor->VerifyFound();
+        dsvci.pNext = &ocddci;
+        dsvci.flags &= ~VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+        CreateImageViewTest(*this, &dsvci, "VUID-VkImageViewCreateInfo-pNext-08107");
     }
 
     {
-        uint8_t data[256];
+        auto sampler_ci = SafeSaneSamplerCreateInfo();
+        sampler_ci.flags |= VK_SAMPLER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
 
-        VkSamplerCaptureDescriptorDataInfoEXT scddi = vku::InitStructHelper();
-        scddi.sampler = sampler.handle();
+        CreateSamplerTest(*this, &sampler_ci, "VUID-VkSamplerCreateInfo-flags-08110");
 
-        m_errorMonitor->SetDesiredError("VUID-vkGetSamplerOpaqueCaptureDescriptorDataEXT-None-08084");
-        m_errorMonitor->SetDesiredError("VUID-VkSamplerCaptureDescriptorDataInfoEXT-sampler-08087");
-        vk::GetSamplerOpaqueCaptureDescriptorDataEXT(device(), &scddi, &data);
-        m_errorMonitor->VerifyFound();
+        sampler_ci.pNext = &ocddci;
+        sampler_ci.flags &= ~VK_SAMPLER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+        CreateSamplerTest(*this, &sampler_ci, "VUID-VkSamplerCreateInfo-pNext-08111");
     }
+}
 
-    {
-        auto blas = vkt::as::blueprint::AccelStructSimpleOnDeviceBottomLevel(*m_device, 4096);
-        blas->Build();
+TEST_F(NegativeDescriptorBuffer, NotEnabledDescriptorBufferCaptureReplayAS) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredFeature(vkt::Feature::accelerationStructure);
+    AddDisabledFeature(vkt::Feature::descriptorBuffer);
+    AddDisabledFeature(vkt::Feature::descriptorBufferCaptureReplay);
+    RETURN_IF_SKIP(Init());
 
-        uint8_t data[256];
+    uint32_t data[128];
+    const auto ocddci = vku::InitStruct<VkOpaqueCaptureDescriptorDataCreateInfoEXT>(nullptr, &data);
 
-        VkAccelerationStructureCaptureDescriptorDataInfoEXT ascddi = vku::InitStructHelper();
-        ascddi.accelerationStructure = blas->handle();
+    vkt::Buffer as_buffer(*m_device, 4096, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
-        m_errorMonitor->SetDesiredError("VUID-vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT-None-08088");
-        m_errorMonitor->SetDesiredError("VUID-VkAccelerationStructureCaptureDescriptorDataInfoEXT-accelerationStructure-08091");
-        vk::GetAccelerationStructureOpaqueCaptureDescriptorDataEXT(device(), &ascddi, &data);
-        m_errorMonitor->VerifyFound();
-    }
+    VkAccelerationStructureKHR as;
+    VkAccelerationStructureCreateInfoKHR asci = vku::InitStructHelper();
+    asci.createFlags = VK_ACCELERATION_STRUCTURE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+    asci.buffer = as_buffer.handle();
 
-    {
-        vkt::Buffer d_buffer(*m_device, 4096,
-                             VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
-                             vkt::device_address);
+    m_errorMonitor->SetDesiredError("VUID-VkAccelerationStructureCreateInfoKHR-createFlags-08108");
+    vk::CreateAccelerationStructureKHR(device(), &asci, NULL, &as);
+    m_errorMonitor->VerifyFound();
 
-        VkDescriptorBufferBindingInfoEXT dbbi = vku::InitStructHelper();
-        dbbi.address = d_buffer.address();
-        dbbi.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
-
-        d_buffer.memory().destroy();
-
-        m_commandBuffer->begin();
-        m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-None-08047");
-        vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
-        m_errorMonitor->VerifyFound();
-
-        m_commandBuffer->end();
-    }
+    asci.pNext = &ocddci;
+    asci.createFlags &= ~VK_ACCELERATION_STRUCTURE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+    m_errorMonitor->SetDesiredError("VUID-VkAccelerationStructureCreateInfoKHR-pNext-08109");
+    vk::CreateAccelerationStructureKHR(device(), &asci, NULL, &as);
+    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeDescriptorBuffer, BufferlessPushDescriptorsOff) {
     TEST_DESCRIPTION("When bufferlessPushDescriptors is not supported.");
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
     AddRequiredFeature(vkt::Feature::descriptorBufferPushDescriptors);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
@@ -483,7 +530,7 @@ TEST_F(NegativeDescriptorBuffer, BufferlessPushDescriptorsOff) {
         GTEST_SKIP() << "bufferlessPushDescriptors is supported";
     }
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     vkt::Buffer d_buffer(*m_device, 4096,
                          VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
@@ -506,17 +553,14 @@ TEST_F(NegativeDescriptorBuffer, BufferlessPushDescriptorsOff) {
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-bufferlessPushDescriptors-08056",
                                     descriptor_buffer_properties.maxDescriptorBufferBindings + 1);
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-bufferCount-08051");
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), binding_infos.size(), binding_infos.data());
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), binding_infos.size(), binding_infos.data());
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeDescriptorBuffer, BufferlessPushDescriptors) {
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
     AddRequiredFeature(vkt::Feature::descriptorBufferPushDescriptors);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
@@ -524,7 +568,7 @@ TEST_F(NegativeDescriptorBuffer, BufferlessPushDescriptors) {
         GTEST_SKIP() << "bufferlessPushDescriptors is not supported";
     }
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     vkt::Buffer d_buffer(*m_device, 4096,
                          VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
@@ -548,20 +592,17 @@ TEST_F(NegativeDescriptorBuffer, BufferlessPushDescriptors) {
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-bufferCount-08051");
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingPushDescriptorBufferHandleEXT-bufferlessPushDescriptors-08059",
                                     descriptor_buffer_properties.maxDescriptorBufferBindings + 1);
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), binding_infos.size(), binding_infos.data());
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), binding_infos.size(), binding_infos.data());
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingPushDescriptorBufferHandleEXT-bufferlessPushDescriptors-08059");
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeDescriptorBuffer, DescriptorBufferOffsetAlignment) {
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
@@ -569,7 +610,7 @@ TEST_F(NegativeDescriptorBuffer, DescriptorBufferOffsetAlignment) {
         GTEST_SKIP() << "descriptorBufferOffsetAlignment is 1";
     }
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     vkt::Buffer d_buffer(*m_device, 4096,
                          VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
@@ -581,21 +622,18 @@ TEST_F(NegativeDescriptorBuffer, DescriptorBufferOffsetAlignment) {
                  VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-address-08057");
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(NegativeDescriptorBuffer, DescriptorBufferBindingInfoUsage) {
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+TEST_F(NegativeDescriptorBuffer, BindingInfoUsage) {
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     vkt::Buffer buffer(*m_device, 4096, 0, vkt::device_address);
 
@@ -605,13 +643,13 @@ TEST_F(NegativeDescriptorBuffer, DescriptorBufferBindingInfoUsage) {
 
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-usage-08122");
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-pBindingInfos-08055");
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
     m_errorMonitor->VerifyFound();
 
     dbbi.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-usage-08123");
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-pBindingInfos-08055");
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
     m_errorMonitor->VerifyFound();
 
     dbbi.usage = VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -620,36 +658,47 @@ TEST_F(NegativeDescriptorBuffer, DescriptorBufferBindingInfoUsage) {
     }
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-usage-08124");
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-pBindingInfos-08055");
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptorBuffer, BindingInfoUsageMultiBuffers) {
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
+
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(descriptor_buffer_properties);
+
+    m_command_buffer.begin();
+
+    vkt::Buffer buffer_good1(*m_device, 4096, VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT, vkt::device_address);
+    vkt::Buffer buffer_good2(*m_device, 4096, VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT, vkt::device_address);
+    vkt::Buffer buffer_bad(*m_device, 4096, 0, vkt::device_address);
+
+    VkDescriptorBufferBindingInfoEXT dbbi = vku::InitStructHelper();
+    dbbi.address = buffer_bad.address();
+    dbbi.usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-usage-08122");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-pBindingInfos-08055");
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeDescriptorBuffer, CmdBindDescriptorBufferEmbeddedSamplers) {
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
+
+    VkDescriptorSetLayoutBinding binding1 = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+    vkt::DescriptorSetLayout dsl1(*m_device, binding1, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
-
-    const VkDescriptorSetLayoutBinding bindings[] = {
-        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr},
-    };
-    const auto dslci1 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(
-        nullptr, static_cast<VkDescriptorSetLayoutCreateFlags>(VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT),
-        size32(bindings), bindings);
-    vkt::DescriptorSetLayout dsl1(*m_device, dslci1);
-
-    const VkDescriptorSetLayoutBinding bindings2[] = {
-        {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()},
-    };
-    const VkDescriptorSetLayoutCreateFlags flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
-                                                   VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
-    const auto dslci2 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, flags, size32(bindings2), bindings2);
-    vkt::DescriptorSetLayout dsl2(*m_device, dslci2);
+    VkDescriptorSetLayoutBinding binding2 = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()};
+    vkt::DescriptorSetLayout dsl2(*m_device, binding2,
+                                  VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
+                                      VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT);
 
     const VkDescriptorSetLayout set_layouts[2] = {dsl1.handle(), dsl2.handle()};
     VkPipelineLayoutCreateInfo plci = vku::InitStructHelper();
@@ -658,44 +707,32 @@ TEST_F(NegativeDescriptorBuffer, CmdBindDescriptorBufferEmbeddedSamplers) {
     vkt::PipelineLayout pipeline_layout(*m_device, plci);
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBufferEmbeddedSamplersEXT-set-08070");
-    vk::CmdBindDescriptorBufferEmbeddedSamplersEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS,
+    vk::CmdBindDescriptorBufferEmbeddedSamplersEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                    pipeline_layout.handle(), 0);
     m_errorMonitor->VerifyFound();
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBufferEmbeddedSamplersEXT-set-08071");
-    vk::CmdBindDescriptorBufferEmbeddedSamplersEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS,
+    vk::CmdBindDescriptorBufferEmbeddedSamplersEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                    pipeline_layout.handle(), 2);
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeDescriptorBuffer, CmdSetDescriptorBufferOffsets) {
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
+
+    VkDescriptorSetLayoutBinding binding1 = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+    vkt::DescriptorSetLayout dsl1(*m_device, binding1, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
-
-    const VkDescriptorSetLayoutBinding bindings[] = {
-        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr},
-    };
-    const auto dslci1 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(
-        nullptr, static_cast<VkDescriptorSetLayoutCreateFlags>(VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT),
-        size32(bindings), bindings);
-    vkt::DescriptorSetLayout dsl1(*m_device, dslci1);
-
-    const VkDescriptorSetLayoutBinding bindings2[] = {
-        {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()},
-    };
-    const VkDescriptorSetLayoutCreateFlags flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
-                                                   VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
-    const auto dslci2 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, flags, size32(bindings2), bindings2);
-    vkt::DescriptorSetLayout dsl2(*m_device, dslci2);
+    VkDescriptorSetLayoutBinding binding2 = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()};
+    vkt::DescriptorSetLayout dsl2(*m_device, binding2,
+                                  VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
+                                      VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT);
 
     const VkDescriptorSetLayout set_layouts[2] = {dsl1.handle(), dsl2.handle()};
     VkPipelineLayoutCreateInfo plci = vku::InitStructHelper();
@@ -708,7 +745,7 @@ TEST_F(NegativeDescriptorBuffer, CmdSetDescriptorBufferOffsets) {
     VkDescriptorBufferBindingInfoEXT dbbi = vku::InitStructHelper();
     dbbi.address = buffer.address();
     dbbi.usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
 
     uint32_t index = 0;
     VkDeviceSize offset = 0;
@@ -717,7 +754,7 @@ TEST_F(NegativeDescriptorBuffer, CmdSetDescriptorBufferOffsets) {
         index = 0;
         offset = 1;
         m_errorMonitor->SetDesiredError("VUID-vkCmdSetDescriptorBufferOffsetsEXT-pOffsets-08061");
-        vk::CmdSetDescriptorBufferOffsetsEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(),
+        vk::CmdSetDescriptorBufferOffsetsEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(),
                                              0, 1, &index, &offset);
         m_errorMonitor->VerifyFound();
     }
@@ -726,7 +763,7 @@ TEST_F(NegativeDescriptorBuffer, CmdSetDescriptorBufferOffsets) {
     offset = 0;
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetDescriptorBufferOffsetsEXT-pBufferIndices-08064");
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetDescriptorBufferOffsetsEXT-pBufferIndices-08065");
-    vk::CmdSetDescriptorBufferOffsetsEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+    vk::CmdSetDescriptorBufferOffsetsEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                                          &index, &offset);
     m_errorMonitor->VerifyFound();
 
@@ -735,7 +772,7 @@ TEST_F(NegativeDescriptorBuffer, CmdSetDescriptorBufferOffsets) {
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetDescriptorBufferOffsetsEXT-firstSet-08066");
     m_errorMonitor->SetUnexpectedError("VUID-vkCmdSetDescriptorBufferOffsetsEXT-pOffsets-08063");
-    vk::CmdSetDescriptorBufferOffsetsEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 3,
+    vk::CmdSetDescriptorBufferOffsetsEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 3,
                                          indices, offsets);
     m_errorMonitor->VerifyFound();
 
@@ -764,12 +801,12 @@ TEST_F(NegativeDescriptorBuffer, CmdSetDescriptorBufferOffsets) {
 
         const uint32_t indices_2[2] = {0, 0};
         const VkDeviceSize offsets_2[2] = {0, 0};
-        vk::CmdBindDescriptorBuffersEXT(*m_commandBuffer, 1, &dbbi);
+        vk::CmdBindDescriptorBuffersEXT(m_command_buffer, 1, &dbbi);
         // complain about set layout for set 0
         m_errorMonitor->SetDesiredError("VUID-vkCmdSetDescriptorBufferOffsetsEXT-firstSet-09006");
         // complain about set layout for set 1
         m_errorMonitor->SetDesiredError("VUID-vkCmdSetDescriptorBufferOffsetsEXT-firstSet-09006");
-        vk::CmdSetDescriptorBufferOffsetsEXT(*m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout_2, 0, 2, indices_2,
+        vk::CmdSetDescriptorBufferOffsetsEXT(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout_2, 0, 2, indices_2,
                                              offsets_2);
         m_errorMonitor->VerifyFound();
     }
@@ -777,33 +814,22 @@ TEST_F(NegativeDescriptorBuffer, CmdSetDescriptorBufferOffsets) {
 
 TEST_F(NegativeDescriptorBuffer, BindingAndOffsets) {
     TEST_DESCRIPTION("Test mapping from address to buffers when validating buffer offsets");
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
+
+    VkDescriptorSetLayoutBinding binding1 = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+    vkt::DescriptorSetLayout dsl1(*m_device, binding1, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
-
-    const VkDescriptorSetLayoutBinding bindings[] = {
-        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr},
-    };
-    const auto dslci1 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(
-        nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT, size32(bindings), bindings);
-    vkt::DescriptorSetLayout dsl1(*m_device, dslci1);
-
-    const VkDescriptorSetLayoutBinding bindings2[] = {
-        {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()},
-    };
-    const VkDescriptorSetLayoutCreateFlags flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
-                                                   VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
-    const auto dslci2 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, flags, size32(bindings2), bindings2);
-    vkt::DescriptorSetLayout dsl2(*m_device, dslci2);
+    VkDescriptorSetLayoutBinding binding2 = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()};
+    vkt::DescriptorSetLayout dsl2(*m_device, binding2,
+                                  VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
+                                      VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT);
 
     const VkDescriptorSetLayout set_layouts[2] = {dsl1.handle(), dsl2.handle()};
     VkPipelineLayoutCreateInfo plci = vku::InitStructHelper();
@@ -833,7 +859,7 @@ TEST_F(NegativeDescriptorBuffer, BindingAndOffsets) {
     alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
     VkMemoryAllocateInfo alloc_info = vku::InitStructHelper(&alloc_flags);
     alloc_info.allocationSize = buffer_mem_reqs.size;
-    m_device->phy().set_memory_type(buffer_mem_reqs.memoryTypeBits, &alloc_info, 0);
+    m_device->phy().SetMemoryType(buffer_mem_reqs.memoryTypeBits, &alloc_info, 0);
     vkt::DeviceMemory buffer_memory(*m_device, alloc_info);
 
     // Bind those buffers to the same buffer memory
@@ -852,24 +878,24 @@ TEST_F(NegativeDescriptorBuffer, BindingAndOffsets) {
     dbbi.address = common_address;
     dbbi.usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
 
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
 
     constexpr uint32_t index = 0;
 
     // First call should succeed because offset is small enough to fit in large_buffer
     const VkDeviceSize offset = small_buffer_size;
-    vk::CmdSetDescriptorBufferOffsetsEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+    vk::CmdSetDescriptorBufferOffsetsEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                                          &index, &offset);
 
     large_buffer.destroy();
     // Large buffer has been deleted, its entry in the address to buffers map must have been as well.
     // Since offset is too large to fit in small buffer, vkCmdSetDescriptorBufferOffsetsEXT should fail
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetDescriptorBufferOffsetsEXT-pOffsets-08063");
-    vk::CmdSetDescriptorBufferOffsetsEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+    vk::CmdSetDescriptorBufferOffsetsEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                                          &index, &offset);
     m_errorMonitor->VerifyFound();
 
-    m_commandBuffer->end();
+    m_command_buffer.end();
 }
 
 TEST_F(NegativeDescriptorBuffer, InconsistentBuffer) {
@@ -901,23 +927,23 @@ TEST_F(NegativeDescriptorBuffer, InconsistentBuffer) {
     dbbi.usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
 
     CreateComputePipelineHelper pipe(*this);
-    ASSERT_EQ(VK_SUCCESS, pipe.CreateComputePipeline());
+    pipe.CreateComputePipeline();
 
-    m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    m_command_buffer.begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
 
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1, &dbbi);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
 
     uint32_t index = 0;
     VkDeviceSize offset = 0;
-    vk::CmdSetDescriptorBufferOffsetsEXT(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
+    vk::CmdSetDescriptorBufferOffsetsEXT(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
                                          &index, &offset);
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-None-08117");
-    vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
     m_errorMonitor->VerifyFound();
 
-    m_commandBuffer->end();
+    m_command_buffer.end();
 }
 
 TEST_F(NegativeDescriptorBuffer, InconsistentSet) {
@@ -960,17 +986,17 @@ TEST_F(NegativeDescriptorBuffer, InconsistentSet) {
     pipe.cp_ci_.flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
     ASSERT_EQ(VK_SUCCESS, pipe.CreateComputePipeline());
 
-    m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    m_command_buffer.begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
 
-    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
                               &ds->handle(), 0, nullptr);
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-None-08115");
-    vk::CmdDispatch(m_commandBuffer->handle(), 1, 1, 1);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
     m_errorMonitor->VerifyFound();
 
-    m_commandBuffer->end();
+    m_command_buffer.end();
 }
 
 TEST_F(NegativeDescriptorBuffer, BindPoint) {
@@ -984,22 +1010,14 @@ TEST_F(NegativeDescriptorBuffer, BindPoint) {
 
     vkt::PipelineLayout pipeline_layout;
     {
-        const VkDescriptorSetLayoutBinding bindings[] = {
-            {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr},
-        };
-        const VkDescriptorSetLayoutCreateInfo dslci1 = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, nullptr,
-                                                        VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT, size32(bindings),
-                                                        bindings};
-        vkt::DescriptorSetLayout dsl1(*m_device, dslci1);
+        VkDescriptorSetLayoutBinding binding1 = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+        vkt::DescriptorSetLayout dsl1(*m_device, binding1, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 
         vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
-
-        const VkDescriptorSetLayoutBinding binding2 = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
-                                                       &sampler.handle()};
-        const VkDescriptorSetLayoutCreateFlags flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
-                                                       VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
-        const auto dslci2 = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, flags, 1u, &binding2);
-        vkt::DescriptorSetLayout dsl2(*m_device, dslci2);
+        VkDescriptorSetLayoutBinding binding2 = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()};
+        vkt::DescriptorSetLayout dsl2(*m_device, binding2,
+                                      VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT |
+                                          VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT);
 
         const VkDescriptorSetLayout set_layouts[2] = {dsl1.handle(), dsl2.handle()};
         VkPipelineLayoutCreateInfo plci = vku::InitStructHelper();
@@ -1180,23 +1198,6 @@ TEST_F(NegativeDescriptorBuffer, DescriptorGetInfoAS) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(NegativeDescriptorBuffer, DescriptorGetInfoRtxNV) {
-    TEST_DESCRIPTION("Descriptor buffer vkDescriptorGetInfo() for NV_ray_tracing.");
-    AddRequiredExtensions(VK_NV_RAY_TRACING_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
-
-    uint8_t buffer[128];
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
-    GetPhysicalDeviceProperties2(descriptor_buffer_properties);
-
-    VkDescriptorGetInfoEXT dgi = vku::InitStructHelper();
-    dgi.type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV;
-    dgi.data.accelerationStructure = 0;
-    m_errorMonitor->SetDesiredError("VUID-VkDescriptorDataEXT-type-08042");
-    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.accelerationStructureDescriptorSize, &buffer);
-    m_errorMonitor->VerifyFound();
-}
-
 TEST_F(NegativeDescriptorBuffer, DescriptorGetInfoAddressRange) {
     TEST_DESCRIPTION("Descriptor buffer vkDescriptorGetInfo() with VkDescriptorAddressInfoEXT.");
     AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
@@ -1207,10 +1208,10 @@ TEST_F(NegativeDescriptorBuffer, DescriptorGetInfoAddressRange) {
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
 
-    VkBufferCreateInfo buffCI = vku::InitStructHelper();
-    buffCI.size = 4096;
-    buffCI.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    vkt::Buffer d_buffer(*m_device, buffCI, vkt::no_mem);
+    VkBufferCreateInfo buffer_ci = vku::InitStructHelper();
+    buffer_ci.size = 4096;
+    buffer_ci.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    vkt::Buffer d_buffer(*m_device, buffer_ci, vkt::no_mem);
 
     VkDescriptorAddressInfoEXT dai = vku::InitStructHelper();
     VkDescriptorGetInfoEXT dgi = vku::InitStructHelper();
@@ -1238,7 +1239,7 @@ TEST_F(NegativeDescriptorBuffer, DescriptorGetInfoAddressRange) {
     d_buffer.bind_memory(mem, 0);
 
     dai.address = d_buffer.address();
-    dai.range = 4096 * buffCI.size;
+    dai.range = 4096 * buffer_ci.size;
     dai.format = VK_FORMAT_R8_UINT;
 
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-range-08045");
@@ -1294,125 +1295,40 @@ TEST_F(NegativeDescriptorBuffer, DescriptorGetInfoAddressRange) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(NegativeDescriptorBuffer, Various) {
-    TEST_DESCRIPTION("Descriptor buffer various tests.");
-    AddOptionalExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
-    AddOptionalExtensions(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME);
-    AddOptionalExtensions(VK_NV_RAY_TRACING_EXTENSION_NAME);
+TEST_F(NegativeDescriptorBuffer, LayoutFlags) {
     RETURN_IF_SKIP(InitBasicDescriptorBuffer());
-    const bool nv_ray_tracing = IsExtensionsEnabled(VK_NV_RAY_TRACING_EXTENSION_NAME);
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
-    {
-        VkSampler invalid_sampler = CastToHandle<VkSampler, uintptr_t>(0xbaadbeef);
-        VkImageView invalid_imageview = CastToHandle<VkImageView, uintptr_t>(0xbaadbeef);
-        VkDeviceAddress invalid_buffer = CastToHandle<VkDeviceAddress, uintptr_t>(0xbaadbeef);
+    const VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()};
+    vkt::DescriptorSetLayout dsl(*m_device, binding);
 
-        uint8_t buffer[128];
-        VkDescriptorGetInfoEXT dgi = vku::InitStructHelper();
+    VkDeviceSize size;
 
-        const VkDescriptorImageInfo dii = {invalid_sampler, invalid_imageview, VK_IMAGE_LAYOUT_GENERAL};
+    m_errorMonitor->SetDesiredError("VUID-vkGetDescriptorSetLayoutSizeEXT-layout-08012");
+    vk::GetDescriptorSetLayoutSizeEXT(device(), dsl.handle(), &size);
+    m_errorMonitor->VerifyFound();
 
-        dgi.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        dgi.data.pCombinedImageSampler = &dii;
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08019");
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08020");
-        vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.combinedImageSamplerDescriptorSize, &buffer);
-        m_errorMonitor->VerifyFound();
+    VkDeviceSize offset;
 
-        dgi.type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-        dgi.data.pInputAttachmentImage = &dii;
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08021");
-        vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.inputAttachmentDescriptorSize, &buffer);
-        m_errorMonitor->VerifyFound();
+    m_errorMonitor->SetDesiredError("VUID-vkGetDescriptorSetLayoutBindingOffsetEXT-layout-08014");
+    vk::GetDescriptorSetLayoutBindingOffsetEXT(device(), dsl.handle(), 0, &offset);
+    m_errorMonitor->VerifyFound();
+}
 
-        dgi.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        dgi.data.pSampledImage = &dii;
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08022");
-        vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.sampledImageDescriptorSize, &buffer);
-        m_errorMonitor->VerifyFound();
-
-        dgi.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        dgi.data.pStorageImage = &dii;
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08023");
-        vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.storageImageDescriptorSize, &buffer);
-        m_errorMonitor->VerifyFound();
-
-        VkDescriptorAddressInfoEXT dai = vku::InitStructHelper();
-        dai.address = invalid_buffer;
-        dai.range = 64;
-        dai.format = VK_FORMAT_R8_UINT;
-
-        dgi.type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-        dgi.data.pUniformTexelBuffer = &dai;
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-None-08044");
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08024");
-        vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.uniformTexelBufferDescriptorSize, &buffer);
-        m_errorMonitor->VerifyFound();
-
-        dgi.type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
-        dgi.data.pStorageTexelBuffer = &dai;
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-None-08044");
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08025");
-        vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.storageTexelBufferDescriptorSize, &buffer);
-        m_errorMonitor->VerifyFound();
-
-        dgi.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        dgi.data.pUniformTexelBuffer = &dai;
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-None-08044");
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08026");
-        vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.uniformBufferDescriptorSize, &buffer);
-        m_errorMonitor->VerifyFound();
-
-        dgi.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        dgi.data.pStorageTexelBuffer = &dai;
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-None-08044");
-        m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08027");
-        vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.storageBufferDescriptorSize, &buffer);
-        m_errorMonitor->VerifyFound();
-
-        if (nv_ray_tracing) {
-            dgi.type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV;
-            dgi.data.pStorageTexelBuffer = &dai;
-            m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08029");
-            vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.storageBufferDescriptorSize, &buffer);
-            m_errorMonitor->VerifyFound();
-        }
-    }
+TEST_F(NegativeDescriptorBuffer, DescriptorBufferCaptureReplay) {
+    AddRequiredFeature(vkt::Feature::descriptorBufferCaptureReplay);
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     {
-        const VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
-                                                   &sampler.handle()};
-        const auto dslci = vku::InitStruct<VkDescriptorSetLayoutCreateInfo>(nullptr, 0U, 1U, &binding);
-        vkt::DescriptorSetLayout dsl(*m_device, dslci);
+        VkBufferCreateInfo buffer_ci = vku::InitStructHelper();
+        buffer_ci.flags = VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
+        buffer_ci.size = 4096;
+        buffer_ci.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
-        {
-            VkDeviceSize size;
-
-            m_errorMonitor->SetDesiredError("VUID-vkGetDescriptorSetLayoutSizeEXT-layout-08012");
-            vk::GetDescriptorSetLayoutSizeEXT(device(), dsl.handle(), &size);
-            m_errorMonitor->VerifyFound();
-
-            VkDeviceSize offset;
-
-            m_errorMonitor->SetDesiredError("VUID-vkGetDescriptorSetLayoutBindingOffsetEXT-layout-08014");
-            vk::GetDescriptorSetLayoutBindingOffsetEXT(device(), dsl.handle(), 0, &offset);
-            m_errorMonitor->VerifyFound();
-        }
-    }
-
-    VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(descriptor_buffer_features);
-    if (descriptor_buffer_features.descriptorBufferCaptureReplay) {
-        VkBufferCreateInfo buffCI = vku::InitStructHelper();
-        buffCI.flags = VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
-        buffCI.size = 4096;
-        buffCI.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-
-        vkt::Buffer d_buffer(*m_device, buffCI, vkt::no_mem);
+        vkt::Buffer d_buffer(*m_device, buffer_ci, vkt::no_mem);
 
         VkMemoryRequirements mem_reqs;
         vk::GetBufferMemoryRequirements(device(), d_buffer.handle(), &mem_reqs);
@@ -1428,7 +1344,7 @@ TEST_F(NegativeDescriptorBuffer, Various) {
         m_errorMonitor->VerifyFound();
     }
 
-    if (descriptor_buffer_features.descriptorBufferCaptureReplay) {
+    {
         VkImageCreateInfo image_create_info = vku::InitStructHelper();
         image_create_info.flags = VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT;
         image_create_info.imageType = VK_IMAGE_TYPE_2D;
@@ -1455,6 +1371,82 @@ TEST_F(NegativeDescriptorBuffer, Various) {
         vk::BindImageMemory(device(), temp_image.handle(), mem.handle(), 0);
         m_errorMonitor->VerifyFound();
     }
+}
+
+TEST_F(NegativeDescriptorBuffer, DescriptorGetInfo) {
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
+
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(descriptor_buffer_properties);
+
+    vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
+
+    VkSampler invalid_sampler = CastToHandle<VkSampler, uintptr_t>(0xbaadbeef);
+    VkImageView invalid_imageview = CastToHandle<VkImageView, uintptr_t>(0xbaadbeef);
+    VkDeviceAddress invalid_buffer = CastToHandle<VkDeviceAddress, uintptr_t>(0xbaadbeef);
+
+    uint8_t buffer[128];
+    VkDescriptorGetInfoEXT dgi = vku::InitStructHelper();
+
+    const VkDescriptorImageInfo dii = {invalid_sampler, invalid_imageview, VK_IMAGE_LAYOUT_GENERAL};
+
+    dgi.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dgi.data.pCombinedImageSampler = &dii;
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08019");
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08020");
+    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.combinedImageSamplerDescriptorSize, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    dgi.type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    dgi.data.pInputAttachmentImage = &dii;
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08021");
+    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.inputAttachmentDescriptorSize, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    dgi.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    dgi.data.pSampledImage = &dii;
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08022");
+    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.sampledImageDescriptorSize, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    dgi.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    dgi.data.pStorageImage = &dii;
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08023");
+    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.storageImageDescriptorSize, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    VkDescriptorAddressInfoEXT dai = vku::InitStructHelper();
+    dai.address = invalid_buffer;
+    dai.range = 64;
+    dai.format = VK_FORMAT_R8_UINT;
+
+    dgi.type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    dgi.data.pUniformTexelBuffer = &dai;
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-None-08044");
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08024");
+    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.uniformTexelBufferDescriptorSize, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    dgi.type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+    dgi.data.pStorageTexelBuffer = &dai;
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-None-08044");
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08025");
+    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.storageTexelBufferDescriptorSize, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    dgi.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    dgi.data.pUniformTexelBuffer = &dai;
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-None-08044");
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08026");
+    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.uniformBufferDescriptorSize, &buffer);
+    m_errorMonitor->VerifyFound();
+
+    dgi.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    dgi.data.pStorageTexelBuffer = &dai;
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorAddressInfoEXT-None-08044");
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorGetInfoEXT-type-08027");
+    vk::GetDescriptorEXT(device(), &dgi, descriptor_buffer_properties.storageBufferDescriptorSize, &buffer);
+    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeDescriptorBuffer, ExtensionCombination) {
@@ -1488,10 +1480,10 @@ TEST_F(NegativeDescriptorBuffer, ExtensionCombination) {
 
     dbf.descriptorBuffer = true;
 
-    VkDevice testDevice;
+    VkDevice test_device;
 
     m_errorMonitor->SetDesiredError("VUID-VkDeviceCreateInfo-None-08095");
-    vk::CreateDevice(gpu(), &device_ci, nullptr, &testDevice);
+    vk::CreateDevice(gpu(), &device_ci, nullptr, &test_device);
     m_errorMonitor->VerifyFound();
 }
 
@@ -1547,12 +1539,9 @@ TEST_F(NegativeDescriptorBuffer, NullHandle) {
 }
 
 TEST_F(NegativeDescriptorBuffer, NullCombinedImageSampler) {
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::nullDescriptor);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
@@ -1596,12 +1585,9 @@ TEST_F(NegativeDescriptorBuffer, BufferUsage) {
 }
 
 TEST_F(NegativeDescriptorBuffer, Binding) {
-    SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_6_EXTENSION_NAME);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::maintenance6);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     // TODO - try to get 08010 removed from spec as no possible way to create descriptor with the invalid flag
     m_errorMonitor->SetAllowedFailureMsg("VUID-VkDescriptorSetAllocateInfo-pSetLayouts-08009");
@@ -1612,10 +1598,10 @@ TEST_F(NegativeDescriptorBuffer, Binding) {
                                        VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
     const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorSets-pDescriptorSets-08010");
-    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     m_errorMonitor->VerifyFound();
 
@@ -1629,7 +1615,7 @@ TEST_F(NegativeDescriptorBuffer, Binding) {
     bind_ds_info.pDynamicOffsets = nullptr;
 
     m_errorMonitor->SetDesiredError("VUID-VkBindDescriptorSetsInfoKHR-pDescriptorSets-08010");
-    vk::CmdBindDescriptorSets2KHR(m_commandBuffer->handle(), &bind_ds_info);
+    vk::CmdBindDescriptorSets2KHR(m_command_buffer.handle(), &bind_ds_info);
     m_errorMonitor->VerifyFound();
 }
 
@@ -1641,38 +1627,35 @@ TEST_F(NegativeDescriptorBuffer, InvalidDescriptorBufferUsage) {
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
     RETURN_IF_SKIP(Init());
 
-    VkBufferCreateInfo buffCI = vku::InitStructHelper();
-    buffCI.size = 4096;
-    buffCI.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
-                   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    VkBufferCreateInfo buffer_ci = vku::InitStructHelper();
+    buffer_ci.size = 4096;
+    buffer_ci.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+                      VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
     VkMemoryAllocateFlagsInfo allocate_flag_info = vku::InitStructHelper();
     allocate_flag_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-    vkt::Buffer d_buffer(*m_device, buffCI, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &allocate_flag_info);
+    vkt::Buffer d_buffer(*m_device, buffer_ci, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &allocate_flag_info);
 
-    VkDescriptorBufferBindingInfoEXT bindingInfo = vku::InitStructHelper();
-    bindingInfo.address = d_buffer.address();
-    bindingInfo.usage = buffCI.usage | 0x80000000;
+    VkDescriptorBufferBindingInfoEXT binding_info = vku::InitStructHelper();
+    binding_info.address = d_buffer.address();
+    binding_info.usage = buffer_ci.usage | 0x80000000;
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-None-09499");
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1u, &bindingInfo);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1u, &binding_info);
     m_errorMonitor->VerifyFound();
 
-    bindingInfo.usage = 0u;
+    binding_info.usage = 0u;
 
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-None-09500");
-    vk::CmdBindDescriptorBuffersEXT(m_commandBuffer->handle(), 1u, &bindingInfo);
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1u, &binding_info);
     m_errorMonitor->VerifyFound();
-    m_commandBuffer->end();
+    m_command_buffer.end();
 }
 
 TEST_F(NegativeDescriptorBuffer, MaxTexelBufferElements) {
     TEST_DESCRIPTION("texel buffers must be less than maxTexelBufferElements.");
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);
@@ -1702,11 +1685,8 @@ TEST_F(NegativeDescriptorBuffer, MaxTexelBufferElements) {
 }
 
 TEST_F(NegativeDescriptorBuffer, TexelBufferFormat) {
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::descriptorBuffer);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
 
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(descriptor_buffer_properties);

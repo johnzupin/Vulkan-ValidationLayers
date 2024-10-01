@@ -59,7 +59,7 @@ TEST_F(PositiveSparseImage, MultipleBinds) {
     // at the end of the first
     VkMemoryAllocateInfo memory_info = vku::InitStructHelper();
     memory_info.allocationSize = memory_reqs.alignment;
-    bool pass = m_device->phy().set_memory_type(memory_reqs.memoryTypeBits, &memory_info, 0);
+    bool pass = m_device->phy().SetMemoryType(memory_reqs.memoryTypeBits, &memory_info, 0);
     ASSERT_TRUE(pass);
     vkt::DeviceMemory memory_one(*m_device, memory_info);
     vkt::DeviceMemory memory_two(*m_device, memory_info);
@@ -119,7 +119,7 @@ TEST_F(PositiveSparseImage, BindFreeMemory) {
     vk::GetImageMemoryRequirements(device(), image, &memory_reqs);
     VkMemoryAllocateInfo memory_info = vku::InitStructHelper();
     memory_info.allocationSize = memory_reqs.size;
-    bool pass = m_device->phy().set_memory_type(memory_reqs.memoryTypeBits, &memory_info, 0);
+    bool pass = m_device->phy().SetMemoryType(memory_reqs.memoryTypeBits, &memory_info, 0);
     ASSERT_TRUE(pass);
 
     vkt::DeviceMemory memory(*m_device, memory_info);
@@ -152,7 +152,7 @@ TEST_F(PositiveSparseImage, BindFreeMemory) {
     // Free the memory, then use the image in a new command buffer
     memory.destroy();
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     VkImageMemoryBarrier img_barrier = vku::InitStructHelper();
     img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -165,14 +165,14 @@ TEST_F(PositiveSparseImage, BindFreeMemory) {
     img_barrier.subresourceRange.baseMipLevel = 0;
     img_barrier.subresourceRange.layerCount = 1;
     img_barrier.subresourceRange.levelCount = 1;
-    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
+    vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
                            nullptr, 0, nullptr, 1, &img_barrier);
 
     const VkClearColorValue clear_color = {{0.0f, 0.0f, 0.0f, 1.0f}};
     VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-    vk::CmdClearColorImage(m_commandBuffer->handle(), image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, 1, &range);
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    vk::CmdClearColorImage(m_command_buffer.handle(), image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, 1, &range);
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     // Wait for operations to finish before destroying anything
     m_default_queue->Wait();
 }
@@ -228,7 +228,7 @@ TEST_F(PositiveSparseImage, BindMetadata) {
     // Allocate memory for the metadata
     VkMemoryAllocateInfo metadata_memory_info = vku::InitStructHelper();
     metadata_memory_info.allocationSize = metadata_reqs->imageMipTailSize;
-    m_device->phy().set_memory_type(memory_reqs.memoryTypeBits, &metadata_memory_info, 0);
+    m_device->phy().SetMemoryType(memory_reqs.memoryTypeBits, &metadata_memory_info, 0);
     vkt::DeviceMemory metadata_memory(*m_device, metadata_memory_info);
 
     // Bind metadata
@@ -317,14 +317,14 @@ TEST_F(PositiveSparseImage, OpImageSparse) {
     pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&ds.layout_});
     pipe.CreateGraphicsPipeline();
 
-    m_commandBuffer->begin();
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdBindDescriptorSets(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_, 0, 1, &ds.set_, 0,
+    m_command_buffer.begin();
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_, 0, 1, &ds.set_, 0,
                               nullptr);
-    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
+    vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
 }
 
 TEST_F(PositiveSparseImage, BindImage) {

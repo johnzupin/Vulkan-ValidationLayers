@@ -10,11 +10,8 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
-#include "utils/cast_utils.h"
-#include "generated/enum_flag_bits.h"
 #include "layer_validation_tests.h"
-#include "pipeline_helper.h"
-#include "utils/vk_layer_utils.h"
+#include "utils/convert_utils.h"
 
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 #include "wayland-client.h"
@@ -327,8 +324,6 @@ void VkLayerTest::Init(VkPhysicalDeviceFeatures *features, VkPhysicalDeviceFeatu
     RETURN_IF_SKIP(InitState(features, features2));
 }
 
-vkt::CommandBuffer *VkLayerTest::CommandBuffer() { return m_commandBuffer; }
-
 VkLayerTest::VkLayerTest() {
 #if !defined(VK_USE_PLATFORM_ANDROID_KHR)
     m_instance_extension_names.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -593,7 +588,7 @@ std::vector<std::string> get_args(android_app &app, const char *intent_extra_dat
     std::stringstream ss(args_str);
     std::string arg;
     while (std::getline(ss, arg, ' ')) {
-        if (!arg.empty()) args.push_back(arg);
+        if (!arg.empty()) args.emplace_back(arg);
     }
 
     return args;

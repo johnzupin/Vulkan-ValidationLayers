@@ -21,12 +21,12 @@
 
 #include <vulkan/utility/vk_safe_struct.hpp>
 
-#include "utils/hash_vk_types.h"
 #include "state_tracker/pipeline_sub_state.h"
 #include "generated/dynamic_state_helper.h"
 #include "utils/shader_utils.h"
 #include "state_tracker/state_tracker.h"
 #include "state_tracker/shader_stage_state.h"
+#include "utils/vk_layer_utils.h"
 
 // Fwd declarations -- including descriptor_set.h creates an ugly include loop
 namespace vvl {
@@ -131,12 +131,26 @@ class Pipeline : public StateObject {
     const bool uses_pipeline_vertex_robustness;
     bool ignore_color_attachments;
 
+    mutable bool binary_data_released = false;
+
+    // TODO - Because we have hack to create a pipeline at PreCallValidate time (for GPL) we have no proper way to create inherited
+    // state objects of the pipeline This is to make it clear that while currently everyone has to allocate this memory, it is only
+    // ment for GPU-AV
+    struct InstrumentationData {
+        // We create a VkShaderModule that is instrumented and need to delete before leaving the pipeline call
+        std::vector<VkShaderModule> instrumented_shader_module;
+        // TODO - For GPL, this doesn't get passed down from linked shaders
+        bool was_instrumented = false;
+        // When we instrument GPL at link time, we need to hold the new libraries until they are done
+        VkPipeline pre_raster_lib = VK_NULL_HANDLE;
+        VkPipeline frag_out_lib = VK_NULL_HANDLE;
+    } instrumentation_data;
+
     // Executable or legacy pipeline
     Pipeline(const ValidationStateTracker &state_data, const VkGraphicsPipelineCreateInfo *pCreateInfo,
              std::shared_ptr<const vvl::PipelineCache> &&pipe_cache, std::shared_ptr<const vvl::RenderPass> &&rpstate,
              std::shared_ptr<const vvl::PipelineLayout> &&layout,
-             spirv::StatelessData stateless_data[kCommonMaxGraphicsShaderStages],
-             ShaderModuleUniqueIds *shader_unique_id_map = nullptr);
+             spirv::StatelessData stateless_data[kCommonMaxGraphicsShaderStages]);
 
     // Compute pipeline
     Pipeline(const ValidationStateTracker &state_data, const VkComputePipelineCreateInfo *pCreateInfo,
@@ -409,8 +423,7 @@ class Pipeline : public StateObject {
     const VkPipelineRenderingCreateInfo *GetPipelineRenderingCreateInfo() const { return rendering_create_info; }
 
     static std::vector<ShaderStageState> GetStageStates(const ValidationStateTracker &state_data, const Pipeline &pipe_state,
-                                                        spirv::StatelessData *stateless_data,
-                                                        ShaderModuleUniqueIds *shader_unique_id_map);
+                                                        spirv::StatelessData *stateless_data);
 
     // Return true if for a given PSO, the given state enum is dynamic, else return false
     bool IsDynamic(const CBDynamicState state) const { return dynamic_state[state]; }
@@ -656,7 +669,9 @@ struct LastBound {
     // We have to track shader_object_bound, because shader_object_states will be nullptr when VK_NULL_HANDLE is used
     bool shader_object_bound[kShaderObjectStageCount]{false};
     vvl::ShaderObject *shader_object_states[kShaderObjectStageCount]{nullptr};
+    // The compatible layout used binding descriptor sets (track location to provide better error message)
     VkPipelineLayout desc_set_pipeline_layout = VK_NULL_HANDLE;
+    vvl::Func desc_set_bound_command = vvl::Func::Empty;  // will be something like vkCmdBindDescriptorSets
     std::shared_ptr<vvl::DescriptorSet> push_descriptor_set;
 
     struct DescriptorBufferBinding {
@@ -695,6 +710,7 @@ struct LastBound {
     bool IsDepthBoundTestEnable() const;
     bool IsDepthWriteEnable() const;
     bool IsDepthBiasEnable() const;
+    bool IsDepthClampEnable() const;
     bool IsStencilTestEnable() const;
     VkStencilOpState GetStencilOpStateFront() const;
     VkStencilOpState GetStencilOpStateBack() const;
@@ -710,16 +726,22 @@ struct LastBound {
     bool IsExclusiveScissorEnabled() const;
     bool IsCoverageToColorEnabled() const;
     bool IsCoverageModulationTableEnable() const;
+    bool IsShadingRateImageEnable() const;
+    bool IsViewportWScalingEnable() const;
     VkCoverageModulationModeNV GetCoverageModulationMode() const;
 
     bool ValidShaderObjectCombination(const VkPipelineBindPoint bind_point, const DeviceFeatures &device_features) const;
     VkShaderEXT GetShader(ShaderObjectStage stage) const;
     vvl::ShaderObject *GetShaderState(ShaderObjectStage stage) const;
+    const vvl::ShaderObject *GetShaderStateIfValid(ShaderObjectStage stage) const;
+    // Return compute shader for compute pipeline, vertex or mesh shader for graphics
+    const vvl::ShaderObject *GetFirstShader(VkPipelineBindPoint bind_point) const;
     bool HasShaderObjects() const;
     bool IsValidShaderBound(ShaderObjectStage stage) const;
     bool IsValidShaderOrNullBound(ShaderObjectStage stage) const;
     std::vector<vvl::ShaderObject *> GetAllBoundGraphicsShaders();
     bool IsAnyGraphicsShaderBound() const;
+    VkShaderStageFlags GetAllActiveBoundStages() const;
 
     bool IsBoundSetCompatible(uint32_t set, const vvl::PipelineLayout &pipeline_layout) const;
     bool IsBoundSetCompatible(uint32_t set, const vvl::ShaderObject &shader_object_state) const;
@@ -791,6 +813,19 @@ static VkPipelineBindPoint inline ConvertToPipelineBindPoint(VkShaderStageFlagBi
     return VK_PIPELINE_BIND_POINT_MAX_ENUM;
 }
 
+static VkPipelineBindPoint inline ConvertToPipelineBindPoint(VkShaderStageFlags stage) {
+    // Assumes the call has checked stages have not been mixed
+    if (stage & kShaderStageAllGraphics) {
+        return VK_PIPELINE_BIND_POINT_GRAPHICS;
+    } else if (stage & VK_SHADER_STAGE_COMPUTE_BIT) {
+        return VK_PIPELINE_BIND_POINT_COMPUTE;
+    } else if (stage & kShaderStageAllRayTracing) {
+        return VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
+    } else {
+        assert(false);
+        return VK_PIPELINE_BIND_POINT_MAX_ENUM;
+    }
+}
 static LvlBindPoint inline ConvertToLvlBindPoint(VkShaderStageFlagBits stage) {
     switch (stage) {
         case VK_SHADER_STAGE_VERTEX_BIT:

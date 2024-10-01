@@ -21,10 +21,13 @@
 
 namespace gpuav {
 
-void SetupShaderInstrumentationResources(Validator& gpuav, LockedSharedPtr<gpuav::CommandBuffer, WriteLockGuard>& cmd_buffer,
-                                         VkPipelineBindPoint bind_point, const Location& loc);
-void SetupShaderInstrumentationResources(Validator& gpuav, VkCommandBuffer cmd_buffer, VkPipelineBindPoint bind_point,
-                                         const Location& loc);
+struct DescSetState;
+
+void PreCallSetupShaderInstrumentationResources(Validator& gpuav, CommandBuffer& cb_state, VkPipelineBindPoint bind_point,
+                                                const Location& loc);
+
+void PostCallSetupShaderInstrumentationResources(Validator& gpuav, CommandBuffer& cb_statee, VkPipelineBindPoint bind_point,
+                                                 const Location& loc);
 
 // Return true iff a error has been found
 bool LogInstrumentationError(Validator& gpuav, VkCommandBuffer cmd_buffer, const LogObjectList& objlist, uint32_t operation_index,
@@ -33,9 +36,12 @@ bool LogInstrumentationError(Validator& gpuav, VkCommandBuffer cmd_buffer, const
                              const Location& loc);
 
 // Return true iff an error has been found in error_record, among the list of errors this function manages
-bool LogMessageInstBindlessDescriptor(const uint32_t* error_record, std::string& out_error_msg, std::string& out_vuid_msg,
-                                      const std::vector<DescSetState>& descriptor_sets, const Location& loc,
-                                      bool uses_shader_object, bool& out_oob_access);
+bool LogMessageInstBindlessDescriptor(Validator& gpuav, const uint32_t* error_record, std::string& out_error_msg,
+                                      std::string& out_vuid_msg, const std::vector<DescSetState>& descriptor_sets,
+                                      const Location& loc, bool uses_shader_object, bool& out_oob_access);
+bool LogMessageInstNonBindlessOOB(Validator& gpuav, const uint32_t* error_record, std::string& out_error_msg,
+                                  std::string& out_vuid_msg, const std::vector<DescSetState>& descriptor_sets, const Location& loc,
+                                  bool uses_shader_object, bool& out_oob_access);
 bool LogMessageInstBufferDeviceAddress(const uint32_t* error_record, std::string& out_error_msg, std::string& out_vuid_msg,
                                        bool& out_oob_access);
 bool LogMessageInstRayQuery(const uint32_t* error_record, std::string& out_error_msg, std::string& out_vuid_msg);

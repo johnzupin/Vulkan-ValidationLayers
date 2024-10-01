@@ -20,7 +20,6 @@
 #include "generated/chassis.h"
 #include "drawdispatch/drawdispatch_vuids.h"
 #include "core_validation.h"
-#include "state_tracker/image_state.h"
 #include "state_tracker/buffer_state.h"
 #include "state_tracker/shader_object_state.h"
 #include "state_tracker/descriptor_sets.h"
@@ -81,16 +80,18 @@ bool CoreChecks::ValidateCmdDrawInstance(const vvl::CommandBuffer &cb_state, uin
     if (!pipeline_state || pipeline_state->IsDynamic(CB_DYNAMIC_STATE_VERTEX_INPUT_EXT)) {
         if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_VERTEX_INPUT_EXT) &&
             phys_dev_ext_props.vtx_attrib_divisor_props.supportsNonZeroFirstInstance == VK_FALSE && firstInstance != 0u) {
-            for (uint32_t i = 0; i < (uint32_t)cb_state.dynamic_state_value.vertex_binding_descriptions_divisor.size(); ++i) {
-                if (cb_state.dynamic_state_value.vertex_binding_descriptions_divisor[i] != 1u) {
+            for (const auto &binding_state : cb_state.dynamic_state_value.vertex_bindings) {
+                const auto &desc = binding_state.second.desc;
+                if (desc.divisor != 1u) {
                     LogObjectList objlist(cb_state.Handle());
                     if (pipeline_state) {
                         objlist.add(pipeline_state->Handle());
                     }
                     skip |= LogError(vuid.vertex_input_09462, objlist, loc,
-                                     "vkCmdSetVertexInputEXT set pVertexBindingDivisors[%" PRIu32 "].divisor as %" PRIu32
-                                     ", but firstInstance is %" PRIu32 " and supportsNonZeroFirstInstance is VK_FALSE.",
-                                     i, cb_state.dynamic_state_value.vertex_binding_descriptions_divisor[i], firstInstance);
+                                     "vkCmdSetVertexInputEXT set pVertexBindingDivisors[%" PRIu32 "] (binding %" PRIu32
+                                     ") divisor as %" PRIu32 ", but firstInstance is %" PRIu32
+                                     " and supportsNonZeroFirstInstance is VK_FALSE.",
+                                     binding_state.second.index, desc.binding, desc.divisor, firstInstance);
                     break;
                 }
             }
@@ -238,7 +239,7 @@ bool CoreChecks::PreCallValidateCmdDrawIndexed(VkCommandBuffer commandBuffer, ui
     skip |= ValidateGraphicsIndexedCmd(cb_state, error_obj.location);
     skip |= ValidateActionState(cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, error_obj.location);
     skip |= ValidateCmdDrawIndexedBufferSize(cb_state, indexCount, firstIndex, error_obj.location,
-                                             "VUID-vkCmdDrawIndexed-robustBufferAccess2-07825");
+                                             "VUID-vkCmdDrawIndexed-robustBufferAccess2-08798");
     skip |= ValidateVTGShaderStages(cb_state, error_obj.location);
     return skip;
 }
@@ -284,7 +285,7 @@ bool CoreChecks::PreCallValidateCmdDrawMultiIndexedEXT(VkCommandBuffer commandBu
             const auto info_ptr = reinterpret_cast<const VkMultiDrawIndexedInfoEXT *>(info_bytes + i * stride);
             skip |= ValidateCmdDrawIndexedBufferSize(cb_state, info_ptr->indexCount, info_ptr->firstIndex,
                                                      error_obj.location.dot(Field::pIndexInfo, i),
-                                                     "VUID-vkCmdDrawMultiIndexedEXT-robustBufferAccess2-07825");
+                                                     "VUID-vkCmdDrawMultiIndexedEXT-robustBufferAccess2-08798");
         }
     }
     return skip;
@@ -1347,10 +1348,13 @@ bool CoreChecks::ValidateActionStateDescriptorsPipeline(const LastBound &last_bo
             pipe_layouts_log << FormatHandle(*layouts.front());
         }
         objlist.add(last_bound_state.desc_set_pipeline_layout);
+        std::string range =
+            pipeline.max_active_slot == 0 ? "set 0 is" : "all sets 0 to " + std::to_string(pipeline.max_active_slot) + " are";
         skip |= LogError(vuid.compatible_pipeline_08600, objlist, vuid.loc(),
                          "The %s (created with %s) statically uses descriptor set %" PRIu32
-                         " which is not compatible with the currently bound descriptor set's pipeline layout (%s)\n%s",
-                         FormatHandle(pipeline).c_str(), pipe_layouts_log.str().c_str(), pipeline.max_active_slot,
+                         ", but %s not compatible with the pipeline layout bound with %s (%s)\n%s",
+                         FormatHandle(pipeline).c_str(), pipe_layouts_log.str().c_str(), pipeline.max_active_slot, range.c_str(),
+                         String(last_bound_state.desc_set_bound_command),
                          FormatHandle(last_bound_state.desc_set_pipeline_layout).c_str(),
                          last_bound_state.DescribeNonCompatibleSet(pipeline.max_active_slot, *pipeline_layout).c_str());
     } else {
@@ -1361,7 +1365,9 @@ bool CoreChecks::ValidateActionStateDescriptorsPipeline(const LastBound &last_bo
             const auto set_info = last_bound_state.per_set[set_index];
             if (!set_info.bound_descriptor_set) {
                 skip |= LogError(vuid.compatible_pipeline_08600, cb_state.GetObjectList(bind_point), vuid.loc(),
-                                 "%s uses set #%" PRIu32 " but that set is not bound.", FormatHandle(pipeline).c_str(), set_index);
+                                 "%s uses set #%" PRIu32
+                                 " but that set is not bound. (Need to use a command like vkCmdBindDescriptorSets to bind the set)",
+                                 FormatHandle(pipeline).c_str(), set_index);
             } else if (!VerifySetLayoutCompatibility(*set_info.bound_descriptor_set, pipeline_layout->set_layouts,
                                                      pipeline_layout->Handle(), set_index, error_string)) {
                 // Set is bound but not compatible w/ overlapping pipeline_layout from PSO

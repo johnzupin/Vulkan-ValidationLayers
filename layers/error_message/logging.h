@@ -20,21 +20,19 @@
 #include <array>
 #include <cstdarg>
 #include <mutex>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <vulkan/utility/vk_struct_helper.hpp>
 
-#include "vk_layer_config.h"
+#include "error_message/log_message_type.h"
 #include "containers/custom_containers.h"
 #include "generated/vk_layer_dispatch_table.h"
 #include "generated/vk_object_types.h"
 
 #if defined __ANDROID__
 #include <android/log.h>
-#define LOGCONSOLE(...) ((void)__android_log_print(ANDROID_LOG_INFO, "VALIDATION", __VA_ARGS__))
 [[maybe_unused]] static const char *kForceDefaultCallbackKey = "debug.vvl.forcelayerlog";
 #endif
 
@@ -192,7 +190,7 @@ class DebugReport {
     // This mutex is defined as mutable since the normal usage for a debug report object is as 'const'. The mutable keyword allows
     // the layers to continue this pattern, but also allows them to use/change this specific member for synchronization purposes.
     mutable std::mutex debug_output_mutex;
-    uint32_t duplicate_message_limit = 0;
+    uint32_t duplicate_message_limit = 0;  // zero will keep printing forever
     const void *instance_pnext_chain{};
     bool force_default_log_callback{false};
     uint32_t device_created = 0;
@@ -219,8 +217,11 @@ class DebugReport {
         return FormatHandle(VkHandleInfo<T>::Typename(), HandleToUint64(handle));
     }
 
-    bool LogMsg(VkFlags msg_flags, const LogObjectList &objects, const Location *loc, std::string_view vuid_text,
+    // Formats messages to be in the proper format, handles VUID logic, and any legacy issues
+    bool LogMsg(VkFlags msg_flags, const LogObjectList &objects, const Location &loc, std::string_view vuid_text,
                 const char *format, va_list argptr);
+    // Core logging that interacts with the DebugCallbacks
+    bool DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, const char *msg, const char *text_vuid) const;
 
     void BeginQueueDebugUtilsLabel(VkQueue queue, const VkDebugUtilsLabelEXT *label_info);
     void EndQueueDebugUtilsLabel(VkQueue queue);
@@ -234,12 +235,11 @@ class DebugReport {
 
   private:
     bool UpdateLogMsgCounts(int32_t vuid_hash) const;
-    bool DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, const char *message, const char *text_vuid) const;
-    bool LogMsgEnabled(std::string_view vuid_text, VkDebugUtilsMessageSeverityFlagsEXT severity,
-                       VkDebugUtilsMessageTypeFlagsEXT type);
+    bool LogMsgEnabled(std::string_view vuid_text, VkDebugUtilsMessageSeverityFlagsEXT msg_severity,
+                       VkDebugUtilsMessageTypeFlagsEXT msg_type);
 
-    VkDebugUtilsMessageSeverityFlagsEXT active_severities{0};
-    VkDebugUtilsMessageTypeFlagsEXT active_types{0};
+    VkDebugUtilsMessageSeverityFlagsEXT active_msg_severities{0};
+    VkDebugUtilsMessageTypeFlagsEXT active_msg_types{0};
     mutable vvl::unordered_map<uint32_t, uint32_t> duplicate_message_count_map{};
 
     vvl::unordered_map<VkQueue, std::unique_ptr<LoggingLabelState>> debug_utils_queue_labels;

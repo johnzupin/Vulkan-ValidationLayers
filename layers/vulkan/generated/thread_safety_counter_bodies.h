@@ -53,6 +53,7 @@ WRAPPER(VkDisplayModeKHR)
 WRAPPER(VkVideoSessionKHR)
 WRAPPER(VkVideoSessionParametersKHR)
 WRAPPER(VkDeferredOperationKHR)
+WRAPPER(VkPipelineBinaryKHR)
 WRAPPER_PARENT_INSTANCE(VkDebugReportCallbackEXT)
 WRAPPER(VkCuModuleNVX)
 WRAPPER(VkCuFunctionNVX)
@@ -70,6 +71,8 @@ WRAPPER(VkBufferCollectionFUCHSIA)
 WRAPPER(VkMicromapEXT)
 WRAPPER(VkOpticalFlowSessionNV)
 WRAPPER(VkShaderEXT)
+WRAPPER(VkIndirectExecutionSetEXT)
+WRAPPER(VkIndirectCommandsLayoutEXT)
 // clang-format on
 
 // NOLINTEND

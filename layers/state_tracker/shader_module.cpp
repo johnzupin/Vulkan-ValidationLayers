@@ -19,8 +19,7 @@
 #include <string>
 #include <queue>
 
-#include "state_tracker/pipeline_state.h"
-#include "state_tracker/descriptor_sets.h"
+#include "utils/hash_util.h"
 #include "generated/spirv_grammar_helper.h"
 #include "spirv/1.2/GLSL.std.450.h"
 
@@ -281,6 +280,12 @@ void ExecutionModeSet::Add(const Instruction& insn) {
         case spv::ExecutionModeStencilRefReplacingEXT:
             flags |= stencil_ref_replacing_bit;
             break;
+        case spv::ExecutionModeDerivativeGroupLinearKHR:
+            flags |= derivative_group_linear;
+            break;
+        case spv::ExecutionModeDerivativeGroupQuadsKHR:
+            flags |= derivative_group_quads;
+            break;
         default:
             break;
     }
@@ -443,6 +448,15 @@ bool EntryPoint::IsBuiltInWritten(spv::BuiltIn built_in, const Module& module_st
             }
         }
         break;
+    }
+    return false;
+}
+
+bool EntryPoint::HasBuiltIn(spv::BuiltIn built_in) const {
+    for (const auto* variable : built_in_variables) {
+        if (variable->decorations.builtin == built_in) {
+            return true;
+        }
     }
     return false;
 }
@@ -852,9 +866,10 @@ Module::StaticData::StaticData(const Module& module_state, StatelessData* statel
     {
         std::vector<uint32_t>::const_iterator it = module_state.words_.cbegin();
         it += 5;  // skip first 5 word of header
+        instructions.reserve(module_state.words_.size() * 4);
         while (it != module_state.words_.cend()) {
-            Instruction insn(it);
-            const uint32_t opcode = insn.Opcode();
+            auto new_insn = instructions.emplace_back(it);
+            const uint32_t opcode = new_insn.Opcode();
 
             // Check for opcodes that would require reparsing of the words
             if (opcode == spv::OpGroupDecorate || opcode == spv::OpDecorationGroup || opcode == spv::OpGroupMemberDecorate) {
@@ -865,8 +880,7 @@ Module::StaticData::StaticData(const Module& module_state, StatelessData* statel
                 }
             }
 
-            instructions.emplace_back(insn);
-            it += insn.Length();
+            it += new_insn.Length();
         }
         instructions.shrink_to_fit();
     }
@@ -1245,7 +1259,7 @@ void Module::DescribeTypeInner(std::ostringstream& ss, uint32_t type, uint32_t i
     const Instruction* insn = FindDef(type);
     auto indent_by = [&ss](uint32_t i) {
         for (uint32_t x = 0; x < i; x++) {
-            ss << "\t";
+            ss << '\t';
         }
     };
 
@@ -1292,11 +1306,11 @@ void Module::DescribeTypeInner(std::ostringstream& ss, uint32_t type, uint32_t i
                     ss << " \"" << name << "\"";
                 }
 
-                ss << "\n";
+                ss << '\n';
             }
             indent--;
             indent_by(indent);
-            ss << "}";
+            ss << '}';
 
             auto name = GetName(type);
             if (!name.empty()) {
@@ -1336,9 +1350,9 @@ std::string Module::DescribeVariable(uint32_t id) const {
         ss << "Variable \"" << name << "\"";
         auto decorations = GetDecorations(id);
         if (!decorations.empty()) {
-            ss << " (Decorations:" << decorations << ")";
+            ss << " (Decorations:" << decorations << ')';
         }
-        ss << "\n";
+        ss << '\n';
     }
     return ss.str();
 }
@@ -1978,7 +1992,8 @@ bool ResourceInterfaceVariable::IsStorageBuffer(const ResourceInterfaceVariable&
     const bool storage_buffer = variable.storage_class == spv::StorageClassStorageBuffer;
     const bool uniform = variable.storage_class == spv::StorageClassUniform;
     // Block decorations are always on the struct of the variable
-    const bool buffer_block = variable.type_struct_info && variable.type_struct_info->decorations.Has(DecorationSet::buffer_block_bit);
+    const bool buffer_block =
+        variable.type_struct_info && variable.type_struct_info->decorations.Has(DecorationSet::buffer_block_bit);
     const bool block = variable.type_struct_info && variable.type_struct_info->decorations.Has(DecorationSet::block_bit);
     return ((uniform && buffer_block) || ((storage_buffer || physical_storage_buffer) && block));
 }

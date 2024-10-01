@@ -62,6 +62,8 @@ enum class Feature {
     reportAddressBinding,
     // VkPhysicalDeviceAmigoProfilingFeaturesSEC
     amigoProfiling,
+    // VkPhysicalDeviceAntiLagFeaturesAMD
+    antiLag,
     // VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT
     attachmentFeedbackLoopDynamicState,
     // VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT
@@ -86,9 +88,11 @@ enum class Feature {
     deviceCoherentMemory,
     // VkPhysicalDeviceColorWriteEnableFeaturesEXT
     colorWriteEnable,
-    // VkPhysicalDeviceComputeShaderDerivativesFeaturesNV
+    // VkPhysicalDeviceCommandBufferInheritanceFeaturesNV
+    commandBufferInheritance,
+    // VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
     computeDerivativeGroupLinear,
-    // VkPhysicalDeviceComputeShaderDerivativesFeaturesNV
+    // VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
     computeDerivativeGroupQuads,
     // VkPhysicalDeviceConditionalRenderingFeaturesEXT
     conditionalRendering,
@@ -124,6 +128,8 @@ enum class Feature {
     floatRepresentation,
     // VkPhysicalDeviceDepthBiasControlFeaturesEXT
     leastRepresentableValueForceUnormRepresentation,
+    // VkPhysicalDeviceDepthClampControlFeaturesEXT
+    depthClampControl,
     // VkPhysicalDeviceDepthClampZeroOneFeaturesEXT
     depthClampZeroOne,
     // VkPhysicalDeviceDepthClipControlFeaturesEXT
@@ -188,8 +194,10 @@ enum class Feature {
     deviceGeneratedComputeCaptureReplay,
     // VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV
     deviceGeneratedComputePipelines,
-    // VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV
+    // VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT
     deviceGeneratedCommands,
+    // VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT
+    dynamicGeneratedPipelineLayout,
     // VkPhysicalDeviceDeviceMemoryReportFeaturesEXT
     deviceMemoryReport,
     // VkPhysicalDeviceDiagnosticsConfigFeaturesNV
@@ -560,6 +568,8 @@ enum class Feature {
     performanceCounterMultipleQueryPools,
     // VkPhysicalDevicePerformanceQueryFeaturesKHR
     performanceCounterQueryPools,
+    // VkPhysicalDevicePipelineBinaryFeaturesKHR
+    pipelineBinaries,
     // VkPhysicalDevicePipelineCreationCacheControlFeatures, VkPhysicalDeviceVulkan13Features
     pipelineCreationCacheControl,
     // VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR

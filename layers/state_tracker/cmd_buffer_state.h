@@ -18,7 +18,6 @@
  * limitations under the License.
  */
 #pragma once
-#include "utils/hash_vk_types.h"
 #include "state_tracker/state_object.h"
 #include "state_tracker/image_layout_map.h"
 #include "state_tracker/pipeline_state.h"
@@ -86,6 +85,7 @@ struct AttachmentInfo {
 
     bool IsResolve() const { return type == Type::ColorResolve || type == Type::DepthResolve || type == Type::StencilResolve; }
     bool IsInput() const { return type == Type::Input; }
+    bool IsColor() const { return type == Type::Color; }
 
     std::string Describe(AttachmentSource source, uint32_t index) const;
 };
@@ -104,7 +104,7 @@ namespace vvl {
 
 class Event : public StateObject {
   public:
-    Event(VkEvent handle, const VkEventCreateInfo *pCreateInfo);
+    Event(VkEvent handle, const VkEventCreateInfo *create_info);
     VkEvent VkHandle() const { return handle_.Cast<VkEvent>(); }
 
     const VkEventCreateFlags flags;
@@ -138,12 +138,12 @@ class CommandPool : public StateObject {
     // Cmd buffers allocated from this pool
     vvl::unordered_map<VkCommandBuffer, CommandBuffer *> commandBuffers;
 
-    CommandPool(ValidationStateTracker &dev, VkCommandPool handle, const VkCommandPoolCreateInfo *pCreateInfo, VkQueueFlags flags);
+    CommandPool(ValidationStateTracker &dev, VkCommandPool handle, const VkCommandPoolCreateInfo *create_info, VkQueueFlags flags);
     virtual ~CommandPool() { Destroy(); }
 
     VkCommandPool VkHandle() const { return handle_.Cast<VkCommandPool>(); }
 
-    void Allocate(const VkCommandBufferAllocateInfo *create_info, const VkCommandBuffer *command_buffers);
+    void Allocate(const VkCommandBufferAllocateInfo *allocate_info, const VkCommandBuffer *command_buffers);
     void Free(uint32_t count, const VkCommandBuffer *command_buffers);
     void Reset(const Location &loc);
 
@@ -262,6 +262,8 @@ class CommandBuffer : public RefcountedStateObject {
         bool rasterizer_discard_enable;
         // VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE
         bool depth_bias_enable = false;
+        // VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT
+        bool depth_clamp_enable = false;
         // VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT
         bool alpha_to_coverage_enable;
         // VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT
@@ -283,9 +285,8 @@ class CommandBuffer : public RefcountedStateObject {
         std::vector<VkColorBlendEquationEXT> color_blend_equations;  // VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT
         std::vector<VkColorComponentFlags> color_write_masks;        // VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT
 
-        // VK_DYNAMIC_STATE_VERTEX_INPUT_EXT
-        std::vector<uint32_t> vertex_binding_descriptions_divisor;
-        std::vector<VkVertexInputAttributeDescription2EXT> vertex_attribute_descriptions;
+        // VK_DYNAMIC_STATE_VERTEX_INPUT_EXT, key is binding number
+        vvl::unordered_map<uint32_t, VertexBindingState> vertex_bindings;
 
         // VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT
         VkConservativeRasterizationModeEXT conservative_rasterization_mode;
@@ -352,8 +353,7 @@ class CommandBuffer : public RefcountedStateObject {
                 color_write_enable_attachment_count = 0u;
             }
             if (mask[CB_DYNAMIC_STATE_VERTEX_INPUT_EXT]) {
-                vertex_binding_descriptions_divisor.clear();
-                vertex_attribute_descriptions.clear();
+                vertex_bindings.clear();
             }
             if (mask[CB_DYNAMIC_STATE_VIEWPORT_W_SCALING_NV]) {
                 viewport_w_scalings.clear();
@@ -423,6 +423,8 @@ class CommandBuffer : public RefcountedStateObject {
     std::shared_ptr<vvl::RenderPass> activeRenderPass;
     // Used for both type of renderPass
     AttachmentSource attachment_source;
+    // There is no concept of "attachment index" with dynamic rendering, we use this for both dynamic/non-dynamic rendering though.
+    // The attachments are packed the following: | color | color resolve | depth | depth resolve | stencil | stencil resolve |
     std::vector<AttachmentInfo> active_attachments;
     vvl::unordered_set<uint32_t> active_color_attachments_index;
     uint32_t active_render_pass_device_mask;
@@ -513,6 +515,7 @@ class CommandBuffer : public RefcountedStateObject {
         std::vector<std::byte> values{};
     };
     std::vector<PushConstantData> push_constant_data_chunks;
+    std::array<VkPipelineLayout, BindPoint_Count> push_constant_latest_used_layout{};
     PushConstantRangesId push_constant_ranges_layout;
 
     // Video coding related state tracking
@@ -538,7 +541,7 @@ class CommandBuffer : public RefcountedStateObject {
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock); }
     WriteLockGuard WriteLock() { return WriteLockGuard(lock); }
 
-    CommandBuffer(ValidationStateTracker &dev, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *pAllocateInfo,
+    CommandBuffer(ValidationStateTracker &dev, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *allocate_info,
                   const vvl::CommandPool *cmd_pool);
 
     virtual ~CommandBuffer() { Destroy(); }
@@ -627,7 +630,8 @@ class CommandBuffer : public RefcountedStateObject {
     void ExecuteCommands(vvl::span<const VkCommandBuffer> secondary_command_buffers);
 
     void UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_bind_point, const vvl::PipelineLayout &pipeline_layout,
-                                       uint32_t first_set, uint32_t set_count, const VkDescriptorSet *pDescriptorSets,
+                                       vvl::Func bound_command, uint32_t first_set, uint32_t set_count,
+                                       const VkDescriptorSet *pDescriptorSets,
                                        std::shared_ptr<vvl::DescriptorSet> &push_descriptor_set, uint32_t dynamic_offset_count,
                                        const uint32_t *p_dynamic_offsets);
 
@@ -635,8 +639,9 @@ class CommandBuffer : public RefcountedStateObject {
                                           uint32_t first_set, uint32_t set_count, const uint32_t *buffer_indicies,
                                           const VkDeviceSize *buffer_offsets);
 
-    void PushDescriptorSetState(VkPipelineBindPoint pipelineBindPoint, const vvl::PipelineLayout &pipeline_layout, uint32_t set,
-                                uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites);
+    void PushDescriptorSetState(VkPipelineBindPoint pipelineBindPoint, const vvl::PipelineLayout &pipeline_layout,
+                                vvl::Func bound_command, uint32_t set, uint32_t descriptorWriteCount,
+                                const VkWriteDescriptorSet *pDescriptorWrites);
 
     void UpdateDrawCmd(Func command);
     void UpdateDispatchCmd(Func command);
@@ -689,7 +694,7 @@ class CommandBuffer : public RefcountedStateObject {
     void BindShader(VkShaderStageFlagBits shader_stage, vvl::ShaderObject *shader_object_state);
 
     bool IsPrimary() const { return allocate_info.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY; }
-    bool IsSeconary() const { return allocate_info.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY; }
+    bool IsSecondary() const { return allocate_info.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY; }
     void BeginLabel(const char *label_name);
     void EndLabel();
     int LabelStackDepth() const { return label_stack_depth_; }

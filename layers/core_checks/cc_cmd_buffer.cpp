@@ -244,7 +244,8 @@ bool CoreChecks::PreCallValidateBeginCommandBuffer(VkCommandBuffer commandBuffer
                                  "occulusionQuery is disabled or the device does not support precise occlusion queries.",
                                  FormatHandle(commandBuffer).c_str());
             }
-            auto p_inherited_viewport_scissor_info = vku::FindStructInPNextChain<VkCommandBufferInheritanceViewportScissorInfoNV>(info->pNext);
+            auto p_inherited_viewport_scissor_info =
+                vku::FindStructInPNextChain<VkCommandBufferInheritanceViewportScissorInfoNV>(info->pNext);
             if (p_inherited_viewport_scissor_info != nullptr && p_inherited_viewport_scissor_info->viewportScissor2D) {
                 if (!enabled_features.inheritedViewportScissor2D) {
                     skip |= LogError(
@@ -499,7 +500,7 @@ bool CoreChecks::PreCallValidateCmdUpdateBuffer(VkCommandBuffer commandBuffer, V
 
 bool CoreChecks::ValidatePrimaryCommandBuffer(const vvl::CommandBuffer &cb_state, const Location &loc, const char *vuid) const {
     bool skip = false;
-    if (cb_state.IsSeconary()) {
+    if (cb_state.IsSecondary()) {
         skip |= LogError(vuid, cb_state.Handle(), loc, "command can't be executed on a secondary command buffer.");
     }
     return skip;
@@ -874,11 +875,105 @@ bool CoreChecks::PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuffer
             skip |= viewport_scissor_inheritance.VisitSecondary(i, cb_loc, sub_cb_state);
         }
 
-        if (!sub_cb_state.IsSeconary()) {
+        if (!sub_cb_state.IsSecondary()) {
             const LogObjectList objlist(commandBuffer, pCommandBuffers[i]);
             skip |= LogError("VUID-vkCmdExecuteCommands-pCommandBuffers-00088", objlist, cb_loc,
                              "(%s) is not VK_COMMAND_BUFFER_LEVEL_SECONDARY.", FormatHandle(pCommandBuffers[i]).c_str());
         } else {
+            if (cb_state.activeRenderPass) {
+                if (cb_state.hasRenderPassInstance && cb_state.activeRenderPass->UsesDynamicRendering() &&
+                    sub_cb_state.activeRenderPass->UsesDynamicRendering()) {
+                    const auto *location_info = vku::FindStructInPNextChain<VkRenderingAttachmentLocationInfoKHR>(
+                        sub_cb_state.activeRenderPass->inheritance_rendering_info.pNext);
+
+                    if (location_info) {
+                        const std::string vuid_090504 = "VUID-vkCmdExecuteCommands-pCommandBuffers-09504";
+                        const LogObjectList objlist(commandBuffer, pCommandBuffers[i]);
+                        skip |= ValidateRenderingAttachmentLocationsKHR(*location_info, objlist, cb_loc.dot(Field::pNext));
+
+                        if (location_info->colorAttachmentCount != cb_state.rendering_attachments.color_indexes.size()) {
+                            skip |= LogError(
+                                vuid_090504, objlist,
+                                cb_loc.pNext(Struct::VkRenderingAttachmentLocationInfoKHR, Field::colorAttachmentCount),
+                                "(%" PRIu32
+                                ") does not match the implicit or explicit state in the primary command buffer ("
+                                "%" PRIu32 ").",
+                                location_info->colorAttachmentCount, unsigned(cb_state.rendering_attachments.color_indexes.size()));
+                        } else {
+                            for (uint32_t idx = 0; idx < location_info->colorAttachmentCount; idx++) {
+                                if (location_info->pColorAttachmentLocations &&
+                                    location_info->pColorAttachmentLocations[idx] !=
+                                        cb_state.rendering_attachments.color_locations[idx]) {
+                                    skip |= LogError(
+                                        vuid_090504, objlist,
+                                        cb_loc.pNext(Struct::VkRenderingAttachmentLocationInfoKHR,
+                                                     Field::pColorAttachmentInputIndices, idx),
+                                        "(%" PRIu32
+                                        ") does not match the implicit or explicit state in the primary command buffer (%" PRIu32
+                                        ").",
+                                        location_info->pColorAttachmentLocations[idx],
+                                        cb_state.rendering_attachments.color_locations[idx]);
+                                }
+                            }
+                        }
+                    }
+
+                    const auto *index_info = vku::FindStructInPNextChain<VkRenderingInputAttachmentIndexInfoKHR>(
+                        sub_cb_state.activeRenderPass->inheritance_rendering_info.pNext);
+
+                    if (index_info) {
+                        const std::string vuid_090505 = "VUID-vkCmdExecuteCommands-pCommandBuffers-09505";
+                        const LogObjectList objlist(commandBuffer, pCommandBuffers[i]);
+                        skip |= ValidateRenderingInputAttachmentIndicesKHR(*index_info, objlist, cb_loc.dot(Field::pNext));
+
+                        if (index_info->colorAttachmentCount != cb_state.rendering_attachments.color_indexes.size()) {
+                            skip |= LogError(
+                                vuid_090505, objlist,
+                                cb_loc.pNext(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::colorAttachmentCount),
+                                "(%" PRIu32
+                                ") does not match the implicit or explicit state in the primary command buffer ("
+                                "%" PRIu32 ").",
+                                index_info->colorAttachmentCount, unsigned(cb_state.rendering_attachments.color_indexes.size()));
+                        } else {
+                            for (uint32_t idx = 0; idx < index_info->colorAttachmentCount; idx++) {
+                                if (index_info->pColorAttachmentInputIndices && cb_state.rendering_attachments.color_indexes[idx] !=
+                                                                                    index_info->pColorAttachmentInputIndices[idx]) {
+                                    skip |= LogError(vuid_090505, objlist,
+                                                     cb_loc.pNext(Struct::VkRenderingInputAttachmentIndexInfoKHR,
+                                                                  Field::pColorAttachmentInputIndices, idx),
+                                                     "(%" PRIu32
+                                                     ") does not match the implicit or explicit state in the primary command "
+                                                     "buffer (%" PRIu32 ").",
+                                                     index_info->pColorAttachmentInputIndices[idx],
+                                                     cb_state.rendering_attachments.color_indexes[idx]);
+                                }
+                            }
+                        }
+
+                        if (cb_state.rendering_attachments.depth_index && index_info->pDepthInputAttachmentIndex &&
+                            *cb_state.rendering_attachments.depth_index != *index_info->pDepthInputAttachmentIndex) {
+                            skip |= LogError(
+                                vuid_090505, objlist,
+                                cb_loc.pNext(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::pDepthInputAttachmentIndex),
+                                "(%" PRIu32
+                                ") does not match the implicit or explicit state in the primary command buffer ("
+                                "%" PRIu32 ").",
+                                *index_info->pDepthInputAttachmentIndex, *cb_state.rendering_attachments.depth_index);
+                        }
+
+                        if (cb_state.rendering_attachments.stencil_index && index_info->pStencilInputAttachmentIndex &&
+                            *cb_state.rendering_attachments.stencil_index != *index_info->pStencilInputAttachmentIndex) {
+                            skip |= LogError(
+                                vuid_090505, objlist,
+                                cb_loc.pNext(Struct::VkRenderingInputAttachmentIndexInfoKHR, Field::pStencilInputAttachmentIndex),
+                                "(%" PRIu32
+                                ") does not match the implicit or explicit state in the primary command buffer"
+                                "(%" PRIu32 ").",
+                                *index_info->pStencilInputAttachmentIndex, *cb_state.rendering_attachments.stencil_index);
+                        }
+                    }
+                }
+            }
             if (!cb_state.activeRenderPass) {
                 if (sub_cb_state.beginInfo.flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) {
                     const LogObjectList objlist(commandBuffer, pCommandBuffers[i]);
@@ -1319,11 +1414,11 @@ bool CoreChecks::PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuffer
                         const auto subresource = image_state->subresource_encoder.Decode(index);
                         // VU being worked on https://gitlab.khronos.org/vulkan/vulkan/-/issues/2456
                         skip |= LogError("UNASSIGNED-vkCmdExecuteCommands-commandBuffer-00001", objlist, cb_loc,
-                                         "was executed using %s (subresource: aspectMask 0x%x array layer %" PRIu32
+                                         "was executed using %s (subresource: aspectMask %s, array layer %" PRIu32
                                          ", mip level %" PRIu32 ") which expects layout %s--instead, image %s layout is %s.",
-                                         FormatHandle(image).c_str(), subresource.aspectMask, subresource.arrayLayer,
-                                         subresource.mipLevel, string_VkImageLayout(sub_layout), layout_type,
-                                         string_VkImageLayout(cb_layout));
+                                         FormatHandle(image).c_str(), string_VkImageAspectFlags(subresource.aspectMask).c_str(),
+                                         subresource.arrayLayer, subresource.mipLevel, string_VkImageLayout(sub_layout),
+                                         layout_type, string_VkImageLayout(cb_layout));
                     }
                 }
             }

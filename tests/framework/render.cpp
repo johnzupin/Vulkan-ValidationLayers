@@ -25,8 +25,8 @@
 #include <vulkan/utility/vk_format_utils.h>
 
 #include "generated/vk_extension_helper.h"
-#include "utils/vk_layer_utils.h"
 #include "layer_validation_tests.h"
+#include "vk_layer_config.h"
 
 #if defined(VK_USE_PLATFORM_METAL_EXT)
 #include "apple_wsi.h"
@@ -44,7 +44,6 @@ typename C::iterator RemoveIf(C &container, F &&fn) {
 VkRenderFramework::VkRenderFramework()
     : instance_(nullptr),
       m_device(nullptr),
-      m_commandBuffer(nullptr),
       m_renderPass(VK_NULL_HANDLE),
       m_vertex_buffer(nullptr),
       m_width(256),   // default window width
@@ -486,7 +485,6 @@ void VkRenderFramework::ShutdownFramework() {
     }
 
     m_command_buffer.destroy();
-    m_commandBuffer = nullptr;
     m_command_pool.destroy();
 
     if (m_second_queue) {
@@ -652,30 +650,26 @@ void VkRenderFramework::InitState(VkPhysicalDeviceFeatures *features, void *crea
         vk::InitDeviceExtension(instance_, *m_device, device_ext_name);
     }
 
-    m_default_queue = m_device->QueuesWithGraphicsCapability()[0];
-
-    m_second_queue = [this]() -> vkt::Queue * {
-        if (m_device->QueuesWithGraphicsCapability().size() > 1) {
-            return m_device->QueuesWithGraphicsCapability()[1];  // skip default queue
+    std::vector<vkt::Queue *> queues;
+    vvl::Append(queues, m_device->QueuesWithGraphicsCapability());
+    for (vkt::Queue *queue_with_compute_caps : m_device->QueuesWithComputeCapability()) {
+        if (!vvl::Contains(queues, queue_with_compute_caps)) {
+            queues.emplace_back(queue_with_compute_caps);
         }
-        const auto &with_compute_caps = m_device->QueuesWithComputeCapability();
-        if (with_compute_caps.size() > 0 && with_compute_caps[0] != m_default_queue) {
-            return with_compute_caps[0];
+    }
+    for (vkt::Queue *queue_with_transfer_caps : m_device->QueuesWithTransferCapability()) {
+        if (!vvl::Contains(queues, queue_with_transfer_caps)) {
+            queues.emplace_back(queue_with_transfer_caps);
         }
-        if (with_compute_caps.size() > 1) {
-            return with_compute_caps[1];
-        }
-        const auto &with_transfer_caps = m_device->QueuesWithTransferCapability();
-        if (with_transfer_caps.size() > 0 && with_transfer_caps[0] != m_default_queue) {
-            return with_transfer_caps[0];
-        }
-        if (with_transfer_caps.size() > 1) {
-            return with_transfer_caps[1];
-        }
-        return nullptr;
-    }();
-    if (m_second_queue) {
+    }
+    m_default_queue = queues[0];
+    if (queues.size() > 1) {
+        m_second_queue = queues[1];
         m_second_queue_caps = m_device->phy().queue_properties_[m_second_queue->family_index].queueFlags;
+    }
+    if (queues.size() > 2) {
+        m_third_queue = queues[2];
+        m_third_queue_caps = m_device->phy().queue_properties_[m_third_queue->family_index].queueFlags;
     }
 
     m_depthStencil = new vkt::Image();
@@ -684,7 +678,6 @@ void VkRenderFramework::InitState(VkPhysicalDeviceFeatures *features, void *crea
 
     m_command_pool.Init(*m_device, m_device->graphics_queue_node_index_, flags);
     m_command_buffer.Init(*m_device, m_command_pool);
-    m_commandBuffer = &m_command_buffer;
 
     if (m_second_queue) {
         m_second_command_pool.Init(*m_device, m_second_queue->family_index, flags);
@@ -1106,7 +1099,7 @@ void VkRenderFramework::SetDefaultDynamicStatesExclude(const std::vector<VkDynam
         m_vertex_buffer = new vkt::Buffer(*m_device, 32u, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     }
 
-    VkCommandBuffer cmdBuffer = commandBuffer ? commandBuffer : m_commandBuffer->handle();
+    VkCommandBuffer cmdBuffer = commandBuffer ? commandBuffer : m_command_buffer.handle();
     VkViewport viewport = {0, 0, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f};
     VkRect2D scissor = {{0, 0}, {m_width, m_height}};
     if (!excluded(VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT)) vk::CmdSetViewportWithCountEXT(cmdBuffer, 1u, &viewport);
