@@ -1,3 +1,593 @@
+vulkan-validationlayers (1.3.296.0~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ clayjohn ]
+  * build: Correct Android NDK version in error message
+
+  [ Rodrigo Locatti ]
+  * layers: Acknowledge alloc memory priority in BP
+  * tests: Add BindMemory_StaticPriority
+
+  [ spencer-lunarg ]
+  * printf: More test and doc cleanup
+  * bp: Return on invalid image in zcull scope
+
+  [ Ralph Potter ]
+  * tests: Fix PositiveDescriptors.ImmutableSamplerOnlyDescriptor
+  * layers: Fix function name typo
+
+  [ spencer-lunarg ]
+  * printf: Cleanup Printf string message parsing logic
+  * printf: Add Basic DebugPrintf string validation
+
+  [ egdaniel ]
+  * core: Fix descriptorType check in ImmutableSamplersAreEqual
+
+  [ Artem Kharytoniuk ]
+  * sync: Disable resource reporting due to stale index issue
+
+  [ spencer-lunarg ]
+  * build: Fix CMake Clang Debug build check
+  * printf: Fix vector of lu and lx
+
+  [ Ralph Potter ]
+  * layers: Add VUID-09504 checks
+  * tests: Add VUID-09504 test
+  * layers: Add VUID-09505 checks
+  * tests: Add VUID-09505 test
+  * layers: Improve VUID-09504 and VUID-09505 messages
+
+  [ spencer-lunarg ]
+  * core: Move PreCallRecord to PostCallRecord
+  * bp: Move PreCallRecord to PostCallRecord
+  * scripts: Add missing parent VUs
+  * scripts: Remove false warning for object_tracker.h
+  * layers: Cleanup Stateless image checks
+  * layers: Fix compatible image VU for 291 headers
+
+  [ Spencer Fricke ]
+  * layers: Improve comment grammar
+
+  [ spencer-lunarg ]
+  * layers: Add RTX Implicit VUID
+
+  [ Artem Kharytoniuk ]
+  * sync: Ensure handle index is valid
+  * tests: Test invalid handle resource index
+
+  [ spencer-lunarg ]
+  * scripts: Fix when extension dep are flipped
+
+  [ Arno ]
+  * layers: Move static globals to accessor functions
+
+  [ Spencer Fricke ]
+  * layers: Use emplace_back in DescriptorSet
+
+  [ Arno ]
+  * layers: Add Tracy
+  * layers: Misc memory optimisations
+
+  [ Jeremy Gebben ]
+  * gpu: Keep track of which timeline semaphore functions to use
+  * gpu: Fix a race condition in submission processing
+
+  [ spencer-lunarg ]
+  * layers: Cleanup Global and Shader settings
+  * gpu: Add debug option to print instrumentation info
+
+  [ Arno ]
+  * layers: Improve perf for buffer copies validation
+  * layers: Add Tracy messages macro
+
+  [ spencer-lunarg ]
+  * spirv: Create a InjectFunctionPass subclass
+  * tests: Add more debug printf tests
+  * printf: Move implementation inside VVL
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix iteration over queue batch contexts
+  * tests: Test that fence wait processes present batches
+
+  [ spencer-lunarg ]
+  * layers: Use char for new line in string stream
+
+  [ Arno ]
+  * layers: Fix handling of invalid @ with 0 primitive
+  * layers: Add 09491
+  * layers: Add 09492
+  * layers: Fix usage of mimalloc with Tracy
+
+  [ spencer-lunarg ]
+  * layers: Use emplace_back where possible
+
+  [ Arno ]
+  * tests: Add buffer copies stress test
+  * layers: Improve perf of buffer copies validation
+
+  [ spencer-lunarg ]
+  * printf: Add stage info to verbose info
+  * printf: Support 64-bit floats
+
+  [ Jeremy Gebben ]
+  * build: Update shader dependencies to latest
+
+  [ spencer-lunarg ]
+  * gpu: Improve naming between shader for Descriptor Indexing
+  * layers: Set Loc as const ref in LogMsg
+  * gpu: Change GPU SPIR-V namespace to be generic
+  * gpu: Don't mix VVL and GPU SPIR-V namespaces
+  * layers: Use emplace_back when building SPIR-V
+  * gpu: Combine InstrumentShader
+  * gpu: Remove copy of SPIR-V before instrumentation
+  * layers: Unify state object creation names
+  * spirv: Allow instrumentation to report to DebugCallback
+  * printf: Move validation inside instrumentation time
+  * layers: Fix logging consistency
+
+  [ Antonio Maiorano ]
+  * layers: Fix stack overflow in GetDrawDispatchVuid
+
+  [ Arno ]
+  * layers: Handle sparse/not sparse buffer copies
+
+  [ Benjamin Cheng ]
+  * layers: Add missing pre-condition for inline query
+  * tests: Put decode output image in incorrect layout
+  * tests: Add missing result status query check
+
+  [ spencer-lunarg ]
+  * tests: Pass in --print-debug-info for standalone
+  * tests: Add profiling script for spirv instrumentation
+  * layers: Remove unused includes
+
+  [ Arno ]
+  * gpu: Fix descriptor update
+
+  [ spencer-lunarg ]
+  * tests: Remove unused includes
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.292
+
+  [ spencer-lunarg ]
+  * spirv: Rerun generate_spirv.py
+  * spirv: Use InternalError over assert where possible
+  * spirv: Create dedicated InjectConditionalFunctionPass class
+  * gpu: Combine PreCallRecordCreateShaderModule
+  * gpu: Move more debugprintf to be like gpuav
+  * gpu: Unify error message and DeviceCreation
+
+  [ Jeremy Gebben ]
+  * gpu: Avoid multiple command buffer lookups while instrumenting
+
+  [ spencer-lunarg ]
+  * gpu: More cleanup around descriptor indexing
+  * layers: Add AddressBuffer helper
+  * printf: Fix 8-bit 16-bit signed ints
+  * layers: Apply some clang-tidy fixes
+  * gpu: Fix buffer OOB to use range, not size
+  * gpu: Print Texel Buffer vkBufferView in message
+  * tests: Fix bad OOB tests
+
+  [ Jeremy Gebben ]
+  * corechecks: Replace VUID 07825 with 08798
+  * gpu: Move ShaderCacheHash to a separate file
+
+  [ spencer-lunarg ]
+  * gpu: Cleanup setting init
+  * gpu: Add Module settings
+  * gpu: Add feature support checks
+
+  [ ziga-lunarg ]
+  * tests: Fix task shader limit test
+
+  [ Arno ]
+  * gpu: Fixes for Doom Eternal
+  * gpu_and_core: Fix handling of deferred pipe create
+  * tests: Add deferred RT pipe build test
+
+  [ spencer-lunarg ]
+  * gpu: Move Instrumentation to Pipeline creation
+
+  [ Arno ]
+  * core: Use robin hood map
+
+  [ Spencer Fricke ]
+  * layers: Remove gpuav_debug_disable_all from vkconfig
+
+  [ Christophe ]
+  * layers: Hide deprecated 'enables/disables' in vkconfig
+
+  [ Arno ]
+  * core: Fix WrapPnextChainHandles name
+  * core: Remove QueryObject <
+
+  [ spencer-lunarg ]
+  * gpu: Combine ShaderObject in Printf/GPU-AV
+  * gpu: Shader Object instruments for each pCreateInfos
+  * gpu: Remove extra copy of safe structs
+
+  [ Spencer Fricke ]
+  * layers: Update comments
+
+  [ Jeremy Gebben ]
+  * state: Improve storage of vertex input state
+
+  [ ziga-lunarg ]
+  * layers: Add missing query update
+  * tests: Test getting ray tracing query results
+
+  [ spencer-lunarg ]
+  * layers: Fix false positive for dynamic Geometry Topology
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix vkGetSemaphoreCounterValue leaves orphaned signal
+  * tests: Test semaphore counter query with external semaphore
+
+  [ spencer-lunarg ]
+  * gpu: Remove self validation from bindless shader
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.293
+
+  [ Artem Kharytoniuk ]
+  * layers: Add QueueSubmission object per swapchain
+  * layers: Use QueueSubmission to track present fence
+  * tests: Test queue waits for present fence
+
+  [ spencer-lunarg ]
+  * layers: Fix crash for shader module identifiers and mesh shaders
+  * scripts: Fix check_code_format.py
+
+  [ ziga-lunarg ]
+  * layers: Fix VUID 04131 message
+
+  [ spencer-lunarg ]
+  * layers: Add VK_EXT_layer_settings param validation
+  * layers: Spec fixes for 1.3.293
+  * gpu: Pass all tests with self val
+
+  [ ziga-lunarg ]
+  * layers: Fix VUID 04896 message
+  * layers: Fix VUID 06479 message
+
+  [ spencer-lunarg ]
+  * gpu: Fix GPU-AV Caching
+  * gpu: Create dedicated ShaderInstrumentation setting struct
+
+  [ Artem Kharytoniuk ]
+  * layers: Revert PR "Wait for present fences in QueueWaitIdle"
+
+  [ spencer-lunarg ]
+  * layers: Improve RequiredSubgroupSizeCreateInfo messages
+  * layers: Fix 06038 wording
+  * docs: GPU-AV Bindless Descriptor Design Doc
+
+  [ ziga-lunarg ]
+  * layers: Fix VUID 08096 message
+
+  [ spencer-lunarg ]
+  * tests: Add Descriptor Buffer Access Bit
+  * layers: Misc Descriptor Buffer message cleanup
+
+  [ arno-lunarg ]
+  * gpu: Fix shader objects management
+  * gpu: Fix unaligned dynamic offsets
+  * gpu: Fix obtention of last used pipeline layout
+  * gpu: Fix tracked shader stages order
+
+  [ spencer-lunarg ]
+  * layers: Seperate CreateBuffer for descriptor buffers
+  * docs: Add Limitations documentations
+
+  [ Spencer Fricke ]
+  * docs: Apply suggestions from code review
+  * docs: Apply suggestions from code review
+
+  [ spencer-lunarg ]
+  * gpu: Add NonBindlessOOBBuffer Pass
+  * gpu: Add NonBindlessOOBTexelBufferPass
+
+  [ ziga-lunarg ]
+  * layers: Fix tessellation typos
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.294
+
+  [ Spencer Fricke ]
+  * docs: Fix grammar in limitations.md
+
+  [ spencer-lunarg ]
+  * layers: Add Handles to ShaderObject bind messages
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup Fence/Semaphore interfaces
+
+  [ spencer-lunarg ]
+  * layers: Print ppEnabledExtensionNames string if unknown
+
+  [ Artem Kharytoniuk ]
+  * layers: Track present fences
+  * tests: Test queue waits for present fence
+  * layers: Rename PresentSync -> AcquireFenceSync
+
+  [ spencer-lunarg ]
+  * gpu: Have all Passes have a name function
+  * layers: Sort stages for ValidateInterfaceBetweenStages
+  * tests: More test header cleanup
+  * ci: Add some job dependency
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix SubmitInfoConverter does not store timeline values
+
+  [ spencer-lunarg ]
+  * scripts: Hotfix for VK_KHR_pipeline_binary XML
+
+  [ stu-s ]
+  * layers: Add VK_KHR_pipeline_binary validation
+
+  [ spencer-lunarg ]
+  * bp: Improve max sync object message
+
+  [ Spencer Fricke ]
+  * scripts: Update Profiles in known_good.json
+
+  [ spencer-lunarg ]
+  * bp: Add some more values to error messages
+
+  [ Artem Kharytoniuk ]
+  * tests: Cleanup SignalSemaphoreValue test
+
+  [ spencer-lunarg ]
+  * tests: More DebugPrintf Tests
+  * printf: Inline logic
+  * layers: Fix more Self Validation errors
+
+  [ Ralph Potter ]
+  * layers: Allow VUID-VkAcquireNextImageInfoKHR-fence-01289
+  * tests: Add fence tests for vkAcquireNextImageKHR
+  * layers: Report inflight vs. retired fences in vkAcquireNextImage
+  * tests: Remove layeredShadingRateAttachments property check
+  * tests: Positive tests for VkFramebufferCreateInfo-flags-04587
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.295
+
+  [ spencer-lunarg ]
+  * layers: Add was instrumented tracking
+  * printf: Don't allocate memory when not needed
+  * layers: Fix Self Validation Build
+  * layers: Cleanup ValidateDescriptorSetLayoutCreateInfo
+  * tests: Cleanup Descriptor Buffer tests
+  * layers: More Descriptor Buffer cleanup
+  * gpu: Apply missing patches from 8482
+
+  [ Jeremy Gebben ]
+  * build: Update SPIRV dependencies to latest
+
+  [ ziga-lunarg ]
+  * tests: Fix minImageCount in swapchain maintenance1 test
+
+  [ spencer-lunarg ]
+  * layers: Inline ValidateExtendedDynamicState
+  * layers: Call alias function call dynamic state
+  * layers: Fix VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT false pos
+  * layers: Fix vkCmdSetVertexInputEXT false positive
+  * tests: Add some larger Descriptor Buffer tests
+  * gpu: Fix Descriptor Buffer GPU-AV crash
+
+  [ Ralph Potter ]
+  * layers: Early exit on VUID 09006 violation
+
+  [ Sergey Kosarevsky ]
+  * gpu: Don't emit redundant warnings
+
+  [ spencer-lunarg ]
+  * printf: Fix clearing over output buffer size
+
+  [ Arno ]
+  * layers: Fix assert_and_continue
+
+  [ Sergey Kosarevsky ]
+  * gpu: Fixed crash in `Pass::ConvertTo32()`
+
+  [ spencer-lunarg ]
+  * layers: Fix maintenance5 PhysicalDevice checks
+  * layers: Update SPIRV-Tools
+
+  [ Spencer Fricke ]
+  * doc: Fix typos in debug_printf.cpp
+  * docs: Fix typos in debug_printf.cpp
+  * docs: Fix typos in debug_printf.cpp
+  * docs: Fix typos in debug_printf.cpp
+  * docs: Fix typos in debug_printf.cpp
+
+  [ spencer-lunarg ]
+  * scripts: Grab latest VUL for VK_EXT_sample_locations
+  * layers: Improve error message formatting
+  * tests: Add Indexed and Indirect printf
+  * gpu: Add guard to CastToUint32
+  * gpu: Fix variable to match setting name
+  * layers: Fix Getting VkPhysicalDeviceVulkan13Properties
+  * layers: Move interface runtime to work with ShaderObject
+  * layers: Use ValidateInterfaceBetweenStages for shader object
+  * layers: Cleanup TypeToDescriptorTypeSet
+
+  [ Artem Kharytoniuk ]
+  * layers: Update semaphore state tracking
+  * tests: Test semaphore in-use issues and host op deadlocks
+  * tests: Add new tests helpers from timeline branch
+  * sync: Update sync stats
+
+  [ Arno ]
+  * gpu: Add accel struct state creation overload
+  * gpu: Fix handling of deferred RT pipe creation
+
+  [ spencer-lunarg ]
+  * layers: Fix multiple calls to CmdSetVertexInputEXT
+  * gpu: Don't emit redundant warnings
+  * tests: Move Pipeline Binary to own test file
+  * tests: Pipeline Binary cleanup
+  * layers: Improve error message with flags
+  * gpu: Don't warn if bda is already enabled
+  * scripts: Improve error importing Reg
+
+  [ Spencer Fricke ]
+  * docs: Fix Update docs/generated_code.md
+
+  [ spencer-lunarg ]
+  * layers: Improve enum extension error message
+
+  [ Arno ]
+  * layers: Fix accel struct validation
+  * layers: Update 03675
+
+  [ spencer-lunarg ]
+  * scripts: Fix vkGetPipelineKeyKHR
+  * tests: Null VkLayerSettingsCreateInfoEXT
+  * gpu: Make request to DontInline on instrumentation
+  * gpu: Print internal shader ID in error message
+
+  [ Arno ]
+  * gpu: Print debug info on one line
+  * gpu: Remove PostCallRecordPipelineCreationsRT
+
+  [ spencer-lunarg ]
+  * layers: Fix vkGetPipelineKeyKHR with null createinfo
+  * layers: Improve bindless descriptor error messages
+
+  [ Artem Kharytoniuk ]
+  * layers: Revert "Fix a race condition in submission processing"
+  * layers: Remove workaround to handle missing signals
+  * tests: Add a test based on khronos timeline article
+  * sync: Register QueueBatchContext in stats system
+
+  [ spencer-lunarg ]
+  * layers: Split long android error messages
+  * layers: Move all settings to VK_EXT_layer_settings
+  * docs: Add Settings documentation
+
+  [ Spencer Fricke ]
+  * docs: Fix grammar in settings.md
+
+  [ spencer-lunarg ]
+  * gpu: Defer GPL instrumenation until linking
+
+  [ Ralph Potter ]
+  * layers: Add VUID-VkSparseImageMemoryBind-memory-01105 checks
+  * tests: Add VUID-VkSparseImageMemoryBind-memory-01105 test
+  * tests: Separate sparse binding tests
+
+  [ Arno ]
+  * gpu: Auto enable uniformAndStorageBuffer8BitAccess
+
+  [ spencer-lunarg ]
+  * printf: Improve the debugprintf settings
+
+  [ ziga-lunarg ]
+  * tests: Fix windows warnings
+
+  [ spencer-lunarg ]
+  * layers: Sending setting warning through debug callback
+  * layers: Improve compatible dsl message
+
+  [ ziga-lunarg ]
+  * layers: Fix shader object matching interface
+  * tests: Test shader object interface matching
+  * layers: Check VUID 07483 only if sample locations is enabled
+  * tests: Test mismatched sample locations when disabled
+
+  [ Artem Kharytoniuk ]
+  * sync: Add support for timeline semaphores
+  * tests: Test syncval timeline semaphores support
+
+  [ spencer-lunarg ]
+  * layers: Improve Error Message descriptor set layout
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove workaround from KhronosTimelineSemaphoreExample
+
+  [ spencer-lunarg ]
+  * scripts: Supress VK_KHR_pipeline_binary warnings
+  * tests: Remove Deprecated m_commandBuffer
+
+  [ Artem Kharytoniuk ]
+  * sync: Add stats for signals and unresolved batches
+  * tests: Simplify threading configuration
+
+  [ spencer-lunarg ]
+  * gpuav: Turn off Command Validation Settings default
+  * gpuav: Force more features if possible
+
+  [ Ralph Potter ]
+  * tests: Add positive tests for compute pipeline derivatives
+
+  [ spencer-lunarg ]
+  * layers: Fix VK_DYNAMIC_STATE_VIEWPORT_COARSE_SAMPLE_ORDER_NV
+  * layers: Fix VK_DYNAMIC_STATE_VIEWPORT_SHADING_RATE_PALETTE_NV
+  * layers: Fix VK_DYNAMIC_STATE_VIEWPORT_W_SCALING_NV
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove incorrect timeline semaphore tests
+
+  [ Arno ]
+  * gpu: Revert forcing of ray query
+
+  [ Artem Kharytoniuk ]
+  * tests: Cleanup syncval timeline tests
+
+  [ spencer-lunarg ]
+  * gpu: Fix instrumentation desc set binding logic
+  * layers: Update VK_EXT_swapchain_maintenance1 VUs
+  * gpu: Force shaderInt64 on
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.3.296
+
+  [ spencer-lunarg ]
+  * scripts: Header 296 patches
+  * layers: Add missing DynamicState enum
+  * layers: Add VK_EXT_depth_clamp_control
+  * layers: Add VK_EXT_device_generated_commands
+
+  [ Artem Kharytoniuk ]
+  * sync: Cleanup timeline signals after queue/device wait
+  * tests: Monitor timeline signals cleanup
+
+  [ spencer-lunarg ]
+  * tests: Remove m_commandBuffer
+
+  [ Ralph Potter ]
+  * tests: Improve support for derivative compute pipelines
+  * layers: Improve support for derivative compute pipelines
+
+  [ spencer-lunarg ]
+  * layers: Add VK_KHR_compute_shader_derivatives
+  * layers: Combine viewportCount dynamic state
+  * ci: Remove redundant Thread Sanitize testing
+
+  [ Artem Kharytoniuk ]
+  * sync: Unify code to cleanup timeline signals
+  * sync: Cleanup signals that are never/rarely waited on
+  * tests: Test many timeline signals without waits
+
+  [ spencer-lunarg ]
+  * gpuav: Use PostCallRecordCmdDispatchBase alias
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix iteration over queue batch contexts
+  * tests: Test that fence wait processes timeline signal batches
+
+  [ spencer-lunarg ]
+  * tests: Create_info to CreateInfo
+  * tests: Remove some unused functions
+  * tests: Change set_memory_type for SetMemoryType
+
+  [ Arno ]
+  * printf: Ray tracing tests
+
+ -- john <john@odin>  Tue, 01 Oct 2024 10:25:22 -0600
+
 vulkan-validationlayers (1.3.290.0~rc2-1lunarg22.04-1) jammy; urgency=medium
 
   [ Artem Kharytoniuk ]
