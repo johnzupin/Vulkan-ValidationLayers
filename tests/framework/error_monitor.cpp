@@ -16,6 +16,9 @@
  * limitations under the License.
  */
 #include "error_monitor.h"
+#include "test_common.h"
+#include "error_message/log_message_type.h"
+#include "generated/vk_function_pointers.h"
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 // Note. VK_EXT_debug_report is deprecated by the VK_EXT_debug_utils extension.
@@ -192,6 +195,12 @@ void ErrorMonitor::SetDesiredWarning(const char *msg, uint32_t count) {
     }
 }
 
+void ErrorMonitor::SetDesiredInfo(const char *msg, uint32_t count /*= 1*/) {
+    for (uint32_t i = 0; i < count; ++i) {
+        SetDesiredFailureMsg(kInformationBit, msg);
+    }
+}
+
 void ErrorMonitor::SetAllowedFailureMsg(const char *const msg) {
     auto guard = Lock();
     allowed_message_strings_.emplace_back(msg);
@@ -236,7 +245,7 @@ VkBool32 ErrorMonitor::CheckForDesiredMsg(const char *vuid, const char *const ms
         }
     }
 
-    if (!found_expected && !allowed_message_strings_.empty()) {
+    if (!found_expected) {
         for (const auto &allowed_msg : allowed_message_strings_) {
             if (error_string.find(allowed_msg) != std::string::npos) {
                 found_expected = true;

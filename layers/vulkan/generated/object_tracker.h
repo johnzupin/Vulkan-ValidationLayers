@@ -803,6 +803,22 @@ bool PreCallValidateCmdBindIndexBuffer2KHR(VkCommandBuffer commandBuffer, VkBuff
                                            VkIndexType indexType, const ErrorObject& error_obj) const override;
 bool PreCallValidateGetImageSubresourceLayout2KHR(VkDevice device, VkImage image, const VkImageSubresource2KHR* pSubresource,
                                                   VkSubresourceLayout2KHR* pLayout, const ErrorObject& error_obj) const override;
+bool PreCallValidateCreatePipelineBinariesKHR(VkDevice device, const VkPipelineBinaryCreateInfoKHR* pCreateInfo,
+                                              const VkAllocationCallbacks* pAllocator, VkPipelineBinaryHandlesInfoKHR* pBinaries,
+                                              const ErrorObject& error_obj) const override;
+void PostCallRecordCreatePipelineBinariesKHR(VkDevice device, const VkPipelineBinaryCreateInfoKHR* pCreateInfo,
+                                             const VkAllocationCallbacks* pAllocator, VkPipelineBinaryHandlesInfoKHR* pBinaries,
+                                             const RecordObject& record_obj) override;
+bool PreCallValidateDestroyPipelineBinaryKHR(VkDevice device, VkPipelineBinaryKHR pipelineBinary,
+                                             const VkAllocationCallbacks* pAllocator, const ErrorObject& error_obj) const override;
+void PreCallRecordDestroyPipelineBinaryKHR(VkDevice device, VkPipelineBinaryKHR pipelineBinary,
+                                           const VkAllocationCallbacks* pAllocator, const RecordObject& record_obj) override;
+bool PreCallValidateGetPipelineBinaryDataKHR(VkDevice device, const VkPipelineBinaryDataInfoKHR* pInfo,
+                                             VkPipelineBinaryKeyKHR* pPipelineBinaryKey, size_t* pPipelineBinaryDataSize,
+                                             void* pPipelineBinaryData, const ErrorObject& error_obj) const override;
+bool PreCallValidateReleaseCapturedPipelineDataKHR(VkDevice device, const VkReleaseCapturedPipelineDataInfoKHR* pInfo,
+                                                   const VkAllocationCallbacks* pAllocator,
+                                                   const ErrorObject& error_obj) const override;
 bool PreCallValidateCmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer,
                                               const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo,
                                               const ErrorObject& error_obj) const override;
@@ -1367,6 +1383,52 @@ bool PreCallValidateGetLatencyTimingsNV(VkDevice device, VkSwapchainKHR swapchai
                                         const ErrorObject& error_obj) const override;
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+bool PreCallValidateGetGeneratedCommandsMemoryRequirementsEXT(VkDevice device,
+                                                              const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo,
+                                                              VkMemoryRequirements2* pMemoryRequirements,
+                                                              const ErrorObject& error_obj) const override;
+bool PreCallValidateCmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
+                                                      const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo,
+                                                      VkCommandBuffer stateCommandBuffer,
+                                                      const ErrorObject& error_obj) const override;
+bool PreCallValidateCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                                   const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo,
+                                                   const ErrorObject& error_obj) const override;
+bool PreCallValidateCreateIndirectCommandsLayoutEXT(VkDevice device, const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo,
+                                                    const VkAllocationCallbacks* pAllocator,
+                                                    VkIndirectCommandsLayoutEXT* pIndirectCommandsLayout,
+                                                    const ErrorObject& error_obj) const override;
+void PostCallRecordCreateIndirectCommandsLayoutEXT(VkDevice device, const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo,
+                                                   const VkAllocationCallbacks* pAllocator,
+                                                   VkIndirectCommandsLayoutEXT* pIndirectCommandsLayout,
+                                                   const RecordObject& record_obj) override;
+bool PreCallValidateDestroyIndirectCommandsLayoutEXT(VkDevice device, VkIndirectCommandsLayoutEXT indirectCommandsLayout,
+                                                     const VkAllocationCallbacks* pAllocator,
+                                                     const ErrorObject& error_obj) const override;
+void PreCallRecordDestroyIndirectCommandsLayoutEXT(VkDevice device, VkIndirectCommandsLayoutEXT indirectCommandsLayout,
+                                                   const VkAllocationCallbacks* pAllocator,
+                                                   const RecordObject& record_obj) override;
+bool PreCallValidateCreateIndirectExecutionSetEXT(VkDevice device, const VkIndirectExecutionSetCreateInfoEXT* pCreateInfo,
+                                                  const VkAllocationCallbacks* pAllocator,
+                                                  VkIndirectExecutionSetEXT* pIndirectExecutionSet,
+                                                  const ErrorObject& error_obj) const override;
+void PostCallRecordCreateIndirectExecutionSetEXT(VkDevice device, const VkIndirectExecutionSetCreateInfoEXT* pCreateInfo,
+                                                 const VkAllocationCallbacks* pAllocator,
+                                                 VkIndirectExecutionSetEXT* pIndirectExecutionSet,
+                                                 const RecordObject& record_obj) override;
+bool PreCallValidateDestroyIndirectExecutionSetEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                   const VkAllocationCallbacks* pAllocator,
+                                                   const ErrorObject& error_obj) const override;
+void PreCallRecordDestroyIndirectExecutionSetEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                 const VkAllocationCallbacks* pAllocator, const RecordObject& record_obj) override;
+bool PreCallValidateUpdateIndirectExecutionSetPipelineEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                          uint32_t executionSetWriteCount,
+                                                          const VkWriteIndirectExecutionSetPipelineEXT* pExecutionSetWrites,
+                                                          const ErrorObject& error_obj) const override;
+bool PreCallValidateUpdateIndirectExecutionSetShaderEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                        uint32_t executionSetWriteCount,
+                                                        const VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites,
+                                                        const ErrorObject& error_obj) const override;
 bool PreCallValidateCreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                                    const VkAllocationCallbacks* pAllocator,
                                                    VkAccelerationStructureKHR* pAccelerationStructure,
@@ -1436,7 +1498,8 @@ void PostCallRecordCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOpera
                                                 VkPipelineCache pipelineCache, uint32_t createInfoCount,
                                                 const VkRayTracingPipelineCreateInfoKHR* pCreateInfos,
                                                 const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
-                                                const RecordObject& record_obj) override;
+                                                const RecordObject& record_obj, PipelineStates& pipeline_states,
+                                                std::shared_ptr<chassis::CreateRayTracingPipelinesKHR> chassis_state) override;
 bool PreCallValidateGetRayTracingCaptureReplayShaderGroupHandlesKHR(VkDevice device, VkPipeline pipeline, uint32_t firstGroup,
                                                                     uint32_t groupCount, size_t dataSize, void* pData,
                                                                     const ErrorObject& error_obj) const override;

@@ -11,6 +11,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
+#include <thread>
 #include "../framework/layer_validation_tests.h"
 
 #ifndef VK_USE_PLATFORM_WIN32_KHR
@@ -35,7 +36,7 @@ TEST_F(PositiveMemory, MapMemory2) {
     VkMemoryAllocateInfo memory_info = vku::InitStructHelper();
     memory_info.allocationSize = allocation_size;
 
-    bool pass = m_device->phy().set_memory_type(vvl::kU32Max, &memory_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    bool pass = m_device->phy().SetMemoryType(vvl::kU32Max, &memory_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     ASSERT_TRUE(pass);
 
     vkt::DeviceMemory memory(*m_device, memory_info);
@@ -89,7 +90,7 @@ TEST_F(PositiveMemory, MapMemoryPlaced) {
     VkMemoryAllocateInfo memory_info = vku::InitStructHelper();
     memory_info.allocationSize = allocation_size;
 
-    bool pass = m_device->phy().set_memory_type(vvl::kU32Max, &memory_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    bool pass = m_device->phy().SetMemoryType(vvl::kU32Max, &memory_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     ASSERT_TRUE(pass);
 
     vkt::DeviceMemory memory(*m_device, memory_info);
@@ -162,9 +163,8 @@ TEST_F(PositiveMemory, GetMemoryRequirements2) {
 
     AddRequiredExtensions(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    vkt::Buffer buffer(*m_device,
-                       vkt::Buffer::create_info(1024, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT),
-                       vkt::no_mem);
+    vkt::Buffer buffer(
+        *m_device, vkt::Buffer::CreateInfo(1024, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT), vkt::no_mem);
 
     // Use extension to get buffer memory requirements
     VkBufferMemoryRequirementsInfo2KHR buffer_info = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2_KHR, nullptr,
@@ -178,7 +178,7 @@ TEST_F(PositiveMemory, GetMemoryRequirements2) {
     vk::BindBufferMemory(device(), buffer.handle(), buffer_memory.handle(), 0);
 
     // Create a test image
-    auto image_ci = vkt::Image::create_info();
+    auto image_ci = vkt::Image::CreateInfo();
     image_ci.imageType = VK_IMAGE_TYPE_2D;
     image_ci.extent.width = 32;
     image_ci.extent.height = 32;
@@ -199,23 +199,23 @@ TEST_F(PositiveMemory, GetMemoryRequirements2) {
     vk::BindImageMemory(device(), image.handle(), image_memory.handle(), 0);
 
     // Now execute arbitrary commands that use the test buffer and image
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     // Fill buffer with 0
-    vk::CmdFillBuffer(m_commandBuffer->handle(), buffer.handle(), 0, VK_WHOLE_SIZE, 0);
+    vk::CmdFillBuffer(m_command_buffer.handle(), buffer.handle(), 0, VK_WHOLE_SIZE, 0);
 
     // Transition and clear image
     const auto subresource_range = image.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
     const auto barrier = image.image_memory_barrier(0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                                                     VK_IMAGE_LAYOUT_GENERAL, subresource_range);
-    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
+    vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
                            nullptr, 0, nullptr, 1, &barrier);
     const VkClearColorValue color = {};
-    vk::CmdClearColorImage(m_commandBuffer->handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, &color, 1, &subresource_range);
+    vk::CmdClearColorImage(m_command_buffer.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, &color, 1, &subresource_range);
 
     // Submit and verify no validation errors
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
 }
 
@@ -227,7 +227,7 @@ TEST_F(PositiveMemory, BindMemory2) {
     AddRequiredExtensions(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
-    vkt::Buffer buffer(*m_device, vkt::Buffer::create_info(1024, VK_BUFFER_USAGE_TRANSFER_DST_BIT), vkt::no_mem);
+    vkt::Buffer buffer(*m_device, vkt::Buffer::CreateInfo(1024, VK_BUFFER_USAGE_TRANSFER_DST_BIT), vkt::no_mem);
 
     // Allocate buffer memory
     vkt::DeviceMemory buffer_memory;
@@ -239,7 +239,7 @@ TEST_F(PositiveMemory, BindMemory2) {
     vk::BindBufferMemory2KHR(device(), 1, &buffer_bind_info);
 
     // Create a test image
-    auto image_ci = vkt::Image::create_info();
+    auto image_ci = vkt::Image::CreateInfo();
     image_ci.imageType = VK_IMAGE_TYPE_2D;
     image_ci.extent.width = 32;
     image_ci.extent.height = 32;
@@ -258,23 +258,23 @@ TEST_F(PositiveMemory, BindMemory2) {
     vk::BindImageMemory2KHR(device(), 1, &image_bind_info);
 
     // Now execute arbitrary commands that use the test buffer and image
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     // Fill buffer with 0
-    vk::CmdFillBuffer(m_commandBuffer->handle(), buffer.handle(), 0, VK_WHOLE_SIZE, 0);
+    vk::CmdFillBuffer(m_command_buffer.handle(), buffer.handle(), 0, VK_WHOLE_SIZE, 0);
 
     // Transition and clear image
     const auto subresource_range = image.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
     const auto barrier = image.image_memory_barrier(0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                                                     VK_IMAGE_LAYOUT_GENERAL, subresource_range);
-    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
+    vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
                            nullptr, 0, nullptr, 1, &barrier);
     const VkClearColorValue color = {};
-    vk::CmdClearColorImage(m_commandBuffer->handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, &color, 1, &subresource_range);
+    vk::CmdClearColorImage(m_command_buffer.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, &color, 1, &subresource_range);
 
     // Submit and verify no validation errors
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
 }
 
@@ -296,14 +296,14 @@ TEST_F(PositiveMemory, NonCoherentMapping) {
     alloc_info.allocationSize = allocation_size;
 
     // Find a memory configurations WITHOUT a COHERENT bit, otherwise exit
-    bool pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    bool pass = m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &alloc_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     if (!pass) {
-        pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info,
-                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                               VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        pass = m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &alloc_info,
+                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         if (!pass) {
-            pass = m_device->phy().set_memory_type(
+            pass = m_device->phy().SetMemoryType(
                 mem_reqs.memoryTypeBits, &alloc_info,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -432,7 +432,7 @@ TEST_F(PositiveMemory, BindImageMemoryMultiThreaded) {
             VkMemoryAllocateInfo mem_alloc = vku::InitStructHelper();
             mem_alloc.memoryTypeIndex = 0;
             mem_alloc.allocationSize = mem_reqs.size;
-            const bool pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &mem_alloc, 0);
+            const bool pass = m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &mem_alloc, 0);
             ASSERT_TRUE(pass);
 
             vkt::DeviceMemory mem(*m_device, mem_alloc);
@@ -472,7 +472,7 @@ TEST_F(PositiveMemory, DeviceBufferMemoryRequirements) {
     VkMemoryAllocateInfo memory_info = vku::InitStructHelper();
     memory_info.allocationSize = memory_reqs2.memoryRequirements.size;
 
-    const bool pass = m_device->phy().set_memory_type(memory_reqs2.memoryRequirements.memoryTypeBits, &memory_info, 0);
+    const bool pass = m_device->phy().SetMemoryType(memory_reqs2.memoryRequirements.memoryTypeBits, &memory_info, 0);
     ASSERT_TRUE(pass);
 
     vkt::DeviceMemory buffer_memory(*m_device, memory_info);
@@ -500,7 +500,7 @@ TEST_F(PositiveMemory, DeviceImageMemoryRequirements) {
     VkMemoryAllocateInfo mem_alloc = vku::InitStructHelper();
     mem_alloc.memoryTypeIndex = 0;
     mem_alloc.allocationSize = mem_reqs.memoryRequirements.size;
-    const bool pass = m_device->phy().set_memory_type(mem_reqs.memoryRequirements.memoryTypeBits, &mem_alloc, 0);
+    const bool pass = m_device->phy().SetMemoryType(mem_reqs.memoryRequirements.memoryTypeBits, &mem_alloc, 0);
     ASSERT_TRUE(pass);
 
     vkt::DeviceMemory mem(*m_device, mem_alloc);
@@ -533,7 +533,7 @@ TEST_F(PositiveMemory, BindMemoryDX11Handle) {
     memory_import.handle = (HANDLE)0x12345678;  // Use arbitrary non-zero value as DX11 resource handle
 
     VkMemoryAllocateInfo alloc_info = vku::InitStructHelper(&memory_import);  // Set zero allocation size
-    m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info, 0);
+    m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &alloc_info, 0);
     vkt::DeviceMemory memory(*m_device, alloc_info);
     // This should not trigger VUs that take into accout allocation size (e.g. 01049/01046)
     vk::BindImageMemory(device(), image, memory, 0);
@@ -562,7 +562,7 @@ TEST_F(PositiveMemory, BindMemoryDX12Handle) {
     memory_import.handle = (HANDLE)0x12345678;  // Use arbitrary non-zero value as DX12 resource handle
 
     VkMemoryAllocateInfo alloc_info = vku::InitStructHelper(&memory_import);  // Set zero allocation size
-    m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info, 0);
+    m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &alloc_info, 0);
     vkt::DeviceMemory memory(*m_device, alloc_info);
     // This should not trigger VUs that take into accout allocation size (e.g. 01049/01046)
     vk::BindImageMemory(device(), image, memory, 0);

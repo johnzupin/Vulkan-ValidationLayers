@@ -21,7 +21,6 @@
 #include "gpu/core/gpuav.h"
 #include "gpu/resources/gpuav_subclasses.h"
 #include "gpu/cmd_validation/gpuav_copy_buffer_to_image.h"
-#include "generated/spirv_grammar_helper.h"
 #include "utils/image_layout_utils.h"
 #include "state_tracker/render_pass_state.h"
 
@@ -195,14 +194,14 @@ static bool VerifyImageLayoutRange(const Validator &gpuav, const vvl::CommandBuf
                 for (auto index : sparse_container::range_view<decltype(intersected_range)>(intersected_range)) {
                     const auto subresource = image_state.subresource_encoder.Decode(index);
                     const LogObjectList objlist(cb_state.Handle(), image_state.Handle());
-                    skip |= gpuav.LogError("UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout", objlist, loc,
-                                           "command buffer %s expects %s (subresource: aspectMask 0x%x array layer %" PRIu32
-                                           ", mip level %" PRIu32
-                                           ") "
-                                           "to be in layout %s--instead, current layout is %s.",
-                                           gpuav.FormatHandle(cb_state).c_str(), gpuav.FormatHandle(image_state).c_str(),
-                                           subresource.aspectMask, subresource.arrayLayer, subresource.mipLevel,
-                                           string_VkImageLayout(initial_layout), string_VkImageLayout(image_layout));
+                    skip |= gpuav.LogError(
+                        "UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout", objlist, loc,
+                        "command buffer %s expects %s (subresource: aspectMask %s array layer %" PRIu32 ", mip level %" PRIu32
+                        ") "
+                        "to be in layout %s--instead, current layout is %s.",
+                        gpuav.FormatHandle(cb_state).c_str(), gpuav.FormatHandle(image_state).c_str(),
+                        string_VkImageAspectFlags(subresource.aspectMask).c_str(), subresource.arrayLayer, subresource.mipLevel,
+                        string_VkImageLayout(initial_layout), string_VkImageLayout(image_layout));
                 }
             }
         }
@@ -568,14 +567,12 @@ void Validator::PreCallRecordCmdCopyBufferToImage(VkCommandBuffer commandBuffer,
     BaseClass::PreCallRecordCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions,
                                                  record_obj);
 
-    {
-        auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
-        auto dst_image_state = Get<vvl::Image>(dstImage);
-        if (cb_state_ptr && dst_image_state) {
-            // Make sure that all image slices are record referenced layout
-            for (uint32_t i = 0; i < regionCount; ++i) {
-                cb_state_ptr->SetImageInitialLayout(*dst_image_state, pRegions[i].imageSubresource, dstImageLayout);
-            }
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+
+    if (auto dst_image_state = Get<vvl::Image>(dstImage)) {
+        // Make sure that all image slices are record referenced layout
+        for (uint32_t i = 0; i < regionCount; ++i) {
+            cb_state->SetImageInitialLayout(*dst_image_state, pRegions[i].imageSubresource, dstImageLayout);
         }
     }
 
@@ -596,7 +593,7 @@ void Validator::PreCallRecordCmdCopyBufferToImage(VkCommandBuffer commandBuffer,
     copy_buffer_to_image_info.regionCount = regionCount;
     copy_buffer_to_image_info.pRegions = regions_2.data();
 
-    InsertCopyBufferToImageValidation(*this, record_obj.location, commandBuffer, &copy_buffer_to_image_info);
+    InsertCopyBufferToImageValidation(*this, record_obj.location, *cb_state, &copy_buffer_to_image_info);
 }
 
 void Validator::PreCallRecordCmdCopyBufferToImage2KHR(VkCommandBuffer commandBuffer,
@@ -610,19 +607,17 @@ void Validator::PreCallRecordCmdCopyBufferToImage2(VkCommandBuffer commandBuffer
                                                    const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdCopyBufferToImage2(commandBuffer, pCopyBufferToImageInfo, record_obj);
 
-    {
-        auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
-        auto dst_image_state = Get<vvl::Image>(pCopyBufferToImageInfo->dstImage);
-        if (cb_state_ptr && dst_image_state) {
-            // Make sure that all image slices are record referenced layout
-            for (uint32_t i = 0; i < pCopyBufferToImageInfo->regionCount; ++i) {
-                cb_state_ptr->SetImageInitialLayout(*dst_image_state, pCopyBufferToImageInfo->pRegions[i].imageSubresource,
-                                                    pCopyBufferToImageInfo->dstImageLayout);
-            }
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+
+    if (auto dst_image_state = Get<vvl::Image>(pCopyBufferToImageInfo->dstImage)) {
+        // Make sure that all image slices are record referenced layout
+        for (uint32_t i = 0; i < pCopyBufferToImageInfo->regionCount; ++i) {
+            cb_state->SetImageInitialLayout(*dst_image_state, pCopyBufferToImageInfo->pRegions[i].imageSubresource,
+                                            pCopyBufferToImageInfo->dstImageLayout);
         }
     }
 
-    InsertCopyBufferToImageValidation(*this, record_obj.location, commandBuffer, pCopyBufferToImageInfo);
+    InsertCopyBufferToImageValidation(*this, record_obj.location, *cb_state, pCopyBufferToImageInfo);
 }
 
 void Validator::PreCallRecordCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout,

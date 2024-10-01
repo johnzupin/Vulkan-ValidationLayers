@@ -292,7 +292,19 @@ struct GpuVuidsCmdDispatchBase : GpuVuid {
     }
 };
 
+struct GpuVuidsCmdExecuteGeneratedCommandsEXT : GpuVuid {
+    GpuVuidsCmdExecuteGeneratedCommandsEXT() : GpuVuid() {
+        uniform_access_oob_06935 = "VUID-vkCmdExecuteGeneratedCommandsEXT-uniformBuffers-06935";
+        storage_access_oob_06936 = "VUID-vkCmdExecuteGeneratedCommandsEXT-storageBuffers-06936";
+        uniform_access_oob_08612 = "VUID-vkCmdExecuteGeneratedCommandsEXT-None-08612";
+        storage_access_oob_08613 = "VUID-vkCmdExecuteGeneratedCommandsEXT-None-08613";
+        invalid_descriptor = "VUID-vkCmdExecuteGeneratedCommandsEXT-None-08114";
+    }
+};
+
 using Func = vvl::Func;
+
+static const std::map<Func, GpuVuid> &GetGpuVuidsMap() {
 // This LUT is created to allow a static listing of each VUID that is covered by drawdispatch commands
 static const std::map<Func, GpuVuid> gpu_vuid = {
     {Func::vkCmdDraw, GpuVuidsCmdDraw()},
@@ -320,16 +332,20 @@ static const std::map<Func, GpuVuid> gpu_vuid = {
     {Func::vkCmdDrawIndirectByteCountEXT, GpuVuidsCmdDrawIndirectByteCountEXT()},
     {Func::vkCmdDispatchBase, GpuVuidsCmdDispatchBase()},
     {Func::vkCmdDispatchBaseKHR, GpuVuidsCmdDispatchBase()},
+    {Func::vkCmdExecuteGeneratedCommandsEXT, GpuVuidsCmdExecuteGeneratedCommandsEXT()},
     // Used if invalid function is used
     {Func::Empty, GpuVuid()}
 };
+return gpu_vuid;
+}
 
 const GpuVuid &GetGpuVuid(Func command) {
-    if (gpu_vuid.find(command) != gpu_vuid.cend()) {
-        return gpu_vuid.at(command);
+    const auto &gpu_vuids_map = GetGpuVuidsMap();
+    if (gpu_vuids_map.find(command) != gpu_vuids_map.cend()) {
+        return gpu_vuids_map.at(command);
     }
     else {
-        return gpu_vuid.at(Func::Empty);
+        return gpu_vuids_map.at(Func::Empty);
     }
 }
 // clang-format on

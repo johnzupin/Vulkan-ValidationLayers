@@ -884,6 +884,21 @@ typedef enum InterceptId {
     InterceptIdPreCallValidateGetImageSubresourceLayout2KHR,
     InterceptIdPreCallRecordGetImageSubresourceLayout2KHR,
     InterceptIdPostCallRecordGetImageSubresourceLayout2KHR,
+    InterceptIdPreCallValidateCreatePipelineBinariesKHR,
+    InterceptIdPreCallRecordCreatePipelineBinariesKHR,
+    InterceptIdPostCallRecordCreatePipelineBinariesKHR,
+    InterceptIdPreCallValidateDestroyPipelineBinaryKHR,
+    InterceptIdPreCallRecordDestroyPipelineBinaryKHR,
+    InterceptIdPostCallRecordDestroyPipelineBinaryKHR,
+    InterceptIdPreCallValidateGetPipelineKeyKHR,
+    InterceptIdPreCallRecordGetPipelineKeyKHR,
+    InterceptIdPostCallRecordGetPipelineKeyKHR,
+    InterceptIdPreCallValidateGetPipelineBinaryDataKHR,
+    InterceptIdPreCallRecordGetPipelineBinaryDataKHR,
+    InterceptIdPostCallRecordGetPipelineBinaryDataKHR,
+    InterceptIdPreCallValidateReleaseCapturedPipelineDataKHR,
+    InterceptIdPreCallRecordReleaseCapturedPipelineDataKHR,
+    InterceptIdPostCallRecordReleaseCapturedPipelineDataKHR,
     InterceptIdPreCallValidateCmdSetLineStippleKHR,
     InterceptIdPreCallRecordCmdSetLineStippleKHR,
     InterceptIdPostCallRecordCmdSetLineStippleKHR,
@@ -1598,6 +1613,9 @@ typedef enum InterceptId {
     InterceptIdPreCallValidateCmdOpticalFlowExecuteNV,
     InterceptIdPreCallRecordCmdOpticalFlowExecuteNV,
     InterceptIdPostCallRecordCmdOpticalFlowExecuteNV,
+    InterceptIdPreCallValidateAntiLagUpdateAMD,
+    InterceptIdPreCallRecordAntiLagUpdateAMD,
+    InterceptIdPostCallRecordAntiLagUpdateAMD,
     InterceptIdPreCallValidateDestroyShaderEXT,
     InterceptIdPreCallRecordDestroyShaderEXT,
     InterceptIdPostCallRecordDestroyShaderEXT,
@@ -1607,6 +1625,9 @@ typedef enum InterceptId {
     InterceptIdPreCallValidateCmdBindShadersEXT,
     InterceptIdPreCallRecordCmdBindShadersEXT,
     InterceptIdPostCallRecordCmdBindShadersEXT,
+    InterceptIdPreCallValidateCmdSetDepthClampRangeEXT,
+    InterceptIdPreCallRecordCmdSetDepthClampRangeEXT,
+    InterceptIdPostCallRecordCmdSetDepthClampRangeEXT,
     InterceptIdPreCallValidateGetFramebufferTilePropertiesQCOM,
     InterceptIdPreCallRecordGetFramebufferTilePropertiesQCOM,
     InterceptIdPostCallRecordGetFramebufferTilePropertiesQCOM,
@@ -1634,6 +1655,33 @@ typedef enum InterceptId {
     InterceptIdPreCallValidateGetScreenBufferPropertiesQNX,
     InterceptIdPreCallRecordGetScreenBufferPropertiesQNX,
     InterceptIdPostCallRecordGetScreenBufferPropertiesQNX,
+    InterceptIdPreCallValidateGetGeneratedCommandsMemoryRequirementsEXT,
+    InterceptIdPreCallRecordGetGeneratedCommandsMemoryRequirementsEXT,
+    InterceptIdPostCallRecordGetGeneratedCommandsMemoryRequirementsEXT,
+    InterceptIdPreCallValidateCmdPreprocessGeneratedCommandsEXT,
+    InterceptIdPreCallRecordCmdPreprocessGeneratedCommandsEXT,
+    InterceptIdPostCallRecordCmdPreprocessGeneratedCommandsEXT,
+    InterceptIdPreCallValidateCmdExecuteGeneratedCommandsEXT,
+    InterceptIdPreCallRecordCmdExecuteGeneratedCommandsEXT,
+    InterceptIdPostCallRecordCmdExecuteGeneratedCommandsEXT,
+    InterceptIdPreCallValidateCreateIndirectCommandsLayoutEXT,
+    InterceptIdPreCallRecordCreateIndirectCommandsLayoutEXT,
+    InterceptIdPostCallRecordCreateIndirectCommandsLayoutEXT,
+    InterceptIdPreCallValidateDestroyIndirectCommandsLayoutEXT,
+    InterceptIdPreCallRecordDestroyIndirectCommandsLayoutEXT,
+    InterceptIdPostCallRecordDestroyIndirectCommandsLayoutEXT,
+    InterceptIdPreCallValidateCreateIndirectExecutionSetEXT,
+    InterceptIdPreCallRecordCreateIndirectExecutionSetEXT,
+    InterceptIdPostCallRecordCreateIndirectExecutionSetEXT,
+    InterceptIdPreCallValidateDestroyIndirectExecutionSetEXT,
+    InterceptIdPreCallRecordDestroyIndirectExecutionSetEXT,
+    InterceptIdPostCallRecordDestroyIndirectExecutionSetEXT,
+    InterceptIdPreCallValidateUpdateIndirectExecutionSetPipelineEXT,
+    InterceptIdPreCallRecordUpdateIndirectExecutionSetPipelineEXT,
+    InterceptIdPostCallRecordUpdateIndirectExecutionSetPipelineEXT,
+    InterceptIdPreCallValidateUpdateIndirectExecutionSetShaderEXT,
+    InterceptIdPreCallRecordUpdateIndirectExecutionSetShaderEXT,
+    InterceptIdPostCallRecordUpdateIndirectExecutionSetShaderEXT,
     InterceptIdPreCallValidateCreateAccelerationStructureKHR,
     InterceptIdPreCallRecordCreateAccelerationStructureKHR,
     InterceptIdPostCallRecordCreateAccelerationStructureKHR,
@@ -2630,6 +2678,21 @@ void ValidationObject::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallValidateGetImageSubresourceLayout2KHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordGetImageSubresourceLayout2KHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetImageSubresourceLayout2KHR);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCreatePipelineBinariesKHR);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCreatePipelineBinariesKHR);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCreatePipelineBinariesKHR);
+    BUILD_DISPATCH_VECTOR(PreCallValidateDestroyPipelineBinaryKHR);
+    BUILD_DISPATCH_VECTOR(PreCallRecordDestroyPipelineBinaryKHR);
+    BUILD_DISPATCH_VECTOR(PostCallRecordDestroyPipelineBinaryKHR);
+    BUILD_DISPATCH_VECTOR(PreCallValidateGetPipelineKeyKHR);
+    BUILD_DISPATCH_VECTOR(PreCallRecordGetPipelineKeyKHR);
+    BUILD_DISPATCH_VECTOR(PostCallRecordGetPipelineKeyKHR);
+    BUILD_DISPATCH_VECTOR(PreCallValidateGetPipelineBinaryDataKHR);
+    BUILD_DISPATCH_VECTOR(PreCallRecordGetPipelineBinaryDataKHR);
+    BUILD_DISPATCH_VECTOR(PostCallRecordGetPipelineBinaryDataKHR);
+    BUILD_DISPATCH_VECTOR(PreCallValidateReleaseCapturedPipelineDataKHR);
+    BUILD_DISPATCH_VECTOR(PreCallRecordReleaseCapturedPipelineDataKHR);
+    BUILD_DISPATCH_VECTOR(PostCallRecordReleaseCapturedPipelineDataKHR);
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdSetLineStippleKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdSetLineStippleKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdSetLineStippleKHR);
@@ -3356,6 +3419,9 @@ void ValidationObject::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdOpticalFlowExecuteNV);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdOpticalFlowExecuteNV);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdOpticalFlowExecuteNV);
+    BUILD_DISPATCH_VECTOR(PreCallValidateAntiLagUpdateAMD);
+    BUILD_DISPATCH_VECTOR(PreCallRecordAntiLagUpdateAMD);
+    BUILD_DISPATCH_VECTOR(PostCallRecordAntiLagUpdateAMD);
     BUILD_DISPATCH_VECTOR(PreCallValidateDestroyShaderEXT);
     BUILD_DISPATCH_VECTOR(PreCallRecordDestroyShaderEXT);
     BUILD_DISPATCH_VECTOR(PostCallRecordDestroyShaderEXT);
@@ -3365,6 +3431,9 @@ void ValidationObject::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdBindShadersEXT);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdBindShadersEXT);
     BUILD_DISPATCH_VECTOR(PostCallRecordCmdBindShadersEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdSetDepthClampRangeEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdSetDepthClampRangeEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdSetDepthClampRangeEXT);
     BUILD_DISPATCH_VECTOR(PreCallValidateGetFramebufferTilePropertiesQCOM);
     BUILD_DISPATCH_VECTOR(PreCallRecordGetFramebufferTilePropertiesQCOM);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetFramebufferTilePropertiesQCOM);
@@ -3394,6 +3463,33 @@ void ValidationObject::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallRecordGetScreenBufferPropertiesQNX);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetScreenBufferPropertiesQNX);
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+    BUILD_DISPATCH_VECTOR(PreCallValidateGetGeneratedCommandsMemoryRequirementsEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordGetGeneratedCommandsMemoryRequirementsEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordGetGeneratedCommandsMemoryRequirementsEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdPreprocessGeneratedCommandsEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdPreprocessGeneratedCommandsEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdPreprocessGeneratedCommandsEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdExecuteGeneratedCommandsEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdExecuteGeneratedCommandsEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdExecuteGeneratedCommandsEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCreateIndirectCommandsLayoutEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCreateIndirectCommandsLayoutEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCreateIndirectCommandsLayoutEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateDestroyIndirectCommandsLayoutEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordDestroyIndirectCommandsLayoutEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordDestroyIndirectCommandsLayoutEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCreateIndirectExecutionSetEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCreateIndirectExecutionSetEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCreateIndirectExecutionSetEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateDestroyIndirectExecutionSetEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordDestroyIndirectExecutionSetEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordDestroyIndirectExecutionSetEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateUpdateIndirectExecutionSetPipelineEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordUpdateIndirectExecutionSetPipelineEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordUpdateIndirectExecutionSetPipelineEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateUpdateIndirectExecutionSetShaderEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordUpdateIndirectExecutionSetShaderEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordUpdateIndirectExecutionSetShaderEXT);
     BUILD_DISPATCH_VECTOR(PreCallValidateCreateAccelerationStructureKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCreateAccelerationStructureKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCreateAccelerationStructureKHR);

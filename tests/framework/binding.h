@@ -23,9 +23,11 @@
 #include <iterator>
 #include <memory>
 #include <vector>
+#include <optional>
 
+#include "containers/custom_containers.h"
 #include "generated/vk_function_pointers.h"
-#include "generated/vk_extension_helper.h"
+#include "utils/cast_utils.h"
 #include "test_common.h"
 
 namespace vkt {
@@ -78,6 +80,8 @@ class DescriptorSetPool;
 class DescriptorSet;
 class CommandBuffer;
 class CommandPool;
+class IndirectCommandsLayout;
+class IndirectExecutionSet;
 
 std::vector<VkLayerProperties> GetGlobalLayers();
 std::vector<VkExtensionProperties> GetGlobalExtensions();
@@ -89,6 +93,7 @@ template <typename T>
 class Handle {
   public:
     const T &handle() const noexcept { return handle_; }
+    T &handle() noexcept { return handle_; }
     bool initialized() const noexcept { return (handle_ != T{}); }
 
     operator T() const noexcept { return handle(); }
@@ -153,6 +158,8 @@ class NonDispHandle : public Handle<T> {
         dev_handle_ = dev;
     }
 
+    void set_device(VkDevice device) { dev_handle_ = device; }
+
     void destroy() noexcept { dev_handle_ = VK_NULL_HANDLE; }
 
   public:
@@ -168,18 +175,18 @@ class PhysicalDevice : public internal::Handle<VkPhysicalDevice> {
   public:
     explicit PhysicalDevice(VkPhysicalDevice phy)
         : Handle(phy),
-          properties_(properties()),
+          properties_(Properties()),
           limits_(properties_.limits),
-          memory_properties_(memory_properties()),
-          queue_properties_(queue_properties()) {}
+          memory_properties_(MemoryProperties()),
+          queue_properties_(QueueProperties()) {}
 
     void SetName(VkDevice device, const char *name) {
         Handle<VkPhysicalDevice>::SetName(device, VK_OBJECT_TYPE_PHYSICAL_DEVICE, name);
     }
     VkPhysicalDeviceFeatures features() const;
 
-    bool set_memory_type(const uint32_t type_bits, VkMemoryAllocateInfo *info, const VkMemoryPropertyFlags properties,
-                         const VkMemoryPropertyFlags forbid = 0) const;
+    bool SetMemoryType(const uint32_t type_bits, VkMemoryAllocateInfo *info, const VkMemoryPropertyFlags properties,
+                       const VkMemoryPropertyFlags forbid = 0) const;
 
     // vkEnumerateDeviceExtensionProperties()
     std::vector<VkExtensionProperties> extensions(const char *pLayerName = nullptr) const;
@@ -193,11 +200,9 @@ class PhysicalDevice : public internal::Handle<VkPhysicalDevice> {
     const std::vector<VkQueueFamilyProperties> queue_properties_;
 
   private:
-    void add_extension_dependencies(uint32_t dependency_count, VkExtensionProperties *depencency_props,
-                                    std::vector<VkExtensionProperties> &ext_list);
-    VkPhysicalDeviceProperties properties() const;
-    std::vector<VkQueueFamilyProperties> queue_properties() const;
-    VkPhysicalDeviceMemoryProperties memory_properties() const;
+    VkPhysicalDeviceProperties Properties() const;
+    std::vector<VkQueueFamilyProperties> QueueProperties() const;
+    VkPhysicalDeviceMemoryProperties MemoryProperties() const;
 };
 
 class QueueCreateInfoArray {
@@ -290,30 +295,19 @@ class Device : public internal::Handle<VkDevice> {
     VkResult Wait(const std::vector<const Fence *> &fences, bool wait_all, uint64_t timeout);
     VkResult Wait(const Fence &fence) { return Wait(std::vector<const Fence *>(1, &fence), true, (uint64_t)-1); }
 
-    // vkUpdateDescriptorSets()
-    void update_descriptor_sets(const std::vector<VkWriteDescriptorSet> &writes, const std::vector<VkCopyDescriptorSet> &copies);
-    void update_descriptor_sets(const std::vector<VkWriteDescriptorSet> &writes) {
-        return update_descriptor_sets(writes, std::vector<VkCopyDescriptorSet>());
-    }
-
-    static VkWriteDescriptorSet write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                     VkDescriptorType type, uint32_t count,
-                                                     const VkDescriptorImageInfo *image_info);
-    static VkWriteDescriptorSet write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                     VkDescriptorType type, uint32_t count,
-                                                     const VkDescriptorBufferInfo *buffer_info);
-    static VkWriteDescriptorSet write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                     VkDescriptorType type, uint32_t count, const VkBufferView *buffer_views);
-    static VkWriteDescriptorSet write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                     VkDescriptorType type, const std::vector<VkDescriptorImageInfo> &image_info);
-    static VkWriteDescriptorSet write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                     VkDescriptorType type, const std::vector<VkDescriptorBufferInfo> &buffer_info);
-    static VkWriteDescriptorSet write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                     VkDescriptorType type, const std::vector<VkBufferView> &buffer_views);
-
-    static VkCopyDescriptorSet copy_descriptor_set(const DescriptorSet &src_set, uint32_t src_binding, uint32_t src_array_element,
-                                                   const DescriptorSet &dst_set, uint32_t dst_binding, uint32_t dst_array_element,
-                                                   uint32_t count);
+    static VkWriteDescriptorSet WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                   VkDescriptorType type, uint32_t count, const VkDescriptorImageInfo *image_info);
+    static VkWriteDescriptorSet WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                   VkDescriptorType type, uint32_t count,
+                                                   const VkDescriptorBufferInfo *buffer_info);
+    static VkWriteDescriptorSet WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                   VkDescriptorType type, uint32_t count, const VkBufferView *buffer_views);
+    static VkWriteDescriptorSet WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                   VkDescriptorType type, const std::vector<VkDescriptorImageInfo> &image_info);
+    static VkWriteDescriptorSet WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                   VkDescriptorType type, const std::vector<VkDescriptorBufferInfo> &buffer_info);
+    static VkWriteDescriptorSet WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                   VkDescriptorType type, const std::vector<VkBufferView> &buffer_views);
 
   private:
     enum QueueCapabilityIndex {
@@ -324,7 +318,7 @@ class Device : public internal::Handle<VkDevice> {
         QUEUE_CAPABILITY_COUNT = 4,
     };
 
-    void init_queues(const VkDeviceCreateInfo &info);
+    void InitQueues(const VkDeviceCreateInfo &info);
 
     std::vector<const char *> enabled_extensions_;
 
@@ -367,7 +361,7 @@ class DeviceMemory : public internal::NonDispHandle<VkDeviceMemory> {
 class Fence : public internal::NonDispHandle<VkFence> {
   public:
     Fence() = default;
-    Fence(const Device &dev) { init(dev, create_info()); }
+    Fence(const Device &dev) { init(dev, CreateInfo()); }
     Fence(const Device &dev, const VkFenceCreateInfo &info) { init(dev, info); }
     Fence(Fence &&rhs) noexcept : NonDispHandle(std::move(rhs)) {}
     Fence &operator=(Fence &&) noexcept;
@@ -391,8 +385,8 @@ class Fence : public internal::NonDispHandle<VkFence> {
     VkResult export_handle(int &fd_handle, VkExternalFenceHandleTypeFlagBits handle_type);
     VkResult import_handle(int fd_handle, VkExternalFenceHandleTypeFlagBits handle_type, VkFenceImportFlags flags = 0);
 
-    static VkFenceCreateInfo create_info(VkFenceCreateFlags flags);
-    static VkFenceCreateInfo create_info();
+    static VkFenceCreateInfo CreateInfo(VkFenceCreateFlags flags);
+    static VkFenceCreateInfo CreateInfo();
 };
 
 inline const Fence no_fence;
@@ -415,6 +409,7 @@ class Semaphore : public internal::NonDispHandle<VkSemaphore> {
     VkResult WaitKHR(uint64_t value, uint64_t timeout);
     VkResult Signal(uint64_t value);
     VkResult SignalKHR(uint64_t value);
+    uint64_t GetCounterValue(bool use_khr = false) const;
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     VkResult export_handle(HANDLE &win32_handle, VkExternalSemaphoreHandleTypeFlagBits handle_type);
@@ -449,7 +444,7 @@ class Event : public internal::NonDispHandle<VkEvent> {
                   const std::vector<VkImageMemoryBarrier> &image_barriers);
     void reset();
 
-    static VkEventCreateInfo create_info(VkFlags flags);
+    static VkEventCreateInfo CreateInfo(VkFlags flags);
 };
 
 struct WaitT {};
@@ -515,7 +510,7 @@ class QueryPool : public internal::NonDispHandle<VkQueryPool> {
     QueryPool() = default;
     QueryPool(const Device &dev, const VkQueryPoolCreateInfo &info) { init(dev, info); }
     QueryPool(const Device &dev, VkQueryType query_type, uint32_t query_count) {
-        VkQueryPoolCreateInfo info = create_info(query_type, query_count);
+        VkQueryPoolCreateInfo info = CreateInfo(query_type, query_count);
         init(dev, info);
     }
     ~QueryPool() noexcept;
@@ -528,7 +523,7 @@ class QueryPool : public internal::NonDispHandle<VkQueryPool> {
     // vkGetQueryPoolResults()
     VkResult results(uint32_t first, uint32_t count, size_t size, void *data, size_t stride);
 
-    static VkQueryPoolCreateInfo create_info(VkQueryType type, uint32_t slot_count);
+    static VkQueryPoolCreateInfo CreateInfo(VkQueryType type, uint32_t slot_count);
 };
 
 struct NoMemT {};
@@ -556,7 +551,7 @@ class Buffer : public internal::NonDispHandle<VkBuffer> {
         usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;  // always add
         VkMemoryAllocateFlagsInfo allocate_flag_info = vku::InitStructHelper();
         allocate_flag_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-        init(dev, create_info(size, usage), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        init(dev, CreateInfo(size, usage), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
              &allocate_flag_info);
     }
 
@@ -583,7 +578,7 @@ class Buffer : public internal::NonDispHandle<VkBuffer> {
               void *alloc_info_pnext = nullptr);
     void init(const Device &dev, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props = 0,
               void *alloc_info_pnext = nullptr, const std::vector<uint32_t> &queue_families = {}) {
-        init(dev, create_info(size, usage, &queue_families), mem_props, alloc_info_pnext);
+        init(dev, CreateInfo(size, usage, &queue_families), mem_props, alloc_info_pnext);
     }
     void init_no_mem(const Device &dev, const VkBufferCreateInfo &info);
     void SetName(const char *name) { NonDispHandle<VkBuffer>::SetName(VK_OBJECT_TYPE_BUFFER, name); }
@@ -602,9 +597,9 @@ class Buffer : public internal::NonDispHandle<VkBuffer> {
     // Bind to existing memory object
     void bind_memory(const DeviceMemory &mem, VkDeviceSize mem_offset);
 
-    const VkBufferCreateInfo &create_info() const { return create_info_; }
-    static VkBufferCreateInfo create_info(VkDeviceSize size, VkFlags usage, const std::vector<uint32_t> *queue_families = nullptr,
-                                          void *create_info_pnext = nullptr);
+    const VkBufferCreateInfo &CreateInfo() const { return create_info_; }
+    static VkBufferCreateInfo CreateInfo(VkDeviceSize size, VkFlags usage, const std::vector<uint32_t> *queue_families = nullptr,
+                                         void *create_info_pnext = nullptr);
 
     VkBufferMemoryBarrier buffer_memory_barrier(VkFlags output_mask, VkFlags input_mask, VkDeviceSize offset,
                                                 VkDeviceSize size) const {
@@ -749,11 +744,11 @@ class Image : public internal::NonDispHandle<VkImage> {
         return barrier;
     }
 
-    void ImageMemoryBarrier(CommandBuffer *cmd, VkImageAspectFlags aspect, VkFlags output_mask, VkFlags input_mask,
+    void ImageMemoryBarrier(CommandBuffer &cmd, VkImageAspectFlags aspect, VkFlags output_mask, VkFlags input_mask,
                             VkImageLayout image_layout, VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                             VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
 
-    static VkImageCreateInfo create_info();
+    static VkImageCreateInfo CreateInfo();
 
     static VkImageSubresource subresource(VkImageAspectFlags aspect, uint32_t mip_level, uint32_t array_layer);
     static VkImageSubresource subresource(const VkImageSubresourceRange &range, uint32_t mip_level, uint32_t array_layer);
@@ -773,7 +768,7 @@ class Image : public internal::NonDispHandle<VkImage> {
     void Layout(VkImageLayout const layout) { image_layout_ = layout; }
     VkImageLayout Layout() const { return image_layout_; }
 
-    void SetLayout(CommandBuffer *cmd_buf, VkImageAspectFlags aspect, VkImageLayout image_layout);
+    void SetLayout(CommandBuffer &cmd_buf, VkImageAspectFlags aspect, VkImageLayout image_layout);
     void SetLayout(VkImageAspectFlags aspect, VkImageLayout image_layout);
     void SetLayout(VkImageLayout image_layout) { SetLayout(aspect_mask(format()), image_layout); };
 
@@ -855,7 +850,7 @@ class ShaderModule : public internal::NonDispHandle<VkShaderModule> {
     VkResult init_try(const Device &dev, const VkShaderModuleCreateInfo &info);
     void SetName(const char *name) { NonDispHandle<VkShaderModule>::SetName(VK_OBJECT_TYPE_SHADER_MODULE, name); }
 
-    static VkShaderModuleCreateInfo create_info(size_t code_size, const uint32_t *code, VkFlags flags);
+    static VkShaderModuleCreateInfo CreateInfo(size_t code_size, const uint32_t *code, VkFlags flags);
 };
 
 class Shader : public internal::NonDispHandle<VkShaderEXT> {
@@ -905,6 +900,8 @@ class Pipeline : public internal::NonDispHandle<VkPipeline> {
     void init(const Device &dev, const VkComputePipelineCreateInfo &info);
     // vkCreateRayTracingPipelinesKHR
     void init(const Device &dev, const VkRayTracingPipelineCreateInfoKHR &info);
+    // vkCreateRayTracingPipelinesKHR with deferredOperation
+    void InitDeferred(const Device &dev, const VkRayTracingPipelineCreateInfoKHR &info, VkDeferredOperationKHR deferred_op);
     // vkLoadPipeline()
     void init(const Device &dev, size_t size, const void *data);
     // vkLoadPipelineDerivative()
@@ -980,6 +977,14 @@ class DescriptorSetLayout : public internal::NonDispHandle<VkDescriptorSetLayout
         info.pBindings = descriptor_set_bindings.data();
         init(dev, info);
     }
+    DescriptorSetLayout(const Device &dev, const VkDescriptorSetLayoutBinding &descriptor_set_binding,
+                        VkDescriptorSetLayoutCreateFlags flags = 0, void *pNext = nullptr) {
+        VkDescriptorSetLayoutCreateInfo info = vku::InitStructHelper(pNext);
+        info.flags = flags;
+        info.bindingCount = 1;
+        info.pBindings = &descriptor_set_binding;
+        init(dev, info);
+    }
 
     ~DescriptorSetLayout() noexcept;
     void destroy() noexcept;
@@ -1021,8 +1026,7 @@ class DescriptorPool : public internal::NonDispHandle<VkDescriptorPool> {
     DescriptorSet *alloc_sets(const Device &dev, const DescriptorSetLayout &layout);
 
     template <typename PoolSizes>
-    static VkDescriptorPoolCreateInfo create_info(VkDescriptorPoolCreateFlags flags, uint32_t max_sets,
-                                                  const PoolSizes &pool_sizes);
+    static VkDescriptorPoolCreateInfo CreateInfo(VkDescriptorPoolCreateFlags flags, uint32_t max_sets, const PoolSizes &pool_sizes);
 
   private:
     // Track whether this pool's usage is VK_DESCRIPTOR_POOL_USAGE_DYNAMIC
@@ -1030,8 +1034,8 @@ class DescriptorPool : public internal::NonDispHandle<VkDescriptorPool> {
 };
 
 template <typename PoolSizes>
-inline VkDescriptorPoolCreateInfo DescriptorPool::create_info(VkDescriptorPoolCreateFlags flags, uint32_t max_sets,
-                                                              const PoolSizes &pool_sizes) {
+inline VkDescriptorPoolCreateInfo DescriptorPool::CreateInfo(VkDescriptorPoolCreateFlags flags, uint32_t max_sets,
+                                                             const PoolSizes &pool_sizes) {
     VkDescriptorPoolCreateInfo info = vku::InitStructHelper();
     info.flags = flags;
     info.maxSets = max_sets;
@@ -1104,7 +1108,7 @@ class CommandBuffer : public internal::Handle<VkCommandBuffer> {
     void reset(VkCommandBufferResetFlags flags);
     void reset() { reset(VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT); }
 
-    static VkCommandBufferAllocateInfo create_info(VkCommandPool const &pool);
+    static VkCommandBufferAllocateInfo CreateInfo(VkCommandPool const &pool);
 
     void BeginRenderPass(const VkRenderPassBeginInfo &info, VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
     void BeginRenderPass(VkRenderPass rp, VkFramebuffer fb, uint32_t render_area_width = 1, uint32_t render_area_height = 1,
@@ -1208,8 +1212,8 @@ class SamplerYcbcrConversion : public internal::NonDispHandle<VkSamplerYcbcrConv
     static VkSamplerYcbcrConversionCreateInfo DefaultConversionInfo(VkFormat format);
 };
 
-inline VkBufferCreateInfo Buffer::create_info(VkDeviceSize size, VkFlags usage, const std::vector<uint32_t> *queue_families,
-                                              void *create_info_pnext) {
+inline VkBufferCreateInfo Buffer::CreateInfo(VkDeviceSize size, VkFlags usage, const std::vector<uint32_t> *queue_families,
+                                             void *create_info_pnext) {
     VkBufferCreateInfo info = vku::InitStructHelper(create_info_pnext);
     info.size = size;
     info.usage = usage;
@@ -1223,31 +1227,31 @@ inline VkBufferCreateInfo Buffer::create_info(VkDeviceSize size, VkFlags usage, 
     return info;
 }
 
-inline VkFenceCreateInfo Fence::create_info(VkFenceCreateFlags flags) {
+inline VkFenceCreateInfo Fence::CreateInfo(VkFenceCreateFlags flags) {
     VkFenceCreateInfo info = vku::InitStructHelper();
     info.flags = flags;
     return info;
 }
 
-inline VkFenceCreateInfo Fence::create_info() {
+inline VkFenceCreateInfo Fence::CreateInfo() {
     VkFenceCreateInfo info = vku::InitStructHelper();
     return info;
 }
 
-inline VkEventCreateInfo Event::create_info(VkFlags flags) {
+inline VkEventCreateInfo Event::CreateInfo(VkFlags flags) {
     VkEventCreateInfo info = vku::InitStructHelper();
     info.flags = flags;
     return info;
 }
 
-inline VkQueryPoolCreateInfo QueryPool::create_info(VkQueryType type, uint32_t slot_count) {
+inline VkQueryPoolCreateInfo QueryPool::CreateInfo(VkQueryType type, uint32_t slot_count) {
     VkQueryPoolCreateInfo info = vku::InitStructHelper();
     info.queryType = type;
     info.queryCount = slot_count;
     return info;
 }
 
-inline VkImageCreateInfo Image::create_info() {
+inline VkImageCreateInfo Image::CreateInfo() {
     VkImageCreateInfo info = vku::InitStructHelper();
     info.extent.width = 1;
     info.extent.height = 1;
@@ -1320,7 +1324,7 @@ inline VkImageSubresourceRange Image::subresource_range(const VkImageSubresource
     return subresource_range(subres.aspectMask, subres.mipLevel, 1, subres.arrayLayer, 1);
 }
 
-inline VkShaderModuleCreateInfo ShaderModule::create_info(size_t code_size, const uint32_t *code, VkFlags flags) {
+inline VkShaderModuleCreateInfo ShaderModule::CreateInfo(size_t code_size, const uint32_t *code, VkFlags flags) {
     VkShaderModuleCreateInfo info = vku::InitStructHelper();
     info.codeSize = code_size;
     info.pCode = code;
@@ -1328,9 +1332,9 @@ inline VkShaderModuleCreateInfo ShaderModule::create_info(size_t code_size, cons
     return info;
 }
 
-inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                         VkDescriptorType type, uint32_t count,
-                                                         const VkDescriptorImageInfo *image_info) {
+inline VkWriteDescriptorSet Device::WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                       VkDescriptorType type, uint32_t count,
+                                                       const VkDescriptorImageInfo *image_info) {
     VkWriteDescriptorSet write = vku::InitStructHelper();
     write.dstSet = set.handle();
     write.dstBinding = binding;
@@ -1341,9 +1345,9 @@ inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &se
     return write;
 }
 
-inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                         VkDescriptorType type, uint32_t count,
-                                                         const VkDescriptorBufferInfo *buffer_info) {
+inline VkWriteDescriptorSet Device::WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                       VkDescriptorType type, uint32_t count,
+                                                       const VkDescriptorBufferInfo *buffer_info) {
     VkWriteDescriptorSet write = vku::InitStructHelper();
     write.dstSet = set.handle();
     write.dstBinding = binding;
@@ -1354,8 +1358,8 @@ inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &se
     return write;
 }
 
-inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                         VkDescriptorType type, uint32_t count, const VkBufferView *buffer_views) {
+inline VkWriteDescriptorSet Device::WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                       VkDescriptorType type, uint32_t count, const VkBufferView *buffer_views) {
     VkWriteDescriptorSet write = vku::InitStructHelper();
     write.dstSet = set.handle();
     write.dstBinding = binding;
@@ -1366,36 +1370,43 @@ inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &se
     return write;
 }
 
-inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                         VkDescriptorType type,
-                                                         const std::vector<VkDescriptorImageInfo> &image_info) {
-    return write_descriptor_set(set, binding, array_element, type, static_cast<uint32_t>(image_info.size()), &image_info[0]);
+inline VkWriteDescriptorSet Device::WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                       VkDescriptorType type,
+                                                       const std::vector<VkDescriptorImageInfo> &image_info) {
+    return WriteDescriptorSet(set, binding, array_element, type, static_cast<uint32_t>(image_info.size()), &image_info[0]);
 }
 
-inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                         VkDescriptorType type,
-                                                         const std::vector<VkDescriptorBufferInfo> &buffer_info) {
-    return write_descriptor_set(set, binding, array_element, type, static_cast<uint32_t>(buffer_info.size()), &buffer_info[0]);
+inline VkWriteDescriptorSet Device::WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                       VkDescriptorType type,
+                                                       const std::vector<VkDescriptorBufferInfo> &buffer_info) {
+    return WriteDescriptorSet(set, binding, array_element, type, static_cast<uint32_t>(buffer_info.size()), &buffer_info[0]);
 }
 
-inline VkWriteDescriptorSet Device::write_descriptor_set(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
-                                                         VkDescriptorType type, const std::vector<VkBufferView> &buffer_views) {
-    return write_descriptor_set(set, binding, array_element, type, static_cast<uint32_t>(buffer_views.size()), &buffer_views[0]);
+inline VkWriteDescriptorSet Device::WriteDescriptorSet(const DescriptorSet &set, uint32_t binding, uint32_t array_element,
+                                                       VkDescriptorType type, const std::vector<VkBufferView> &buffer_views) {
+    return WriteDescriptorSet(set, binding, array_element, type, static_cast<uint32_t>(buffer_views.size()), &buffer_views[0]);
 }
 
-inline VkCopyDescriptorSet Device::copy_descriptor_set(const DescriptorSet &src_set, uint32_t src_binding,
-                                                       uint32_t src_array_element, const DescriptorSet &dst_set,
-                                                       uint32_t dst_binding, uint32_t dst_array_element, uint32_t count) {
-    VkCopyDescriptorSet copy = vku::InitStructHelper();
-    copy.srcSet = src_set.handle();
-    copy.srcBinding = src_binding;
-    copy.srcArrayElement = src_array_element;
-    copy.dstSet = dst_set.handle();
-    copy.dstBinding = dst_binding;
-    copy.dstArrayElement = dst_array_element;
-    copy.descriptorCount = count;
+class IndirectCommandsLayout : public internal::NonDispHandle<VkIndirectCommandsLayoutEXT> {
+  public:
+    ~IndirectCommandsLayout() noexcept;
+    void destroy() noexcept;
 
-    return copy;
-}
+    explicit IndirectCommandsLayout() : NonDispHandle() {}
+    explicit IndirectCommandsLayout(const Device &dev, const VkIndirectCommandsLayoutCreateInfoEXT &info) { Init(dev, info); }
+    void Init(const Device &dev, const VkIndirectCommandsLayoutCreateInfoEXT &info);
+};
+
+class IndirectExecutionSet : public internal::NonDispHandle<VkIndirectExecutionSetEXT> {
+  public:
+    ~IndirectExecutionSet() noexcept;
+    void destroy() noexcept;
+
+    explicit IndirectExecutionSet() : NonDispHandle() {}
+    explicit IndirectExecutionSet(const Device &dev, const VkIndirectExecutionSetCreateInfoEXT &info) { Init(dev, info); }
+    explicit IndirectExecutionSet(const Device &dev, VkPipeline init_pipeline, uint32_t max_pipelines);
+    explicit IndirectExecutionSet(const Device &dev, const VkIndirectExecutionSetShaderInfoEXT &shader_info);
+    void Init(const Device &dev, const VkIndirectExecutionSetCreateInfoEXT &info);
+};
 
 }  // namespace vkt

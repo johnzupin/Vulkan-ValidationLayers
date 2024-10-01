@@ -19,6 +19,7 @@
 
 #include <cassert>
 #include <cinttypes>
+#include <spirv/unified1/spirv.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -31,6 +32,7 @@
 #include "chassis/chassis_modification_state.h"
 #include "state_tracker/descriptor_sets.h"
 #include "state_tracker/render_pass_state.h"
+#include "spirv-tools/optimizer.hpp"
 
 // Validate use of input attachments against subpass structure
 bool CoreChecks::ValidateShaderInputAttachment(const spirv::Module &module_state, const vvl::Pipeline &pipeline,
@@ -66,7 +68,7 @@ bool CoreChecks::ValidateShaderInputAttachment(const spirv::Module &module_state
         } else if (input_attachment_index >= subpass_description.inputAttachmentCount) {
             const LogObjectList objlist(module_state.handle(), rp_state->Handle());
             skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-06038", objlist, loc,
-                             "SPIR-V consumes input attachment index %" PRIu32 " but that is greater than the pSubpasses[%" PRIu32
+                             "SPIR-V consumes input attachment index %" PRIu32 " but that is not less than the pSubpasses[%" PRIu32
                              "].inputAttachmentCount (%" PRIu32 ").",
                              input_attachment_index, subpass, subpass_description.inputAttachmentCount);
         } else if (input_attachments[input_attachment_index].attachment == VK_ATTACHMENT_UNUSED) {
@@ -100,8 +102,8 @@ bool CoreChecks::ValidateConservativeRasterization(const spirv::Module &module_s
     return skip;
 }
 
-bool CoreChecks::ValidatePushConstantUsage(const spirv::Module &module_state, const vvl::Pipeline &pipeline,
-                                           const spirv::EntryPoint &entrypoint, const Location &loc) const {
+bool CoreChecks::ValidatePushConstantUsage(const spirv::Module &module_state, const spirv::EntryPoint &entrypoint,
+                                           const vvl::Pipeline &pipeline, const Location &loc) const {
     bool skip = false;
 
     // TODO - Workaround for https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5911
@@ -166,19 +168,16 @@ bool CoreChecks::ValidatePushConstantUsage(const spirv::Module &module_state, co
     return skip;
 }
 
-static void TypeToDescriptorTypeSet(const spirv::Module &module_state, uint32_t type_id, uint32_t &descriptor_count,
-                                    vvl::unordered_set<uint32_t> &descriptor_type_set, bool is_khr) {
+static void TypeToDescriptorTypeSet(const spirv::Module &module_state, uint32_t type_id,
+                                    vvl::unordered_set<uint32_t> &descriptor_type_set) {
     const spirv::Instruction *type = module_state.FindDef(type_id);
     bool is_storage_buffer = false;
-    descriptor_count = 1;
 
     // Strip off any array or ptrs. Where we remove array levels, adjust the  descriptor count for each dimension.
     while (type->IsArray() || type->Opcode() == spv::OpTypePointer) {
         if (type->Opcode() == spv::OpTypeRuntimeArray) {
-            descriptor_count = 0;
             type = module_state.FindDef(type->Word(2));
         } else if (type->Opcode() == spv::OpTypeArray) {
-            descriptor_count *= module_state.GetConstantValueById(type->Word(3));
             type = module_state.FindDef(type->Word(2));
         } else {
             if (type->StorageClass() == spv::StorageClassStorageBuffer) {
@@ -251,9 +250,14 @@ static void TypeToDescriptorTypeSet(const spirv::Module &module_state, uint32_t 
             }
             return;
         }
-        case spv::OpTypeAccelerationStructureNV:
-            is_khr ? descriptor_type_set.insert(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR)
-                   : descriptor_type_set.insert(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV);
+
+        // The OpType are alias, but the Descriptor Types are different
+        case spv::OpTypeAccelerationStructureKHR:
+            if (module_state.HasCapability(spv::CapabilityRayTracingNV)) {
+                descriptor_type_set.insert(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV);
+            } else {
+                descriptor_type_set.insert(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR);
+            }
             return;
 
         default:
@@ -546,7 +550,7 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
                << " | AType = " << string_VkComponentTypeKHR(prop.AType) << " | BType = " << string_VkComponentTypeKHR(prop.BType)
                << " | CType = " << string_VkComponentTypeKHR(prop.CType)
                << " | ResultType = " << string_VkComponentTypeKHR(prop.ResultType) << " | scope = " << string_VkScopeKHR(prop.scope)
-               << "\n";
+               << '\n';
         }
         return ss.str();
     };
@@ -1285,6 +1289,21 @@ bool CoreChecks::ValidateExecutionModes(const spirv::Module &module_state, const
         }
     }
 
+    if ((stage == VK_SHADER_STAGE_MESH_BIT_EXT || stage == VK_SHADER_STAGE_TASK_BIT_EXT) &&
+        !phys_dev_ext_props.compute_shader_derivatives_props.meshAndTaskShaderDerivatives) {
+        if (entrypoint.execution_mode.Has(spirv::ExecutionModeSet::derivative_group_linear)) {
+            skip |=
+                LogError("VUID-RuntimeSpirv-meshAndTaskShaderDerivatives-10153", module_state.handle(), loc,
+                         "SPIR-V uses DerivativeGroupLinearKHR in a %s shader, but meshAndTaskShaderDerivatives is not supported.",
+                         string_VkShaderStageFlagBits(stage));
+        } else if (entrypoint.execution_mode.Has(spirv::ExecutionModeSet::derivative_group_quads)) {
+            skip |=
+                LogError("VUID-RuntimeSpirv-meshAndTaskShaderDerivatives-10153", module_state.handle(), loc,
+                         "SPIR-V uses DerivativeGroupQuadsKHR in a %s shader, but meshAndTaskShaderDerivatives is not supported.",
+                         string_VkShaderStageFlagBits(stage));
+        }
+    }
+
     return skip;
 }
 
@@ -1705,125 +1724,126 @@ bool CoreChecks::ValidateVariables(const spirv::Module &module_state, const Loca
     return skip;
 }
 
-bool CoreChecks::ValidateShaderDescriptorVariable(const spirv::Module &module_state, const vvl::Pipeline &pipeline,
-                                                  const spirv::EntryPoint &entrypoint, const Location &loc) const {
+bool CoreChecks::ValidateShaderInterfaceVariable(const spirv::Module &module_state,
+                                                 const spirv::ResourceInterfaceVariable &variable,
+                                                 vvl::unordered_set<uint32_t> &descriptor_type_set, const Location &loc) const {
     bool skip = false;
 
-    std::string vuid_07988;
-    std::string vuid_07990;
-    std::string vuid_07991;
-    switch (pipeline.GetCreateInfoSType()) {
-        case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO:
-            vuid_07988 = "VUID-VkGraphicsPipelineCreateInfo-layout-07988";
-            vuid_07990 = "VUID-VkGraphicsPipelineCreateInfo-layout-07990";
-            vuid_07991 = "VUID-VkGraphicsPipelineCreateInfo-layout-07991";
-            break;
-        case VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO:
-            vuid_07988 = "VUID-VkComputePipelineCreateInfo-layout-07988";
-            vuid_07990 = "VUID-VkComputePipelineCreateInfo-layout-07990";
-            vuid_07991 = "VUID-VkComputePipelineCreateInfo-layout-07991";
-            break;
-        case VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR:
-            vuid_07988 = "VUID-VkRayTracingPipelineCreateInfoKHR-layout-07988";
-            vuid_07990 = "VUID-VkRayTracingPipelineCreateInfoKHR-layout-07990";
-            vuid_07991 = "VUID-VkRayTracingPipelineCreateInfoKHR-layout-07991";
-            break;
-        case VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV:
-            vuid_07988 = "VUID-VkRayTracingPipelineCreateInfoNV-layout-07988";
-            vuid_07990 = "VUID-VkRayTracingPipelineCreateInfoNV-layout-07990";
-            vuid_07991 = "VUID-VkRayTracingPipelineCreateInfoNV-layout-07991";
-            break;
-        default:
-            assert(false);
-            break;
+    if ((variable.is_storage_image || variable.is_storage_texel_buffer || variable.is_storage_buffer) &&
+        !variable.decorations.Has(spirv::DecorationSet::nonwritable_bit)) {
+        // If the variable is a struct, all members must contain NonWritable
+        if (!variable.type_struct_info ||
+            !variable.type_struct_info->decorations.AllMemberHave(spirv::DecorationSet::nonwritable_bit)) {
+            switch (variable.stage) {
+                case VK_SHADER_STAGE_FRAGMENT_BIT:
+                    if (!enabled_features.fragmentStoresAndAtomics) {
+                        skip |=
+                            LogError("VUID-RuntimeSpirv-NonWritable-06340", module_state.handle(), loc,
+                                     "SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor %s (type %s) which is not "
+                                     "marked with NonWritable, but fragmentStoresAndAtomics was not enabled.",
+                                     variable.DescribeDescriptor().c_str(), string_DescriptorTypeSet(descriptor_type_set).c_str());
+                    }
+                    break;
+                case VK_SHADER_STAGE_VERTEX_BIT:
+                case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+                case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
+                case VK_SHADER_STAGE_GEOMETRY_BIT:
+                    if (!enabled_features.vertexPipelineStoresAndAtomics) {
+                        skip |= LogError("VUID-RuntimeSpirv-NonWritable-06341", module_state.handle(), loc,
+                                         "SPIR-V (%s) uses descriptor %s (type %s) which is not marked with NonWritable, but "
+                                         "vertexPipelineStoresAndAtomics was not enabled.",
+                                         string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
+                                         string_DescriptorTypeSet(descriptor_type_set).c_str());
+                    }
+                    break;
+                default:
+                    // No feature requirements for writes and atomics for other stages
+                    break;
+            }
+        }
     }
 
-    for (const auto &variable : entrypoint.resource_interface_variables) {
-        const auto &binding =
-            GetDescriptorBinding(pipeline.PipelineLayoutState().get(), variable.decorations.set, variable.decorations.binding);
-        uint32_t required_descriptor_count = 1;
-        const bool is_khr = binding && binding->descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-        vvl::unordered_set<uint32_t> descriptor_type_set;
-        TypeToDescriptorTypeSet(module_state, variable.type_id, required_descriptor_count, descriptor_type_set, is_khr);
+    if (!variable.decorations.Has(spirv::DecorationSet::input_attachment_bit) && variable.info.image_dim == spv::DimSubpassData) {
+        if (variable.array_length != 0) {
+            skip |= LogError("VUID-RuntimeSpirv-OpTypeImage-09644", module_state.handle(), loc,
+                             "the variable is an array of OpTypeImage with Dim::SubpassData, but it is missing the "
+                             "InputAttachmentIndex decoration.\n%s\n",
+                             variable.base_type.Describe().c_str());
+        } else if (!enabled_features.dynamicRenderingLocalRead) {
+            skip |= LogError("VUID-RuntimeSpirv-None-09558", module_state.handle(), loc,
+                             "the variable is a OpTypeImage with Dim::SubpassData, but it is missing the "
+                             "InputAttachmentIndex decoration (dynamicRenderingLocalRead was not enabled).\n%s\n",
+                             variable.base_type.Describe().c_str());
+        }
+    }
+    return skip;
+}
 
-        if (!binding) {
-            const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
-            skip |= LogError(vuid_07988, objlist, loc,
-                             "SPIR-V (%s) uses descriptor %s (type %s) but was not declared in the pipeline layout.",
-                             string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
-                             string_DescriptorTypeSet(descriptor_type_set).c_str());
-        } else if (~binding->stageFlags & variable.stage) {
-            const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
-            skip |= LogError(vuid_07988, objlist, loc,
-                             "SPIR-V (%s) uses descriptor %s (type %s) but the VkDescriptorSetLayoutBinding::stageFlags was %s.",
-                             string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
-                             string_DescriptorTypeSet(descriptor_type_set).c_str(),
-                             string_VkShaderStageFlags(binding->stageFlags).c_str());
-        } else if ((binding->descriptorType != VK_DESCRIPTOR_TYPE_MUTABLE_EXT) &&
-                   (descriptor_type_set.find(binding->descriptorType) == descriptor_type_set.end())) {
-            const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
-            skip |=
-                LogError(vuid_07990, objlist, loc, "SPIR-V (%s) uses descriptor %s of type %s but expected %s.",
+bool CoreChecks::ValidateShaderInterfaceVariablePipeline(const spirv::Module &module_state, const vvl::Pipeline &pipeline,
+                                                         const spirv::ResourceInterfaceVariable &variable,
+                                                         vvl::unordered_set<uint32_t> &descriptor_type_set,
+                                                         const Location &loc) const {
+    bool skip = false;
+
+    auto get_vuid_07988 = [&pipeline]() {
+        auto sType = pipeline.GetCreateInfoSType();
+        return sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO  ? "VUID-VkGraphicsPipelineCreateInfo-layout-07988"
+               : sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO ? "VUID-VkComputePipelineCreateInfo-layout-07988"
+               : sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR
+                   ? "VUID-VkRayTracingPipelineCreateInfoKHR-layout-07988"
+                   : "VUID-VkRayTracingPipelineCreateInfoNV-layout-07988";
+    };
+    auto get_vuid_07990 = [&pipeline]() {
+        auto sType = pipeline.GetCreateInfoSType();
+        return sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO  ? "VUID-VkGraphicsPipelineCreateInfo-layout-07990"
+               : sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO ? "VUID-VkComputePipelineCreateInfo-layout-07990"
+               : sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR
+                   ? "VUID-VkRayTracingPipelineCreateInfoKHR-layout-07990"
+                   : "VUID-VkRayTracingPipelineCreateInfoNV-layout-07990";
+    };
+    auto get_vuid_07991 = [&pipeline]() {
+        auto sType = pipeline.GetCreateInfoSType();
+        return sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO  ? "VUID-VkGraphicsPipelineCreateInfo-layout-07991"
+               : sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO ? "VUID-VkComputePipelineCreateInfo-layout-07991"
+               : sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR
+                   ? "VUID-VkRayTracingPipelineCreateInfoKHR-layout-07991"
+                   : "VUID-VkRayTracingPipelineCreateInfoNV-layout-07991";
+    };
+
+    const auto binding =
+        GetDescriptorBinding(pipeline.PipelineLayoutState().get(), variable.decorations.set, variable.decorations.binding);
+
+    if (!binding) {
+        const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
+        skip |= LogError(get_vuid_07988(), objlist, loc,
+                         "SPIR-V (%s) uses descriptor %s (type %s) but was not declared in the pipeline layout.",
+                         string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
+                         string_DescriptorTypeSet(descriptor_type_set).c_str());
+    } else if (~binding->stageFlags & variable.stage) {
+        const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
+        skip |=
+            LogError(get_vuid_07988(), objlist, loc,
+                     "SPIR-V (%s) uses descriptor %s (type %s) but the VkDescriptorSetLayoutBinding::stageFlags was %s.",
+                     string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
+                     string_DescriptorTypeSet(descriptor_type_set).c_str(), string_VkShaderStageFlags(binding->stageFlags).c_str());
+    } else if ((binding->descriptorType != VK_DESCRIPTOR_TYPE_MUTABLE_EXT) &&
+               (descriptor_type_set.find(binding->descriptorType) == descriptor_type_set.end())) {
+        const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
+        skip |= LogError(get_vuid_07990(), objlist, loc, "SPIR-V (%s) uses descriptor %s of type %s but expected %s.",
                          string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
                          string_VkDescriptorType(binding->descriptorType), string_DescriptorTypeSet(descriptor_type_set).c_str());
-        } else if (binding->descriptorCount < required_descriptor_count) {
-            const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
-            skip |= LogError(vuid_07991, objlist, loc,
-                             "SPIR-V (%s) uses descriptor %s with %" PRIu32 " descriptors, but requires at least %" PRIu32 ".",
-                             string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
-                             binding->descriptorCount, required_descriptor_count);
-        }
-
-        if ((variable.is_storage_image || variable.is_storage_texel_buffer || variable.is_storage_buffer) &&
-            !variable.decorations.Has(spirv::DecorationSet::nonwritable_bit)) {
-            // If the variable is a struct, all members must contain NonWritable
-            if (!variable.type_struct_info ||
-                !variable.type_struct_info->decorations.AllMemberHave(spirv::DecorationSet::nonwritable_bit)) {
-                switch (variable.stage) {
-                    case VK_SHADER_STAGE_FRAGMENT_BIT:
-                        if (!enabled_features.fragmentStoresAndAtomics) {
-                            skip |= LogError("VUID-RuntimeSpirv-NonWritable-06340", module_state.handle(), loc,
-                                             "SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor %s (type %s) which is not "
-                                             "marked with NonWritable, but fragmentStoresAndAtomics was not enabled.",
-                                             variable.DescribeDescriptor().c_str(),
-                                             string_DescriptorTypeSet(descriptor_type_set).c_str());
-                        }
-                        break;
-                    case VK_SHADER_STAGE_VERTEX_BIT:
-                    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
-                    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
-                    case VK_SHADER_STAGE_GEOMETRY_BIT:
-                        if (!enabled_features.vertexPipelineStoresAndAtomics) {
-                            skip |= LogError("VUID-RuntimeSpirv-NonWritable-06341", module_state.handle(), loc,
-                                             "SPIR-V (%s) uses descriptor %s (type %s) which is not marked with NonWritable, but "
-                                             "vertexPipelineStoresAndAtomics was not enabled.",
-                                             string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
-                                             string_DescriptorTypeSet(descriptor_type_set).c_str());
-                        }
-                        break;
-                    default:
-                        // No feature requirements for writes and atomics for other stages
-                        break;
-                }
-            }
-        }
-
-        if (variable.decorations.Has(spirv::DecorationSet::input_attachment_bit)) {
-            skip |= ValidateShaderInputAttachment(module_state, pipeline, variable, loc);
-        } else if (variable.info.image_dim == spv::DimSubpassData) {
-            if (variable.array_length != 0) {
-                skip |= LogError("VUID-RuntimeSpirv-OpTypeImage-09644", module_state.handle(), loc,
-                                 "the variable is an array of OpTypeImage with Dim::SubpassData, but it is missing the "
-                                 "InputAttachmentIndex decoration.\n%s\n",
-                                 variable.base_type.Describe().c_str());
-            } else if (!enabled_features.dynamicRenderingLocalRead) {
-                skip |= LogError("VUID-RuntimeSpirv-None-09558", module_state.handle(), loc,
-                                 "the variable is a OpTypeImage with Dim::SubpassData, but it is missing the "
-                                 "InputAttachmentIndex decoration (dynamicRenderingLocalRead was not enabled).\n%s\n",
-                                 variable.base_type.Describe().c_str());
-            }
-        }
+    } else if (binding->descriptorCount < variable.array_length && variable.array_length != spirv::kRuntimeArray) {
+        const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
+        skip |= LogError(get_vuid_07991(), objlist, loc,
+                         "SPIR-V (%s) uses descriptor %s with %" PRIu32 " descriptors, but requires at least %" PRIu32 ".",
+                         string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
+                         binding->descriptorCount, variable.array_length);
     }
+
+    if (variable.decorations.Has(spirv::DecorationSet::input_attachment_bit)) {
+        skip |= ValidateShaderInputAttachment(module_state, pipeline, variable, loc);
+    }
+
     return skip;
 }
 
@@ -1839,11 +1859,18 @@ bool CoreChecks::ValidateTransformFeedbackPipeline(const spirv::Module &module_s
                              string_VkShaderStageFlags(pipeline.create_info_shaders).c_str());
         }
 
-        if (pipeline.pre_raster_state && (entrypoint.stage != pipeline.pre_raster_state->last_stage)) {
-            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pStages-02318", module_state.handle(), loc,
-                             "SPIR-V has OpExecutionMode of Xfb in %s, but %s is the last last pre-rasterization shader stage.",
-                             string_VkShaderStageFlagBits(entrypoint.stage),
-                             string_VkShaderStageFlagBits(pipeline.pre_raster_state->last_stage));
+        if (pipeline.pre_raster_state) {
+            if (entrypoint.stage != pipeline.pre_raster_state->last_stage) {
+                skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pStages-02318", module_state.handle(), loc,
+                                 "SPIR-V has OpExecutionMode of Xfb in %s, but %s is the last last pre-rasterization shader stage.",
+                                 string_VkShaderStageFlagBits(entrypoint.stage),
+                                 string_VkShaderStageFlagBits(pipeline.pre_raster_state->last_stage));
+            }
+            if ((pipeline.create_flags & VK_PIPELINE_CREATE_2_INDIRECT_BINDABLE_BIT_EXT) != 0) {
+                skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-flags-11001", module_state.handle(), loc,
+                                 "SPIR-V has OpExecutionMode of Xfb but this pipeline is being created with "
+                                 "VK_PIPELINE_CREATE_2_INDIRECT_BINDABLE_BIT_EXT.");
+            }
         }
     }
 
@@ -2353,6 +2380,7 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
         }
         skip |= ValidatePointSizeShaderState(module_state, entrypoint, *pipeline, stage, loc);
         skip |= ValidatePrimitiveTopology(module_state, entrypoint, *pipeline, loc);
+        skip |= ValidatePushConstantUsage(module_state, entrypoint, *pipeline, loc);
 
         if (stage == VK_SHADER_STAGE_FRAGMENT_BIT && pipeline->GraphicsCreateInfo().renderPass == VK_NULL_HANDLE &&
             module_state.HasCapability(spv::CapabilityInputAttachment) && !enabled_features.dynamicRenderingLocalRead) {
@@ -2387,18 +2415,17 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
                              local_size_x, local_size_y, local_size_z, phys_dev_props.limits.maxComputeWorkGroupInvocations);
         }
 
-        if (const auto *required_subgroup_size_features =
-                vku::FindStructInPNextChain<VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT>(stage_state.GetPNext())) {
-            skip |= ValidateRequiredSubgroupSize(module_state, stage_state, *required_subgroup_size_features, invocations,
-                                                 local_size_x, local_size_y, local_size_z, loc);
-        }
+        skip |= ValidateRequiredSubgroupSize(module_state, stage_state, invocations, local_size_x, local_size_y, local_size_z, loc);
         skip |= ValidateWorkgroupSharedMemory(module_state, stage, total_workgroup_shared_memory, loc);
     }
 
-    // Validate Push Constants use
-    if (pipeline) {
-        skip |= ValidatePushConstantUsage(module_state, *pipeline, entrypoint, loc);
-        skip |= ValidateShaderDescriptorVariable(module_state, *pipeline, entrypoint, loc);
+    for (const auto &variable : entrypoint.resource_interface_variables) {
+        vvl::unordered_set<uint32_t> descriptor_type_set;
+        TypeToDescriptorTypeSet(module_state, variable.type_id, descriptor_type_set);
+        skip |= ValidateShaderInterfaceVariable(module_state, variable, descriptor_type_set, loc);
+        if (pipeline) {
+            skip |= ValidateShaderInterfaceVariablePipeline(module_state, *pipeline, variable, descriptor_type_set, loc);
+        }
     }
 
     if (stage == VK_SHADER_STAGE_COMPUTE_BIT) {
@@ -2488,6 +2515,10 @@ void CoreChecks::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createI
 bool CoreChecks::RunSpirvValidation(spv_const_binary_t &binary, const Location &loc, ValidationCache *cache) const {
     bool skip = false;
 
+    if (global_settings.debug_disable_spirv_val) {
+        return skip;
+    }
+
     uint32_t hash = 0;
     if (cache) {
         hash = hash_util::ShaderHash((void *)binary.code, binary.wordCount * sizeof(uint32_t));
@@ -2530,7 +2561,7 @@ bool CoreChecks::ValidateShaderModuleCreateInfo(const VkShaderModuleCreateInfo &
     bool skip = false;
 
     if (disabled[shader_validation]) {
-        return skip;
+        return skip; // VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT
     }
 
     if (!create_info.pCode) {
@@ -2590,58 +2621,60 @@ bool CoreChecks::PreCallValidateGetShaderModuleCreateInfoIdentifierEXT(VkDevice 
 }
 
 bool CoreChecks::ValidateRequiredSubgroupSize(const spirv::Module &module_state, const ShaderStageState &stage_state,
-                                              const VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT &required_subgroup_size,
                                               uint64_t invocations, uint32_t local_size_x, uint32_t local_size_y,
                                               uint32_t local_size_z, const Location &loc) const {
     bool skip = false;
 
-    const uint32_t requiredSubgroupSize = required_subgroup_size.requiredSubgroupSize;
+    const auto *required_subgroup_size_ci =
+        vku::FindStructInPNextChain<VkPipelineShaderStageRequiredSubgroupSizeCreateInfo>(stage_state.GetPNext());
+    if (!required_subgroup_size_ci) return skip;
+
+    const Location pNext_loc = loc.pNext(Struct::VkPipelineShaderStageRequiredSubgroupSizeCreateInfo);
+
+    const uint32_t required_subgroup_size = required_subgroup_size_ci->requiredSubgroupSize;
     if (!enabled_features.subgroupSizeControl) {
-        skip |= LogError("VUID-VkPipelineShaderStageCreateInfo-pNext-02755", module_state.handle(), loc,
-                         "subgroupSizeControl was not enabled");
+        skip |= LogError("VUID-VkPipelineShaderStageCreateInfo-pNext-02755", module_state.handle(), pNext_loc,
+                         "the subgroupSizeControl feature was not enabled");
     }
-    if ((phys_dev_ext_props.subgroup_size_control_props.requiredSubgroupSizeStages & stage_state.GetStage()) == 0) {
-        skip |= LogError(
-            "VUID-VkPipelineShaderStageCreateInfo-pNext-02755", module_state.handle(), loc,
-            "SPIR-V  (%s) is not in requiredSubgroupSizeStages (%s).", string_VkShaderStageFlagBits(stage_state.GetStage()),
-            string_VkShaderStageFlags(phys_dev_ext_props.subgroup_size_control_props.requiredSubgroupSizeStages).c_str());
+    if ((phys_dev_props_core13.requiredSubgroupSizeStages & stage_state.GetStage()) == 0) {
+        skip |=
+            LogError("VUID-VkPipelineShaderStageCreateInfo-pNext-02755", module_state.handle(), loc,
+                     "SPIR-V (%s) is not in requiredSubgroupSizeStages (%s).", string_VkShaderStageFlagBits(stage_state.GetStage()),
+                     string_VkShaderStageFlags(phys_dev_props_core13.requiredSubgroupSizeStages).c_str());
     }
-    if ((invocations > requiredSubgroupSize * phys_dev_ext_props.subgroup_size_control_props.maxComputeWorkgroupSubgroups)) {
+    if ((invocations > required_subgroup_size * phys_dev_props_core13.maxComputeWorkgroupSubgroups)) {
         skip |= LogError("VUID-VkPipelineShaderStageCreateInfo-pNext-02756", module_state.handle(), loc,
                          "SPIR-V Local workgroup size (%" PRIu32 ", %" PRIu32 ", %" PRIu32
                          ") is greater than requiredSubgroupSize (%" PRIu32 ") * maxComputeWorkgroupSubgroups (%" PRIu32 ").",
-                         local_size_x, local_size_y, local_size_z, requiredSubgroupSize,
-                         phys_dev_ext_props.subgroup_size_control_props.maxComputeWorkgroupSubgroups);
+                         local_size_x, local_size_y, local_size_z, required_subgroup_size,
+                         phys_dev_props_core13.maxComputeWorkgroupSubgroups);
     }
     if (stage_state.pipeline_create_info &&
         (stage_state.pipeline_create_info->flags & VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT) > 0) {
-        if (SafeModulo(local_size_x, requiredSubgroupSize) != 0) {
+        if (SafeModulo(local_size_x, required_subgroup_size) != 0) {
             skip |= LogError("VUID-VkPipelineShaderStageCreateInfo-pNext-02757", module_state.handle(), loc,
                              "SPIR-V Local workgroup size x (%" PRIu32
                              ") is not a multiple of "
                              "requiredSubgroupSize (%" PRIu32 ").",
-                             local_size_x, requiredSubgroupSize);
+                             local_size_x, required_subgroup_size);
         }
     }
-    if (!IsPowerOfTwo(requiredSubgroupSize)) {
-        skip |=
-            LogError("VUID-VkPipelineShaderStageRequiredSubgroupSizeCreateInfo-requiredSubgroupSize-02760", module_state.handle(),
-                     loc.pNext(Struct::VkPipelineShaderStageRequiredSubgroupSizeCreateInfo, Field::requiredSubgroupSizeStages),
-                     "(%" PRIu32 ") is not a power of 2.", requiredSubgroupSize);
+    if (!IsPowerOfTwo(required_subgroup_size)) {
+        skip |= LogError("VUID-VkPipelineShaderStageRequiredSubgroupSizeCreateInfo-requiredSubgroupSize-02760",
+                         module_state.handle(), pNext_loc.dot(Field::requiredSubgroupSizeStages),
+                         "(%" PRIu32 ") is not a power of 2.", required_subgroup_size);
     }
-    if (requiredSubgroupSize < phys_dev_ext_props.subgroup_size_control_props.minSubgroupSize) {
+    if (required_subgroup_size < phys_dev_props_core13.minSubgroupSize) {
         skip |=
             LogError("VUID-VkPipelineShaderStageRequiredSubgroupSizeCreateInfo-requiredSubgroupSize-02761", module_state.handle(),
-                     loc.pNext(Struct::VkPipelineShaderStageRequiredSubgroupSizeCreateInfo, Field::requiredSubgroupSizeStages),
-                     "(%" PRIu32 ") is less than minSubgroupSize (%" PRIu32 ").", requiredSubgroupSize,
-                     phys_dev_ext_props.subgroup_size_control_props.minSubgroupSize);
+                     pNext_loc.dot(Field::requiredSubgroupSizeStages), "(%" PRIu32 ") is less than minSubgroupSize (%" PRIu32 ").",
+                     required_subgroup_size, phys_dev_props_core13.minSubgroupSize);
     }
-    if (requiredSubgroupSize > phys_dev_ext_props.subgroup_size_control_props.maxSubgroupSize) {
-        skip |=
-            LogError("VUID-VkPipelineShaderStageRequiredSubgroupSizeCreateInfo-requiredSubgroupSize-02762", module_state.handle(),
-                     loc.pNext(Struct::VkPipelineShaderStageRequiredSubgroupSizeCreateInfo, Field::requiredSubgroupSizeStages),
-                     "(%" PRIu32 ") is greater than maxSubgroupSize (%" PRIu32 ").", requiredSubgroupSize,
-                     phys_dev_ext_props.subgroup_size_control_props.maxSubgroupSize);
+    if (required_subgroup_size > phys_dev_props_core13.maxSubgroupSize) {
+        skip |= LogError("VUID-VkPipelineShaderStageRequiredSubgroupSizeCreateInfo-requiredSubgroupSize-02762",
+                         module_state.handle(), pNext_loc.dot(Field::requiredSubgroupSizeStages),
+                         "(%" PRIu32 ") is greater than maxSubgroupSize (%" PRIu32 ").", required_subgroup_size,
+                         phys_dev_props_core13.maxSubgroupSize);
     }
 
     return skip;
@@ -2676,20 +2709,18 @@ bool CoreChecks::ValidateComputeWorkGroupSizes(const spirv::Module &module_state
         const auto subgroup_flags = VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT |
                                     VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT;
         if ((stage_state.pipeline_create_info->flags & subgroup_flags) == subgroup_flags) {
-            if (SafeModulo(local_size_x, phys_dev_ext_props.subgroup_size_control_props.maxSubgroupSize) != 0) {
+            if (SafeModulo(local_size_x, phys_dev_props_core13.maxSubgroupSize) != 0) {
                 skip |= LogError(
                     "VUID-VkPipelineShaderStageCreateInfo-flags-02758", module_state.handle(), loc.dot(Field::flags),
                     "(%s), but local workgroup size X dimension (%" PRIu32
                     ") is not a multiple of VkPhysicalDeviceSubgroupSizeControlPropertiesEXT::maxSubgroupSize (%" PRIu32 ").",
                     string_VkPipelineShaderStageCreateFlags(stage_state.pipeline_create_info->flags).c_str(), local_size_x,
-                    phys_dev_ext_props.subgroup_size_control_props.maxSubgroupSize);
+                    phys_dev_props_core13.maxSubgroupSize);
             }
         } else if ((stage_state.pipeline_create_info->flags & VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT) &&
                    (stage_state.pipeline_create_info->flags &
                     VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) == 0) {
-            const auto *required_subgroup_size_features =
-                vku::FindStructInPNextChain<VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT>(stage_state.GetPNext());
-            if (!required_subgroup_size_features) {
+            if (!vku::FindStructInPNextChain<VkPipelineShaderStageRequiredSubgroupSizeCreateInfo>(stage_state.GetPNext())) {
                 if (SafeModulo(local_size_x, phys_dev_props_core11.subgroupSize) != 0) {
                     skip |=
                         LogError("VUID-VkPipelineShaderStageCreateInfo-flags-02759", module_state.handle(), loc.dot(Field::flags),
@@ -2706,13 +2737,13 @@ bool CoreChecks::ValidateComputeWorkGroupSizes(const spirv::Module &module_state
         const auto *required_subgroup_size =
             vku::FindStructInPNextChain<VkShaderRequiredSubgroupSizeCreateInfoEXT>(stage_state.GetPNext());
         if (varying && full) {
-            if (SafeModulo(local_size_x, phys_dev_ext_props.subgroup_size_control_props.maxSubgroupSize) != 0) {
+            if (SafeModulo(local_size_x, phys_dev_props_core13.maxSubgroupSize) != 0) {
                 skip |= LogError(
                     "VUID-VkShaderCreateInfoEXT-flags-08416", module_state.handle(), loc.dot(Field::flags),
                     "(%s) but local workgroup size X dimension (%" PRIu32
                     ") is not a multiple of VkPhysicalDeviceSubgroupSizeControlPropertiesEXT::maxSubgroupSize (%" PRIu32 ").",
                     string_VkPipelineShaderStageCreateFlags(stage_state.shader_object_create_info->flags).c_str(), local_size_x,
-                    phys_dev_ext_props.subgroup_size_control_props.maxSubgroupSize);
+                    phys_dev_props_core13.maxSubgroupSize);
             }
         } else if (full && !varying) {
             if (!required_subgroup_size && SafeModulo(local_size_x, phys_dev_props_core11.subgroupSize) != 0) {

@@ -79,8 +79,10 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
             # Need to deal with VkAccelerationStructureGeometryKHR
             'vkBuildAccelerationStructuresKHR',
             'vkGetAccelerationStructureBuildSizesKHR',
-            # Depends on the VkDescriptorType
+            # Depends on the VkDescriptorType to pick the union pointer
             'vkGetDescriptorEXT',
+            # Depends on the VkIndirectExecutionSetInfoTypeEXT to pick the union pointer
+            'vkCreateIndirectExecutionSetEXT',
             # Special destroy call from the Acquire
             'vkReleasePerformanceConfigurationINTEL',
             # need to call CopyExportMetalObjects
@@ -98,10 +100,19 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
             'vkGetDisplayModePropertiesKHR',
             'vkGetDisplayModeProperties2KHR',
             'vkGetDisplayPlaneSupportedDisplaysKHR',
+            # need to handle binaries in VkPipelineBinaryHandlesInfoKHR as output, not input.
+            'vkCreatePipelineBinariesKHR',
+            'vkGetPipelineKeyKHR',
             ]
 
         # List of all extension structs strings containing handles
-        self.ndo_extension_structs = []
+        self.ndo_extension_structs = [
+            # These are added manually because vkGetPipelineKeyKHR needs to unwrap these (see VUID 09604)
+            "VkComputePipelineCreateInfo",
+            "VkGraphicsPipelineCreateInfo",
+            "VkRayTracingPipelineCreateInfoKHR",
+            "VkExecutionGraphPipelineCreateInfoAMDX",
+        ]
 
         # Dispatch functions that need special state tracking variables passed in
         self.custom_definition = {
@@ -164,7 +175,7 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
             extern bool wrap_handles;
 
             class ValidationObject;
-            void WrapPnextChainHandles(ValidationObject *layer_data, const void *pNext);
+            void UnwrapPnextChainHandles(ValidationObject *layer_data, const void *pNext);
 
             ''')
         guard_helper = PlatformGuardHelper()
@@ -199,7 +210,7 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
             #define DISPATCH_MAX_STACK_ALLOCATIONS 32
 
             // Unique Objects pNext extension handling function
-            void WrapPnextChainHandles(ValidationObject *layer_data, const void *pNext) {
+            void UnwrapPnextChainHandles(ValidationObject *layer_data, const void *pNext) {
                 void *cur_pnext = const_cast<void *>(pNext);
                 while (cur_pnext != nullptr) {
                     VkBaseOutStructure *header = reinterpret_cast<VkBaseOutStructure *>(cur_pnext);
@@ -467,7 +478,7 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
                             else:
                                 pre_code += f'{new_prefix}[{index}] = {member.name}[{index}];\n'
                         if process_pnext:
-                            pre_code += f'WrapPnextChainHandles(layer_data, {new_prefix}[{index}].pNext);\n'
+                            pre_code += f'UnwrapPnextChainHandles(layer_data, {new_prefix}[{index}].pNext);\n'
                         local_prefix = f'{new_prefix}[{index}].'
                         # Process sub-structs in this struct
                         (tmp_decl, tmp_pre, tmp_post) = self.uniquifyMembers(struct.members, local_prefix, arrayIndex, isCreate, isDestroy, False)
@@ -511,7 +522,7 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
                         pre_code += tmp_pre
                         post_code += tmp_post
                         if process_pnext:
-                            pre_code += f'WrapPnextChainHandles(layer_data, {new_prefix}pNext);\n'
+                            pre_code += f'UnwrapPnextChainHandles(layer_data, {new_prefix}pNext);\n'
                         pre_code += '}\n'
                         if topLevel:
                             post_code += self.cleanUpLocalDeclarations(prefix, member.name, member.length, deferred_name)
@@ -527,7 +538,7 @@ class LayerChassisDispatchOutputGenerator(BaseGenerator):
                         pre_code += tmp_pre
                         post_code += tmp_post
                         if process_pnext:
-                            pre_code += f'WrapPnextChainHandles(layer_data, {prefix}{member.name}.pNext);\n'
+                            pre_code += f'UnwrapPnextChainHandles(layer_data, {prefix}{member.name}.pNext);\n'
             elif member.type == 'VkObjectType' and member.name == 'objectType' and any(m.name == 'objectHandle' for m in members):
                 pre_code += '''
                     if (NotDispatchableHandle(objectType)) {

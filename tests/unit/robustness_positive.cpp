@@ -13,7 +13,6 @@
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
-#include "generated/vk_extension_helper.h"
 
 class PositiveRobustness : public VkLayerTest {};
 
@@ -80,12 +79,12 @@ TEST_F(PositiveRobustness, BindVertexBuffers2EXTNullDescriptors) {
     descriptor_set.UpdateDescriptorSets();
     descriptor_set.Clear();
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceSize offset = 0;
-    vk::CmdBindVertexBuffers(m_commandBuffer->handle(), 0, 1, &buffer, &offset);
-    vk::CmdBindVertexBuffers2EXT(m_commandBuffer->handle(), 0, 1, &buffer, &offset, nullptr, nullptr);
-    m_commandBuffer->end();
+    vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0, 1, &buffer, &offset);
+    vk::CmdBindVertexBuffers2EXT(m_command_buffer.handle(), 0, 1, &buffer, &offset, nullptr, nullptr);
+    m_command_buffer.end();
 }
 
 TEST_F(PositiveRobustness, PipelineRobustnessRobustImageAccessExposed) {

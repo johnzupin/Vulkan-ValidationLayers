@@ -871,7 +871,7 @@ TEST_F(NegativeVideo, BindVideoSessionMemory) {
     std::vector<VkBindVideoSessionMemoryInfoKHR> bind_info(mem_req_count, vku::InitStruct<VkBindVideoSessionMemoryInfoKHR>());
     for (uint32_t i = 0; i < mem_req_count; ++i) {
         VkMemoryAllocateInfo alloc_info = vku::InitStructHelper();
-        ASSERT_TRUE(m_device->phy().set_memory_type(mem_reqs[i].memoryRequirements.memoryTypeBits, &alloc_info, 0));
+        ASSERT_TRUE(m_device->phy().SetMemoryType(mem_reqs[i].memoryRequirements.memoryTypeBits, &alloc_info, 0));
         alloc_info.allocationSize = mem_reqs[i].memoryRequirements.size * 2;
 
         VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -3197,7 +3197,7 @@ TEST_F(NegativeVideo, BeginCodingSessionMemoryNotBound) {
         if (i == mem_req_count / 2) continue;
 
         VkMemoryAllocateInfo alloc_info = vku::InitStructHelper();
-        m_device->phy().set_memory_type(mem_reqs[i].memoryRequirements.memoryTypeBits, &alloc_info, 0);
+        m_device->phy().SetMemoryType(mem_reqs[i].memoryRequirements.memoryTypeBits, &alloc_info, 0);
         alloc_info.allocationSize = mem_reqs[i].memoryRequirements.size;
 
         VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -6609,6 +6609,7 @@ TEST_F(NegativeVideo, DecodeImageLayouts) {
 
     // Decode output must be in DECODE_DST layout if it is distinct from reconstructed
     if (config.SupportsDecodeOutputDistinct()) {
+        vk::CmdPipelineBarrier2KHR(cb.handle(), context.DecodeOutput()->LayoutTransition(VK_IMAGE_LAYOUT_GENERAL));
         m_errorMonitor->SetDesiredError("VUID-vkCmdDecodeVideoKHR-pDecodeInfo-07252");
         cb.DecodeVideo(context.DecodeFrame(0));
         m_errorMonitor->VerifyFound();
@@ -9677,9 +9678,9 @@ TEST_F(NegativeVideo, DecodeInlineQueryUnavailable) {
     cb.EndVideoCoding(context.End());
     cb.end();
 
-    m_commandBuffer->begin(&begin_info);
-    vk::CmdResetQueryPool(m_commandBuffer->handle(), context.StatusQueryPool(), 0, 1);
-    m_commandBuffer->end();
+    m_command_buffer.begin(&begin_info);
+    vk::CmdResetQueryPool(m_command_buffer.handle(), context.StatusQueryPool(), 0, 1);
+    m_command_buffer.end();
 
     // Will fail as query pool has never been reset before
     m_errorMonitor->SetDesiredError("VUID-vkCmdDecodeVideoKHR-pNext-08366");
@@ -9687,7 +9688,7 @@ TEST_F(NegativeVideo, DecodeInlineQueryUnavailable) {
     m_errorMonitor->VerifyFound();
     m_device->Wait();
 
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_device->Wait();
 
     // Will succeed this time as we reset the query
@@ -9700,7 +9701,7 @@ TEST_F(NegativeVideo, DecodeInlineQueryUnavailable) {
     m_errorMonitor->VerifyFound();
     m_device->Wait();
 
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
 
     // Will succeed again after reset
@@ -9951,9 +9952,9 @@ TEST_F(NegativeVideo, EncodeInlineQueryUnavailable) {
     cb.EndVideoCoding(context.End());
     cb.end();
 
-    m_commandBuffer->begin(&begin_info);
-    vk::CmdResetQueryPool(m_commandBuffer->handle(), context.EncodeFeedbackQueryPool(), 0, 1);
-    m_commandBuffer->end();
+    m_command_buffer.begin(&begin_info);
+    vk::CmdResetQueryPool(m_command_buffer.handle(), context.EncodeFeedbackQueryPool(), 0, 1);
+    m_command_buffer.end();
 
     // Will fail as query pool has never been reset before
     m_errorMonitor->SetDesiredError("VUID-vkCmdEncodeVideoKHR-pNext-08361");
@@ -9961,7 +9962,7 @@ TEST_F(NegativeVideo, EncodeInlineQueryUnavailable) {
     m_errorMonitor->VerifyFound();
     m_device->Wait();
 
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_device->Wait();
 
     // Will succeed this time as we reset the query
@@ -9974,7 +9975,7 @@ TEST_F(NegativeVideo, EncodeInlineQueryUnavailable) {
     m_errorMonitor->VerifyFound();
     m_device->Wait();
 
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
 
     // Will succeed again after reset
@@ -12262,6 +12263,9 @@ TEST_F(NegativeVideo, BeginQueryInlineQueries) {
     if (!config) {
         GTEST_SKIP() << "Test requires video support";
     }
+    if (!QueueFamilySupportsResultStatusOnlyQueries(config.QueueFamilyIndex())) {
+        GTEST_SKIP() << "Test requires video queue to support result status queries";
+    }
 
     config.SessionCreateInfo()->flags |= VK_VIDEO_SESSION_CREATE_INLINE_QUERIES_BIT_KHR;
 
@@ -12393,19 +12397,19 @@ TEST_F(NegativeVideo, CopyQueryPoolResultsStatusBit) {
 
     vkt::Buffer buffer(*m_device, sizeof(uint32_t), VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdCopyQueryPoolResults-queryType-09442");
     flags = 0;
-    vk::CmdCopyQueryPoolResults(m_commandBuffer->handle(), query_pool.handle(), 0, 1, buffer.handle(), 0, sizeof(uint32_t), flags);
+    vk::CmdCopyQueryPoolResults(m_command_buffer.handle(), query_pool.handle(), 0, 1, buffer.handle(), 0, sizeof(uint32_t), flags);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdCopyQueryPoolResults-flags-09443");
     flags = VK_QUERY_RESULT_WITH_STATUS_BIT_KHR | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT;
-    vk::CmdCopyQueryPoolResults(m_commandBuffer->handle(), query_pool.handle(), 0, 1, buffer.handle(), 0, sizeof(uint32_t), flags);
+    vk::CmdCopyQueryPoolResults(m_command_buffer.handle(), query_pool.handle(), 0, 1, buffer.handle(), 0, sizeof(uint32_t), flags);
     m_errorMonitor->VerifyFound();
 
-    m_commandBuffer->end();
+    m_command_buffer.end();
 }
 
 TEST_F(NegativeVideo, ImageLayoutUsageMismatch) {
@@ -12818,7 +12822,7 @@ TEST_F(NegativeVideoBestPractices, BindVideoSessionMemory) {
     // Create non-video-related DeviceMemory
     VkMemoryAllocateInfo alloc_info = vku::InitStructHelper();
     alloc_info.allocationSize = buf_mem_reqs.size;
-    ASSERT_TRUE(m_device->phy().set_memory_type(buf_mem_reqs.memoryTypeBits, &alloc_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+    ASSERT_TRUE(m_device->phy().SetMemoryType(buf_mem_reqs.memoryTypeBits, &alloc_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
     vkt::DeviceMemory memory(*m_device, alloc_info);
 
     // Set VkBindVideoSessionMemoryInfoKHR::memory to an allocation created before GetVideoSessionMemoryRequirementsKHR was called

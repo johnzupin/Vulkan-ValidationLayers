@@ -13,17 +13,26 @@
 
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
-#include "../framework/descriptor_helper.h"
-#include "../framework/gpu_av_helper.h"
 
-class NegativeGpuAVIndirectBuffer : public GpuAVTest {};
+class NegativeGpuAVIndirectBuffer : public GpuAVTest {
+  public:
+    // Turned off in https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/8586
+    // Need to manually turn on settings while the default is "off"
+    const VkBool32 value_true = true;
+    const VkLayerSettingEXT layer_settings[3] = {
+        {OBJECT_LAYER_NAME, "gpuav_indirect_draws_buffers", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &value_true},
+        {OBJECT_LAYER_NAME, "gpuav_indirect_dispatches_buffers", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &value_true},
+        {OBJECT_LAYER_NAME, "gpuav_indirect_trace_rays_buffers", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &value_true}};
+    VkLayerSettingsCreateInfoEXT layer_settings_create_info = {VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, 3,
+                                                               layer_settings};
+};
 
 TEST_F(NegativeGpuAVIndirectBuffer, DrawCountDeviceLimit) {
     TEST_DESCRIPTION("GPU validation: Validate maxDrawIndirectCount limit");
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);  // instead of enabling feature
     AddOptionalExtensions(VK_EXT_MESH_SHADER_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitGpuAvFramework(&layer_settings_create_info));
 
     VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features = vku::InitStructHelper();
     VkPhysicalDeviceVulkan13Features features13 = vku::InitStructHelper(&mesh_shader_features);
@@ -71,32 +80,32 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCountDeviceLimit) {
     pipe.CreateGraphicsPipeline();
 
     VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDrawIndirectCount-countBuffer-02717");
-    vk::CmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 2,
+    vk::CmdDrawIndirectCountKHR(m_command_buffer.handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 2,
                                 sizeof(VkDrawIndirectCommand));
 
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 
     if (features13.dynamicRendering) {
-        m_commandBuffer->begin();
-        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+        m_command_buffer.begin();
+        m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
         m_errorMonitor->SetDesiredError("VUID-vkCmdDrawIndirectCount-countBuffer-02717");
-        vk::CmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 2,
+        vk::CmdDrawIndirectCountKHR(m_command_buffer.handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 2,
                                     sizeof(VkDrawIndirectCommand));
 
-        m_commandBuffer->EndRenderPass();
-        m_commandBuffer->end();
-        m_default_queue->Submit(*m_commandBuffer);
+        m_command_buffer.EndRenderPass();
+        m_command_buffer.end();
+        m_default_queue->Submit(m_command_buffer);
         m_default_queue->Wait();
         m_errorMonitor->VerifyFound();
     }
@@ -130,14 +139,14 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCountDeviceLimit) {
         count_ptr = static_cast<uint32_t *>(count_buffer.memory().map());
         *count_ptr = 2;
         count_buffer.memory().unmap();
-        m_commandBuffer->begin(&begin_info);
-        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipe.Handle());
-        vk::CmdDrawMeshTasksIndirectCountEXT(m_commandBuffer->handle(), mesh_draw_buffer.handle(), 0, count_buffer.handle(), 0, 1,
+        m_command_buffer.begin(&begin_info);
+        m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipe.Handle());
+        vk::CmdDrawMeshTasksIndirectCountEXT(m_command_buffer.handle(), mesh_draw_buffer.handle(), 0, count_buffer.handle(), 0, 1,
                                              sizeof(VkDrawMeshTasksIndirectCommandEXT));
-        m_commandBuffer->EndRenderPass();
-        m_commandBuffer->end();
-        m_default_queue->Submit(*m_commandBuffer);
+        m_command_buffer.EndRenderPass();
+        m_command_buffer.end();
+        m_default_queue->Submit(m_command_buffer);
         m_default_queue->Wait();
         m_errorMonitor->VerifyFound();
     }
@@ -146,7 +155,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCountDeviceLimit) {
 TEST_F(NegativeGpuAVIndirectBuffer, DrawCountDeviceLimitSubmit2) {
     TEST_DESCRIPTION("GPU validation: Validate maxDrawIndirectCount limit using vkQueueSubmit2");
     SetTargetApiVersion(VK_API_VERSION_1_3);
-    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitGpuAvFramework(&layer_settings_create_info));
 
     PFN_vkSetPhysicalDeviceLimitsEXT fpvkSetPhysicalDeviceLimitsEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceLimitsEXT fpvkGetOriginalPhysicalDeviceLimitsEXT = nullptr;
@@ -186,19 +195,19 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCountDeviceLimitSubmit2) {
     pipe.CreateGraphicsPipeline();
 
     VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdBindIndexBuffer(m_commandBuffer->handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindIndexBuffer(m_command_buffer.handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDrawIndexedIndirectCount-countBuffer-02717");
-    vk::CmdDrawIndexedIndirectCount(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 2,
+    vk::CmdDrawIndexedIndirectCount(m_command_buffer.handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 2,
                                     sizeof(VkDrawIndexedIndirectCommand));
 
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
     // use vkQueueSumit2
-    m_default_queue->Submit2(*m_commandBuffer);
+    m_default_queue->Submit2(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
@@ -208,7 +217,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCount) {
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
     AddOptionalExtensions(VK_EXT_MESH_SHADER_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitGpuAvFramework(&layer_settings_create_info));
 
     VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features = vku::InitStructHelper();
     VkPhysicalDeviceVulkan13Features features13 = vku::InitStructHelper(&mesh_shader_features);
@@ -250,15 +259,15 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCount) {
     *count_ptr = 2;
     count_buffer.memory().unmap();
     VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
-    vk::CmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 1,
+    vk::CmdDrawIndirectCountKHR(m_command_buffer.handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 1,
                                 sizeof(VkDrawIndirectCommand));
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
     count_ptr = static_cast<uint32_t *>(count_buffer.memory().map());
@@ -266,15 +275,15 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCount) {
     count_buffer.memory().unmap();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDrawIndirectCount-countBuffer-03121");
-    m_commandBuffer->begin();
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    m_command_buffer.begin();
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     // Offset of 4 should error
-    vk::CmdDrawIndirectCountKHR(m_commandBuffer->handle(), draw_buffer.handle(), 4, count_buffer.handle(), 0, 1,
+    vk::CmdDrawIndirectCountKHR(m_command_buffer.handle(), draw_buffer.handle(), 4, count_buffer.handle(), 0, 1,
                                 sizeof(VkDrawIndirectCommand));
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 
@@ -292,16 +301,16 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCount) {
     count_ptr = static_cast<uint32_t *>(count_buffer.memory().map());
     *count_ptr = 2;
     count_buffer.memory().unmap();
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vkt::Buffer index_buffer(*m_device, 3 * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-    vk::CmdBindIndexBuffer(m_commandBuffer->handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
-    vk::CmdDrawIndexedIndirectCountKHR(m_commandBuffer->handle(), indexed_draw_buffer.handle(), 0, count_buffer.handle(), 0, 1,
+    vk::CmdBindIndexBuffer(m_command_buffer.handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
+    vk::CmdDrawIndexedIndirectCountKHR(m_command_buffer.handle(), indexed_draw_buffer.handle(), 0, count_buffer.handle(), 0, 1,
                                        sizeof(VkDrawIndexedIndirectCommand));
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
     count_ptr = static_cast<uint32_t *>(count_buffer.memory().map());
@@ -309,16 +318,16 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCount) {
     count_buffer.memory().unmap();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDrawIndexedIndirectCount-countBuffer-03153");
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdBindIndexBuffer(m_commandBuffer->handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindIndexBuffer(m_command_buffer.handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
     // Offset of 4 should error
-    vk::CmdDrawIndexedIndirectCountKHR(m_commandBuffer->handle(), indexed_draw_buffer.handle(), 4, count_buffer.handle(), 0, 1,
+    vk::CmdDrawIndexedIndirectCountKHR(m_command_buffer.handle(), indexed_draw_buffer.handle(), 4, count_buffer.handle(), 0, 1,
                                        sizeof(VkDrawIndexedIndirectCommand));
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
     if (mesh_shader_enabled) {
@@ -350,14 +359,14 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCount) {
         count_ptr = static_cast<uint32_t *>(count_buffer.memory().map());
         *count_ptr = 1;
         count_buffer.memory().unmap();
-        m_commandBuffer->begin(&begin_info);
-        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipe.Handle());
-        vk::CmdDrawMeshTasksIndirectCountEXT(m_commandBuffer->handle(), mesh_draw_buffer.handle(), 8, count_buffer.handle(), 0, 1,
+        m_command_buffer.begin(&begin_info);
+        m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipe.Handle());
+        vk::CmdDrawMeshTasksIndirectCountEXT(m_command_buffer.handle(), mesh_draw_buffer.handle(), 8, count_buffer.handle(), 0, 1,
                                              sizeof(VkDrawMeshTasksIndirectCommandEXT));
-        m_commandBuffer->EndRenderPass();
-        m_commandBuffer->end();
-        m_default_queue->Submit(*m_commandBuffer);
+        m_command_buffer.EndRenderPass();
+        m_command_buffer.end();
+        m_default_queue->Submit(m_command_buffer);
         m_default_queue->Wait();
         m_errorMonitor->VerifyFound();
 
@@ -365,14 +374,14 @@ TEST_F(NegativeGpuAVIndirectBuffer, DrawCount) {
         count_ptr = static_cast<uint32_t *>(count_buffer.memory().map());
         *count_ptr = 2;
         count_buffer.memory().unmap();
-        m_commandBuffer->begin(&begin_info);
-        m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-        vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipe.Handle());
-        vk::CmdDrawMeshTasksIndirectCountEXT(m_commandBuffer->handle(), mesh_draw_buffer.handle(), 4, count_buffer.handle(), 0, 1,
+        m_command_buffer.begin(&begin_info);
+        m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+        vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipe.Handle());
+        vk::CmdDrawMeshTasksIndirectCountEXT(m_command_buffer.handle(), mesh_draw_buffer.handle(), 4, count_buffer.handle(), 0, 1,
                                              sizeof(VkDrawMeshTasksIndirectCommandEXT));
-        m_commandBuffer->EndRenderPass();
-        m_commandBuffer->end();
-        m_default_queue->Submit(*m_commandBuffer);
+        m_command_buffer.EndRenderPass();
+        m_command_buffer.end();
+        m_default_queue->Submit(m_command_buffer);
         m_default_queue->Wait();
         m_errorMonitor->VerifyFound();
     }
@@ -383,7 +392,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredExtensions(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_MESH_SHADER_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitGpuAvFramework(&layer_settings_create_info));
 
     VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features = vku::InitStructHelper();
     VkPhysicalDeviceVulkan13Features features13 = vku::InitStructHelper(&mesh_shader_features);
@@ -432,15 +441,15 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
     // Set x in third draw
     draw_ptr[8] = mesh_shader_props.maxMeshWorkGroupCount[0] + 1;
     VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipe.Handle());
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipe.Handle());
     m_errorMonitor->SetDesiredError("VUID-VkDrawMeshTasksIndirectCommandEXT-TaskEXT-07326");
-    vk::CmdDrawMeshTasksIndirectEXT(m_commandBuffer->handle(), draw_buffer.handle(), 0, 3,
+    vk::CmdDrawMeshTasksIndirectEXT(m_command_buffer.handle(), draw_buffer.handle(), 0, 3,
                                     (sizeof(VkDrawMeshTasksIndirectCommandEXT) + 4));
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 
@@ -448,7 +457,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
     draw_ptr[8] = 0;
     draw_ptr[5] = mesh_shader_props.maxMeshWorkGroupCount[1] + 1;
     m_errorMonitor->SetDesiredError("VUID-VkDrawMeshTasksIndirectCommandEXT-TaskEXT-07327");
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 
@@ -456,7 +465,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
     draw_ptr[5] = 0;
     draw_ptr[2] = mesh_shader_props.maxMeshWorkGroupCount[2] + 1;
     m_errorMonitor->SetDesiredError("VUID-VkDrawMeshTasksIndirectCommandEXT-TaskEXT-07328");
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
     draw_ptr[2] = 0;
@@ -468,7 +477,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
         draw_ptr[0] = (mesh_shader_props.maxMeshWorkGroupTotalCount + 2) / 2;
 
         m_errorMonitor->SetDesiredError("VUID-VkDrawMeshTasksIndirectCommandEXT-TaskEXT-07329");
-        m_default_queue->Submit(*m_commandBuffer);
+        m_default_queue->Submit(m_command_buffer);
         m_default_queue->Wait();
         m_errorMonitor->VerifyFound();
 
@@ -490,18 +499,18 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
     task_pipe.shader_stages_[1] = mesh_shader.GetStageCreateInfo();
     task_pipe.CreateGraphicsPipeline();
 
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, task_pipe.Handle());
-    vk::CmdDrawMeshTasksIndirectCountEXT(m_commandBuffer->handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 3,
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, task_pipe.Handle());
+    vk::CmdDrawMeshTasksIndirectCountEXT(m_command_buffer.handle(), draw_buffer.handle(), 0, count_buffer.handle(), 0, 3,
                                          (sizeof(VkDrawMeshTasksIndirectCommandEXT) + 4));
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
 
     // Set x in second draw
     draw_ptr[4] = mesh_shader_props.maxTaskWorkGroupCount[0] + 1;
     m_errorMonitor->SetDesiredError("VUID-VkDrawMeshTasksIndirectCommandEXT-TaskEXT-07322");
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
     draw_ptr[4] = 0;
@@ -509,7 +518,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
     // Set y in first draw
     draw_ptr[1] = mesh_shader_props.maxTaskWorkGroupCount[0] + 1;
     m_errorMonitor->SetDesiredError("VUID-VkDrawMeshTasksIndirectCommandEXT-TaskEXT-07323");
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
     draw_ptr[1] = 0;
@@ -517,7 +526,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
     // Set z in third draw
     draw_ptr[10] = mesh_shader_props.maxTaskWorkGroupCount[0] + 1;
     m_errorMonitor->SetDesiredError("VUID-VkDrawMeshTasksIndirectCommandEXT-TaskEXT-07324");
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
     draw_ptr[10] = 0;
@@ -529,7 +538,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
         draw_ptr[0] = (mesh_shader_props.maxTaskWorkGroupTotalCount + 2) / 2;
 
         m_errorMonitor->SetDesiredError("VUID-VkDrawMeshTasksIndirectCommandEXT-TaskEXT-07325");
-        m_default_queue->Submit(*m_commandBuffer);
+        m_default_queue->Submit(m_command_buffer);
         m_default_queue->Wait();
         m_errorMonitor->VerifyFound();
 
@@ -543,7 +552,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, Mesh) {
 TEST_F(NegativeGpuAVIndirectBuffer, FirstInstance) {
     TEST_DESCRIPTION("Validate illegal firstInstance values");
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitGpuAvFramework(&layer_settings_create_info));
 
     AddDisabledFeature(vkt::Feature::drawIndirectFirstInstance);
     RETURN_IF_SKIP(InitState(nullptr));
@@ -570,13 +579,13 @@ TEST_F(NegativeGpuAVIndirectBuffer, FirstInstance) {
 
     m_errorMonitor->SetDesiredError("VUID-VkDrawIndirectCommand-firstInstance-00501");
     VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdDrawIndirect(m_commandBuffer->handle(), draw_buffer.handle(), 0, 4, sizeof(VkDrawIndirectCommand));
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdDrawIndirect(m_command_buffer.handle(), draw_buffer.handle(), 0, 4, sizeof(VkDrawIndirectCommand));
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 
@@ -595,23 +604,23 @@ TEST_F(NegativeGpuAVIndirectBuffer, FirstInstance) {
     }
     indexed_draw_buffer.memory().unmap();
 
-    m_commandBuffer->begin(&begin_info);
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    m_command_buffer.begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vkt::Buffer index_buffer(*m_device, 3 * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-    vk::CmdBindIndexBuffer(m_commandBuffer->handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
-    vk::CmdDrawIndexedIndirect(m_commandBuffer->handle(), indexed_draw_buffer.handle(), sizeof(VkDrawIndexedIndirectCommand), 3,
+    vk::CmdBindIndexBuffer(m_command_buffer.handle(), index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
+    vk::CmdDrawIndexedIndirect(m_command_buffer.handle(), indexed_draw_buffer.handle(), sizeof(VkDrawIndexedIndirectCommand), 3,
                                sizeof(VkDrawIndexedIndirectCommand));
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeGpuAVIndirectBuffer, DispatchWorkgroupSize) {
     TEST_DESCRIPTION("GPU validation: Validate VkDispatchIndirectCommand");
-    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitGpuAvFramework(&layer_settings_create_info));
 
     PFN_vkSetPhysicalDeviceLimitsEXT fpvkSetPhysicalDeviceLimitsEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceLimitsEXT fpvkGetOriginalPhysicalDeviceLimitsEXT = nullptr;
@@ -660,44 +669,44 @@ TEST_F(NegativeGpuAVIndirectBuffer, DispatchWorkgroupSize) {
     CreateComputePipelineHelper pipe(*this);
     pipe.CreateComputePipeline();
 
-    m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    m_command_buffer.begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-x-00417");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 0);
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 0);
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-y-00418");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), sizeof(VkDispatchIndirectCommand));
 
     // valid
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 2 * sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 2 * sizeof(VkDispatchIndirectCommand));
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-z-00419");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 3 * sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 3 * sizeof(VkDispatchIndirectCommand));
 
     // Only expect to have the first error return
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-x-00417");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 4 * sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 4 * sizeof(VkDispatchIndirectCommand));
 
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
 
     // Check again in a 2nd submitted command buffer
-    m_commandBuffer->reset();
-    m_commandBuffer->begin();
-    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    m_command_buffer.reset();
+    m_command_buffer.begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-x-00417");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 0);
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 0);
 
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 2 * sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 2 * sizeof(VkDispatchIndirectCommand));
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-x-00417");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 0);
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 0);
 
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }
@@ -705,7 +714,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, DispatchWorkgroupSize) {
 TEST_F(NegativeGpuAVIndirectBuffer, DispatchWorkgroupSizeShaderObjects) {
     TEST_DESCRIPTION("GPU validation: Validate VkDispatchIndirectCommand");
     AddRequiredExtensions(VK_EXT_SHADER_OBJECT_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitGpuAvFramework(&layer_settings_create_info));
 
     PFN_vkSetPhysicalDeviceLimitsEXT fpvkSetPhysicalDeviceLimitsEXT = nullptr;
     PFN_vkGetOriginalPhysicalDeviceLimitsEXT fpvkGetOriginalPhysicalDeviceLimitsEXT = nullptr;
@@ -755,44 +764,44 @@ TEST_F(NegativeGpuAVIndirectBuffer, DispatchWorkgroupSizeShaderObjects) {
     VkShaderStageFlagBits stage = VK_SHADER_STAGE_COMPUTE_BIT;
     vkt::Shader shader(*m_device, stage, GLSLToSPV(stage, kMinimalShaderGlsl));
 
-    m_commandBuffer->begin();
-    vk::CmdBindShadersEXT(m_commandBuffer->handle(), 1u, &stage, &shader.handle());
+    m_command_buffer.begin();
+    vk::CmdBindShadersEXT(m_command_buffer.handle(), 1u, &stage, &shader.handle());
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-x-00417");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 0);
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 0);
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-y-00418");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), sizeof(VkDispatchIndirectCommand));
 
     // valid
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 2 * sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 2 * sizeof(VkDispatchIndirectCommand));
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-z-00419");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 3 * sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 3 * sizeof(VkDispatchIndirectCommand));
 
     // Only expect to have the first error return
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-x-00417");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 4 * sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 4 * sizeof(VkDispatchIndirectCommand));
 
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
 
     // Check again in a 2nd submitted command buffer
-    m_commandBuffer->reset();
-    m_commandBuffer->begin();
-    vk::CmdBindShadersEXT(m_commandBuffer->handle(), 1u, &stage, &shader.handle());
+    m_command_buffer.reset();
+    m_command_buffer.begin();
+    vk::CmdBindShadersEXT(m_command_buffer.handle(), 1u, &stage, &shader.handle());
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-x-00417");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 0);
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 0);
 
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 2 * sizeof(VkDispatchIndirectCommand));
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 2 * sizeof(VkDispatchIndirectCommand));
 
     m_errorMonitor->SetDesiredError("VUID-VkDispatchIndirectCommand-x-00417");
-    vk::CmdDispatchIndirect(m_commandBuffer->handle(), indirect_buffer.handle(), 0);
+    vk::CmdDispatchIndirect(m_command_buffer.handle(), indirect_buffer.handle(), 0);
 
-    m_commandBuffer->end();
-    m_default_queue->Submit(*m_commandBuffer);
+    m_command_buffer.end();
+    m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();
 }

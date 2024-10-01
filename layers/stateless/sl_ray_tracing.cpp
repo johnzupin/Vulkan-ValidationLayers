@@ -169,7 +169,7 @@ bool StatelessValidation::ValidateAccelerationStructureInfoNV(const VkAccelerati
         }
     }
     skip |= ValidateFlags(loc.dot(Field::flags), vvl::FlagBitmask::VkBuildAccelerationStructureFlagBitsKHR,
-                          AllVkBuildAccelerationStructureFlagBitsKHR, info.flags, kOptionalFlags,
+                          AllVkBuildAccelerationStructureFlagBitsKHR, info.flags, kOptionalFlags, VK_NULL_HANDLE,
                           "VUID-VkAccelerationStructureInfoNV-flags-parameter");
     return skip;
 }
@@ -304,6 +304,10 @@ bool StatelessValidation::ValidateCreateRayTracingPipelinesFlagsNV(const VkPipel
         skip |= LogError("VUID-VkRayTracingPipelineCreateInfoNV-flags-02904", device, flags_loc, "is %s.",
                          string_VkPipelineCreateFlags2KHR(flags).c_str());
     }
+    if (flags & VK_PIPELINE_CREATE_2_INDIRECT_BINDABLE_BIT_EXT) {
+        skip |= LogError("VUID-VkRayTracingPipelineCreateInfoNV-flags-11008", device, flags_loc, "is %s.",
+                         string_VkPipelineCreateFlags2KHR(flags).c_str());
+    }
     if ((flags & VK_PIPELINE_CREATE_DEFER_COMPILE_BIT_NV) &&
         (flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT)) {
         skip |= LogError("VUID-VkRayTracingPipelineCreateInfoNV-flags-02957", device, flags_loc, "is %s.",
@@ -381,8 +385,9 @@ bool StatelessValidation::manual_PreCallValidateCreateRayTracingPipelinesNV(
         const Location flags_loc = create_flags_2 ? create_info_loc.pNext(Struct::VkPipelineCreateFlags2CreateInfoKHR, Field::flags)
                                                   : create_info_loc.dot(Field::flags);
         if (!create_flags_2) {
-            skip |= ValidateFlags(flags_loc, vvl::FlagBitmask::VkPipelineCreateFlagBits, AllVkPipelineCreateFlagBits,
-                                  create_info.flags, kOptionalFlags, "VUID-VkRayTracingPipelineCreateInfoNV-None-09497");
+            skip |=
+                ValidateFlags(flags_loc, vvl::FlagBitmask::VkPipelineCreateFlagBits, AllVkPipelineCreateFlagBits, create_info.flags,
+                              kOptionalFlags, VK_NULL_HANDLE, "VUID-VkRayTracingPipelineCreateInfoNV-None-09497");
         }
         skip |= ValidateCreateRayTracingPipelinesFlagsNV(flags, flags_loc);
 
@@ -424,6 +429,8 @@ bool StatelessValidation::manual_PreCallValidateCreateRayTracingPipelinesNV(
                 }
             }
         }
+
+        skip |= ValidatePipelineBinaryInfo(create_info.pNext, create_info.flags, pipelineCache, create_info_loc);
     }
 
     return skip;
@@ -481,8 +488,9 @@ bool StatelessValidation::manual_PreCallValidateCreateRayTracingPipelinesKHR(
         const Location flags_loc = create_flags_2 ? create_info_loc.pNext(Struct::VkPipelineCreateFlags2CreateInfoKHR, Field::flags)
                                                   : create_info_loc.dot(Field::flags);
         if (!create_flags_2) {
-            skip |= ValidateFlags(flags_loc, vvl::FlagBitmask::VkPipelineCreateFlagBits, AllVkPipelineCreateFlagBits,
-                                  create_info.flags, kOptionalFlags, "VUID-VkRayTracingPipelineCreateInfoKHR-None-09497");
+            skip |=
+                ValidateFlags(flags_loc, vvl::FlagBitmask::VkPipelineCreateFlagBits, AllVkPipelineCreateFlagBits, create_info.flags,
+                              kOptionalFlags, VK_NULL_HANDLE, "VUID-VkRayTracingPipelineCreateInfoKHR-None-09497");
         }
         skip |= ValidateCreateRayTracingPipelinesFlagsKHR(flags, flags_loc);
 
@@ -645,6 +653,8 @@ bool StatelessValidation::manual_PreCallValidateCreateRayTracingPipelinesKHR(
                 }
             }
         }
+
+        skip |= ValidatePipelineBinaryInfo(create_info.pNext, create_info.flags, pipelineCache, create_info_loc);
     }
 
     return skip;
@@ -985,7 +995,8 @@ bool StatelessValidation::ValidateAccelerationStructureBuildGeometryInfoKHR(cons
                                        "VUID-VkAccelerationStructureGeometryTrianglesDataKHR-sType-sType");
             skip |= ValidateStructPnext(geometry_loc.dot(Field::geometry).dot(Field::triangles), geom.geometry.triangles.pNext,
                                         allowed_structs.size(), allowed_structs.data(), GeneratedVulkanHeaderVersion,
-                                        "VUID-VkAccelerationStructureGeometryTrianglesDataKHR-pNext-pNext", kVUIDUndefined);
+                                        "VUID-VkAccelerationStructureGeometryTrianglesDataKHR-pNext-pNext",
+                                        "VUID-VkAccelerationStructureGeometryTrianglesDataKHR-sType-unique");
             skip |= ValidateRangedEnum(geometry_loc.dot(Field::geometry).dot(Field::triangles).dot(Field::vertexFormat),
                                        vvl::Enum::VkFormat, geom.geometry.triangles.vertexFormat,
                                        "VUID-VkAccelerationStructureGeometryTrianglesDataKHR-vertexFormat-parameter");

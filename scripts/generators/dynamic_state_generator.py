@@ -107,7 +107,8 @@ dynamic_state_map = {
         "command" : ["vkCmdSetPrimitiveRestartEnable"]
     },
     "VK_DYNAMIC_STATE_VIEWPORT_W_SCALING_NV" : {
-        "command" : ["vkCmdSetViewportWScalingNV"]
+        "command" : ["vkCmdSetViewportWScalingNV"],
+        "dependency" : ["viewportWScalingEnable"]
     },
     "VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT" : {
         "command" : ["vkCmdSetDiscardRectangleEXT"]
@@ -123,10 +124,12 @@ dynamic_state_map = {
         "dependency" : ["rasterizerDiscardEnable", "sampleLocationsEnable"]
     },
     "VK_DYNAMIC_STATE_VIEWPORT_SHADING_RATE_PALETTE_NV" : {
-        "command" : ["vkCmdSetViewportShadingRatePaletteNV"]
+        "command" : ["vkCmdSetViewportShadingRatePaletteNV"],
+        "dependency" : ["rasterizerDiscardEnable", "shadingRateImageEnable"]
     },
     "VK_DYNAMIC_STATE_VIEWPORT_COARSE_SAMPLE_ORDER_NV" : {
-        "command" : ["vkCmdSetCoarseSampleOrderNV"]
+        "command" : ["vkCmdSetCoarseSampleOrderNV"],
+        "dependency" : ["rasterizerDiscardEnable"]
     },
     "VK_DYNAMIC_STATE_EXCLUSIVE_SCISSOR_ENABLE_NV" : {
         "command" : ["vkCmdSetExclusiveScissorEnableNV"]
@@ -264,6 +267,10 @@ dynamic_state_map = {
     },
     "VK_DYNAMIC_STATE_RAY_TRACING_PIPELINE_STACK_SIZE_KHR" : {
         "command" : ["vkCmdSetRayTracingPipelineStackSizeKHR"],
+    },
+    "VK_DYNAMIC_STATE_DEPTH_CLAMP_RANGE_EXT" : {
+        "command" : ["vkCmdSetDepthClampRangeEXT"],
+        "dependency" : ["depthClampEnable"]
     },
 }
 
@@ -491,6 +498,13 @@ class DynamicStateOutputGenerator(BaseGenerator):
                 } else {
                     ss << "VkPipelineRasterizationStateCreateInfo::depthTestEnable was VK_TRUE in the last bound graphics pipeline.\\n";
                 }''')
+            if 'depthClampEnable' in dependency:
+                out.append('''
+                if (!pipeline || pipeline->IsDynamic(CB_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT)) {
+                    ss << "vkCmdSetDepthClampEnableEXT last set depthClampEnable to VK_TRUE.\\n";
+                } else {
+                    ss << "VkPipelineRasterizationStateCreateInfo::depthClampEnable was VK_TRUE in the last bound graphics pipeline.\\n";
+                }''')
             if 'logicOpEnable' in dependency:
                 out.append('''
                 if (!pipeline || pipeline->IsDynamic(CB_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT)) {
@@ -518,6 +532,20 @@ class DynamicStateOutputGenerator(BaseGenerator):
                     ss << "vkCmdSetCoverageModulationTableEnableNV last set coverageModulationTableEnable to VK_TRUE.\\n";
                 } else {
                     ss << "VkPipelineMultisampleStateCreateInfo::pNext->VkPipelineCoverageModulationStateCreateInfoNV::coverageModulationTableEnable was VK_TRUE in the last bound graphics pipeline.\\n";
+                }''')
+            if 'shadingRateImageEnable' in dependency:
+                out.append('''
+                if (!pipeline || pipeline->IsDynamic(CB_DYNAMIC_STATE_VIEWPORT_SHADING_RATE_PALETTE_NV)) {
+                    ss << "vkCmdSetShadingRateImageEnableNV last set shadingRateImageEnable to VK_TRUE.\\n";
+                } else {
+                    ss << "VkPipelineViewportStateCreateInfo::pNext->VkPipelineViewportShadingRateImageStateCreateInfoNV::shadingRateImageEnable was VK_TRUE in the last bound graphics pipeline.\\n";
+                }''')
+            if 'viewportWScalingEnable' in dependency:
+                out.append('''
+                if (!pipeline || pipeline->IsDynamic(CB_DYNAMIC_STATE_VIEWPORT_W_SCALING_ENABLE_NV)) {
+                    ss << "vkCmdSetViewportWScalingEnableNV last set viewportWScalingEnable to VK_TRUE.\\n";
+                } else {
+                    ss << "VkPipelineViewportStateCreateInfo::pNext->VkPipelineViewportWScalingStateCreateInfoNV::viewportWScalingEnable was VK_TRUE in the last bound graphics pipeline.\\n";
                 }''')
 
             out.append('    break;')

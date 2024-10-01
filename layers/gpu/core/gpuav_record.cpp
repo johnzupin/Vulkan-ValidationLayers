@@ -17,8 +17,6 @@
 
 #include <cmath>
 #include <fstream>
-#include "utils/cast_utils.h"
-#include "state_tracker/shader_stage_state.h"
 #include "utils/hash_util.h"
 #include "gpu/core/gpuav.h"
 #include "gpu/cmd_validation/gpuav_draw.h"
@@ -29,10 +27,9 @@
 #include "gpu/descriptor_validation/gpuav_image_layout.h"
 #include "gpu/resources/gpuav_subclasses.h"
 #include "gpu/instrumentation/gpuav_instrumentation.h"
-#include "spirv-tools/instrument.hpp"
-#include "spirv-tools/linker.hpp"
-#include "generated/layer_chassis_dispatch.h"
+#include "gpu/shaders/gpu_shaders_constants.h"
 #include "chassis/chassis_modification_state.h"
+#include "gpu/core/gpu_shader_cache_hash.h"
 
 // Generated shaders
 #include "generated/gpu_av_shader_hash.h"
@@ -90,63 +87,6 @@ void Validator::PreCallRecordDestroyRenderPass(VkDevice device, VkRenderPass ren
     BaseClass::PreCallRecordDestroyRenderPass(device, renderPass, pAllocator, record_obj);
 }
 
-// Create the instrumented shader data to provide to the driver.
-void Validator::PreCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo,
-                                                const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule,
-                                                const RecordObject &record_obj, chassis::CreateShaderModule &chassis_state) {
-    BaseClass::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, record_obj, chassis_state);
-    if (gpuav_settings.select_instrumented_shaders && !CheckForGpuAvEnabled(pCreateInfo->pNext)) return;
-    uint32_t shader_id;
-    if (gpuav_settings.cache_instrumented_shaders) {
-        const uint32_t shader_hash = hash_util::ShaderHash(pCreateInfo->pCode, pCreateInfo->codeSize);
-        if (gpuav_settings.cache_instrumented_shaders && instrumented_shaders_cache_.IsSpirvCached(shader_hash, chassis_state)) {
-            return;
-        }
-        shader_id = shader_hash;
-    } else {
-        shader_id = unique_shader_module_id_++;
-    }
-    const bool pass = InstrumentShader(vvl::make_span(pCreateInfo->pCode, pCreateInfo->codeSize / sizeof(uint32_t)), shader_id,
-                                       record_obj.location, chassis_state.instrumented_spirv);
-    if (pass) {
-        chassis_state.instrumented_create_info.pCode = chassis_state.instrumented_spirv.data();
-        chassis_state.instrumented_create_info.codeSize = chassis_state.instrumented_spirv.size() * sizeof(uint32_t);
-        chassis_state.unique_shader_id = shader_id;
-        if (gpuav_settings.cache_instrumented_shaders) {
-            instrumented_shaders_cache_.Add(shader_id, chassis_state.instrumented_spirv);
-        }
-    }
-}
-
-void Validator::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
-                                              const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
-                                              const RecordObject &record_obj, chassis::ShaderObject &chassis_state) {
-    BaseClass::PreCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj,
-                                             chassis_state);
-    for (uint32_t i = 0; i < createInfoCount; ++i) {
-        if (gpuav_settings.select_instrumented_shaders && !CheckForGpuAvEnabled(pCreateInfos[i].pNext)) continue;
-        if (gpuav_settings.cache_instrumented_shaders) {
-            const uint32_t shader_hash = hash_util::ShaderHash(pCreateInfos[i].pCode, pCreateInfos[i].codeSize);
-            if (instrumented_shaders_cache_.IsSpirvCached(i, chassis_state.unique_shader_ids[i], chassis_state)) {
-                continue;
-            }
-            chassis_state.unique_shader_ids[i] = shader_hash;
-        } else {
-            chassis_state.unique_shader_ids[i] = unique_shader_module_id_++;
-        }
-        const bool pass = InstrumentShader(
-            vvl::make_span(static_cast<const uint32_t *>(pCreateInfos[i].pCode), pCreateInfos[i].codeSize / sizeof(uint32_t)),
-            chassis_state.unique_shader_ids[i], record_obj.location, chassis_state.instrumented_spirv[i]);
-        if (pass) {
-            chassis_state.instrumented_create_info[i].pCode = chassis_state.instrumented_spirv[i].data();
-            chassis_state.instrumented_create_info[i].codeSize = chassis_state.instrumented_spirv[i].size() * sizeof(uint32_t);
-            if (gpuav_settings.cache_instrumented_shaders) {
-                instrumented_shaders_cache_.Add(chassis_state.unique_shader_ids[i], chassis_state.instrumented_spirv[i]);
-            }
-        }
-    }
-}
-
 // Clean up device-related resources
 void Validator::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator,
                                            const RecordObject &record_obj) {
@@ -157,7 +97,7 @@ void Validator::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCa
     if (gpuav_settings.cache_instrumented_shaders && !instrumented_shaders_cache_.IsEmpty()) {
         std::ofstream file_stream(instrumented_shader_cache_path_, std::ofstream::out | std::ofstream::binary);
         if (file_stream) {
-            ShaderCacheHash shader_cache_hash(gpuav_settings);
+            ShaderCacheHash shader_cache_hash(gpuav_settings.shader_instrumentation);
             file_stream.write(reinterpret_cast<const char *>(&shader_cache_hash), sizeof(shader_cache_hash));
             uint32_t datasize = static_cast<uint32_t>(instrumented_shaders_cache_.spirv_shaders_.size());
             file_stream.write(reinterpret_cast<char *>(&datasize), sizeof(uint32_t));
@@ -254,7 +194,12 @@ void Validator::PostCallRecordCmdBindPipeline(VkCommandBuffer commandBuffer, VkP
                                               VkPipeline pipeline, const RecordObject &record_obj) {
     BaseClass::PostCallRecordCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline, record_obj);
 
-    UpdateBoundPipeline(*this, commandBuffer, pipelineBindPoint, pipeline, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    UpdateBoundPipeline(*this, *cb_state, pipelineBindPoint, pipeline, record_obj.location);
 }
 
 void Validator::PostCallRecordCmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
@@ -263,21 +208,33 @@ void Validator::PostCallRecordCmdBindDescriptorSets(VkCommandBuffer commandBuffe
                                                     const uint32_t *pDynamicOffsets, const RecordObject &record_obj) {
     BaseClass::PostCallRecordCmdBindDescriptorSets(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount,
                                                    pDescriptorSets, dynamicOffsetCount, pDynamicOffsets, record_obj);
-    UpdateBoundDescriptors(*this, commandBuffer, pipelineBindPoint, record_obj.location);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    UpdateBoundDescriptors(*this, *cb_state, pipelineBindPoint, record_obj.location);
 }
 void Validator::PostCallRecordCmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer,
                                                         const VkBindDescriptorSetsInfoKHR *pBindDescriptorSetsInfo,
                                                         const RecordObject &record_obj) {
     BaseClass::PostCallRecordCmdBindDescriptorSets2KHR(commandBuffer, pBindDescriptorSetsInfo, record_obj);
 
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
     if (IsStageInPipelineBindPoint(pBindDescriptorSetsInfo->stageFlags, VK_PIPELINE_BIND_POINT_GRAPHICS)) {
-        UpdateBoundDescriptors(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+        UpdateBoundDescriptors(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
     }
     if (IsStageInPipelineBindPoint(pBindDescriptorSetsInfo->stageFlags, VK_PIPELINE_BIND_POINT_COMPUTE)) {
-        UpdateBoundDescriptors(*this, commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
+        UpdateBoundDescriptors(*this, *cb_state, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
     }
     if (IsStageInPipelineBindPoint(pBindDescriptorSetsInfo->stageFlags, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)) {
-        UpdateBoundDescriptors(*this, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+        UpdateBoundDescriptors(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
     }
 }
 
@@ -287,22 +244,33 @@ void Validator::PreCallRecordCmdPushDescriptorSetKHR(VkCommandBuffer commandBuff
                                                      const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdPushDescriptorSetKHR(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount,
                                                     pDescriptorWrites, record_obj);
-    UpdateBoundDescriptors(*this, commandBuffer, pipelineBindPoint, record_obj.location);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    UpdateBoundDescriptors(*this, *cb_state, pipelineBindPoint, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
                                                       const VkPushDescriptorSetInfoKHR *pPushDescriptorSetInfo,
                                                       const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdPushDescriptorSet2KHR(commandBuffer, pPushDescriptorSetInfo, record_obj);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
 
     if (IsStageInPipelineBindPoint(pPushDescriptorSetInfo->stageFlags, VK_PIPELINE_BIND_POINT_GRAPHICS)) {
-        UpdateBoundDescriptors(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+        UpdateBoundDescriptors(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
     }
     if (IsStageInPipelineBindPoint(pPushDescriptorSetInfo->stageFlags, VK_PIPELINE_BIND_POINT_COMPUTE)) {
-        UpdateBoundDescriptors(*this, commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
+        UpdateBoundDescriptors(*this, *cb_state, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
     }
     if (IsStageInPipelineBindPoint(pPushDescriptorSetInfo->stageFlags, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)) {
-        UpdateBoundDescriptors(*this, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+        UpdateBoundDescriptors(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
     }
 }
 
@@ -310,7 +278,7 @@ void Validator::PreCallRecordCmdBindDescriptorBuffersEXT(VkCommandBuffer command
                                                          const VkDescriptorBufferBindingInfoEXT *pBindingInfos,
                                                          const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdBindDescriptorBuffersEXT(commandBuffer, bufferCount, pBindingInfos, record_obj);
-    gpuav_settings.validate_descriptors = false;
+    // TODO - Unsupported
 }
 
 void Validator::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplersEXT(VkCommandBuffer commandBuffer,
@@ -318,7 +286,7 @@ void Validator::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplersEXT(VkComman
                                                                         VkPipelineLayout layout, uint32_t set,
                                                                         const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplersEXT(commandBuffer, pipelineBindPoint, layout, set, record_obj);
-    gpuav_settings.validate_descriptors = false;
+    // TODO - Unsupported
 }
 
 void Validator::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT(
@@ -326,14 +294,33 @@ void Validator::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT(
     const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdBindDescriptorBufferEmbeddedSamplers2EXT(commandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo,
                                                                         record_obj);
-    gpuav_settings.validate_descriptors = false;
+    // TODO - Unsupported
 }
 
 void Validator::PreCallRecordCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
                                      uint32_t firstVertex, uint32_t firstInstance, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance, record_obj);
 
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
+                                      uint32_t firstVertex, uint32_t firstInstance, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount,
@@ -341,9 +328,29 @@ void Validator::PreCallRecordCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint
                                              uint32_t stride, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawMultiEXT(commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride,
                                             record_obj);
-    for (uint32_t i = 0; i < drawCount; i++) {
-        SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
     }
+
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount,
+                                              const VkMultiDrawInfoEXT *pVertexInfo, uint32_t instanceCount, uint32_t firstInstance,
+                                              uint32_t stride, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawMultiEXT(commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride,
+                                             record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount,
@@ -351,7 +358,25 @@ void Validator::PreCallRecordCmdDrawIndexed(VkCommandBuffer commandBuffer, uint3
                                             const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance,
                                            record_obj);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount,
+                                             uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance,
+                                             const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance,
+                                            record_obj);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount,
@@ -360,26 +385,84 @@ void Validator::PreCallRecordCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffe
                                                     const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawMultiIndexedEXT(commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride,
                                                    pVertexOffset, record_obj);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
     for (uint32_t i = 0; i < drawCount; i++) {
         // #ARNO_TODO calling Setup drawCount times seems weird...
-        SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+        PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
     }
+}
+
+void Validator::PostCallRecordCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount,
+                                                     const VkMultiDrawIndexedInfoEXT *pIndexInfo, uint32_t instanceCount,
+                                                     uint32_t firstInstance, uint32_t stride, const int32_t *pVertexOffset,
+                                                     const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawMultiIndexedEXT(commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride,
+                                                    pVertexOffset, record_obj);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t count,
                                              uint32_t stride, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawIndirect(commandBuffer, buffer, offset, count, stride, record_obj);
 
-    InsertIndirectDrawValidation(*this, record_obj.location, commandBuffer, buffer, offset, count, VK_NULL_HANDLE, 0, stride);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    InsertIndirectDrawValidation(*this, record_obj.location, *cb_state, buffer, offset, count, VK_NULL_HANDLE, 0, stride);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t count,
+                                              uint32_t stride, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawIndirect(commandBuffer, buffer, offset, count, stride, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                     uint32_t count, uint32_t stride, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawIndexedIndirect(commandBuffer, buffer, offset, count, stride, record_obj);
 
-    InsertIndirectDrawValidation(*this, record_obj.location, commandBuffer, buffer, offset, count, VK_NULL_HANDLE, 0, stride);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    InsertIndirectDrawValidation(*this, record_obj.location, *cb_state, buffer, offset, count, VK_NULL_HANDLE, 0, stride);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                     uint32_t count, uint32_t stride, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawIndexedIndirect(commandBuffer, buffer, offset, count, stride, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -389,15 +472,42 @@ void Validator::PreCallRecordCmdDrawIndirectCountKHR(VkCommandBuffer commandBuff
                                       record_obj);
 }
 
+void Validator::PostCallRecordCmdDrawIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                      VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
+                                                      uint32_t stride, const RecordObject &record_obj) {
+    PostCallRecordCmdDrawIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride,
+                                       record_obj);
+}
+
 void Validator::PreCallRecordCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                   VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
                                                   uint32_t stride, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount,
                                                  stride, record_obj);
 
-    InsertIndirectDrawValidation(*this, record_obj.location, commandBuffer, buffer, offset, maxDrawCount, countBuffer,
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    InsertIndirectDrawValidation(*this, record_obj.location, *cb_state, buffer, offset, maxDrawCount, countBuffer,
                                  countBufferOffset, stride);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                   VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
+                                                   uint32_t stride, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount,
+                                                  stride, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawIndirectByteCountEXT(VkCommandBuffer commandBuffer, uint32_t instanceCount,
@@ -406,7 +516,26 @@ void Validator::PreCallRecordCmdDrawIndirectByteCountEXT(VkCommandBuffer command
                                                          uint32_t vertexStride, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawIndirectByteCountEXT(commandBuffer, instanceCount, firstInstance, counterBuffer,
                                                         counterBufferOffset, counterOffset, vertexStride, record_obj);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawIndirectByteCountEXT(VkCommandBuffer commandBuffer, uint32_t instanceCount,
+                                                          uint32_t firstInstance, VkBuffer counterBuffer,
+                                                          VkDeviceSize counterBufferOffset, uint32_t counterOffset,
+                                                          uint32_t vertexStride, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawIndirectByteCountEXT(commandBuffer, instanceCount, firstInstance, counterBuffer,
+                                                         counterBufferOffset, counterOffset, vertexStride, record_obj);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawIndexedIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -417,29 +546,90 @@ void Validator::PreCallRecordCmdDrawIndexedIndirectCountKHR(VkCommandBuffer comm
                                              record_obj);
 }
 
+void Validator::PostCallRecordCmdDrawIndexedIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                             VkBuffer countBuffer, VkDeviceSize countBufferOffset,
+                                                             uint32_t maxDrawCount, uint32_t stride,
+                                                             const RecordObject &record_obj) {
+    PostCallRecordCmdDrawIndexedIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride,
+                                              record_obj);
+}
+
 void Validator::PreCallRecordCmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                          VkBuffer countBuffer, VkDeviceSize countBufferOffset,
                                                          uint32_t maxDrawCount, uint32_t stride, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawIndexedIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount,
                                                         stride, record_obj);
 
-    InsertIndirectDrawValidation(*this, record_obj.location, commandBuffer, buffer, offset, maxDrawCount, countBuffer,
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    InsertIndirectDrawValidation(*this, record_obj.location, *cb_state, buffer, offset, maxDrawCount, countBuffer,
                                  countBufferOffset, stride);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                          VkBuffer countBuffer, VkDeviceSize countBufferOffset,
+                                                          uint32_t maxDrawCount, uint32_t stride, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawIndexedIndirectCount(commandBuffer, buffer, offset, countBuffer, countBufferOffset,
+                                                         maxDrawCount, stride, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawMeshTasksNV(VkCommandBuffer commandBuffer, uint32_t taskCount, uint32_t firstTask,
                                                 const RecordObject &record_obj) {
     ValidationStateTracker::PreCallRecordCmdDrawMeshTasksNV(commandBuffer, taskCount, firstTask, record_obj);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawMeshTasksNV(VkCommandBuffer commandBuffer, uint32_t taskCount, uint32_t firstTask,
+                                                 const RecordObject &record_obj) {
+    ValidationStateTracker::PostCallRecordCmdDrawMeshTasksNV(commandBuffer, taskCount, firstTask, record_obj);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawMeshTasksIndirectNV(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                         uint32_t drawCount, uint32_t stride, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawMeshTasksIndirectNV(commandBuffer, buffer, offset, drawCount, stride, record_obj);
 
-    InsertIndirectDrawValidation(*this, record_obj.location, commandBuffer, buffer, offset, drawCount, VK_NULL_HANDLE, 0, stride);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    InsertIndirectDrawValidation(*this, record_obj.location, *cb_state, buffer, offset, drawCount, VK_NULL_HANDLE, 0, stride);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawMeshTasksIndirectNV(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                         uint32_t drawCount, uint32_t stride, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawMeshTasksIndirectNV(commandBuffer, buffer, offset, drawCount, stride, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawMeshTasksIndirectCountNV(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -449,23 +639,77 @@ void Validator::PreCallRecordCmdDrawMeshTasksIndirectCountNV(VkCommandBuffer com
     BaseClass::PreCallRecordCmdDrawMeshTasksIndirectCountNV(commandBuffer, buffer, offset, countBuffer, countBufferOffset,
                                                             maxDrawCount, stride, record_obj);
 
-    InsertIndirectDrawValidation(*this, record_obj.location, commandBuffer, buffer, offset, maxDrawCount, countBuffer,
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    InsertIndirectDrawValidation(*this, record_obj.location, *cb_state, buffer, offset, maxDrawCount, countBuffer,
                                  countBufferOffset, stride);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawMeshTasksIndirectCountNV(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                              VkBuffer countBuffer, VkDeviceSize countBufferOffset,
+                                                              uint32_t maxDrawCount, uint32_t stride,
+                                                              const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawMeshTasksIndirectCountNV(commandBuffer, buffer, offset, countBuffer, countBufferOffset,
+                                                             maxDrawCount, stride, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawMeshTasksEXT(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY,
                                                  uint32_t groupCountZ, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawMeshTasksEXT(commandBuffer, groupCountX, groupCountY, groupCountZ, record_obj);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawMeshTasksEXT(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY,
+                                                  uint32_t groupCountZ, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawMeshTasksEXT(commandBuffer, groupCountX, groupCountY, groupCountZ, record_obj);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawMeshTasksIndirectEXT(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                          uint32_t drawCount, uint32_t stride, const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDrawMeshTasksIndirectEXT(commandBuffer, buffer, offset, drawCount, stride, record_obj);
 
-    InsertIndirectDrawValidation(*this, record_obj.location, commandBuffer, buffer, offset, drawCount, VK_NULL_HANDLE, 0, stride);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    InsertIndirectDrawValidation(*this, record_obj.location, *cb_state, buffer, offset, drawCount, VK_NULL_HANDLE, 0, stride);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawMeshTasksIndirectEXT(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                          uint32_t drawCount, uint32_t stride, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawMeshTasksIndirectEXT(commandBuffer, buffer, offset, drawCount, stride, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDrawMeshTasksIndirectCountEXT(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -475,23 +719,80 @@ void Validator::PreCallRecordCmdDrawMeshTasksIndirectCountEXT(VkCommandBuffer co
     BaseClass::PreCallRecordCmdDrawMeshTasksIndirectCountEXT(commandBuffer, buffer, offset, countBuffer, countBufferOffset,
                                                              maxDrawCount, stride, record_obj);
 
-    InsertIndirectDrawValidation(*this, record_obj.location, commandBuffer, buffer, offset, maxDrawCount, countBuffer,
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    InsertIndirectDrawValidation(*this, record_obj.location, *cb_state, buffer, offset, maxDrawCount, countBuffer,
                                  countBufferOffset, stride);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDrawMeshTasksIndirectCountEXT(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                               VkBuffer countBuffer, VkDeviceSize countBufferOffset,
+                                                               uint32_t maxDrawCount, uint32_t stride,
+                                                               const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDrawMeshTasksIndirectCountEXT(commandBuffer, buffer, offset, countBuffer, countBufferOffset,
+                                                              maxDrawCount, stride, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDispatch(VkCommandBuffer commandBuffer, uint32_t x, uint32_t y, uint32_t z,
                                          const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDispatch(commandBuffer, x, y, z, record_obj);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDispatch(VkCommandBuffer commandBuffer, uint32_t x, uint32_t y, uint32_t z,
+                                          const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDispatch(commandBuffer, x, y, z, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                                  const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdDispatchIndirect(commandBuffer, buffer, offset, record_obj);
 
-    InsertIndirectDispatchValidation(*this, record_obj.location, commandBuffer, buffer, offset);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    InsertIndirectDispatchValidation(*this, record_obj.location, *cb_state, buffer, offset);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                                  const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDispatchIndirect(commandBuffer, buffer, offset, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
@@ -500,7 +801,26 @@ void Validator::PreCallRecordCmdDispatchBase(VkCommandBuffer commandBuffer, uint
     BaseClass::PreCallRecordCmdDispatchBase(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY,
                                             groupCountZ, record_obj);
 
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                              uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
+                                              const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdDispatchBase(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY,
+                                             groupCountZ, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_COMPUTE, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
@@ -508,6 +828,13 @@ void Validator::PreCallRecordCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, u
                                                 uint32_t groupCountZ, const RecordObject &record_obj) {
     PreCallRecordCmdDispatchBase(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ,
                                  record_obj);
+}
+
+void Validator::PostCallRecordCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                                 uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY,
+                                                 uint32_t groupCountZ, const RecordObject &record_obj) {
+    PostCallRecordCmdDispatchBase(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ,
+                                  record_obj);
 }
 
 void Validator::PreCallRecordCmdTraceRaysNV(VkCommandBuffer commandBuffer, VkBuffer raygenShaderBindingTableBuffer,
@@ -523,7 +850,33 @@ void Validator::PreCallRecordCmdTraceRaysNV(VkCommandBuffer commandBuffer, VkBuf
                                            callableShaderBindingTableBuffer, callableShaderBindingOffset,
                                            callableShaderBindingStride, width, height, depth, record_obj);
 
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdTraceRaysNV(VkCommandBuffer commandBuffer, VkBuffer raygenShaderBindingTableBuffer,
+                                             VkDeviceSize raygenShaderBindingOffset, VkBuffer missShaderBindingTableBuffer,
+                                             VkDeviceSize missShaderBindingOffset, VkDeviceSize missShaderBindingStride,
+                                             VkBuffer hitShaderBindingTableBuffer, VkDeviceSize hitShaderBindingOffset,
+                                             VkDeviceSize hitShaderBindingStride, VkBuffer callableShaderBindingTableBuffer,
+                                             VkDeviceSize callableShaderBindingOffset, VkDeviceSize callableShaderBindingStride,
+                                             uint32_t width, uint32_t height, uint32_t depth, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdTraceRaysNV(commandBuffer, raygenShaderBindingTableBuffer, raygenShaderBindingOffset,
+                                            missShaderBindingTableBuffer, missShaderBindingOffset, missShaderBindingStride,
+                                            hitShaderBindingTableBuffer, hitShaderBindingOffset, hitShaderBindingStride,
+                                            callableShaderBindingTableBuffer, callableShaderBindingOffset,
+                                            callableShaderBindingStride, width, height, depth, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdTraceRaysKHR(VkCommandBuffer commandBuffer,
@@ -535,7 +888,29 @@ void Validator::PreCallRecordCmdTraceRaysKHR(VkCommandBuffer commandBuffer,
     BaseClass::PreCallRecordCmdTraceRaysKHR(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable,
                                             pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth, record_obj);
 
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdTraceRaysKHR(VkCommandBuffer commandBuffer,
+                                              const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable,
+                                              const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable,
+                                              const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
+                                              const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width,
+                                              uint32_t height, uint32_t depth, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdTraceRaysKHR(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable,
+                                             pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdTraceRaysIndirectKHR(VkCommandBuffer commandBuffer,
@@ -548,15 +923,83 @@ void Validator::PreCallRecordCmdTraceRaysIndirectKHR(VkCommandBuffer commandBuff
                                                     pHitShaderBindingTable, pCallableShaderBindingTable, indirectDeviceAddress,
                                                     record_obj);
 
-    InsertIndirectTraceRaysValidation(*this, record_obj.location, commandBuffer, indirectDeviceAddress);
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    InsertIndirectTraceRaysValidation(*this, record_obj.location, *cb_state, indirectDeviceAddress);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdTraceRaysIndirectKHR(VkCommandBuffer commandBuffer,
+                                                      const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable,
+                                                      const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable,
+                                                      const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
+                                                      const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
+                                                      VkDeviceAddress indirectDeviceAddress, const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdTraceRaysIndirectKHR(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable,
+                                                     pHitShaderBindingTable, pCallableShaderBindingTable, indirectDeviceAddress,
+                                                     record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
 }
 
 void Validator::PreCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress,
                                                       const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdTraceRaysIndirect2KHR(commandBuffer, indirectDeviceAddress, record_obj);
 
-    SetupShaderInstrumentationResources(*this, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+}
+
+void Validator::PostCallRecordCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress,
+                                                       const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdTraceRaysIndirect2KHR(commandBuffer, indirectDeviceAddress, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, record_obj.location);
+}
+
+void Validator::PreCallRecordCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                                            const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo,
+                                                            const RecordObject &record_obj) {
+    BaseClass::PreCallRecordCmdExecuteGeneratedCommandsEXT(commandBuffer, isPreprocessed, pGeneratedCommandsInfo, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    const VkPipelineBindPoint bind_point = ConvertToPipelineBindPoint(pGeneratedCommandsInfo->shaderStages);
+    PreCallSetupShaderInstrumentationResources(*this, *cb_state, bind_point, record_obj.location);
+};
+
+void Validator::PostCallRecordCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                                             const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo,
+                                                             const RecordObject &record_obj) {
+    BaseClass::PostCallRecordCmdExecuteGeneratedCommandsEXT(commandBuffer, isPreprocessed, pGeneratedCommandsInfo, record_obj);
+
+    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    if (!cb_state) {
+        InternalError(commandBuffer, record_obj.location, "Unrecognized command buffer.");
+        return;
+    }
+    const VkPipelineBindPoint bind_point = ConvertToPipelineBindPoint(pGeneratedCommandsInfo->shaderStages);
+    PostCallSetupShaderInstrumentationResources(*this, *cb_state, bind_point, record_obj.location);
 }
 
 }  // namespace gpuav

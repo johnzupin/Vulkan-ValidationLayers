@@ -29,25 +29,16 @@
 #include <vulkan/utility/vk_format_utils.h>
 #include <vulkan/utility/vk_struct_helper.hpp>
 
-#include "test_common.h"
+#include "binding.h"
 #include "containers/custom_containers.h"
 #include "generated/vk_extension_helper.h"
 #include "render.h"
-#include "utils/convert_utils.h"
-#include "shader_templates.h"
 
-#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <limits>
-#include <memory>
 #include <string>
-#include <unordered_set>
 #include <vector>
-#include <condition_variable>
-
-using std::string;
-using std::vector;
 
 // MSVC and GCC define __SANITIZE_ADDRESS__ when compiling with address sanitization
 // However, clang doesn't. Instead you have to use __has_feature to check.
@@ -169,7 +160,6 @@ class VkLayerTest : public VkLayerTestBase {
     void Init(VkPhysicalDeviceFeatures *features = nullptr, VkPhysicalDeviceFeatures2 *features2 = nullptr,
               void *instance_pnext = nullptr);
     void AddSurfaceExtension();
-    vkt::CommandBuffer *CommandBuffer();
 
     template <typename Features>
     VkPhysicalDeviceFeatures2 GetPhysicalDeviceFeatures2(Features &feature_query) {
@@ -308,6 +298,11 @@ class ExternalMemorySyncTest : public VkLayerTest {
 #else
     using ExternalHandle = int;
 #endif
+};
+
+class DeviceGeneratedCommandsTest : public VkLayerTest {
+  public:
+    void InitBasicDeviceGeneratedCommands();
 };
 
 class GraphicsLibraryTest : public VkLayerTest {

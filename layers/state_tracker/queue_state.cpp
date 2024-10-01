@@ -85,7 +85,6 @@ vvl::PreSubmitResult vvl::Queue::PreSubmit(std::vector<vvl::QueueSubmission> &&s
         }
         {
             auto guard = Lock();
-            result.last_submission_seq = submission.seq;
             submissions_.emplace_back(std::move(submission));
             if (!thread_) {
                 thread_ = std::make_unique<std::thread>(&Queue::ThreadFunc, this);
@@ -197,7 +196,7 @@ void vvl::Queue::Retire(QueueSubmission &submission) {
     };
     submission.EndUse();
     for (auto &wait : submission.wait_semaphores) {
-        wait.semaphore->Retire(this, submission.loc.Get(), wait.payload);
+        wait.semaphore->RetireWait(this, wait.payload, submission.loc.Get(), true);
     }
     for (auto &cb_state : submission.cbs) {
         auto cb_guard = cb_state->WriteLock();
@@ -208,7 +207,7 @@ void vvl::Queue::Retire(QueueSubmission &submission) {
         cb_state->Retire(submission.perf_submit_pass, is_query_updated_after);
     }
     for (auto &signal : submission.signal_semaphores) {
-        signal.semaphore->Retire(this, submission.loc.Get(), signal.payload);
+        signal.semaphore->RetireSignal(signal.payload);
     }
     if (submission.fence) {
         submission.fence->Retire();

@@ -147,7 +147,7 @@ TEST_F(NegativeWsi, BindImageMemorySwapchain) {
     }
 
     vkt::DeviceMemory mem;
-    bool pass = m_device->phy().set_memory_type(mem_reqs.memoryTypeBits, &alloc_info, 0);
+    bool pass = m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &alloc_info, 0);
     // some devices don't give us good memory requirements for the swapchain image
     if (pass) {
         mem.init(*m_device, alloc_info);
@@ -329,7 +329,7 @@ TEST_F(NegativeWsi, TransferImageToSwapchainLayoutDeviceGroup) {
 
     const auto swapchain_images = GetSwapchainImages(m_swapchain);
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
 
     VkImageCopy copy_region = {};
     copy_region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -337,15 +337,15 @@ TEST_F(NegativeWsi, TransferImageToSwapchainLayoutDeviceGroup) {
     copy_region.srcOffset = {0, 0, 0};
     copy_region.dstOffset = {0, 0, 0};
     copy_region.extent = {test_extent_value, test_extent_value, 1};
-    vk::CmdCopyImage(m_commandBuffer->handle(), src_Image.handle(), VK_IMAGE_LAYOUT_GENERAL, peer_image.handle(),
+    vk::CmdCopyImage(m_command_buffer.handle(), src_Image.handle(), VK_IMAGE_LAYOUT_GENERAL, peer_image.handle(),
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
-    m_commandBuffer->end();
+    m_command_buffer.end();
 
     // Even though both peer_image and swapchain_images[0] use the same memory and are in an invalid layout,
     // only peer_image is referenced by the command buffer so there should only be one error reported.
     m_errorMonitor->SetDesiredError("UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout");
-    m_default_queue->Submit(*m_commandBuffer);
+    m_default_queue->Submit(m_command_buffer);
     m_errorMonitor->VerifyFound();
 
     // peer_image is a presentable image and controlled by the implementation
@@ -463,6 +463,58 @@ TEST_F(NegativeWsi, SwapchainAcquireImageNoSync) {
     }
 }
 
+TEST_F(NegativeWsi, SwapchainAcquireImageSignaledFence) {
+    TEST_DESCRIPTION("Test vkAcquireNextImageKHR with signaled fence");
+
+    AddSurfaceExtension();
+
+    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitSwapchain());
+
+    vkt::Fence fence(*m_device);
+
+    vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, fence.handle());
+
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+
+    {
+        m_errorMonitor->SetDesiredError("VUID-vkAcquireNextImageKHR-fence-01287");
+        uint32_t dummy;
+        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, fence.handle(), &dummy);
+        m_errorMonitor->VerifyFound();
+    }
+}
+
+TEST_F(NegativeWsi, SwapchainAcquireImageSignaledFence2KHR) {
+    TEST_DESCRIPTION("Test vkAcquireNextImage2KHR with signaled fence");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+
+    AddSurfaceExtension();
+
+    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitSwapchain());
+
+    vkt::Fence fence(*m_device);
+
+    vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, fence.handle());
+
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
+
+    {
+        m_errorMonitor->SetDesiredError("VUID-VkAcquireNextImageInfoKHR-fence-01289");
+        VkAcquireNextImageInfoKHR acquire_info = vku::InitStructHelper();
+        acquire_info.swapchain = m_swapchain;
+        acquire_info.timeout = kWaitTimeout;
+        acquire_info.semaphore = VK_NULL_HANDLE;
+        acquire_info.fence = fence.handle();
+        acquire_info.deviceMask = 0x1;
+
+        uint32_t dummy;
+        vk::AcquireNextImage2KHR(device(), &acquire_info, &dummy);
+        m_errorMonitor->VerifyFound();
+    }
+}
+
 TEST_F(NegativeWsi, SwapchainAcquireImageNoSync2KHR) {
     TEST_DESCRIPTION("Test vkAcquireNextImage2KHR with VK_NULL_HANDLE semaphore and fence");
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -557,7 +609,7 @@ TEST_F(NegativeWsi, SwapchainAcquireTooManyImages) {
     const uint32_t acquirable_count = image_count - caps.minImageCount + 1;
     std::vector<vkt::Fence> fences(acquirable_count);
     for (uint32_t i = 0; i < acquirable_count; ++i) {
-        fences[i].init(*m_device, vkt::Fence::create_info());
+        fences[i].init(*m_device, vkt::Fence::CreateInfo());
         uint32_t image_i;
         const auto res = vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, fences[i].handle(), &image_i);
         ASSERT_TRUE(res == VK_SUCCESS || res == VK_SUBOPTIMAL_KHR);
@@ -682,7 +734,7 @@ TEST_F(NegativeWsi, SwapchainAcquireTooManyImages2KHR) {
     const uint32_t acquirable_count = image_count - caps.minImageCount + 1;
     std::vector<vkt::Fence> fences(acquirable_count);
     for (uint32_t i = 0; i < acquirable_count; ++i) {
-        fences[i].init(*m_device, vkt::Fence::create_info());
+        fences[i].init(*m_device, vkt::Fence::CreateInfo());
         uint32_t image_i;
         const auto res = vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, VK_NULL_HANDLE, fences[i].handle(), &image_i);
         ASSERT_TRUE(res == VK_SUCCESS || res == VK_SUBOPTIMAL_KHR);
@@ -1157,21 +1209,21 @@ TEST_F(NegativeWsi, DeviceMask) {
     dev_grp_cmd_buf_info.deviceMask = 0xFFFFFFFF;
     VkCommandBufferBeginInfo cmd_buf_info = vku::InitStructHelper(&dev_grp_cmd_buf_info);
 
-    m_commandBuffer->reset();
+    m_command_buffer.reset();
     m_errorMonitor->SetDesiredError("VUID-VkDeviceGroupCommandBufferBeginInfo-deviceMask-00106");
-    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cmd_buf_info);
+    vk::BeginCommandBuffer(m_command_buffer.handle(), &cmd_buf_info);
     m_errorMonitor->VerifyFound();
 
     dev_grp_cmd_buf_info.deviceMask = 0;
-    m_commandBuffer->reset();
+    m_command_buffer.reset();
     m_errorMonitor->SetDesiredError("VUID-VkDeviceGroupCommandBufferBeginInfo-deviceMask-00107");
-    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cmd_buf_info);
+    vk::BeginCommandBuffer(m_command_buffer.handle(), &cmd_buf_info);
     m_errorMonitor->VerifyFound();
 
     // Test VkDeviceGroupRenderPassBeginInfo
     dev_grp_cmd_buf_info.deviceMask = 0x00000001;
-    m_commandBuffer->reset();
-    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cmd_buf_info);
+    m_command_buffer.reset();
+    vk::BeginCommandBuffer(m_command_buffer.handle(), &cmd_buf_info);
 
     VkDeviceGroupRenderPassBeginInfo dev_grp_rp_info = vku::InitStructHelper();
     dev_grp_rp_info.deviceMask = 0xFFFFFFFF;
@@ -1179,12 +1231,12 @@ TEST_F(NegativeWsi, DeviceMask) {
 
     m_errorMonitor->SetDesiredError("VUID-VkDeviceGroupRenderPassBeginInfo-deviceMask-00905");
     m_errorMonitor->SetDesiredError("VUID-VkDeviceGroupRenderPassBeginInfo-deviceMask-00907");
-    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     m_errorMonitor->VerifyFound();
 
     dev_grp_rp_info.deviceMask = 0;
     m_errorMonitor->SetDesiredError("VUID-VkDeviceGroupRenderPassBeginInfo-deviceMask-00906");
-    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     m_errorMonitor->VerifyFound();
 
     dev_grp_rp_info.deviceMask = 0x00000001;
@@ -1193,22 +1245,22 @@ TEST_F(NegativeWsi, DeviceMask) {
     dev_grp_rp_info.pDeviceRenderAreas = device_render_areas.data();
 
     m_errorMonitor->SetDesiredError("VUID-VkDeviceGroupRenderPassBeginInfo-deviceRenderAreaCount-00908");
-    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     m_errorMonitor->VerifyFound();
 
     // Test vk::CmdSetDeviceMask()
-    vk::CmdSetDeviceMask(m_commandBuffer->handle(), 0x00000001);
+    vk::CmdSetDeviceMask(m_command_buffer.handle(), 0x00000001);
 
     dev_grp_rp_info.deviceRenderAreaCount = physical_device_group[0].physicalDeviceCount;
-    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetDeviceMask-deviceMask-00108");
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetDeviceMask-deviceMask-00110");
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetDeviceMask-deviceMask-00111");
-    vk::CmdSetDeviceMask(m_commandBuffer->handle(), 0xFFFFFFFF);
+    vk::CmdSetDeviceMask(m_command_buffer.handle(), 0xFFFFFFFF);
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdSetDeviceMask-deviceMask-00109");
-    vk::CmdSetDeviceMask(m_commandBuffer->handle(), 0);
+    vk::CmdSetDeviceMask(m_command_buffer.handle(), 0);
     m_errorMonitor->VerifyFound();
 
     vkt::Semaphore semaphore(*m_device), semaphore2(*m_device);
@@ -1243,11 +1295,11 @@ TEST_F(NegativeWsi, DeviceMask) {
 
     VkSubmitInfo submit_info = vku::InitStructHelper(&device_group_submit_info);
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    submit_info.pCommandBuffers = &m_command_buffer.handle();
 
-    m_commandBuffer->reset();
-    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cmd_buf_info);
-    vk::EndCommandBuffer(m_commandBuffer->handle());
+    m_command_buffer.reset();
+    vk::BeginCommandBuffer(m_command_buffer.handle(), &cmd_buf_info);
+    vk::EndCommandBuffer(m_command_buffer.handle());
     m_errorMonitor->SetDesiredError("VUID-VkDeviceGroupSubmitInfo-pCommandBufferDeviceMasks-00086");
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
@@ -1416,13 +1468,13 @@ TEST_F(NegativeWsi, DeviceGroupSubmitInfoSemaphoreCount) {
 
     VkSubmitInfo submit_info = vku::InitStructHelper(&device_group_submit_info);
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandBuffer->handle();
+    submit_info.pCommandBuffers = &m_command_buffer.handle();
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = &semaphore.handle();
 
-    m_commandBuffer->reset();
-    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cmd_buf_info);
-    vk::EndCommandBuffer(m_commandBuffer->handle());
+    m_command_buffer.reset();
+    vk::BeginCommandBuffer(m_command_buffer.handle(), &cmd_buf_info);
+    vk::EndCommandBuffer(m_command_buffer.handle());
     m_errorMonitor->SetDesiredError("VUID-VkDeviceGroupSubmitInfo-signalSemaphoreCount-00084");
     vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, VK_NULL_HANDLE);
     m_errorMonitor->VerifyFound();
@@ -1532,10 +1584,10 @@ TEST_F(NegativeWsi, DisplayPresentInfoSrcRect) {
     ASSERT_TRUE(image_acquired.initialized());
     vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, image_acquired.handle(), VK_NULL_HANDLE, &current_buffer);
 
-    m_commandBuffer->begin();
-    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
-    m_commandBuffer->EndRenderPass();
-    m_commandBuffer->end();
+    m_command_buffer.begin();
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.end();
 
     uint32_t swapchain_width = m_surface_capabilities.minImageExtent.width;
     uint32_t swapchain_height = m_surface_capabilities.minImageExtent.height;
@@ -2004,10 +2056,23 @@ TEST_F(NegativeWsi, SwapchainMaintenance1ExtensionAcquire) {
     // SwapchainCreateInfo->presentMode has to be in VkSurfacePresentModeCompatibilityEXT->pPresentModes
     if (compatible_present_modes.size() > 1) {
         swapchain_create_info.presentMode = compatible_present_modes[1];
+
+        VkSurfacePresentModeEXT present_mode2 = vku::InitStructHelper();
+        present_mode2.presentMode = pdev_surface_present_modes[0];
+        VkPhysicalDeviceSurfaceInfo2KHR surface_info2 = vku::InitStructHelper(&present_mode2);
+        surface_info2.surface = m_surface;
+
+        VkSurfacePresentModeCompatibilityEXT present_mode_compatibility2 = vku::InitStructHelper();
+        present_mode2.presentMode = swapchain_create_info.presentMode;
+        VkSurfaceCapabilities2KHR surface_caps2 = vku::InitStructHelper(&present_mode_compatibility2);
+        vk::GetPhysicalDeviceSurfaceCapabilities2KHR(gpu(), &surface_info2, &surface_caps2);
+
+        swapchain_create_info.minImageCount = surface_caps2.surfaceCapabilities.minImageCount;
         m_errorMonitor->SetDesiredError("VUID-VkSwapchainPresentModesCreateInfoEXT-presentMode-07764");
         vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
         m_errorMonitor->VerifyFound();
     }
+    swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
 
     swapchain_create_info.presentMode = compatible_present_modes[0];
     VkSwapchainPresentScalingCreateInfoEXT present_scaling_info = vku::InitStructHelper();
@@ -2364,12 +2429,12 @@ TEST_F(NegativeWsi, SwapchainMaintenance1ExtensionRelease) {
 
     const VkImageMemoryBarrier present_transition =
         TransitionToPresent(swapchain_images[image_index], VK_IMAGE_LAYOUT_UNDEFINED, 0);
-    m_commandBuffer->begin();
-    vk::CmdPipelineBarrier(m_commandBuffer->handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
+    m_command_buffer.begin();
+    vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
                            0, nullptr, 0, nullptr, 1, &present_transition);
-    m_commandBuffer->end();
+    m_command_buffer.end();
 
-    m_default_queue->Submit(*m_commandBuffer, acquire_semaphore, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, submit_semaphore);
+    m_default_queue->Submit(m_command_buffer, acquire_semaphore, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, submit_semaphore);
 
     VkPresentInfoKHR present = vku::InitStructHelper();
     present.waitSemaphoreCount = 1;
@@ -3021,10 +3086,10 @@ TEST_F(NegativeWsi, MissingWaitForImageAcquireSemaphore_2) {
     vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, semaphore, VK_NULL_HANDLE, &image_index);
 
     // Dummy submit that signals semaphore that will be waited by the present. Does not wait on the acquire semaphore.
-    m_commandBuffer->begin();
-    m_commandBuffer->end();
+    m_command_buffer.begin();
+    m_command_buffer.end();
     const vkt::Semaphore submit_semaphore(*m_device);
-    m_default_queue->Submit(*m_commandBuffer, vkt::signal, submit_semaphore);
+    m_default_queue->Submit(m_command_buffer, vkt::signal, submit_semaphore);
 
     // Present waits on submit semaphore. Does not wait on the acquire semaphore.
     VkPresentInfoKHR present = vku::InitStructHelper();
@@ -3298,11 +3363,11 @@ TEST_F(NegativeWsi, UseDestroyedSwapchain) {
     vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
     vk::DestroySwapchainKHR(device(), oldSwapchain, nullptr);
 
-    m_commandBuffer->begin();
+    m_command_buffer.begin();
     m_errorMonitor->SetDesiredError("VUID-VkRenderPassBeginInfo-framebuffer-parameter");
-    m_commandBuffer->BeginRenderPass(rp.handle(), fb.handle());
+    m_command_buffer.BeginRenderPass(rp.handle(), fb.handle());
     m_errorMonitor->VerifyFound();
-    m_commandBuffer->end();
+    m_command_buffer.end();
 }
 
 TEST_F(NegativeWsi, ImageCompressionControlSwapchainWithoutFeature) {
@@ -3514,5 +3579,32 @@ TEST_F(NegativeWsi, NonSupportedPresentMode) {
     VkSwapchainKHR swapchain;
     m_errorMonitor->SetDesiredError("VUID-VkSwapchainCreateInfoKHR-presentMode-01281");
     vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &swapchain);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeWsi, SwapchainMaintenance1DeferredMemoryFlags) {
+    AddSurfaceExtension();
+    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitSurface());
+    InitSwapchainInfo();
+
+    VkSwapchainCreateInfoKHR swapchain_ci = vku::InitStructHelper();
+    swapchain_ci.flags = VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
+    swapchain_ci.surface = m_surface;
+    swapchain_ci.minImageCount = m_surface_capabilities.minImageCount;
+    swapchain_ci.imageFormat = m_surface_formats[0].format;
+    swapchain_ci.imageColorSpace = m_surface_formats[0].colorSpace;
+    swapchain_ci.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_ci.imageArrayLayers = 1;
+    swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_ci.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    swapchain_ci.compositeAlpha = m_surface_composite_alpha;
+    swapchain_ci.presentMode = m_surface_non_shared_present_mode;
+    swapchain_ci.clipped = VK_FALSE;
+    swapchain_ci.oldSwapchain = 0;
+
+    m_errorMonitor->SetDesiredError("VUID-VkSwapchainCreateInfoKHR-flags-parameter");
+    vk::CreateSwapchainKHR(device(), &swapchain_ci, nullptr, &m_swapchain);
     m_errorMonitor->VerifyFound();
 }

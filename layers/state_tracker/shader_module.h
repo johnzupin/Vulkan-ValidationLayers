@@ -26,7 +26,6 @@
 #include "state_tracker/state_object.h"
 #include "state_tracker/sampler_state.h"
 #include <spirv/unified1/spirv.hpp>
-#include "spirv-tools/optimizer.hpp"
 
 namespace vvl {
 class Pipeline;
@@ -128,6 +127,9 @@ struct ExecutionModeSet {
         stencil_ref_replacing_bit = 1 << 25,
 
         fp_fast_math_default = 1 << 26,
+
+        derivative_group_linear = 1 << 27,
+        derivative_group_quads = 1 << 28,
     };
 
     // bits to know if things have been set or not by a Decoration
@@ -537,6 +539,8 @@ struct EntryPoint {
                const AccessChainVariableMap &access_chain_map, const VariableAccessMap &variable_access_map,
                const DebugNameMap &debug_name_map);
 
+    bool HasBuiltIn(spv::BuiltIn built_in) const;
+
   protected:
     static vvl::unordered_set<uint32_t> GetAccessibleIds(const Module &module_state, EntryPoint &entrypoint);
     static std::vector<StageInterfaceVariable> GetStageInterfaceVariables(const Module &module_state, const EntryPoint &entrypoint,
@@ -652,7 +656,7 @@ struct Module {
     VulkanTypedHandle handle_;                            // Will be updated once its known its valid SPIR-V
     VulkanTypedHandle handle() const { return handle_; }  // matches normal convention to get handle
 
-    // Used for when modifying the SPIR-V (spirv-opt, GPU-AV instrumentation, etc) and need reparse it for VVL validaiton
+    // Used for when modifying the SPIR-V (spirv-opt, GPU-AV instrumentation, etc) and need reparse it for VVL validation
     Module(vvl::span<const uint32_t> code) : valid_spirv(true), words_(code.begin(), code.end()), static_data_(*this) {}
 
     // StatelessData is a pointer as we have cases were we don't need it and simpler to just null check the few cases that use it
@@ -711,6 +715,7 @@ struct Module {
     std::string DescribeType(uint32_t type) const;
     std::string DescribeVariable(uint32_t id) const;
 
+    // Note that some shaders can have an input and output topology
     std::optional<VkPrimitiveTopology> GetTopology(const EntryPoint &entrypoint) const;
 
     std::shared_ptr<const EntryPoint> FindEntrypoint(char const *name, VkShaderStageFlagBits stageBits) const;
@@ -748,15 +753,13 @@ struct Module {
 // Represents a VkShaderModule handle
 namespace vvl {
 struct ShaderModule : public StateObject {
-    ShaderModule(VkShaderModule handle, std::shared_ptr<spirv::Module> &spirv_module, uint32_t unique_shader_id)
-        : StateObject(handle, kVulkanObjectTypeShaderModule), spirv(spirv_module), gpu_validation_shader_id(unique_shader_id) {
+    ShaderModule(VkShaderModule handle, std::shared_ptr<spirv::Module> &spirv_module)
+        : StateObject(handle, kVulkanObjectTypeShaderModule), spirv(spirv_module) {
         spirv->handle_ = handle_;
     }
 
     // For when we need to create a module with no SPIR-V backing it
-    ShaderModule(uint32_t unique_shader_id)
-        : StateObject(static_cast<VkShaderModule>(VK_NULL_HANDLE), kVulkanObjectTypeShaderModule),
-          gpu_validation_shader_id(unique_shader_id) {}
+    ShaderModule() : StateObject(static_cast<VkShaderModule>(VK_NULL_HANDLE), kVulkanObjectTypeShaderModule) {}
 
     VkShaderModule VkHandle() const { return handle_.Cast<VkShaderModule>(); }
 
@@ -764,8 +767,5 @@ struct ShaderModule : public StateObject {
     // TODO - This (and vvl::ShaderObject) could be unique, but need handle multiple ValidationObjects
     // https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/6265/files
     std::shared_ptr<spirv::Module> spirv;
-
-    // Used as way to match instrumented GPU-AV shader to a VkShaderModule handle
-    uint32_t gpu_validation_shader_id = 0;
 };
 }  // namespace vvl
