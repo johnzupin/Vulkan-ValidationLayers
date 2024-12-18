@@ -27,12 +27,12 @@
 #endif
 
 #include <vulkan/vk_enum_string_helper.h>
-#include "generated/chassis.h"
 #include "core_validation.h"
 #include "state_tracker/image_state.h"
 #include "state_tracker/device_state.h"
 #include "state_tracker/render_pass_state.h"
 #include <spirv-tools/libspirv.h>
+#include "generated/dispatch_functions.h"
 
 bool CoreChecks::ValidateDeviceQueueFamily(uint32_t queue_family, const Location &loc, const char *vuid,
                                            bool optional = false) const {
@@ -189,7 +189,7 @@ bool CoreChecks::ValidateDeviceQueueCreateInfos(const vvl::PhysicalDevice &pd_st
         create_flags(uint32_t a, uint32_t b) : unprocted_index(a), protected_index(b) {}
     };
     vvl::unordered_map<uint32_t, create_flags> queue_family_map;
-    vvl::unordered_map<uint32_t, VkQueueGlobalPriorityKHR> global_priorities;
+    vvl::unordered_map<uint32_t, VkQueueGlobalPriority> global_priorities;
 
     std::vector<uint32_t> queue_counts;
     for (uint32_t i = 0; i < info_count; ++i) {
@@ -251,8 +251,8 @@ bool CoreChecks::ValidateDeviceQueueCreateInfos(const vvl::PhysicalDevice &pd_st
             }
         }
 
-        VkQueueGlobalPriorityKHR global_priority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;  // Implicit default value
-        const auto *global_priority_ci = vku::FindStructInPNextChain<VkDeviceQueueGlobalPriorityCreateInfoKHR>(infos[i].pNext);
+        VkQueueGlobalPriority global_priority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;  // Implicit default value
+        const auto *global_priority_ci = vku::FindStructInPNextChain<VkDeviceQueueGlobalPriorityCreateInfo>(infos[i].pNext);
         if (global_priority_ci) {
             global_priority = global_priority_ci->globalPriority;
         }
@@ -262,8 +262,8 @@ bool CoreChecks::ValidateDeviceQueueCreateInfos(const vvl::PhysicalDevice &pd_st
                 skip |= LogError("VUID-VkDeviceCreateInfo-pQueueCreateInfos-06654", pd_state.Handle(), info_loc,
                                  "Multiple queues are created with queueFamilyIndex %" PRIu32
                                  ", but one has global priority %s and another %s.",
-                                 infos[i].queueFamilyIndex, string_VkQueueGlobalPriorityKHR(prev_global_priority->second),
-                                 string_VkQueueGlobalPriorityKHR(global_priority));
+                                 infos[i].queueFamilyIndex, string_VkQueueGlobalPriority(prev_global_priority->second),
+                                 string_VkQueueGlobalPriority(global_priority));
             }
         } else {
             global_priorities.insert({infos[i].queueFamilyIndex, global_priority});
@@ -297,7 +297,7 @@ bool CoreChecks::ValidateDeviceQueueCreateInfos(const vvl::PhysicalDevice &pd_st
 
                 skip |= LogError(
                     "VUID-VkDeviceQueueCreateInfo-queueCount-00382", pd_state.Handle(), info_loc.dot(Field::queueCount),
-                    " (%" PRIu32
+                    "(%" PRIu32
                     ") is not less than or equal to available queue count for this pCreateInfo->pQueueCreateInfos[%" PRIu32
                     "].queueFamilyIndex} (%" PRIu32 ") obtained previously from vkGetPhysicalDeviceQueueFamilyProperties%s (%s).",
                     requested_queue_count, i, requested_queue_family, conditional_ext_cmd, count_note.c_str());
@@ -325,141 +325,23 @@ bool CoreChecks::PreCallValidateCreateDevice(VkPhysicalDevice gpu, const VkDevic
                                              const VkAllocationCallbacks *pAllocator, VkDevice *pDevice,
                                              const ErrorObject &error_obj) const {
     bool skip = false;
-    auto pd_state = Get<vvl::PhysicalDevice>(gpu);
-
     // TODO: object_tracker should perhaps do this instead
     //       and it does not seem to currently work anyway -- the loader just crashes before this point
+    auto pd_state = Get<vvl::PhysicalDevice>(gpu);
     if (!pd_state) {
         skip |= LogError("VUID-vkCreateDevice-physicalDevice-parameter", device, error_obj.location,
                          "Have not called vkEnumeratePhysicalDevices() yet.");
-    } else {
-        skip |= ValidateDeviceQueueCreateInfos(*pd_state, pCreateInfo->queueCreateInfoCount, pCreateInfo->pQueueCreateInfos,
-                                               error_obj.location.dot(Field::pCreateInfo));
-
-        const VkPhysicalDeviceFragmentShadingRateFeaturesKHR *fragment_shading_rate_features =
-            vku::FindStructInPNextChain<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>(pCreateInfo->pNext);
-
-        if (fragment_shading_rate_features) {
-            const VkPhysicalDeviceShadingRateImageFeaturesNV *shading_rate_image_features =
-                vku::FindStructInPNextChain<VkPhysicalDeviceShadingRateImageFeaturesNV>(pCreateInfo->pNext);
-
-            if (shading_rate_image_features && shading_rate_image_features->shadingRateImage) {
-                if (fragment_shading_rate_features->pipelineFragmentShadingRate) {
-                    skip |= LogError("VUID-VkDeviceCreateInfo-shadingRateImage-04478", pd_state->Handle(), error_obj.location,
-                                     "Cannot enable shadingRateImage and pipelineFragmentShadingRate features simultaneously.");
-                }
-                if (fragment_shading_rate_features->primitiveFragmentShadingRate) {
-                    skip |= LogError("VUID-VkDeviceCreateInfo-shadingRateImage-04479", pd_state->Handle(), error_obj.location,
-                                     "Cannot enable shadingRateImage and primitiveFragmentShadingRate features simultaneously.");
-                }
-                if (fragment_shading_rate_features->attachmentFragmentShadingRate) {
-                    skip |= LogError("VUID-VkDeviceCreateInfo-shadingRateImage-04480", pd_state->Handle(), error_obj.location,
-                                     "Cannot enable shadingRateImage and attachmentFragmentShadingRate features "
-                                     "simultaneously.");
-                }
-            }
-
-            const VkPhysicalDeviceFragmentDensityMapFeaturesEXT *fragment_density_map_features =
-                vku::FindStructInPNextChain<VkPhysicalDeviceFragmentDensityMapFeaturesEXT>(pCreateInfo->pNext);
-
-            if (fragment_density_map_features && fragment_density_map_features->fragmentDensityMap) {
-                if (fragment_shading_rate_features->pipelineFragmentShadingRate) {
-                    skip |= LogError("VUID-VkDeviceCreateInfo-fragmentDensityMap-04481", pd_state->Handle(), error_obj.location,
-                                     "Cannot enable fragmentDensityMap and pipelineFragmentShadingRate features "
-                                     "simultaneously.");
-                }
-                if (fragment_shading_rate_features->primitiveFragmentShadingRate) {
-                    skip |= LogError("VUID-VkDeviceCreateInfo-fragmentDensityMap-04482", pd_state->Handle(), error_obj.location,
-                                     "Cannot enable fragmentDensityMap and primitiveFragmentShadingRate features "
-                                     "simultaneously.");
-                }
-                if (fragment_shading_rate_features->attachmentFragmentShadingRate) {
-                    skip |= LogError("VUID-VkDeviceCreateInfo-fragmentDensityMap-04483", pd_state->Handle(), error_obj.location,
-                                     "Cannot enable fragmentDensityMap and attachmentFragmentShadingRate features "
-                                     "simultaneously.");
-                }
-            }
-        }
-
-        const auto *shader_image_atomic_int64_features =
-            vku::FindStructInPNextChain<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT>(pCreateInfo->pNext);
-        if (shader_image_atomic_int64_features) {
-            if (shader_image_atomic_int64_features->sparseImageInt64Atomics &&
-                !shader_image_atomic_int64_features->shaderImageInt64Atomics) {
-                skip |= LogError("VUID-VkDeviceCreateInfo-None-04896", pd_state->Handle(), error_obj.location,
-                                 "if sparseImageInt64Atomics feature is enabled then shaderImageInt64Atomics "
-                                 "feature must also be enabled.");
-            }
-        }
-        const auto *shader_atomic_float_features = vku::FindStructInPNextChain<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>(pCreateInfo->pNext);
-        if (shader_atomic_float_features) {
-            if (shader_atomic_float_features->sparseImageFloat32Atomics &&
-                !shader_atomic_float_features->shaderImageFloat32Atomics) {
-                skip |= LogError("VUID-VkDeviceCreateInfo-None-04897", pd_state->Handle(), error_obj.location,
-                                 "if sparseImageFloat32Atomics feature is enabled then shaderImageFloat32Atomics "
-                                 "feature must also be enabled.");
-            }
-            if (shader_atomic_float_features->sparseImageFloat32AtomicAdd &&
-                !shader_atomic_float_features->shaderImageFloat32AtomicAdd) {
-                skip |= LogError("VUID-VkDeviceCreateInfo-None-04898", pd_state->Handle(), error_obj.location,
-                                 "if sparseImageFloat32AtomicAdd feature is enabled then shaderImageFloat32AtomicAdd "
-                                 "feature must also be enabled.");
-            }
-        }
-        const auto *shader_atomic_float2_features =
-            vku::FindStructInPNextChain<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT>(pCreateInfo->pNext);
-        if (shader_atomic_float2_features) {
-            if (shader_atomic_float2_features->sparseImageFloat32AtomicMinMax &&
-                !shader_atomic_float2_features->shaderImageFloat32AtomicMinMax) {
-                skip |=
-                    LogError("VUID-VkDeviceCreateInfo-sparseImageFloat32AtomicMinMax-04975", pd_state->Handle(), error_obj.location,
-                             "if sparseImageFloat32AtomicMinMax feature is enabled then shaderImageFloat32AtomicMinMax "
-                             "feature must also be enabled.");
-            }
-        }
-        const auto *device_group_ci = vku::FindStructInPNextChain<VkDeviceGroupDeviceCreateInfo>(pCreateInfo->pNext);
-        if (device_group_ci) {
-            for (uint32_t i = 0; i < device_group_ci->physicalDeviceCount - 1; ++i) {
-                for (uint32_t j = i + 1; j < device_group_ci->physicalDeviceCount; ++j) {
-                    if (device_group_ci->pPhysicalDevices[i] == device_group_ci->pPhysicalDevices[j]) {
-                        skip |= LogError("VUID-VkDeviceGroupDeviceCreateInfo-pPhysicalDevices-00375", pd_state->Handle(),
-                                         error_obj.location,
-                                         "VkDeviceGroupDeviceCreateInfo has a duplicated physical device "
-                                         "in pPhysicalDevices [%" PRIu32 "] and [%" PRIu32 "].",
-                                         i, j);
-                    }
-                }
-            }
-        }
+        return skip;
     }
 
-    const auto *cache_control = vku::FindStructInPNextChain<VkDevicePipelineBinaryInternalCacheControlKHR>(pCreateInfo->pNext);
-    if (cache_control && cache_control->disableInternalCache) {
-        VkPhysicalDevicePipelineBinaryPropertiesKHR pipeline_binary_props = vku::InitStructHelper();
-        VkPhysicalDeviceProperties2 props2 = vku::InitStructHelper(&pipeline_binary_props);
-        DispatchGetPhysicalDeviceProperties2(gpu, &props2);
-
-        if (!pipeline_binary_props.pipelineBinaryInternalCacheControl) {
-            skip |= LogError("VUID-VkDevicePipelineBinaryInternalCacheControlKHR-disableInternalCache-09602", pd_state->Handle(),
-                             error_obj.location,
-                             "if disableInternalCache is VK_TRUE then pipelineBinaryInternalCacheControl must also be VK_TRUE");
-        }
-    }
-
+    skip |= ValidateDeviceQueueCreateInfos(*pd_state, pCreateInfo->queueCreateInfoCount, pCreateInfo->pQueueCreateInfos,
+                                           error_obj.location.dot(Field::pCreateInfo));
     return skip;
 }
 
 void CoreChecks::PostCreateDevice(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) {
     // The state tracker sets up the device state (also if extension and/or features are enabled)
     StateTracker::PostCreateDevice(pCreateInfo, loc);
-
-    // Add the callback hooks for the functions that are either broadly or deeply used and that the ValidationStateTracker refactor
-    // would be messier without.
-    // TODO: Find a good way to do this hooklessly.
-    SetSetImageViewInitialLayoutCallback(
-        [](vvl::CommandBuffer *cb_state, const vvl::ImageView &iv_state, VkImageLayout layout) -> void {
-            cb_state->SetImageViewInitialLayout(iv_state, layout);
-        });
 
     AdjustValidatorOptions(device_extensions, enabled_features, spirv_val_options, &spirv_val_option_hash);
 
@@ -559,7 +441,7 @@ bool CoreChecks::PreCallValidateGetDeviceQueue(VkDevice device, uint32_t queueFa
 
         if (device_queue_info.queue_count <= queueIndex) {
             skip |= LogError("VUID-vkGetDeviceQueue-queueIndex-00385", device, error_obj.location.dot(Field::queueIndex),
-                             "(%" PRIu32 ") is not less than the number of queues requested from queueFamilyIndex (=%" PRIu32
+                             "(%" PRIu32 ") is not less than the number of queues requested from queueFamilyIndex (%" PRIu32
                              ") when the device was created vkCreateDevice::pCreateInfo->pQueueCreateInfos[%" PRIu32
                              "] (i.e. is not less than %" PRIu32 ").",
                              queueIndex, queueFamilyIndex, device_queue_info.index, device_queue_info.queue_count);
@@ -620,13 +502,13 @@ bool CoreChecks::ValidateGetPhysicalDeviceImageFormatProperties2(const VkPhysica
                                                                  VkImageFormatProperties2 *pImageFormatProperties,
                                                                  const ErrorObject &error_obj) const {
     bool skip = false;
-    const auto *copy_perf_query = vku::FindStructInPNextChain<VkHostImageCopyDevicePerformanceQueryEXT>(pImageFormatProperties->pNext);
+    const auto *copy_perf_query = vku::FindStructInPNextChain<VkHostImageCopyDevicePerformanceQuery>(pImageFormatProperties->pNext);
     if (copy_perf_query) {
-        if ((pImageFormatInfo->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) == 0) {
+        if ((pImageFormatInfo->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT) == 0) {
             skip |= LogError("VUID-vkGetPhysicalDeviceImageFormatProperties2-pNext-09004", physical_device, error_obj.location,
                              "pImageFormatProperties includes a chained "
-                             "VkHostImageCopyDevicePerformanceQueryEXT struct, but pImageFormatInfo->usage (%s) does not contain "
-                             "VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT",
+                             "VkHostImageCopyDevicePerformanceQuery struct, but pImageFormatInfo->usage (%s) does not contain "
+                             "VK_IMAGE_USAGE_HOST_TRANSFER_BIT",
                              string_VkBufferUsageFlags(pImageFormatInfo->usage).c_str());
         }
     }
@@ -917,10 +799,6 @@ bool CoreChecks::ValidateDeviceQueueSupport(const Location &loc) const {
             vuid = "VUID-vkCreateEvent-device-09672";
             flags = VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
             break;
-        case Func::vkCreateShadersEXT:
-            vuid = "VUID-vkCreateShadersEXT-device-09669";
-            flags = VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT;
-            break;
         case Func::vkCreateRenderPass:
             vuid = "VUID-vkCreateRenderPass-device-10000";
             flags = VK_QUEUE_GRAPHICS_BIT;
@@ -977,7 +855,7 @@ bool CoreChecks::PreCallValidateCreatePipelineBinariesKHR(VkDevice device, const
             skip |= LogError("VUID-VkPipelineBinaryCreateInfoKHR-pipeline-09607", pipeline, create_info_loc.dot(Field::pipeline),
                              "called on a pipeline created without the "
                              "VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR flag set. (Make sure you set it with "
-                             "VkPipelineCreateFlags2CreateInfoKHR)");
+                             "VkPipelineCreateFlags2CreateInfo)");
         }
 
         if (pipeline_state->binary_data_released) {

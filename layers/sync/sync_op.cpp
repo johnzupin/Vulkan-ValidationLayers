@@ -215,7 +215,7 @@ SyncOpBarriers::SyncOpBarriers(vvl::Func command, const SyncValidator &sync_stat
 }
 
 SyncOpBarriers::SyncOpBarriers(vvl::Func command, const SyncValidator &sync_state, VkQueueFlags queue_flags, uint32_t event_count,
-                               const VkDependencyInfoKHR *dep_infos)
+                               const VkDependencyInfo *dep_infos)
     : SyncOpBase(command), barriers_(event_count) {
     for (uint32_t i = 0; i < event_count; i++) {
         const auto &dep_info = dep_infos[i];
@@ -245,7 +245,7 @@ SyncOpPipelineBarrier::SyncOpPipelineBarrier(vvl::Func command, const SyncValida
                      pImageMemoryBarriers) {}
 
 SyncOpPipelineBarrier::SyncOpPipelineBarrier(vvl::Func command, const SyncValidator &sync_state, VkQueueFlags queue_flags,
-                                             const VkDependencyInfoKHR &dep_info)
+                                             const VkDependencyInfo &dep_info)
     : SyncOpBarriers(command, sync_state, queue_flags, 1, &dep_info) {}
 
 bool SyncOpPipelineBarrier::Validate(const CommandBufferAccessContext &cb_context) const {
@@ -272,11 +272,9 @@ bool SyncOpPipelineBarrier::Validate(const CommandBufferAccessContext &cb_contex
             // PHASE1 TODO -- add tag information to log msg when useful.
             const Location loc(command_);
             const auto &sync_state = cb_context.GetSyncState();
-            skip |= sync_state.LogError(string_SyncHazardVUID(hazard.Hazard()), image_state->Handle(), loc,
-                                        "Hazard %s for image barrier %" PRIu32 " %s. Access info %s.",
-                                        string_SyncHazard(hazard.Hazard()), image_barrier.index,
-                                        sync_state.FormatHandle(image_state->Handle()).c_str(),
-                                        cb_context.FormatHazard(hazard).c_str());
+            const auto error =
+                sync_state.error_messages_.PipelineBarrierError(hazard, cb_context, image_barrier.index, *image_state);
+            skip |= sync_state.SyncError(hazard.Hazard(), image_state->Handle(), loc, error);
         }
     }
     return skip;
@@ -495,7 +493,7 @@ SyncOpWaitEvents::SyncOpWaitEvents(vvl::Func command, const SyncValidator &sync_
 }
 
 SyncOpWaitEvents::SyncOpWaitEvents(vvl::Func command, const SyncValidator &sync_state, VkQueueFlags queue_flags,
-                                   uint32_t eventCount, const VkEvent *pEvents, const VkDependencyInfoKHR *pDependencyInfo)
+                                   uint32_t eventCount, const VkEvent *pEvents, const VkDependencyInfo *pDependencyInfo)
     : SyncOpBarriers(command, sync_state, queue_flags, eventCount, pDependencyInfo) {
     MakeEventsList(sync_state, eventCount, pEvents);
     assert(events_.size() == barriers_.size());  // Just so nobody gets clever and decides to cull the event or barrier arrays
@@ -546,8 +544,8 @@ bool SyncOpWaitEvents::DoValidate(const CommandExecutionContext &exec_context, c
     const auto &sync_state = exec_context.GetSyncState();
     const QueueId queue_id = exec_context.GetQueueId();
 
-    VkPipelineStageFlags2KHR event_stage_masks = 0U;
-    VkPipelineStageFlags2KHR barrier_mask_params = 0U;
+    VkPipelineStageFlags2 event_stage_masks = 0U;
+    VkPipelineStageFlags2 barrier_mask_params = 0U;
     bool events_not_found = false;
     const auto *events_context = exec_context.GetCurrentEventsContext();
     assert(events_context);
@@ -648,11 +646,9 @@ bool SyncOpWaitEvents::DoValidate(const CommandExecutionContext &exec_context, c
                     *image_state, subresource_range, sync_event->scope.exec_scope, src_access_scope, queue_id,
                     sync_event->FirstScope(), sync_event->first_scope_tag, AccessContext::DetectOptions::kDetectAll);
                 if (hazard.IsHazard()) {
-                    skip |= sync_state.LogError(string_SyncHazardVUID(hazard.Hazard()), image_state->Handle(), loc,
-                                                "Hazard %s for image barrier %" PRIu32 " %s. Access info %s.",
-                                                string_SyncHazard(hazard.Hazard()), image_memory_barrier.index,
-                                                sync_state.FormatHandle(image_state->Handle()).c_str(),
-                                                exec_context.FormatHazard(hazard).c_str());
+                    const auto error =
+                        sync_state.error_messages_.WaitEventsError(hazard, exec_context, image_memory_barrier.index, *image_state);
+                    skip |= sync_state.SyncError(hazard.Hazard(), image_state->Handle(), loc, error);
                     break;
                 }
             }
@@ -663,7 +659,7 @@ bool SyncOpWaitEvents::DoValidate(const CommandExecutionContext &exec_context, c
     }
 
     // Note that we can't check for HOST in pEvents as we don't track that set event type
-    const auto extra_stage_bits = (barrier_mask_params & ~VK_PIPELINE_STAGE_2_HOST_BIT_KHR) & ~event_stage_masks;
+    const auto extra_stage_bits = (barrier_mask_params & ~VK_PIPELINE_STAGE_2_HOST_BIT) & ~event_stage_masks;
     if (extra_stage_bits) {
         // Issue error message that event waited for is not in wait events scope
         // NOTE: This isn't exactly the right VUID for WaitEvents2, but it's as close as we currently have support for
@@ -797,7 +793,7 @@ void SyncOpWaitEvents::MakeEventsList(const SyncValidator &sync_state, uint32_t 
 }
 
 SyncOpResetEvent::SyncOpResetEvent(vvl::Func command, const SyncValidator &sync_state, VkQueueFlags queue_flags, VkEvent event,
-                                   VkPipelineStageFlags2KHR stageMask)
+                                   VkPipelineStageFlags2 stageMask)
     : SyncOpBase(command), event_(sync_state.Get<vvl::Event>(event)), exec_scope_(SyncExecScope::MakeSrc(queue_flags, stageMask)) {}
 
 bool SyncOpResetEvent::Validate(const CommandBufferAccessContext &cb_context) const {
@@ -877,7 +873,7 @@ void SyncOpResetEvent::ReplayRecord(CommandExecutionContext &exec_context, Resou
 }
 
 SyncOpSetEvent::SyncOpSetEvent(vvl::Func command, const SyncValidator &sync_state, VkQueueFlags queue_flags, VkEvent event,
-                               VkPipelineStageFlags2KHR stageMask, const AccessContext *access_context)
+                               VkPipelineStageFlags2 stageMask, const AccessContext *access_context)
     : SyncOpBase(command),
       event_(sync_state.Get<vvl::Event>(event)),
       recorded_context_(),
@@ -893,7 +889,7 @@ SyncOpSetEvent::SyncOpSetEvent(vvl::Func command, const SyncValidator &sync_stat
 }
 
 SyncOpSetEvent::SyncOpSetEvent(vvl::Func command, const SyncValidator &sync_state, VkQueueFlags queue_flags, VkEvent event,
-                               const VkDependencyInfoKHR &dep_info, const AccessContext *access_context)
+                               const VkDependencyInfo &dep_info, const AccessContext *access_context)
     : SyncOpBase(command),
       event_(sync_state.Get<vvl::Event>(event)),
       recorded_context_(),
@@ -1106,9 +1102,11 @@ ResourceUsageTag SyncOpBeginRenderPass::Record(CommandBufferAccessContext *cb_co
 }
 
 bool SyncOpBeginRenderPass::ReplayValidate(ReplayState &replay, ResourceUsageTag recorded_tag) const {
-    // Need to update the exec_contexts state (which for RenderPass operations *must* be a QueueBatchContext, as
-    // render pass operations are not allowed in secondary command buffers.
-    replay.BeginRenderPassReplaySetup(*this);
+    CommandExecutionContext &exec_context = replay.GetExecutionContext();
+    // can't be kExecuted, this operation is not allowed in secondary command buffers
+    assert(exec_context.Type() == CommandExecutionContext::kSubmitted);
+    auto &batch_context = static_cast<QueueBatchContext &>(exec_context);
+    batch_context.BeginRenderPassReplaySetup(replay, *this);
 
     // Only the layout transitions happen at the replay tag, loadOp's happen at a subsequent tag
     ResourceUsageRange first_use_range = {recorded_tag, recorded_tag + 1};
@@ -1135,7 +1133,7 @@ bool SyncOpNextSubpass::Validate(const CommandBufferAccessContext &cb_context) c
     const auto *renderpass_context = cb_context.GetCurrentRenderPassContext();
     if (!renderpass_context) return skip;
 
-    skip |= renderpass_context->ValidateNextSubpass(cb_context.GetExecutionContext(), command_);
+    skip |= renderpass_context->ValidateNextSubpass(cb_context, command_);
     return skip;
 }
 
@@ -1145,7 +1143,11 @@ ResourceUsageTag SyncOpNextSubpass::Record(CommandBufferAccessContext *cb_contex
 
 bool SyncOpNextSubpass::ReplayValidate(ReplayState &replay, ResourceUsageTag recorded_tag) const {
     // Any store/resolve operations happen before the NextSubpass tag so we can advance to the next subpass state
-    replay.NextSubpassReplaySetup();
+    CommandExecutionContext &exec_context = replay.GetExecutionContext();
+    // can't be kExecuted, this operation is not allowed in secondary command buffers
+    assert(exec_context.Type() == CommandExecutionContext::kSubmitted);
+    auto &batch_context = static_cast<QueueBatchContext &>(exec_context);
+    batch_context.NextSubpassReplaySetup(replay);
 
     // Only the layout transitions happen at the replay tag, loadOp's happen at a subsequent tag
     ResourceUsageRange first_use_range = {recorded_tag, recorded_tag + 1};
@@ -1168,7 +1170,7 @@ bool SyncOpEndRenderPass::Validate(const CommandBufferAccessContext &cb_context)
     const auto *renderpass_context = cb_context.GetCurrentRenderPassContext();
 
     if (!renderpass_context) return skip;
-    skip |= renderpass_context->ValidateEndRenderPass(cb_context.GetExecutionContext(), command_);
+    skip |= renderpass_context->ValidateEndRenderPass(cb_context, command_);
     return skip;
 }
 
@@ -1183,8 +1185,12 @@ bool SyncOpEndRenderPass::ReplayValidate(ReplayState &replay, ResourceUsageTag r
     bool skip = false;
     skip |= replay.DetectFirstUseHazard(first_use_range);
 
-    // We can cleanup here as the recorded tag represents the final layout transition (which is the last operation or the RP
-    replay.EndRenderPassReplayCleanup();
+    // We can cleanup here as the recorded tag represents the final layout transition (which is the last operation or the RP)
+    CommandExecutionContext &exec_context = replay.GetExecutionContext();
+    // can't be kExecuted, this operation is not allowed in secondary command buffers
+    assert(exec_context.Type() == CommandExecutionContext::kSubmitted);
+    auto &batch_context = static_cast<QueueBatchContext &>(exec_context);
+    batch_context.EndRenderPassReplayCleanup(replay);
 
     return skip;
 }
@@ -1194,14 +1200,6 @@ void SyncOpEndRenderPass::ReplayRecord(CommandExecutionContext &exec_context, Re
 ReplayState::ReplayState(CommandExecutionContext &exec_context, const CommandBufferAccessContext &recorded_context,
                          const ErrorObject &error_obj, uint32_t index, ResourceUsageTag base_tag)
     : exec_context_(exec_context), recorded_context_(recorded_context), error_obj_(error_obj), index_(index), base_tag_(base_tag) {}
-
-void ReplayState::BeginRenderPassReplaySetup(const SyncOpBeginRenderPass &begin_op) {
-    exec_context_.BeginRenderPassReplaySetup(*this, begin_op);
-}
-
-void ReplayState::NextSubpassReplaySetup() { exec_context_.NextSubpassReplaySetup(*this); }
-
-void ReplayState::EndRenderPassReplayCleanup() { exec_context_.EndRenderPassReplayCleanup(*this); }
 
 AccessContext *ReplayState::ReplayStateRenderPassBegin(VkQueueFlags queue_flags, const SyncOpBeginRenderPass &begin_op,
                                                        const AccessContext &external_context) {
@@ -1222,22 +1220,18 @@ const AccessContext *ReplayState::GetRecordedAccessContext() const {
 bool ReplayState::DetectFirstUseHazard(const ResourceUsageRange &first_use_range) const {
     bool skip = false;
     if (first_use_range.non_empty()) {
-        HazardResult hazard;
         // We're allowing for the Replay(Validate|Record) to modify the exec_context (e.g. for Renderpass operations), so
         // we need to fetch the current access context each time
-        hazard = GetRecordedAccessContext()->DetectFirstUseHazard(exec_context_.GetQueueId(), first_use_range,
-                                                                  *exec_context_.GetCurrentAccessContext());
+        const HazardResult hazard = GetRecordedAccessContext()->DetectFirstUseHazard(exec_context_.GetQueueId(), first_use_range,
+                                                                                     *exec_context_.GetCurrentAccessContext());
 
         if (hazard.IsHazard()) {
             const SyncValidator &sync_state = exec_context_.GetSyncState();
             const auto handle = exec_context_.Handle();
             const VkCommandBuffer recorded_handle = recorded_context_.GetCBState().VkHandle();
-            skip |= sync_state.LogError(
-                string_SyncHazardVUID(hazard.Hazard()), handle, error_obj_.location,
-                "Hazard %s for entry %" PRIu32 ", %s, %s access info %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                index_, sync_state.FormatHandle(recorded_handle).c_str(), exec_context_.ExecutionTypeString(),
-                recorded_context_.FormatUsage(exec_context_.ExecutionUsageString(), *hazard.RecordedAccess()).c_str(),
-                exec_context_.FormatHazard(hazard).c_str());
+            const auto error =
+                sync_state.error_messages_.FirstUseError(hazard, exec_context_, recorded_context_, index_, recorded_handle);
+            skip |= sync_state.SyncError(hazard.Hazard(), handle, error_obj_.location, error);
         }
     }
     return skip;
@@ -1355,7 +1349,7 @@ void SyncEventState::ResetFirstScope() {
 }
 
 // Keep the "ignore this event" logic in same place for ValidateWait and RecordWait to use
-SyncEventState::IgnoreReason SyncEventState::IsIgnoredByWait(vvl::Func command, VkPipelineStageFlags2KHR srcStageMask) const {
+SyncEventState::IgnoreReason SyncEventState::IsIgnoredByWait(vvl::Func command, VkPipelineStageFlags2 srcStageMask) const {
     IgnoreReason reason = NotIgnored;
 
     if ((vvl::Func::vkCmdWaitEvents2KHR == command || vvl::Func::vkCmdWaitEvents2 == command) &&
@@ -1367,7 +1361,7 @@ SyncEventState::IgnoreReason SyncEventState::IsIgnoredByWait(vvl::Func command, 
     } else if (unsynchronized_set != vvl::Func::Empty) {
         reason = SetRace;
     } else if (first_scope) {
-        const VkPipelineStageFlags2KHR missing_bits = scope.mask_param & ~srcStageMask;
+        const VkPipelineStageFlags2 missing_bits = scope.mask_param & ~srcStageMask;
         // Note it is the "not missing bits" path that is the only "NotIgnored" path
         if (missing_bits) reason = MissingStageBits;
     } else {
@@ -1377,7 +1371,7 @@ SyncEventState::IgnoreReason SyncEventState::IsIgnoredByWait(vvl::Func command, 
     return reason;
 }
 
-bool SyncEventState::HasBarrier(VkPipelineStageFlags2KHR stageMask, VkPipelineStageFlags2KHR exec_scope_arg) const {
+bool SyncEventState::HasBarrier(VkPipelineStageFlags2 stageMask, VkPipelineStageFlags2 exec_scope_arg) const {
     return (last_command == vvl::Func::Empty) || (stageMask & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) || (barriers & exec_scope_arg) ||
            (barriers & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
 }

@@ -56,6 +56,7 @@ struct DrawDispatchVuid {
     const char* scissor_count_03418 = kVUIDUndefined;
     const char* viewport_scissor_count_03419 = kVUIDUndefined;
     const char* primitive_topology_class_07500 = kVUIDUndefined;
+    const char* primitive_topology_patch_list_10286 = kVUIDUndefined;
     const char* corner_sampled_address_mode_02696 = kVUIDUndefined;
     const char* imageview_atomic_02691 = kVUIDUndefined;
     const char* bufferview_atomic_07888 = kVUIDUndefined;
@@ -227,20 +228,16 @@ struct DrawDispatchVuid {
     const char* set_rasterization_samples_08644 = kVUIDUndefined;
     const char* set_color_write_enable_08646 = kVUIDUndefined;
     const char* set_color_write_enable_08647 = kVUIDUndefined;
-    const char* set_discard_rectangles_enable_08648 = kVUIDUndefined;
-    const char* set_discard_rectangles_mode_08649 = kVUIDUndefined;
     const char* set_color_blend_enable_08657 = kVUIDUndefined;
     const char* set_color_blend_equation_08658 = kVUIDUndefined;
     const char* set_color_write_mask_08659 = kVUIDUndefined;
     const char* set_blend_operation_advance_09416 = kVUIDUndefined;
-    const char* set_sample_locations_enable_08664 = kVUIDUndefined;
     const char* set_line_rasterization_mode_08666 = kVUIDUndefined;
     const char* set_line_rasterization_mode_08667 = kVUIDUndefined;
     const char* set_line_rasterization_mode_08668 = kVUIDUndefined;
     const char* set_line_stipple_enable_08669 = kVUIDUndefined;
     const char* set_line_stipple_enable_08670 = kVUIDUndefined;
     const char* set_line_stipple_enable_08671 = kVUIDUndefined;
-    const char* set_line_stipple_08672 = kVUIDUndefined;
     const char* vertex_shader_08684 = kVUIDUndefined;
     const char* tessellation_control_shader_08685 = kVUIDUndefined;
     const char* tessellation_evaluation_shader_08686 = kVUIDUndefined;
@@ -310,6 +307,7 @@ struct DrawDispatchVuid {
     const char* color_blend_equation_07628 = kVUIDUndefined;
     const char* color_write_mask_07629 = kVUIDUndefined;
     const char* color_blend_advanced_07635 = kVUIDUndefined;
+    const char* image_layout_09600 = kVUIDUndefined;
     // Ray tracing
     const char* ray_tracing_pipeline_stack_size_09458 = kVUIDUndefined;
 };

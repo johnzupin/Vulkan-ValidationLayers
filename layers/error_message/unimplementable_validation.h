@@ -36,11 +36,19 @@ const char* unimplementable_validation[] = {
     "VUID-vkCmdEndDebugUtilsLabelEXT-commandBuffer-01912",
 
     // These VUIDs cannot be validated beyond making sure the pointer is not null
-    "VUID-VkMemoryToImageCopyEXT-pHostPointer-09061", "VUID-VkImageToMemoryCopyEXT-pHostPointer-09066"
+    "VUID-VkMemoryToImageCopy-pHostPointer-09061", "VUID-VkImageToMemoryCopy-pHostPointer-09066"
 
     // these are already taken care in spirv-val for 08737
     "VUID-VkShaderModuleCreateInfo-pCode-08736", "VUID-VkShaderCreateInfoEXT-pCode-08736",
     "VUID-VkShaderModuleCreateInfo-pCode-08738", "VUID-VkShaderCreateInfoEXT-pCode-08738",
+
+    // We can't detect what user does in their callback
+    "VUID-PFN_vkDebugUtilsMessengerCallbackEXT-None-04769",
+    "VUID-VkDeviceMemoryReportCallbackDataEXT-pNext-pNext",
+    "VUID-VkDeviceMemoryReportCallbackDataEXT-sType-sType",
+
+    // We are not going to package glslang inside the VVL layer just to validate VK_NV_glsl_shader
+    "VUID-VkShaderModuleCreateInfo-pCode-01379",
 
     // These are checked already in VUID-vkGetPrivateData-objectType-04018 and VUID-vkSetPrivateData-objectHandle-04016
     "VUID-vkGetPrivateData-device-parameter",
@@ -71,6 +79,17 @@ const char* unimplementable_validation[] = {
     "VUID-VkPipelineCacheHeaderVersionOne-headerSize-04967",
     "VUID-VkPipelineCacheHeaderVersionOne-headerVersion-04968",
     "VUID-VkPipelineCacheHeaderVersionOne-headerSize-08990",
+    "VUID-VkPipelineCacheHeaderVersionOne-headerVersion-parameter",
+    // Same as above, struct is returned by the driver
+    "VUID-VkDeviceFaultVendorBinaryHeaderVersionOneEXT-headerSize-07340",
+    "VUID-VkDeviceFaultVendorBinaryHeaderVersionOneEXT-headerVersion-07341",
+    "VUID-VkDeviceFaultVendorBinaryHeaderVersionOneEXT-headerVersion-parameter",
+
+    // Extension has redundant implicit VUs
+    "VUID-VkBufferConstraintsInfoFUCHSIA-createInfo-parameter",
+    "VUID-VkBufferConstraintsInfoFUCHSIA-bufferCollectionConstraints-parameter",
+    "VUID-VkImageConstraintsInfoFUCHSIA-bufferCollectionConstraints-parameter",
+    "VUID-VkImageFormatConstraintsInfoFUCHSIA-imageCreateInfo-parameter",
 
     // https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/6639#note_468463
     "VUID-VkIndirectCommandsVertexBufferTokenEXT-vertexBindingUnit-11134",
@@ -93,16 +112,16 @@ const char* unimplementable_validation[] = {
     "VUID-VkImageResolve2-srcSubresource-parameter",
     "VUID-VkBufferImageCopy-imageSubresource-parameter",
     "VUID-VkBufferImageCopy2-imageSubresource-parameter",
-    "VUID-VkMemoryToImageCopyEXT-imageSubresource-parameter",
-    "VUID-VkImageToMemoryCopyEXT-imageSubresource-parameter",
+    "VUID-VkMemoryToImageCopy-imageSubresource-parameter",
+    "VUID-VkImageToMemoryCopy-imageSubresource-parameter",
     "VUID-VkCopyMemoryToImageIndirectCommandNV-imageSubresource-parameter",
     // VkImageSubresourceRange
     "VUID-VkImageMemoryBarrier-subresourceRange-parameter",
     "VUID-VkImageMemoryBarrier2-subresourceRange-parameter",
-    "VUID-VkHostImageLayoutTransitionInfoEXT-subresourceRange-parameter",
+    "VUID-VkHostImageLayoutTransitionInfo-subresourceRange-parameter",
     "VUID-VkImageViewCreateInfo-subresourceRange-parameter",
     // VkImageSubresource
-    "VUID-VkImageSubresource2KHR-imageSubresource-parameter",
+    "VUID-VkImageSubresource2-imageSubresource-parameter",
     "VUID-VkSparseImageMemoryBind-subresource-parameter",
     // VkStencilOpState
     "VUID-VkPipelineDepthStencilStateCreateInfo-front-parameter",
@@ -126,6 +145,13 @@ const char* unimplementable_validation[] = {
     // VkVideoPictureResourceInfoKHR
     "VUID-VkVideoDecodeInfoKHR-dstPictureResource-parameter",
     "VUID-VkVideoEncodeInfoKHR-srcPictureResource-parameter",
+    // VkPushConstantRange
+    "VUID-VkIndirectCommandsPushConstantTokenEXT-updateRange-parameter",
+
+    // These structs are never called anywhere explicitly
+    "VUID-VkAccelerationStructureInstanceKHR-flags-parameter",
+    "VUID-VkAccelerationStructureMatrixMotionInstanceNV-flags-parameter",
+    "VUID-VkAccelerationStructureSRTMotionInstanceNV-flags-parameter",
 
     // When:
     //   Struct A has a pointer field to Struct B
@@ -151,8 +177,8 @@ const char* unimplementable_validation[] = {
     "VUID-vkGetDeviceFaultInfoEXT-pFaultCounts-07337",
     "VUID-vkGetDeviceFaultInfoEXT-pFaultCounts-07338",
     "VUID-vkGetDeviceFaultInfoEXT-pFaultCounts-07339",
-    "VUID-VkRenderingInputAttachmentIndexInfoKHR-pDepthInputAttachmentIndex-parameter",
-    "VUID-VkRenderingInputAttachmentIndexInfoKHR-pStencilInputAttachmentIndex-parameter"
+    "VUID-VkRenderingInputAttachmentIndexInfo-pDepthInputAttachmentIndex-parameter",
+    "VUID-VkRenderingInputAttachmentIndexInfo-pStencilInputAttachmentIndex-parameter"
 
     // These VUs have "is not NULL it must be a pointer to a valid pointer to valid structure" language
     // There is no actual way to validate thsese
@@ -174,9 +200,9 @@ const char* unimplementable_validation[] = {
     "VUID-VkD3D12FenceSubmitInfoKHR-pWaitSemaphoreValues-parameter",
     "VUID-VkD3D12FenceSubmitInfoKHR-pSignalSemaphoreValues-parameter",
     "VUID-VkPresentRegionKHR-pRectangles-parameter",
-    "VUID-VkBindDescriptorSetsInfoKHR-pDynamicOffsets-parameter",
-    "VUID-VkPhysicalDeviceHostImageCopyPropertiesEXT-pCopySrcLayouts-parameter",
-    "VUID-VkPhysicalDeviceHostImageCopyPropertiesEXT-pCopyDstLayouts-parameter",
+    "VUID-VkBindDescriptorSetsInfo-pDynamicOffsets-parameter",
+    "VUID-VkPhysicalDeviceHostImageCopyProperties-pCopySrcLayouts-parameter",
+    "VUID-VkPhysicalDeviceHostImageCopyProperties-pCopyDstLayouts-parameter",
     "VUID-VkSurfacePresentModeCompatibilityEXT-pPresentModes-parameter",
     "VUID-VkFrameBoundaryEXT-pImages-parameter",
     "VUID-VkFrameBoundaryEXT-pBuffers-parameter",
@@ -200,6 +226,44 @@ const char* unimplementable_validation[] = {
     "VUID-vkGetAccelerationStructureBuildSizesKHR-pMaxPrimitiveCounts-parameter",
     "VUID-vkCmdDrawMultiIndexedEXT-pVertexOffset-parameter",
     "VUID-VkDisplayModeCreateInfoKHR-parameters-parameter",
+    "VUID-VkPipelineBinaryHandlesInfoKHR-pPipelineBinaries-parameter",
+    "VUID-VkSubpassDescription2-pResolveAttachments-parameter",
+    "VUID-VkPhysicalDeviceLayeredApiPropertiesListKHR-pLayeredApis-parameter",
+    "VUID-VkExecutionGraphPipelineCreateInfoAMDX-pStages-parameter",
+    "VUID-VkGetLatencyMarkerInfoNV-pTimings-parameter",
+    "VUID-VkIndirectExecutionSetShaderInfoEXT-pSetLayoutInfos-parameter",
+    "VUID-VkAccelerationStructureBuildGeometryInfoKHR-pGeometries-parameter",
+    "VUID-vkEnumeratePhysicalDeviceGroups-pPhysicalDeviceGroupProperties-parameter",
+    "VUID-vkGetImageSparseMemoryRequirements2-pSparseMemoryRequirements-parameter",
+    "VUID-vkGetPhysicalDeviceQueueFamilyProperties2-pQueueFamilyProperties-parameter",
+    "VUID-vkGetPhysicalDeviceSparseImageFormatProperties2-pProperties-parameter",
+    "VUID-vkGetPhysicalDeviceToolProperties-pToolProperties-parameter",
+    "VUID-vkGetDeviceImageSparseMemoryRequirements-pSparseMemoryRequirements-parameter",
+    "VUID-vkGetPhysicalDeviceVideoFormatPropertiesKHR-pVideoFormatProperties-parameter",
+    "VUID-vkGetVideoSessionMemoryRequirementsKHR-pMemoryRequirements-parameter",
+    "VUID-vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR-pCounters-parameter",
+    "VUID-vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR-pCounterDescriptions-parameter",
+    "VUID-vkGetPhysicalDeviceSurfaceFormats2KHR-pSurfaceFormats-parameter",
+    "VUID-vkGetPhysicalDeviceDisplayProperties2KHR-pProperties-parameter",
+    "VUID-vkGetPhysicalDeviceDisplayPlaneProperties2KHR-pProperties-parameter",
+    "VUID-vkGetDisplayModeProperties2KHR-pProperties-parameter",
+    "VUID-vkGetPhysicalDeviceFragmentShadingRatesKHR-pFragmentShadingRates-parameter",
+    "VUID-vkGetPipelineExecutablePropertiesKHR-pProperties-parameter",
+    "VUID-vkGetPipelineExecutableStatisticsKHR-pStatistics-parameter",
+    "VUID-vkGetPipelineExecutableInternalRepresentationsKHR-pInternalRepresentations-parameter",
+    "VUID-vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR-pProperties-parameter",
+    "VUID-vkGetQueueCheckpointDataNV-pCheckpointData-parameter",
+    "VUID-vkGetQueueCheckpointData2NV-pCheckpointData-parameter",
+    "VUID-vkGetPhysicalDeviceCooperativeMatrixPropertiesNV-pProperties-parameter",
+    "VUID-vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV-pCombinations-parameter",
+    "VUID-vkGetPhysicalDeviceOpticalFlowImageFormatsNV-pImageFormatProperties-parameter",
+    "VUID-vkGetFramebufferTilePropertiesQCOM-pProperties-parameter",
+    "VUID-vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV-pProperties-parameter",
+    "VUID-VkAccelerationStructureBuildGeometryInfoKHR-ppGeometries-parameter",
+    "VUID-VkPipelineBinaryCreateInfoKHR-pKeysAndDataInfo-parameter",
+    "VUID-vkCmdSetDepthClampRangeEXT-pDepthClampRange-parameter",
+    "VUID-VkRenderingInputAttachmentIndexInfo-pColorAttachmentInputIndices-parameter",
+    "VUID-VkPipelineViewportDepthClampControlCreateInfoEXT-pDepthClampRange-parameter",
     // These occur in stateless validation when a pointer member is optional and the length member is null
     "VUID-VkDeviceCreateInfo-pEnabledFeatures-parameter",
     "VUID-VkPipelineShaderStageCreateInfo-pSpecializationInfo-parameter",
@@ -218,6 +282,7 @@ const char* unimplementable_validation[] = {
     "VUID-VkApplicationInfo-pEngineName-parameter",
     "VUID-VkDebugUtilsObjectNameInfoEXT-pObjectName-parameter",
     "VUID-VkDebugUtilsMessengerCallbackDataEXT-pMessageIdName-parameter",
+    "VUID-VkDebugUtilsMessengerCallbackDataEXT-pMessage-parameter",
     "VUID-VkPipelineShaderStageNodeCreateInfoAMDX-pName-parameter",
     "VUID-VkShaderCreateInfoEXT-pName-parameter",
     "VUID-vkGetDeviceProcAddr-pName-parameter",
@@ -288,6 +353,9 @@ const char* unimplementable_validation[] = {
     "VUID-vkCreateWin32SurfaceKHR-pAllocator-parameter",
     "VUID-vkCreateXcbSurfaceKHR-pAllocator-parameter",
     "VUID-vkCreateXlibSurfaceKHR-pAllocator-parameter",
+    "VUID-vkCreateIndirectCommandsLayoutEXT-pAllocator-parameter",
+    "VUID-vkCreateIndirectExecutionSetEXT-pAllocator-parameter",
+    "VUID-vkCreatePipelineBinariesKHR-pAllocator-parameter",
     "VUID-vkDestroyAccelerationStructureKHR-pAllocator-parameter",
     "VUID-vkDestroyAccelerationStructureNV-pAllocator-parameter",
     "VUID-vkDestroyBuffer-pAllocator-parameter",
@@ -330,10 +398,29 @@ const char* unimplementable_validation[] = {
     "VUID-vkDestroyValidationCacheEXT-pAllocator-parameter",
     "VUID-vkDestroyVideoSessionKHR-pAllocator-parameter",
     "VUID-vkDestroyVideoSessionParametersKHR-pAllocator-parameter",
+    "VUID-vkDestroyIndirectCommandsLayoutEXT-pAllocator-parameter",
+    "VUID-vkDestroyIndirectExecutionSetEXT-pAllocator-parameter",
+    "VUID-vkDestroyPipelineBinaryKHR-pAllocator-parameter",
+    "VUID-vkReleaseCapturedPipelineDataKHR-pAllocator-parameter",
     "VUID-vkFreeMemory-pAllocator-parameter",
     "VUID-vkRegisterDeviceEventEXT-pAllocator-parameter",
     "VUID-vkRegisterDisplayEventEXT-pAllocator-parameter",
     "VUID-vkAllocateMemory-pAllocator-parameter",
+};
+
+// VUs from deprecated extensions that would require complex codegen to get working
+const char* deprecated_validation[] = {
+    "VUID-VkAccelerationStructureCreateInfoNV-info-parameter",
+    "VUID-VkAccelerationStructureInfoNV-type-parameter",
+    "VUID-VkAccelerationStructureMotionInstanceNV-flags-zerobitmask",
+    "VUID-VkAccelerationStructureMotionInstanceNV-matrixMotionInstance-parameter",
+    "VUID-VkAccelerationStructureMotionInstanceNV-staticInstance-parameter",
+    "VUID-VkAccelerationStructureMotionInstanceNV-type-parameter",
+    "VUID-VkGeometryDataNV-aabbs-parameter",
+    "VUID-VkGeometryDataNV-triangles-parameter",
+    "VUID-VkGeometryNV-geometry-parameter",
+    "VUID-VkAccelerationStructureTrianglesDisplacementMicromapNV-micromap-parameter",
+    "VUID-VkBindIndexBufferIndirectCommandNV-indexType-parameter",
 };
 
 // clang-format on

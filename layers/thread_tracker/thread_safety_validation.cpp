@@ -15,8 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "generated/chassis.h"
-#include "generated/layer_chassis_dispatch.h"  // wrap_handles declaration
+#include "generated/dispatch_functions.h"
 #include "thread_tracker/thread_safety_validation.h"
 
 ReadLockGuard ThreadSafety::ReadLock() const { return ReadLockGuard(validation_object_mutex, std::defer_lock); }
@@ -62,10 +61,13 @@ void ThreadSafety::PostCallRecordCreateDescriptorSetLayout(VkDevice device, cons
         // Check whether any binding uses read_only
         bool read_only = (pCreateInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_HOST_ONLY_POOL_BIT_EXT) != 0;
         if (!read_only) {
-            const auto* flags_create_info = vku::FindStructInPNextChain<VkDescriptorSetLayoutBindingFlagsCreateInfo>(pCreateInfo->pNext);
-            if (flags_create_info) {
+            if (const auto* flags_create_info =
+                    vku::FindStructInPNextChain<VkDescriptorSetLayoutBindingFlagsCreateInfo>(pCreateInfo->pNext)) {
                 for (uint32_t i = 0; i < flags_create_info->bindingCount; ++i) {
-                    if (flags_create_info->pBindingFlags[i] & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT) {
+                    // "Descriptor bindings created with this flag are also partially exempt from the external synchronization
+                    // requirement in vkUpdateDescriptorSetWithTemplateKHR and vkUpdateDescriptorSets"
+                    if (flags_create_info->pBindingFlags[i] &
+                        (VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT)) {
                         read_only = true;
                         break;
                     }
@@ -719,8 +721,8 @@ void ThreadSafety::PostCallRecordCreateRayTracingPipelinesKHR(VkDevice device, V
     // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5817
     const bool is_operation_deferred = (deferredOperation != VK_NULL_HANDLE && record_obj.result == VK_OPERATION_DEFERRED_KHR);
     if (is_operation_deferred) {
-        auto layer_data = GetLayerDataPtr(GetDispatchKey(device), layer_data_map);
-        if (wrap_handles) {
+        auto layer_data = GetLayerData(device);
+        if (dispatch_->wrap_handles) {
             deferredOperation = layer_data->Unwrap(deferredOperation);
         }
 
@@ -766,6 +768,11 @@ void ThreadSafety::PreCallRecordQueuePresentKHR(VkQueue queue, const VkPresentIn
             StartWriteObject(pPresentInfo->pSwapchains[index], record_obj.location);
         }
     }
+    if (const auto* present_fence_info = vku::FindStructInPNextChain<VkSwapchainPresentFenceInfoEXT>(pPresentInfo->pNext)) {
+        for (uint32_t index = 0; index < present_fence_info->swapchainCount; index++) {
+            StartWriteObject(present_fence_info->pFences[index], record_obj.location);
+        }
+    }
 }
 
 void ThreadSafety::PostCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo,
@@ -780,6 +787,11 @@ void ThreadSafety::PostCallRecordQueuePresentKHR(VkQueue queue, const VkPresentI
     if (pPresentInfo->pSwapchains != nullptr) {
         for (uint32_t index = 0; index < pPresentInfo->swapchainCount; ++index) {
             FinishWriteObject(pPresentInfo->pSwapchains[index], record_obj.location);
+        }
+    }
+    if (const auto* present_fence_info = vku::FindStructInPNextChain<VkSwapchainPresentFenceInfoEXT>(pPresentInfo->pNext)) {
+        for (uint32_t index = 0; index < present_fence_info->swapchainCount; index++) {
+            FinishWriteObject(present_fence_info->pFences[index], record_obj.location);
         }
     }
 }

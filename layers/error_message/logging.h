@@ -26,10 +26,9 @@
 
 #include <vulkan/utility/vk_struct_helper.hpp>
 
-#include "error_message/log_message_type.h"
 #include "containers/custom_containers.h"
-#include "generated/vk_layer_dispatch_table.h"
 #include "generated/vk_object_types.h"
+#include "error_message/log_message_type.h"
 
 #if defined __ANDROID__
 #include <android/log.h>
@@ -109,8 +108,8 @@ static inline uint64_t HandleToUint64(uint64_t h) { return h; }
 
 // Data we store per label for logging
 struct LoggingLabel {
-    std::string name;
-    std::array<float, 4> color;
+    std::string name{};
+    std::array<float, 4> color{};
 
     void Reset() { *this = LoggingLabel(); }
     bool Empty() const { return name.empty(); }
@@ -127,8 +126,6 @@ struct LoggingLabel {
         if (label_info && label_info->pLabelName) {
             name = label_info->pLabelName;
             std::copy_n(std::begin(label_info->color), 4, color.begin());
-        } else {
-            Reset();
         }
     }
 
@@ -146,20 +143,18 @@ struct LoggingLabelState {
     LoggingLabel insert_label;
 
     // Export the labels, but in reverse order since we want the most recent at the top.
-    std::vector<VkDebugUtilsLabelEXT> Export() const {
-        size_t count = labels.size() + (insert_label.Empty() ? 0 : 1);
-        std::vector<VkDebugUtilsLabelEXT> out(count);
+    void Export(std::vector<VkDebugUtilsLabelEXT> &exported_labels) const {
+        exported_labels.reserve(exported_labels.size() + 1 + labels.size());
 
-        if (!count) return out;
-
-        size_t index = count - 1;
         if (!insert_label.Empty()) {
-            out[index--] = insert_label.Export();
+            exported_labels.emplace_back(insert_label.Export());
         }
-        for (const auto &label : labels) {
-            out[index--] = label.Export();
-        }
-        return out;
+
+        std::for_each(labels.rbegin(), labels.rend(), [&exported_labels](const LoggingLabel &label) {
+            if (!label.Empty()) {
+                exported_labels.emplace_back(label.Export());
+            }
+        });
     }
 };
 
@@ -181,6 +176,14 @@ struct MessageFormatSettings {
     bool display_application_name = false;
     std::string application_name;
 };
+
+#if defined(__clang__)
+#define DECORATE_PRINTF(_fmt_argnum, _first_param_num) __attribute__((format(printf, _fmt_argnum, _first_param_num)))
+#elif defined(__GNUC__)
+#define DECORATE_PRINTF(_fmt_argnum, _first_param_num) __attribute__((format(gnu_printf, _fmt_argnum, _first_param_num)))
+#else
+#define DECORATE_PRINTF(_fmt_num, _first_param_num)
+#endif
 
 class DebugReport {
   public:
@@ -248,8 +251,6 @@ class DebugReport {
     vvl::unordered_map<uint64_t, std::string> debug_utils_object_name_map;
 };
 
-template DebugReport *GetLayerDataPtr<DebugReport>(void *data_key, std::unordered_map<void *, DebugReport *> &data_map);
-
 VKAPI_ATTR VkResult LayerCreateMessengerCallback(DebugReport *debug_report, bool default_callback,
                                                  const VkDebugUtilsMessengerCreateInfoEXT *create_info,
                                                  VkDebugUtilsMessengerEXT *messenger);
@@ -267,8 +268,6 @@ static inline void LayerDestroyCallback(DebugReport *debug_report, T callback) {
 VKAPI_ATTR void ActivateInstanceDebugCallbacks(DebugReport *debug_report);
 
 VKAPI_ATTR void DeactivateInstanceDebugCallbacks(DebugReport *debug_report);
-
-VKAPI_ATTR void LayerDebugUtilsDestroyInstance(DebugReport *debug_report);
 
 VKAPI_ATTR VkBool32 VKAPI_CALL MessengerBreakCallback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
                                                       VkDebugUtilsMessageTypeFlagsEXT message_type,

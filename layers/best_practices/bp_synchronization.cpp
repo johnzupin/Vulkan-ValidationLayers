@@ -38,19 +38,19 @@ bool BestPractices::CheckPipelineStageFlags(const LogObjectList& objlist, const 
                                             VkPipelineStageFlags2KHR flags) const {
     bool skip = false;
 
-    if (flags & VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR) {
-        skip |= LogWarning("BestPractices-pipeline-stage-flags2-graphics", objlist, loc,
-                           "using VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR");
-    } else if (flags & VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR) {
-        skip |= LogWarning("BestPractices-pipeline-stage-flags2-compute", objlist, loc,
-                           "using VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR");
+    if (flags & VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT) {
+        skip |=
+            LogWarning("BestPractices-pipeline-stage-flags2-graphics", objlist, loc, "using VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT");
+    } else if (flags & VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT) {
+        skip |=
+            LogWarning("BestPractices-pipeline-stage-flags2-compute", objlist, loc, "using VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT");
     }
 
     return skip;
 }
 
 bool BestPractices::CheckDependencyInfo(const LogObjectList& objlist, const Location& dep_loc,
-                                        const VkDependencyInfoKHR& dep_info) const {
+                                        const VkDependencyInfo& dep_info) const {
     bool skip = false;
     auto stage_masks = sync_utils::GetGlobalStageMasks(dep_info);
 
@@ -390,7 +390,8 @@ bool BestPractices::PreCallValidateCmdPipelineBarrier(
                 auto image_state = Get<vvl::Image>(pImageMemoryBarriers[i].image);
                 if (image_state && !(image_state->create_info.usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
                     const LogObjectList objlist(commandBuffer, pImageMemoryBarriers[i].image);
-                    skip |= LogPerformanceWarning("BestPractices-AMD-vkImage-AvoidGeneral", objlist, error_obj.location,
+                    skip |= LogPerformanceWarning("BestPractices-AMD-vkImage-AvoidGeneral", objlist,
+                                                  error_obj.location.dot(Field::pImageMemoryBarriers, i).dot(Field::image),
                                                   "%s VK_IMAGE_LAYOUT_GENERAL should only be used with "
                                                   "VK_IMAGE_USAGE_STORAGE_BIT images.",
                                                   VendorSpecificTag(kBPVendorAMD));

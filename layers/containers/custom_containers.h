@@ -23,9 +23,7 @@
 #include <cassert>
 #include <limits>
 #include <memory>
-#include <map>
 #include <unordered_map>
-#include <set>
 #include <algorithm>
 #include <iterator>
 #include <type_traits>
@@ -35,6 +33,8 @@
 #ifdef USE_ROBIN_HOOD_HASHING
 #include "robin_hood.h"
 #else
+#include <map>
+#include <set>
 #include <unordered_set>
 #endif
 
@@ -813,51 +813,6 @@ class small_unordered_map : public small_container<Key, typename vvl::unordered_
 
 template <typename Key, int N = 1>
 class small_unordered_set : public small_container<Key, Key, vvl::unordered_set<Key>, value_type_helper_set<Key>, N> {};
-
-// For the given data key, look up the layer_data instance from given layer_data_map
-template <typename DATA_T>
-DATA_T *GetLayerDataPtr(void *data_key, small_unordered_map<void *, DATA_T *, 2> &layer_data_map) {
-    /* TODO: We probably should lock here, or have caller lock */
-    DATA_T *&got = layer_data_map[data_key];
-
-    if (got == nullptr) {
-        got = new DATA_T;
-    }
-
-    return got;
-}
-
-template <typename DATA_T>
-void FreeLayerDataPtr(void *data_key, small_unordered_map<void *, DATA_T *, 2> &layer_data_map) {
-    delete layer_data_map[data_key];
-    layer_data_map.erase(data_key);
-}
-
-// For the given data key, look up the layer_data instance from given layer_data_map
-template <typename DATA_T>
-DATA_T *GetLayerDataPtr(void *data_key, std::unordered_map<void *, DATA_T *> &layer_data_map) {
-    DATA_T *debug_data;
-    /* TODO: We probably should lock here, or have caller lock */
-    auto got = layer_data_map.find(data_key);
-
-    if (got == layer_data_map.end()) {
-        debug_data = new DATA_T;
-        layer_data_map[(void *)data_key] = debug_data;
-    } else {
-        debug_data = got->second;
-    }
-
-    return debug_data;
-}
-
-template <typename DATA_T>
-void FreeLayerDataPtr(void *data_key, std::unordered_map<void *, DATA_T *> &layer_data_map) {
-    auto got = layer_data_map.find(data_key);
-    assert(got != layer_data_map.end());
-
-    delete got->second;
-    layer_data_map.erase(got);
-}
 
 namespace vvl {
 

@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+#include <vulkan/vk_enum_string_helper.h>
 #include "best_practices/best_practices_validation.h"
 #include "error_message/error_strings.h"
 #include "best_practices/bp_state.h"
@@ -129,23 +130,22 @@ bool BestPractices::PreCallValidateCreateRenderPass(VkDevice device, const VkRen
 
     if (IsExtEnabled(device_extensions.vk_ext_multisampled_render_to_single_sampled)) {
         for (uint32_t i = 0; i < pCreateInfo->subpassCount; ++i) {
-            if (pCreateInfo->pSubpasses[i].pResolveAttachments) {
-                for (uint32_t j = 0; j < pCreateInfo->pSubpasses[i].colorAttachmentCount; ++j) {
-                    const uint32_t attachment = pCreateInfo->pSubpasses[i].pResolveAttachments[j].attachment;
-                    if (attachment != VK_ATTACHMENT_UNUSED) {
-                        const VkFormat format = pCreateInfo->pAttachments[attachment].format;
-                        VkSubpassResolvePerformanceQueryEXT performance_query = vku::InitStructHelper();
-                        VkFormatProperties2 format_properties2 = vku::InitStructHelper(&performance_query);
-                        DispatchGetPhysicalDeviceFormatProperties2Helper(physical_device, format, &format_properties2);
-                        if (performance_query.optimal == VK_FALSE) {
-                            skip |= LogPerformanceWarning(
-                                "BestPractices-vkCreateRenderPass-SubpassResolve-NonOptimalFormat", device,
-                                create_info_loc.dot(Field::pSubpasses, i).dot(Field::pResolveAttachments, j).dot(Field::attachment),
-                                "(%" PRIu32
-                                ") in the VkRenderPass has the format %s and is used as a resolve attachment, "
-                                "but VkSubpassResolvePerformanceQueryEXT::optimal is VK_FALSE.",
-                                attachment, string_VkFormat(format));
-                        }
+            if (!pCreateInfo->pSubpasses[i].pResolveAttachments) continue;
+            for (uint32_t j = 0; j < pCreateInfo->pSubpasses[i].colorAttachmentCount; ++j) {
+                const uint32_t attachment = pCreateInfo->pSubpasses[i].pResolveAttachments[j].attachment;
+                if (attachment != VK_ATTACHMENT_UNUSED) {
+                    const VkFormat format = pCreateInfo->pAttachments[attachment].format;
+                    VkSubpassResolvePerformanceQueryEXT performance_query = vku::InitStructHelper();
+                    VkFormatProperties2 format_properties2 = vku::InitStructHelper(&performance_query);
+                    DispatchGetPhysicalDeviceFormatProperties2Helper(physical_device, format, &format_properties2);
+                    if (performance_query.optimal == VK_FALSE) {
+                        skip |= LogPerformanceWarning(
+                            "BestPractices-vkCreateRenderPass-SubpassResolve-NonOptimalFormat", device,
+                            create_info_loc.dot(Field::pSubpasses, i).dot(Field::pResolveAttachments, j).dot(Field::attachment),
+                            "(%" PRIu32
+                            ") in the VkRenderPass has the format %s and is used as a resolve attachment, "
+                            "but VkSubpassResolvePerformanceQueryEXT::optimal is VK_FALSE.",
+                            attachment, string_VkFormat(format));
                     }
                 }
             }
@@ -406,8 +406,8 @@ void BestPractices::RecordCmdBeginRenderPass(bp_state::CommandBuffer& cb_state, 
         }
 
         // If renderpass doesn't load attachment, no need to validate image in queue
-        if ((!vkuFormatIsStencilOnly(attachment.format) && attachment.loadOp == VK_ATTACHMENT_LOAD_OP_NONE_KHR) ||
-            (vkuFormatHasStencil(attachment.format) && attachment.stencilLoadOp == VK_ATTACHMENT_LOAD_OP_NONE_KHR)) {
+        if ((!vkuFormatIsStencilOnly(attachment.format) && attachment.loadOp == VK_ATTACHMENT_LOAD_OP_NONE) ||
+            (vkuFormatHasStencil(attachment.format) && attachment.stencilLoadOp == VK_ATTACHMENT_LOAD_OP_NONE)) {
             continue;
         }
 
@@ -641,10 +641,15 @@ void BestPractices::PostCallRecordCmdPushConstants(VkCommandBuffer commandBuffer
     StateTracker::PostCallRecordCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, pValues, record_obj);
 }
 
+void BestPractices::PostCallRecordCmdPushConstants2(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo,
+                                                    const RecordObject& record_obj) {
+    StateTracker::PostCallRecordCmdPushConstants2(commandBuffer, pPushConstantsInfo, record_obj);
+}
+
 void BestPractices::PostCallRecordCmdPushConstants2KHR(VkCommandBuffer commandBuffer,
                                                        const VkPushConstantsInfoKHR* pPushConstantsInfo,
                                                        const RecordObject& record_obj) {
-    StateTracker::PostCallRecordCmdPushConstants2KHR(commandBuffer, pPushConstantsInfo, record_obj);
+    PostCallRecordCmdPushConstants2(commandBuffer, pPushConstantsInfo, record_obj);
 }
 
 void BestPractices::PostRecordCmdBeginRenderPass(bp_state::CommandBuffer& cb_state, const VkRenderPassBeginInfo* pRenderPassBegin) {
@@ -825,11 +830,11 @@ bool BestPractices::ValidateCmdEndRenderPass(VkCommandBuffer commandBuffer, cons
             if (untouched_aspects) {
                 skip |= LogPerformanceWarning(
                     "BestPractices-vkCmdEndRenderPass-redundant-attachment-on-tile", commandBuffer, loc,
-                    "%s %s: Render pass was ended, but attachment #%u (format: %u, untouched aspects %s) "
+                    "%s %s: Render pass was ended, but attachment #%u (format: %s, untouched aspects %s) "
                     "was never accessed by a pipeline or clear command. "
                     "On tile-based architectures, LOAD_OP_LOAD and STORE_OP_STORE consume bandwidth and should not be part of the "
                     "render pass if the attachments are not intended to be accessed.",
-                    VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG), i, attachment.format,
+                    VendorSpecificTag(kBPVendorArm), VendorSpecificTag(kBPVendorIMG), i, string_VkFormat(attachment.format),
                     string_VkImageAspectFlags(untouched_aspects).c_str());
             }
         }

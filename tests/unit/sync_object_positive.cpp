@@ -42,9 +42,9 @@ TEST_F(PositiveSyncObject, Sync2OwnershipTranfersImage) {
     VkFlags image_use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, image_use);
     image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
-    auto image_subres = image.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
-    auto image_barrier = image.image_memory_barrier(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
-                                                    image.Layout(), image.Layout(), image_subres);
+    auto image_subres = image.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+    auto image_barrier = image.ImageMemoryBarrier(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                                                  image.Layout(), image.Layout(), image_subres);
     image_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
     image_barrier.dstQueueFamilyIndex = no_gfx_queue->family_index;
 
@@ -53,8 +53,8 @@ TEST_F(PositiveSyncObject, Sync2OwnershipTranfersImage) {
     // Change layouts while changing ownership
     image_barrier.srcQueueFamilyIndex = no_gfx_queue->family_index;
     image_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
-    image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR;
-    image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR;
+    image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
     image_barrier.oldLayout = image.Layout();
     // Make sure the new layout is different from the old
     if (image_barrier.oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
@@ -82,9 +82,8 @@ TEST_F(PositiveSyncObject, Sync2OwnershipTranfersBuffer) {
     vkt::CommandBuffer no_gfx_cb(*m_device, no_gfx_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
-    auto buffer_barrier =
-        buffer.buffer_memory_barrier(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR, VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR,
-                                     VK_ACCESS_2_NONE_KHR, VK_ACCESS_2_NONE_KHR, 0, VK_WHOLE_SIZE);
+    auto buffer_barrier = buffer.BufferMemoryBarrier(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                                                     VK_ACCESS_2_NONE, VK_ACCESS_2_NONE, 0, VK_WHOLE_SIZE);
 
     // Let gfx own it.
     buffer_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
@@ -98,8 +97,8 @@ TEST_F(PositiveSyncObject, Sync2OwnershipTranfersBuffer) {
     // Transfer it to gfx
     buffer_barrier.srcQueueFamilyIndex = no_gfx_queue->family_index;
     buffer_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
-    buffer_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR;
-    buffer_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR;
+    buffer_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    buffer_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
 
     ValidOwnershipTransfer(m_errorMonitor, no_gfx_queue, no_gfx_cb, m_default_queue, m_command_buffer, &buffer_barrier, nullptr);
 }
@@ -132,7 +131,7 @@ TEST_F(PositiveSyncObject, LayoutFromPresentWithoutAccessMemoryRead) {
     range.layerCount = 1;
     barrier.subresourceRange = range;
     vkt::CommandBuffer cmdbuf(*m_device, m_command_pool);
-    cmdbuf.begin();
+    cmdbuf.Begin();
     vk::CmdPipelineBarrier(cmdbuf.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr,
                            0, nullptr, 1, &barrier);
     barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -272,7 +271,7 @@ TEST_F(PositiveSyncObject, TwoFencesThreeFrames) {
 
     for (uint32_t i = 0; i < NUM_OBJECTS; ++i) {
         cmd_buffers[i].Init(*m_device, m_command_pool);
-        fences[i].init(*m_device, vku::InitStruct<VkFenceCreateInfo>());
+        fences[i].Init(*m_device);
     }
     for (uint32_t frame = 0; frame < NUM_FRAMES; ++frame) {
         for (uint32_t obj = 0; obj < NUM_OBJECTS; ++obj) {
@@ -312,18 +311,18 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr,
                            0, nullptr);
     vk::CmdSetViewport(cb0, 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1, 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
-    m_second_queue->Submit(cb0, vkt::signal, semaphore);
-    m_default_queue->Submit(cb1, vkt::wait, semaphore);
+    m_second_queue->Submit(cb0, vkt::Signal(semaphore));
+    m_default_queue->Submit(cb1, vkt::Wait(semaphore));
     m_default_queue->Wait();
 }
 
@@ -352,18 +351,18 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr,
                            0, nullptr);
     vk::CmdSetViewport(cb0, 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1, 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
-    m_second_queue->Submit(cb0, vkt::signal, semaphore);
-    m_default_queue->Submit(cb1, vkt::wait, semaphore, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, fence);
+    m_second_queue->Submit(cb0, vkt::Signal(semaphore));
+    m_default_queue->Submit(cb1, vkt::Wait(semaphore), fence);
     m_default_queue->Wait();
 }
 
@@ -392,18 +391,18 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                            nullptr, 0, nullptr);
     vk::CmdSetViewport(cb0.handle(), 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1.handle(), 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
-    m_second_queue->Submit(cb0, vkt::signal, semaphore);
-    m_default_queue->Submit(cb1, vkt::wait, semaphore, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, fence);
+    m_second_queue->Submit(cb0, vkt::Signal(semaphore));
+    m_default_queue->Submit(cb1, vkt::Wait(semaphore), fence);
 
     vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
     vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
@@ -418,12 +417,12 @@ TEST_F(PositiveSyncObject, TwoQueuesEnsureCorrectRetirementWithWorkStolen) {
 
     // An (empty) command buffer. We must have work in the first submission --
     // the layer treats unfenced work differently from fenced work.
-    m_command_buffer.begin();
-    m_command_buffer.end();
+    m_command_buffer.Begin();
+    m_command_buffer.End();
 
     vkt::Semaphore s(*m_device);
-    m_default_queue->Submit(m_command_buffer, vkt::signal, s);
-    m_second_queue->Submit(vkt::no_cmd, vkt::wait, s);
+    m_default_queue->Submit(m_command_buffer, vkt::Signal(s));
+    m_second_queue->Submit(vkt::no_cmd, vkt::Wait(s));
 
     m_default_queue->Wait();
     m_device->Wait();
@@ -454,18 +453,18 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithSemaphoreAndOneFence
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                            nullptr, 0, nullptr);
     vk::CmdSetViewport(cb0.handle(), 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1.handle(), 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
-    m_second_queue->Submit(cb0, vkt::signal, semaphore);
-    m_default_queue->Submit(cb1, vkt::wait, semaphore, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, fence);
+    m_second_queue->Submit(cb0, vkt::Signal(semaphore));
+    m_default_queue->Submit(cb1, vkt::Wait(semaphore), fence);
     vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 }
 
@@ -496,18 +495,18 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsSeparateQueuesWithTimelineSemaphoreAnd
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                            nullptr, 0, nullptr);
     vk::CmdSetViewport(cb0.handle(), 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1.handle(), 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
-    m_second_queue->SubmitWithTimelineSemaphore(cb0, vkt::signal, semaphore, 1);
-    m_default_queue->SubmitWithTimelineSemaphore(cb1, vkt::wait, semaphore, 1, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, fence);
+    m_second_queue->Submit(cb0, vkt::TimelineSignal(semaphore, 1));
+    m_default_queue->Submit(cb1, vkt::TimelineWait(semaphore, 1), fence);
     vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 }
 
@@ -530,18 +529,18 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueWithSemaphoreAndOneFence) {
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                            nullptr, 0, nullptr);
     vk::CmdSetViewport(cb0.handle(), 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1.handle(), 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
-    m_default_queue->Submit(cb0, vkt::signal, semaphore);
-    m_default_queue->Submit(cb1, vkt::wait, semaphore, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, fence);
+    m_default_queue->Submit(cb0, vkt::Signal(semaphore));
+    m_default_queue->Submit(cb1, vkt::Wait(semaphore), fence);
     vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 }
 
@@ -563,15 +562,15 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueNullQueueSubmitWithFence) {
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                            nullptr, 0, nullptr);
     vk::CmdSetViewport(cb0.handle(), 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1.handle(), 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
     m_default_queue->Submit(cb0);
     m_default_queue->Submit(cb1);
@@ -597,15 +596,15 @@ TEST_F(PositiveSyncObject, TwoQueueSubmitsOneQueueOneFence) {
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                            nullptr, 0, nullptr);
     vk::CmdSetViewport(cb0.handle(), 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1.handle(), 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
     m_default_queue->Submit(cb0);
     m_default_queue->Submit(cb1, fence);
@@ -630,15 +629,15 @@ TEST_F(PositiveSyncObject, TwoSubmitInfosWithSemaphoreOneQueueSubmitsOneFence) {
     viewport.x = 0;
     viewport.y = 0;
 
-    cb0.begin();
+    cb0.Begin();
     vk::CmdPipelineBarrier(cb0.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                            nullptr, 0, nullptr);
     vk::CmdSetViewport(cb0.handle(), 0, 1, &viewport);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdSetViewport(cb1.handle(), 0, 1, &viewport);
-    cb1.end();
+    cb1.End();
 
     VkSubmitInfo submit_info[2];
     VkPipelineStageFlags flags[]{VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
@@ -680,16 +679,16 @@ TEST_F(PositiveSyncObject, WaitBeforeSignalOnDifferentQueuesSignalLargerThanWait
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
 
     // Wait for value 1 (or greater)
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdCopyBuffer(m_command_buffer, buffer_a, buffer_b, 1, &region);
-    m_command_buffer.end();
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT);
+    m_command_buffer.End();
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT));
 
     // Signal value 2
-    second_cb.begin();
+    second_cb.Begin();
     vk::CmdCopyBuffer(second_cb, buffer_a, buffer_b, 1, &region);
-    second_cb.end();
-    m_second_queue->Submit2WithTimelineSemaphore(second_cb, vkt::signal, semaphore, 2, VK_PIPELINE_STAGE_2_COPY_BIT);
+    second_cb.End();
+    m_second_queue->Submit2(second_cb, vkt::TimelineSignal(semaphore, 2, VK_PIPELINE_STAGE_2_COPY_BIT));
 
     m_device->Wait();
 }
@@ -732,10 +731,10 @@ TEST_F(PositiveSyncObject, LongSemaphoreChain) {
 TEST_F(PositiveSyncObject, ExternalSemaphore) {
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     const auto extension_name = VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT;
 #else
     const auto extension_name = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
 #endif
 
     AddRequiredExtensions(extension_name);
@@ -745,18 +744,18 @@ TEST_F(PositiveSyncObject, ExternalSemaphore) {
     RETURN_IF_SKIP(Init());
 
     // Check for external semaphore import and export capability
-    VkPhysicalDeviceExternalSemaphoreInfoKHR esi = vku::InitStructHelper();
+    VkPhysicalDeviceExternalSemaphoreInfo esi = vku::InitStructHelper();
     esi.handleType = handle_type;
     VkExternalSemaphorePropertiesKHR esp = vku::InitStructHelper();
-    vk::GetPhysicalDeviceExternalSemaphorePropertiesKHR(gpu(), &esi, &esp);
+    vk::GetPhysicalDeviceExternalSemaphorePropertiesKHR(Gpu(), &esi, &esp);
 
-    if (!(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR) ||
-        !(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT_KHR)) {
+    if (!(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT) ||
+        !(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT)) {
         GTEST_SKIP() << "External semaphore does not support importing and exporting";
     }
 
     // Create a semaphore to export payload from
-    VkExportSemaphoreCreateInfoKHR esci = vku::InitStructHelper();
+    VkExportSemaphoreCreateInfo esci = vku::InitStructHelper();
     esci.handleTypes = handle_type;
     VkSemaphoreCreateInfo sci = vku::InitStructHelper(&esci);
 
@@ -767,8 +766,8 @@ TEST_F(PositiveSyncObject, ExternalSemaphore) {
     vkt::Semaphore import_semaphore(*m_device, sci);
 
     ExternalHandle ext_handle{};
-    export_semaphore.export_handle(ext_handle, handle_type);
-    import_semaphore.import_handle(ext_handle, handle_type);
+    export_semaphore.ExportHandle(ext_handle, handle_type);
+    import_semaphore.ImportHandle(ext_handle, handle_type);
 
     // Signal the exported semaphore and wait on the imported semaphore
     VkPipelineStageFlags flags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
@@ -783,7 +782,7 @@ TEST_F(PositiveSyncObject, ExternalSemaphore) {
 
     vk::QueueSubmit(m_default_queue->handle(), si.size(), si.data(), VK_NULL_HANDLE);
 
-    if (m_device->phy().features().sparseBinding) {
+    if (m_device->Physical().Features().sparseBinding) {
         // Signal the imported semaphore and wait on the exported semaphore
         std::vector<VkBindSparseInfo> bi(4, vku::InitStruct<VkBindSparseInfo>());
         bi[0].signalSemaphoreCount = 1;
@@ -805,10 +804,10 @@ TEST_F(PositiveSyncObject, ExternalTimelineSemaphore) {
         "Should be roughly equivalant to the CTS *cross_instance*timeline_semaphore* tests");
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     const auto extension_name = VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 #else
     const auto extension_name = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
 #endif
     AddRequiredExtensions(VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -822,26 +821,26 @@ TEST_F(PositiveSyncObject, ExternalTimelineSemaphore) {
     }
 
     // Check for external semaphore import and export capability
-    VkSemaphoreTypeCreateInfoKHR tci = vku::InitStructHelper();
-    tci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    VkSemaphoreTypeCreateInfo tci = vku::InitStructHelper();
+    tci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
 
-    VkPhysicalDeviceExternalSemaphoreInfoKHR esi = vku::InitStructHelper(&tci);
+    VkPhysicalDeviceExternalSemaphoreInfo esi = vku::InitStructHelper(&tci);
     esi.handleType = handle_type;
 
     VkExternalSemaphorePropertiesKHR esp = vku::InitStructHelper();
 
-    vk::GetPhysicalDeviceExternalSemaphorePropertiesKHR(gpu(), &esi, &esp);
+    vk::GetPhysicalDeviceExternalSemaphorePropertiesKHR(Gpu(), &esi, &esp);
 
-    if (!(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR) ||
-        !(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT_KHR)) {
+    if (!(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT) ||
+        !(esp.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT)) {
         GTEST_SKIP() << "External semaphore does not support importing and exporting, skipping test";
     }
 
     // Create a semaphore to export payload from
-    VkExportSemaphoreCreateInfoKHR esci = vku::InitStructHelper();
+    VkExportSemaphoreCreateInfo esci = vku::InitStructHelper();
     esci.handleTypes = handle_type;
-    VkSemaphoreTypeCreateInfoKHR stci = vku::InitStructHelper(&esci);
-    stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+    VkSemaphoreTypeCreateInfo stci = vku::InitStructHelper(&esci);
+    stci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
     VkSemaphoreCreateInfo sci = vku::InitStructHelper(&stci);
 
     vkt::Semaphore export_semaphore(*m_device, sci);
@@ -851,8 +850,8 @@ TEST_F(PositiveSyncObject, ExternalTimelineSemaphore) {
     vkt::Semaphore import_semaphore(*m_device, sci);
 
     ExternalHandle ext_handle{};
-    export_semaphore.export_handle(ext_handle, handle_type);
-    import_semaphore.import_handle(ext_handle, handle_type);
+    export_semaphore.ExportHandle(ext_handle, handle_type);
+    import_semaphore.ImportHandle(ext_handle, handle_type);
 
     uint64_t wait_value = 1;
     uint64_t signal_value = 12345;
@@ -891,10 +890,10 @@ TEST_F(PositiveSyncObject, ExternalTimelineSemaphore) {
 TEST_F(PositiveSyncObject, ExternalFence) {
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     const auto extension_name = VK_KHR_EXTERNAL_FENCE_WIN32_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 #else
     const auto extension_name = VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT;
 #endif
     AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -903,18 +902,18 @@ TEST_F(PositiveSyncObject, ExternalFence) {
     RETURN_IF_SKIP(Init());
 
     // Check for external fence import and export capability
-    VkPhysicalDeviceExternalFenceInfoKHR efi = vku::InitStructHelper();
+    VkPhysicalDeviceExternalFenceInfo efi = vku::InitStructHelper();
     efi.handleType = handle_type;
     VkExternalFencePropertiesKHR efp = vku::InitStructHelper();
-    vk::GetPhysicalDeviceExternalFencePropertiesKHR(gpu(), &efi, &efp);
+    vk::GetPhysicalDeviceExternalFencePropertiesKHR(Gpu(), &efi, &efp);
 
-    if (!(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT_KHR) ||
-        !(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT_KHR)) {
+    if (!(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT) ||
+        !(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT)) {
         GTEST_SKIP() << "External fence does not support importing and exporting, skipping test.";
     }
 
     // Create a fence to export payload from
-    VkExportFenceCreateInfoKHR efci = vku::InitStructHelper();
+    VkExportFenceCreateInfo efci = vku::InitStructHelper();
     efci.handleTypes = handle_type;
     VkFenceCreateInfo fci = vku::InitStructHelper(&efci);
     vkt::Fence export_fence(*m_device, fci);
@@ -925,8 +924,8 @@ TEST_F(PositiveSyncObject, ExternalFence) {
 
     // Export fence payload to an opaque handle
     ExternalHandle ext_fence{};
-    export_fence.export_handle(ext_fence, handle_type);
-    import_fence.import_handle(ext_fence, handle_type);
+    export_fence.ExportHandle(ext_fence, handle_type);
+    import_fence.ImportHandle(ext_fence, handle_type);
 
     // Signal the exported fence and wait on the imported fence
     vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, export_fence.handle());
@@ -950,7 +949,7 @@ TEST_F(PositiveSyncObject, ExternalFence) {
 
 TEST_F(PositiveSyncObject, ExternalFenceSyncFdLoop) {
     const auto extension_name = VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
     AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME);
@@ -958,19 +957,19 @@ TEST_F(PositiveSyncObject, ExternalFenceSyncFdLoop) {
     RETURN_IF_SKIP(Init());
 
     // Check for external fence import and export capability
-    VkPhysicalDeviceExternalFenceInfoKHR efi = vku::InitStructHelper();
+    VkPhysicalDeviceExternalFenceInfo efi = vku::InitStructHelper();
     efi.handleType = handle_type;
     VkExternalFencePropertiesKHR efp = vku::InitStructHelper();
-    vk::GetPhysicalDeviceExternalFencePropertiesKHR(gpu(), &efi, &efp);
+    vk::GetPhysicalDeviceExternalFencePropertiesKHR(Gpu(), &efi, &efp);
 
-    if (!(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT_KHR) ||
-        !(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT_KHR)) {
+    if (!(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT) ||
+        !(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT)) {
         GTEST_SKIP() << "External fence does not support importing and exporting, skipping test.";
         return;
     }
 
     // Create a fence to export payload from
-    VkExportFenceCreateInfoKHR efci = vku::InitStructHelper();
+    VkExportFenceCreateInfo efci = vku::InitStructHelper();
     efci.handleTypes = handle_type;
     VkFenceCreateInfo fci = vku::InitStructHelper(&efci);
     vkt::Fence export_fence(*m_device, fci);
@@ -978,20 +977,20 @@ TEST_F(PositiveSyncObject, ExternalFenceSyncFdLoop) {
     fci.pNext = nullptr;
     fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     std::array<vkt::Fence, 2> fences;
-    fences[0].init(*m_device, fci);
-    fences[1].init(*m_device, fci);
+    fences[0].Init(*m_device, fci);
+    fences[1].Init(*m_device, fci);
 
     for (uint32_t i = 0; i < 1000; i++) {
         auto submitter = i & 1;
         auto waiter = (~i) & 1;
-        fences[submitter].reset();
+        fences[submitter].Reset();
         vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, fences[submitter].handle());
 
-        fences[waiter].wait(kWaitTimeout);
+        fences[waiter].Wait(kWaitTimeout);
 
         vk::QueueSubmit(m_default_queue->handle(), 0, nullptr, export_fence.handle());
         int fd_handle = -1;
-        export_fence.export_handle(fd_handle, handle_type);
+        export_fence.ExportHandle(fd_handle, handle_type);
 #ifndef VK_USE_PLATFORM_WIN32_KHR
         close(fd_handle);
 #endif
@@ -1002,7 +1001,7 @@ TEST_F(PositiveSyncObject, ExternalFenceSyncFdLoop) {
 
 TEST_F(PositiveSyncObject, ExternalFenceSubmitCmdBuffer) {
     const auto extension_name = VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
     AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME);
@@ -1013,25 +1012,25 @@ TEST_F(PositiveSyncObject, ExternalFenceSubmitCmdBuffer) {
     }
 
     // Check for external fence export capability
-    VkPhysicalDeviceExternalFenceInfoKHR efi = vku::InitStructHelper();
+    VkPhysicalDeviceExternalFenceInfo efi = vku::InitStructHelper();
     efi.handleType = handle_type;
     VkExternalFencePropertiesKHR efp = vku::InitStructHelper();
-    vk::GetPhysicalDeviceExternalFencePropertiesKHR(gpu(), &efi, &efp);
+    vk::GetPhysicalDeviceExternalFencePropertiesKHR(Gpu(), &efi, &efp);
 
-    if (!(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT_KHR)) {
+    if (!(efp.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT)) {
         GTEST_SKIP() << "External fence does not support exporting, skipping test.";
         return;
     }
 
     // Create a fence to export payload from
-    VkExportFenceCreateInfoKHR efci = vku::InitStructHelper();
+    VkExportFenceCreateInfo efci = vku::InitStructHelper();
     efci.handleTypes = handle_type;
     VkFenceCreateInfo fci = vku::InitStructHelper(&efci);
     vkt::Fence export_fence(*m_device, fci);
 
     for (uint32_t i = 0; i < 1000; i++) {
-        m_command_buffer.begin();
-        m_command_buffer.end();
+        m_command_buffer.Begin();
+        m_command_buffer.End();
 
         VkSubmitInfo submit_info = vku::InitStructHelper();
         submit_info.commandBufferCount = 1;
@@ -1039,7 +1038,7 @@ TEST_F(PositiveSyncObject, ExternalFenceSubmitCmdBuffer) {
         vk::QueueSubmit(m_default_queue->handle(), 1, &submit_info, export_fence.handle());
 
         int fd_handle = -1;
-        export_fence.export_handle(fd_handle, handle_type);
+        export_fence.ExportHandle(fd_handle, handle_type);
 
 #ifndef VK_USE_PLATFORM_WIN32_KHR
         // Wait until command buffer is finished using the exported handle.
@@ -1067,7 +1066,7 @@ TEST_F(PositiveSyncObject, ExternalFenceSubmitCmdBuffer) {
         m_default_queue->Wait();
 #endif
 
-        m_command_buffer.reset();
+        m_command_buffer.Reset();
     }
 
     m_default_queue->Wait();
@@ -1080,11 +1079,11 @@ TEST_F(PositiveSyncObject, BasicSetAndWaitEvent) {
     const vkt::Event event(*m_device);
 
     // Record time validation
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdSetEvent(m_command_buffer, event, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     vk::CmdWaitEvents(m_command_buffer, 1, &event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                       0, nullptr, 0, nullptr, 0, nullptr);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     // Also submit to the queue to test submit time validation
     m_default_queue->Submit(m_command_buffer);
@@ -1110,36 +1109,14 @@ TEST_F(PositiveSyncObject, BasicSetAndWaitEvent2) {
     const vkt::Event event(*m_device);
 
     // Record time validation
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdSetEvent2(m_command_buffer, event, &dependency_info);
     vk::CmdWaitEvents2(m_command_buffer, 1, &event.handle(), &dependency_info);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     // Also submit to the queue to test submit time validation
     m_default_queue->Submit(m_command_buffer);
     m_device->Wait();
-}
-
-TEST_F(PositiveSyncObject, WaitEventThenSet) {
-#if defined(VVL_ENABLE_TSAN)
-    // NOTE: This test in particular has failed sporadically on CI when TSAN is enabled.
-    GTEST_SKIP() << "https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5965";
-#endif
-    TEST_DESCRIPTION("Wait on a event then set it after the wait has been submitted.");
-
-    RETURN_IF_SKIP(Init());
-
-    vkt::Event event(*m_device);
-
-    m_command_buffer.begin();
-    vk::CmdWaitEvents(m_command_buffer.handle(), 1, &event.handle(), VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                      0, nullptr, 0, nullptr, 0, nullptr);
-    vk::CmdResetEvent(m_command_buffer.handle(), event.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
-    m_command_buffer.end();
-
-    m_default_queue->Submit(m_command_buffer);
-    vk::SetEvent(device(), event.handle());
-    m_default_queue->Wait();
 }
 
 TEST_F(PositiveSyncObject, DoubleLayoutTransition) {
@@ -1150,23 +1127,21 @@ TEST_F(PositiveSyncObject, DoubleLayoutTransition) {
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_B8G8R8A8_UNORM;
-    image_create_info.extent.width = 32;
-    image_create_info.extent.height = 1;
-    image_create_info.extent.depth = 1;
+    image_create_info.extent = {32, 1, 1};
     image_create_info.mipLevels = 1;
     image_create_info.arrayLayers = 1;
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-    VkImageSubresource image_sub = vkt::Image::subresource(VK_IMAGE_ASPECT_COLOR_BIT, 0, 0);
-    VkImageSubresourceRange image_sub_range = vkt::Image::subresource_range(image_sub);
+    VkImageSubresource image_sub = vkt::Image::Subresource(VK_IMAGE_ASPECT_COLOR_BIT, 0, 0);
+    VkImageSubresourceRange image_sub_range = vkt::Image::SubresourceRange(image_sub);
     vkt::Image image(*m_device, image_create_info, vkt::set_layout);
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
 
     {
-        VkImageMemoryBarrier image_barriers[] = {image.image_memory_barrier(
+        VkImageMemoryBarrier image_barriers[] = {image.ImageMemoryBarrier(
             0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image_sub_range)};
 
         vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
@@ -1177,16 +1152,16 @@ TEST_F(PositiveSyncObject, DoubleLayoutTransition) {
     // Is it undefined behavior? Write a comment and provide references to the spec if that's allowed.
     {
         VkImageMemoryBarrier image_barriers[] = {
-            image.image_memory_barrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, image_sub_range),
-            image.image_memory_barrier(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL,
-                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, image_sub_range)};
+            image.ImageMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, image_sub_range),
+            image.ImageMemoryBarrier(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL,
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, image_sub_range)};
 
         vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
                                0, nullptr, 0, nullptr, 2, image_barriers);
     }
 
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveSyncObject, QueueSubmitTimelineSemaphore2Queue) {
@@ -1208,15 +1183,15 @@ TEST_F(PositiveSyncObject, QueueSubmitTimelineSemaphore2Queue) {
 
     vkt::CommandPool pool0(*m_device, m_default_queue->family_index);
     vkt::CommandBuffer cb0(*m_device, pool0);
-    cb0.begin();
+    cb0.Begin();
     vk::CmdCopyBuffer(cb0.handle(), buffer_a.handle(), buffer_b.handle(), 1, &region);
-    cb0.end();
+    cb0.End();
 
     vkt::CommandPool pool1(*m_device, m_second_queue->family_index);
     vkt::CommandBuffer cb1(*m_device, pool1);
-    cb1.begin();
+    cb1.Begin();
     vk::CmdCopyBuffer(cb1.handle(), buffer_c.handle(), buffer_b.handle(), 1, &region);
-    cb1.end();
+    cb1.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
 
@@ -1226,8 +1201,8 @@ TEST_F(PositiveSyncObject, QueueSubmitTimelineSemaphore2Queue) {
     constexpr uint64_t kQ1Begin = 3;
     constexpr uint64_t kQ1End = 4;
 
-    m_default_queue->SubmitWithTimelineSemaphore(cb0, semaphore, kQ0Begin, semaphore, kQ0End);
-    m_second_queue->SubmitWithTimelineSemaphore(cb1, semaphore, kQ1Begin, semaphore, kQ1End);
+    m_default_queue->Submit(cb0, vkt::TimelineWait(semaphore, kQ0Begin), vkt::TimelineSignal(semaphore, kQ0End));
+    m_second_queue->Submit(cb1, vkt::TimelineWait(semaphore, kQ1Begin), vkt::TimelineSignal(semaphore, kQ1End));
 
     semaphore.SignalKHR(kQ0Begin);  // initiate forward progress on q0
     semaphore.WaitKHR(kQ0End, kWaitTimeout);
@@ -1246,7 +1221,7 @@ TEST_F(PositiveSyncObject, ResetQueryPoolFromDifferentCBWithFenceAfter) {
 
     RETURN_IF_SKIP(Init());
 
-    if (m_device->phy().queue_properties_[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
+    if (m_device->Physical().queue_properties_[m_device->graphics_queue_node_index_].timestampValidBits == 0) {
         GTEST_SKIP() << "Device graphic queue has timestampValidBits of 0, skipping.\n";
     }
 
@@ -1259,13 +1234,13 @@ TEST_F(PositiveSyncObject, ResetQueryPoolFromDifferentCBWithFenceAfter) {
 
     vkt::QueryPool query_pool(*m_device, VK_QUERY_TYPE_TIMESTAMP, 1);
 
-    cb0.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    cb0.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     vk::CmdResetQueryPool(cb0.handle(), query_pool.handle(), 0, 1);
-    cb0.end();
+    cb0.End();
 
-    cb1.begin();
+    cb1.Begin();
     vk::CmdWriteTimestamp(cb1.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, query_pool.handle(), 0);
-    cb1.end();
+    cb1.End();
 
     // Begin by resetting the query pool.
     m_default_queue->Submit(cb0);
@@ -1332,8 +1307,8 @@ TEST_F(PositiveSyncObject, FenceSemThreadRace) {
     m_errorMonitor->SetBailout(&bailout);
 
     for (uint32_t i = 0; i < data.iterations; i++, signal_value++) {
-        m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, sem, signal_value, fence);
-        fence.wait(data.timeout);
+        m_default_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(sem, signal_value), fence);
+        fence.Wait(data.timeout);
         vk::ResetFences(device(), 1, &fence.handle());
     }
     m_errorMonitor->SetBailout(nullptr);
@@ -1346,10 +1321,6 @@ TEST_F(PositiveSyncObject, SubmitFenceButWaitIdle) {
     AddRequiredExtensions(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     RETURN_IF_SKIP(InitSwapchain());
-    uint32_t image_index, image_count;
-    vk::GetSwapchainImagesKHR(m_device->handle(), m_swapchain, &image_count, nullptr);
-    std::vector<VkImage> swapchainImages(image_count, VK_NULL_HANDLE);
-    vk::GetSwapchainImagesKHR(m_device->handle(), m_swapchain, &image_count, swapchainImages.data());
 
     vkt::Fence fence(*m_device);
     vkt::Semaphore sem(*m_device);
@@ -1369,7 +1340,7 @@ TEST_F(PositiveSyncObject, SubmitFenceButWaitIdle) {
     auto err = vk::AllocateCommandBuffers(m_device->handle(), &alloc_info, &command_buffer);
     ASSERT_EQ(VK_SUCCESS, err);
 
-    err = vk::AcquireNextImageKHR(m_device->handle(), m_swapchain, kWaitTimeout, sem.handle(), VK_NULL_HANDLE, &image_index);
+    m_swapchain.AcquireNextImage(sem, kWaitTimeout, &err);
     ASSERT_EQ(VK_SUCCESS, err);
 
     VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
@@ -1459,12 +1430,12 @@ struct SemBufferRaceData {
             gpu_signal_value = (i * 3) + 2;
             uint64_t host_wait_value = (i * 3) + 3;
 
-            cb.begin();
+            cb.Begin();
             vk::CmdFillBuffer(cb.handle(), buffer->handle(), 0, 12, 0x11111111);
-            cb.end();
+            cb.End();
             thread_buffer = std::move(buffer);
 
-            err = queue->SubmitWithTimelineSemaphore(cb, sem, gpu_wait_value, sem, gpu_signal_value);
+            err = queue->Submit(cb, vkt::TimelineWait(sem, gpu_wait_value), vkt::TimelineSignal(sem, gpu_signal_value));
             ASSERT_EQ(VK_SUCCESS, err);
 
             err = sem.SignalKHR(host_signal_value);
@@ -1511,15 +1482,16 @@ TEST_F(PositiveSyncObject, WaitTimelineSemaphoreWithWin32HandleRetrieved) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
     constexpr auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
-    if (!SemaphoreExportImportSupported(gpu(), handle_type)) {
-        GTEST_SKIP() << "Semaphore does not support export and import through Win32 handle";
-    }
 
-    // Create exportable timeline semaphore
     VkSemaphoreTypeCreateInfo semaphore_type_create_info = vku::InitStructHelper();
     semaphore_type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
     semaphore_type_create_info.initialValue = 0;
 
+    if (!SemaphoreExportImportSupported(Gpu(), handle_type, &semaphore_type_create_info)) {
+        GTEST_SKIP() << "Semaphore does not support export and import through Win32 handle";
+    }
+
+    // Create exportable timeline semaphore
     VkExportSemaphoreCreateInfo export_info = vku::InitStructHelper(&semaphore_type_create_info);
     export_info.handleTypes = handle_type;
 
@@ -1528,7 +1500,7 @@ TEST_F(PositiveSyncObject, WaitTimelineSemaphoreWithWin32HandleRetrieved) {
 
     // This caused original issue: exported semaphore failed to retire queue operations.
     HANDLE win32_handle = NULL;
-    ASSERT_EQ(VK_SUCCESS, semaphore.export_handle(win32_handle, handle_type));
+    ASSERT_EQ(VK_SUCCESS, semaphore.ExportHandle(win32_handle, handle_type));
 
     // Put semaphore to work
     const uint64_t signal_value = 1;
@@ -1579,13 +1551,13 @@ TEST_F(PositiveSyncObject, SubpassBarrier) {
     barrier.image = image.handle();
     barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(rp.Handle(), fb.handle(), 32, 32);
     vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1,
                            &barrier);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveSyncObject, SubpassBarrier2) {
@@ -1626,11 +1598,11 @@ TEST_F(PositiveSyncObject, SubpassBarrier2) {
     dependency_info.imageMemoryBarrierCount = 1;
     dependency_info.pImageMemoryBarriers = &barrier;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(rp.Handle(), fb.handle(), 32, 32);
     vk::CmdPipelineBarrier2(m_command_buffer.handle(), &dependency_info);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/6204
@@ -1665,7 +1637,7 @@ TEST_F(PositiveSyncObject, SubpassBarrierWithExpandableStages) {
     barrier.srcAccessMask = VK_ACCESS_INDEX_READ_BIT;
     barrier.dstAccessMask = VK_ACCESS_INDEX_READ_BIT;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
 
     // The issue was that implementation expands *subpass* compound stages but did not expand *barrier* compound stages.
@@ -1675,7 +1647,7 @@ TEST_F(PositiveSyncObject, SubpassBarrierWithExpandableStages) {
                            &barrier, 0, nullptr, 0, nullptr);
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveSyncObject, BarrierWithHostStage) {
@@ -1700,9 +1672,9 @@ TEST_F(PositiveSyncObject, BarrierWithHostStage) {
     buffer_dependency.bufferMemoryBarrierCount = 1;
     buffer_dependency.pBufferMemoryBarriers = &buffer_barrier;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdPipelineBarrier2(m_command_buffer.handle(), &buffer_dependency);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     // HOST stage as destination
     vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
@@ -1723,9 +1695,9 @@ TEST_F(PositiveSyncObject, BarrierWithHostStage) {
     image_dependency.imageMemoryBarrierCount = 1;
     image_dependency.pImageMemoryBarriers = &image_barrier;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdPipelineBarrier2(m_command_buffer.handle(), &image_dependency);
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveSyncObject, BarrierASBuildWithShaderReadAccess) {
@@ -1744,9 +1716,9 @@ TEST_F(PositiveSyncObject, BarrierASBuildWithShaderReadAccess) {
     dependency_info.memoryBarrierCount = 1;
     dependency_info.pMemoryBarriers = &mem_barrier;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdPipelineBarrier2KHR(m_command_buffer, &dependency_info);
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveSyncObject, BarrierAccessSyncMicroMap) {
@@ -1768,9 +1740,9 @@ TEST_F(PositiveSyncObject, BarrierAccessSyncMicroMap) {
     dependency_info.memoryBarrierCount = 1;
     dependency_info.pMemoryBarriers = &mem_barrier;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdPipelineBarrier2KHR(m_command_buffer.handle(), &dependency_info);
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveSyncObject, DynamicRenderingLocalReadImageBarrier) {
@@ -1787,7 +1759,7 @@ TEST_F(PositiveSyncObject, DynamicRenderingLocalReadImageBarrier) {
 
     vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM,
                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR);
+    image.SetLayout(VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ);
 
     VkFormat colorAttachment = VK_FORMAT_R16_UNORM;
 
@@ -1805,15 +1777,15 @@ TEST_F(PositiveSyncObject, DynamicRenderingLocalReadImageBarrier) {
     VkImageMemoryBarrier imageMemoryBarrier = vku::InitStructHelper();
     imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     imageMemoryBarrier.dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR;
-    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR;
+    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ;
+    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ;
     imageMemoryBarrier.image = image.handle();
     imageMemoryBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
 
-    secondary.begin(&beginInfo);
+    secondary.Begin(&beginInfo);
     vk::CmdPipelineBarrier(secondary.handle(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                            VK_DEPENDENCY_BY_REGION_BIT, 0u, nullptr, 0u, nullptr, 1u, &imageMemoryBarrier);
-    secondary.end();
+    secondary.End();
 }
 
 // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/6172
@@ -1895,10 +1867,10 @@ TEST_F(PositiveSyncObject, SubmitImportedBinarySemaphoreWithNonZeroValue) {
     TEST_DESCRIPTION("QueueSubmit2 can specify arbitrary payload value for binary semaphore and it should be ignored");
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     const auto extension_name = VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 #else
     const auto extension_name = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
-    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
 #endif
     AddRequiredExtensions(extension_name);
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -1906,17 +1878,17 @@ TEST_F(PositiveSyncObject, SubmitImportedBinarySemaphoreWithNonZeroValue) {
     RETURN_IF_SKIP(Init());
 
     // Check semaphore's import/export capability
-    VkPhysicalDeviceExternalSemaphoreInfoKHR semaphore_info = vku::InitStructHelper();
+    VkPhysicalDeviceExternalSemaphoreInfo semaphore_info = vku::InitStructHelper();
     semaphore_info.handleType = handle_type;
     VkExternalSemaphorePropertiesKHR semaphore_properties = vku::InitStructHelper();
-    vk::GetPhysicalDeviceExternalSemaphorePropertiesKHR(gpu(), &semaphore_info, &semaphore_properties);
-    if (!(semaphore_properties.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR) ||
-        !(semaphore_properties.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT_KHR)) {
+    vk::GetPhysicalDeviceExternalSemaphorePropertiesKHR(Gpu(), &semaphore_info, &semaphore_properties);
+    if (!(semaphore_properties.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT) ||
+        !(semaphore_properties.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT)) {
         GTEST_SKIP() << "Semaphore does not support import and/or export";
     }
 
     // Signaling semaphore
-    VkExportSemaphoreCreateInfoKHR export_info = vku::InitStructHelper();
+    VkExportSemaphoreCreateInfo export_info = vku::InitStructHelper();
     export_info.handleTypes = handle_type;
     VkSemaphoreCreateInfo semaphore_ci = vku::InitStructHelper(&export_info);
     vkt::Semaphore semaphore(*m_device, semaphore_ci);
@@ -1925,11 +1897,11 @@ TEST_F(PositiveSyncObject, SubmitImportedBinarySemaphoreWithNonZeroValue) {
     signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 
     ExternalHandle ext_handle{};
-    semaphore.export_handle(ext_handle, handle_type);
+    semaphore.ExportHandle(ext_handle, handle_type);
 
     // Wait semaphore is imported from the signaling one.
     vkt::Semaphore semaphore2(*m_device);
-    semaphore2.import_handle(ext_handle, handle_type);
+    semaphore2.ImportHandle(ext_handle, handle_type);
     VkSemaphoreSubmitInfo wait_info = vku::InitStructHelper();
     wait_info.semaphore = semaphore2;
     // Specify some payload value, even if it's a binary semaphore. It should be ignored.
@@ -1980,9 +1952,9 @@ TEST_F(PositiveSyncObject, IgnoreAcquireOpSrcStage) {
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &acquire_barrier;
 
-    transfer_cb.begin();
+    transfer_cb.Begin();
     vk::CmdPipelineBarrier2(transfer_cb.handle(), &dep_info);
-    transfer_cb.end();
+    transfer_cb.End();
 }
 
 TEST_F(PositiveSyncObject, IgnoreReleaseOpDstStage) {
@@ -2016,9 +1988,81 @@ TEST_F(PositiveSyncObject, IgnoreReleaseOpDstStage) {
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &release_barrier;
 
-    release_cb.begin();
+    release_cb.Begin();
     vk::CmdPipelineBarrier2(release_cb.handle(), &dep_info);
-    release_cb.end();
+    release_cb.End();
+}
+
+TEST_F(PositiveSyncObject, ImageOwnershipTransferNormalizeSubresourceRange) {
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8823
+    TEST_DESCRIPTION("Use different representations of image subresource range for release and acquire ownership operations");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Queue *transfer_queue = m_device->TransferOnlyQueue();
+    if (!transfer_queue) {
+        GTEST_SKIP() << "Transfer-only queue is not present";
+    }
+    vkt::CommandPool release_pool(*m_device, transfer_queue->family_index);
+    vkt::CommandBuffer release_cb(*m_device, release_pool);
+    vkt::CommandBuffer acquire_cb(*m_device, m_command_pool);
+
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkImageCreateInfo image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, usage);
+    image_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vkt::Image image(*m_device, image_ci);
+    image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    // Release image
+    VkImageMemoryBarrier2 release_barrier = vku::InitStructHelper();
+    release_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    release_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    release_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    release_barrier.dstAccessMask = VK_ACCESS_2_NONE;
+    release_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    release_barrier.newLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+    release_barrier.srcQueueFamilyIndex = transfer_queue->family_index;
+    release_barrier.dstQueueFamilyIndex = m_default_queue->family_index;
+    release_barrier.image = image;
+    // Specify exact mip/layer count
+    release_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    VkDependencyInfo release_dep_info = vku::InitStructHelper();
+    release_dep_info.imageMemoryBarrierCount = 1;
+    release_dep_info.pImageMemoryBarriers = &release_barrier;
+    release_cb.Begin();
+    vk::CmdPipelineBarrier2(release_cb, &release_dep_info);
+    release_cb.End();
+
+    // Acquire image
+    VkImageMemoryBarrier2 acquire_barrier = vku::InitStructHelper();
+    acquire_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    acquire_barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    acquire_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    acquire_barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    acquire_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    acquire_barrier.newLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+    acquire_barrier.srcQueueFamilyIndex = transfer_queue->family_index;
+    acquire_barrier.dstQueueFamilyIndex = m_default_queue->family_index;
+    acquire_barrier.image = image;
+    // Use VK_REMAINING shortcut to specify mip/layer count.
+    // Test for regression when VK_REMAINING is not compared correctly against specific mip/layer values for ownership transfer.
+    acquire_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
+
+    VkDependencyInfo acquire_dep_info = vku::InitStructHelper();
+    acquire_dep_info.imageMemoryBarrierCount = 1;
+    acquire_dep_info.pImageMemoryBarriers = &acquire_barrier;
+    acquire_cb.Begin();
+    vk::CmdPipelineBarrier2(acquire_cb, &acquire_dep_info);
+    acquire_cb.End();
+
+    // Submit release on the transfer queue and acquire on the main queue.
+    // There should be no errors about missing release operation for acquire operation.
+    vkt::Semaphore semaphore(*m_device);
+    transfer_queue->Submit2(release_cb, vkt::Signal(semaphore));
+    m_default_queue->Submit2(acquire_cb, vkt::Wait(semaphore));
+    m_device->Wait();
 }
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
@@ -2034,7 +2078,7 @@ TEST_F(PositiveSyncObject, GetCounterValueOfExportedSemaphore) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
     constexpr auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
-    if (!SemaphoreExportImportSupported(gpu(), handle_type)) {
+    if (!SemaphoreExportImportSupported(Gpu(), handle_type)) {
         GTEST_SKIP() << "Semaphore does not support export and import through Win32 handle";
     }
 
@@ -2047,7 +2091,7 @@ TEST_F(PositiveSyncObject, GetCounterValueOfExportedSemaphore) {
     const VkSemaphoreCreateInfo create_info = vku::InitStructHelper(&export_info);
     vkt::Semaphore semaphore(*m_device, create_info);
     HANDLE win32_handle = NULL;
-    semaphore.export_handle(win32_handle, handle_type);
+    semaphore.ExportHandle(win32_handle, handle_type);
 
     // The problem was that GetSemaphoreCounterValue creates temporary signal to make forward progress,
     // but the code path for external semaphore failed to retire that signal. Being stuck that signal
@@ -2071,7 +2115,7 @@ TEST_F(PositiveSyncObject, GetCounterValueOfExportedSemaphore2) {
         GTEST_SKIP() << "Test not supported by MockICD";
     }
     constexpr auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
-    if (!SemaphoreExportImportSupported(gpu(), handle_type)) {
+    if (!SemaphoreExportImportSupported(Gpu(), handle_type)) {
         GTEST_SKIP() << "Semaphore does not support export and import through Win32 handle";
     }
 
@@ -2084,7 +2128,7 @@ TEST_F(PositiveSyncObject, GetCounterValueOfExportedSemaphore2) {
     const VkSemaphoreCreateInfo create_info = vku::InitStructHelper(&export_info);
     vkt::Semaphore semaphore(*m_device, create_info);
     HANDLE win32_handle = NULL;
-    semaphore.export_handle(win32_handle, handle_type);
+    semaphore.ExportHandle(win32_handle, handle_type);
 
     // Slight variation of the previous test to ensure that issue was not related to semaphore initial value
     semaphore.Signal(1);
@@ -2104,7 +2148,7 @@ TEST_F(PositiveSyncObject, TimelineHostWaitThenSubmitSignal) {
         GTEST_SKIP() << "Test not supported by MockICD (WaitSemaphores)";
     }
 
-    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE_KHR);
+    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     auto thread = [&semaphore]() { semaphore.Wait(1, kWaitTimeout); };
     std::thread t(thread);
 
@@ -2112,7 +2156,7 @@ TEST_F(PositiveSyncObject, TimelineHostWaitThenSubmitSignal) {
     // If the waiting thread was not fast enough this becomes a common signal-then-wait setup.
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
 
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 1);
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(semaphore, 1));
     t.join();
 }
 
@@ -2126,7 +2170,7 @@ TEST_F(PositiveSyncObject, TimelineHostWaitThenSubmitLargerSignal) {
         GTEST_SKIP() << "Test not supported by MockICD (WaitSemaphores)";
     }
 
-    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE_KHR);
+    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     auto thread = [&semaphore]() { semaphore.Wait(1, kWaitTimeout); };
     std::thread t(thread);
 
@@ -2134,7 +2178,7 @@ TEST_F(PositiveSyncObject, TimelineHostWaitThenSubmitLargerSignal) {
     // If the waiting thread was not fast enough this becomes a common signal-then-wait setup.
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
 
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 2);
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(semaphore, 2));
     t.join();
 }
 
@@ -2147,7 +2191,7 @@ TEST_F(PositiveSyncObject, TimelineHostWaitThenHostSignal) {
     if (IsPlatformMockICD()) {
         GTEST_SKIP() << "Test not supported by MockICD (WaitSemaphores)";
     }
-    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE_KHR);
+    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     auto thread = [&semaphore]() { semaphore.Wait(1, kWaitTimeout); };
     std::thread t(thread);
 
@@ -2165,7 +2209,7 @@ TEST_F(PositiveSyncObject, TimelineHostSignalThenHostWait) {
     AddRequiredFeature(vkt::Feature::timelineSemaphore);
     RETURN_IF_SKIP(Init());
 
-    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE_KHR);
+    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     semaphore.Signal(1);
     semaphore.Wait(1, kWaitTimeout);
 }
@@ -2177,7 +2221,7 @@ TEST_F(PositiveSyncObject, TimelineSubmitSignalThenHostWaitSmallerValue) {
     RETURN_IF_SKIP(Init());
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 2);
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(semaphore, 2));
     semaphore.Wait(1, kWaitTimeout);
 }
 
@@ -2192,8 +2236,8 @@ TEST_F(PositiveSyncObject, TimelineSubmitWaitThenSubmitSignalLargerValue) {
         GTEST_SKIP() << "2 queues are needed";
     }
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
-    m_second_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 2);
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
+    m_second_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(semaphore, 2));
 
     // This should also sync with the second queue because the second queue signals a default one.
     m_default_queue->Wait();
@@ -2210,8 +2254,8 @@ TEST_F(PositiveSyncObject, TimelineSubmitSignalThenSubmitWaitSmallerValue) {
         GTEST_SKIP() << "2 queues are needed";
     }
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_second_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 2);
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
+    m_second_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(semaphore, 2));
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
 
     // This should also sync with the second queue because the second queue signals a default one.
     m_default_queue->Wait();
@@ -2224,7 +2268,7 @@ TEST_F(PositiveSyncObject, TimelineSubmitWaitThenHostSignal) {
     RETURN_IF_SKIP(Init());
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
     semaphore.Signal(1);
     m_default_queue->Wait();
 }
@@ -2236,46 +2280,8 @@ TEST_F(PositiveSyncObject, TimelineSubmitWaitThenHostSignalLargerValue) {
     RETURN_IF_SKIP(Init());
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
     semaphore.Signal(2);
-    m_default_queue->Wait();
-}
-
-// TODO: non-monotonic signaling order, when validation can detect this convert to a negative test
-TEST_F(PositiveSyncObject, ClosestSignalValueDoesNotFinishWait) {
-    TEST_DESCRIPTION("Test that validation selects correct signal");
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredFeature(vkt::Feature::timelineSemaphore);
-    RETURN_IF_SKIP(Init());
-
-    if (!m_second_queue) {
-        GTEST_SKIP() << "2 queues are needed";
-    }
-
-    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 2);
-    m_second_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 3);
-    m_default_queue->Wait();
-}
-
-// TODO: non-monotonic signaling order, when validation can detect this convert to a negative test
-TEST_F(PositiveSyncObject, ClosestSignalValueDoesNotFinishWait2) {
-    TEST_DESCRIPTION("Test that validation selects correct signal");
-    SetTargetApiVersion(VK_API_VERSION_1_2);
-    AddRequiredFeature(vkt::Feature::timelineSemaphore);
-    RETURN_IF_SKIP(Init());
-
-    if (!m_second_queue) {
-        GTEST_SKIP() << "2 queues are needed";
-    }
-
-    vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 1);
-    m_second_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 3);
     m_default_queue->Wait();
 }
 
@@ -2289,7 +2295,7 @@ TEST_F(PositiveSyncObject, PollSemaphoreCounter) {
     }
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 1);
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(semaphore, 1));
 
     uint64_t counter = 0;
     do {
@@ -2316,7 +2322,7 @@ TEST_F(PositiveSyncObject, KhronosTimelineSemaphoreExample) {
 
         auto thread1 = [this, &timeline]() {
             // Can start immediately, wait on 0 is noop
-            m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, timeline, 0, timeline, 5);
+            m_default_queue->Submit(vkt::no_cmd, vkt::TimelineWait(timeline, 0), vkt::TimelineSignal(timeline, 5));
         };
         auto thread2 = [&timeline]() {
             // Wait for thread1
@@ -2324,7 +2330,9 @@ TEST_F(PositiveSyncObject, KhronosTimelineSemaphoreExample) {
             // Unblock thread3
             timeline.Signal(7);
         };
-        auto thread3 = [this, &timeline]() { m_second_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, timeline, 7, timeline, 8); };
+        auto thread3 = [this, &timeline]() {
+            m_second_queue->Submit(vkt::no_cmd, vkt::TimelineWait(timeline, 7), vkt::TimelineSignal(timeline, 8));
+        };
 
         std::thread t1(thread1);
         std::thread t2(thread2);
@@ -2336,4 +2344,96 @@ TEST_F(PositiveSyncObject, KhronosTimelineSemaphoreExample) {
         t2.join();
         t1.join();
     }
+}
+
+TEST_F(PositiveSyncObject, BinarySyncAfterResolvedTimelineWait) {
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8900
+    TEST_DESCRIPTION("Test binary wait followed by the previous resolved timeline wait");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredFeature(vkt::Feature::timelineSemaphore);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Semaphore timeline_semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
+    vkt::Semaphore binary_semaphore(*m_device);
+
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(timeline_semaphore, 1));
+
+    // This removes signal's timepoint from timeline (not pending anymore)
+    timeline_semaphore.Wait(1, kWaitTimeout);
+
+    // Wait one more time (should just check completed state).
+    m_default_queue->Submit(vkt::no_cmd, vkt::TimelineWait(timeline_semaphore, 1));
+
+    m_default_queue->Submit(vkt::no_cmd, vkt::Signal(binary_semaphore));
+
+    // Waiting on binary semaphore initiates check of unresolved timeline wait dependency.
+    // This check did not work properly when resolving timeline signal was already retired.
+    m_default_queue->Submit(vkt::no_cmd, vkt::Wait(binary_semaphore));
+    m_default_queue->Wait();
+}
+
+TEST_F(PositiveSyncObject, QueueWaitAfterBinarySignal) {
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8989
+    TEST_DESCRIPTION("Wait for binary signal after queue wait");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredFeature(vkt::Feature::timelineSemaphore);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Semaphore timeline_semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE, 1);
+    vkt::Semaphore binary_semaphore(*m_device);
+
+    m_default_queue->Submit(vkt::no_cmd, vkt::Signal(binary_semaphore));
+    // this removes timepoint with signal op from timeline, but it should not be a problem to wait for this signal
+    m_default_queue->Wait();
+
+    // Values that corresponds to binary semaphore should not affect internal logic.
+    // Use non-zero value for binary semaphore to increase probability of the issues in case of regression.
+    const uint64_t values[2] = {
+        1,  // timeline value
+        42  // arbitrary value that should be ignored (binary semaphore slot)
+    };
+    VkTimelineSemaphoreSubmitInfo timeline_info = vku::InitStructHelper();
+    timeline_info.waitSemaphoreValueCount = 2;
+    timeline_info.pWaitSemaphoreValues = values;
+
+    const VkPipelineStageFlags wait_dst_stages[2] = {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
+    const VkSemaphore wait_semaphores[2] = {timeline_semaphore, binary_semaphore};
+
+    VkSubmitInfo submit = vku::InitStructHelper(&timeline_info);
+    submit.waitSemaphoreCount = 2;
+    submit.pWaitSemaphores = wait_semaphores;
+    submit.pWaitDstStageMask = wait_dst_stages;
+
+    // Wait on the binary signal that was followed by Wait().
+    // This also waits on the timeline initial value, so effectiely no-wait.
+    // The only reason timeline semaphore is used in this test, is to have a
+    // slot in VkTimelineSemaphoreSubmitInfo that corresponds to binary semaphore.
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit, VK_NULL_HANDLE);
+    m_default_queue->Wait();
+}
+
+TEST_F(PositiveSyncObject, QueueWaitAfterBinarySignal2) {
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8989
+    TEST_DESCRIPTION("Binary signal followed by queue wait");
+    RETURN_IF_SKIP(Init());
+
+    vkt::Semaphore semaphore(*m_device);
+    m_default_queue->Submit(vkt::no_cmd, vkt::Signal(semaphore));
+    m_default_queue->Wait();  // this removes timepoint with signal op from timeline
+
+    m_default_queue->Submit(vkt::no_cmd, vkt::Wait(semaphore));
+    // Test for regression that triggers assert in Semaphore::CanBinaryBeSignaled
+    m_default_queue->Submit(vkt::no_cmd, vkt::Signal(semaphore));
+    m_default_queue->Wait();
+}
+
+TEST_F(PositiveSyncObject, QueueWaitAfterBinarySignal3) {
+    TEST_DESCRIPTION("Binary signal followed by queue wait");
+    RETURN_IF_SKIP(Init());
+
+    vkt::Semaphore semaphore(*m_device);
+    m_default_queue->Submit(vkt::no_cmd, vkt::Signal(semaphore));
+    m_default_queue->Wait();  // this removes timepoint with signal op from timeline
+    m_default_queue->Submit(vkt::no_cmd, vkt::Wait(semaphore), vkt::Signal(semaphore));
+    m_default_queue->Wait();
 }

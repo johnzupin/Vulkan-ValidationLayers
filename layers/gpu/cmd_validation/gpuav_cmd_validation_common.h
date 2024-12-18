@@ -17,24 +17,27 @@
 
 #pragma once
 
-#include "gpu/resources/gpuav_subclasses.h"
-
 #include <utility>
 #include <vector>
+#include "state_tracker/cmd_buffer_state.h"
 
 namespace gpuav {
 class Validator;
+class CommandBuffer;
 
 class RestorablePipelineState {
   public:
-    RestorablePipelineState(vvl::CommandBuffer& cb_state, VkPipelineBindPoint bind_point) { Create(cb_state, bind_point); }
+    RestorablePipelineState(CommandBuffer& cb_state, VkPipelineBindPoint bind_point) : cb_state_(cb_state) {
+        Create(cb_state, bind_point);
+    }
     ~RestorablePipelineState() { Restore(); }
 
   private:
-    void Create(vvl::CommandBuffer& cb_state, VkPipelineBindPoint bind_point);
+    void Create(CommandBuffer& cb_state, VkPipelineBindPoint bind_point);
     void Restore() const;
 
-    VkCommandBuffer cmd_buffer_;
+    CommandBuffer& cb_state_;
+    const vku::safe_VkRenderingInfo* rendering_info_ = nullptr;
     VkPipelineBindPoint pipeline_bind_point_ = VK_PIPELINE_BIND_POINT_MAX_ENUM;
     VkPipeline pipeline_ = VK_NULL_HANDLE;
     VkPipelineLayout desc_set_pipeline_layout_ = VK_NULL_HANDLE;
@@ -46,7 +49,7 @@ class RestorablePipelineState {
     std::vector<vvl::ShaderObject*> shader_objects_;
 };
 
-void BindValidationCmdsCommonDescSet(Validator& gpuav, CommandBuffer& cb_state, VkPipelineBindPoint bind_point,
-                                     VkPipelineLayout pipeline_layout, uint32_t cmd_index, uint32_t error_logger_index);
+void BindErrorLoggingDescSet(Validator& gpuav, CommandBuffer& cb_state, VkPipelineBindPoint bind_point,
+                             VkPipelineLayout pipeline_layout, uint32_t cmd_index, uint32_t error_logger_index);
 
 }  // namespace gpuav

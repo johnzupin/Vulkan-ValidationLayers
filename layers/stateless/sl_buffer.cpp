@@ -35,7 +35,7 @@ bool StatelessValidation::manual_PreCallValidateCreateBuffer(VkDevice device, co
         // If sharingMode is VK_SHARING_MODE_CONCURRENT, queueFamilyIndexCount must be greater than 1
         if (pCreateInfo->queueFamilyIndexCount <= 1) {
             skip |= LogError("VUID-VkBufferCreateInfo-sharingMode-00914", device, create_info_loc.dot(Field::sharingMode),
-                             "VK_SHARING_MODE_CONCURRENT, but queueFamilyIndexCount is %" PRIu32 ".",
+                             "is VK_SHARING_MODE_CONCURRENT, but queueFamilyIndexCount is %" PRIu32 ".",
                              pCreateInfo->queueFamilyIndexCount);
         }
 
@@ -70,7 +70,7 @@ bool StatelessValidation::manual_PreCallValidateCreateBuffer(VkDevice device, co
                          string_VkBufferCreateFlags(pCreateInfo->flags).c_str());
     }
 
-    if (!vku::FindStructInPNextChain<VkBufferUsageFlags2CreateInfoKHR>(pCreateInfo->pNext)) {
+    if (!vku::FindStructInPNextChain<VkBufferUsageFlags2CreateInfo>(pCreateInfo->pNext)) {
         skip |= ValidateFlags(create_info_loc.dot(Field::usage), vvl::FlagBitmask::VkBufferUsageFlagBits, AllVkBufferUsageFlagBits,
                               pCreateInfo->usage, kRequiredFlags, VK_NULL_HANDLE, "VUID-VkBufferCreateInfo-None-09499",
                               "VUID-VkBufferCreateInfo-None-09500");

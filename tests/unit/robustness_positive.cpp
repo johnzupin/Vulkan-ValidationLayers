@@ -21,14 +21,8 @@ TEST_F(PositiveRobustness, WriteDescriptorSetAccelerationStructureNVNullDescript
 
     AddRequiredExtensions(VK_NV_RAY_TRACING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceRobustness2FeaturesEXT robustness2_features = vku::InitStructHelper();
-    auto features2 = GetPhysicalDeviceFeatures2(robustness2_features);
-    if (robustness2_features.nullDescriptor != VK_TRUE) {
-        GTEST_SKIP() << "nullDescriptor feature not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredFeature(vkt::Feature::nullDescriptor);
+    RETURN_IF_SKIP(Init());
 
     OneOffDescriptorSet ds(m_device, {
                                          {0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 1, VK_SHADER_STAGE_MISS_BIT_NV, nullptr},
@@ -52,18 +46,10 @@ TEST_F(PositiveRobustness, WriteDescriptorSetAccelerationStructureNVNullDescript
 TEST_F(PositiveRobustness, BindVertexBuffers2EXTNullDescriptors) {
     TEST_DESCRIPTION("Test nullDescriptor works wih CmdBindVertexBuffers variants");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceRobustness2FeaturesEXT robustness2_features = vku::InitStructHelper();
-    auto features2 = GetPhysicalDeviceFeatures2(robustness2_features);
-    if (!robustness2_features.nullDescriptor) {
-        GTEST_SKIP() << "nullDescriptor feature not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredFeature(vkt::Feature::nullDescriptor);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     OneOffDescriptorSet descriptor_set(m_device, {
@@ -79,12 +65,12 @@ TEST_F(PositiveRobustness, BindVertexBuffers2EXTNullDescriptors) {
     descriptor_set.UpdateDescriptorSets();
     descriptor_set.Clear();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceSize offset = 0;
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0, 1, &buffer, &offset);
     vk::CmdBindVertexBuffers2EXT(m_command_buffer.handle(), 0, 1, &buffer, &offset, nullptr, nullptr);
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveRobustness, PipelineRobustnessRobustImageAccessExposed) {
@@ -92,17 +78,11 @@ TEST_F(PositiveRobustness, PipelineRobustnessRobustImageAccessExposed) {
 
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredExtensions(VK_EXT_PIPELINE_ROBUSTNESS_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    // 1.3 exposes VK_EXT_image_robustness and the feature for us
-    VkPhysicalDevicePipelineRobustnessFeaturesEXT pipeline_robustness_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(pipeline_robustness_features);
-    if (!pipeline_robustness_features.pipelineRobustness) {
-        GTEST_SKIP() << "pipelineRobustness is not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &pipeline_robustness_features));
+    AddRequiredFeature(vkt::Feature::pipelineRobustness);
+    RETURN_IF_SKIP(Init());
 
-    VkPipelineRobustnessCreateInfoEXT pipeline_robustness_info = vku::InitStructHelper();
+    VkPipelineRobustnessCreateInfo pipeline_robustness_info = vku::InitStructHelper();
     CreateComputePipelineHelper pipe(*this, &pipeline_robustness_info);
-    pipeline_robustness_info.images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_EXT;
+    pipeline_robustness_info.images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS;
     pipe.CreateComputePipeline();
 }

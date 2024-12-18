@@ -56,11 +56,15 @@ class ErrorMonitor {
     void SetDesiredFailureMsg(const VkFlags msg_flags, const char *const msg_string);
     void SetDesiredFailureMsg(const VkFlags msg_flags, const std::string &msg);
     void SetDesiredFailureMsgRegex(const VkFlags msg_flags, const char *vuid, std::string regex_str);
+    // Any error message matching undesired_regex_str will provoke a test failure
+    void SetDesiredFailureMsgRegex(const VkFlags msg_flags, const char *vuid, std::string regex_str,
+                                   std::string undesired_regex_str);
     // Most tests check for kErrorBit so default to just using it
     void SetDesiredError(const char *msg, uint32_t count = 1);
     // Regex uses modified ECMAScript regular expression grammar https://eel.is/c++draft/re.grammar
     void SetDesiredErrorRegex(const char *vuid, std::string regex_str, uint32_t count = 1);
-    // And use this for warnings
+    // And use this for
+    void SetDesiredWarningRegex(const char *vuid, std::string regex_str, uint32_t count = 1);
     void SetDesiredWarning(const char *msg, uint32_t count = 1);
     void SetDesiredInfo(const char *msg, uint32_t count = 1);
 
@@ -113,6 +117,8 @@ class ErrorMonitor {
         enum MsgType { Undefined, String, Regex } msg_type = Undefined;
         std::string msg_string;  // also used to store regex string
         std::regex msg_regex;
+        std::regex undesired_msg_regex;
+        std::string undesired_msg_regex_string;
         void SetMsgString(std::string msg) {
             msg_type = MsgType::String;
             msg_string = std::move(msg);
@@ -122,10 +128,16 @@ class ErrorMonitor {
             msg_string = std::move(regex_str);
             msg_regex = std::move(regex);
         }
+        void SetUndesiredMsgRegex(std::string undesired_regex_str, std::regex undesired_regex) {
+            undesired_msg_regex_string = std::move(undesired_regex_str);
+            undesired_msg_regex = std::move(undesired_regex);
+        }
         bool Search(const char *vuid, std::string_view msg) const;
+        bool SearchUndesiredRegex(std::string_view msg) const;
         std::string Print() const;
     };
     std::vector<VuidAndMessage> desired_messages_;
+    std::vector<VuidAndMessage> undesired_messages_;
     std::vector<std::string> ignore_message_strings_;
     std::vector<std::string> allowed_message_strings_;
     mutable std::mutex mutex_;

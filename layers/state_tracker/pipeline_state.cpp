@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 #include "state_tracker/pipeline_state.h"
+#include "generated/dynamic_state_helper.h"
 #include "state_tracker/descriptor_sets.h"
 #include "state_tracker/cmd_buffer_state.h"
 #include "state_tracker/render_pass_state.h"
@@ -252,7 +253,7 @@ static CBDynamicFlags GetGraphicsDynamicState(Pipeline &pipe_state) {
                 case VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE:
                 case VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT:
                 case VK_DYNAMIC_STATE_POLYGON_MODE_EXT:
-                case VK_DYNAMIC_STATE_LINE_STIPPLE_KHR:
+                case VK_DYNAMIC_STATE_LINE_STIPPLE:
                 case VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_EXT:
                 case VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT:
                 case VK_DYNAMIC_STATE_RASTERIZATION_STREAM_EXT:
@@ -390,24 +391,24 @@ static CBDynamicFlags GetRayTracingDynamicState(Pipeline &pipe_state) {
 
 static bool UsesPipelineRobustness(const void *pNext, const Pipeline &pipe_state) {
     bool result = false;
-    const auto robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfoEXT>(pNext);
+    const auto robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfo>(pNext);
     if (!robustness_info) {
         return false;
     }
-    result |= (robustness_info->storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
-              (robustness_info->storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT);
-    result |= (robustness_info->uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
-              (robustness_info->uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT);
+    result |= (robustness_info->storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2) ||
+              (robustness_info->storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS);
+    result |= (robustness_info->uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2) ||
+              (robustness_info->uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS);
     if (!result) {
         for (const auto &stage_ci : pipe_state.shader_stages_ci) {
-            const auto stage_robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfoEXT>(stage_ci.pNext);
+            const auto stage_robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfo>(stage_ci.pNext);
             if (stage_robustness_info) {
                 result |=
-                    (stage_robustness_info->storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
-                    (stage_robustness_info->storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT);
+                    (stage_robustness_info->storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2) ||
+                    (stage_robustness_info->storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS);
                 result |=
-                    (stage_robustness_info->uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
-                    (stage_robustness_info->uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT);
+                    (stage_robustness_info->uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2) ||
+                    (stage_robustness_info->uniformBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS);
             }
         }
     }
@@ -416,19 +417,18 @@ static bool UsesPipelineRobustness(const void *pNext, const Pipeline &pipe_state
 
 static bool UsesPipelineVertexRobustness(const void *pNext, const Pipeline &pipe_state) {
     bool result = false;
-    const auto robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfoEXT>(pNext);
+    const auto robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfo>(pNext);
     if (!robustness_info) {
         return false;
     }
-    result |= (robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
-              (robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT);
+    result |= (robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2) ||
+              (robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS);
     if (!result) {
         for (const auto &stage_ci : pipe_state.shader_stages_ci) {
-            const auto stage_robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfoEXT>(stage_ci.pNext);
+            const auto stage_robustness_info = vku::FindStructInPNextChain<VkPipelineRobustnessCreateInfo>(stage_ci.pNext);
             if (stage_robustness_info) {
-                result |=
-                    (stage_robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT) ||
-                    (stage_robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT);
+                result |= (stage_robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2) ||
+                          (stage_robustness_info->vertexInputs == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS);
             }
         }
     }
@@ -509,7 +509,7 @@ static VkPrimitiveTopology GetTopologyAtRasterizer(const Pipeline &pipeline) {
 }
 
 static VkPipelineCreateFlags2KHR GetPipelineCreateFlags(const void *pNext, VkPipelineCreateFlags flags) {
-    const auto flags2 = vku::FindStructInPNextChain<VkPipelineCreateFlags2CreateInfoKHR>(pNext);
+    const auto flags2 = vku::FindStructInPNextChain<VkPipelineCreateFlags2CreateInfo>(pNext);
     if (flags2) {
         return flags2->flags;
     }
@@ -821,10 +821,10 @@ Pipeline::Pipeline(const ValidationStateTracker &state_data, const VkRayTracingP
 
 void LastBound::UnbindAndResetPushDescriptorSet(std::shared_ptr<vvl::DescriptorSet> &&ds) {
     if (push_descriptor_set) {
-        for (auto &ps : per_set) {
-            if (ps.bound_descriptor_set == push_descriptor_set) {
-                cb_state.RemoveChild(ps.bound_descriptor_set);
-                ps.bound_descriptor_set.reset();
+        for (auto &ds_slot : ds_slots) {
+            if (ds_slot.ds_state == push_descriptor_set) {
+                cb_state.RemoveChild(ds_slot.ds_state);
+                ds_slot.ds_state.reset();
             }
         }
     }
@@ -840,7 +840,7 @@ void LastBound::Reset() {
         push_descriptor_set->Destroy();
     }
     push_descriptor_set.reset();
-    per_set.clear();
+    ds_slots.clear();
 }
 
 bool LastBound::IsDepthTestEnable() const {
@@ -1123,6 +1123,39 @@ bool LastBound::IsCoverageModulationTableEnable() const {
     return false;
 }
 
+bool LastBound::IsStippledLineEnable() const {
+    if (!pipeline_state || pipeline_state->IsDynamic(CB_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT)) {
+        if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT)) {
+            return cb_state.dynamic_state_value.stippled_line_enable;
+        }
+    } else {
+        if (const auto line_state_ci = vku::FindStructInPNextChain<VkPipelineRasterizationLineStateCreateInfo>(
+                pipeline_state->RasterizationStatePNext())) {
+            return line_state_ci->stippledLineEnable;
+        }
+    }
+    return false;
+}
+
+bool LastBound::IsDiscardRectangleEnable() const {
+    if (!pipeline_state || pipeline_state->IsDynamic(CB_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT)) {
+        if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT)) {
+            return cb_state.dynamic_state_value.discard_rectangle_enable;
+        }
+    } else {
+        // VK_EXT_discard_rectangles had a special v2 added right away to give it dynamic state
+        // "If the VK_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT dynamic state is not enabled for the pipeline the presence of this
+        // structure in the VkGraphicsPipelineCreateInfo chain, and a discardRectangleCount greater than zero, implicitly enables
+        // discard rectangles in the pipeline"
+        const void *pipeline_pnext = pipeline_state->GetCreateInfoPNext();
+        if (const auto *discard_rectangle_state =
+                vku::FindStructInPNextChain<VkPipelineDiscardRectangleStateCreateInfoEXT>(pipeline_pnext)) {
+            return discard_rectangle_state->discardRectangleCount > 0;
+        }
+    }
+    return false;
+}
+
 bool LastBound::IsShadingRateImageEnable() const {
     if (!pipeline_state || pipeline_state->IsDynamic(CB_DYNAMIC_STATE_SHADING_RATE_IMAGE_ENABLE_NV)) {
         if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_SHADING_RATE_IMAGE_ENABLE_NV)) {
@@ -1311,41 +1344,41 @@ VkShaderStageFlags LastBound::GetAllActiveBoundStages() const {
 }
 
 bool LastBound::IsBoundSetCompatible(uint32_t set, const vvl::PipelineLayout &pipeline_layout) const {
-    if ((set >= per_set.size()) || (set >= pipeline_layout.set_compat_ids.size())) {
+    if ((set >= ds_slots.size()) || (set >= pipeline_layout.set_compat_ids.size())) {
         return false;
     }
-    return (*(per_set[set].compat_id_for_set) == *(pipeline_layout.set_compat_ids[set]));
+    return (*(ds_slots[set].compat_id_for_set) == *(pipeline_layout.set_compat_ids[set]));
 }
 
 bool LastBound::IsBoundSetCompatible(uint32_t set, const vvl::ShaderObject &shader_object_state) const {
-    if ((set >= per_set.size()) || (set >= shader_object_state.set_compat_ids.size())) {
+    if ((set >= ds_slots.size()) || (set >= shader_object_state.set_compat_ids.size())) {
         return false;
     }
-    return (*(per_set[set].compat_id_for_set) == *(shader_object_state.set_compat_ids[set]));
+    return (*(ds_slots[set].compat_id_for_set) == *(shader_object_state.set_compat_ids[set]));
 };
 
 std::string LastBound::DescribeNonCompatibleSet(uint32_t set, const vvl::PipelineLayout &pipeline_layout) const {
     std::ostringstream ss;
-    if (set >= per_set.size()) {
-        ss << "The set (" << set << ") is out of bounds for the number of sets bound (" << per_set.size() << ")\n";
+    if (set >= ds_slots.size()) {
+        ss << "The set (" << set << ") is out of bounds for the number of sets bound (" << ds_slots.size() << ")\n";
     } else if (set >= pipeline_layout.set_compat_ids.size()) {
         ss << "The set (" << set << ") is out of bounds for the number of sets in the non-compatible VkPipelineLayout ("
            << pipeline_layout.set_compat_ids.size() << ")\n";
     } else {
-        return per_set[set].compat_id_for_set->DescribeDifference(*(pipeline_layout.set_compat_ids[set]));
+        return ds_slots[set].compat_id_for_set->DescribeDifference(*(pipeline_layout.set_compat_ids[set]));
     }
     return ss.str();
 }
 
 std::string LastBound::DescribeNonCompatibleSet(uint32_t set, const vvl::ShaderObject &shader_object_state) const {
     std::ostringstream ss;
-    if (set >= per_set.size()) {
-        ss << "The set (" << set << ") is out of bounds for the number of sets bound (" << per_set.size() << ")\n";
+    if (set >= ds_slots.size()) {
+        ss << "The set (" << set << ") is out of bounds for the number of sets bound (" << ds_slots.size() << ")\n";
     } else if (set >= shader_object_state.set_compat_ids.size()) {
         ss << "The set (" << set << ") is out of bounds for the number of sets in the non-compatible VkDescriptorSetLayout ("
            << shader_object_state.set_compat_ids.size() << ")\n";
     } else {
-        return per_set[set].compat_id_for_set->DescribeDifference(*(shader_object_state.set_compat_ids[set]));
+        return ds_slots[set].compat_id_for_set->DescribeDifference(*(shader_object_state.set_compat_ids[set]));
     }
     return ss.str();
 }

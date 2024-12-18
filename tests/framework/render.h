@@ -35,6 +35,10 @@ using vkt::MakeVkHandles;
 static constexpr uint64_t kWaitTimeout{10000000000};  // 10 seconds in ns
 static constexpr VkDeviceSize kZeroDeviceSize{0};
 
+// Common (and simple) enough to make global
+static constexpr VkMemoryPropertyFlags kHostVisibleMemProps =
+    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
 struct SurfaceContext {
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
     HWND m_win32Window{};
@@ -46,10 +50,19 @@ struct SurfaceContext {
 #if defined(VK_USE_PLATFORM_XCB_KHR)
     xcb_connection_t *m_surface_xcb_conn{};
 #endif
-
 #if defined(VK_USE_PLATFORM_METAL_EXT)
-    void *caMetalLayer;
+    void *caMetalLayer{};
 #endif
+
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+    static bool CanResize() { return true; }
+    void Resize(uint32_t width, uint32_t height);
+#else
+    static bool CanResize() { return false; }
+    void Resize(uint32_t width, uint32_t height) {}
+#endif
+    void Destroy();
+    ~SurfaceContext() { Destroy(); }
 };
 
 struct SurfaceInformation {
@@ -65,15 +78,19 @@ class VkRenderFramework : public VkTestFramework {
     VkInstance instance() const { return instance_; }
     VkDevice device() const { return m_device->handle(); }
     vkt::Device *DeviceObj() const { return m_device; }
-    VkPhysicalDevice gpu() const;
-    VkRenderPass renderPass() const { return m_renderPass; }
-    VkFramebuffer framebuffer() const { return m_framebuffer->handle(); }
+    VkPhysicalDevice Gpu() const;
+    // Deprecated, use Gpu()
+    VkPhysicalDevice gpu() const { return Gpu(); }
+    VkRenderPass RenderPass() const { return m_renderPass; }
+    VkFramebuffer Framebuffer() const { return m_framebuffer->handle(); }
 
     vkt::Queue *DefaultQueue() const { return m_default_queue; }
     vkt::Queue *SecondQueue() const { return m_second_queue; }
 
     ErrorMonitor &Monitor();
-    const VkPhysicalDeviceProperties &physDevProps() const;
+    const VkPhysicalDeviceProperties &PhysicalDeviceProps() const;
+    // Deprecated, use PhysicalDeviceProps()
+    const VkPhysicalDeviceProperties &physDevProps() const { return PhysicalDeviceProps(); }
 
     bool InstanceLayerSupported(const char *layer_name, uint32_t spec_version = 0, uint32_t impl_version = 0);
     bool InstanceExtensionSupported(const char *extension_name, uint32_t spec_version = 0);
@@ -82,20 +99,21 @@ class VkRenderFramework : public VkTestFramework {
     void InitFramework(void *instance_pnext = NULL);
     void ShutdownFramework();
 
-     // Functions to modify the VkRenderFramework surface & swapchain variables
+    // Functions to modify the VkRenderFramework surface & swapchain variables
     void InitSurface();
-    void DestroySurface();
     void InitSwapchainInfo();
     void InitSwapchain(VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                        VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR);
     void DestroySwapchain();
     // Functions to create surfaces and swapchains that *aren't* member variables of VkRenderFramework
-    VkResult CreateSurface(SurfaceContext &surface_context, VkSurfaceKHR &surface, VkInstance custom_instance = VK_NULL_HANDLE);
-    void DestroySurface(VkSurfaceKHR& surface);
-    void DestroySurfaceContext(SurfaceContext& surface_context);
+    VkResult CreateSurface(SurfaceContext &surface_context, vkt::Surface &surface, VkInstance custom_instance = VK_NULL_HANDLE);
     SurfaceInformation GetSwapchainInfo(const VkSurfaceKHR surface);
-    bool CreateSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags imageUsage,  VkSurfaceTransformFlagBitsKHR preTransform, VkSwapchainKHR &swapchain, VkSwapchainKHR oldSwapchain = 0);
-    std::vector<VkImage> GetSwapchainImages(const VkSwapchainKHR swapchain);
+    vkt::Swapchain CreateSwapchain(VkSurfaceKHR surface, VkImageUsageFlags imageUsage, VkSurfaceTransformFlagBitsKHR preTransform,
+                                   VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE);
+
+    // Swapchain capabilities declaration to be used with RETURN_IF_SKIP
+    void SupportMultiSwapchain();
+    void SupportSurfaceResize();
 
     void InitRenderTarget();
     void InitRenderTarget(uint32_t targets);
@@ -144,19 +162,15 @@ class VkRenderFramework : public VkTestFramework {
     void AllowPromotedExtensions() { allow_promoted_extensions_ = true; }
 
     // Add a feature required for the test to be executed. The currently targeted API version is used to add the correct struct, so
-    // be sure to call SetTargetApiVersion before
+    // be sure to call SetTargetApiVersion before.
+    // Only features added with this or the AddOptionalFeature method will be enabled.
     void AddRequiredFeature(vkt::Feature feature);
-    // Add a feature that will be disabled when creating the device. The currently targeted API version is used to add the correct
-    // struct, so be sure to call SetTargetApiVersion before
-    void AddDisabledFeature(vkt::Feature feature);
+    // Add an optional feature for the test to be executed. The currently targeted API version is used to add the correct struct, so
+    // be sure to call SetTargetApiVersion before
+    // Only features added with this or the AddRequiredFeature method will be enabled.
+    void AddOptionalFeature(vkt::Feature feature);
 
-    template <typename GLSLContainer>
-    std::vector<uint32_t> GLSLToSPV(VkShaderStageFlagBits stage, const GLSLContainer &code,
-                                    const spv_target_env env = SPV_ENV_VULKAN_1_0) {
-        std::vector<uint32_t> spv;
-        GLSLtoSPV(&m_device->phy().limits_, stage, code, spv, env);
-        return spv;
-    }
+    std::vector<uint32_t> GLSLToSPV(VkShaderStageFlagBits stage, const char *code, const spv_target_env env = SPV_ENV_VULKAN_1_0);
 
     void SetDesiredFailureMsg(const VkFlags msg_flags, const std::string &msg) {
         m_errorMonitor->SetDesiredFailureMsg(msg_flags, msg);
@@ -174,8 +188,8 @@ class VkRenderFramework : public VkTestFramework {
     VkRenderFramework();
     virtual ~VkRenderFramework() = 0;
 
-    std::vector<VkLayerProperties> available_layers_; // allow caching of available layers
-    std::vector<VkExtensionProperties> available_extensions_; // allow caching of available instance extensions
+    std::vector<VkLayerProperties> available_layers_;          // allow caching of available layers
+    std::vector<VkExtensionProperties> available_extensions_;  // allow caching of available instance extensions
 
     ErrorMonitor monitor_ = ErrorMonitor(m_print_vu);
     ErrorMonitor *m_errorMonitor = &monitor_;  // TODO: Removing this properly is it's own PR. It's a big change.
@@ -188,7 +202,15 @@ class VkRenderFramework : public VkTestFramework {
     VkInstance instance_;
     VkPhysicalDevice gpu_ = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties physDevProps_;
-    vkt::FeatureRequirements feature_requirements_;
+    // This set of required features is used for the features query.
+    // If any required feature is not available, test will fail
+    vkt::FeatureRequirements required_features_;
+    // This is the set of features that will be enabled.
+    // The same features added to required_features_ are added here.
+    // But when querying features, required_features_ will be filled with all
+    // available features. Hence, if used to create a device, the required_features_ set
+    // would *also* enable available features, when we just want to enable required features.
+    vkt::FeatureRequirements features_to_enable_;
     bool all_queue_count_ = false;
 
     uint32_t m_gpu_index;
@@ -201,8 +223,8 @@ class VkRenderFramework : public VkTestFramework {
 
     // WSI items
     SurfaceContext m_surface_context{};
-    VkSurfaceKHR m_surface{};
-    VkSwapchainKHR m_swapchain{};
+    vkt::Surface m_surface{};
+    vkt::Swapchain m_swapchain;
     VkSurfaceCapabilitiesKHR m_surface_capabilities{};
     std::vector<VkSurfaceFormatKHR> m_surface_formats;
     std::vector<VkPresentModeKHR> m_surface_present_modes;
@@ -219,6 +241,7 @@ class VkRenderFramework : public VkTestFramework {
     vkt::Image *m_depthStencil;
     // first graphics queue, used must often, don't overwrite, use Device class
     vkt::Queue *m_default_queue = nullptr;
+    VkQueueFlags m_default_queue_caps = 0;
 
     // A queue different from the default one (can be null).
     // The queue with the most capabilities is selected (graphics > compute > transfer).

@@ -52,8 +52,7 @@ bool StatelessValidation::ValidateIndirectExecutionSetPipelineInfo(const VkIndir
                          props.maxIndirectPipelineCount);
     }
 
-    // implicit checks
-    skip |= ValidateRequiredHandle(pipeline_info_loc.dot(Field::initialPipeline), pipeline_info.initialPipeline);
+    skip |= ValidateIndirectExecutionSetPipelineInfoEXT(pipeline_info, pipeline_info_loc);
 
     return skip;
 }
@@ -77,7 +76,9 @@ bool StatelessValidation::ValidateIndirectExecutionSetShaderInfo(const VkIndirec
                          shader_info.maxShaderCount, shader_info.shaderCount);
     }
 
-    // implicit checks
+    // implicit checks - done manually as code gen is hard to get correct
+    skip |= ValidateStructType(shader_info_loc, &shader_info, VK_STRUCTURE_TYPE_INDIRECT_EXECUTION_SET_SHADER_INFO_EXT, false,
+                               kVUIDUndefined, "VUID-VkIndirectExecutionSetShaderInfoEXT-sType-sType");
     skip |= ValidateStructTypeArray(shader_info_loc.dot(Field::shaderCount), shader_info_loc.dot(Field::pSetLayoutInfos),
                                     shader_info.shaderCount, shader_info.pSetLayoutInfos,
                                     VK_STRUCTURE_TYPE_INDIRECT_EXECUTION_SET_SHADER_LAYOUT_INFO_EXT, true, false,
@@ -475,6 +476,10 @@ bool StatelessValidation::ValidateGeneratedCommandsInfo(VkCommandBuffer command_
                              info_loc.dot(Field::sequenceCountAddress), "(%" PRIuLEAST64 ") is not aligned to 4.",
                              generated_commands_info.sequenceCountAddress);
         }
+    }
+    if (generated_commands_info.maxSequenceCount == 0) {
+        skip |= LogError("VUID-VkGeneratedCommandsInfoEXT-maxSequenceCount-10246", command_buffer,
+                         info_loc.dot(Field::maxSequenceCount), "is zero.");
     }
 
     if (generated_commands_info.indirectAddress == 0) {

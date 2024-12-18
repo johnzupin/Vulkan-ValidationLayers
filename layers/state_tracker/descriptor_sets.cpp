@@ -166,10 +166,10 @@ vvl::DescriptorClass vvl::DescriptorTypeToClass(VkDescriptorType type) {
             return DescriptorClass::AccelerationStructure;
         case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
             return DescriptorClass::Mutable;
-        default:
+        case VK_DESCRIPTOR_TYPE_MAX_ENUM:
             break;
     }
-    return DescriptorClass::NoDescriptorClass;
+    return DescriptorClass::Invalid;
 }
 
 using DescriptorSet = vvl::DescriptorSet;
@@ -288,7 +288,11 @@ std::string DescriptorSetLayoutDef::DescribeDifference(uint32_t index, const Des
 // Construct DescriptorSetLayout instance from given create info
 // Proactively reserve and resize as possible, as the reallocation was visible in profiling
 vvl::DescriptorSetLayoutDef::DescriptorSetLayoutDef(const VkDescriptorSetLayoutCreateInfo *p_create_info)
-    : flags_(p_create_info->flags), binding_count_(0), descriptor_count_(0), dynamic_descriptor_count_(0) {
+    : flags_(p_create_info->flags),
+      binding_count_(0),
+      descriptor_count_(0),
+      non_inline_descriptor_count_(0),
+      dynamic_descriptor_count_(0) {
     const auto *flags_create_info = vku::FindStructInPNextChain<VkDescriptorSetLayoutBindingFlagsCreateInfo>(p_create_info->pNext);
 
     binding_type_stats_ = {0, 0};
@@ -334,6 +338,9 @@ vvl::DescriptorSetLayoutDef::DescriptorSetLayoutDef(const VkDescriptorSetLayoutC
         if (binding_info.descriptorCount > 0) {
             non_empty_bindings_.insert(binding_num);
         }
+
+        non_inline_descriptor_count_ +=
+            (binding_info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) ? 1 : binding_info.descriptorCount;
 
         if (IsDynamicDescriptor(binding_info.descriptorType)) {
             dynamic_descriptor_count_ += binding_info.descriptorCount;
@@ -569,7 +576,7 @@ vvl::DescriptorSet::DescriptorSet(const VkDescriptorSet handle, vvl::DescriptorP
                 bindings_.push_back(MakeBinding<MutableBinding>(free_binding++, *create_info, descriptor_count, flags));
                 break;
             }
-            default:
+            case DescriptorClass::Invalid:
                 assert(false);  // Bad descriptor type specified
                 break;
         }
@@ -687,8 +694,8 @@ void vvl::DescriptorSet::PerformCopyUpdate(const VkCopyDescriptorSet &update, co
 // TODO: Modify the UpdateDrawState virtural functions to *only* set initial layout and not change layouts
 // Prereq: This should be called for a set that has been confirmed to be active for the given cb_state, meaning it's going
 //   to be used in a draw by the given cb_state
-void vvl::DescriptorSet::UpdateDrawState(ValidationStateTracker *device_data, vvl::CommandBuffer *cb_state, vvl::Func command,
-                                         const vvl::Pipeline *pipe, const BindingVariableMap &binding_req_map) {
+void vvl::DescriptorSet::UpdateDrawStates(ValidationStateTracker *device_data, vvl::CommandBuffer &cb_state,
+                                          const BindingVariableMap &binding_req_map) {
     // Descriptor UpdateDrawState only call image layout validation callbacks. If it is disabled, skip the entire loop.
     if (device_data->disabled[image_layout_validation]) {
         return;
@@ -701,28 +708,28 @@ void vvl::DescriptorSet::UpdateDrawState(ValidationStateTracker *device_data, vv
         ASSERT_AND_CONTINUE(binding);
 
         // core validation doesn't handle descriptor indexing, that is only done by GPU-AV
-        if (SkipBinding(*binding, binding_req_pair.second.variable->is_dynamic_accessed)) {
+        if (ValidateBindingOnGPU(*binding, binding_req_pair.second.variable->is_runtime_descriptor_array)) {
             continue;
         }
         switch (binding->descriptor_class) {
             case DescriptorClass::Image: {
                 auto *image_binding = static_cast<ImageBinding *>(binding);
                 for (uint32_t i = 0; i < image_binding->count; ++i) {
-                    image_binding->descriptors[i].UpdateDrawState(device_data, cb_state);
+                    image_binding->descriptors[i].UpdateDrawState(cb_state);
                 }
                 break;
             }
             case DescriptorClass::ImageSampler: {
                 auto *image_binding = static_cast<ImageSamplerBinding *>(binding);
                 for (uint32_t i = 0; i < image_binding->count; ++i) {
-                    image_binding->descriptors[i].UpdateDrawState(device_data, cb_state);
+                    image_binding->descriptors[i].UpdateDrawState(cb_state);
                 }
                 break;
             }
             case DescriptorClass::Mutable: {
                 auto *mutable_binding = static_cast<MutableBinding *>(binding);
                 for (uint32_t i = 0; i < mutable_binding->count; ++i) {
-                    mutable_binding->descriptors[i].UpdateDrawState(device_data, cb_state);
+                    mutable_binding->descriptors[i].UpdateDrawState(cb_state);
                 }
                 break;
             }
@@ -730,6 +737,16 @@ void vvl::DescriptorSet::UpdateDrawState(ValidationStateTracker *device_data, vv
                 break;
         }
     }
+}
+
+// This is used to decide if we should validate the Descirptors on the CPU or GPU-AV
+bool vvl::DescriptorSet::ValidateBindingOnGPU(const DescriptorBinding &binding, bool is_runtime_descriptor_array) const {
+    // Some applications (notably Doom Eternal) might have large non-bindless descriptors attached (basically doing Descriptor
+    // Indexing without the extension). Trying to loop through these on the CPU will bring FPS down by over 50% so we make use of
+    // the post processing to detect which descriptors were actually accessed
+    static constexpr uint32_t max_descriptor_on_cpu = 1024;
+    return GetNonInlineDescriptorCount() > max_descriptor_on_cpu || IsBindless(binding.binding_flags) ||
+           is_runtime_descriptor_array;
 }
 
 // Helper template to change shared pointer members of a Descriptor, while
@@ -873,11 +890,11 @@ void vvl::ImageDescriptor::CopyUpdate(DescriptorSet &set_state, const Validation
     UpdateKnownValidView(is_bindless);
 }
 
-void vvl::ImageDescriptor::UpdateDrawState(ValidationStateTracker *dev_data, vvl::CommandBuffer *cb_state) {
+void vvl::ImageDescriptor::UpdateDrawState(vvl::CommandBuffer &cb_state) {
     // Add binding for image
     auto iv_state = GetImageViewState();
     if (iv_state) {
-        dev_data->CallSetImageViewInitialLayoutCallback(cb_state, *iv_state, image_layout_);
+        cb_state.SetImageViewInitialLayout(*iv_state, image_layout_);
     }
 }
 
@@ -1141,7 +1158,9 @@ void vvl::MutableDescriptor::WriteUpdate(DescriptorSet &set_state, const Validat
             }
             break;
         }
-        default:
+        case DescriptorClass::InlineUniform:
+        case DescriptorClass::Mutable:
+        case DescriptorClass::Invalid:
             break;
     }
     SetDescriptorType(update.descriptorType, buffer_size);
@@ -1149,122 +1168,118 @@ void vvl::MutableDescriptor::WriteUpdate(DescriptorSet &set_state, const Validat
 
 void vvl::MutableDescriptor::CopyUpdate(DescriptorSet &set_state, const ValidationStateTracker &dev_data,
                                                     const Descriptor &src, bool is_bindless, VkDescriptorType src_type) {
-    VkDeviceSize src_size = 0;
-    if (src.GetClass() == DescriptorClass::PlainSampler) {
-        auto &sampler_src = static_cast<const SamplerDescriptor &>(src);
-        if (!immutable_) {
-            ReplaceStatePtr(set_state, sampler_state_, sampler_src.GetSharedSamplerState(), is_bindless);
+    VkDeviceSize buffer_size = 0;
+    switch (src.GetClass()) {
+        case DescriptorClass::PlainSampler: {
+            auto &sampler_src = static_cast<const SamplerDescriptor &>(src);
+            if (!immutable_) {
+                ReplaceStatePtr(set_state, sampler_state_, sampler_src.GetSharedSamplerState(), is_bindless);
+            }
+            break;
         }
-    } else if (src.GetClass() == DescriptorClass::ImageSampler) {
-        auto &image_src = static_cast<const ImageSamplerDescriptor &>(src);
-        if (!immutable_) {
-            ReplaceStatePtr(set_state, sampler_state_, image_src.GetSharedSamplerState(), is_bindless);
+        case DescriptorClass::ImageSampler: {
+            auto &image_src = static_cast<const ImageSamplerDescriptor &>(src);
+            if (!immutable_) {
+                ReplaceStatePtr(set_state, sampler_state_, image_src.GetSharedSamplerState(), is_bindless);
+            }
+
+            image_layout_ = image_src.GetImageLayout();
+            ReplaceStatePtr(set_state, image_view_state_, image_src.GetSharedImageViewState(), is_bindless);
+            break;
         }
+        case DescriptorClass::Image: {
+            auto &image_src = static_cast<const ImageDescriptor &>(src);
 
-        image_layout_ = image_src.GetImageLayout();
-        ReplaceStatePtr(set_state, image_view_state_, image_src.GetSharedImageViewState(), is_bindless);
-    } else if (src.GetClass() == DescriptorClass::Image) {
-        auto &image_src = static_cast<const ImageDescriptor &>(src);
-
-        image_layout_ = image_src.GetImageLayout();
-        ReplaceStatePtr(set_state, image_view_state_, image_src.GetSharedImageViewState(), is_bindless);
-    } else if (src.GetClass() == DescriptorClass::TexelBuffer) {
-        ReplaceStatePtr(set_state, buffer_view_state_, static_cast<const TexelDescriptor &>(src).GetSharedBufferViewState(),
-                        is_bindless);
-        src_size = buffer_view_state_ ? buffer_view_state_->Size() : vvl::kU32Max;
-    } else if (src.GetClass() == DescriptorClass::GeneralBuffer) {
-        const auto buff_desc = static_cast<const BufferDescriptor &>(src);
-        offset_ = buff_desc.GetOffset();
-        range_ = buff_desc.GetRange();
-        ReplaceStatePtr(set_state, buffer_state_, buff_desc.GetSharedBufferState(), is_bindless);
-        src_size = range_;
-    } else if (src.GetClass() == DescriptorClass::AccelerationStructure) {
-        auto &acc_desc = static_cast<const AccelerationStructureDescriptor &>(src);
-        if (is_khr_) {
-            acc_ = acc_desc.GetAccelerationStructure();
-            ReplaceStatePtr(set_state, acc_state_, dev_data.GetConstCastShared<vvl::AccelerationStructureKHR>(acc_), is_bindless);
-        } else {
-            acc_nv_ = acc_desc.GetAccelerationStructureNV();
-            ReplaceStatePtr(set_state, acc_state_nv_, dev_data.GetConstCastShared<vvl::AccelerationStructureNV>(acc_nv_),
+            image_layout_ = image_src.GetImageLayout();
+            ReplaceStatePtr(set_state, image_view_state_, image_src.GetSharedImageViewState(), is_bindless);
+            break;
+        }
+        case DescriptorClass::TexelBuffer: {
+            ReplaceStatePtr(set_state, buffer_view_state_, static_cast<const TexelDescriptor &>(src).GetSharedBufferViewState(),
                             is_bindless);
+            buffer_size = buffer_view_state_ ? buffer_view_state_->Size() : vvl::kU32Max;
+            break;
         }
-    } else if (src.GetClass() == DescriptorClass::Mutable) {
-        const auto &mutable_src = static_cast<const MutableDescriptor &>(src);
-        auto active_class = DescriptorTypeToClass(mutable_src.ActiveType());
-        switch (active_class) {
-            case DescriptorClass::PlainSampler: {
-                if (!immutable_) {
-                    ReplaceStatePtr(set_state, sampler_state_, mutable_src.GetSharedSamplerState(), is_bindless);
-                }
-            } break;
-            case DescriptorClass::ImageSampler: {
-                if (!immutable_) {
-                    ReplaceStatePtr(set_state, sampler_state_, mutable_src.GetSharedSamplerState(), is_bindless);
-                }
-
-                image_layout_ = mutable_src.GetImageLayout();
-                ReplaceStatePtr(set_state, image_view_state_, mutable_src.GetSharedImageViewState(), is_bindless);
-            } break;
-            case DescriptorClass::Image: {
-                image_layout_ = mutable_src.GetImageLayout();
-                ReplaceStatePtr(set_state, image_view_state_, mutable_src.GetSharedImageViewState(), is_bindless);
-            } break;
-            case DescriptorClass::GeneralBuffer: {
-                offset_ = mutable_src.GetOffset();
-                range_ = mutable_src.GetRange();
-                ReplaceStatePtr(set_state, buffer_state_, mutable_src.GetSharedBufferState(), is_bindless);
-            } break;
-            case DescriptorClass::TexelBuffer: {
-                ReplaceStatePtr(set_state, buffer_view_state_, mutable_src.GetSharedBufferViewState(), is_bindless);
-            } break;
-            case DescriptorClass::AccelerationStructure: {
-                if (mutable_src.is_khr()) {
-                    acc_ = mutable_src.GetAccelerationStructureKHR();
-                    ReplaceStatePtr(set_state, acc_state_, dev_data.GetConstCastShared<vvl::AccelerationStructureKHR>(acc_),
-                                    is_bindless);
-                } else {
-                    acc_nv_ = mutable_src.GetAccelerationStructureNV();
-                    ReplaceStatePtr(set_state, acc_state_nv_, dev_data.GetConstCastShared<vvl::AccelerationStructureNV>(acc_nv_),
-                                    is_bindless);
-                }
-
-            } break;
-            default:
-                break;
+        case DescriptorClass::GeneralBuffer: {
+            const auto buff_desc = static_cast<const BufferDescriptor &>(src);
+            offset_ = buff_desc.GetOffset();
+            range_ = buff_desc.GetRange();
+            ReplaceStatePtr(set_state, buffer_state_, buff_desc.GetSharedBufferState(), is_bindless);
+            buffer_size = range_;
+            break;
         }
-        src_size = mutable_src.GetBufferSize();
+        case DescriptorClass::AccelerationStructure: {
+            auto &acc_desc = static_cast<const AccelerationStructureDescriptor &>(src);
+            if (is_khr_) {
+                acc_ = acc_desc.GetAccelerationStructure();
+                ReplaceStatePtr(set_state, acc_state_, dev_data.GetConstCastShared<vvl::AccelerationStructureKHR>(acc_),
+                                is_bindless);
+            } else {
+                acc_nv_ = acc_desc.GetAccelerationStructureNV();
+                ReplaceStatePtr(set_state, acc_state_nv_, dev_data.GetConstCastShared<vvl::AccelerationStructureNV>(acc_nv_),
+                                is_bindless);
+            }
+            break;
+        }
+        case DescriptorClass::Mutable: {
+            const auto &mutable_src = static_cast<const MutableDescriptor &>(src);
+            auto active_class = DescriptorTypeToClass(mutable_src.ActiveType());
+            switch (active_class) {
+                case DescriptorClass::PlainSampler: {
+                    if (!immutable_) {
+                        ReplaceStatePtr(set_state, sampler_state_, mutable_src.GetSharedSamplerState(), is_bindless);
+                    }
+                } break;
+                case DescriptorClass::ImageSampler: {
+                    if (!immutable_) {
+                        ReplaceStatePtr(set_state, sampler_state_, mutable_src.GetSharedSamplerState(), is_bindless);
+                    }
+
+                    image_layout_ = mutable_src.GetImageLayout();
+                    ReplaceStatePtr(set_state, image_view_state_, mutable_src.GetSharedImageViewState(), is_bindless);
+                } break;
+                case DescriptorClass::Image: {
+                    image_layout_ = mutable_src.GetImageLayout();
+                    ReplaceStatePtr(set_state, image_view_state_, mutable_src.GetSharedImageViewState(), is_bindless);
+                } break;
+                case DescriptorClass::GeneralBuffer: {
+                    offset_ = mutable_src.GetOffset();
+                    range_ = mutable_src.GetRange();
+                    ReplaceStatePtr(set_state, buffer_state_, mutable_src.GetSharedBufferState(), is_bindless);
+                } break;
+                case DescriptorClass::TexelBuffer: {
+                    ReplaceStatePtr(set_state, buffer_view_state_, mutable_src.GetSharedBufferViewState(), is_bindless);
+                } break;
+                case DescriptorClass::AccelerationStructure: {
+                    if (mutable_src.IsKHR()) {
+                        acc_ = mutable_src.GetAccelerationStructureKHR();
+                        ReplaceStatePtr(set_state, acc_state_, dev_data.GetConstCastShared<vvl::AccelerationStructureKHR>(acc_),
+                                        is_bindless);
+                    } else {
+                        acc_nv_ = mutable_src.GetAccelerationStructureNV();
+                        ReplaceStatePtr(set_state, acc_state_nv_,
+                                        dev_data.GetConstCastShared<vvl::AccelerationStructureNV>(acc_nv_), is_bindless);
+                    }
+
+                } break;
+                case DescriptorClass::InlineUniform:
+                case DescriptorClass::Mutable:
+                case DescriptorClass::Invalid:
+                    break;
+            }
+            buffer_size = mutable_src.GetBufferSize();
+            break;
+        }
+        case vvl::DescriptorClass::InlineUniform:
+        case vvl::DescriptorClass::Invalid:
+            break;
     }
-    SetDescriptorType(src_type, src_size);
+    SetDescriptorType(src_type, buffer_size);
 }
 
 void vvl::MutableDescriptor::SetDescriptorType(VkDescriptorType type, VkDeviceSize buffer_size) {
     active_descriptor_type_ = type;
     buffer_size_ = buffer_size;
-}
-void vvl::MutableDescriptor::SetDescriptorType(VkDescriptorType src_type, const Descriptor *src) {
-    active_descriptor_type_ = src_type;
-    if (src->GetClass() == vvl::DescriptorClass::GeneralBuffer) {
-        auto buffer = static_cast<const vvl::BufferDescriptor *>(src)->GetBuffer();
-        if (buffer == VK_NULL_HANDLE) {
-            buffer_size_ = vvl::kU32Max;
-        } else {
-            auto buffer_state = static_cast<const vvl::BufferDescriptor *>(src)->GetBufferState();
-            buffer_size_ = static_cast<uint32_t>(buffer_state->create_info.size);
-        }
-    } else if (src->GetClass() == vvl::DescriptorClass::TexelBuffer) {
-        auto buffer_view = static_cast<const vvl::TexelDescriptor *>(src)->GetBufferView();
-        if (buffer_view == VK_NULL_HANDLE) {
-            buffer_size_ = vvl::kU32Max;
-        } else {
-            auto buffer_view_state = static_cast<const vvl::TexelDescriptor *>(src)->GetBufferViewState();
-            buffer_size_ = static_cast<uint32_t>(buffer_view_state->buffer_state->create_info.size);
-        }
-    } else if (src->GetClass() == vvl::DescriptorClass::Mutable) {
-        auto descriptor = static_cast<const vvl::MutableDescriptor *>(src);
-        buffer_size_ = descriptor->GetBufferSize();
-    } else {
-        buffer_size_ = 0;
-    }
 }
 
 VkDeviceSize vvl::MutableDescriptor::GetEffectiveRange() const {
@@ -1278,18 +1293,18 @@ VkDeviceSize vvl::MutableDescriptor::GetEffectiveRange() const {
     }
 }
 
-void vvl::MutableDescriptor::UpdateDrawState(ValidationStateTracker *dev_data, vvl::CommandBuffer *cb_state) {
-    auto active_class = DescriptorTypeToClass(active_descriptor_type_);
+void vvl::MutableDescriptor::UpdateDrawState(vvl::CommandBuffer &cb_state) {
+    const vvl::DescriptorClass active_class = ActiveClass();
     if (active_class == DescriptorClass::Image || active_class == DescriptorClass::ImageSampler) {
         if (image_view_state_) {
-            dev_data->CallSetImageViewInitialLayoutCallback(cb_state, *image_view_state_, image_layout_);
+            cb_state.SetImageViewInitialLayout(*image_view_state_, image_layout_);
         }
     }
 }
 
 bool vvl::MutableDescriptor::AddParent(StateObject *state_object) {
     bool result = false;
-    auto active_class = DescriptorTypeToClass(active_descriptor_type_);
+    const vvl::DescriptorClass active_class = ActiveClass();
     switch (active_class) {
         case DescriptorClass::PlainSampler:
             if (sampler_state_) {
@@ -1327,7 +1342,9 @@ bool vvl::MutableDescriptor::AddParent(StateObject *state_object) {
                 result |= acc_state_nv_->AddParent(state_object);
             }
             break;
-        default:
+        case DescriptorClass::InlineUniform:
+        case DescriptorClass::Mutable:
+        case DescriptorClass::Invalid:
             break;
     }
     return result;
@@ -1376,7 +1393,10 @@ bool vvl::MutableDescriptor::Invalid() const {
             } else {
                 return !acc_state_nv_ || acc_state_nv_->Invalid();
             }
-        default:
-            return false;
+        case DescriptorClass::InlineUniform:
+        case DescriptorClass::Mutable:
+        case DescriptorClass::Invalid:
+            break;
     }
+    return false;
 }

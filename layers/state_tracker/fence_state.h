@@ -49,9 +49,6 @@ class Swapchain;
 struct AcquireFenceSync {
     // The queue submissions that will be notified when WaitForFences is called.
     small_vector<SubmissionReference, 2, uint32_t> submission_refs;
-
-    // The swapchain associated with this synchronization instance.
-    std::shared_ptr<vvl::Swapchain> swapchain;
 };
 
 class Fence : public RefcountedStateObject {
@@ -65,6 +62,7 @@ class Fence : public RefcountedStateObject {
 
     Fence(ValidationStateTracker &dev, VkFence handle, const VkFenceCreateInfo *pCreateInfo);
 
+    const VulkanTypedHandle *InUse() const override;
     VkFence VkHandle() const { return handle_.Cast<VkFence>(); }
     // TODO: apply ReadLock as Semaphore does, or consider reading enums without lock.
     // Consider if more high-level operation should be exposed, because
@@ -90,7 +88,6 @@ class Fence : public RefcountedStateObject {
     std::optional<VkExternalFenceHandleTypeFlagBits> ImportedHandleType() const;
 
     void SetAcquireFenceSync(const AcquireFenceSync &acquire_fence_sync);
-    bool IsAcquireFenceSyncSwapchainChanged(const std::shared_ptr<vvl::Swapchain> &current_swapchain) const;
 
     const VkFenceCreateFlags flags;
     const VkExternalFenceHandleTypeFlags export_handle_types;
@@ -107,7 +104,10 @@ class Fence : public RefcountedStateObject {
     mutable std::shared_mutex lock_;
     std::promise<void> completed_;
     std::shared_future<void> waiter_;
+
+    // Special frame synchronization based on acquire fence (check AcquireFenceSync documentation)
     AcquireFenceSync acquire_fence_sync_;
+
     ValidationStateTracker &dev_data_;
 };
 

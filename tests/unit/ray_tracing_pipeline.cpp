@@ -663,6 +663,7 @@ TEST_F(NegativeRayTracingPipeline, LibraryFlags) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredFeature(vkt::Feature::rayTracingPipeline);
+    AddRequiredFeature(vkt::Feature::rayTraversalPrimitiveCulling);
     RETURN_IF_SKIP(InitFrameworkForRayTracingTest());
     RETURN_IF_SKIP(InitState());
 
@@ -769,6 +770,7 @@ TEST_F(NegativeRayTracingPipeline, LibraryFlags) {
 TEST_F(NegativeRayTracingPipeline, GetCaptureReplayShaderGroupHandlesKHR) {
     TEST_DESCRIPTION("Validate vkGetRayTracingCaptureReplayShaderGroupHandlesKHR.");
     SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredFeature(vkt::Feature::rayTracingPipeline);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
     AddRequiredFeature(vkt::Feature::rayTracingPipelineShaderGroupHandleCaptureReplay);
     RETURN_IF_SKIP(InitFrameworkForRayTracingTest());
@@ -848,11 +850,9 @@ TEST_F(NegativeRayTracingPipeline, DeferredOp) {
     VkShaderObj rgen_shader(this, kRayTracingMinimalGlsl, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
     VkShaderObj chit_shader(this, chit_src, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, SPV_ENV_VULKAN_1_2);
 
-    std::vector<VkDescriptorSetLayoutBinding> layout_bindings = {
-        {0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, nullptr},
-        {1, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, nullptr}};
-
-    const vkt::DescriptorSetLayout ds_layout(*m_device, layout_bindings);
+    const vkt::DescriptorSetLayout ds_layout(
+        *m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, nullptr},
+                    {1, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, nullptr}});
     const vkt::PipelineLayout pipeline_layout(*m_device, {&ds_layout});
 
     VkPipelineShaderStageCreateInfo stage_create_info = vku::InitStructHelper();
@@ -913,7 +913,7 @@ TEST_F(NegativeRayTracingPipeline, DeferredOp) {
     VkResult result = vk::CreateRayTracingPipelinesKHR(m_device->handle(), deferredOperation, VK_NULL_HANDLE, 1, &pipeline_ci,
                                                        nullptr, &pipeline);
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     if (result == VK_OPERATION_DEFERRED_KHR) {
         result = vk::DeferredOperationJoinKHR(this->m_device->handle(), deferredOperation);
         ASSERT_EQ(result, VK_SUCCESS);
@@ -927,7 +927,7 @@ TEST_F(NegativeRayTracingPipeline, DeferredOp) {
     ASSERT_EQ(result, VK_SUCCESS);
 
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vk::DestroyPipeline(m_device->handle(), pipeline, nullptr);
     vk::DestroyDeferredOperationKHR(m_device->handle(), deferredOperation, nullptr);
@@ -955,18 +955,16 @@ TEST_F(NegativeRayTracingPipeline, MaxResources) {
 
     const uint32_t maxPerStageResources = 4;
     VkPhysicalDeviceProperties props;
-    fpvkGetOriginalPhysicalDeviceLimitsEXT(gpu(), &props.limits);
+    fpvkGetOriginalPhysicalDeviceLimitsEXT(Gpu(), &props.limits);
     props.limits.maxPerStageResources = maxPerStageResources;
-    fpvkSetPhysicalDeviceLimitsEXT(gpu(), &props.limits);
+    fpvkSetPhysicalDeviceLimitsEXT(Gpu(), &props.limits);
 
     RETURN_IF_SKIP(InitState(nullptr, &ray_tracing_features));
 
-    std::vector<VkDescriptorSetLayoutBinding> layout_bindings = {
-        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, m_device->phy().limits_.maxPerStageResources, VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-         nullptr},
-        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr}};
-
-    const vkt::DescriptorSetLayout ds_layout(*m_device, layout_bindings);
+    const vkt::DescriptorSetLayout ds_layout(
+        *m_device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, m_device->Physical().limits_.maxPerStageResources,
+                     VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr},
+                    {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr}});
     const vkt::PipelineLayout pipeline_layout(*m_device, {&ds_layout});
     VkShaderObj rgen_shader(this, kRayTracingMinimalGlsl, VK_SHADER_STAGE_RAYGEN_BIT_KHR, SPV_ENV_VULKAN_1_2);
 
@@ -1121,7 +1119,7 @@ TEST_F(NegativeRayTracingPipeline, LibraryGroupHandlesEXT) {
     AddRequiredFeature(vkt::Feature::rayTracingPipeline);
     AddRequiredFeature(vkt::Feature::rayTracingPipelineShaderGroupHandleCaptureReplay);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
-    AddDisabledFeature(vkt::Feature::pipelineLibraryGroupHandles);
+
     RETURN_IF_SKIP(InitFrameworkForRayTracingTest());
     RETURN_IF_SKIP(InitState());
 
@@ -1195,7 +1193,7 @@ TEST_F(NegativeRayTracingPipeline, PipelineBinaryRayTracingPipeline) {
     raytracing_pipeline_ci.layout = pipeline_layout.handle();
 
     {
-        VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+        VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
         flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
         raytracing_pipeline_ci.pNext = &flags2;
 
@@ -1244,7 +1242,7 @@ TEST_F(NegativeRayTracingPipeline, PipelineBinaryRayTracingPipeline) {
     }
 
     {
-        VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+        VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
         flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
         raytracing_pipeline_ci.pNext = &flags2;
 
@@ -1280,7 +1278,7 @@ TEST_F(NegativeRayTracingPipeline, PipelineBinaryRayTracingPipeline) {
         feedback.flags = VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT |
                          VK_PIPELINE_CREATION_FEEDBACK_BASE_PIPELINE_ACCELERATION_BIT;
 
-        flags2.flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT;
+        flags2.flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
         flags2.pNext = &binary_info;
         binary_info.pNext = &feedback_create_info;
 

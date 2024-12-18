@@ -578,7 +578,7 @@ class Pipeline : public StateObject {
     static bool EnablesRasterizationStates(const CreateInfo &create_info) {
         if (create_info.pDynamicState && create_info.pDynamicState->pDynamicStates) {
             for (uint32_t i = 0; i < create_info.pDynamicState->dynamicStateCount; ++i) {
-                if (create_info.pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT) {
+                if (create_info.pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE) {
                     // If RASTERIZER_DISCARD_ENABLE is dynamic, then we must return true (i.e., rasterization is enabled)
                     // NOTE: create_info must contain pre-raster state, otherwise it is an invalid pipeline and will trigger
                     //       an error outside of this function.
@@ -678,13 +678,14 @@ struct LastBound {
         uint32_t index = 0;
         VkDeviceSize offset = 0;
     };
-    // Ordered bound set tracking where index is set# that given set is bound to
-    struct PER_SET {
-        std::shared_ptr<vvl::DescriptorSet> bound_descriptor_set;
-        std::optional<DescriptorBufferBinding> bound_descriptor_buffer;
+
+    // Each command buffer has a "slot" to hold a descriptor set binding. This "slot" also might be empty
+    struct DescriptorSetSlot {
+        std::shared_ptr<vvl::DescriptorSet> ds_state;
+        std::optional<DescriptorBufferBinding> descriptor_buffer_binding;
 
         // one dynamic offset per dynamic descriptor bound to this CB
-        std::vector<uint32_t> dynamicOffsets;
+        std::vector<uint32_t> dynamic_offsets;
         PipelineLayoutCompatId compat_id_for_set{0};
 
         // Cache most recently validated descriptor state for ValidateActionState/UpdateDrawState
@@ -693,13 +694,14 @@ struct LastBound {
         uint64_t validated_set_image_layout_change_count{~0ULL};
 
         void Reset() {
-            bound_descriptor_set.reset();
-            bound_descriptor_buffer.reset();
-            dynamicOffsets.clear();
+            ds_state.reset();
+            descriptor_buffer_binding.reset();
+            dynamic_offsets.clear();
         }
     };
 
-    std::vector<PER_SET> per_set;
+    // Ordered bound set tracking where index is set# that given set is bound to
+    std::vector<DescriptorSetSlot> ds_slots;
 
     void Reset();
 
@@ -726,6 +728,8 @@ struct LastBound {
     bool IsExclusiveScissorEnabled() const;
     bool IsCoverageToColorEnabled() const;
     bool IsCoverageModulationTableEnable() const;
+    bool IsDiscardRectangleEnable() const;
+    bool IsStippledLineEnable() const;
     bool IsShadingRateImageEnable() const;
     bool IsViewportWScalingEnable() const;
     VkCoverageModulationModeNV GetCoverageModulationMode() const;

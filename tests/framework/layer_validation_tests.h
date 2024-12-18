@@ -29,6 +29,12 @@
 #include <vulkan/utility/vk_format_utils.h>
 #include <vulkan/utility/vk_struct_helper.hpp>
 
+// Remove Windows macro that prevents usage of its name in any scope of the program.
+// For example, BitstreamBuffer::MemoryBarrier() won't compile on ARM64.
+#if defined(VK_USE_PLATFORM_WIN32_KHR) && defined(MemoryBarrier)
+#undef MemoryBarrier
+#endif
+
 #include "binding.h"
 #include "containers/custom_containers.h"
 #include "generated/vk_extension_helper.h"
@@ -69,6 +75,14 @@
 #endif
 
 #define OBJECT_LAYER_NAME "VK_LAYER_KHRONOS_validation"
+
+// This is only for tests where you have a good reason to have more than the default (10) duplicate message limit.
+// It is highly suggested you first try to breakup your test up into smaller tests if you are trying to use this.
+static VkBool32 kVkFalse = VK_FALSE;
+static const VkLayerSettingEXT kDisableMessageLimitSetting = {OBJECT_LAYER_NAME, "enable_message_limit",
+                                                              VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &kVkFalse};
+[[maybe_unused]] static VkLayerSettingsCreateInfoEXT kDisableMessageLimit = {VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
+                                                                             nullptr, 1, &kDisableMessageLimitSetting};
 
 //--------------------------------------------------------------------------------------
 // Mesh and VertexFormat Data
@@ -303,6 +317,9 @@ class ExternalMemorySyncTest : public VkLayerTest {
 class DeviceGeneratedCommandsTest : public VkLayerTest {
   public:
     void InitBasicDeviceGeneratedCommands();
+
+    void SetPreProcessBuffer(VkGeneratedCommandsInfoEXT &generated_commands_info);
+    std::unique_ptr<vkt::Buffer> pre_process_buffer_ = std::make_unique<vkt::Buffer>();
 };
 
 class GraphicsLibraryTest : public VkLayerTest {
@@ -312,11 +329,9 @@ class GraphicsLibraryTest : public VkLayerTest {
 
 class HostImageCopyTest : public VkLayerTest {
   public:
-    void InitHostImageCopyTest(const VkImageCreateInfo &create_info);
+    void InitHostImageCopyTest();
     bool CopyLayoutSupported(const std::vector<VkImageLayout> &copy_src_layouts, const std::vector<VkImageLayout> &copy_dst_layouts,
                              VkImageLayout layout);
-    VkFormat compressed_format = VK_FORMAT_UNDEFINED;
-    bool separate_depth_stencil = false;
     std::vector<VkImageLayout> copy_src_layouts;
     std::vector<VkImageLayout> copy_dst_layouts;
 
@@ -375,6 +390,10 @@ class WsiTest : public VkLayerTest {
     VkImageMemoryBarrier TransitionToPresent(VkImage swapchain_image, VkImageLayout old_layout, VkAccessFlags src_access_mask);
 
   protected:
+    // Find physical device group that contains physical device selected by the test framework
+    std::optional<VkPhysicalDeviceGroupProperties> FindPhysicalDeviceGroup();
+
+  protected:
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     struct WaylandContext {
         wl_display *display = nullptr;
@@ -387,16 +406,12 @@ class WsiTest : public VkLayerTest {
 #endif
 };
 
-class YcbcrTest : public VkLayerTest {
-  public:
-    void InitBasicYcbcr(void *pNextFeatures = nullptr);
-};
-
 class CooperativeMatrixTest : public VkLayerTest {
   public:
     void InitCooperativeMatrixKHR();
     bool HasValidProperty(VkScopeKHR scope, uint32_t m, uint32_t n, uint32_t k, VkComponentTypeKHR type);
     std::vector<VkCooperativeMatrixPropertiesKHR> coop_matrix_props;
+    std::vector<VkCooperativeMatrixFlexibleDimensionsPropertiesNV> coop_matrix_flex_props;
 };
 
 class ParentTest : public VkLayerTest {
@@ -448,4 +463,4 @@ void CreateBufferViewTest(VkLayerTest &test, const VkBufferViewCreateInfo *pCrea
 
 void CreateImageViewTest(VkLayerTest &test, const VkImageViewCreateInfo *pCreateInfo, const std::string &code = "");
 
-void print_android(const char *c);
+void PrintAndroid(const char *c);

@@ -41,7 +41,7 @@ class VideoSessionParameters;
 
 // Only CoreChecks uses this, but the state tracker stores it.
 constexpr static auto kInvalidLayout = image_layout_map::kInvalidLayout;
-using ImageSubresourceLayoutMap = image_layout_map::ImageSubresourceLayoutMap;
+using ImageLayoutRegistry = image_layout_map::ImageLayoutRegistry;
 
 struct EventInfo {
     VkPipelineStageFlags2 src_stage_mask = VK_PIPELINE_STAGE_2_NONE;
@@ -150,15 +150,17 @@ class CommandPool : public StateObject {
     void Destroy() override;
 };
 
+// This struct is not used to store label inserted with vkCmdInsertDebugUtilsLabelEXT
+struct LabelCommand {
+    bool begin = false;      // vkCmdBeginDebugUtilsLabelEXT or vkCmdEndDebugUtilsLabelEXT
+    std::string label_name;  // used when begin == true
+};
+
 class CommandBuffer : public RefcountedStateObject {
     using Func = vvl::Func;
   public:
-    struct LayoutState {
-        StateObject::IdType id;
-        std::shared_ptr<ImageSubresourceLayoutMap> map;
-    };
-    using ImageLayoutMap = vvl::unordered_map<VkImage, LayoutState>;
-    using AliasedLayoutMap = vvl::unordered_map<const GlobalImageLayoutRangeMap *, std::shared_ptr<ImageSubresourceLayoutMap>>;
+    using ImageLayoutMap = vvl::unordered_map<VkImage, std::shared_ptr<ImageLayoutRegistry>>;
+    using AliasedLayoutMap = vvl::unordered_map<const GlobalImageLayoutRangeMap *, std::shared_ptr<ImageLayoutRegistry>>;
 
     VkCommandBufferAllocateInfo allocate_info;
     VkCommandBufferBeginInfo beginInfo;
@@ -245,7 +247,7 @@ class CommandBuffer : public RefcountedStateObject {
         // VK_DYNAMIC_STATE_SAMPLE_MASK_EXT
         VkSampleCountFlagBits samples_mask_samples;
         // VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_KHR
-        VkLineRasterizationModeKHR line_rasterization_mode;
+        VkLineRasterizationMode line_rasterization_mode;
         // VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT
         bool stippled_line_enable;
         // VK_DYNAMIC_STATE_COVERAGE_TO_COLOR_ENABLE_NV
@@ -452,10 +454,10 @@ class CommandBuffer : public RefcountedStateObject {
 
     // VK_KHR_dynamic_rendering_local_read works like dynamic state, but lives for the rendering lifetime only
     struct RenderingAttachment {
-        // VkRenderingAttachmentLocationInfoKHR
+        // VkRenderingAttachmentLocationInfo
         bool set_color_locations = false;
         std::vector<uint32_t> color_locations;
-        // VkRenderingInputAttachmentIndexInfoKHR
+        // VkRenderingInputAttachmentIndexInfo
         bool set_color_indexes = false;
         std::vector<uint32_t> color_indexes;
         const uint32_t *depth_index = nullptr;
@@ -497,11 +499,11 @@ class CommandBuffer : public RefcountedStateObject {
 
     using EventCallback = std::function<bool(CommandBuffer &cb_state, bool do_validate, EventMap &local_event_signal_info,
                                              VkQueue waiting_queue, const Location &loc)>;
-    std::vector<EventCallback> eventUpdates;
+    std::vector<EventCallback> event_updates;
 
     std::vector<std::function<bool(CommandBuffer &cb_state, bool do_validate, VkQueryPool &firstPerfQueryPool,
                                    uint32_t perfQueryPass, QueryMap *localQueryToStateMap)>>
-        queryUpdates;
+        query_updates;
     bool performance_lock_acquired = false;
     bool performance_lock_released = false;
 
@@ -573,9 +575,9 @@ class CommandBuffer : public RefcountedStateObject {
 
     void ResetPushConstantRangesLayoutIfIncompatible(const vvl::PipelineLayout &pipeline_layout_state);
 
-    std::shared_ptr<const ImageSubresourceLayoutMap> GetImageSubresourceLayoutMap(VkImage image) const;
-    std::shared_ptr<ImageSubresourceLayoutMap> GetImageSubresourceLayoutMap(const vvl::Image &image_state);
-    const ImageLayoutMap &GetImageSubresourceLayoutMap() const;
+    std::shared_ptr<const ImageLayoutRegistry> GetImageLayoutRegistry(VkImage image) const;
+    std::shared_ptr<ImageLayoutRegistry> GetOrCreateImageLayoutRegistry(const vvl::Image &image_state);
+    const ImageLayoutMap &GetImageLayoutMap() const;
 
     const QFOTransferBarrierSets<QFOImageTransferBarrier> &GetQFOBarrierSets(const QFOImageTransferBarrier &type_tag) const {
         return qfo_transfer_image_barriers;
@@ -591,17 +593,15 @@ class CommandBuffer : public RefcountedStateObject {
 
     vvl::Pipeline *GetCurrentPipeline(VkPipelineBindPoint pipelineBindPoint) const;
     void GetCurrentPipelineAndDesriptorSets(VkPipelineBindPoint pipelineBindPoint, const vvl::Pipeline **rtn_pipe,
-                                            const std::vector<LastBound::PER_SET> **rtn_sets) const;
+                                            const std::vector<LastBound::DescriptorSetSlot> **rtn_sets) const;
 
     VkQueueFlags GetQueueFlags() const { return command_pool->queue_flags; }
 
-    template <typename Barrier>
-    inline bool IsReleaseOp(const Barrier &barrier) const {
-        return (IsTransferOp(barrier)) && (command_pool->queueFamilyIndex == barrier.srcQueueFamilyIndex);
+    bool IsReleaseOp(const sync_utils::OwnershipTransferBarrier &barrier) const {
+        return (IsOwnershipTransfer(barrier)) && (command_pool->queueFamilyIndex == barrier.srcQueueFamilyIndex);
     }
-    template <typename Barrier>
-    inline bool IsAcquireOp(const Barrier &barrier) const {
-        return (IsTransferOp(barrier)) && (command_pool->queueFamilyIndex == barrier.dstQueueFamilyIndex);
+    bool IsAcquireOp(const sync_utils::OwnershipTransferBarrier &barrier) const {
+        return (IsOwnershipTransfer(barrier)) && (command_pool->queueFamilyIndex == barrier.dstQueueFamilyIndex);
     }
 
     void Begin(const VkCommandBufferBeginInfo *pBeginInfo);
@@ -661,7 +661,7 @@ class CommandBuffer : public RefcountedStateObject {
     void RecordBarriers(uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers, uint32_t bufferMemoryBarrierCount,
                         const VkBufferMemoryBarrier *pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount,
                         const VkImageMemoryBarrier *pImageMemoryBarriers);
-    void RecordBarriers(const VkDependencyInfoKHR &dep_info);
+    void RecordBarriers(const VkDependencyInfo &dep_info);
 
     void SetImageViewLayout(const vvl::ImageView &view_state, VkImageLayout layout, VkImageLayout layoutStencil);
     void SetImageViewInitialLayout(const vvl::ImageView &view_state, VkImageLayout layout);
@@ -695,14 +695,11 @@ class CommandBuffer : public RefcountedStateObject {
 
     bool IsPrimary() const { return allocate_info.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY; }
     bool IsSecondary() const { return allocate_info.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY; }
+
     void BeginLabel(const char *label_name);
     void EndLabel();
-    int LabelStackDepth() const { return label_stack_depth_; }
+    int32_t GetLabelStackDepth() const { return label_stack_depth_; }
 
-    struct LabelCommand {
-        bool begin = false;      // vkCmdBeginDebugUtilsLabelEXT or vkCmdEndDebugUtilsLabelEXT
-        std::string label_name;  // used when begin == true
-    };
     const std::vector<LabelCommand> &GetLabelCommands() const { return label_commands_; }
 
     // Applies label commands to the label_stack: for "begin label" command it pushes
@@ -718,7 +715,7 @@ class CommandBuffer : public RefcountedStateObject {
     // Keep track of how many CmdBeginDebugUtilsLabelEXT calls have been made without a matching CmdEndDebugUtilsLabelEXT.
     // Negative value for a secondary command buffer indicates invalid state.
     // Negative value for a primary command buffer is allowed. Validation is done at submit time accross all command buffers.
-    int label_stack_depth_ = 0;
+    int32_t label_stack_depth_ = 0;
     // Used during sumbit time validation.
     std::vector<LabelCommand> label_commands_;
 
@@ -733,31 +730,5 @@ class CommandBuffer : public RefcountedStateObject {
     void EnqueueUpdateVideoInlineQueries(const VkVideoInlineQueryInfoKHR &query_info);
     void UnbindResources();
 };
-
-// specializations for barriers that cannot do queue family ownership transfers
-template <>
-inline bool CommandBuffer::IsReleaseOp(const sync_utils::MemoryBarrier &barrier) const {
-    return false;
-}
-template <>
-inline bool CommandBuffer::IsReleaseOp(const VkMemoryBarrier &barrier) const {
-    return false;
-}
-template <>
-inline bool CommandBuffer::IsReleaseOp(const VkMemoryBarrier2KHR &barrier) const {
-    return false;
-}
-template <>
-inline bool CommandBuffer::IsAcquireOp(const sync_utils::MemoryBarrier &barrier) const {
-    return false;
-}
-template <>
-inline bool CommandBuffer::IsAcquireOp(const VkMemoryBarrier &barrier) const {
-    return false;
-}
-template <>
-inline bool CommandBuffer::IsAcquireOp(const VkMemoryBarrier2KHR &barrier) const {
-    return false;
-}
 
 }  // namespace vvl

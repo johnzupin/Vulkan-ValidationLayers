@@ -18,20 +18,26 @@
 
 #pragma once
 
+#include <algorithm>
+#include <atomic>
+#include <bitset>
 #include <cassert>
 #include <cctype>
+#include <cmath>
 #include <cstring>
-#include <string>
-#include <vector>
-#include <bitset>
+#include <memory>
+#include <optional>
 #include <shared_mutex>
+#include <string>
+#include <type_traits>
+#include <vector>
 
 #include <vulkan/utility/vk_format_utils.h>
 #include <vulkan/utility/vk_concurrent_unordered_map.hpp>
+#include <vulkan/utility/vk_struct_helper.hpp>
 #include "vulkan/vk_layer.h"
 
-#include "generated/vk_extension_helper.h"
-#include "error_message/logging.h"
+#include "generated/vk_layer_dispatch_table.h"
 
 #ifndef WIN32
 #include <strings.h>  // For ffs()
@@ -266,7 +272,7 @@ static inline uint32_t GetIndexAlignment(VkIndexType indexType) {
             return 2;
         case VK_INDEX_TYPE_UINT32:
             return 4;
-        case VK_INDEX_TYPE_UINT8_KHR:
+        case VK_INDEX_TYPE_UINT8:
             return 1;
         case VK_INDEX_TYPE_NONE_KHR:  // alias VK_INDEX_TYPE_NONE_NV
             return 0;
@@ -275,6 +281,22 @@ static inline uint32_t GetIndexAlignment(VkIndexType indexType) {
             // to have already picked up on the enum being nonsense.
             return 1;
     }
+}
+
+inline constexpr uint32_t GetIndexBitsSize(VkIndexType indexType) {
+    switch (indexType) {
+        case VK_INDEX_TYPE_UINT16:
+            return 16;
+        case VK_INDEX_TYPE_UINT32:
+            return 32;
+        case VK_INDEX_TYPE_NONE_KHR:
+            return 0;
+        case VK_INDEX_TYPE_UINT8_KHR:
+            return 8;
+        case VK_INDEX_TYPE_MAX_ENUM:
+            return 0;
+    }
+    return 0;
 }
 
 // vkspec.html#formats-planes-image-aspect
@@ -381,18 +403,6 @@ static inline VkDeviceSize SafeDivision(VkDeviceSize dividend, VkDeviceSize divi
         result = dividend / divisor;
     }
     return result;
-}
-
-inline std::optional<VkDeviceSize> ComputeValidSize(VkDeviceSize offset, VkDeviceSize size, VkDeviceSize whole_size) {
-    std::optional<VkDeviceSize> valid_size;
-    if (offset < whole_size) {
-        if (size == VK_WHOLE_SIZE) {
-            valid_size.emplace(whole_size - offset);
-        } else if ((offset + size) <= whole_size) {
-            valid_size.emplace(size);
-        }
-    }
-    return valid_size;
 }
 
 // Only 32 bit fields should need a bit count

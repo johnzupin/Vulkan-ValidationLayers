@@ -25,7 +25,7 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitInitialValue) {
     TEST_DESCRIPTION("Wait on the initial value");
     RETURN_IF_SKIP(InitTimelineSemaphore());
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE, 1);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
     m_default_queue->Wait();
 }
 
@@ -35,13 +35,13 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitAfterSignal) {
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 1);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 1));
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1));
     m_default_queue->Wait();
 }
 
@@ -51,13 +51,13 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitAfterSignalSync1) {
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->SubmitWithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 1);
-    m_default_queue->SubmitWithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1);
+    m_default_queue->Submit(m_command_buffer, vkt::TimelineSignal(semaphore, 1));
+    m_default_queue->Submit(m_command_buffer, vkt::TimelineWait(semaphore, 1));
     m_default_queue->Wait();
 }
 
@@ -70,16 +70,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitAfterSignalTwoQueues) {
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 1);
-    m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 1));
+    m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineWait(semaphore, 1));
     m_device->Wait();
 }
 
@@ -89,13 +89,13 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitAfterSignalSmallerValue) {
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 2);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 2));
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1));
     m_default_queue->Wait();
 }
 
@@ -108,16 +108,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitAfterSignalSmallerValueTwoQueues) {
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 2);
-    m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 2));
+    m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineWait(semaphore, 1));
     m_device->Wait();
 }
 
@@ -127,13 +127,13 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitAfterSignalNonDefaultStage) {
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 3, VK_PIPELINE_STAGE_2_COPY_BIT);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 3, VK_PIPELINE_STAGE_2_COPY_BIT));
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT));
     m_default_queue->Wait();
 }
 
@@ -143,13 +143,13 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitAfterSignalNonDefaultStage2) {
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 3, VK_PIPELINE_STAGE_2_COPY_BIT);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 3, VK_PIPELINE_STAGE_2_COPY_BIT));
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT));
     m_default_queue->Wait();
 }
 
@@ -162,16 +162,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitAfterSignalNonDefaultStageTwoQueues
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 3, VK_PIPELINE_STAGE_2_COPY_BIT);
-    m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, vkt::wait, semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 3, VK_PIPELINE_STAGE_2_COPY_BIT));
+    m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineWait(semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT));
     m_device->Wait();
 }
 
@@ -184,16 +184,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitBeforeSignal) {
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1);
-    m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, vkt::signal, semaphore, 1);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1));
+    m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineSignal(semaphore, 1));
     m_device->Wait();
 }
 
@@ -206,16 +206,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitBeforeSignalSync1) {
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->SubmitWithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1);
-    m_second_queue->SubmitWithTimelineSemaphore(m_second_command_buffer, vkt::signal, semaphore, 1);
+    m_default_queue->Submit(m_command_buffer, vkt::TimelineWait(semaphore, 1));
+    m_second_queue->Submit(m_second_command_buffer, vkt::TimelineSignal(semaphore, 1));
     m_device->Wait();
 }
 
@@ -228,16 +228,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitSmallerValueBeforeSignal) {
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1);
-    m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, vkt::signal, semaphore, 2);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1));
+    m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineSignal(semaphore, 2));
     m_device->Wait();
 }
 
@@ -250,16 +250,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitBeforeSignalNonDefaultStage) {
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT);
-    m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, vkt::signal, semaphore, 3, VK_PIPELINE_STAGE_2_COPY_BIT);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT));
+    m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineSignal(semaphore, 3, VK_PIPELINE_STAGE_2_COPY_BIT));
     m_device->Wait();
 }
 
@@ -272,17 +272,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitBeforeSignalNonDefaultStage2) {
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT);
-    m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, vkt::signal, semaphore, 3,
-                                                 VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1, VK_PIPELINE_STAGE_2_COPY_BIT));
+    m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineSignal(semaphore, 3, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT));
     m_device->Wait();
 }
 
@@ -292,16 +291,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitLatestSignal) {
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 1, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 2);  // includes all stages
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 1, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT));
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(semaphore, 2));  // includes all stages
 
     // If due to regression signal=1 resolves this wait then it should generate a WAW hazard due to stage mask mismatch
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 2);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 2));
     m_device->Wait();
 }
 
@@ -314,19 +313,19 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitLatestSignalTwoQueues) {
     }
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 1, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 2);  // includes all stages
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 1, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT));
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(semaphore, 2));  // includes all stages
 
     // If due to regression signal=1 resolves this wait then it should generate a WAW hazard due to stage mask mismatch
-    m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, vkt::wait, semaphore, 2);
+    m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineWait(semaphore, 2));
     m_device->Wait();
 }
 
@@ -341,10 +340,10 @@ TEST_F(PositiveSyncValTimelineSemaphore, QueuesCollaborateToResolveEachOthersWai
     vkt::Semaphore first_queue_wait(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     vkt::Semaphore second_queue_wait(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
 
-    m_second_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, second_queue_wait, 1);
-    m_second_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, first_queue_wait, 1);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, second_queue_wait, 1);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, first_queue_wait, 1);
+    m_second_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(second_queue_wait, 1));
+    m_second_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(first_queue_wait, 1));
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(second_queue_wait, 1));
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(first_queue_wait, 1));
     m_device->Wait();
 }
 
@@ -356,9 +355,9 @@ TEST_F(PositiveSyncValTimelineSemaphore, SignalResolvesTwoWaits) {
         GTEST_SKIP() << "Three queues are needed";
     }
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_second_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
-    m_third_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 1);
+    m_second_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
+    m_third_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(semaphore, 1));
     m_device->Wait();
 }
 
@@ -371,8 +370,8 @@ TEST_F(PositiveSyncValTimelineSemaphore, SignalResolvesTwoWaits2) {
     }
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     semaphore.Signal(1);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
-    m_second_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
+    m_second_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
     m_device->Wait();
 }
 
@@ -390,13 +389,13 @@ TEST_F(PositiveSyncValTimelineSemaphore, SyncSubmitsWithSingleSemaphore) {
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     for (int i = 1; i <= N; i++) {
-        m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, semaphore, i - 1, semaphore, i);
+        m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, i - 1), vkt::TimelineSignal(semaphore, i));
     }
     m_device->Wait();
 }
@@ -409,13 +408,13 @@ TEST_F(PositiveSyncValTimelineSemaphore, FrameSynchronization) {
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     // Due to synchronization the copies from different frames do not collide
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     for (int i = 1; i <= N; i++) {
-        m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, i);
+        m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, i));
         semaphore.Wait(i, vvl::kU64Max);
     }
     m_device->Wait();
@@ -432,13 +431,13 @@ TEST_F(PositiveSyncValTimelineSemaphore, FrameSynchronization2) {
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     // Due to synchronization the copies from different frames do not collide
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     for (int i = 1; i <= N; i++) {
-        m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, i);
+        m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, i));
         while (semaphore.GetCounterValue() != i)
             ;
     }
@@ -457,7 +456,7 @@ TEST_F(PositiveSyncValTimelineSemaphore, HostSignal) {
     TEST_DESCRIPTION("Host signal finishes device wait");
     RETURN_IF_SKIP(InitTimelineSemaphore());
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
     semaphore.Signal(1);
     m_device->Wait();
 }
@@ -466,7 +465,7 @@ TEST_F(PositiveSyncValTimelineSemaphore, HostWaitWait) {
     TEST_DESCRIPTION("Wait for semaphore one more time on the host");
     RETURN_IF_SKIP(InitTimelineSemaphore());
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, 1);
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(semaphore, 1));
     semaphore.Wait(1, kWaitTimeout);
     // Test that the second wait does not cause any issues.
     semaphore.Wait(1, kWaitTimeout);
@@ -482,7 +481,7 @@ TEST_F(PositiveSyncValTimelineSemaphore, HostSignalSignal) {
     // Test that the second signal does not cause any issues.
     semaphore.Signal(2);
 
-    m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(semaphore, 1));
     m_device->Wait();
 }
 
@@ -496,12 +495,12 @@ TEST_F(PositiveSyncValTimelineSemaphore, HostWaitEmptyBatch) {
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_a, buffer_b);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
 
@@ -543,26 +542,26 @@ TEST_F(PositiveSyncValTimelineSemaphore, KhronosTimelineSemaphoreExample) {
     }
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    if (!buffer_b.memory().initialized()) {
+    vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, kHostVisibleMemProps);
+    if (!buffer_b.Memory().initialized()) {
         GTEST_SKIP() << "Can't allocate host visible/coherent memory";
     }
-    uint8_t* bytes = static_cast<uint8_t*>(buffer_b.memory().map());
+    uint8_t* bytes = static_cast<uint8_t*>(buffer_b.Memory().Map());
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
-    m_second_command_buffer.begin();
+    m_command_buffer.End();
+    m_second_command_buffer.Begin();
     m_second_command_buffer.Copy(buffer_b, buffer_a);
-    m_second_command_buffer.end();
+    m_second_command_buffer.End();
 
     vkt::Semaphore timeline(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
 
     auto thread1 = [this, &timeline]() {
         const uint64_t wait_value_1 = 0;    // No-op wait. Value is always >= 0.
         const uint64_t signal_value_1 = 5;  // Unblock thread2's CPU work.
-        m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, timeline, wait_value_1, timeline, signal_value_1);
+        m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(timeline, wait_value_1),
+                                 vkt::TimelineSignal(timeline, signal_value_1));
     };
     auto thread2 = [&timeline, &bytes]() {
         // Wait for thread1's device work to complete.
@@ -578,7 +577,8 @@ TEST_F(PositiveSyncValTimelineSemaphore, KhronosTimelineSemaphoreExample) {
     auto thread3 = [this, &timeline]() {
         const uint64_t wait_value_3 = 7;    // Wait for thread2's CPU work to complete.
         const uint64_t signal_value_3 = 8;  // Signal completion of all work.
-        m_second_queue->Submit2WithTimelineSemaphore(m_second_command_buffer, timeline, wait_value_3, timeline, signal_value_3);
+        m_second_queue->Submit2(m_second_command_buffer, vkt::TimelineWait(timeline, wait_value_3),
+                                vkt::TimelineSignal(timeline, signal_value_3));
     };
 
     std::thread t1(thread1);
@@ -605,8 +605,8 @@ TEST_F(PositiveSyncValTimelineSemaphore, ResolveManyWaitBeforeSignals) {
     // Increase constant value to get longer running time.
     uint32_t N = 1000;
     for (uint32_t i = 0; i < N; i++) {
-        m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::wait, semaphore, i + 1);
-        m_second_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, i + 1);
+        m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineWait(semaphore, i + 1));
+        m_second_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(semaphore, i + 1));
         m_device->Wait();
     }
 }
@@ -625,7 +625,7 @@ TEST_F(PositiveSyncValTimelineSemaphore, ExternalSemaphoreWaitBeforeSignal) {
     }
 
     constexpr auto handle_type = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
-    if (!SemaphoreExportImportSupported(gpu(), handle_type)) {
+    if (!SemaphoreExportImportSupported(Gpu(), handle_type)) {
         GTEST_SKIP() << "Semaphore does not support export and import through Win32 handle";
     }
 
@@ -640,16 +640,16 @@ TEST_F(PositiveSyncValTimelineSemaphore, ExternalSemaphoreWaitBeforeSignal) {
     vkt::Semaphore import_semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
 
     HANDLE win32_handle = NULL;
-    export_semaphore.export_handle(win32_handle, handle_type);
-    import_semaphore.import_handle(win32_handle, handle_type);
+    export_semaphore.ExportHandle(win32_handle, handle_type);
+    import_semaphore.ImportHandle(win32_handle, handle_type);
 
     // This test is for manual inspection. Without special handling the wait-before-signal with an
     // external semaphore accumulates unresolved batches and registered signals (it's not possible
     // to track external signal). Check that the list of unresolved batches and signals does not grow.
     const int N = 100;
     for (int i = 1; i <= N; i++) {
-        m_default_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::wait, export_semaphore, i);
-        m_second_queue->SubmitWithTimelineSemaphore(vkt::no_cmd, vkt::signal, import_semaphore, i);
+        m_default_queue->Submit(vkt::no_cmd, vkt::TimelineWait(export_semaphore, i));
+        m_second_queue->Submit(vkt::no_cmd, vkt::TimelineSignal(import_semaphore, i));
         m_device->Wait();
     }
 }
@@ -662,7 +662,7 @@ TEST_F(PositiveSyncValTimelineSemaphore, QueueWaitIdleRemovesSignals) {
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     const uint32_t N = 100;
     for (uint32_t i = 1; i <= N; i++) {
-        m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, i);
+        m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(semaphore, i));
         // The maximum number of registered signals will be around 25
         if (i % 25 == 0) {
             m_default_queue->Wait();
@@ -678,7 +678,7 @@ TEST_F(PositiveSyncValTimelineSemaphore, DeviceWaitIdleRemovesignals) {
     vkt::Semaphore semaphore(*m_device, VK_SEMAPHORE_TYPE_TIMELINE);
     const uint32_t N = 100;
     for (uint32_t i = 1; i <= N; i++) {
-        m_default_queue->Submit2WithTimelineSemaphore(vkt::no_cmd, vkt::signal, semaphore, i);
+        m_default_queue->Submit2(vkt::no_cmd, vkt::TimelineSignal(semaphore, i));
         // The maximum number of registered signals will be around 50
         if (i % 50 == 0) {
             m_device->Wait();
@@ -696,9 +696,9 @@ TEST_F(PositiveSyncValTimelineSemaphore, ManyOrphanedSignals) {
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     VkCommandBufferSubmitInfo cbuf_info = vku::InitStructHelper();
     cbuf_info.commandBuffer = m_command_buffer;
@@ -746,16 +746,15 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitForFencesWithTimelineSignalBatches)
 
     vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    m_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+    m_command_buffer.Begin(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     m_command_buffer.Copy(buffer_a, buffer_b);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     vkt::Fence fence(*m_device);
 
     // The first batch context.
     // Specify VERTEX_SHADER signal scope, so waiting for timeline signal does not protect buffer copy
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::signal, semaphore, 1,
-                                                  VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, fence);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineSignal(semaphore, 1, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT), fence);
 
     // The second batch context which imports the first one.
     // The timeline signal in the first submit still references the first batch.
@@ -764,12 +763,12 @@ TEST_F(PositiveSyncValTimelineSemaphore, WaitForFencesWithTimelineSignalBatches)
     // The original omission was that iteration over all batch context did not take into account
     // batches associated with timeline signals. In the case of regression accesses in the first
     // batch (stored in timeline signal) will survive the fence wait.
-    fence.wait(kWaitTimeout);
+    fence.Wait(kWaitTimeout);
 
     // Waiting for timeline signal imports the first batch stored in that signal.
     // In case of regression the first batch will contain unprotected copy writes and
     // this will cause WRITE-AFTER-WRITE hazard.
-    m_default_queue->Submit2WithTimelineSemaphore(m_command_buffer, vkt::wait, semaphore, 1);
+    m_default_queue->Submit2(m_command_buffer, vkt::TimelineWait(semaphore, 1));
 
     m_default_queue->Wait();
 }

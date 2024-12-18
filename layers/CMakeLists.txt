@@ -142,7 +142,8 @@ target_sources(vvl PRIVATE
     best_practices/bp_wsi.cpp
     best_practices/best_practices_validation.h
     chassis/chassis_modification_state.h
-    chassis/layer_chassis_dispatch_manual.cpp
+    chassis/chassis_manual.cpp
+    chassis/dispatch_object_manual.cpp
     containers/qfo_transfer.h
     containers/range_vector.h
     containers/subresource_adapter.cpp
@@ -175,6 +176,9 @@ target_sources(vvl PRIVATE
     core_checks/cc_shader_object.cpp
     core_checks/cc_state_tracker.h
     core_checks/cc_state_tracker.cpp
+    core_checks/cc_submit.h
+    core_checks/cc_submit.cpp
+    core_checks/cc_synchronization.h
     core_checks/cc_synchronization.cpp
     core_checks/cc_video.cpp
     core_checks/cc_vuid_maps.cpp
@@ -183,6 +187,8 @@ target_sources(vvl PRIVATE
     core_checks/cc_ycbcr.cpp
     drawdispatch/descriptor_validator.cpp
     drawdispatch/drawdispatch_vuids.cpp
+    error_message/spirv_logging.h
+    error_message/spirv_logging.cpp
     external/vma/vma.h
     external/vma/vma.cpp
     ${API_TYPE}/generated/best_practices.cpp
@@ -197,7 +203,9 @@ target_sources(vvl PRIVATE
     ${API_TYPE}/generated/dynamic_state_helper.cpp
     ${API_TYPE}/generated/dynamic_state_helper.h
     ${API_TYPE}/generated/enum_flag_bits.h
-    ${API_TYPE}/generated/layer_chassis_dispatch.cpp
+    ${API_TYPE}/generated/dispatch_vector.cpp
+    ${API_TYPE}/generated/dispatch_object.cpp
+    ${API_TYPE}/generated/validation_object.cpp
     ${API_TYPE}/generated/object_tracker.cpp
     ${API_TYPE}/generated/object_tracker.h
     ${API_TYPE}/generated/spirv_grammar_helper.cpp
@@ -210,17 +218,25 @@ target_sources(vvl PRIVATE
     ${API_TYPE}/generated/thread_safety_counter_bodies.h
     ${API_TYPE}/generated/thread_safety_counter_definitions.h
     ${API_TYPE}/generated/thread_safety_counter_instances.h
-    ${API_TYPE}/generated/gpu_av_shader_hash.h
     ${API_TYPE}/generated/cmd_validation_copy_buffer_to_image_comp.h
     ${API_TYPE}/generated/cmd_validation_copy_buffer_to_image_comp.cpp
     ${API_TYPE}/generated/cmd_validation_dispatch_comp.h
     ${API_TYPE}/generated/cmd_validation_dispatch_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_draw_vert.h
-    ${API_TYPE}/generated/cmd_validation_draw_vert.cpp
+    ${API_TYPE}/generated/cmd_validation_count_buffer_comp.h
+    ${API_TYPE}/generated/cmd_validation_count_buffer_comp.cpp
+    ${API_TYPE}/generated/cmd_validation_first_instance_comp.h
+    ${API_TYPE}/generated/cmd_validation_first_instance_comp.cpp
+    ${API_TYPE}/generated/cmd_validation_draw_indexed_comp.h
+    ${API_TYPE}/generated/cmd_validation_draw_indexed_comp.cpp
+    ${API_TYPE}/generated/cmd_validation_draw_indexed_indirect_index_buffer_comp.h
+    ${API_TYPE}/generated/cmd_validation_draw_indexed_indirect_index_buffer_comp.cpp
+    ${API_TYPE}/generated/cmd_validation_draw_indexed_indirect_vertex_buffer_comp.h
+    ${API_TYPE}/generated/cmd_validation_draw_indexed_indirect_vertex_buffer_comp.cpp
+    ${API_TYPE}/generated/cmd_validation_draw_mesh_indirect_comp.h
+    ${API_TYPE}/generated/cmd_validation_draw_mesh_indirect_comp.cpp
     ${API_TYPE}/generated/cmd_validation_trace_rays_rgen.h
     ${API_TYPE}/generated/cmd_validation_trace_rays_rgen.cpp
-    gpu/core/gpu_settings.h
-    gpu/core/gpu_shader_cache_hash.h
+    gpu/core/gpuav_settings.h
     gpu/core/gpuav_constants.h
     gpu/cmd_validation/gpuav_cmd_validation_common.h
     gpu/cmd_validation/gpuav_cmd_validation_common.cpp
@@ -239,26 +255,24 @@ target_sources(vvl PRIVATE
     gpu/descriptor_validation/gpuav_image_layout.h
     gpu/descriptor_validation/gpuav_image_layout.cpp
     gpu/core/gpuav.h
-    gpu/core/gpu_state_tracker.cpp
-    gpu/core/gpu_state_tracker.h
     gpu/core/gpuav_record.cpp
     gpu/core/gpuav_setup.cpp
     gpu/debug_printf/debug_printf.cpp
     gpu/debug_printf/debug_printf.h
     gpu/error_message/gpuav_vuids.cpp
     gpu/error_message/gpuav_vuids.h
-    gpu/instrumentation/gpu_shader_instrumentor.cpp
-    gpu/instrumentation/gpu_shader_instrumentor.h
+    gpu/instrumentation/gpuav_shader_instrumentor.cpp
+    gpu/instrumentation/gpuav_shader_instrumentor.h
     gpu/instrumentation/gpuav_instrumentation.h
     gpu/instrumentation/gpuav_instrumentation.cpp
-    gpu/resources/gpuav_subclasses.cpp
-    gpu/resources/gpuav_subclasses.h
-    gpu/resources/gpu_shader_resources.h
-    gpu/resources/gpu_resources.h
-    gpu/resources/gpu_resources.cpp
-    gpu/shaders/gpu_error_codes.h
-    gpu/shaders/gpu_error_header.h
-    gpu/shaders/gpu_shaders_constants.h
+    gpu/resources/gpuav_state_trackers.cpp
+    gpu/resources/gpuav_state_trackers.h
+    gpu/resources/gpuav_shader_resources.h
+    gpu/resources/gpuav_vulkan_objects.h
+    gpu/resources/gpuav_vulkan_objects.cpp
+    gpu/shaders/gpuav_error_codes.h
+    gpu/shaders/gpuav_error_header.h
+    gpu/shaders/gpuav_shaders_constants.h
     object_tracker/object_lifetime_validation.h
     object_tracker/object_tracker_utils.cpp
     state_tracker/buffer_state.cpp
@@ -338,11 +352,15 @@ target_sources(vvl PRIVATE
     sync/sync_commandbuffer.h
     sync/sync_common.cpp
     sync/sync_common.h
+    sync/sync_error_messages.cpp
+    sync/sync_error_messages.h
     sync/sync_image.h
     sync/sync_op.cpp
     sync/sync_op.h
     sync/sync_renderpass.cpp
     sync/sync_renderpass.h
+    sync/sync_reporting.cpp
+    sync/sync_reporting.h
     sync/sync_settings.h
     sync/sync_stats.cpp
     sync/sync_stats.h
@@ -521,7 +539,7 @@ endif()
 if (WIN32)
     install(FILES ${INTERMEDIATE_FILE} DESTINATION ${LAYER_INSTALL_DIR} RENAME ${OUTPUT_FILE_FINAL_NAME})
 endif()
-if (MSVC)
+if (MSVC AND EXISTS $<TARGET_PDB_FILE:vvl>)
     install(FILES $<TARGET_PDB_FILE:vvl> DESTINATION ${LAYER_INSTALL_DIR})
 endif()
 

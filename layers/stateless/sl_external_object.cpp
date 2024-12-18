@@ -18,16 +18,18 @@
 
 #include "stateless/stateless_validation.h"
 #include "generated/enum_flag_bits.h"
-#include "generated/layer_chassis_dispatch.h"
+#include "generated/dispatch_functions.h"
 
 bool StatelessValidation::manual_PreCallValidateGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo, int *pFd,
                                                                const ErrorObject &error_obj) const {
     constexpr auto allowed_types = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT | VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
     bool skip = false;
     if (0 == (pGetFdInfo->handleType & allowed_types)) {
-        skip |= LogError("VUID-VkMemoryGetFdInfoKHR-handleType-00672", pGetFdInfo->memory, error_obj.location,
-                         "handle type %s is not one of the supported handle types.",
-                         string_VkExternalMemoryHandleTypeFlagBits(pGetFdInfo->handleType));
+        skip |= LogError("VUID-VkMemoryGetFdInfoKHR-handleType-00672", pGetFdInfo->memory,
+                         error_obj.location.dot(Field::pGetFdInfo).dot(Field::handleType),
+                         "(%s) is not one of the supported handle types (%s).",
+                         string_VkExternalMemoryHandleTypeFlagBits(pGetFdInfo->handleType),
+                         string_VkExternalMemoryHandleTypeFlags(allowed_types).c_str());
     }
     return skip;
 }
@@ -38,12 +40,12 @@ bool StatelessValidation::manual_PreCallValidateGetMemoryFdPropertiesKHR(VkDevic
                                                                          const ErrorObject &error_obj) const {
     bool skip = false;
     if (fd < 0) {
-        skip |= LogError("VUID-vkGetMemoryFdPropertiesKHR-fd-00673", device, error_obj.location,
-                         "fd handle (%d) is not a valid POSIX file descriptor.", fd);
+        skip |= LogError("VUID-vkGetMemoryFdPropertiesKHR-fd-00673", device, error_obj.location.dot(Field::fd),
+                         "handle (%d) is not a valid POSIX file descriptor.", fd);
     }
     if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT) {
-        skip |= LogError("VUID-vkGetMemoryFdPropertiesKHR-handleType-00674", device, error_obj.location,
-                         "opaque handle type %s is not allowed.", string_VkExternalMemoryHandleTypeFlagBits(handleType));
+        skip |= LogError("VUID-vkGetMemoryFdPropertiesKHR-handleType-00674", device, error_obj.location.dot(Field::handleType),
+                         "(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT) is not allowed.");
     }
     return skip;
 }
@@ -165,9 +167,11 @@ bool StatelessValidation::manual_PreCallValidateGetMemoryWin32HandleKHR(VkDevice
         VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT | VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT;
     bool skip = false;
     if ((pGetWin32HandleInfo->handleType & (nt_handles | global_share_handles)) == 0) {
-        skip |= LogError("VUID-VkMemoryGetWin32HandleInfoKHR-handleType-00664", pGetWin32HandleInfo->memory, error_obj.location,
-                         "handle type %s is not one of the supported handle types.",
-                         string_VkExternalMemoryHandleTypeFlagBits(pGetWin32HandleInfo->handleType));
+        skip |= LogError("VUID-VkMemoryGetWin32HandleInfoKHR-handleType-00664", pGetWin32HandleInfo->memory,
+                         error_obj.location.dot(Field::pGetWin32HandleInfo).dot(Field::handleType),
+                         "(%s) is not one of the supported handle types (%s).",
+                         string_VkExternalMemoryHandleTypeFlagBits(pGetWin32HandleInfo->handleType),
+                         string_VkExternalMemoryHandleTypeFlags(nt_handles | global_share_handles).c_str());
     }
     return skip;
 }
@@ -279,24 +283,6 @@ bool StatelessValidation::ExportMetalObjectsPNextUtil(VkExportMetalObjectTypeFla
     return skip;
 }
 
-bool StatelessValidation::manual_PreCallValidateExportMetalObjectsEXT(VkDevice device,
-                                                                      VkExportMetalObjectsInfoEXT *pMetalObjectsInfo,
-                                                                      const ErrorObject &error_obj) const {
-    bool skip = false;
-
-    static_assert(AllVkExportMetalObjectTypeFlagBitsEXT == 0x3F, "Add new ExportMetalObjects support to VVL!");
-
-    constexpr std::array allowed_structs = {
-        VK_STRUCTURE_TYPE_EXPORT_METAL_BUFFER_INFO_EXT,       VK_STRUCTURE_TYPE_EXPORT_METAL_COMMAND_QUEUE_INFO_EXT,
-        VK_STRUCTURE_TYPE_EXPORT_METAL_DEVICE_INFO_EXT,       VK_STRUCTURE_TYPE_EXPORT_METAL_IO_SURFACE_INFO_EXT,
-        VK_STRUCTURE_TYPE_EXPORT_METAL_SHARED_EVENT_INFO_EXT, VK_STRUCTURE_TYPE_EXPORT_METAL_TEXTURE_INFO_EXT,
-    };
-    skip |=
-        ValidateStructPnext(error_obj.location.dot(Field::pMetalObjectsInfo), pMetalObjectsInfo->pNext, allowed_structs.size(),
-                            allowed_structs.data(), GeneratedVulkanHeaderVersion, "VUID-VkExportMetalObjectsInfoEXT-pNext-pNext",
-                            "VUID-VkExportMetalObjectsInfoEXT-sType-unique", VK_NULL_HANDLE, true);
-    return skip;
-}
 #endif  // VK_USE_PLATFORM_METAL_EXT
 
 namespace {
