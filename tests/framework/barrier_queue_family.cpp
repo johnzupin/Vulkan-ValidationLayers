@@ -52,55 +52,57 @@ void BarrierQueueFamilyBase::Context::Reset() {
 void BarrierQueueFamilyTestHelper::Init(std::vector<uint32_t> *families, bool image_memory, bool buffer_memory) {
     vkt::Device *device_obj = context_->layer_test->DeviceObj();
 
-    auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                                                  VK_IMAGE_TILING_OPTIMAL, families);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(
+        32, 32, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL,
+        families ? vvl::make_span(families->data(), families->size()) : vvl::span<uint32_t>{});
     if (image_memory) {
         image_.init(*device_obj, image_ci, 0);
         image_.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     } else {
-        image_.init_no_mem(*device_obj, image_ci);
+        image_.InitNoMemory(*device_obj, image_ci);
     }
 
-    image_barrier_ = image_.image_memory_barrier(VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, image_.Layout(),
-                                                 image_.Layout(), image_.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1));
+    image_barrier_ = image_.ImageMemoryBarrier(VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, image_.Layout(),
+                                               image_.Layout(), image_.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1));
 
     VkMemoryPropertyFlags mem_prop = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    auto buffer_ci = vkt::Buffer::CreateInfo(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, families);
+    auto buffer_ci = vkt::Buffer::CreateInfo(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                             families ? vvl::make_span(families->data(), families->size()) : vvl::span<uint32_t>{});
     if (buffer_memory) {
         buffer_.init(*device_obj, buffer_ci, mem_prop);
     } else {
-        buffer_.init_no_mem(*device_obj, buffer_ci);
+        buffer_.InitNoMemory(*device_obj, buffer_ci);
     }
     ASSERT_TRUE(buffer_.initialized());
-    buffer_barrier_ = buffer_.buffer_memory_barrier(VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0, VK_WHOLE_SIZE);
+    buffer_barrier_ = buffer_.BufferMemoryBarrier(VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0, VK_WHOLE_SIZE);
 }
 
-void Barrier2QueueFamilyTestHelper::Init(std::vector<uint32_t> *families, bool image_memory, bool buffer_memory) {
+void Barrier2QueueFamilyTestHelper::Init(bool image_memory, bool buffer_memory) {
     vkt::Device *device_obj = context_->layer_test->DeviceObj();
 
     auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                                                  VK_IMAGE_TILING_OPTIMAL, families);
+                                                  VK_IMAGE_TILING_OPTIMAL);
     if (image_memory) {
         image_.init(*device_obj, image_ci, 0);
         image_.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     } else {
-        image_.init_no_mem(*device_obj, image_ci);
+        image_.InitNoMemory(*device_obj, image_ci);
     }
 
-    image_barrier_ = image_.image_memory_barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                                 VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, image_.Layout(),
-                                                 image_.Layout(), image_.subresource_range(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1));
+    image_barrier_ = image_.ImageMemoryBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                               VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, image_.Layout(),
+                                               image_.Layout(), image_.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1));
 
     VkMemoryPropertyFlags mem_prop = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    auto buffer_ci = vkt::Buffer::CreateInfo(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, families);
+    auto buffer_ci = vkt::Buffer::CreateInfo(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     if (buffer_memory) {
         buffer_.init(*device_obj, buffer_ci, mem_prop);
     } else {
-        buffer_.init_no_mem(*device_obj, buffer_ci);
+        buffer_.InitNoMemory(*device_obj, buffer_ci);
     }
     ASSERT_TRUE(buffer_.initialized());
-    buffer_barrier_ = buffer_.buffer_memory_barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                                    VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0, VK_WHOLE_SIZE);
+    buffer_barrier_ = buffer_.BufferMemoryBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                                  VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0, VK_WHOLE_SIZE);
 }
 
 BarrierQueueFamilyBase::QueueFamilyObjs *BarrierQueueFamilyBase::GetQueueFamilyInfo(Context *context, uint32_t qfi) {
@@ -133,12 +135,12 @@ void BarrierQueueFamilyTestHelper::operator()(const std::string &img_err, const 
 
     vkt::CommandBuffer *command_buffer = qf->command_buffer;
     for (int cb_repeat = 0; cb_repeat < (mod == Modifier::DOUBLE_COMMAND_BUFFER ? 2 : 1); cb_repeat++) {
-        command_buffer->begin();
+        command_buffer->Begin();
         for (int repeat = 0; repeat < (mod == Modifier::DOUBLE_RECORD ? 2 : 1); repeat++) {
             vk::CmdPipelineBarrier(command_buffer->handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 1, &buffer_barrier_, 1, &image_barrier_);
         }
-        command_buffer->end();
+        command_buffer->End();
         command_buffer = qf->command_buffer2;  // Second pass (if any) goes to the secondary command_buffer.
     }
 
@@ -177,7 +179,7 @@ void Barrier2QueueFamilyTestHelper::operator()(const std::string &img_err, const
     buffer_barrier_.srcQueueFamilyIndex = src;
     buffer_barrier_.dstQueueFamilyIndex = dst;
 
-    VkDependencyInfoKHR dep_info = vku::InitStructHelper();
+    VkDependencyInfo dep_info = vku::InitStructHelper();
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &buffer_barrier_;
     dep_info.imageMemoryBarrierCount = 1;
@@ -187,11 +189,11 @@ void Barrier2QueueFamilyTestHelper::operator()(const std::string &img_err, const
 
     vkt::CommandBuffer *command_buffer = qf->command_buffer;
     for (int cb_repeat = 0; cb_repeat < (mod == Modifier::DOUBLE_COMMAND_BUFFER ? 2 : 1); cb_repeat++) {
-        command_buffer->begin();
+        command_buffer->Begin();
         for (int repeat = 0; repeat < (mod == Modifier::DOUBLE_RECORD ? 2 : 1); repeat++) {
             vk::CmdPipelineBarrier2KHR(command_buffer->handle(), &dep_info);
         }
-        command_buffer->end();
+        command_buffer->End();
         command_buffer = qf->command_buffer2;  // Second pass (if any) goes to the secondary command_buffer.
     }
 
@@ -234,9 +236,9 @@ void ValidOwnershipTransfer(ErrorMonitor *monitor, vkt::Queue *queue_from, vkt::
 }
 
 void ValidOwnershipTransferOp(ErrorMonitor *monitor, vkt::Queue *queue, vkt::CommandBuffer &cb,
-                              const VkBufferMemoryBarrier2KHR *buf_barrier, const VkImageMemoryBarrier2KHR *img_barrier) {
+                              const VkBufferMemoryBarrier2 *buf_barrier, const VkImageMemoryBarrier2 *img_barrier) {
     cb.begin();
-    VkDependencyInfoKHR dep_info = vku::InitStructHelper();
+    VkDependencyInfo dep_info = vku::InitStructHelper();
     dep_info.bufferMemoryBarrierCount = (buf_barrier) ? 1 : 0;
     dep_info.pBufferMemoryBarriers = buf_barrier;
     dep_info.imageMemoryBarrierCount = (img_barrier) ? 1 : 0;
@@ -248,18 +250,18 @@ void ValidOwnershipTransferOp(ErrorMonitor *monitor, vkt::Queue *queue, vkt::Com
 }
 
 void ValidOwnershipTransfer(ErrorMonitor *monitor, vkt::Queue *queue_from, vkt::CommandBuffer &cb_from, vkt::Queue *queue_to,
-                            vkt::CommandBuffer &cb_to, const VkBufferMemoryBarrier2KHR *buf_barrier,
-                            const VkImageMemoryBarrier2KHR *img_barrier) {
-    VkBufferMemoryBarrier2KHR fixup_buf_barrier;
-    VkImageMemoryBarrier2KHR fixup_img_barrier;
+                            vkt::CommandBuffer &cb_to, const VkBufferMemoryBarrier2 *buf_barrier,
+                            const VkImageMemoryBarrier2 *img_barrier) {
+    VkBufferMemoryBarrier2 fixup_buf_barrier;
+    VkImageMemoryBarrier2 fixup_img_barrier;
     if (buf_barrier) {
         fixup_buf_barrier = *buf_barrier;
-        fixup_buf_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE_KHR;
+        fixup_buf_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
         fixup_buf_barrier.dstAccessMask = 0;
     }
     if (img_barrier) {
         fixup_img_barrier = *img_barrier;
-        fixup_img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE_KHR;
+        fixup_img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
         fixup_img_barrier.dstAccessMask = 0;
     }
 
@@ -268,12 +270,12 @@ void ValidOwnershipTransfer(ErrorMonitor *monitor, vkt::Queue *queue_from, vkt::
 
     if (buf_barrier) {
         fixup_buf_barrier = *buf_barrier;
-        fixup_buf_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE_KHR;
+        fixup_buf_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
         fixup_buf_barrier.srcAccessMask = 0;
     }
     if (img_barrier) {
         fixup_img_barrier = *img_barrier;
-        fixup_img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE_KHR;
+        fixup_img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
         fixup_img_barrier.srcAccessMask = 0;
     }
     ValidOwnershipTransferOp(monitor, queue_to, cb_to, buf_barrier ? &fixup_buf_barrier : nullptr,

@@ -28,19 +28,19 @@ TEST_F(PositiveThreading, DisplayObjects) {
     RETURN_IF_SKIP(Init());
 
     uint32_t prop_count = 0;
-    vk::GetPhysicalDeviceDisplayPropertiesKHR(gpu(), &prop_count, nullptr);
+    vk::GetPhysicalDeviceDisplayPropertiesKHR(Gpu(), &prop_count, nullptr);
     if (prop_count == 0) {
         GTEST_SKIP() << "No VkDisplayKHR properties to query";
     }
 
     std::vector<VkDisplayPropertiesKHR> display_props{prop_count};
     // Create a VkDisplayKHR object
-    vk::GetPhysicalDeviceDisplayPropertiesKHR(gpu(), &prop_count, display_props.data());
+    vk::GetPhysicalDeviceDisplayPropertiesKHR(Gpu(), &prop_count, display_props.data());
     ASSERT_NE(prop_count, 0U);
 
     // Now use this new object in an API call that thread safety will track
     prop_count = 0;
-    vk::GetDisplayModePropertiesKHR(gpu(), display_props[0].display, &prop_count, nullptr);
+    vk::GetDisplayModePropertiesKHR(Gpu(), display_props[0].display, &prop_count, nullptr);
 }
 
 TEST_F(PositiveThreading, DisplayPlaneObjects) {
@@ -51,16 +51,16 @@ TEST_F(PositiveThreading, DisplayPlaneObjects) {
     RETURN_IF_SKIP(Init());
 
     uint32_t prop_count = 0;
-    vk::GetPhysicalDeviceDisplayPlanePropertiesKHR(gpu(), &prop_count, nullptr);
+    vk::GetPhysicalDeviceDisplayPlanePropertiesKHR(Gpu(), &prop_count, nullptr);
     if (prop_count != 0) {
         // only grab first plane property
         prop_count = 1;
         VkDisplayPlanePropertiesKHR display_plane_props = {};
         // Create a VkDisplayKHR object
-        vk::GetPhysicalDeviceDisplayPlanePropertiesKHR(gpu(), &prop_count, &display_plane_props);
+        vk::GetPhysicalDeviceDisplayPlanePropertiesKHR(Gpu(), &prop_count, &display_plane_props);
         // Now use this new object in an API call
         prop_count = 0;
-        vk::GetDisplayModePropertiesKHR(gpu(), display_plane_props.currentDisplay, &prop_count, nullptr);
+        vk::GetDisplayModePropertiesKHR(Gpu(), display_plane_props.currentDisplay, &prop_count, nullptr);
     }
 }
 
@@ -74,25 +74,17 @@ TEST_F(PositiveThreading, UpdateDescriptorUpdateAfterBindNoCollision) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    std::array<VkDescriptorBindingFlagsEXT, 2> flags = {
-        {VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT}};
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT flags_create_info = vku::InitStructHelper();
-    flags_create_info.bindingCount = (uint32_t)flags.size();
-    flags_create_info.pBindingFlags = flags.data();
-
-    OneOffDescriptorSet normal_descriptor_set(m_device,
-                                              {
-                                                  {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-                                                  {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-                                              },
-                                              VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT, &flags_create_info,
-                                              VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT);
-
+    OneOffDescriptorIndexingSet descriptor_set(m_device, {
+                                                             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+                                                              nullptr, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT},
+                                                             {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+                                                              nullptr, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT},
+                                                         });
     vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
     ThreadTestData data;
     data.device = device();
-    data.descriptorSet = normal_descriptor_set.set_;
+    data.descriptorSet = descriptor_set.set_;
     data.binding = 0;
     data.buffer = buffer.handle();
     std::atomic<bool> bailout{false};
@@ -105,7 +97,50 @@ TEST_F(PositiveThreading, UpdateDescriptorUpdateAfterBindNoCollision) {
 
     ThreadTestData data2;
     data2.device = device();
-    data2.descriptorSet = normal_descriptor_set.set_;
+    data2.descriptorSet = descriptor_set.set_;
+    data2.binding = 1;
+    data2.buffer = buffer.handle();
+    data2.bailout = &bailout;
+
+    UpdateDescriptor(&data2);
+
+    thread.join();
+
+    m_errorMonitor->SetBailout(NULL);
+}
+
+TEST_F(PositiveThreading, UpdateDescriptorUnusedWhilePendingNoCollision) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8975");
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::descriptorBindingUpdateUnusedWhilePending);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    OneOffDescriptorIndexingSet descriptor_set(m_device, {
+                                                             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+                                                              nullptr, VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT},
+                                                             {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+                                                              nullptr, VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT},
+                                                         });
+    vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+    ThreadTestData data;
+    data.device = device();
+    data.descriptorSet = descriptor_set.set_;
+    data.binding = 0;
+    data.buffer = buffer.handle();
+    std::atomic<bool> bailout{false};
+    data.bailout = &bailout;
+    m_errorMonitor->SetBailout(data.bailout);
+
+    // Update descriptors from another thread.
+    std::thread thread(UpdateDescriptor, &data);
+    // Update descriptors from this thread at the same time.
+
+    ThreadTestData data2;
+    data2.device = device();
+    data2.descriptorSet = descriptor_set.set_;
     data2.binding = 1;
     data2.buffer = buffer.handle();
     data2.bailout = &bailout;
@@ -139,7 +174,8 @@ TEST_F(PositiveThreading, NullFenceCollision) {
 
 TEST_F(PositiveThreading, DebugObjectNames) {
     AddRequiredExtensions(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    RETURN_IF_SKIP(Init());
+    RETURN_IF_SKIP(InitFramework(&kDisableMessageLimit));
+    RETURN_IF_SKIP(InitState());
 
     constexpr uint32_t count = 10000u;
 
@@ -224,12 +260,12 @@ TEST_F(PositiveThreading, DebugObjectNames) {
         }
     };
     const auto bind_descriptor = [&]() {
-        m_command_buffer.begin();
+        m_command_buffer.Begin();
         for (uint32_t i = 0; i < count; ++i) {
             vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0u, 1u,
                                       &descriptor_sets[i], 0u, nullptr);
         }
-        m_command_buffer.end();
+        m_command_buffer.End();
     };
 
     std::thread thread2(bind_descriptor);
@@ -271,8 +307,8 @@ TEST_F(PositiveThreading, Queue) {
     vkt::CommandBuffer mock_cmdbuff(*m_device, cbai);
     const VkCommandBufferBeginInfo cbbi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, nullptr,
                                         VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, nullptr};
-    mock_cmdbuff.begin(&cbbi);
-    mock_cmdbuff.end();
+    mock_cmdbuff.Begin(&cbbi);
+    mock_cmdbuff.End();
 
     std::mutex queue_mutex;
 

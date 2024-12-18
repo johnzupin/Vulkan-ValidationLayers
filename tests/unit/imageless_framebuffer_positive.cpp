@@ -33,18 +33,18 @@ TEST_F(PositiveImagelessFramebuffer, BasicUsage) {
     rp.AddColorAttachment(0);
     rp.CreateRenderPass();
 
-    VkFramebufferAttachmentImageInfoKHR fb_attachment_image_info = vku::InitStructHelper();
+    VkFramebufferAttachmentImageInfo fb_attachment_image_info = vku::InitStructHelper();
     fb_attachment_image_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     fb_attachment_image_info.width = attachment_width;
     fb_attachment_image_info.height = attachment_height;
     fb_attachment_image_info.layerCount = 1;
     fb_attachment_image_info.viewFormatCount = 1;
     fb_attachment_image_info.pViewFormats = &format;
-    VkFramebufferAttachmentsCreateInfoKHR fb_attachment_ci = vku::InitStructHelper();
+    VkFramebufferAttachmentsCreateInfo fb_attachment_ci = vku::InitStructHelper();
     fb_attachment_ci.attachmentImageInfoCount = 1;
     fb_attachment_ci.pAttachmentImageInfos = &fb_attachment_image_info;
     VkFramebufferCreateInfo fb_ci = vku::InitStructHelper(&fb_attachment_ci);
-    fb_ci.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT_KHR;
+    fb_ci.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT;
     fb_ci.width = attachment_width;
     fb_ci.height = attachment_height;
     fb_ci.layers = 1;
@@ -82,9 +82,7 @@ TEST_F(PositiveImagelessFramebuffer, Image3D) {
     image_ci.flags = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
     image_ci.imageType = VK_IMAGE_TYPE_3D;
     image_ci.format = format;
-    image_ci.extent.width = 32;
-    image_ci.extent.height = 32;
-    image_ci.extent.depth = 4;
+    image_ci.extent = {32, 32, 4};
     image_ci.mipLevels = 1;
     image_ci.arrayLayers = 1;
     image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -132,10 +130,10 @@ TEST_F(PositiveImagelessFramebuffer, Image3D) {
     render_pass_bi.clearValueCount = 1;
     render_pass_bi.pClearValues = &clear_value;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass_bi);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveImagelessFramebuffer, SecondaryCmdBuffer) {
@@ -148,7 +146,7 @@ TEST_F(PositiveImagelessFramebuffer, SecondaryCmdBuffer) {
 
     uint32_t attachment_width = 512;
     uint32_t attachment_height = 512;
-    VkFormat format = FindSupportedDepthOnlyFormat(gpu());
+    VkFormat format = FindSupportedDepthOnlyFormat(Gpu());
 
     // Create a renderPass with a single attachment
     RenderPassSingleSubpass rp(*this);
@@ -157,7 +155,7 @@ TEST_F(PositiveImagelessFramebuffer, SecondaryCmdBuffer) {
     rp.AddDepthStencilAttachment(0);
     rp.CreateRenderPass();
 
-    VkFramebufferAttachmentImageInfoKHR fb_attachment_image_info = vku::InitStructHelper();
+    VkFramebufferAttachmentImageInfo fb_attachment_image_info = vku::InitStructHelper();
     fb_attachment_image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     fb_attachment_image_info.width = attachment_width;
     fb_attachment_image_info.height = attachment_height;
@@ -165,12 +163,12 @@ TEST_F(PositiveImagelessFramebuffer, SecondaryCmdBuffer) {
     fb_attachment_image_info.viewFormatCount = 1;
     fb_attachment_image_info.pViewFormats = &format;
 
-    VkFramebufferAttachmentsCreateInfoKHR fb_attachment_ci = vku::InitStructHelper();
+    VkFramebufferAttachmentsCreateInfo fb_attachment_ci = vku::InitStructHelper();
     fb_attachment_ci.attachmentImageInfoCount = 1;
     fb_attachment_ci.pAttachmentImageInfos = &fb_attachment_image_info;
 
     VkFramebufferCreateInfo fb_ci = vku::InitStructHelper(&fb_attachment_ci);
-    fb_ci.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT_KHR;
+    fb_ci.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT;
     fb_ci.width = attachment_width;
     fb_ci.height = attachment_height;
     fb_ci.layers = 1;
@@ -207,9 +205,9 @@ TEST_F(PositiveImagelessFramebuffer, SecondaryCmdBuffer) {
     clearAttachment.colorAttachment = 0;
 
     vkt::CommandBuffer secondary(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
-    secondary.begin(&beginInfo);
+    secondary.Begin(&beginInfo);
     vk::CmdClearAttachments(secondary.handle(), 1u, &clearAttachment, 1u, &clearRect);
-    secondary.end();
+    secondary.End();
 }
 
 TEST_F(PositiveImagelessFramebuffer, FragmentShadingRateDimensionsMultiview) {

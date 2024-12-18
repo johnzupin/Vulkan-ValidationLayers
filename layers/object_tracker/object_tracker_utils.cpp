@@ -15,13 +15,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-#include "generated/chassis.h"
-
 #include "object_lifetime_validation.h"
-#include "generated/layer_chassis_dispatch.h"
+#include "chassis/dispatch_object.h"
 
 uint64_t object_track_index = 0;
+
+static std::shared_mutex lifetime_set_mutex;
+static vvl::unordered_set<ObjectLifetimes *> lifetime_set;
+
+ObjectLifetimes::ObjectLifetimes() : num_objects{}, num_total_objects(0), null_descriptor_enabled(false) {
+    container_type = LayerObjectTypeObjectTracker;
+    WriteLockGuard lock(lifetime_set_mutex);
+    lifetime_set.insert(this);
+}
+
+ObjectLifetimes::~ObjectLifetimes() {
+    WriteLockGuard lock(lifetime_set_mutex);
+    lifetime_set.erase(this);
+}
 
 VulkanTypedHandle ObjTrackStateTypedHandle(const ObjTrackState &track_state) {
     // TODO: Unify Typed Handle representation (i.e. VulkanTypedHandle everywhere there are handle/type pairs)
@@ -58,21 +69,23 @@ bool ObjectLifetimes::CheckObjectValidity(uint64_t object_handle, VulkanObjectTy
     }
     // Object not found, look for it in other device object maps
     const ObjectLifetimes *other_lifetimes = nullptr;
-    for (const auto &other_device_data : layer_data_map) {
-        const auto lifetimes = other_device_data.second->GetValidationObject<ObjectLifetimes>();
-        if (lifetimes && lifetimes != this && lifetimes->TracksObject(object_handle, object_type)) {
-            other_lifetimes = lifetimes;
+    {
+        ReadLockGuard lock(lifetime_set_mutex);
+        for (const auto *lifetimes : lifetime_set) {
+            if (lifetimes != this && lifetimes->TracksObject(object_handle, object_type)) {
+                other_lifetimes = lifetimes;
 
-            // Sometimes (calls such as vkRegisterDisplayEventEXT) interact with both the device and physical device
-            if (parent_type == kVulkanObjectTypePhysicalDevice) {
-                auto iter = other_lifetimes->object_map[object_type].find(object_handle);
-                if (iter != other_lifetimes->object_map[object_type].end()) {
-                    if (iter->second->parent_object == HandleToUint64(physical_device)) {
-                        return skip;
+                // Sometimes (calls such as vkRegisterDisplayEventEXT) interact with both the device and physical device
+                if (parent_type == kVulkanObjectTypePhysicalDevice) {
+                    auto iter = other_lifetimes->object_map[object_type].find(object_handle);
+                    if (iter != other_lifetimes->object_map[object_type].end()) {
+                        if (iter->second->parent_object == HandleToUint64(physical_device)) {
+                            return skip;
+                        }
                     }
                 }
+                break;
             }
-            break;
         }
     }
 
@@ -360,14 +373,14 @@ bool ObjectLifetimes::ValidateDescriptorWrite(VkWriteDescriptorSet const *desc, 
     return skip;
 }
 
-bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
-                                                             VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount,
-                                                             const VkWriteDescriptorSet *pDescriptorWrites,
-                                                             const ErrorObject &error_obj) const {
+bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                                                          VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount,
+                                                          const VkWriteDescriptorSet *pDescriptorWrites,
+                                                          const ErrorObject &error_obj) const {
     bool skip = false;
-    // Checked by chassis: commandBuffer: "VUID-vkCmdPushDescriptorSetKHR-commandBuffer-parameter"
-    skip |= ValidateObject(layout, kVulkanObjectTypePipelineLayout, false, "VUID-vkCmdPushDescriptorSetKHR-layout-parameter",
-                           "VUID-vkCmdPushDescriptorSetKHR-commonparent", error_obj.location.dot(Field::layout));
+    // Checked by chassis: commandBuffer: "VUID-vkCmdPushDescriptorSet-commandBuffer-parameter"
+    skip |= ValidateObject(layout, kVulkanObjectTypePipelineLayout, false, "VUID-vkCmdPushDescriptorSet-layout-parameter",
+                           "VUID-vkCmdPushDescriptorSet-commonparent", error_obj.location.dot(Field::layout));
     if (pDescriptorWrites) {
         for (uint32_t index0 = 0; index0 < descriptorWriteCount; ++index0) {
             skip |=
@@ -377,13 +390,21 @@ bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSetKHR(VkCommandBuffer com
     return skip;
 }
 
-bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
-                                                              const VkPushDescriptorSetInfoKHR *pPushDescriptorSetInfo,
-                                                              const ErrorObject &error_obj) const {
+bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                                                             VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount,
+                                                             const VkWriteDescriptorSet *pDescriptorWrites,
+                                                             const ErrorObject &error_obj) const {
+    return PreCallValidateCmdPushDescriptorSet(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount,
+                                               pDescriptorWrites, error_obj);
+}
+
+bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSet2(VkCommandBuffer commandBuffer,
+                                                           const VkPushDescriptorSetInfo *pPushDescriptorSetInfo,
+                                                           const ErrorObject &error_obj) const {
     bool skip = false;
-    // Checked by chassis: commandBuffer: "VUID-vkCmdPushDescriptorSet2KHR-commandBuffer-parameter"
+    // Checked by chassis: commandBuffer: "VUID-vkCmdPushDescriptorSet2-commandBuffer-parameter"
     skip |= ValidateObject(pPushDescriptorSetInfo->layout, kVulkanObjectTypePipelineLayout, true,
-                           "VUID-VkPushDescriptorSetInfoKHR-layout-parameter", kVUIDUndefined,
+                           "VUID-VkPushDescriptorSetInfo-layout-parameter", kVUIDUndefined,
                            error_obj.location.dot(Field::pPushDescriptorSetInfo).dot(Field::layout));
 
     if (pPushDescriptorSetInfo->pDescriptorWrites) {
@@ -394,6 +415,12 @@ bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSet2KHR(VkCommandBuffer co
         }
     }
     return skip;
+}
+
+bool ObjectLifetimes::PreCallValidateCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
+                                                              const VkPushDescriptorSetInfoKHR *pPushDescriptorSetInfo,
+                                                              const ErrorObject &error_obj) const {
+    return PreCallValidateCmdPushDescriptorSet2(commandBuffer, pPushDescriptorSetInfo, error_obj);
 }
 
 void ObjectLifetimes::CreateQueue(VkQueue vkObj, const Location &loc) {
@@ -469,8 +496,8 @@ bool ObjectLifetimes::PreCallValidateDestroyInstance(VkInstance instance, const 
                      string_VkDebugReportObjectTypeEXT(debug_object_type), FormatHandle(ObjTrackStateTypedHandle(*node)).c_str());
 
         // Throw errors if any device objects belonging to this instance have not been destroyed
-        auto device_layer_data = GetLayerDataPtr(GetDispatchKey(device), layer_data_map);
-        auto obj_lifetimes_data = device_layer_data->GetValidationObject<ObjectLifetimes>();
+        auto device_layer_data = GetLayerData(device);
+        auto obj_lifetimes_data = static_cast<ObjectLifetimes*>(device_layer_data->GetValidationObject(LayerObjectTypeObjectTracker));
         skip |= obj_lifetimes_data->ReportUndestroyedDeviceObjects(device, error_obj.location);
 
         skip |= ValidateDestroyObject(device, kVulkanObjectTypeDevice, pAllocator, "VUID-vkDestroyInstance-instance-00630",
@@ -527,9 +554,13 @@ bool ObjectLifetimes::PreCallValidateDestroyDevice(VkDevice device, const VkAllo
 
 void ObjectLifetimes::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator,
                                                  const RecordObject &record_obj) {
-    auto instance_data = GetLayerDataPtr(GetDispatchKey(physical_device), layer_data_map);
-    auto object_lifetimes = instance_data->GetValidationObject<ObjectLifetimes>();
-    object_lifetimes->RecordDestroyObject(device, kVulkanObjectTypeDevice);
+    auto instance_data = GetLayerData(physical_device);
+    auto object_lifetimes = static_cast<ObjectLifetimes*>(instance_data->GetValidationObject(LayerObjectTypeObjectTracker));
+    // If ObjectTracker was removed (in an early teardown) this might be null, could search in aborted_object_dispatch but if it is
+    // there, no need to record anything else
+    if (object_lifetimes) {
+        object_lifetimes->RecordDestroyObject(device, kVulkanObjectTypeDevice);
+    }
     DestroyLeakedDeviceObjects();
 
     // Clean up Queue's MemRef Linked Lists
@@ -732,8 +763,8 @@ void ObjectLifetimes::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice
     if (record_obj.result < VK_SUCCESS) return;
     CreateObject(*pDevice, kVulkanObjectTypeDevice, pAllocator, record_obj.location);
 
-    auto device_data = GetLayerDataPtr(GetDispatchKey(*pDevice), layer_data_map);
-    auto object_tracking = device_data->GetValidationObject<ObjectLifetimes>();
+    auto device_data = GetLayerData(*pDevice);
+    auto object_tracking = static_cast<ObjectLifetimes*>(device_data->GetValidationObject(LayerObjectTypeObjectTracker));
 
     const auto *robustness2_features = vku::FindStructInPNextChain<VkPhysicalDeviceRobustness2FeaturesEXT>(pCreateInfo->pNext);
     object_tracking->null_descriptor_enabled = robustness2_features && robustness2_features->nullDescriptor;
@@ -1196,7 +1227,7 @@ bool ObjectLifetimes::PreCallValidateCreateDescriptorUpdateTemplate(VkDevice dev
                                    "VUID-VkDescriptorUpdateTemplateCreateInfo-commonparent",
                                    create_info_loc.dot(Field::descriptorSetLayout));
         }
-        if (pCreateInfo->templateType == VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS_KHR) {
+        if (pCreateInfo->templateType == VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS) {
             skip |= ValidateObject(pCreateInfo->pipelineLayout, kVulkanObjectTypePipelineLayout, false,
                                    "VUID-VkDescriptorUpdateTemplateCreateInfo-templateType-00352",
                                    "VUID-VkDescriptorUpdateTemplateCreateInfo-commonparent",
@@ -1357,8 +1388,8 @@ void ObjectLifetimes::PostCallRecordCreateRayTracingPipelinesKHR(
                 }
             };
 
-            auto layer_data = GetLayerDataPtr(GetDispatchKey(device), layer_data_map);
-            if (wrap_handles) {
+            auto layer_data = GetLayerData(device);
+            if (dispatch_->wrap_handles) {
                 deferredOperation = layer_data->Unwrap(deferredOperation);
             }
             std::vector<std::function<void(const std::vector<VkPipeline> &)>> cleanup_fn;
@@ -1536,21 +1567,36 @@ bool ObjectLifetimes::PreCallValidateCreateIndirectExecutionSetEXT(VkDevice devi
                                                                    VkIndirectExecutionSetEXT *pIndirectExecutionSet,
                                                                    const ErrorObject &error_obj) const {
     bool skip = false;
+    // Checked by chassis: device: "VUID-vkCreateIndirectExecutionSetEXT-device-parameter"
 
-    if (pCreateInfo && pCreateInfo->type == VK_INDIRECT_EXECUTION_SET_INFO_TYPE_SHADER_OBJECTS_EXT &&
-        pCreateInfo->info.pShaderInfo) {
+    if (!pCreateInfo) {
+        return skip;
+    }
+
+    const Location create_info_loc = error_obj.location.dot(Field::pCreateInfo);
+    const Location info_loc = create_info_loc.dot(Field::info);
+    if (pCreateInfo->type == VK_INDIRECT_EXECUTION_SET_INFO_TYPE_PIPELINES_EXT && pCreateInfo->info.pPipelineInfo) {
+        [[maybe_unused]] const Location pipeline_info_loc = info_loc.dot(Field::pPipelineInfo);
+        skip |= ValidateObject(pCreateInfo->info.pPipelineInfo->initialPipeline, kVulkanObjectTypePipeline, false,
+                               "VUID-VkIndirectExecutionSetPipelineInfoEXT-initialPipeline-parameter", kVUIDUndefined,
+                               pipeline_info_loc.dot(Field::initialPipeline));
+    }
+
+    if (pCreateInfo->type == VK_INDIRECT_EXECUTION_SET_INFO_TYPE_SHADER_OBJECTS_EXT && pCreateInfo->info.pShaderInfo) {
         const VkIndirectExecutionSetShaderInfoEXT &shader_info = *pCreateInfo->info.pShaderInfo;
-        const Location create_info_loc = error_obj.location.dot(Field::pCreateInfo);
-        const Location info_loc = create_info_loc.dot(Field::info);
         const Location shader_info_loc = info_loc.dot(Field::pShaderInfo);
-        if (shader_info.pSetLayoutInfos) {
+        if (shader_info.pSetLayoutInfos && shader_info.pInitialShaders) {
             for (uint32_t i = 0; i < shader_info.shaderCount; ++i) {
+                skip |= ValidateObject(shader_info.pInitialShaders[i], kVulkanObjectTypeShaderEXT, false,
+                                       "VUID-VkIndirectExecutionSetShaderInfoEXT-pInitialShaders-parameter", kVUIDUndefined,
+                                       shader_info_loc.dot(Field::pInitialShaders, i));
+
                 const Location set_layout_info_loc = shader_info_loc.dot(Field::pSetLayoutInfos, i);
                 const VkIndirectExecutionSetShaderLayoutInfoEXT &layout_info = shader_info.pSetLayoutInfos[i];
                 if ((layout_info.setLayoutCount > 0) && (layout_info.pSetLayouts)) {
                     for (uint32_t layout_index = 0; layout_index < layout_info.setLayoutCount; ++layout_index) {
                         skip |= ValidateObject(layout_info.pSetLayouts[layout_index], kVulkanObjectTypeDescriptorSetLayout, true,
-                                               kVUIDUndefined,
+                                               "VUID-VkIndirectExecutionSetShaderLayoutInfoEXT-pSetLayouts-parameter",
                                                "UNASSIGNED-VkIndirectExecutionSetShaderLayoutInfoEXT-pSetLayouts-parent",
                                                set_layout_info_loc.dot(Field::pSetLayouts, layout_index));
                     }

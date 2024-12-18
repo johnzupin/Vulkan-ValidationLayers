@@ -84,7 +84,9 @@ class ObjectTrackerOutputGenerator(BaseGenerator):
             'vkAllocateDescriptorSets',
             'vkFreeDescriptorSets',
             'vkUpdateDescriptorSets',
+            'vkCmdPushDescriptorSet',
             'vkCmdPushDescriptorSetKHR',
+            'vkCmdPushDescriptorSet2',
             'vkCmdPushDescriptorSet2KHR',
             'vkResetDescriptorPool',
             'vkCreateDescriptorUpdateTemplate',
@@ -358,7 +360,6 @@ class ObjectTrackerOutputGenerator(BaseGenerator):
         out = []
         out.append('// clang-format off')
         out.append('''
-#include "chassis.h"
 #include "object_tracker/object_lifetime_validation.h"
 ReadLockGuard ObjectLifetimes::ReadLock() const { return ReadLockGuard(validation_object_mutex, std::defer_lock); }
 WriteLockGuard ObjectLifetimes::WriteLock() { return WriteLockGuard(validation_object_mutex, std::defer_lock); }
@@ -576,8 +577,8 @@ bool ObjectLifetimes::ReportUndestroyedDeviceObjects(VkDevice device, const Loca
             return '"UNASSIGNED-VkLatencySleepInfoNV-signalSemaphore-parent"'
         if commandName == 'vkCreateCudaFunctionNV' and memberName == 'module':
             return '"UNASSIGNED-VkCudaFunctionCreateInfoNV-module-parent"'
-        if commandName == 'vkCmdPushConstants2KHR' and memberName == 'layout':
-            return '"UNASSIGNED-VkPushConstantsInfoKHR-layout-parent"'
+        if (commandName == 'vkCmdPushConstants2' or commandName == 'vkCmdPushConstants2KHR') and memberName == 'layout':
+            return '"UNASSIGNED-VkPushConstantsInfo-layout-parent"'
         if commandName == 'vkCmdSetDescriptorBufferOffsets2EXT' and memberName == 'layout':
             return '"UNASSIGNED-VkSetDescriptorBufferOffsetsInfoEXT-layout-parent"'
         if commandName == 'vkCmdBindDescriptorBufferEmbeddedSamplers2EXT' and memberName == 'layout':
@@ -660,16 +661,16 @@ bool ObjectLifetimes::ReportUndestroyedDeviceObjects(VkDevice device, const Loca
             return '"UNASSIGNED-VkReleaseSwapchainImagesInfoEXT-swapchain-parent"'
         if commandName == 'vkCmdBeginConditionalRenderingEXT' and memberName == 'buffer':
             return '"UNASSIGNED-VkConditionalRenderingBeginInfoEXT-buffer-parent"'
-        if commandName == 'vkMapMemory2KHR' and memberName == 'memory':
-            return '"UNASSIGNED-VkMemoryMapInfoKHR-memory-parent"'
-        if commandName == 'vkUnmapMemory2KHR' and memberName == 'memory':
-            return '"UNASSIGNED-VkMemoryUnmapInfoKHR-memory-parent"'
-        if commandName == 'vkCopyMemoryToImageEXT' and memberName == 'dstImage':
-            return '"UNASSIGNED-VkCopyMemoryToImageInfoEXT-dstImage-parent"'
-        if commandName == 'vkCopyImageToMemoryEXT' and memberName == 'srcImage':
-            return '"UNASSIGNED-VkCopyImageToMemoryInfoEXT-srcImage-parent"'
-        if commandName == 'vkTransitionImageLayoutEXT' and memberName == 'image':
-            return '"UNASSIGNED-VkHostImageLayoutTransitionInfoEXT-image-parent"'
+        if (commandName == 'vkMapMemory2' or commandName == 'vkMapMemory2KHR') and memberName == 'memory':
+            return '"UNASSIGNED-VkMemoryMapInfo-memory-parent"'
+        if (commandName == 'vkUnmapMemory2' or commandName == 'vkUnmapMemory2KHR') and memberName == 'memory':
+            return '"UNASSIGNED-VkMemoryUnmapInfo-memory-parent"'
+        if (commandName == 'vkCopyMemoryToImage' or commandName == 'vkCopyMemoryToImageEXT') and memberName == 'dstImage':
+            return '"UNASSIGNED-VkCopyMemoryToImageInfo-dstImage-parent"'
+        if (commandName == 'vkCopyImageToMemory' or commandName == 'vkCopyImageToMemoryEXT') and memberName == 'srcImage':
+            return '"UNASSIGNED-VkCopyImageToMemoryInfo-srcImage-parent"'
+        if (commandName == 'vkTransitionImageLayout' or commandName == 'vkTransitionImageLayoutEXT') and memberName == 'image':
+            return '"UNASSIGNED-VkHostImageLayoutTransitionInfo-image-parent"'
         if commandName == 'vkCreateMicromapEXT' and memberName == 'buffer':
             return '"UNASSIGNED-VkMicromapCreateInfoEXT-buffer-parent"'
         if commandName == 'vkCreateAccelerationStructureKHR' and memberName == 'buffer':
@@ -773,6 +774,8 @@ bool ObjectLifetimes::ReportUndestroyedDeviceObjects(VkDevice device, const Loca
             return '"UNASSIGNED-VkWriteIndirectExecutionSetShaderEXT-shader-parent"'
         if structName == 'VkDescriptorDataEXT' and memberName == 'pSampler':
             return '"UNASSIGNED-VkDescriptorDataEXT-pSampler-parent"'
+        if structName == 'VkVideoEncodeQuantizationMapInfoKHR' and memberName == 'quantizationMap':
+            return '"UNASSIGNED-VkVideoEncodeQuantizationMapInfoKHR-quantizationMap-parent"'
 
         # Common parents because the structs have more then one handle that needs to be check
         if (structName == 'VkBufferMemoryBarrier' and memberName == 'buffer') or (structName == 'VkImageMemoryBarrier' and memberName == 'image'):
@@ -942,8 +945,8 @@ bool ObjectLifetimes::ReportUndestroyedDeviceObjects(VkDevice device, const Loca
                     location = f'{errorLoc}.dot(Field::{member.name})'
                     if self.vk.commands[topCommand].device and self.vk.handles[member.type].instance:
                         # Use case when for device-level API call we should use instance-level validation object
-                        pre_call_validate += 'auto instance_data = GetLayerDataPtr(GetDispatchKey(instance), layer_data_map);\n'
-                        pre_call_validate += 'auto instance_object_lifetimes = instance_data->GetValidationObject<ObjectLifetimes>();\n'
+                        pre_call_validate += 'auto instance_data = GetLayerData(instance);\n'
+                        pre_call_validate += 'auto instance_object_lifetimes = static_cast<ObjectLifetimes*>(instance_data->GetValidationObject(LayerObjectTypeObjectTracker));\n'
                         pre_call_validate += f'skip |= instance_object_lifetimes->ValidateObject({prefix}{member.name}, kVulkanObjectType{member.type[2:]}, {nullAllowed}, {param_vuid}, {parent_vuid}, {location}{parent_object_type});\n'
                     else:
                         pre_call_validate += f'skip |= ValidateObject({prefix}{member.name}, kVulkanObjectType{member.type[2:]}, {nullAllowed}, {param_vuid}, {parent_vuid}, {location}{parent_object_type});\n'

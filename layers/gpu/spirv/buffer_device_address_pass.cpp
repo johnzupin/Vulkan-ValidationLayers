@@ -20,14 +20,14 @@
 
 #include "generated/instrumentation_buffer_device_address_comp.h"
 
-namespace gpu {
+namespace gpuav {
 namespace spirv {
-
-static LinkInfo link_info = {instrumentation_buffer_device_address_comp, instrumentation_buffer_device_address_comp_size,
-                             LinkFunctions::inst_buffer_device_address, 0, "inst_buffer_device_address"};
 
 // By appending the LinkInfo, it will attempt at linking stage to add the function.
 uint32_t BufferDeviceAddressPass::GetLinkFunctionId() {
+    static LinkInfo link_info = {instrumentation_buffer_device_address_comp, instrumentation_buffer_device_address_comp_size, 0,
+                                 "inst_buffer_device_address"};
+
     if (link_function_id == 0) {
         link_function_id = module_.TakeNextId();
         link_info.function_id = link_function_id;
@@ -45,36 +45,58 @@ uint32_t BufferDeviceAddressPass::CreateFunctionCall(BasicBlock& block, Instruct
     block.CreateInstruction(spv::OpConvertPtrToU, {uint64_type.Id(), convert_id, pointer_id}, inst_it);
 
     const Constant& length_constant = module_.type_manager_.GetConstantUInt32(type_length_);
-    const Constant& access_opcode = module_.type_manager_.GetConstantUInt32(access_opcode_);
+    const uint32_t opcode = target_instruction_->Opcode();
+    const Constant& access_opcode = module_.type_manager_.GetConstantUInt32(opcode);
+
+    const Constant& alignment_constant = module_.type_manager_.GetConstantUInt32(alignment_literal_);
 
     const uint32_t function_result = module_.TakeNextId();
     const uint32_t function_def = GetLinkFunctionId();
     const uint32_t bool_type = module_.type_manager_.GetTypeBool().Id();
 
-    block.CreateInstruction(spv::OpFunctionCall,
-                            {bool_type, function_result, function_def, injection_data.inst_position_id,
-                             injection_data.stage_info_id, convert_id, length_constant.Id(), access_opcode.Id()},
-                            inst_it);
+    block.CreateInstruction(
+        spv::OpFunctionCall,
+        {bool_type, function_result, function_def, injection_data.inst_position_id, injection_data.stage_info_id, convert_id,
+         length_constant.Id(), access_opcode.Id(), alignment_constant.Id()},
+        inst_it);
 
     return function_result;
 }
 
 void BufferDeviceAddressPass::Reset() {
     target_instruction_ = nullptr;
-    access_opcode_ = 0;
+    alignment_literal_ = 0;
     type_length_ = 0;
 }
 
-bool BufferDeviceAddressPass::AnalyzeInstruction(const Function& function, const Instruction& inst) {
+bool BufferDeviceAddressPass::RequiresInstrumentation(const Function& function, const Instruction& inst) {
     const uint32_t opcode = inst.Opcode();
-    if (opcode != spv::OpLoad && opcode != spv::OpStore) {
+    if (opcode == spv::OpLoad || opcode == spv::OpStore) {
+        // We only care if there is an Aligned Memory Operands
+        // VUID-StandaloneSpirv-PhysicalStorageBuffer64-04708 requires there to be an Aligned operand
+        const uint32_t memory_operand_index = opcode == spv::OpLoad ? 4 : 3;
+        const uint32_t alignment_word_index = opcode == spv::OpLoad ? 5 : 4;  // OpStore is at [4]
+        if (inst.Length() < alignment_word_index) {
+            return false;
+        }
+        const uint32_t memory_operands = inst.Word(memory_operand_index);
+        if ((memory_operands & spv::MemoryAccessAlignedMask) == 0) {
+            return false;
+        }
+        // Even if they are other Memory Operands the spec says it is ordered by smallest bit first,
+        // Luckily |Aligned| is the smallest bit that can have an operand so we know it is here
+        alignment_literal_ = inst.Word(alignment_word_index);
+    } else if (opcode == spv::OpAtomicLoad || opcode == spv::OpAtomicStore || opcode == spv::OpAtomicExchange) {
+        // Atomics are naturally aligned and by setting this to 1, it will always pass the alignment check
+        alignment_literal_ = 1;
+    } else {
         return false;
     }
 
     // TODO - Should have loop to walk Load/Store to the Pointer,
     // this case will not cover things such as OpCopyObject or double OpAccessChains
     const Instruction* pointer_inst = function.FindInstruction(inst.Operand(0));
-    if (!pointer_inst || pointer_inst->Opcode() != spv::OpAccessChain) {
+    if (!pointer_inst || !pointer_inst->IsAccessChain()) {
         return false;
     }
 
@@ -105,15 +127,14 @@ bool BufferDeviceAddressPass::AnalyzeInstruction(const Function& function, const
     }
 
     // Save information to be used to make the Function
-    access_opcode_ = opcode;
     target_instruction_ = &inst;
     type_length_ = module_.type_manager_.TypeLength(*accessed_type);
     return true;
 }
 
 void BufferDeviceAddressPass::PrintDebugInfo() {
-    std::cout << "BufferDeviceAddressPass instrumentation count: " << instrumented_count_ << '\n';
+    std::cout << "BufferDeviceAddressPass instrumentation count: " << instrumentations_count_ << '\n';
 }
 
 }  // namespace spirv
-}  // namespace gpu
+}  // namespace gpuav

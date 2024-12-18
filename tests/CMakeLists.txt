@@ -86,6 +86,7 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/descriptor_indexing_positive.cpp
     unit/descriptors.cpp
     unit/descriptors_positive.cpp
+    unit/device_feature_property.cpp
     unit/device_generated_commands.cpp
     unit/device_generated_commands_positive.cpp
     unit/device_queue.cpp
@@ -104,12 +105,22 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/gpu_av.cpp
     unit/gpu_av_buffer_device_address.cpp
     unit/gpu_av_buffer_device_address_positive.cpp
+    unit/gpu_av_debug_printf.cpp
     unit/gpu_av_descriptor_buffer_positive.cpp
+    unit/gpu_av_descriptor_class_general_buffer.cpp
+    unit/gpu_av_descriptor_class_general_buffer_positive.cpp
+    unit/gpu_av_descriptor_class_texel_buffer.cpp
+    unit/gpu_av_descriptor_class_texel_buffer_positive.cpp
     unit/gpu_av_descriptor_indexing.cpp
     unit/gpu_av_descriptor_indexing_positive.cpp
+    unit/gpu_av_descriptor_post_process.cpp
+    unit/gpu_av_descriptor_post_process_positive.cpp
+    unit/gpu_av_image_layout.cpp
+    unit/gpu_av_image_layout_positive.cpp
     unit/gpu_av_indirect_buffer.cpp
-    unit/gpu_av_oob.cpp
-    unit/gpu_av_oob_positive.cpp
+    unit/gpu_av_indirect_buffer_positive.cpp
+    unit/gpu_av_index_buffer.cpp
+    unit/gpu_av_index_buffer_positive.cpp
     unit/gpu_av_positive.cpp
     unit/gpu_av_shader_object_positive.cpp
     unit/gpu_av_shader_debug_info.cpp
@@ -125,6 +136,8 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/host_image_copy_positive.cpp
     unit/image_drm.cpp
     unit/image_drm_positive.cpp
+    unit/image_layout.cpp
+    unit/image_layout_positive.cpp
     unit/image.cpp
     unit/image_positive.cpp
     unit/imageless_framebuffer.cpp
@@ -132,6 +145,8 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/instance_positive.cpp
     unit/instanceless.cpp
     unit/layer_utils_positive.cpp
+    unit/layer_settings.cpp
+    unit/layer_settings_positive.cpp
     unit/memory.cpp
     unit/memory_positive.cpp
     unit/mesh.cpp
@@ -207,6 +222,7 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/sync_object_positive.cpp
     unit/sync_val.cpp
     unit/sync_val_positive.cpp
+    unit/sync_val_reporting.cpp
     unit/sync_val_semaphore.cpp
     unit/sync_val_semaphore_positive.cpp
     unit/sync_val_wsi.cpp

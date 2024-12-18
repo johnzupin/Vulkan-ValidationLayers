@@ -277,8 +277,8 @@ void CommandBuffer::ResetCBState() {
     queue_submit_functions.clear();
     queue_submit_functions_after_render_pass.clear();
     cmd_execute_commands_functions.clear();
-    eventUpdates.clear();
-    queryUpdates.clear();
+    event_updates.clear();
+    query_updates.clear();
 
     for (auto &item : lastBound) {
         item.Reset();
@@ -300,6 +300,10 @@ void CommandBuffer::ResetCBState() {
     debug_label.Reset();
     label_stack_depth_ = 0;
     label_commands_.clear();
+
+    push_constant_data_chunks.clear();
+    push_constant_latest_used_layout.fill(VK_NULL_HANDLE);
+    push_constant_ranges_layout.reset();
 
     nesting_level = 0;
 
@@ -345,8 +349,9 @@ void CommandBuffer::ResetPushConstantRangesLayoutIfIncompatible(const vvl::Pipel
         return;
     }
 
-    push_constant_ranges_layout = pipeline_layout_state.push_constant_ranges_layout;
     push_constant_data_chunks.clear();
+    push_constant_latest_used_layout.fill(VK_NULL_HANDLE);
+    push_constant_ranges_layout = pipeline_layout_state.push_constant_ranges_layout;
 }
 
 void CommandBuffer::Destroy() {
@@ -405,28 +410,28 @@ void CommandBuffer::NotifyInvalidate(const StateObject::NodeList &invalid_nodes,
     StateObject::NotifyInvalidate(invalid_nodes, unlink);
 }
 
-const CommandBuffer::ImageLayoutMap &CommandBuffer::GetImageSubresourceLayoutMap() const { return image_layout_map; }
+const CommandBuffer::ImageLayoutMap &CommandBuffer::GetImageLayoutMap() const { return image_layout_map; }
 
 // The const variant only need the image as it is the key for the map
-std::shared_ptr<const ImageSubresourceLayoutMap> CommandBuffer::GetImageSubresourceLayoutMap(VkImage image) const {
+std::shared_ptr<const ImageLayoutRegistry> CommandBuffer::GetImageLayoutRegistry(VkImage image) const {
     auto it = image_layout_map.find(image);
     if (it == image_layout_map.cend()) {
         return nullptr;
     }
-    return it->second.map;
+    return it->second;
 }
 
 // The non-const variant only needs the image state, as the factory requires it to construct a new entry
-std::shared_ptr<ImageSubresourceLayoutMap> CommandBuffer::GetImageSubresourceLayoutMap(const vvl::Image &image_state) {
+std::shared_ptr<ImageLayoutRegistry> CommandBuffer::GetOrCreateImageLayoutRegistry(const vvl::Image &image_state) {
     // Make sure we don't create a nullptr keyed entry for a zombie Image
     if (image_state.Destroyed() || !image_state.layout_range_map) {
         return nullptr;
     }
     auto iter = image_layout_map.find(image_state.VkHandle());
-    if (iter != image_layout_map.end() && image_state.GetId() == iter->second.id) {
-        return iter->second.map;
+    if (iter != image_layout_map.end() && iter->second && image_state.GetId() == iter->second->GetImageId()) {
+        return iter->second;
     }
-    std::shared_ptr<ImageSubresourceLayoutMap> layout_map;
+    std::shared_ptr<ImageLayoutRegistry> image_layout_registry;
     if (image_state.CanAlias()) {
         // Aliasing images need to share the same local layout map.
         // Since they use the same global layout state, use it as a key
@@ -435,27 +440,26 @@ std::shared_ptr<ImageSubresourceLayoutMap> CommandBuffer::GetImageSubresourceLay
         const auto *global_layout_map = image_state.layout_range_map.get();
         auto alias_iter = aliased_image_layout_map.find(global_layout_map);
         if (alias_iter != aliased_image_layout_map.end()) {
-            layout_map = alias_iter->second;
+            image_layout_registry = alias_iter->second;
         } else {
-            layout_map = std::make_shared<ImageSubresourceLayoutMap>(image_state);
+            image_layout_registry = std::make_shared<ImageLayoutRegistry>(image_state);
             // Save the local layout map for the next aliased image.
             // The global layout map pointer is only used as a key into the local lookup
             // table so it doesn't need to be locked.
-            aliased_image_layout_map.emplace(global_layout_map, layout_map);
+            aliased_image_layout_map.emplace(global_layout_map, image_layout_registry);
         }
 
     } else {
-        layout_map = std::make_shared<ImageSubresourceLayoutMap>(image_state);
+        image_layout_registry = std::make_shared<ImageLayoutRegistry>(image_state);
     }
     if (iter != image_layout_map.end()) {
         // overwrite the stale entry
-        iter->second.id = image_state.GetId();
-        iter->second.map = layout_map;
+        iter->second = image_layout_registry;
     } else {
         // add a new entry
-        image_layout_map.insert({image_state.VkHandle(), vvl::CommandBuffer::LayoutState{image_state.GetId(), layout_map}});
+        image_layout_map.insert({image_state.VkHandle(), image_layout_registry});
     }
-    return layout_map;
+    return image_layout_registry;
 }
 
 static bool SetQueryState(const QueryObject &object, QueryState value, QueryMap *localQueryToStateMap) {
@@ -466,8 +470,8 @@ static bool SetQueryState(const QueryObject &object, QueryState value, QueryMap 
 void CommandBuffer::BeginQuery(const QueryObject &query_obj) {
     activeQueries.insert(query_obj);
     startedQueries.insert(query_obj);
-    queryUpdates.emplace_back([query_obj](CommandBuffer &cb_state_arg, bool do_validate, VkQueryPool &firstPerfQueryPool,
-                                          uint32_t perfQueryPass, QueryMap *localQueryToStateMap) {
+    query_updates.emplace_back([query_obj](CommandBuffer &cb_state_arg, bool do_validate, VkQueryPool &firstPerfQueryPool,
+                                           uint32_t perfQueryPass, QueryMap *localQueryToStateMap) {
         SetQueryState(QueryObject(query_obj, perfQueryPass), QUERYSTATE_RUNNING, localQueryToStateMap);
         return false;
     });
@@ -479,8 +483,8 @@ void CommandBuffer::BeginQuery(const QueryObject &query_obj) {
 
 void CommandBuffer::EndQuery(const QueryObject &query_obj) {
     activeQueries.erase(query_obj);
-    queryUpdates.emplace_back([query_obj](CommandBuffer &cb_state_arg, bool do_validate, VkQueryPool &firstPerfQueryPool,
-                                          uint32_t perfQueryPass, QueryMap *localQueryToStateMap) {
+    query_updates.emplace_back([query_obj](CommandBuffer &cb_state_arg, bool do_validate, VkQueryPool &firstPerfQueryPool,
+                                           uint32_t perfQueryPass, QueryMap *localQueryToStateMap) {
         return SetQueryState(QueryObject(query_obj, perfQueryPass), QUERYSTATE_ENDED, localQueryToStateMap);
     });
     updatedQueries.insert(query_obj);
@@ -516,9 +520,9 @@ void CommandBuffer::EndQueries(VkQueryPool queryPool, uint32_t firstQuery, uint3
         activeQueries.erase(query_obj);
         updatedQueries.insert(query_obj);
     }
-    queryUpdates.emplace_back([queryPool, firstQuery, queryCount](CommandBuffer &cb_state_arg, bool do_validate,
-                                                                  VkQueryPool &firstPerfQueryPool, uint32_t perfQueryPass,
-                                                                  QueryMap *localQueryToStateMap) {
+    query_updates.emplace_back([queryPool, firstQuery, queryCount](CommandBuffer &cb_state_arg, bool do_validate,
+                                                                   VkQueryPool &firstPerfQueryPool, uint32_t perfQueryPass,
+                                                                   QueryMap *localQueryToStateMap) {
         return SetQueryStateMulti(queryPool, firstQuery, queryCount, perfQueryPass, QUERYSTATE_ENDED, localQueryToStateMap);
     });
 }
@@ -529,9 +533,9 @@ void CommandBuffer::ResetQueryPool(VkQueryPool queryPool, uint32_t firstQuery, u
         updatedQueries.insert(query_obj);
     }
 
-    queryUpdates.emplace_back([queryPool, firstQuery, queryCount](CommandBuffer &cb_state_arg, bool do_validate,
-                                                                  VkQueryPool &firstPerfQueryPool, uint32_t perfQueryPass,
-                                                                  QueryMap *localQueryToStateMap) {
+    query_updates.emplace_back([queryPool, firstQuery, queryCount](CommandBuffer &cb_state_arg, bool do_validate,
+                                                                   VkQueryPool &firstPerfQueryPool, uint32_t perfQueryPass,
+                                                                   QueryMap *localQueryToStateMap) {
         return SetQueryStateMulti(queryPool, firstQuery, queryCount, perfQueryPass, QUERYSTATE_RESET, localQueryToStateMap);
     });
 }
@@ -704,7 +708,7 @@ void CommandBuffer::BeginRendering(Func command, const VkRenderingInfo *pRenderi
         striped_count += rp_striped_begin->stripeInfoCount;
     }
 
-    activeSubpassContents = ((pRenderingInfo->flags & VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR)
+    activeSubpassContents = ((pRenderingInfo->flags & VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT)
                                  ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
                                  : VK_SUBPASS_CONTENTS_INLINE);
 
@@ -898,8 +902,8 @@ void CommandBuffer::ControlVideoCoding(const VkVideoCodingControlInfoKHR *pContr
 }
 
 void vvl::CommandBuffer::EnqueueUpdateVideoInlineQueries(const VkVideoInlineQueryInfoKHR &query_info) {
-    queryUpdates.emplace_back([query_info](vvl::CommandBuffer &cb_state_arg, bool do_validate, VkQueryPool &firstPerfQueryPool,
-                                           uint32_t perfQueryPass, QueryMap *localQueryToStateMap) {
+    query_updates.emplace_back([query_info](vvl::CommandBuffer &cb_state_arg, bool do_validate, VkQueryPool &firstPerfQueryPool,
+                                            uint32_t perfQueryPass, QueryMap *localQueryToStateMap) {
         for (uint32_t i = 0; i < query_info.queryCount; i++) {
             SetQueryState(QueryObject(query_info.queryPool, query_info.firstQuery + i), QUERYSTATE_ENDED, localQueryToStateMap);
         }
@@ -1078,14 +1082,15 @@ void CommandBuffer::ExecuteCommands(vvl::span<const VkCommandBuffer> secondary_c
         // NOTE: The update/population of the image_layout_map is done in CoreChecks, but for other classes derived from
         // ValidationStateTracker these maps will be empty, so leaving the propagation in the the state tracker should be a no-op
         // for those other classes.
-        for (const auto &sub_layout_map_entry : sub_cb_state->image_layout_map) {
-            const auto image_state = dev_data.Get<vvl::Image>(sub_layout_map_entry.first);
-            if (!image_state || image_state->Destroyed() || image_state->GetId() != sub_layout_map_entry.second.id) {
+        for (const auto &[image, image_layout_registry] : sub_cb_state->image_layout_map) {
+            const auto image_state = dev_data.Get<vvl::Image>(image);
+            if (!image_state || image_state->Destroyed() || !image_layout_registry ||
+                image_state->GetId() != image_layout_registry->GetImageId()) {
                 continue;
             }
-            auto cb_subres_map = GetImageSubresourceLayoutMap(*image_state);
-            if (cb_subres_map) {
-                cb_subres_map->UpdateFrom(*sub_layout_map_entry.second.map);
+            auto cb_image_layout_registry = GetOrCreateImageLayoutRegistry(*image_state);
+            if (cb_image_layout_registry) {
+                cb_image_layout_registry->UpdateFrom(*image_layout_registry);
             }
         }
 
@@ -1095,18 +1100,18 @@ void CommandBuffer::ExecuteCommands(vvl::span<const VkCommandBuffer> secondary_c
         // Add a query update that runs all the query updates that happen in the sub command buffer.
         // This avoids locking ambiguity because primary command buffers are locked when these
         // callbacks run, but secondary command buffers are not.
-        queryUpdates.emplace_back([sub_command_buffer](CommandBuffer &cb_state_arg, bool do_validate,
-                                                       VkQueryPool &firstPerfQueryPool, uint32_t perfQueryPass,
-                                                       QueryMap *localQueryToStateMap) {
+        query_updates.emplace_back([sub_command_buffer](CommandBuffer &cb_state_arg, bool do_validate,
+                                                        VkQueryPool &firstPerfQueryPool, uint32_t perfQueryPass,
+                                                        QueryMap *localQueryToStateMap) {
             bool skip = false;
             auto sub_cb_state_arg = cb_state_arg.dev_data.GetWrite<CommandBuffer>(sub_command_buffer);
-            for (auto &function : sub_cb_state_arg->queryUpdates) {
+            for (auto &function : sub_cb_state_arg->query_updates) {
                 skip |= function(*sub_cb_state_arg, do_validate, firstPerfQueryPool, perfQueryPass, localQueryToStateMap);
             }
             return skip;
         });
-        for (auto &function : sub_cb_state->eventUpdates) {
-            eventUpdates.push_back(function);
+        for (auto &function : sub_cb_state->event_updates) {
+            event_updates.push_back(function);
         }
         for (auto &event : sub_cb_state->events) {
             events.push_back(event);
@@ -1215,14 +1220,13 @@ void CommandBuffer::UpdatePipelineState(Func command, const VkPipelineBindPoint 
     }
 
     if (last_bound.desc_set_pipeline_layout != VK_NULL_HANDLE) {
-        for (const auto &set_binding_pair : pipe->active_slots) {
-            uint32_t set_index = set_binding_pair.first;
-            if (set_index >= last_bound.per_set.size()) {
+        for (const auto &[set_index, binding_req_map] : pipe->active_slots) {
+            if (set_index >= last_bound.ds_slots.size()) {
                 continue;
             }
-            auto &set_info = last_bound.per_set[set_index];
+            auto &ds_slot = last_bound.ds_slots[set_index];
             // Pull the set node
-            auto &descriptor_set = set_info.bound_descriptor_set;
+            auto &descriptor_set = ds_slot.ds_state;
             if (!descriptor_set) {
                 continue;
             }
@@ -1232,21 +1236,21 @@ void CommandBuffer::UpdatePipelineState(Func command, const VkPipelineBindPoint 
             // We can skip updating the state if "nothing" has changed since the last validation.
             // See CoreChecks::ValidateActionState for more details.
             const bool need_update =  // Update if descriptor set (or contents) has changed
-                set_info.validated_set != descriptor_set.get() ||
-                set_info.validated_set_change_count != descriptor_set->GetChangeCount() ||
+                ds_slot.validated_set != descriptor_set.get() ||
+                ds_slot.validated_set_change_count != descriptor_set->GetChangeCount() ||
                 (!dev_data.disabled[image_layout_validation] &&
-                 set_info.validated_set_image_layout_change_count != image_layout_change_count);
+                 ds_slot.validated_set_image_layout_change_count != image_layout_change_count);
             if (need_update) {
                 if (!dev_data.disabled[command_buffer_state] && !descriptor_set->IsPushDescriptor()) {
                     AddChild(descriptor_set);
                 }
 
                 // Bind this set and its active descriptor resources to the command buffer
-                descriptor_set->UpdateDrawState(&dev_data, this, command, pipe, set_binding_pair.second);
+                descriptor_set->UpdateDrawStates(&dev_data, *this, binding_req_map);
 
-                set_info.validated_set = descriptor_set.get();
-                set_info.validated_set_change_count = descriptor_set->GetChangeCount();
-                set_info.validated_set_image_layout_change_count = image_layout_change_count;
+                ds_slot.validated_set = descriptor_set.get();
+                ds_slot.validated_set_change_count = descriptor_set->GetChangeCount();
+                ds_slot.validated_set_image_layout_change_count = image_layout_change_count;
             }
         }
     }
@@ -1254,12 +1258,12 @@ void CommandBuffer::UpdatePipelineState(Func command, const VkPipelineBindPoint 
 
 // Helper for descriptor set (and buffer) updates.
 static bool PushDescriptorCleanup(LastBound &last_bound, uint32_t set_idx) {
-    // All uses are from loops over per_set, but just in case..
-    assert(set_idx < last_bound.per_set.size());
+    // All uses are from loops over ds_slots, but just in case..
+    assert(set_idx < last_bound.ds_slots.size());
 
-    auto ds = last_bound.per_set[set_idx].bound_descriptor_set.get();
-    if (ds && ds->IsPushDescriptor()) {
-        assert(ds == last_bound.push_descriptor_set.get());
+    auto descriptor_set = last_bound.ds_slots[set_idx].ds_state.get();
+    if (descriptor_set && descriptor_set->IsPushDescriptor()) {
+        assert(descriptor_set == last_bound.push_descriptor_set.get());
         last_bound.push_descriptor_set = nullptr;
         return true;
     }
@@ -1287,14 +1291,14 @@ void CommandBuffer::UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_b
     last_bound.desc_set_bound_command = bound_command;
     auto &pipe_compat_ids = pipeline_layout.set_compat_ids;
     // Resize binding arrays
-    if (last_binding_index >= last_bound.per_set.size()) {
-        last_bound.per_set.resize(required_size);
+    if (last_binding_index >= last_bound.ds_slots.size()) {
+        last_bound.ds_slots.resize(required_size);
     }
-    const uint32_t current_size = static_cast<uint32_t>(last_bound.per_set.size());
+    const uint32_t current_size = static_cast<uint32_t>(last_bound.ds_slots.size());
 
     // Clean up the "disturbed" before and after the range to be set
     if (required_size < current_size) {
-        if (last_bound.per_set[last_binding_index].compat_id_for_set != pipe_compat_ids[last_binding_index]) {
+        if (last_bound.ds_slots[last_binding_index].compat_id_for_set != pipe_compat_ids[last_binding_index]) {
             // We're disturbing those after last, we'll shrink below, but first need to check for and cleanup the push_descriptor
             for (auto set_idx = required_size; set_idx < current_size; ++set_idx) {
                 if (PushDescriptorCleanup(last_bound, set_idx)) {
@@ -1309,16 +1313,16 @@ void CommandBuffer::UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_b
 
     // We resize if we need more set entries or if those past "last" are disturbed
     if (required_size != current_size) {
-        last_bound.per_set.resize(required_size);
+        last_bound.ds_slots.resize(required_size);
     }
 
     // For any previously bound sets, need to set them to "invalid" if they were disturbed by this update
     for (uint32_t set_idx = 0; set_idx < first_set; ++set_idx) {
-        auto &set_info = last_bound.per_set[set_idx];
-        if (set_info.compat_id_for_set != pipe_compat_ids[set_idx]) {
+        auto &ds_slot = last_bound.ds_slots[set_idx];
+        if (ds_slot.compat_id_for_set != pipe_compat_ids[set_idx]) {
             PushDescriptorCleanup(last_bound, set_idx);
-            set_info.Reset();
-            set_info.compat_id_for_set = pipe_compat_ids[set_idx];
+            ds_slot.Reset();
+            ds_slot.compat_id_for_set = pipe_compat_ids[set_idx];
         }
     }
 
@@ -1326,29 +1330,29 @@ void CommandBuffer::UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_b
     const uint32_t *input_dynamic_offsets = p_dynamic_offsets;  // "read" pointer for dynamic offset data
     for (uint32_t input_idx = 0; input_idx < set_count; input_idx++) {
         auto set_idx = input_idx + first_set;  // set_idx is index within layout, input_idx is index within input descriptor sets
-        auto &set_info = last_bound.per_set[set_idx];
+        auto &ds_slot = last_bound.ds_slots[set_idx];
         auto descriptor_set =
             push_descriptor_set ? push_descriptor_set : dev_data.Get<vvl::DescriptorSet>(pDescriptorSets[input_idx]);
 
-        set_info.Reset();
+        ds_slot.Reset();
         // Record binding (or push)
         if (descriptor_set != last_bound.push_descriptor_set) {
             // Only cleanup the push descriptors if they aren't the currently used set.
             PushDescriptorCleanup(last_bound, set_idx);
         }
-        set_info.bound_descriptor_set = descriptor_set;
-        set_info.compat_id_for_set = pipe_compat_ids[set_idx];  // compat ids are canonical *per* set index
+        ds_slot.ds_state = descriptor_set;
+        ds_slot.compat_id_for_set = pipe_compat_ids[set_idx];  // compat ids are canonical *per* set index
 
         if (descriptor_set) {
             auto set_dynamic_descriptor_count = descriptor_set->GetDynamicDescriptorCount();
             // TODO: Add logic for tracking push_descriptor offsets (here or in caller)
             if (set_dynamic_descriptor_count && input_dynamic_offsets) {
                 const uint32_t *end_offset = input_dynamic_offsets + set_dynamic_descriptor_count;
-                set_info.dynamicOffsets = std::vector<uint32_t>(input_dynamic_offsets, end_offset);
+                ds_slot.dynamic_offsets = std::vector<uint32_t>(input_dynamic_offsets, end_offset);
                 input_dynamic_offsets = end_offset;
                 assert(input_dynamic_offsets <= (p_dynamic_offsets + dynamic_offset_count));
             } else {
-                set_info.dynamicOffsets.clear();
+                ds_slot.dynamic_offsets.clear();
             }
         }
     }
@@ -1368,14 +1372,14 @@ void CommandBuffer::UpdateLastBoundDescriptorBuffers(VkPipelineBindPoint pipelin
     last_bound.desc_set_pipeline_layout = pipeline_layout.VkHandle();
     auto &pipe_compat_ids = pipeline_layout.set_compat_ids;
     // Resize binding arrays
-    if (last_binding_index >= last_bound.per_set.size()) {
-        last_bound.per_set.resize(required_size);
+    if (last_binding_index >= last_bound.ds_slots.size()) {
+        last_bound.ds_slots.resize(required_size);
     }
-    const uint32_t current_size = static_cast<uint32_t>(last_bound.per_set.size());
+    const uint32_t current_size = static_cast<uint32_t>(last_bound.ds_slots.size());
 
     // Clean up the "disturbed" before and after the range to be set
     if (required_size < current_size) {
-        if (last_bound.per_set[last_binding_index].compat_id_for_set != pipe_compat_ids[last_binding_index]) {
+        if (last_bound.ds_slots[last_binding_index].compat_id_for_set != pipe_compat_ids[last_binding_index]) {
             // We're disturbing those after last, we'll shrink below, but first need to check for and cleanup the push_descriptor
             for (auto set_idx = required_size; set_idx < current_size; ++set_idx) {
                 if (PushDescriptorCleanup(last_bound, set_idx)) {
@@ -1390,32 +1394,33 @@ void CommandBuffer::UpdateLastBoundDescriptorBuffers(VkPipelineBindPoint pipelin
 
     // We resize if we need more set entries or if those past "last" are disturbed
     if (required_size != current_size) {
-        last_bound.per_set.resize(required_size);
+        last_bound.ds_slots.resize(required_size);
     }
 
     // For any previously bound sets, need to set them to "invalid" if they were disturbed by this update
     for (uint32_t set_idx = 0; set_idx < first_set; ++set_idx) {
         PushDescriptorCleanup(last_bound, set_idx);
-        last_bound.per_set[set_idx].Reset();
+        last_bound.ds_slots[set_idx].Reset();
     }
 
     // Now update the bound sets with the input sets
     for (uint32_t input_idx = 0; input_idx < set_count; input_idx++) {
         auto set_idx = input_idx + first_set;  // set_idx is index within layout, input_idx is index within input descriptor sets
-        auto &set_info = last_bound.per_set[set_idx];
-        set_info.Reset();
+        auto &ds_slot = last_bound.ds_slots[set_idx];
+        ds_slot.Reset();
 
         // Record binding
-        set_info.bound_descriptor_buffer = {buffer_indicies[input_idx], buffer_offsets[input_idx]};
-        set_info.compat_id_for_set = pipe_compat_ids[set_idx];  // compat ids are canonical *per* set index
+        ds_slot.descriptor_buffer_binding = {buffer_indicies[input_idx], buffer_offsets[input_idx]};
+        ds_slot.compat_id_for_set = pipe_compat_ids[set_idx];  // compat ids are canonical *per* set index
     }
 }
 
 // Set image layout for given VkImageSubresourceRange struct
 void CommandBuffer::SetImageLayout(const vvl::Image &image_state, const VkImageSubresourceRange &image_subresource_range,
                                    VkImageLayout layout, VkImageLayout expected_layout) {
-    auto subresource_map = GetImageSubresourceLayoutMap(image_state);
-    if (subresource_map && subresource_map->SetSubresourceRangeLayout(*this, image_subresource_range, layout, expected_layout)) {
+    auto image_layout_registry = GetOrCreateImageLayoutRegistry(image_state);
+    if (image_layout_registry &&
+        image_layout_registry->SetSubresourceRangeLayout(*this, image_subresource_range, layout, expected_layout)) {
         image_layout_change_count++;  // Change the version of this data to force revalidation
     }
 }
@@ -1426,18 +1431,19 @@ void CommandBuffer::SetImageViewInitialLayout(const vvl::ImageView &view_state, 
         return;
     }
     vvl::Image *image_state = view_state.image_state.get();
-    auto subresource_map = (image_state && !image_state->Destroyed()) ? GetImageSubresourceLayoutMap(*image_state) : nullptr;
-    if (subresource_map) {
-        subresource_map->SetSubresourceRangeInitialLayout(*this, layout, view_state);
+    auto image_layout_registry =
+        (image_state && !image_state->Destroyed()) ? GetOrCreateImageLayoutRegistry(*image_state) : nullptr;
+    if (image_layout_registry) {
+        image_layout_registry->SetSubresourceRangeInitialLayout(*this, layout, view_state);
     }
 }
 
 // Set the initial image layout for a passed non-normalized subresource range
 void CommandBuffer::SetImageInitialLayout(const vvl::Image &image_state, const VkImageSubresourceRange &range,
                                           VkImageLayout layout) {
-    auto subresource_map = GetImageSubresourceLayoutMap(image_state);
-    if (subresource_map) {
-        subresource_map->SetSubresourceRangeInitialLayout(*this, image_state.NormalizeSubresourceRange(range), layout);
+    auto image_layout_registry = GetOrCreateImageLayoutRegistry(image_state);
+    if (image_layout_registry) {
+        image_layout_registry->SetSubresourceRangeInitialLayout(*this, image_state.NormalizeSubresourceRange(range), layout);
     }
 }
 
@@ -1517,7 +1523,7 @@ void CommandBuffer::RecordSetEvent(Func command, VkEvent event, VkPipelineStageF
     if (!waitedEvents.count(event)) {
         writeEventsBeforeWait.push_back(event);
     }
-    eventUpdates.emplace_back(
+    event_updates.emplace_back(
         [event, stageMask](CommandBuffer &, bool do_validate, EventMap &local_event_signal_info, VkQueue, const Location &loc) {
             local_event_signal_info[event] = EventInfo{stageMask, true};
             return false;  // skip
@@ -1537,7 +1543,7 @@ void CommandBuffer::RecordResetEvent(Func command, VkEvent event, VkPipelineStag
         writeEventsBeforeWait.push_back(event);
     }
 
-    eventUpdates.emplace_back(
+    event_updates.emplace_back(
         [event](CommandBuffer &, bool do_validate, EventMap &local_event_signal_info, VkQueue, const Location &loc) {
             local_event_signal_info[event] = EventInfo{VK_PIPELINE_STAGE_2_NONE, false};
             return false;  // skip
@@ -1578,7 +1584,7 @@ void CommandBuffer::RecordBarriers(uint32_t memoryBarrierCount, const VkMemoryBa
     }
 }
 
-void CommandBuffer::RecordBarriers(const VkDependencyInfoKHR &dep_info) {
+void CommandBuffer::RecordBarriers(const VkDependencyInfo &dep_info) {
     if (dev_data.disabled[command_buffer_state]) return;
 
     for (uint32_t i = 0; i < dep_info.bufferMemoryBarrierCount; i++) {
@@ -1614,13 +1620,13 @@ void CommandBuffer::Submit(VkQueue queue, uint32_t perf_submit_pass, const Locat
     {
         VkQueryPool first_pool = VK_NULL_HANDLE;
         QueryMap local_query_to_state_map;
-        for (auto &function : queryUpdates) {
+        for (auto &function : query_updates) {
             function(*this, /*do_validate*/ false, first_pool, perf_submit_pass, &local_query_to_state_map);
         }
-        for (const auto &query_state_pair : local_query_to_state_map) {
-            auto query_pool_state = dev_data.Get<vvl::QueryPool>(query_state_pair.first.pool);
+        for (const auto &[query_object, query_state] : local_query_to_state_map) {
+            auto query_pool_state = dev_data.Get<vvl::QueryPool>(query_object.pool);
             if (!query_pool_state) continue;
-            query_pool_state->SetQueryState(query_state_pair.first.slot, query_state_pair.first.perf_pass, query_state_pair.second);
+            query_pool_state->SetQueryState(query_object.slot, query_object.perf_pass, query_state);
         }
     }
 
@@ -1628,7 +1634,7 @@ void CommandBuffer::Submit(VkQueue queue, uint32_t perf_submit_pass, const Locat
     // Ultimately, it tracks the last SetEvent for the entire submission.
     {
         EventMap local_event_signal_info;
-        for (const auto &function : eventUpdates) {
+        for (const auto &function : event_updates) {
             function(*this, /*do_validate*/ false, local_event_signal_info,
                      VK_NULL_HANDLE /* when do_validate is false then wait handler is inactive */, loc);
         }
@@ -1659,15 +1665,15 @@ void CommandBuffer::Retire(uint32_t perf_submit_pass, const std::function<bool(c
     }
     QueryMap local_query_to_state_map;
     VkQueryPool first_pool = VK_NULL_HANDLE;
-    for (auto &function : queryUpdates) {
+    for (auto &function : query_updates) {
         function(*this, /*do_validate*/ false, first_pool, perf_submit_pass, &local_query_to_state_map);
     }
 
-    for (const auto &query_state_pair : local_query_to_state_map) {
-        if (query_state_pair.second == QUERYSTATE_ENDED && !is_query_updated_after(query_state_pair.first)) {
-            auto query_pool_state = dev_data.Get<vvl::QueryPool>(query_state_pair.first.pool);
+    for (const auto &[query_object, query_state] : local_query_to_state_map) {
+        if (query_state == QUERYSTATE_ENDED && !is_query_updated_after(query_object)) {
+            auto query_pool_state = dev_data.Get<vvl::QueryPool>(query_object.pool);
             if (!query_pool_state) continue;
-            query_pool_state->SetQueryState(query_state_pair.first.slot, query_state_pair.first.perf_pass, QUERYSTATE_AVAILABLE);
+            query_pool_state->SetQueryState(query_object.slot, query_object.perf_pass, QUERYSTATE_AVAILABLE);
         }
     }
 }
@@ -1802,12 +1808,12 @@ vvl::Pipeline *CommandBuffer::GetCurrentPipeline(VkPipelineBindPoint pipelineBin
 }
 
 void CommandBuffer::GetCurrentPipelineAndDesriptorSets(VkPipelineBindPoint pipelineBindPoint, const vvl::Pipeline **rtn_pipe,
-                                                       const std::vector<LastBound::PER_SET> **rtn_sets) const {
+                                                       const std::vector<LastBound::DescriptorSetSlot> **rtn_sets) const {
     const auto lv_bind_point = ConvertToLvlBindPoint(pipelineBindPoint);
     const auto &last_bound = lastBound[lv_bind_point];
     if (!last_bound.pipeline_state) return;
     *rtn_pipe = last_bound.pipeline_state;
-    *rtn_sets = &(last_bound.per_set);
+    *rtn_sets = &(last_bound.ds_slots);
 }
 
 void CommandBuffer::BeginLabel(const char *label_name) {
@@ -1837,12 +1843,16 @@ void CommandBuffer::ReplayLabelCommands(const vvl::span<const LabelCommand> &lab
 
 std::string CommandBuffer::GetDebugRegionName(const std::vector<LabelCommand> &label_commands, uint32_t label_command_index,
                                               const std::vector<std::string> &initial_label_stack) {
-    assert(label_command_index < label_commands.size());
-
-    auto commands_to_replay = vvl::make_span(label_commands.data(), label_command_index + 1);
+    if (label_command_index >= label_commands.size()) {
+        // Can happen due to core validation error when in-use command buffer was re-recorded.
+        // It's a bug if this happens in a valid vulkan program.
+        return {};
+    }
+    auto label_commands_to_replay = vvl::make_span(label_commands.data(), label_command_index + 1);
     auto label_stack = initial_label_stack;
-    vvl::CommandBuffer::ReplayLabelCommands(commands_to_replay, label_stack);
+    vvl::CommandBuffer::ReplayLabelCommands(label_commands_to_replay, label_stack);
 
+    // Build up complete debug region name from all enclosing regions
     std::string debug_region;
     for (const std::string &label_name : label_stack) {
         if (!debug_region.empty()) {

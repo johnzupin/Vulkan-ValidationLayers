@@ -40,7 +40,6 @@ TEST_F(NegativeRayTracingPipelineNV, BasicUsage) {
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkPipelineShaderStageCreateInfo stage_create_info = vku::InitStructHelper();
     stage_create_info.stage = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-    ;
     stage_create_info.module = rgen_shader.handle();
     stage_create_info.pName = "main";
     VkRayTracingShaderGroupCreateInfoNV group_create_info = vku::InitStructHelper();
@@ -78,7 +77,7 @@ TEST_F(NegativeRayTracingPipelineNV, BasicUsage) {
         pipeline_ci.groupCount = 1;
         pipeline_ci.pGroups = &group_create_info;
         pipeline_ci.layout = empty_pipeline_layout.handle();
-        pipeline_ci.flags = VK_PIPELINE_CREATE_DEFER_COMPILE_BIT_NV | VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT;
+        pipeline_ci.flags = VK_PIPELINE_CREATE_DEFER_COMPILE_BIT_NV | VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
         m_errorMonitor->SetDesiredError("VUID-VkRayTracingPipelineCreateInfoNV-flags-02957");
         vk::CreateRayTracingPipelinesNV(m_device->handle(), VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &pipeline);
         m_errorMonitor->VerifyFound();
@@ -172,7 +171,7 @@ TEST_F(NegativeRayTracingPipelineNV, BindPoint) {
     CreatePipelineHelper pipe(*this);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipe.Handle());
 
     m_errorMonitor->VerifyFound();
@@ -661,8 +660,8 @@ TEST_F(NegativeRayTracingPipelineNV, StageCreationFeedbackCount) {
 
     RETURN_IF_SKIP(InitState());
 
-    VkPipelineCreationFeedbackCreateInfoEXT feedback_info = vku::InitStructHelper();
-    VkPipelineCreationFeedbackEXT feedbacks[4] = {};
+    VkPipelineCreationFeedbackCreateInfo feedback_info = vku::InitStructHelper();
+    VkPipelineCreationFeedback feedbacks[4] = {};
 
     feedback_info.pPipelineCreationFeedback = &feedbacks[0];
     feedback_info.pipelineStageCreationFeedbackCount = 2;

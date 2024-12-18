@@ -463,7 +463,7 @@ Note that not all legacy code, such as `ForbidInheritedViewportScissor()` has be
 
 ##### Queries
 
-During queue submission, query validation is performed via lambda functions added to `vvl::CommandBuffer::queryUpdates` by various CoreChecks methods. During the Validate phase, these are executed with the do_validate parameter set to true. And they are executed again during PostRecord with do_validate set to false. During submission, the final state of each `QueryObject` is updated into the corresponding `vvl::QueryPool` object, which has a thread safe interface. When the command buffer is retired, all used `QueryObject` states are reset to `AVAILABLE`.
+During queue submission, query validation is performed via lambda functions added to `vvl::CommandBuffer::query_updates` by various CoreChecks methods. During the Validate phase, these are executed with the do_validate parameter set to true. And they are executed again during PostRecord with do_validate set to false. During submission, the final state of each `QueryObject` is updated into the corresponding `vvl::QueryPool` object, which has a thread safe interface. When the command buffer is retired, all used `QueryObject` states are reset to `AVAILABLE`.
 
 
 ##### Events
@@ -632,10 +632,10 @@ Each `vvl::CommandBuffer` maintains its own copy of the image layout state, in a
 
 ```
    typedef vvl::unordered_map<const vvl::Image *,
-                                    std::shared_ptr<ImageSubresourceLayoutMap>>  CommandBufferImageLayoutMap;
+                                    std::shared_ptr<ImageLayoutRegistry>>  CommandBufferImageLayoutMap;
    CommandBufferImageLayoutMap image_layout_map;
    typedef vvl::unordered_map<const GlobalImageLayoutRangeMap *,
-                                     std::shared_ptr<ImageSubresourceLayoutMap>>
+                                     std::shared_ptr<ImageLayoutRegistry>>
                                                                                CommandBufferAliasedLayoutMap;
    CommandBufferAliasedLayoutMap aliased_image_layout_map;  // storage for potentially aliased images
 

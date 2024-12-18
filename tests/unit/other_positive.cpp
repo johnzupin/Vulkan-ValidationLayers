@@ -41,11 +41,11 @@ TEST_F(VkPositiveLayerTest, Maintenance1Tests) {
     AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     vkt::CommandBuffer cmd_buf(*m_device, m_command_pool);
-    cmd_buf.begin();
+    cmd_buf.Begin();
     // Set Negative height, should give error if Maintenance 1 is not enabled
     VkViewport viewport = {0, 0, 16, -16, 0, 1};
     vk::CmdSetViewport(cmd_buf.handle(), 0, 1, &viewport);
-    cmd_buf.end();
+    cmd_buf.End();
 }
 
 TEST_F(VkPositiveLayerTest, ValidStructPNext) {
@@ -73,7 +73,7 @@ TEST_F(VkPositiveLayerTest, ValidStructPNext) {
     memory_info.allocationSize = memory_reqs.size;
 
     bool pass;
-    pass = m_device->phy().SetMemoryType(memory_reqs.memoryTypeBits, &memory_info, 0);
+    pass = m_device->Physical().SetMemoryType(memory_reqs.memoryTypeBits, &memory_info, 0);
     ASSERT_TRUE(pass);
 
     vkt::DeviceMemory buffer_memory(*m_device, memory_info);
@@ -94,12 +94,11 @@ TEST_F(VkPositiveLayerTest, DeviceIDPropertiesExtensions) {
 
     VkPhysicalDeviceIDProperties id_props = vku::InitStructHelper();
     VkPhysicalDeviceProperties2 props2 = vku::InitStructHelper(&id_props);
-    vk::GetPhysicalDeviceProperties2KHR(gpu(), &props2);
+    vk::GetPhysicalDeviceProperties2KHR(Gpu(), &props2);
 }
 
 TEST_F(VkPositiveLayerTest, ParameterLayerFeatures2Capture) {
     TEST_DESCRIPTION("Ensure parameter_validation_layer correctly captures physical device features");
-
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     RETURN_IF_SKIP(InitFramework());
 
@@ -107,14 +106,20 @@ TEST_F(VkPositiveLayerTest, ParameterLayerFeatures2Capture) {
 
     VkPhysicalDeviceFeatures2 features2 = vku::InitStructHelper();
     GetPhysicalDeviceFeatures2(features2);
+    if (!features2.features.samplerAnisotropy) {
+        GTEST_SKIP() << "samplerAnisotropy feature not supported";
+    }
+    if (!features2.features.pipelineStatisticsQuery) {
+        GTEST_SKIP() << "pipelineStatisticsQuery feature not supported";
+    }
 
     // We're not creating a valid m_device, but the phy wrapper is useful
-    vkt::PhysicalDevice physical_device(gpu());
+    vkt::PhysicalDevice physical_device(Gpu());
     vkt::QueueCreateInfoArray queue_info(physical_device.queue_properties_);
     // Only request creation with queuefamilies that have at least one queue
     std::vector<VkDeviceQueueCreateInfo> create_queue_infos;
-    auto qci = queue_info.data();
-    for (uint32_t i = 0; i < queue_info.size(); ++i) {
+    auto qci = queue_info.Data();
+    for (uint32_t i = 0; i < queue_info.Size(); ++i) {
         if (qci[i].queueCount) {
             create_queue_infos.push_back(qci[i]);
         }
@@ -131,10 +136,10 @@ TEST_F(VkPositiveLayerTest, ParameterLayerFeatures2Capture) {
     dev_info.pEnabledFeatures = nullptr;
 
     VkDevice device;
-    err = vk::CreateDevice(gpu(), &dev_info, nullptr, &device);
+    err = vk::CreateDevice(Gpu(), &dev_info, nullptr, &device);
     ASSERT_EQ(VK_SUCCESS, err);
 
-    if (features2.features.samplerAnisotropy) {
+    {
         // Test that the parameter layer is caching the features correctly using CreateSampler
         VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
         // If the features were not captured correctly, this should cause an error
@@ -145,12 +150,10 @@ TEST_F(VkPositiveLayerTest, ParameterLayerFeatures2Capture) {
         err = vk::CreateSampler(device, &sampler_ci, nullptr, &sampler);
         ASSERT_EQ(VK_SUCCESS, err);
         vk::DestroySampler(device, sampler, nullptr);
-    } else {
-        printf("Feature samplerAnisotropy not enabled;  parameter_layer check skipped.\n");
     }
 
     // Verify the core validation layer has captured the physical device features by creating a a query pool.
-    if (features2.features.pipelineStatisticsQuery) {
+    {
         VkQueryPool query_pool;
         VkQueryPoolCreateInfo qpci = vkt::QueryPool::CreateInfo(VK_QUERY_TYPE_PIPELINE_STATISTICS, 1);
         qpci.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT;
@@ -158,8 +161,6 @@ TEST_F(VkPositiveLayerTest, ParameterLayerFeatures2Capture) {
         ASSERT_EQ(VK_SUCCESS, err);
 
         vk::DestroyQueryPool(device, query_pool, nullptr);
-    } else {
-        printf("Feature pipelineStatisticsQuery not enabled;  core_validation_layer check skipped.\n");
     }
 
     vk::DestroyDevice(device, nullptr);
@@ -183,7 +184,7 @@ TEST_F(VkPositiveLayerTest, ModifyPnext) {
     shading.maxFragmentShadingRateInvocationCount = static_cast<VkSampleCountFlagBits>(0);
     VkPhysicalDeviceProperties2 props = vku::InitStructHelper(&shading);
 
-    vk::GetPhysicalDeviceProperties2(gpu(), &props);
+    vk::GetPhysicalDeviceProperties2(Gpu(), &props);
 }
 
 TEST_F(VkPositiveLayerTest, UseFirstQueueUnqueried) {
@@ -202,7 +203,7 @@ TEST_F(VkPositiveLayerTest, UseFirstQueueUnqueried) {
     device_ci.pQueueCreateInfos = &queue_ci;
 
     VkDevice test_device;
-    vk::CreateDevice(gpu(), &device_ci, nullptr, &test_device);
+    vk::CreateDevice(Gpu(), &device_ci, nullptr, &test_device);
 
     vk::DestroyDevice(test_device, nullptr);
 }
@@ -243,7 +244,7 @@ TEST_F(VkPositiveLayerTest, GetDevProcAddrExtensions) {
     device_ci.pQueueCreateInfos = &queue_ci;
 
     VkDevice device;
-    vk::CreateDevice(gpu(), &device_ci, NULL, &device);
+    vk::CreateDevice(Gpu(), &device_ci, NULL, &device);
 
     vkTrimCommandPoolKHR = vk::GetDeviceProcAddr(device, "vkTrimCommandPoolKHR");
     if (nullptr == vkTrimCommandPoolKHR) m_errorMonitor->SetError("Unexpected null pointer");
@@ -267,10 +268,10 @@ TEST_F(VkPositiveLayerTest, Vulkan12FeaturesBufferDeviceAddress) {
     RETURN_IF_SKIP(InitState(nullptr, &features2));
 
     VkMemoryAllocateFlagsInfo alloc_flags = vku::InitStructHelper();
-    alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+    alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
     vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                        &alloc_flags);
-    (void)buffer.address();
+    (void)buffer.Address();
 
     // Also verify that we don't get the KHR extension address without enabling the KHR extension
     auto vkGetBufferDeviceAddressKHR =
@@ -359,8 +360,8 @@ TEST_F(VkPositiveLayerTest, FormatProperties3FromProfiles) {
     RETURN_IF_SKIP(Init());
     VkFormatProperties3KHR fmt_props_3 = vku::InitStructHelper();
     VkFormatProperties2 fmt_props = vku::InitStructHelper(&fmt_props_3);
-    vk::GetPhysicalDeviceFormatProperties2(gpu(), VK_FORMAT_R8_UNORM, &fmt_props);
-    vk::GetPhysicalDeviceFormatProperties2(gpu(), VK_FORMAT_R8G8B8A8_UNORM, &fmt_props);
+    vk::GetPhysicalDeviceFormatProperties2(Gpu(), VK_FORMAT_R8_UNORM, &fmt_props);
+    vk::GetPhysicalDeviceFormatProperties2(Gpu(), VK_FORMAT_R8G8B8A8_UNORM, &fmt_props);
 }
 
 TEST_F(VkPositiveLayerTest, GDPAWithMultiCmdExt) {
@@ -411,22 +412,15 @@ TEST_F(VkPositiveLayerTest, ExtensionExpressions) {
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = vku::InitStructHelper();
-    GetPhysicalDeviceFeatures2(fsr_features);
-    if (!fsr_features.pipelineFragmentShadingRate) {
-        GTEST_SKIP() << "VkPhysicalDeviceFragmentShadingRateFeaturesKHR::pipelineFragmentShadingRate not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &fsr_features));
+    AddRequiredFeature(vkt::Feature::pipelineFragmentShadingRate);
+    RETURN_IF_SKIP(Init());
 
     VkExtent2D fragment_size = {1, 1};
     std::array combiner_ops = {VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR, VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR};
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdSetFragmentShadingRateKHR(m_command_buffer, &fragment_size, combiner_ops.data());
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(VkPositiveLayerTest, AllowedDuplicateStype) {
@@ -501,10 +495,10 @@ TEST_F(VkPositiveLayerTest, ExclusiveScissorVersionCount) {
     }
     RETURN_IF_SKIP(InitState());
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     VkBool32 exclusiveScissorEnable = VK_TRUE;
     vk::CmdSetExclusiveScissorEnableNV(m_command_buffer.handle(), 0u, 1u, &exclusiveScissorEnable);
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(VkPositiveLayerTest, GetCalibratedTimestamps) {
@@ -514,12 +508,12 @@ TEST_F(VkPositiveLayerTest, GetCalibratedTimestamps) {
     RETURN_IF_SKIP(Init());
 
     uint32_t count = 0;
-    vk::GetPhysicalDeviceCalibrateableTimeDomainsEXT(gpu(), &count, nullptr);
+    vk::GetPhysicalDeviceCalibrateableTimeDomainsEXT(Gpu(), &count, nullptr);
     if (count < 2) {
         GTEST_SKIP() << "only 1 TimeDomain supported";
     }
     std::vector<VkTimeDomainEXT> time_domains(count);
-    vk::GetPhysicalDeviceCalibrateableTimeDomainsEXT(gpu(), &count, time_domains.data());
+    vk::GetPhysicalDeviceCalibrateableTimeDomainsEXT(Gpu(), &count, time_domains.data());
 
     VkCalibratedTimestampInfoEXT timestamp_infos[2];
     timestamp_infos[0] = vku::InitStructHelper();
@@ -539,12 +533,12 @@ TEST_F(VkPositiveLayerTest, GetCalibratedTimestampsKHR) {
     RETURN_IF_SKIP(Init());
 
     uint32_t count = 0;
-    vk::GetPhysicalDeviceCalibrateableTimeDomainsKHR(gpu(), &count, nullptr);
+    vk::GetPhysicalDeviceCalibrateableTimeDomainsKHR(Gpu(), &count, nullptr);
     if (count < 2) {
         GTEST_SKIP() << "only 1 TimeDomain supported";
     }
     std::vector<VkTimeDomainKHR> time_domains(count);
-    vk::GetPhysicalDeviceCalibrateableTimeDomainsKHR(gpu(), &count, time_domains.data());
+    vk::GetPhysicalDeviceCalibrateableTimeDomainsKHR(Gpu(), &count, time_domains.data());
 
     VkCalibratedTimestampInfoKHR timestamp_infos[2];
     timestamp_infos[0] = vku::InitStructHelper();
@@ -580,7 +574,7 @@ TEST_F(VkPositiveLayerTest, NoExtensionFromInstanceFunction) {
     RETURN_IF_SKIP(Init());
     VkFormatProperties format_properties;
     // need VK_KHR_sampler_ycbcr_conversion if it was a device function
-    vk::GetPhysicalDeviceFormatProperties(gpu(), VK_FORMAT_B16G16R16G16_422_UNORM, &format_properties);
+    vk::GetPhysicalDeviceFormatProperties(Gpu(), VK_FORMAT_B16G16R16G16_422_UNORM, &format_properties);
 }
 
 TEST_F(VkPositiveLayerTest, InstanceExtensionsCallingDeviceStruct0) {
@@ -589,7 +583,7 @@ TEST_F(VkPositiveLayerTest, InstanceExtensionsCallingDeviceStruct0) {
     SetTargetApiVersion(VK_API_VERSION_1_0);
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME)) {
+    if (!DeviceExtensionSupported(Gpu(), nullptr, VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME)) {
         GTEST_SKIP() << "VK_KHR_image_format_list is not supported";
     }
     const VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -607,33 +601,33 @@ TEST_F(VkPositiveLayerTest, InstanceExtensionsCallingDeviceStruct0) {
 
     VkImageFormatProperties2 image_format_properties = vku::InitStructHelper();
     // Requires instance extension (VK_KHR_get_physical_device_properties2)
-    vk::GetPhysicalDeviceImageFormatProperties2KHR(gpu(), &image_format_info, &image_format_properties);
+    vk::GetPhysicalDeviceImageFormatProperties2KHR(Gpu(), &image_format_info, &image_format_properties);
 }
 
 TEST_F(VkPositiveLayerTest, InstanceExtensionsCallingDeviceStruct1) {
     TEST_DESCRIPTION(
-        "Use VkBufferUsageFlags2CreateInfoKHR with VkPhysicalDeviceExternalBufferInfo if VK_KHR_maintenance5 is available");
+        "Use VkBufferUsageFlags2CreateInfo with VkPhysicalDeviceExternalBufferInfo if VK_KHR_maintenance5 is available");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+    if (!DeviceExtensionSupported(Gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
         GTEST_SKIP() << "VK_KHR_maintenance5 is not supported";
     }
 
 #ifdef _WIN32
-    const auto handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 #else
-    const auto handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+    const auto handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
 #endif
 
     // Requires device extension (VK_KHR_maintenance5)
-    VkBufferUsageFlags2CreateInfoKHR bufferUsageFlags2 = vku::InitStructHelper();
-    bufferUsageFlags2.usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT_KHR;
+    VkBufferUsageFlags2CreateInfo bufferUsageFlags2 = vku::InitStructHelper();
+    bufferUsageFlags2.usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
 
     VkPhysicalDeviceExternalBufferInfo externalBufferInfo = vku::InitStructHelper(&bufferUsageFlags2);
     externalBufferInfo.handleType = handle_type;
     VkExternalBufferProperties externalBufferProperties = vku::InitStructHelper();
     // Instance extension promoted to VK_VERSION_1_1
-    vk::GetPhysicalDeviceExternalBufferProperties(gpu(), &externalBufferInfo, &externalBufferProperties);
+    vk::GetPhysicalDeviceExternalBufferProperties(Gpu(), &externalBufferInfo, &externalBufferProperties);
 }
 
 TEST_F(VkPositiveLayerTest, TimelineSemaphoreWithVulkan11) {
@@ -647,11 +641,11 @@ TEST_F(VkPositiveLayerTest, TimelineSemaphoreWithVulkan11) {
 TEST_F(VkPositiveLayerTest, UnrecognizedEnumOutOfRange) {
     TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8367");
     RETURN_IF_SKIP(Init());
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+    if (!DeviceExtensionSupported(Gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
         GTEST_SKIP() << "VK_KHR_maintenance5 is not supported";
     }
     VkFormatProperties format_properties;
-    vk::GetPhysicalDeviceFormatProperties(gpu(), static_cast<VkFormat>(8000), &format_properties);
+    vk::GetPhysicalDeviceFormatProperties(Gpu(), static_cast<VkFormat>(8000), &format_properties);
     m_errorMonitor->VerifyFound();
 }
 
@@ -659,22 +653,22 @@ TEST_F(VkPositiveLayerTest, UnrecognizedEnumOutOfRange2) {
     TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8367");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+    if (!DeviceExtensionSupported(Gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
         GTEST_SKIP() << "VK_KHR_maintenance5 is not supported";
     }
     VkFormatProperties2 format_properties = vku::InitStructHelper();
-    vk::GetPhysicalDeviceFormatProperties2(gpu(), static_cast<VkFormat>(8000), &format_properties);
+    vk::GetPhysicalDeviceFormatProperties2(Gpu(), static_cast<VkFormat>(8000), &format_properties);
 }
 
 TEST_F(VkPositiveLayerTest, UnrecognizedFlagOutOfRange) {
     TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8367");
     RETURN_IF_SKIP(Init());
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+    if (!DeviceExtensionSupported(Gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
         GTEST_SKIP() << "VK_KHR_maintenance5 is not supported";
     }
 
     VkImageFormatProperties format_properties;
-    vk::GetPhysicalDeviceImageFormatProperties(gpu(), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_1D, VK_IMAGE_TILING_OPTIMAL,
+    vk::GetPhysicalDeviceImageFormatProperties(Gpu(), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_1D, VK_IMAGE_TILING_OPTIMAL,
                                                static_cast<VkImageUsageFlags>(0xffffffff), 0, &format_properties);
 }
 
@@ -682,7 +676,7 @@ TEST_F(VkPositiveLayerTest, UnrecognizedFlagOutOfRange2) {
     TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8367");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     RETURN_IF_SKIP(Init());
-    if (!DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+    if (!DeviceExtensionSupported(Gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
         GTEST_SKIP() << "VK_KHR_maintenance5 is not supported";
     }
 
@@ -693,5 +687,5 @@ TEST_F(VkPositiveLayerTest, UnrecognizedFlagOutOfRange2) {
     format_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     format_info.type = VK_IMAGE_TYPE_1D;
     format_info.usage = static_cast<VkImageUsageFlags>(0xffffffff);
-    vk::GetPhysicalDeviceImageFormatProperties2(gpu(), &format_info, &format_properties);
+    vk::GetPhysicalDeviceImageFormatProperties2(Gpu(), &format_info, &format_properties);
 }

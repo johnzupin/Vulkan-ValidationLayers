@@ -16,14 +16,12 @@
  */
 
 #include <algorithm>
-#include <iostream>
-#include <limits>
 #include <memory>
 #include <vector>
 
+#include "sync/sync_error_messages.h"
 #include "sync/sync_validation.h"
 #include "sync/sync_image.h"
-#include "state_tracker/device_state.h"
 #include "state_tracker/buffer_state.h"
 #include "utils/convert_utils.h"
 #include "vk_layer_config.h"
@@ -38,6 +36,11 @@ SyncValidator::~SyncValidator() {
     if (device_validation_object && show_stats) {
         stats.ReportOnDestruction();
     }
+}
+
+bool SyncValidator::SyncError(SyncHazard hazard, const LogObjectList &objlist, const Location &loc,
+                              const std::string &error_message) const {
+    return LogError(string_SyncHazardVUID(hazard), objlist, loc, "%s", error_message.c_str());
 }
 
 ResourceUsageRange SyncValidator::ReserveGlobalTagRange(size_t tag_count) const {
@@ -305,6 +308,36 @@ std::shared_ptr<vvl::ImageView> SyncValidator::CreateImageViewState(
     return std::make_shared<ImageViewState>(image_state, handle, create_info, format_features, cubic_props);
 }
 
+void SyncValidator::PreCallRecordDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks *pAllocator,
+                                               const RecordObject &record_obj) {
+    if (const auto buffer_state = Get<vvl::Buffer>(buffer)) {
+        const VkDeviceSize base_address = ResourceBaseAddress(*buffer_state);
+        const ResourceAccessRange buffer_range(base_address, base_address + buffer_state->create_info.size);
+        auto batch_op = [&buffer_range](const QueueBatchContext::Ptr &batch) {
+            batch->OnResourceDestroyed(buffer_range);
+            batch->Trim();
+        };
+        ForAllQueueBatchContexts(batch_op);
+    }
+    StateTracker::PreCallRecordDestroyBuffer(device, buffer, pAllocator, record_obj);
+}
+
+void SyncValidator::PreCallRecordDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks *pAllocator,
+                                              const RecordObject &record_obj) {
+    if (const auto image_state = Get<syncval_state::ImageState>(image)) {
+        auto batch_op = [&image_state](const QueueBatchContext::Ptr &batch) {
+            ImageRangeGen range_gen = image_state->MakeImageRangeGen(image_state->full_range, false);
+            for (; range_gen->non_empty(); ++range_gen) {
+                const ResourceAccessRange subresource_range = *range_gen;
+                batch->OnResourceDestroyed(subresource_range);
+            }
+            batch->Trim();
+        };
+        ForAllQueueBatchContexts(batch_op);
+    }
+    StateTracker::PreCallRecordDestroyImage(device, image, pAllocator, record_obj);
+}
+
 bool SyncValidator::PreCallValidateCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer,
                                                  uint32_t regionCount, const VkBufferCopy *pRegions,
                                                  const ErrorObject &error_obj) const {
@@ -326,10 +359,8 @@ bool SyncValidator::PreCallValidateCmdCopyBuffer(VkCommandBuffer commandBuffer, 
             auto hazard = context->DetectHazard(*src_buffer, SYNC_COPY_TRANSFER_READ, src_range);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, srcBuffer);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for srcBuffer %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(srcBuffer).c_str(), region, cb_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.BufferRegionError(hazard, srcBuffer, true, region, *cb_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
         if (dst_buffer && !skip) {
@@ -337,10 +368,8 @@ bool SyncValidator::PreCallValidateCmdCopyBuffer(VkCommandBuffer commandBuffer, 
             auto hazard = context->DetectHazard(*dst_buffer, SYNC_COPY_TRANSFER_WRITE, dst_range);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, dstBuffer);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for dstBuffer %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstBuffer).c_str(), region, cb_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.BufferRegionError(hazard, dstBuffer, false, region, *cb_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
         if (skip) break;
@@ -396,22 +425,21 @@ bool SyncValidator::PreCallValidateCmdCopyBuffer2(VkCommandBuffer commandBuffer,
             auto hazard = context->DetectHazard(*src_buffer, SYNC_COPY_TRANSFER_READ, src_range);
             if (hazard.IsHazard()) {
                 // TODO -- add tag information to log msg when useful.
+                // TODO: there are no tests for this error
                 const LogObjectList objlist(commandBuffer, pCopyBufferInfo->srcBuffer);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for srcBuffer %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(pCopyBufferInfo->srcBuffer).c_str(), region, cb_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.BufferRegionError(hazard, pCopyBufferInfo->srcBuffer, true, region, *cb_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
         if (dst_buffer && !skip) {
             const ResourceAccessRange dst_range = MakeRange(*dst_buffer, copy_region.dstOffset, copy_region.size);
             auto hazard = context->DetectHazard(*dst_buffer, SYNC_COPY_TRANSFER_WRITE, dst_range);
             if (hazard.IsHazard()) {
+                // TODO: there are no tests for this error
                 const LogObjectList objlist(commandBuffer, pCopyBufferInfo->dstBuffer);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for dstBuffer %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(pCopyBufferInfo->dstBuffer).c_str(), region, cb_context->FormatHazard(hazard).c_str());
+                const auto error =
+                    error_messages_.BufferRegionError(hazard, pCopyBufferInfo->dstBuffer, false, region, *cb_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
         if (skip) break;
@@ -424,7 +452,7 @@ bool SyncValidator::PreCallValidateCmdCopyBuffer2KHR(VkCommandBuffer commandBuff
     return PreCallValidateCmdCopyBuffer2(commandBuffer, pCopyBufferInfo, error_obj);
 }
 
-void SyncValidator::RecordCmdCopyBuffer2(VkCommandBuffer commandBuffer, const VkCopyBufferInfo2KHR *pCopyBufferInfo, Func command) {
+void SyncValidator::RecordCmdCopyBuffer2(VkCommandBuffer commandBuffer, const VkCopyBufferInfo2 *pCopyBufferInfo, Func command) {
     auto cb_state = Get<syncval_state::CommandBuffer>(commandBuffer);
     assert(cb_state);
     if (!cb_state) return;
@@ -483,10 +511,8 @@ bool SyncValidator::PreCallValidateCmdCopyImage(VkCommandBuffer commandBuffer, V
                                                 copy_region.extent, false, SYNC_COPY_TRANSFER_READ);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, srcImage);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for srcImage %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(srcImage).c_str(), region, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageRegionError(hazard, srcImage, true, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
 
@@ -495,10 +521,8 @@ bool SyncValidator::PreCallValidateCmdCopyImage(VkCommandBuffer commandBuffer, V
                                                 copy_region.extent, false, SYNC_COPY_TRANSFER_WRITE);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, dstImage);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for dstImage %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstImage).c_str(), region, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageRegionError(hazard, dstImage, false, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
             if (skip) break;
         }
@@ -519,23 +543,22 @@ void SyncValidator::PreCallRecordCmdCopyImage(VkCommandBuffer commandBuffer, VkI
     assert(context);
 
     auto src_image = Get<ImageState>(srcImage);
-    if (src_image) {
-        cb_access_context->AddCommandHandle(tag, src_image->Handle());
-    }
+    auto src_tag_ex = src_image ? cb_access_context->AddCommandHandle(tag, src_image->Handle()) : ResourceUsageTagEx{tag};
+
     auto dst_image = Get<ImageState>(dstImage);
-    if (dst_image) {
-        cb_access_context->AddCommandHandle(tag, dst_image->Handle());
-    }
+    auto dst_tag_ex = dst_image ? cb_access_context->AddCommandHandle(tag, dst_image->Handle()) : ResourceUsageTagEx{tag};
 
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &copy_region = pRegions[region];
         if (src_image) {
             context->UpdateAccessState(*src_image, SYNC_COPY_TRANSFER_READ, SyncOrdering::kNonAttachment,
-                                       RangeFromLayers(copy_region.srcSubresource), copy_region.srcOffset, copy_region.extent, tag);
+                                       RangeFromLayers(copy_region.srcSubresource), copy_region.srcOffset, copy_region.extent,
+                                       src_tag_ex);
         }
         if (dst_image) {
             context->UpdateAccessState(*dst_image, SYNC_COPY_TRANSFER_WRITE, SyncOrdering::kNonAttachment,
-                                       RangeFromLayers(copy_region.dstSubresource), copy_region.dstOffset, copy_region.extent, tag);
+                                       RangeFromLayers(copy_region.dstSubresource), copy_region.dstOffset, copy_region.extent,
+                                       dst_tag_ex);
         }
     }
 }
@@ -562,10 +585,10 @@ bool SyncValidator::PreCallValidateCmdCopyImage2(VkCommandBuffer commandBuffer, 
                                                 copy_region.extent, false, SYNC_COPY_TRANSFER_READ);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, pCopyImageInfo->srcImage);
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                                 "Hazard %s for srcImage %s, region %" PRIu32 ". Access info %s.",
-                                 string_SyncHazard(hazard.Hazard()), FormatHandle(pCopyImageInfo->srcImage).c_str(), region,
-                                 cb_access_context->FormatHazard(hazard).c_str());
+                const auto error =
+                    error_messages_.ImageRegionError(hazard, pCopyImageInfo->srcImage, true, region, *cb_access_context);
+                // TODO: this error not covered by the test
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
 
@@ -574,10 +597,9 @@ bool SyncValidator::PreCallValidateCmdCopyImage2(VkCommandBuffer commandBuffer, 
                                                 copy_region.extent, false, SYNC_COPY_TRANSFER_WRITE);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, pCopyImageInfo->dstImage);
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                                 "Hazard %s for dstImage %s, region %" PRIu32 ". Access info %s.",
-                                 string_SyncHazard(hazard.Hazard()), FormatHandle(pCopyImageInfo->dstImage).c_str(), region,
-                                 cb_access_context->FormatHazard(hazard).c_str());
+                const auto error =
+                    error_messages_.ImageRegionError(hazard, pCopyImageInfo->dstImage, false, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
             if (skip) break;
         }
@@ -591,7 +613,7 @@ bool SyncValidator::PreCallValidateCmdCopyImage2KHR(VkCommandBuffer commandBuffe
     return PreCallValidateCmdCopyImage2(commandBuffer, pCopyImageInfo, error_obj);
 }
 
-void SyncValidator::RecordCmdCopyImage2(VkCommandBuffer commandBuffer, const VkCopyImageInfo2KHR *pCopyImageInfo, Func command) {
+void SyncValidator::RecordCmdCopyImage2(VkCommandBuffer commandBuffer, const VkCopyImageInfo2 *pCopyImageInfo, Func command) {
     auto cb_state = Get<syncval_state::CommandBuffer>(commandBuffer);
     assert(cb_state);
     if (!cb_state) return;
@@ -601,23 +623,22 @@ void SyncValidator::RecordCmdCopyImage2(VkCommandBuffer commandBuffer, const VkC
     assert(context);
 
     auto src_image = Get<ImageState>(pCopyImageInfo->srcImage);
-    if (src_image) {
-        cb_access_context->AddCommandHandle(tag, src_image->Handle());
-    }
+    auto src_tag_ex = src_image ? cb_access_context->AddCommandHandle(tag, src_image->Handle()) : ResourceUsageTagEx{tag};
+
     auto dst_image = Get<ImageState>(pCopyImageInfo->dstImage);
-    if (dst_image) {
-        cb_access_context->AddCommandHandle(tag, dst_image->Handle());
-    }
+    auto dst_tag_ex = dst_image ? cb_access_context->AddCommandHandle(tag, dst_image->Handle()) : ResourceUsageTagEx{tag};
 
     for (uint32_t region = 0; region < pCopyImageInfo->regionCount; region++) {
         const auto &copy_region = pCopyImageInfo->pRegions[region];
         if (src_image) {
             context->UpdateAccessState(*src_image, SYNC_COPY_TRANSFER_READ, SyncOrdering::kNonAttachment,
-                                       RangeFromLayers(copy_region.srcSubresource), copy_region.srcOffset, copy_region.extent, tag);
+                                       RangeFromLayers(copy_region.srcSubresource), copy_region.srcOffset, copy_region.extent,
+                                       src_tag_ex);
         }
         if (dst_image) {
             context->UpdateAccessState(*dst_image, SYNC_COPY_TRANSFER_WRITE, SyncOrdering::kNonAttachment,
-                                       RangeFromLayers(copy_region.dstSubresource), copy_region.dstOffset, copy_region.extent, tag);
+                                       RangeFromLayers(copy_region.dstSubresource), copy_region.dstOffset, copy_region.extent,
+                                       dst_tag_ex);
         }
     }
 }
@@ -809,6 +830,9 @@ void SyncValidator::RecordCmdBeginRenderPass(VkCommandBuffer commandBuffer, cons
                                              const VkSubpassBeginInfo *pSubpassBeginInfo, Func command) {
     auto cb_state = Get<syncval_state::CommandBuffer>(commandBuffer);
     if (cb_state) {
+        if (!cb_state->IsPrimary()) {
+            return;  // [core validation check]: only primary command buffer can begin render pass
+        }
         cb_state->access_context.RecordSyncOp<SyncOpBeginRenderPass>(command, *this, pRenderPassBegin, pSubpassBeginInfo);
     }
 }
@@ -876,6 +900,9 @@ void SyncValidator::RecordCmdNextSubpass(VkCommandBuffer commandBuffer, const Vk
     if (!cb_state) return;
     auto *cb_context = &cb_state->access_context;
 
+    if (!cb_state->IsPrimary()) {
+        return;  // [core validation check]: only primary command buffer can start next subpass
+    }
     cb_context->RecordSyncOp<SyncOpNextSubpass>(command, *this, pSubpassBeginInfo, pSubpassEndInfo);
 }
 
@@ -937,6 +964,9 @@ void SyncValidator::RecordCmdEndRenderPass(VkCommandBuffer commandBuffer, const 
     if (!cb_state) return;
     auto *cb_context = &cb_state->access_context;
 
+    if (!cb_state->IsPrimary()) {
+        return;  // [core validation check]: only primary command buffer can end render pass
+    }
     cb_context->RecordSyncOp<SyncOpEndRenderPass>(command, *this, pSubpassEndInfo);
 }
 
@@ -1057,10 +1087,8 @@ bool SyncValidator::ValidateCmdCopyBufferToImage(VkCommandBuffer commandBuffer, 
                 if (hazard.IsHazard()) {
                     // PHASE1 TODO -- add tag information to log msg when useful.
                     const LogObjectList objlist(commandBuffer, srcBuffer);
-                    skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, loc,
-                                     "Hazard %s for srcBuffer %s, region %" PRIu32 ". Access info %s.",
-                                     string_SyncHazard(hazard.Hazard()), FormatHandle(srcBuffer).c_str(), region,
-                                     cb_access_context->FormatHazard(hazard).c_str());
+                    const auto error = error_messages_.BufferRegionError(hazard, srcBuffer, true, region, *cb_access_context);
+                    skip |= SyncError(hazard.Hazard(), objlist, loc, error);
                 }
             }
 
@@ -1068,10 +1096,8 @@ bool SyncValidator::ValidateCmdCopyBufferToImage(VkCommandBuffer commandBuffer, 
                                            copy_region.imageExtent, false, SYNC_COPY_TRANSFER_WRITE);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, dstImage);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, loc,
-                             "Hazard %s for dstImage %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstImage).c_str(), region, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageRegionError(hazard, dstImage, false, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, loc, error);
             }
             if (skip) break;
         }
@@ -1118,9 +1144,7 @@ void SyncValidator::RecordCmdCopyBufferToImage(VkCommandBuffer commandBuffer, Vk
     auto src_tag_ex = src_buffer ? cb_access_context->AddCommandHandle(tag, src_buffer->Handle()) : ResourceUsageTagEx{tag};
 
     auto dst_image = Get<ImageState>(dstImage);
-    if (dst_image) {
-        cb_access_context->AddCommandHandle(tag, dst_image->Handle());
-    }
+    auto dst_tag_ex = dst_image ? cb_access_context->AddCommandHandle(tag, dst_image->Handle()) : ResourceUsageTagEx{tag};
 
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &copy_region = pRegions[region];
@@ -1134,7 +1158,7 @@ void SyncValidator::RecordCmdCopyBufferToImage(VkCommandBuffer commandBuffer, Vk
             }
             context->UpdateAccessState(*dst_image, SYNC_COPY_TRANSFER_WRITE, SyncOrdering::kNonAttachment,
                                        RangeFromLayers(copy_region.imageSubresource), copy_region.imageOffset,
-                                       copy_region.imageExtent, tag);
+                                       copy_region.imageExtent, dst_tag_ex);
         }
     }
 }
@@ -1187,10 +1211,8 @@ bool SyncValidator::ValidateCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, 
                                                 copy_region.imageExtent, false, SYNC_COPY_TRANSFER_READ);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, srcImage);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, loc,
-                             "Hazard %s for srcImage %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(srcImage).c_str(), region, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageRegionError(hazard, srcImage, true, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, loc, error);
             }
             if (dst_mem) {
                 ResourceAccessRange dst_range = MakeRange(
@@ -1199,10 +1221,8 @@ bool SyncValidator::ValidateCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, 
                 hazard = context->DetectHazard(*dst_buffer, SYNC_COPY_TRANSFER_WRITE, dst_range);
                 if (hazard.IsHazard()) {
                     const LogObjectList objlist(commandBuffer, dstBuffer);
-                    skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, loc,
-                                     "Hazard %s for dstBuffer %s, region %" PRIu32 ". Access info %s.",
-                                     string_SyncHazard(hazard.Hazard()), FormatHandle(dstBuffer).c_str(), region,
-                                     cb_access_context->FormatHazard(hazard).c_str());
+                    const auto error = error_messages_.BufferRegionError(hazard, dstBuffer, false, region, *cb_access_context);
+                    skip |= SyncError(hazard.Hazard(), objlist, loc, error);
                 }
             }
         }
@@ -1245,22 +1265,17 @@ void SyncValidator::RecordCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, Vk
     assert(context);
 
     auto src_image = Get<ImageState>(srcImage);
-    if (src_image) {
-        cb_access_context->AddCommandHandle(tag, src_image->Handle());
-    }
+    auto src_tag_ex = src_image ? cb_access_context->AddCommandHandle(tag, src_image->Handle()) : ResourceUsageTagEx{tag};
 
     auto dst_buffer = Get<vvl::Buffer>(dstBuffer);
     auto dst_tag_ex = dst_buffer ? cb_access_context->AddCommandHandle(tag, dst_buffer->Handle()) : ResourceUsageTagEx{tag};
-
-    const auto dst_mem = (dst_buffer && !dst_buffer->sparse) ? dst_buffer->MemState()->VkHandle() : VK_NULL_HANDLE;
-    const VulkanTypedHandle dst_handle(dst_mem, kVulkanObjectTypeDeviceMemory);
 
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &copy_region = pRegions[region];
         if (src_image) {
             context->UpdateAccessState(*src_image, SYNC_COPY_TRANSFER_READ, SyncOrdering::kNonAttachment,
                                        RangeFromLayers(copy_region.imageSubresource), copy_region.imageOffset,
-                                       copy_region.imageExtent, tag);
+                                       copy_region.imageExtent, src_tag_ex);
             if (dst_buffer) {
                 ResourceAccessRange dst_range = MakeRange(
                     copy_region.bufferOffset,
@@ -1326,10 +1341,8 @@ bool SyncValidator::ValidateCmdBlitImage(VkCommandBuffer commandBuffer, VkImage 
                                                 SYNC_BLIT_TRANSFER_READ);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, srcImage);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, loc,
-                             "Hazard %s for srcImage %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(srcImage).c_str(), region, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageRegionError(hazard, srcImage, true, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, loc, error);
             }
         }
 
@@ -1344,10 +1357,8 @@ bool SyncValidator::ValidateCmdBlitImage(VkCommandBuffer commandBuffer, VkImage 
                                                 SYNC_BLIT_TRANSFER_WRITE);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, dstImage);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, loc,
-                             "Hazard %s for dstImage %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstImage).c_str(), region, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageRegionError(hazard, dstImage, false, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, loc, error);
             }
             if (skip) break;
         }
@@ -1386,13 +1397,10 @@ void SyncValidator::RecordCmdBlitImage(VkCommandBuffer commandBuffer, VkImage sr
     assert(context);
 
     auto src_image = Get<ImageState>(srcImage);
-    if (src_image) {
-        cb_state->access_context.AddCommandHandle(tag, src_image->Handle());
-    }
+    auto src_tag_ex = src_image ? cb_state->access_context.AddCommandHandle(tag, src_image->Handle()) : ResourceUsageTagEx{tag};
+
     auto dst_image = Get<ImageState>(dstImage);
-    if (dst_image) {
-        cb_state->access_context.AddCommandHandle(tag, dst_image->Handle());
-    }
+    auto dst_tag_ex = dst_image ? cb_state->access_context.AddCommandHandle(tag, dst_image->Handle()) : ResourceUsageTagEx{tag};
 
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &blit_region = pRegions[region];
@@ -1404,7 +1412,7 @@ void SyncValidator::RecordCmdBlitImage(VkCommandBuffer commandBuffer, VkImage sr
                                  static_cast<uint32_t>(abs(blit_region.srcOffsets[1].y - blit_region.srcOffsets[0].y)),
                                  static_cast<uint32_t>(abs(blit_region.srcOffsets[1].z - blit_region.srcOffsets[0].z))};
             context->UpdateAccessState(*src_image, SYNC_BLIT_TRANSFER_READ, SyncOrdering::kNonAttachment,
-                                       RangeFromLayers(blit_region.srcSubresource), offset, extent, tag);
+                                       RangeFromLayers(blit_region.srcSubresource), offset, extent, src_tag_ex);
         }
         if (dst_image) {
             VkOffset3D offset = {std::min(blit_region.dstOffsets[0].x, blit_region.dstOffsets[1].x),
@@ -1414,7 +1422,7 @@ void SyncValidator::RecordCmdBlitImage(VkCommandBuffer commandBuffer, VkImage sr
                                  static_cast<uint32_t>(abs(blit_region.dstOffsets[1].y - blit_region.dstOffsets[0].y)),
                                  static_cast<uint32_t>(abs(blit_region.dstOffsets[1].z - blit_region.dstOffsets[0].z))};
             context->UpdateAccessState(*dst_image, SYNC_BLIT_TRANSFER_WRITE, SyncOrdering::kNonAttachment,
-                                       RangeFromLayers(blit_region.dstSubresource), offset, extent, tag);
+                                       RangeFromLayers(blit_region.dstSubresource), offset, extent, dst_tag_ex);
         }
     }
 }
@@ -1442,9 +1450,8 @@ void SyncValidator::PreCallRecordCmdBlitImage2(VkCommandBuffer commandBuffer, co
 }
 
 bool SyncValidator::ValidateIndirectBuffer(const CommandBufferAccessContext &cb_context, const AccessContext &context,
-                                           VkCommandBuffer commandBuffer, const VkDeviceSize struct_size, const VkBuffer buffer,
-                                           const VkDeviceSize offset, const uint32_t drawCount, const uint32_t stride,
-                                           const Location &loc) const {
+                                           const VkDeviceSize struct_size, const VkBuffer buffer, const VkDeviceSize offset,
+                                           const uint32_t drawCount, const uint32_t stride, const Location &loc) const {
     bool skip = false;
     if (drawCount == 0) return skip;
 
@@ -1455,20 +1462,18 @@ bool SyncValidator::ValidateIndirectBuffer(const CommandBufferAccessContext &cb_
         const ResourceAccessRange range = MakeRange(offset, size);
         auto hazard = context.DetectHazard(*buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range);
         if (hazard.IsHazard()) {
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), buf_state->Handle(), loc,
-                             "Hazard %s for indirect %s in %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(buffer).c_str(), FormatHandle(commandBuffer).c_str(),
-                             cb_context.FormatHazard(hazard).c_str());
+            const LogObjectList objlist(cb_context.GetCBState().Handle(), buf_state->Handle());
+            const auto error = error_messages_.BufferError(hazard, buffer, "indirect", cb_context);
+            skip |= SyncError(hazard.Hazard(), objlist, loc, error);
         }
     } else {
         for (uint32_t i = 0; i < drawCount; ++i) {
             const ResourceAccessRange range = MakeRange(offset + i * stride, size);
             auto hazard = context.DetectHazard(*buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range);
             if (hazard.IsHazard()) {
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), buf_state->Handle(), loc,
-                                 "Hazard %s for indirect %s in %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                                 FormatHandle(buffer).c_str(), FormatHandle(commandBuffer).c_str(),
-                                 cb_context.FormatHazard(hazard).c_str());
+                const LogObjectList objlist(cb_context.GetCBState().Handle(), buf_state->Handle());
+                const auto error = error_messages_.BufferError(hazard, buffer, "indirect", cb_context);
+                skip |= SyncError(hazard.Hazard(), objlist, loc, error);
                 break;
             }
         }
@@ -1498,19 +1503,17 @@ void SyncValidator::RecordIndirectBuffer(CommandBufferAccessContext &cb_context,
     }
 }
 
-bool SyncValidator::ValidateCountBuffer(const CommandBufferAccessContext &cb_context, const AccessContext &context,
-                                        VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
-                                        const Location &loc) const {
+bool SyncValidator::ValidateCountBuffer(const CommandBufferAccessContext &cb_context, const AccessContext &context, VkBuffer buffer,
+                                        VkDeviceSize offset, const Location &loc) const {
     bool skip = false;
 
     auto count_buf_state = Get<vvl::Buffer>(buffer);
     const ResourceAccessRange range = MakeRange(offset, 4);
     auto hazard = context.DetectHazard(*count_buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range);
     if (hazard.IsHazard()) {
-        skip |=
-            LogError(string_SyncHazardVUID(hazard.Hazard()), count_buf_state->Handle(), loc,
-                     "Hazard %s for countBuffer %s in %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                     FormatHandle(buffer).c_str(), FormatHandle(commandBuffer).c_str(), cb_context.FormatHazard(hazard).c_str());
+        const LogObjectList objlist(cb_context.GetCBState().Handle(), count_buf_state->Handle());
+        const auto error = error_messages_.BufferError(hazard, buffer, "countBuffer", cb_context);
+        skip |= SyncError(hazard.Hazard(), objlist, loc, error);
     }
     return skip;
 }
@@ -1559,8 +1562,8 @@ bool SyncValidator::PreCallValidateCmdDispatchIndirect(VkCommandBuffer commandBu
     if (!context) return skip;
 
     skip |= cb_state->access_context.ValidateDispatchDrawDescriptorSet(VK_PIPELINE_BIND_POINT_COMPUTE, error_obj.location);
-    skip |= ValidateIndirectBuffer(cb_state->access_context, *context, commandBuffer, sizeof(VkDispatchIndirectCommand), buffer,
-                                   offset, 1, sizeof(VkDispatchIndirectCommand), error_obj.location);
+    skip |= ValidateIndirectBuffer(cb_state->access_context, *context, sizeof(VkDispatchIndirectCommand), buffer, offset, 1,
+                                   sizeof(VkDispatchIndirectCommand), error_obj.location);
     return skip;
 }
 
@@ -1650,13 +1653,10 @@ bool SyncValidator::PreCallValidateCmdDrawIndirect(VkCommandBuffer commandBuffer
 
     skip |= cb_access_context->ValidateDispatchDrawDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, error_obj.location);
     skip |= cb_access_context->ValidateDrawAttachment(error_obj.location);
-    skip |= ValidateIndirectBuffer(*cb_access_context, *context, commandBuffer, sizeof(VkDrawIndirectCommand), buffer, offset,
-                                   drawCount, stride, error_obj.location);
-
-    // TODO: For now, we validate the whole vertex buffer. It might cause some false positive.
-    //       VkDrawIndirectCommand buffer could be changed until SubmitQueue.
-    //       We will validate the vertex buffer in SubmitQueue in the future.
-    skip |= cb_access_context->ValidateDrawVertex(std::optional<uint32_t>(), 0, error_obj.location);
+    skip |= ValidateIndirectBuffer(*cb_access_context, *context, sizeof(VkDrawIndirectCommand), buffer, offset, drawCount, stride,
+                                   error_obj.location);
+    // TODO: Shader instrumentation support is needed to read indirect buffer content (new syncval mode)
+    // skip |= cb_access_context->ValidateDrawVertex(?, ?, error_obj.location);
     return skip;
 }
 
@@ -1673,10 +1673,8 @@ void SyncValidator::PreCallRecordCmdDrawIndirect(VkCommandBuffer commandBuffer, 
     cb_access_context->RecordDrawAttachment(tag);
     RecordIndirectBuffer(*cb_access_context, tag, sizeof(VkDrawIndirectCommand), buffer, offset, drawCount, stride);
 
-    // TODO: For now, we record the whole vertex buffer. It might cause some false positive.
-    //       VkDrawIndirectCommand buffer could be changed until SubmitQueue.
-    //       We will record the vertex buffer in SubmitQueue in the future.
-    cb_access_context->RecordDrawVertex(std::optional<uint32_t>(), 0, tag);
+    // TODO: Shader instrumentation support is needed to read indirect buffer content (new syncval mode)
+    // cb_access_context->RecordDrawVertex(?, ?, tag);
 }
 
 bool SyncValidator::PreCallValidateCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -1694,13 +1692,11 @@ bool SyncValidator::PreCallValidateCmdDrawIndexedIndirect(VkCommandBuffer comman
 
     skip |= cb_access_context->ValidateDispatchDrawDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, error_obj.location);
     skip |= cb_access_context->ValidateDrawAttachment(error_obj.location);
-    skip |= ValidateIndirectBuffer(*cb_access_context, *context, commandBuffer, sizeof(VkDrawIndexedIndirectCommand), buffer,
-                                   offset, drawCount, stride, error_obj.location);
+    skip |= ValidateIndirectBuffer(*cb_access_context, *context, sizeof(VkDrawIndexedIndirectCommand), buffer, offset, drawCount,
+                                   stride, error_obj.location);
 
-    // TODO: For now, we validate the whole index and vertex buffer. It might cause some false positive.
-    //       VkDrawIndexedIndirectCommand buffer could be changed until SubmitQueue.
-    //       We will validate the index and vertex buffer in SubmitQueue in the future.
-    skip |= cb_access_context->ValidateDrawVertexIndex(std::optional<uint32_t>(), 0, error_obj.location);
+    // TODO: Shader instrumentation support is needed to read indirect buffer content (new syncval mode)
+    // skip |= cb_access_context->ValidateDrawVertexIndex(?, ?, error_obj.location);
     return skip;
 }
 
@@ -1717,10 +1713,8 @@ void SyncValidator::PreCallRecordCmdDrawIndexedIndirect(VkCommandBuffer commandB
     cb_access_context->RecordDrawAttachment(tag);
     RecordIndirectBuffer(*cb_access_context, tag, sizeof(VkDrawIndexedIndirectCommand), buffer, offset, drawCount, stride);
 
-    // TODO: For now, we record the whole index and vertex buffer. It might cause some false positive.
-    //       VkDrawIndexedIndirectCommand buffer could be changed until SubmitQueue.
-    //       We will record the index and vertex buffer in SubmitQueue in the future.
-    cb_access_context->RecordDrawVertexIndex(std::optional<uint32_t>(), 0, tag);
+    // TODO: Shader instrumentation support is needed to read indirect buffer content (new syncval mode)
+    // cb_access_context->RecordDrawVertexIndex(?, ?, tag);
 }
 
 bool SyncValidator::PreCallValidateCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -1738,14 +1732,12 @@ bool SyncValidator::PreCallValidateCmdDrawIndirectCount(VkCommandBuffer commandB
 
     skip |= cb_access_context->ValidateDispatchDrawDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, error_obj.location);
     skip |= cb_access_context->ValidateDrawAttachment(error_obj.location);
-    skip |= ValidateIndirectBuffer(*cb_access_context, *context, commandBuffer, sizeof(VkDrawIndirectCommand), buffer, offset,
-                                   maxDrawCount, stride, error_obj.location);
-    skip |= ValidateCountBuffer(*cb_access_context, *context, commandBuffer, countBuffer, countBufferOffset, error_obj.location);
+    skip |= ValidateIndirectBuffer(*cb_access_context, *context, sizeof(VkDrawIndirectCommand), buffer, offset, maxDrawCount,
+                                   stride, error_obj.location);
+    skip |= ValidateCountBuffer(*cb_access_context, *context, countBuffer, countBufferOffset, error_obj.location);
 
-    // TODO: For now, we validate the whole vertex buffer. It might cause some false positive.
-    //       VkDrawIndirectCommand buffer could be changed until SubmitQueue.
-    //       We will validate the vertex buffer in SubmitQueue in the future.
-    skip |= cb_access_context->ValidateDrawVertex(std::optional<uint32_t>(), 0, error_obj.location);
+    // TODO: Shader instrumentation support is needed to read indirect buffer content (new syncval mode)
+    // skip |= cb_access_context->ValidateDrawVertex(?, ?, error_obj.location);
     return skip;
 }
 
@@ -1763,10 +1755,8 @@ void SyncValidator::RecordCmdDrawIndirectCount(VkCommandBuffer commandBuffer, Vk
     RecordIndirectBuffer(*cb_access_context, tag, sizeof(VkDrawIndirectCommand), buffer, offset, 1, stride);
     RecordCountBuffer(*cb_access_context, tag, countBuffer, countBufferOffset);
 
-    // TODO: For now, we record the whole vertex buffer. It might cause some false positive.
-    //       VkDrawIndirectCommand buffer could be changed until SubmitQueue.
-    //       We will record the vertex buffer in SubmitQueue in the future.
-    cb_access_context->RecordDrawVertex(std::optional<uint32_t>(), 0, tag);
+    // TODO: Shader instrumentation support is needed to read indirect buffer content (new syncval mode)
+    // cb_access_context->RecordDrawVertex(?, ?, tag);
 }
 
 void SyncValidator::PreCallRecordCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -1823,14 +1813,12 @@ bool SyncValidator::PreCallValidateCmdDrawIndexedIndirectCount(VkCommandBuffer c
 
     skip |= cb_access_context->ValidateDispatchDrawDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, error_obj.location);
     skip |= cb_access_context->ValidateDrawAttachment(error_obj.location);
-    skip |= ValidateIndirectBuffer(*cb_access_context, *context, commandBuffer, sizeof(VkDrawIndexedIndirectCommand), buffer,
-                                   offset, maxDrawCount, stride, error_obj.location);
-    skip |= ValidateCountBuffer(*cb_access_context, *context, commandBuffer, countBuffer, countBufferOffset, error_obj.location);
+    skip |= ValidateIndirectBuffer(*cb_access_context, *context, sizeof(VkDrawIndexedIndirectCommand), buffer, offset, maxDrawCount,
+                                   stride, error_obj.location);
+    skip |= ValidateCountBuffer(*cb_access_context, *context, countBuffer, countBufferOffset, error_obj.location);
 
-    // TODO: For now, we validate the whole index and vertex buffer. It might cause some false positive.
-    //       VkDrawIndexedIndirectCommand buffer could be changed until SubmitQueue.
-    //       We will validate the index and vertex buffer in SubmitQueue in the future.
-    skip |= cb_access_context->ValidateDrawVertexIndex(std::optional<uint32_t>(), 0, error_obj.location);
+    // TODO: Shader instrumentation support is needed to read indirect buffer content (new syncval mode)
+    // skip |= cb_access_context->ValidateDrawVertexIndex(?, ?, error_obj.location);
     return skip;
 }
 
@@ -1848,10 +1836,8 @@ void SyncValidator::RecordCmdDrawIndexedIndirectCount(VkCommandBuffer commandBuf
     RecordIndirectBuffer(*cb_access_context, tag, sizeof(VkDrawIndexedIndirectCommand), buffer, offset, 1, stride);
     RecordCountBuffer(*cb_access_context, tag, countBuffer, countBufferOffset);
 
-    // TODO: For now, we record the whole index and vertex buffer. It might cause some false positive.
-    //       VkDrawIndexedIndirectCommand buffer could be changed until SubmitQueue.
-    //       We will update the index and vertex buffer in SubmitQueue in the future.
-    cb_access_context->RecordDrawVertexIndex(std::optional<uint32_t>(), 0, tag);
+    // TODO: Shader instrumentation support is needed to read indirect buffer content (new syncval mode)
+    // cb_access_context->RecordDrawVertexIndex(?, ?, tag);
 }
 
 void SyncValidator::PreCallRecordCmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -1917,9 +1903,8 @@ bool SyncValidator::PreCallValidateCmdClearColorImage(VkCommandBuffer commandBuf
             auto hazard = context->DetectHazard(*image_state, SYNC_CLEAR_TRANSFER_WRITE, range, false);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, image);
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                                 "Hazard %s for %s, range index %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                                 FormatHandle(image).c_str(), index, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageSubresourceRangeError(hazard, image, index, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
     }
@@ -1974,9 +1959,8 @@ bool SyncValidator::PreCallValidateCmdClearDepthStencilImage(VkCommandBuffer com
             auto hazard = context->DetectHazard(*image_state, SYNC_CLEAR_TRANSFER_WRITE, range, false);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, image);
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                                 "Hazard %s for %s, range index %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                                 FormatHandle(image).c_str(), index, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageSubresourceRangeError(hazard, image, index, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
     }
@@ -2063,9 +2047,8 @@ bool SyncValidator::PreCallValidateCmdCopyQueryPoolResults(VkCommandBuffer comma
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_COPY_TRANSFER_WRITE, range);
         if (hazard.IsHazard()) {
             const LogObjectList objlist(commandBuffer, queryPool, dstBuffer);
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for dstBuffer %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstBuffer).c_str(), cb_access_context->FormatHazard(hazard).c_str());
+            const auto error = error_messages_.BufferError(hazard, dstBuffer, "dstBuffer", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
         }
     }
 
@@ -2117,9 +2100,8 @@ bool SyncValidator::PreCallValidateCmdFillBuffer(VkCommandBuffer commandBuffer, 
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_CLEAR_TRANSFER_WRITE, range);
         if (hazard.IsHazard()) {
             const LogObjectList objlist(commandBuffer, dstBuffer);
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for dstBuffer %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstBuffer).c_str(), cb_access_context->FormatHazard(hazard).c_str());
+            const auto error = error_messages_.BufferError(hazard, dstBuffer, "dstBuffer", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
         }
     }
     return skip;
@@ -2168,10 +2150,8 @@ bool SyncValidator::PreCallValidateCmdResolveImage(VkCommandBuffer commandBuffer
                                                 resolve_region.srcOffset, resolve_region.extent, false, SYNC_RESOLVE_TRANSFER_READ);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, srcImage);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for srcImage %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(srcImage).c_str(), region, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageRegionError(hazard, srcImage, true, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
 
@@ -2181,10 +2161,8 @@ bool SyncValidator::PreCallValidateCmdResolveImage(VkCommandBuffer commandBuffer
                                       resolve_region.extent, false, SYNC_RESOLVE_TRANSFER_WRITE);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, dstImage);
-                skip |=
-                    LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for dstImage %s, region %" PRIu32 ". Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstImage).c_str(), region, cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.ImageRegionError(hazard, dstImage, false, region, *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
             if (skip) break;
         }
@@ -2207,30 +2185,27 @@ void SyncValidator::PreCallRecordCmdResolveImage(VkCommandBuffer commandBuffer, 
     assert(context);
 
     auto src_image = Get<ImageState>(srcImage);
-    if (src_image) {
-        cb_access_context->AddCommandHandle(tag, src_image->Handle());
-    }
+    auto src_tag_ex = src_image ? cb_access_context->AddCommandHandle(tag, src_image->Handle()) : ResourceUsageTagEx{tag};
+
     auto dst_image = Get<ImageState>(dstImage);
-    if (dst_image) {
-        cb_access_context->AddCommandHandle(tag, dst_image->Handle());
-    }
+    auto dst_tag_ex = dst_image ? cb_access_context->AddCommandHandle(tag, dst_image->Handle()) : ResourceUsageTagEx{tag};
 
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &resolve_region = pRegions[region];
         if (src_image) {
             context->UpdateAccessState(*src_image, SYNC_RESOLVE_TRANSFER_READ, SyncOrdering::kNonAttachment,
                                        RangeFromLayers(resolve_region.srcSubresource), resolve_region.srcOffset,
-                                       resolve_region.extent, tag);
+                                       resolve_region.extent, src_tag_ex);
         }
         if (dst_image) {
             context->UpdateAccessState(*dst_image, SYNC_RESOLVE_TRANSFER_WRITE, SyncOrdering::kNonAttachment,
                                        RangeFromLayers(resolve_region.dstSubresource), resolve_region.dstOffset,
-                                       resolve_region.extent, tag);
+                                       resolve_region.extent, dst_tag_ex);
         }
     }
 }
 
-bool SyncValidator::PreCallValidateCmdResolveImage2(VkCommandBuffer commandBuffer, const VkResolveImageInfo2KHR *pResolveImageInfo,
+bool SyncValidator::PreCallValidateCmdResolveImage2(VkCommandBuffer commandBuffer, const VkResolveImageInfo2 *pResolveImageInfo,
                                                     const ErrorObject &error_obj) const {
     bool skip = false;
     const auto cb_state = Get<syncval_state::CommandBuffer>(commandBuffer);
@@ -2254,10 +2229,10 @@ bool SyncValidator::PreCallValidateCmdResolveImage2(VkCommandBuffer commandBuffe
                                                 resolve_region.srcOffset, resolve_region.extent, false, SYNC_RESOLVE_TRANSFER_READ);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, pResolveImageInfo->srcImage);
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, region_loc,
-                                 "Hazard %s for srcImage %s, region %" PRIu32 ". Access info %s.",
-                                 string_SyncHazard(hazard.Hazard()), FormatHandle(pResolveImageInfo->srcImage).c_str(), region,
-                                 cb_access_context->FormatHazard(hazard).c_str());
+                const auto error =
+                    error_messages_.ImageRegionError(hazard, pResolveImageInfo->srcImage, true, region, *cb_access_context);
+                // TODO: this error is not covered by the test
+                skip |= SyncError(hazard.Hazard(), objlist, region_loc, error);
             }
         }
 
@@ -2267,10 +2242,10 @@ bool SyncValidator::PreCallValidateCmdResolveImage2(VkCommandBuffer commandBuffe
                                       resolve_region.extent, false, SYNC_RESOLVE_TRANSFER_WRITE);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, pResolveImageInfo->dstImage);
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, region_loc,
-                                 "Hazard %s for dstImage %s, region %" PRIu32 ". Access info %s.",
-                                 string_SyncHazard(hazard.Hazard()), FormatHandle(pResolveImageInfo->dstImage).c_str(), region,
-                                 cb_access_context->FormatHazard(hazard).c_str());
+                const auto error =
+                    error_messages_.ImageRegionError(hazard, pResolveImageInfo->dstImage, false, region, *cb_access_context);
+                // TODO: this error is not covered by the test
+                skip |= SyncError(hazard.Hazard(), objlist, region_loc, error);
             }
             if (skip) break;
         }
@@ -2285,7 +2260,7 @@ bool SyncValidator::PreCallValidateCmdResolveImage2KHR(VkCommandBuffer commandBu
     return PreCallValidateCmdResolveImage2(commandBuffer, pResolveImageInfo, error_obj);
 }
 
-void SyncValidator::PreCallRecordCmdResolveImage2(VkCommandBuffer commandBuffer, const VkResolveImageInfo2KHR *pResolveImageInfo,
+void SyncValidator::PreCallRecordCmdResolveImage2(VkCommandBuffer commandBuffer, const VkResolveImageInfo2 *pResolveImageInfo,
                                                   const RecordObject &record_obj) {
     StateTracker::PreCallRecordCmdResolveImage2(commandBuffer, pResolveImageInfo, record_obj);
     auto cb_state = Get<syncval_state::CommandBuffer>(commandBuffer);
@@ -2297,25 +2272,22 @@ void SyncValidator::PreCallRecordCmdResolveImage2(VkCommandBuffer commandBuffer,
     assert(context);
 
     auto src_image = Get<ImageState>(pResolveImageInfo->srcImage);
-    if (src_image) {
-        cb_access_context->AddCommandHandle(tag, src_image->Handle());
-    }
+    auto src_tag_ex = src_image ? cb_access_context->AddCommandHandle(tag, src_image->Handle()) : ResourceUsageTagEx{tag};
+
     auto dst_image = Get<ImageState>(pResolveImageInfo->dstImage);
-    if (dst_image) {
-        cb_access_context->AddCommandHandle(tag, dst_image->Handle());
-    }
+    auto dst_tag_ex = dst_image ? cb_access_context->AddCommandHandle(tag, dst_image->Handle()) : ResourceUsageTagEx{tag};
 
     for (uint32_t region = 0; region < pResolveImageInfo->regionCount; region++) {
         const auto &resolve_region = pResolveImageInfo->pRegions[region];
         if (src_image) {
             context->UpdateAccessState(*src_image, SYNC_RESOLVE_TRANSFER_READ, SyncOrdering::kNonAttachment,
                                        RangeFromLayers(resolve_region.srcSubresource), resolve_region.srcOffset,
-                                       resolve_region.extent, tag);
+                                       resolve_region.extent, src_tag_ex);
         }
         if (dst_image) {
             context->UpdateAccessState(*dst_image, SYNC_RESOLVE_TRANSFER_WRITE, SyncOrdering::kNonAttachment,
                                        RangeFromLayers(resolve_region.dstSubresource), resolve_region.dstOffset,
-                                       resolve_region.extent, tag);
+                                       resolve_region.extent, dst_tag_ex);
         }
     }
 }
@@ -2345,9 +2317,8 @@ bool SyncValidator::PreCallValidateCmdUpdateBuffer(VkCommandBuffer commandBuffer
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_CLEAR_TRANSFER_WRITE, range);
         if (hazard.IsHazard()) {
             const LogObjectList objlist(commandBuffer, dstBuffer);
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), objlist, error_obj.location,
-                             "Hazard %s for dstBuffer %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstBuffer).c_str(), cb_access_context->FormatHazard(hazard).c_str());
+            const auto error = error_messages_.BufferError(hazard, dstBuffer, "dstBuffer", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
         }
     }
     return skip;
@@ -2393,9 +2364,8 @@ bool SyncValidator::PreCallValidateCmdWriteBufferMarkerAMD(VkCommandBuffer comma
         const ResourceAccessRange range = MakeRange(dstOffset, 4);
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_COPY_TRANSFER_WRITE, range);
         if (hazard.IsHazard()) {
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), dstBuffer, error_obj.location,
-                             "Hazard %s for dstBuffer %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstBuffer).c_str(), cb_access_context->FormatHazard(hazard).c_str());
+            const auto error = error_messages_.BufferError(hazard, dstBuffer, "dstBuffer", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), dstBuffer, error_obj.location, error);
         }
     }
     return skip;
@@ -2444,10 +2414,9 @@ bool SyncValidator::PreCallValidateCmdDecodeVideoKHR(VkCommandBuffer commandBuff
         const ResourceAccessRange src_range = MakeRange(*src_buffer, pDecodeInfo->srcBufferOffset, pDecodeInfo->srcBufferRange);
         auto hazard = context->DetectHazard(*src_buffer, SYNC_VIDEO_DECODE_VIDEO_DECODE_READ, src_range);
         if (hazard.IsHazard()) {
-            // PHASE1 TODO -- add tag information to log msg when useful.
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), src_buffer->Handle(), decode_info_loc.dot(Field::srcBuffer),
-                             "Hazard %s for bitstream buffer %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(pDecodeInfo->srcBuffer).c_str(), cb_access_context->FormatHazard(hazard).c_str());
+            // TODO: there are no tests for this error
+            const auto error = error_messages_.BufferError(hazard, pDecodeInfo->srcBuffer, "bitstream buffer", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), src_buffer->Handle(), decode_info_loc.dot(Field::srcBuffer), error);
         }
     }
 
@@ -2455,9 +2424,9 @@ bool SyncValidator::PreCallValidateCmdDecodeVideoKHR(VkCommandBuffer commandBuff
     if (dst_resource) {
         auto hazard = context->DetectHazard(*vs_state, dst_resource, SYNC_VIDEO_DECODE_VIDEO_DECODE_WRITE);
         if (hazard.IsHazard()) {
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), dst_resource.image_view_state->Handle(),
-                             decode_info_loc.dot(Field::dstPictureResource), "Hazard %s for decode output picture. Access info %s.",
-                             string_SyncHazard(hazard.Hazard()), cb_access_context->FormatHazard(hazard).c_str());
+            const auto error = error_messages_.Error(hazard, "decode output picture", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), dst_resource.image_view_state->Handle(),
+                              decode_info_loc.dot(Field::dstPictureResource), error);
         }
     }
 
@@ -2466,10 +2435,10 @@ bool SyncValidator::PreCallValidateCmdDecodeVideoKHR(VkCommandBuffer commandBuff
         if (setup_resource && (setup_resource != dst_resource)) {
             auto hazard = context->DetectHazard(*vs_state, setup_resource, SYNC_VIDEO_DECODE_VIDEO_DECODE_WRITE);
             if (hazard.IsHazard()) {
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), setup_resource.image_view_state->Handle(),
-                                 decode_info_loc.dot(Field::pSetupReferenceSlot).dot(Field::pPictureResource),
-                                 "Hazard %s for reconstructed picture. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                                 cb_access_context->FormatHazard(hazard).c_str());
+                // TODO: there are no tests for this error
+                const auto error = error_messages_.Error(hazard, "reconstructed picture", *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), setup_resource.image_view_state->Handle(),
+                                  decode_info_loc.dot(Field::pSetupReferenceSlot).dot(Field::pPictureResource), error);
             }
         }
     }
@@ -2480,10 +2449,9 @@ bool SyncValidator::PreCallValidateCmdDecodeVideoKHR(VkCommandBuffer commandBuff
             if (reference_resource) {
                 auto hazard = context->DetectHazard(*vs_state, reference_resource, SYNC_VIDEO_DECODE_VIDEO_DECODE_READ);
                 if (hazard.IsHazard()) {
-                    skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), reference_resource.image_view_state->Handle(),
-                                     decode_info_loc.dot(Field::pReferenceSlots, i).dot(Field::pPictureResource),
-                                     "Hazard %s for reference picture #%u. Access info %s.", string_SyncHazard(hazard.Hazard()), i,
-                                     cb_access_context->FormatHazard(hazard).c_str());
+                    const auto error = error_messages_.VideoReferencePictureError(hazard, i, *cb_access_context);
+                    skip |= SyncError(hazard.Hazard(), reference_resource.image_view_state->Handle(),
+                                      decode_info_loc.dot(Field::pReferenceSlots, i).dot(Field::pPictureResource), error);
                 }
             }
         }
@@ -2558,10 +2526,8 @@ bool SyncValidator::PreCallValidateCmdEncodeVideoKHR(VkCommandBuffer commandBuff
         const ResourceAccessRange src_range = MakeRange(*dst_buffer, pEncodeInfo->dstBufferOffset, pEncodeInfo->dstBufferRange);
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_VIDEO_ENCODE_VIDEO_ENCODE_WRITE, src_range);
         if (hazard.IsHazard()) {
-            // PHASE1 TODO -- add tag information to log msg when useful.
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), dst_buffer->Handle(), encode_info_loc.dot(Field::dstBuffer),
-                             "Hazard %s for bitstream buffer %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(pEncodeInfo->dstBuffer).c_str(), cb_access_context->FormatHazard(hazard).c_str());
+            const auto error = error_messages_.BufferError(hazard, pEncodeInfo->dstBuffer, "bitstream buffer", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), dst_buffer->Handle(), encode_info_loc.dot(Field::dstBuffer), error);
         }
     }
 
@@ -2569,9 +2535,10 @@ bool SyncValidator::PreCallValidateCmdEncodeVideoKHR(VkCommandBuffer commandBuff
     if (src_resource) {
         auto hazard = context->DetectHazard(*vs_state, src_resource, SYNC_VIDEO_ENCODE_VIDEO_ENCODE_READ);
         if (hazard.IsHazard()) {
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), src_resource.image_view_state->Handle(),
-                             encode_info_loc.dot(Field::srcPictureResource), "Hazard %s for encode input picture. Access info %s.",
-                             string_SyncHazard(hazard.Hazard()), cb_access_context->FormatHazard(hazard).c_str());
+            // TODO: there are no tests for this error
+            const auto error = error_messages_.Error(hazard, "encode input picture", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), src_resource.image_view_state->Handle(),
+                              encode_info_loc.dot(Field::srcPictureResource), error);
         }
     }
 
@@ -2580,10 +2547,9 @@ bool SyncValidator::PreCallValidateCmdEncodeVideoKHR(VkCommandBuffer commandBuff
         if (setup_resource) {
             auto hazard = context->DetectHazard(*vs_state, setup_resource, SYNC_VIDEO_ENCODE_VIDEO_ENCODE_WRITE);
             if (hazard.IsHazard()) {
-                skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), setup_resource.image_view_state->Handle(),
-                                 encode_info_loc.dot(Field::pSetupReferenceSlot).dot(Field::pPictureResource),
-                                 "Hazard %s for reconstructed picture. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                                 cb_access_context->FormatHazard(hazard).c_str());
+                const auto error = error_messages_.Error(hazard, "reconstructed picture", *cb_access_context);
+                skip |= SyncError(hazard.Hazard(), setup_resource.image_view_state->Handle(),
+                                  encode_info_loc.dot(Field::pSetupReferenceSlot).dot(Field::pPictureResource), error);
             }
         }
     }
@@ -2594,10 +2560,30 @@ bool SyncValidator::PreCallValidateCmdEncodeVideoKHR(VkCommandBuffer commandBuff
             if (reference_resource) {
                 auto hazard = context->DetectHazard(*vs_state, reference_resource, SYNC_VIDEO_ENCODE_VIDEO_ENCODE_READ);
                 if (hazard.IsHazard()) {
-                    skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), reference_resource.image_view_state->Handle(),
-                                     encode_info_loc.dot(Field::pReferenceSlots, i).dot(Field::pPictureResource),
-                                     "Hazard %s for reference picture #%u. Access info %s.", string_SyncHazard(hazard.Hazard()), i,
-                                     cb_access_context->FormatHazard(hazard).c_str());
+                    const auto error = error_messages_.VideoReferencePictureError(hazard, i, *cb_access_context);
+                    skip |= SyncError(hazard.Hazard(), reference_resource.image_view_state->Handle(),
+                                      encode_info_loc.dot(Field::pReferenceSlots, i).dot(Field::pPictureResource), error);
+                }
+            }
+        }
+    }
+
+    if (pEncodeInfo->flags & (VK_VIDEO_ENCODE_WITH_QUANTIZATION_DELTA_MAP_BIT_KHR | VK_VIDEO_ENCODE_WITH_EMPHASIS_MAP_BIT_KHR)) {
+        auto quantization_map_info = vku::FindStructInPNextChain<VkVideoEncodeQuantizationMapInfoKHR>(pEncodeInfo);
+        if (quantization_map_info) {
+            auto image_view_state = Get<ImageViewState>(quantization_map_info->quantizationMap);
+            if (image_view_state) {
+                VkOffset3D offset = {0, 0, 0};
+                VkExtent3D extent = {quantization_map_info->quantizationMapExtent.width,
+                                     quantization_map_info->quantizationMapExtent.height, 1};
+                auto hazard = context->DetectHazard(*image_view_state, offset, extent, SYNC_VIDEO_ENCODE_VIDEO_ENCODE_READ,
+                                                    SyncOrdering::kOrderingNone);
+                if (hazard.IsHazard()) {
+                    // TODO: there are no tests for this error
+                    const auto error = error_messages_.Error(hazard, "quantization map", *cb_access_context);
+                    skip |= SyncError(hazard.Hazard(), image_view_state->Handle(),
+                                      encode_info_loc.pNext(Struct::VkVideoEncodeQuantizationMapInfoKHR, Field::quantizationMap),
+                                      error);
                 }
             }
         }
@@ -2645,6 +2631,20 @@ void SyncValidator::PreCallRecordCmdEncodeVideoKHR(VkCommandBuffer commandBuffer
             auto reference_resource = vvl::VideoPictureResource(*this, *pEncodeInfo->pReferenceSlots[i].pPictureResource);
             if (reference_resource) {
                 context->UpdateAccessState(*vs_state, reference_resource, SYNC_VIDEO_ENCODE_VIDEO_ENCODE_READ, tag);
+            }
+        }
+    }
+
+    if (pEncodeInfo->flags & (VK_VIDEO_ENCODE_WITH_QUANTIZATION_DELTA_MAP_BIT_KHR | VK_VIDEO_ENCODE_WITH_EMPHASIS_MAP_BIT_KHR)) {
+        auto quantization_map_info = vku::FindStructInPNextChain<VkVideoEncodeQuantizationMapInfoKHR>(pEncodeInfo);
+        if (quantization_map_info) {
+            auto image_view_state = Get<ImageViewState>(quantization_map_info->quantizationMap);
+            if (image_view_state) {
+                VkOffset3D offset = {0, 0, 0};
+                VkExtent3D extent = {quantization_map_info->quantizationMapExtent.width,
+                                     quantization_map_info->quantizationMapExtent.height, 1};
+                context->UpdateAccessState(*image_view_state, SYNC_VIDEO_ENCODE_VIDEO_ENCODE_READ, SyncOrdering::kOrderingNone,
+                                           offset, extent, ResourceUsageTagEx{tag});
             }
         }
     }
@@ -2872,9 +2872,9 @@ bool SyncValidator::PreCallValidateCmdWriteBufferMarker2AMD(VkCommandBuffer comm
         const ResourceAccessRange range = MakeRange(dstOffset, 4);
         auto hazard = context->DetectHazard(*dst_buffer, SYNC_COPY_TRANSFER_WRITE, range);
         if (hazard.IsHazard()) {
-            skip |= LogError(string_SyncHazardVUID(hazard.Hazard()), dstBuffer, error_obj.location,
-                             "Hazard %s for dstBuffer %s. Access info %s.", string_SyncHazard(hazard.Hazard()),
-                             FormatHandle(dstBuffer).c_str(), cb_access_context->FormatHazard(hazard).c_str());
+            // TODO: there are no tests for this error
+            const auto error = error_messages_.BufferError(hazard, dstBuffer, "dstBuffer", *cb_access_context);
+            skip |= SyncError(hazard.Hazard(), dstBuffer, error_obj.location, error);
         }
     }
     return skip;
@@ -3325,9 +3325,9 @@ bool SyncValidator::PropagateTimelineSignals(SignalsUpdate &signals_update, cons
     }
 
     // Each iteration uses registered timeline signals to resolve existing unresolved batches.
-    // Each resolved batch can generate new timeline signals which are used on the next iteration.
+    // Each resolved batch can generate new timeline signals which can resolve more unresolved batches on the next iteration.
     // This finishes when all unresolved batches are resolved or when iteration does not generate new timeline signals.
-    while (ProcessUnresolvedBatches(queues, signals_update, skip, error_obj)) {
+    while (PropagateTimelineSignalsIteration(queues, signals_update, skip, error_obj)) {
         ;
     }
 
@@ -3340,71 +3340,77 @@ bool SyncValidator::PropagateTimelineSignals(SignalsUpdate &signals_update, cons
     return skip;
 }
 
-bool SyncValidator::ProcessUnresolvedBatches(std::vector<UnresolvedQueue> &queues, SignalsUpdate &signals_update, bool &skip,
-                                             const ErrorObject &error_obj) const {
+bool SyncValidator::PropagateTimelineSignalsIteration(std::vector<UnresolvedQueue> &queues, SignalsUpdate &signals_update,
+                                                      bool &skip, const ErrorObject &error_obj) const {
     bool has_new_timeline_signals = false;
     for (auto &queue : queues) {
         if (queue.unresolved_batches.empty()) {
-            continue;  // all batches for this queue were resolved
-        }
-        // Resolve waits that have matching signal
-        for (UnresolvedBatch &unresolved_batch : queue.unresolved_batches) {
-            auto it = unresolved_batch.unresolved_waits.begin();
-            while (it != unresolved_batch.unresolved_waits.end()) {
-                const VkSemaphoreSubmitInfo &wait_info = *it;
-                auto resolving_signal = signals_update.OnTimelineWait(wait_info.semaphore, wait_info.value);
-                if (!resolving_signal.has_value()) {
-                    ++it;
-                    continue;  // resolving signal not found, the wait stays unresolved
-                }
-                if (resolving_signal->batch) {  // null for host signals
-                    unresolved_batch.batch->ResolveSubmitSemaphoreWait(*resolving_signal, wait_info.stageMask);
-                    unresolved_batch.batch->ImportTags(*resolving_signal->batch);
-                    unresolved_batch.resolved_dependencies.emplace_back(resolving_signal->batch);
-                }
-                it = unresolved_batch.unresolved_waits.erase(it);
-            }
+            continue;  // all batches for this queue were resolved by previous iterations
         }
 
-        QueueBatchContext::Ptr queue_last_batch =
+        BatchContextPtr last_batch =
             queue.queue_state->PendingLastBatch() ? queue.queue_state->PendingLastBatch() : queue.queue_state->LastBatch();
+        const BatchContextPtr initial_last_batch = last_batch;
 
-        // Process batches that do not have unresolved waits anymore.
-        // Stop when find a batch with unresolved waits or when all the batches are processed.
-        bool has_new_last_batch = false;
-        while (!queue.unresolved_batches.empty() && queue.unresolved_batches.front().unresolved_waits.empty()) {
-            UnresolvedBatch &ready_batch = queue.unresolved_batches.front();
+        while (!queue.unresolved_batches.empty()) {
+            auto &unresolved_batch = queue.unresolved_batches.front();
 
-            // Import the previous batch information
-            if (queue_last_batch && !vvl::Contains(ready_batch.resolved_dependencies, queue_last_batch)) {
-                ready_batch.batch->ResolveLastBatch(queue_last_batch);
-                ready_batch.resolved_dependencies.emplace_back(std::move(queue_last_batch));
-            }
-            queue_last_batch = ready_batch.batch;
-            has_new_last_batch = true;
-
-            const auto async_batches = ready_batch.batch->RegisterAsyncContexts(ready_batch.resolved_dependencies);
-
-            skip |= ready_batch.batch->ValidateSubmit(ready_batch.command_buffers, ready_batch.submit_index,
-                                                      ready_batch.batch_index, ready_batch.label_stack, error_obj);
-
-            // Process signals. New timeline signals can liberate more unresolved batches on the next iteration
-            const auto submit_signals = vvl::make_span(ready_batch.signals.data(), ready_batch.signals.size());
-            has_new_timeline_signals |= signals_update.RegisterSignals(ready_batch.batch, submit_signals);
+            has_new_timeline_signals |= ProcessUnresolvedBatch(unresolved_batch, signals_update, last_batch, skip, error_obj);
 
             // Remove processed batch from the (local) unresolved list
             queue.unresolved_batches.erase(queue.unresolved_batches.begin());
-            stats.RemoveUnresolvedBatch();
-            // Because unresolved list was changed, propagate the change into the queue's (global) unresolved state
-            queue.update_unresolved = true;
-        }
 
-        // Schedule last batch update
-        if (has_new_last_batch) {
-            queue.queue_state->SetPendingLastBatch(std::move(queue_last_batch));
+            // Propagate change into the queue's (global) unresolved state
+            queue.update_unresolved = true;
+
+            stats.RemoveUnresolvedBatch();
+        }
+        if (last_batch != initial_last_batch) {
+            queue.queue_state->SetPendingLastBatch(std::move(last_batch));
         }
     }
     return has_new_timeline_signals;
+}
+
+bool SyncValidator::ProcessUnresolvedBatch(UnresolvedBatch &unresolved_batch, SignalsUpdate &signals_update,
+                                           BatchContextPtr &last_batch, bool &skip, const ErrorObject &error_obj) const {
+    // Resolve waits that have matching signal
+    auto it = unresolved_batch.unresolved_waits.begin();
+    while (it != unresolved_batch.unresolved_waits.end()) {
+        const VkSemaphoreSubmitInfo &wait_info = *it;
+        auto resolving_signal = signals_update.OnTimelineWait(wait_info.semaphore, wait_info.value);
+        if (!resolving_signal.has_value()) {
+            ++it;
+            continue;  // resolving signal not found, the wait stays unresolved
+        }
+        if (resolving_signal->batch) {  // null for host signals
+            unresolved_batch.batch->ResolveSubmitSemaphoreWait(*resolving_signal, wait_info.stageMask);
+            unresolved_batch.batch->ImportTags(*resolving_signal->batch);
+            unresolved_batch.resolved_dependencies.emplace_back(resolving_signal->batch);
+        }
+        it = unresolved_batch.unresolved_waits.erase(it);
+    }
+
+    // This batch still has unresolved waits
+    if (!unresolved_batch.unresolved_waits.empty()) {
+        return false;  // no new timeline signals were registered
+    }
+
+    // Process fully resolved batch
+    UnresolvedBatch &ready_batch = unresolved_batch;
+    if (last_batch && !vvl::Contains(ready_batch.resolved_dependencies, last_batch)) {
+        ready_batch.batch->ResolveLastBatch(last_batch);
+        ready_batch.resolved_dependencies.emplace_back(std::move(last_batch));
+    }
+    last_batch = ready_batch.batch;
+
+    const auto async_batches = ready_batch.batch->RegisterAsyncContexts(ready_batch.resolved_dependencies);
+
+    skip |= ready_batch.batch->ValidateSubmit(ready_batch.command_buffers, ready_batch.submit_index, ready_batch.batch_index,
+                                              ready_batch.label_stack, error_obj);
+
+    const auto submit_signals = vvl::make_span(ready_batch.signals.data(), ready_batch.signals.size());
+    return signals_update.RegisterSignals(ready_batch.batch, submit_signals);
 }
 
 void SyncValidator::PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence,
@@ -3440,8 +3446,8 @@ bool SyncValidator::PreCallValidateQueueSubmit2KHR(VkQueue queue, uint32_t submi
     return PreCallValidateQueueSubmit2(queue, submitCount, pSubmits, fence, error_obj);
 }
 
-bool SyncValidator::PreCallValidateQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits,
-                                                VkFence fence, const ErrorObject &error_obj) const {
+bool SyncValidator::PreCallValidateQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence,
+                                                const ErrorObject &error_obj) const {
     return ValidateQueueSubmit(queue, submitCount, pSubmits, fence, error_obj);
 }
 
@@ -3449,7 +3455,7 @@ void SyncValidator::PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submit
                                                   VkFence fence, const RecordObject &record_obj) {
     PostCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
 }
-void SyncValidator::PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2KHR *pSubmits, VkFence fence,
+void SyncValidator::PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence,
                                                const RecordObject &record_obj) {
     StateTracker::PostCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
 }
@@ -3652,7 +3658,7 @@ ImageRangeGen syncval_state::ImageState::MakeImageRangeGen(const VkImageSubresou
 }
 
 syncval_state::ImageViewState::ImageViewState(const std::shared_ptr<vvl::Image> &image_state, VkImageView handle,
-                                              const VkImageViewCreateInfo *ci, VkFormatFeatureFlags2KHR ff,
+                                              const VkImageViewCreateInfo *ci, VkFormatFeatureFlags2 ff,
                                               const VkFilterCubicImageViewImageFormatPropertiesEXT &cubic_props)
     : vvl::ImageView(image_state, handle, ci, ff, cubic_props), view_range_gen(MakeImageRangeGen()) {}
 

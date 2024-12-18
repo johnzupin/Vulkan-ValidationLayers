@@ -12,6 +12,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
+#include <vulkan/vulkan_core.h>
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
@@ -36,7 +37,7 @@ TEST_F(NegativePipelineLayout, ExceedsSetLimit) {
     vkt::DescriptorSetLayout ds_layout(*m_device, ds_layout_ci);
 
     // Create an array of DSLs, one larger than the physical limit
-    const auto excess_layouts = 1 + m_device->phy().limits_.maxBoundDescriptorSets;
+    const auto excess_layouts = 1 + m_device->Physical().limits_.maxBoundDescriptorSets;
     std::vector<VkDescriptorSetLayout> dsl_array(excess_layouts, ds_layout.handle());
 
     VkPipelineLayoutCreateInfo pipeline_layout_ci = vku::InitStructHelper();
@@ -120,29 +121,28 @@ TEST_F(NegativePipelineLayout, ExcessSubsampledPerStageDescriptors) {
 TEST_F(NegativePipelineLayout, ExcessPerStageDescriptors) {
     TEST_DESCRIPTION("Attempt to create a pipeline layout where total descriptors exceed per-stage limits");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddOptionalExtensions(VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
     AddOptionalExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     bool descriptor_indexing =
         IsExtensionsEnabled(VK_KHR_MAINTENANCE_3_EXTENSION_NAME) && IsExtensionsEnabled(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
 
-    uint32_t max_uniform_buffers = m_device->phy().limits_.maxPerStageDescriptorUniformBuffers;
-    uint32_t max_storage_buffers = m_device->phy().limits_.maxPerStageDescriptorStorageBuffers;
-    uint32_t max_sampled_images = m_device->phy().limits_.maxPerStageDescriptorSampledImages;
-    uint32_t max_storage_images = m_device->phy().limits_.maxPerStageDescriptorStorageImages;
-    uint32_t max_samplers = m_device->phy().limits_.maxPerStageDescriptorSamplers;
+    uint32_t max_uniform_buffers = m_device->Physical().limits_.maxPerStageDescriptorUniformBuffers;
+    uint32_t max_storage_buffers = m_device->Physical().limits_.maxPerStageDescriptorStorageBuffers;
+    uint32_t max_sampled_images = m_device->Physical().limits_.maxPerStageDescriptorSampledImages;
+    uint32_t max_storage_images = m_device->Physical().limits_.maxPerStageDescriptorStorageImages;
+    uint32_t max_samplers = m_device->Physical().limits_.maxPerStageDescriptorSamplers;
     uint32_t max_combined = std::min(max_samplers, max_sampled_images);
-    uint32_t max_input_attachments = m_device->phy().limits_.maxPerStageDescriptorInputAttachments;
+    uint32_t max_input_attachments = m_device->Physical().limits_.maxPerStageDescriptorInputAttachments;
 
-    uint32_t sum_dyn_uniform_buffers = m_device->phy().limits_.maxDescriptorSetUniformBuffersDynamic;
-    uint32_t sum_uniform_buffers = m_device->phy().limits_.maxDescriptorSetUniformBuffers;
-    uint32_t sum_dyn_storage_buffers = m_device->phy().limits_.maxDescriptorSetStorageBuffersDynamic;
-    uint32_t sum_storage_buffers = m_device->phy().limits_.maxDescriptorSetStorageBuffers;
-    uint32_t sum_sampled_images = m_device->phy().limits_.maxDescriptorSetSampledImages;
-    uint32_t sum_storage_images = m_device->phy().limits_.maxDescriptorSetStorageImages;
-    uint32_t sum_samplers = m_device->phy().limits_.maxDescriptorSetSamplers;
-    uint32_t sum_input_attachments = m_device->phy().limits_.maxDescriptorSetInputAttachments;
+    uint32_t sum_dyn_uniform_buffers = m_device->Physical().limits_.maxDescriptorSetUniformBuffersDynamic;
+    uint32_t sum_uniform_buffers = m_device->Physical().limits_.maxDescriptorSetUniformBuffers;
+    uint32_t sum_dyn_storage_buffers = m_device->Physical().limits_.maxDescriptorSetStorageBuffersDynamic;
+    uint32_t sum_storage_buffers = m_device->Physical().limits_.maxDescriptorSetStorageBuffers;
+    uint32_t sum_sampled_images = m_device->Physical().limits_.maxDescriptorSetSampledImages;
+    uint32_t sum_storage_images = m_device->Physical().limits_.maxDescriptorSetStorageImages;
+    uint32_t sum_samplers = m_device->Physical().limits_.maxDescriptorSetSamplers;
+    uint32_t sum_input_attachments = m_device->Physical().limits_.maxDescriptorSetInputAttachments;
 
     VkPhysicalDeviceDescriptorIndexingProperties descriptor_indexing_properties =
         vku::InitStructHelper();
@@ -417,27 +417,26 @@ TEST_F(NegativePipelineLayout, ExcessPerStageDescriptors) {
 TEST_F(NegativePipelineLayout, ExcessDescriptorsOverall) {
     TEST_DESCRIPTION("Attempt to create a pipeline layout where total descriptors exceed limits");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
     AddOptionalExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     const bool descriptor_indexing = IsExtensionsEnabled(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
 
-    uint32_t max_uniform_buffers = m_device->phy().limits_.maxPerStageDescriptorUniformBuffers;
-    uint32_t max_storage_buffers = m_device->phy().limits_.maxPerStageDescriptorStorageBuffers;
-    uint32_t max_sampled_images = m_device->phy().limits_.maxPerStageDescriptorSampledImages;
-    uint32_t max_storage_images = m_device->phy().limits_.maxPerStageDescriptorStorageImages;
-    uint32_t max_samplers = m_device->phy().limits_.maxPerStageDescriptorSamplers;
-    uint32_t max_input_attachments = m_device->phy().limits_.maxPerStageDescriptorInputAttachments;
+    uint32_t max_uniform_buffers = m_device->Physical().limits_.maxPerStageDescriptorUniformBuffers;
+    uint32_t max_storage_buffers = m_device->Physical().limits_.maxPerStageDescriptorStorageBuffers;
+    uint32_t max_sampled_images = m_device->Physical().limits_.maxPerStageDescriptorSampledImages;
+    uint32_t max_storage_images = m_device->Physical().limits_.maxPerStageDescriptorStorageImages;
+    uint32_t max_samplers = m_device->Physical().limits_.maxPerStageDescriptorSamplers;
+    uint32_t max_input_attachments = m_device->Physical().limits_.maxPerStageDescriptorInputAttachments;
 
-    uint32_t sum_dyn_uniform_buffers = m_device->phy().limits_.maxDescriptorSetUniformBuffersDynamic;
-    uint32_t sum_uniform_buffers = m_device->phy().limits_.maxDescriptorSetUniformBuffers;
-    uint32_t sum_dyn_storage_buffers = m_device->phy().limits_.maxDescriptorSetStorageBuffersDynamic;
-    uint32_t sum_storage_buffers = m_device->phy().limits_.maxDescriptorSetStorageBuffers;
-    uint32_t sum_sampled_images = m_device->phy().limits_.maxDescriptorSetSampledImages;
-    uint32_t sum_storage_images = m_device->phy().limits_.maxDescriptorSetStorageImages;
-    uint32_t sum_samplers = m_device->phy().limits_.maxDescriptorSetSamplers;
-    uint32_t sum_input_attachments = m_device->phy().limits_.maxDescriptorSetInputAttachments;
+    uint32_t sum_dyn_uniform_buffers = m_device->Physical().limits_.maxDescriptorSetUniformBuffersDynamic;
+    uint32_t sum_uniform_buffers = m_device->Physical().limits_.maxDescriptorSetUniformBuffers;
+    uint32_t sum_dyn_storage_buffers = m_device->Physical().limits_.maxDescriptorSetStorageBuffersDynamic;
+    uint32_t sum_storage_buffers = m_device->Physical().limits_.maxDescriptorSetStorageBuffers;
+    uint32_t sum_sampled_images = m_device->Physical().limits_.maxDescriptorSetSampledImages;
+    uint32_t sum_storage_images = m_device->Physical().limits_.maxDescriptorSetStorageImages;
+    uint32_t sum_samplers = m_device->Physical().limits_.maxDescriptorSetSamplers;
+    uint32_t sum_input_attachments = m_device->Physical().limits_.maxDescriptorSetInputAttachments;
 
     VkPhysicalDeviceDescriptorIndexingProperties descriptor_indexing_properties =
         vku::InitStructHelper();
@@ -956,7 +955,6 @@ TEST_F(NegativePipelineLayout, MissingDescriptor) {
 TEST_F(NegativePipelineLayout, MultiplePushDescriptorSets) {
     TEST_DESCRIPTION("Verify an error message for multiple push descriptor sets.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     VkDescriptorSetLayoutBinding dsl_binding = {};
@@ -971,7 +969,7 @@ TEST_F(NegativePipelineLayout, MultiplePushDescriptorSets) {
     for (uint32_t i = 0; i < descriptor_set_layout_count; ++i) {
         dsl_binding.binding = i;
         ds_layouts.emplace_back(*m_device, std::vector<VkDescriptorSetLayoutBinding>(1, dsl_binding),
-                                VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
+                                VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT);
     }
     const auto &ds_vk_layouts = MakeVkHandles<VkDescriptorSetLayout>(ds_layouts);
 
@@ -1016,5 +1014,78 @@ TEST_F(NegativePipelineLayout, SetLayoutFlags) {
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     m_errorMonitor->SetDesiredError("VUID-VkPipelineLayoutCreateInfo-pSetLayouts-04606");
     vk::CreatePipelineLayout(device(), &pipeline_layout_ci, NULL, &pipeline_layout);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativePipelineLayout, InlineUniformBlockArray) {
+    TEST_DESCRIPTION("https://gitlab.khronos.org/vulkan/vulkan/-/issues/4083");
+    AddRequiredExtensions(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::inlineUniformBlock);
+    RETURN_IF_SKIP(Init());
+
+    VkDescriptorPoolInlineUniformBlockCreateInfo pool_inline_info = vku::InitStructHelper();
+    pool_inline_info.maxInlineUniformBlockBindings = 1;
+
+    OneOffDescriptorSet descriptor_set(m_device,
+                                       {
+                                           {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                           {1, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 8, VK_SHADER_STAGE_ALL, nullptr},
+                                       },
+                                       0, nullptr, 0, nullptr, &pool_inline_info);
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
+    char const *cs_source = R"glsl(
+        #version 450
+        #extension GL_EXT_debug_printf : enable
+        layout(set = 0, binding = 0) buffer SSBO0 { uint ssbo; };
+        layout(set = 0, binding = 1) uniform InlineUBO { uint x; } inlineArray[4];
+        void main() {
+            ssbo = inlineArray[0].x;
+        }
+    )glsl";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.cp_ci_.layout = pipeline_layout.handle();
+
+    m_errorMonitor->SetDesiredError("UNASSIGNED-VkComputePipelineCreateInfo-layout-inline");
+    pipe.CreateComputePipeline();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativePipelineLayout, InlineUniformBlockArrayOf1) {
+    TEST_DESCRIPTION("https://gitlab.khronos.org/vulkan/vulkan/-/issues/4083");
+    AddRequiredExtensions(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::inlineUniformBlock);
+    RETURN_IF_SKIP(Init());
+
+    VkDescriptorPoolInlineUniformBlockCreateInfo pool_inline_info = vku::InitStructHelper();
+    pool_inline_info.maxInlineUniformBlockBindings = 1;
+
+    OneOffDescriptorSet descriptor_set(m_device,
+                                       {
+                                           {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                           {1, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 8, VK_SHADER_STAGE_ALL, nullptr},
+                                       },
+                                       0, nullptr, 0, nullptr, &pool_inline_info);
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
+    char const *cs_source = R"glsl(
+        #version 450
+        #extension GL_EXT_debug_printf : enable
+        layout(set = 0, binding = 0) buffer SSBO0 { uint ssbo; };
+        // will still produce an OpTypeArray
+        layout(set = 0, binding = 1) uniform InlineUBO { uint x; } inlineArray[1];
+        void main() {
+            ssbo = inlineArray[0].x;
+        }
+    )glsl";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.cp_ci_.layout = pipeline_layout.handle();
+
+    m_errorMonitor->SetDesiredError("UNASSIGNED-VkComputePipelineCreateInfo-layout-inline");
+    pipe.CreateComputePipeline();
     m_errorMonitor->VerifyFound();
 }

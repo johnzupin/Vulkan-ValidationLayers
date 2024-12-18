@@ -19,10 +19,10 @@
  */
 
 #pragma once
-#include "generated/chassis.h"
+#include "chassis/validation_object.h"
 #include "utils/hash_vk_types.h"
 #include "state_tracker/video_session_state.h"
-#include "generated/layer_chassis_dispatch.h"
+#include "chassis/dispatch_object.h"
 #include "generated/device_features.h"
 #include "error_message/logging.h"
 #include "containers/custom_containers.h"
@@ -129,24 +129,6 @@ struct TraitsBase {
     struct Traits<state_type> : public TraitsBase<handle_type, state_type, base_type> {}; \
     }
 
-// For image copies between compressed/uncompressed formats, the extent is provided in source image texels
-// Destination image texel extents must be adjusted by block size for the dest validation checks
-static inline VkExtent3D GetAdjustedDestImageExtent(VkFormat src_format, VkFormat dst_format, VkExtent3D extent) {
-    VkExtent3D adjusted_extent = extent;
-    if (vkuFormatIsBlockedImage(src_format) && !vkuFormatIsBlockedImage(dst_format)) {
-        VkExtent3D block_size = vkuFormatTexelBlockExtent(src_format);
-        adjusted_extent.width /= block_size.width;
-        adjusted_extent.height /= block_size.height;
-        adjusted_extent.depth /= block_size.depth;
-    } else if (!vkuFormatIsBlockedImage(src_format) && vkuFormatIsBlockedImage(dst_format)) {
-        VkExtent3D block_size = vkuFormatTexelBlockExtent(dst_format);
-        adjusted_extent.width *= block_size.width;
-        adjusted_extent.height *= block_size.height;
-        adjusted_extent.depth *= block_size.depth;
-    }
-    return adjusted_extent;
-}
-
 // Get buffer size from VkBufferImageCopy / VkBufferImageCopy2KHR structure, for a given format
 template <typename RegionType>
 static inline VkDeviceSize GetBufferSizeFromCopyImage(const RegionType& region, VkFormat image_format,
@@ -200,13 +182,13 @@ static inline VkDeviceSize GetBufferSizeFromCopyImage(const RegionType& region, 
 
     if (vkuFormatIsBlockedImage(image_format)) {
         // Switch to texel block units, rounding up for any partially-used blocks
-        auto block_dim = vkuFormatTexelBlockExtent(image_format);
-        buffer_width = (buffer_width + block_dim.width - 1) / block_dim.width;
-        buffer_height = (buffer_height + block_dim.height - 1) / block_dim.height;
+        const VkExtent3D block_extent = vkuFormatTexelBlockExtent(image_format);
+        buffer_width = (buffer_width + block_extent.width - 1) / block_extent.width;
+        buffer_height = (buffer_height + block_extent.height - 1) / block_extent.height;
 
-        copy_extent.width = (copy_extent.width + block_dim.width - 1) / block_dim.width;
-        copy_extent.height = (copy_extent.height + block_dim.height - 1) / block_dim.height;
-        copy_extent.depth = (copy_extent.depth + block_dim.depth - 1) / block_dim.depth;
+        copy_extent.width = (copy_extent.width + block_extent.width - 1) / block_extent.width;
+        copy_extent.height = (copy_extent.height + block_extent.height - 1) / block_extent.height;
+        copy_extent.depth = (copy_extent.depth + block_extent.depth - 1) / block_extent.depth;
     }
 
     // Calculate buffer offset of final copied byte, + 1.
@@ -435,18 +417,6 @@ class ValidationStateTracker : public ValidationObject {
             ranges[written_count++] = address_range;
         }
         return {written_count, buffer_address_map_.size()};
-    }
-
-    using SetImageViewInitialLayoutCallback = std::function<void(vvl::CommandBuffer*, const vvl::ImageView&, VkImageLayout)>;
-    template <typename Fn>
-    void SetSetImageViewInitialLayoutCallback(Fn&& fn) {
-        set_image_view_initial_layout_callback.reset(new SetImageViewInitialLayoutCallback(std::forward<Fn>(fn)));
-    }
-
-    void CallSetImageViewInitialLayoutCallback(vvl::CommandBuffer* cb_state, const vvl::ImageView& iv_state, VkImageLayout layout) {
-        if (set_image_view_initial_layout_callback) {
-            (*set_image_view_initial_layout_callback)(cb_state, iv_state, layout);
-        }
     }
 
     VkDeviceSize AllocFakeMemory(VkDeviceSize size) { return fake_memory.Alloc(size); }
@@ -925,6 +895,8 @@ class ValidationStateTracker : public ValidationObject {
                                        const RecordObject& record_obj) override;
     void PostCallRecordQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo,
                                        const RecordObject& record_obj) override;
+    void PostCallRecordReleaseSwapchainImagesEXT(VkDevice device, const VkReleaseSwapchainImagesInfoEXT* pReleaseInfo,
+                                                 const RecordObject& record_obj) override;
     void PreCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence,
                                   const RecordObject& record_obj) override;
     void PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence,
@@ -987,9 +959,13 @@ class ValidationStateTracker : public ValidationObject {
     // Memory mapping
     void PostCallRecordMapMemory(VkDevice device, VkDeviceMemory mem, VkDeviceSize offset, VkDeviceSize size, VkFlags flags,
                                  void** ppData, const RecordObject& record_obj) override;
+    void PostCallRecordMapMemory2(VkDevice device, const VkMemoryMapInfo* pMemoryMapInfo, void** ppData,
+                                  const RecordObject& record_obj) override;
     void PostCallRecordMapMemory2KHR(VkDevice device, const VkMemoryMapInfoKHR* pMemoryMapInfo, void** ppData,
                                      const RecordObject& record_obj) override;
     void PreCallRecordUnmapMemory(VkDevice device, VkDeviceMemory mem, const RecordObject& record_obj) override;
+    void PreCallRecordUnmapMemory2(VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo,
+                                   const RecordObject& record_obj) override;
     void PreCallRecordUnmapMemory2KHR(VkDevice device, const VkMemoryUnmapInfoKHR* pMemoryUnmapInfo,
                                       const RecordObject& record_obj) override;
 
@@ -1026,6 +1002,8 @@ class ValidationStateTracker : public ValidationObject {
                                                        const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin,
                                                        const RecordObject& record_obj) override;
     void PostCallRecordCmdEndConditionalRenderingEXT(VkCommandBuffer commandBuffer, const RecordObject& record_obj) override;
+    void PreCallRecordCmdBindDescriptorSets2(VkCommandBuffer commandBuffer, const VkBindDescriptorSetsInfo* pBindDescriptorSetsInfo,
+                                             const RecordObject& record_obj) override;
     void PreCallRecordCmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer,
                                                 const VkBindDescriptorSetsInfoKHR* pBindDescriptorSetsInfo,
                                                 const RecordObject& record_obj) override;
@@ -1035,6 +1013,8 @@ class ValidationStateTracker : public ValidationObject {
                                             const uint32_t* pDynamicOffsets, const RecordObject& record_obj) override;
     void PreCallRecordCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType,
                                          const RecordObject& record_obj) override;
+    void PreCallRecordCmdBindIndexBuffer2(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size,
+                                          VkIndexType indexType, const RecordObject& record_obj) override;
     void PreCallRecordCmdBindIndexBuffer2KHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size,
                                              VkIndexType indexType, const RecordObject& record_obj) override;
     void PreCallRecordCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline,
@@ -1206,16 +1186,27 @@ class ValidationStateTracker : public ValidationObject {
                                           const VkSubpassEndInfo* pSubpassEndInfo, const RecordObject& record_obj) override;
     void PostCallRecordCmdNextSubpass2(VkCommandBuffer commandBuffer, const VkSubpassBeginInfo* pSubpassBeginInfo,
                                        const VkSubpassEndInfo* pSubpassEndInfo, const RecordObject& record_obj) override;
+    void PreCallRecordCmdPushDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                                           VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount,
+                                           const VkWriteDescriptorSet* pDescriptorWrites, const RecordObject& record_obj) override;
     void PreCallRecordCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
                                               VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount,
                                               const VkWriteDescriptorSet* pDescriptorWrites,
                                               const RecordObject& record_obj) override;
+    void PreCallRecordCmdPushDescriptorSet2(VkCommandBuffer commandBuffer, const VkPushDescriptorSetInfo* pPushDescriptorSetInfo,
+                                            const RecordObject& record_obj) override;
     void PreCallRecordCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer,
                                                const VkPushDescriptorSetInfoKHR* pPushDescriptorSetInfo,
                                                const RecordObject& record_obj) override;
+    void PreCallRecordCmdPushDescriptorSetWithTemplate2(
+        VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo,
+        const RecordObject& record_obj) override;
     void PreCallRecordCmdPushDescriptorSetWithTemplate2KHR(
         VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfoKHR* pPushDescriptorSetWithTemplateInfo,
         const RecordObject& record_obj) override;
+    void PreCallRecordCmdPushDescriptorSetWithTemplate(VkCommandBuffer commandBuffer,
+                                                       VkDescriptorUpdateTemplate descriptorUpdateTemplate, VkPipelineLayout layout,
+                                                       uint32_t set, const void* pData, const RecordObject& record_obj) override;
     void PreCallRecordCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,
                                                           VkDescriptorUpdateTemplate descriptorUpdateTemplate,
                                                           VkPipelineLayout layout, uint32_t set, const void* pData,
@@ -1223,6 +1214,8 @@ class ValidationStateTracker : public ValidationObject {
     void PostCallRecordCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags,
                                         uint32_t offset, uint32_t size, const void* pValues,
                                         const RecordObject& record_obj) override;
+    void PostCallRecordCmdPushConstants2(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo,
+                                         const RecordObject& record_obj) override;
     void PostCallRecordCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfoKHR* pPushConstantsInfo,
                                             const RecordObject& record_obj) override;
     void PreCallRecordCmdResetEvent(VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags stageMask,
@@ -1253,6 +1246,8 @@ class ValidationStateTracker : public ValidationObject {
                                                       uint32_t exclusiveScissorCount, const VkBool32* pExclusiveScissorEnables,
                                                       const RecordObject& record_obj) override;
     void PostCallRecordCmdSetLineWidth(VkCommandBuffer commandBuffer, float lineWidth, const RecordObject& record_obj) override;
+    void PostCallRecordCmdSetLineStipple(VkCommandBuffer commandBuffer, uint32_t lineStippleFactor, uint16_t lineStipplePattern,
+                                         const RecordObject& record_obj) override;
     void PostCallRecordCmdSetLineStippleEXT(VkCommandBuffer commandBuffer, uint32_t lineStippleFactor, uint16_t lineStipplePattern,
                                             const RecordObject& record_obj) override;
     void PostCallRecordCmdSetLineStippleKHR(VkCommandBuffer commandBuffer, uint32_t lineStippleFactor, uint16_t lineStipplePattern,
@@ -1578,8 +1573,14 @@ class ValidationStateTracker : public ValidationObject {
     void PostCallRecordCmdSetFragmentShadingRateKHR(VkCommandBuffer commandBuffer, const VkExtent2D* pFragmentSize,
                                                     const VkFragmentShadingRateCombinerOpKHR combinerOps[2],
                                                     const RecordObject& record_obj) override;
+    void PostCallRecordCmdSetRenderingAttachmentLocations(VkCommandBuffer commandBuffer,
+                                                          const VkRenderingAttachmentLocationInfo* pLocationInfo,
+                                                          const RecordObject& record_obj) override;
     void PostCallRecordCmdSetRenderingAttachmentLocationsKHR(VkCommandBuffer commandBuffer,
                                                              const VkRenderingAttachmentLocationInfoKHR* pLocationInfo,
+                                                             const RecordObject& record_obj) override;
+    void PostCallRecordCmdSetRenderingInputAttachmentIndices(VkCommandBuffer commandBuffer,
+                                                             const VkRenderingInputAttachmentIndexInfo* pLocationInfo,
                                                              const RecordObject& record_obj) override;
     void PostCallRecordCmdSetRenderingInputAttachmentIndicesKHR(VkCommandBuffer commandBuffer,
                                                                 const VkRenderingInputAttachmentIndexInfoKHR* pLocationInfo,
@@ -1786,8 +1787,6 @@ class ValidationStateTracker : public ValidationObject {
     // Link for derived device objects back to their parent instance object
     ValidationStateTracker* instance_state;
 
-    std::unique_ptr<SetImageViewInitialLayoutCallback> set_image_view_initial_layout_callback;
-
     DeviceFeatures enabled_features = {};
     // Device specific data
     VkPhysicalDeviceMemoryProperties phys_dev_mem_props = {};
@@ -1795,6 +1794,10 @@ class ValidationStateTracker : public ValidationObject {
     VkPhysicalDeviceVulkan11Properties phys_dev_props_core11 = {};
     VkPhysicalDeviceVulkan12Properties phys_dev_props_core12 = {};
     VkPhysicalDeviceVulkan13Properties phys_dev_props_core13 = {};
+    VkPhysicalDeviceVulkan14Properties phys_dev_props_core14 = {};
+    // To store the 2 lists from VkPhysicalDeviceHostImageCopyProperties
+    std::vector<VkImageLayout> host_image_copy_props_copy_src_layouts = {};
+    std::vector<VkImageLayout> host_imape_copy_props_copy_dst_layouts = {};
     VkDeviceGroupDeviceCreateInfo device_group_create_info = {};
     uint32_t physical_device_count;
     uint32_t custom_border_color_sampler_count = 0;
@@ -1816,13 +1819,12 @@ class ValidationStateTracker : public ValidationObject {
 
     // Device extension properties -- storing properties gathered from VkPhysicalDeviceProperties2::pNext chain
     struct DeviceExtensionProperties {
-        VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor_props;
         VkPhysicalDeviceShadingRateImagePropertiesNV shading_rate_image_props;
         VkPhysicalDeviceMeshShaderPropertiesNV mesh_shader_props_nv;
         VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_props_ext;
-        VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR vtx_attrib_divisor_props;
         VkPhysicalDeviceCooperativeMatrixPropertiesNV cooperative_matrix_props;
         VkPhysicalDeviceCooperativeMatrixPropertiesKHR cooperative_matrix_props_khr;
+        VkPhysicalDeviceCooperativeMatrix2PropertiesNV cooperative_matrix_props2_nv;
         VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback_props;
         VkPhysicalDeviceRayTracingPropertiesNV ray_tracing_props_nv;
         VkPhysicalDeviceRayTracingPipelinePropertiesKHR ray_tracing_props_khr;
@@ -1845,13 +1847,11 @@ class ValidationStateTracker : public ValidationObject {
         VkPhysicalDeviceExtendedDynamicState3PropertiesEXT extended_dynamic_state3_props;
         VkPhysicalDeviceImageProcessingPropertiesQCOM image_processing_props;
         VkPhysicalDeviceImageAlignmentControlPropertiesMESA image_alignment_control_props;
-        VkPhysicalDeviceMaintenance6PropertiesKHR maintenance6_props;
         VkPhysicalDeviceMaintenance7PropertiesKHR maintenance7_props;
         VkPhysicalDeviceNestedCommandBufferPropertiesEXT nested_command_buffer_props;
         VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_props;
         VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT descriptor_buffer_density_props;
         VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT device_generated_commands_props;
-        VkPhysicalDeviceHostImageCopyPropertiesEXT host_image_copy_props;
         VkPhysicalDevicePipelineBinaryPropertiesKHR pipeline_binary_props;
         VkPhysicalDeviceMapMemoryPlacedPropertiesEXT map_memory_placed_props;
         VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR compute_shader_derivatives_props;
@@ -1859,8 +1859,7 @@ class ValidationStateTracker : public ValidationObject {
     DeviceExtensionProperties phys_dev_ext_props = {};
     std::vector<VkCooperativeMatrixPropertiesNV> cooperative_matrix_properties_nv;
     std::vector<VkCooperativeMatrixPropertiesKHR> cooperative_matrix_properties_khr;
-    std::vector<VkImageLayout> host_image_copy_src_layouts;
-    std::vector<VkImageLayout> host_image_copy_dst_layouts;
+    std::vector<VkCooperativeMatrixFlexibleDimensionsPropertiesNV> cooperative_matrix_flexible_dimensions_properties;
 
     // Features and properties that depend on platforms being defined
     // They will be false if platform is not defined
@@ -1957,7 +1956,7 @@ class ValidationStateTracker : public ValidationObject {
     VALSTATETRACK_MAP_AND_TRAITS_INSTANCE_SCOPE(VkDisplayModeKHR, vvl::DisplayMode, display_mode_map_)
     VALSTATETRACK_MAP_AND_TRAITS_INSTANCE_SCOPE(VkPhysicalDevice, vvl::PhysicalDevice, physical_device_map_)
 
-    std::atomic<vvl::StateObject::IdType> object_id_{1}; // 0 is an invalid id
+    std::atomic<uint32_t> object_id_{1};  // 0 is an invalid id
 
     // Simple base address allocator allow allow VkDeviceMemory allocations to appear to exist in a common address space.
     // At 256GB allocated/sec  ( > 8GB at 30Hz), will overflow in just over 2 years

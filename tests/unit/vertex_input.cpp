@@ -48,24 +48,18 @@ TEST_F(NegativeVertexInput, AttributeFormat) {
 TEST_F(NegativeVertexInput, DivisorExtension) {
     TEST_DESCRIPTION("Test VUIDs added with VK_EXT_vertex_attribute_divisor extension.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT vadf = vku::InitStructHelper();
-    vadf.vertexAttributeInstanceRateDivisor = VK_TRUE;
-    vadf.vertexAttributeInstanceRateZeroDivisor = VK_TRUE;
-
-    VkPhysicalDeviceFeatures2 pd_features2 = vku::InitStructHelper(&vadf);
-    RETURN_IF_SKIP(InitState(nullptr, &pd_features2));
+    AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateDivisor);
+    AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateZeroDivisor);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    const VkPhysicalDeviceLimits &dev_limits = m_device->phy().limits_;
+    const VkPhysicalDeviceLimits &dev_limits = m_device->Physical().limits_;
     VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT pdvad_props = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(pdvad_props);
 
-    VkVertexInputBindingDivisorDescriptionEXT vibdd = {};
-    VkPipelineVertexInputDivisorStateCreateInfoEXT pvids_ci = vku::InitStructHelper();
+    VkVertexInputBindingDivisorDescription vibdd = {};
+    VkPipelineVertexInputDivisorStateCreateInfo pvids_ci = vku::InitStructHelper();
     pvids_ci.vertexBindingDivisorCount = 1;
     pvids_ci.pVertexBindingDivisors = &vibdd;
     VkVertexInputBindingDescription vibd = {};
@@ -91,14 +85,14 @@ TEST_F(NegativeVertexInput, DivisorExtension) {
             1,
             0,
             VK_VERTEX_INPUT_RATE_VERTEX,
-            {"VUID-VkVertexInputBindingDivisorDescriptionKHR-inputRate-01871"}
+            {"VUID-VkVertexInputBindingDivisorDescription-inputRate-01871"}
         },
         {   dev_limits.maxVertexInputBindings + 1,
             1,
             0,
             VK_VERTEX_INPUT_RATE_INSTANCE,
-            {"VUID-VkVertexInputBindingDivisorDescriptionKHR-binding-01869",
-             "VUID-VkVertexInputBindingDivisorDescriptionKHR-inputRate-01871"}
+            {"VUID-VkVertexInputBindingDivisorDescription-binding-01869",
+             "VUID-VkVertexInputBindingDivisorDescription-inputRate-01871"}
         }
     };
 
@@ -108,7 +102,7 @@ TEST_F(NegativeVertexInput, DivisorExtension) {
                 pdvad_props.maxVertexAttribDivisor + 1,
                 0,
                 VK_VERTEX_INPUT_RATE_INSTANCE,
-                {"VUID-VkVertexInputBindingDivisorDescriptionKHR-divisor-01870"}
+                {"VUID-VkVertexInputBindingDivisorDescription-divisor-01870"}
             } );
     }
     // clang-format on
@@ -130,24 +124,17 @@ TEST_F(NegativeVertexInput, DivisorExtension) {
 TEST_F(NegativeVertexInput, DivisorDisabled) {
     TEST_DESCRIPTION("Test instance divisor feature disabled for VK_EXT_vertex_attribute_divisor extension.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT vadf = vku::InitStructHelper();
-    vadf.vertexAttributeInstanceRateDivisor = VK_FALSE;
-    vadf.vertexAttributeInstanceRateZeroDivisor = VK_FALSE;
-    VkPhysicalDeviceFeatures2 pd_features2 = vku::InitStructHelper(&vadf);
-    RETURN_IF_SKIP(InitState(nullptr, &pd_features2));
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT pdvad_props = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(pdvad_props);
 
-    VkVertexInputBindingDivisorDescriptionEXT vibdd = {};
+    VkVertexInputBindingDivisorDescription vibdd = {};
     vibdd.binding = 0;
     vibdd.divisor = 2;
-    VkPipelineVertexInputDivisorStateCreateInfoEXT pvids_ci = vku::InitStructHelper();
+    VkPipelineVertexInputDivisorStateCreateInfo pvids_ci = vku::InitStructHelper();
     pvids_ci.vertexBindingDivisorCount = 1;
     pvids_ci.pVertexBindingDivisors = &vibdd;
     VkVertexInputBindingDescription vibd = {};
@@ -165,27 +152,21 @@ TEST_F(NegativeVertexInput, DivisorDisabled) {
         helper.vi_ci_.pVertexBindingDescriptions = &vibd;
     };
     CreatePipelineHelper::OneshotTest(*this, instance_rate, kErrorBit,
-                                      "VUID-VkVertexInputBindingDivisorDescriptionKHR-vertexAttributeInstanceRateDivisor-02229");
+                                      "VUID-VkVertexInputBindingDivisorDescription-vertexAttributeInstanceRateDivisor-02229");
 }
 
 TEST_F(NegativeVertexInput, DivisorInstanceRateZero) {
     TEST_DESCRIPTION("Test instanceRateZero feature of VK_EXT_vertex_attribute_divisor extension.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT vadf = vku::InitStructHelper();
-    vadf.vertexAttributeInstanceRateDivisor = VK_TRUE;
-    vadf.vertexAttributeInstanceRateZeroDivisor = VK_FALSE;
-    VkPhysicalDeviceFeatures2 pd_features2 = vku::InitStructHelper(&vadf);
-    RETURN_IF_SKIP(InitState(nullptr, &pd_features2));
+    AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateDivisor);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    VkVertexInputBindingDivisorDescriptionEXT vibdd = {};
+    VkVertexInputBindingDivisorDescription vibdd = {};
     vibdd.binding = 0;
     vibdd.divisor = 0;
-    VkPipelineVertexInputDivisorStateCreateInfoEXT pvids_ci = vku::InitStructHelper();
+    VkPipelineVertexInputDivisorStateCreateInfo pvids_ci = vku::InitStructHelper();
     pvids_ci.vertexBindingDivisorCount = 1;
     pvids_ci.pVertexBindingDivisors = &vibdd;
     VkVertexInputBindingDescription vibd = {};
@@ -198,27 +179,25 @@ TEST_F(NegativeVertexInput, DivisorInstanceRateZero) {
         helper.vi_ci_.vertexBindingDescriptionCount = 1;
         helper.vi_ci_.pVertexBindingDescriptions = &vibd;
     };
-    CreatePipelineHelper::OneshotTest(
-        *this, instance_rate, kErrorBit,
-        "VUID-VkVertexInputBindingDivisorDescriptionKHR-vertexAttributeInstanceRateZeroDivisor-02228");
+    CreatePipelineHelper::OneshotTest(*this, instance_rate, kErrorBit,
+                                      "VUID-VkVertexInputBindingDivisorDescription-vertexAttributeInstanceRateZeroDivisor-02228");
 }
 
 TEST_F(NegativeVertexInput, DivisorExtensionKHR) {
     TEST_DESCRIPTION("Test VUIDs added with VK_KHR_vertex_attribute_divisor extension.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateDivisor);
     AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateZeroDivisor);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    const VkPhysicalDeviceLimits &dev_limits = m_device->phy().limits_;
+    const VkPhysicalDeviceLimits &dev_limits = m_device->Physical().limits_;
     VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR pdvad_props = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(pdvad_props);
 
-    VkVertexInputBindingDivisorDescriptionKHR vibdd = {};
-    VkPipelineVertexInputDivisorStateCreateInfoKHR pvids_ci = vku::InitStructHelper();
+    VkVertexInputBindingDivisorDescription vibdd = {};
+    VkPipelineVertexInputDivisorStateCreateInfo pvids_ci = vku::InitStructHelper();
     pvids_ci.vertexBindingDivisorCount = 1;
     pvids_ci.pVertexBindingDivisors = &vibdd;
     VkVertexInputBindingDescription vibd = {};
@@ -244,14 +223,14 @@ TEST_F(NegativeVertexInput, DivisorExtensionKHR) {
             1,
             0,
             VK_VERTEX_INPUT_RATE_VERTEX,
-            {"VUID-VkVertexInputBindingDivisorDescriptionKHR-inputRate-01871"}
+            {"VUID-VkVertexInputBindingDivisorDescription-inputRate-01871"}
         },
         {   dev_limits.maxVertexInputBindings + 1,
             1,
             0,
             VK_VERTEX_INPUT_RATE_INSTANCE,
-            {"VUID-VkVertexInputBindingDivisorDescriptionKHR-binding-01869",
-             "VUID-VkVertexInputBindingDivisorDescriptionKHR-inputRate-01871"}
+            {"VUID-VkVertexInputBindingDivisorDescription-binding-01869",
+             "VUID-VkVertexInputBindingDivisorDescription-inputRate-01871"}
         }
     };
 
@@ -261,7 +240,7 @@ TEST_F(NegativeVertexInput, DivisorExtensionKHR) {
                 pdvad_props.maxVertexAttribDivisor + 1,
                 0,
                 VK_VERTEX_INPUT_RATE_INSTANCE,
-                {"VUID-VkVertexInputBindingDivisorDescriptionKHR-divisor-01870"}
+                {"VUID-VkVertexInputBindingDivisorDescription-divisor-01870"}
             } );
     }
     // clang-format on
@@ -283,20 +262,18 @@ TEST_F(NegativeVertexInput, DivisorExtensionKHR) {
 TEST_F(NegativeVertexInput, DivisorDisabledKHR) {
     TEST_DESCRIPTION("Test instance divisor feature disabled for VK_KHR_vertex_attribute_divisor extension.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
-    AddDisabledFeature(vkt::Feature::vertexAttributeInstanceRateDivisor);
-    AddDisabledFeature(vkt::Feature::vertexAttributeInstanceRateZeroDivisor);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR pdvad_props = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(pdvad_props);
 
-    VkVertexInputBindingDivisorDescriptionEXT vibdd = {};
+    VkVertexInputBindingDivisorDescription vibdd = {};
     vibdd.binding = 0;
     vibdd.divisor = 2;
-    VkPipelineVertexInputDivisorStateCreateInfoKHR pvids_ci = vku::InitStructHelper();
+    VkPipelineVertexInputDivisorStateCreateInfo pvids_ci = vku::InitStructHelper();
     pvids_ci.vertexBindingDivisorCount = 1;
     pvids_ci.pVertexBindingDivisors = &vibdd;
     VkVertexInputBindingDescription vibd = {};
@@ -314,23 +291,22 @@ TEST_F(NegativeVertexInput, DivisorDisabledKHR) {
         helper.vi_ci_.pVertexBindingDescriptions = &vibd;
     };
     CreatePipelineHelper::OneshotTest(*this, instance_rate, kErrorBit,
-                                      "VUID-VkVertexInputBindingDivisorDescriptionKHR-vertexAttributeInstanceRateDivisor-02229");
+                                      "VUID-VkVertexInputBindingDivisorDescription-vertexAttributeInstanceRateDivisor-02229");
 }
 
 TEST_F(NegativeVertexInput, DivisorInstanceRateZeroKHR) {
     TEST_DESCRIPTION("Test instanceRateZero feature of VK_KHR_vertex_attribute_divisor extension.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateDivisor);
-    AddDisabledFeature(vkt::Feature::vertexAttributeInstanceRateZeroDivisor);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    VkVertexInputBindingDivisorDescriptionKHR vibdd = {};
+    VkVertexInputBindingDivisorDescription vibdd = {};
     vibdd.binding = 0;
     vibdd.divisor = 0;
-    VkPipelineVertexInputDivisorStateCreateInfoKHR pvids_ci = vku::InitStructHelper();
+    VkPipelineVertexInputDivisorStateCreateInfo pvids_ci = vku::InitStructHelper();
     pvids_ci.vertexBindingDivisorCount = 1;
     pvids_ci.pVertexBindingDivisors = &vibdd;
     VkVertexInputBindingDescription vibd = {};
@@ -343,9 +319,37 @@ TEST_F(NegativeVertexInput, DivisorInstanceRateZeroKHR) {
         helper.vi_ci_.vertexBindingDescriptionCount = 1;
         helper.vi_ci_.pVertexBindingDescriptions = &vibd;
     };
-    CreatePipelineHelper::OneshotTest(
-        *this, instance_rate, kErrorBit,
-        "VUID-VkVertexInputBindingDivisorDescriptionKHR-vertexAttributeInstanceRateZeroDivisor-02228");
+    CreatePipelineHelper::OneshotTest(*this, instance_rate, kErrorBit,
+                                      "VUID-VkVertexInputBindingDivisorDescription-vertexAttributeInstanceRateZeroDivisor-02228");
+}
+
+TEST_F(NegativeVertexInput, DivisorInstanceRateZero14) {
+    TEST_DESCRIPTION("Test instanceRateZero feature of VK_KHR_vertex_attribute_divisor extension, promoted in 1.4");
+
+    SetTargetApiVersion(VK_API_VERSION_1_4);
+    AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateDivisor);
+
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkVertexInputBindingDivisorDescription vibdd = {};
+    vibdd.binding = 0;
+    vibdd.divisor = 0;
+    VkPipelineVertexInputDivisorStateCreateInfo pvids_ci = vku::InitStructHelper();
+    pvids_ci.vertexBindingDivisorCount = 1;
+    pvids_ci.pVertexBindingDivisors = &vibdd;
+    VkVertexInputBindingDescription vibd = {};
+    vibd.binding = vibdd.binding;
+    vibd.stride = 12;
+    vibd.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+
+    const auto instance_rate = [&pvids_ci, &vibd](CreatePipelineHelper &helper) {
+        helper.vi_ci_.pNext = &pvids_ci;
+        helper.vi_ci_.vertexBindingDescriptionCount = 1;
+        helper.vi_ci_.pVertexBindingDescriptions = &vibd;
+    };
+    CreatePipelineHelper::OneshotTest(*this, instance_rate, kErrorBit,
+                                      "VUID-VkVertexInputBindingDivisorDescription-vertexAttributeInstanceRateZeroDivisor-02228");
 }
 
 TEST_F(NegativeVertexInput, InputBindingMaxVertexInputBindings) {
@@ -358,7 +362,7 @@ TEST_F(NegativeVertexInput, InputBindingMaxVertexInputBindings) {
 
     // Test when binding is greater than or equal to VkPhysicalDeviceLimits::maxVertexInputBindings.
     VkVertexInputBindingDescription vertex_input_binding_description{};
-    vertex_input_binding_description.binding = m_device->phy().limits_.maxVertexInputBindings;
+    vertex_input_binding_description.binding = m_device->Physical().limits_.maxVertexInputBindings;
 
     const auto set_binding = [&](CreatePipelineHelper &helper) {
         helper.vi_ci_.pVertexBindingDescriptions = &vertex_input_binding_description;
@@ -377,7 +381,7 @@ TEST_F(NegativeVertexInput, InputBindingMaxVertexInputBindingStride) {
 
     // Test when stride is greater than VkPhysicalDeviceLimits::maxVertexInputBindingStride.
     VkVertexInputBindingDescription vertex_input_binding_description{};
-    vertex_input_binding_description.stride = m_device->phy().limits_.maxVertexInputBindingStride + 1;
+    vertex_input_binding_description.stride = m_device->Physical().limits_.maxVertexInputBindingStride + 1;
 
     const auto set_binding = [&](CreatePipelineHelper &helper) {
         helper.vi_ci_.pVertexBindingDescriptions = &vertex_input_binding_description;
@@ -396,7 +400,7 @@ TEST_F(NegativeVertexInput, InputAttributeMaxVertexInputAttributes) {
 
     // Test when location is greater than or equal to VkPhysicalDeviceLimits::maxVertexInputAttributes.
     VkVertexInputAttributeDescription vertex_input_attribute_description{};
-    vertex_input_attribute_description.location = m_device->phy().limits_.maxVertexInputAttributes;
+    vertex_input_attribute_description.location = m_device->Physical().limits_.maxVertexInputAttributes;
 
     const auto set_attribute = [&](CreatePipelineHelper &helper) {
         helper.vi_ci_.pVertexAttributeDescriptions = &vertex_input_attribute_description;
@@ -418,7 +422,7 @@ TEST_F(NegativeVertexInput, InputAttributeMaxVertexInputBindings) {
 
     // Test when binding is greater than or equal to VkPhysicalDeviceLimits::maxVertexInputBindings.
     VkVertexInputAttributeDescription vertex_input_attribute_description{};
-    vertex_input_attribute_description.binding = m_device->phy().limits_.maxVertexInputBindings;
+    vertex_input_attribute_description.binding = m_device->Physical().limits_.maxVertexInputBindings;
 
     const auto set_attribute = [&](CreatePipelineHelper &helper) {
         helper.vi_ci_.pVertexAttributeDescriptions = &vertex_input_attribute_description;
@@ -438,7 +442,7 @@ TEST_F(NegativeVertexInput, AttributeDescriptionOffset) {
     RETURN_IF_SKIP(Init());
 
     VkPhysicalDeviceProperties device_props = {};
-    vk::GetPhysicalDeviceProperties(gpu(), &device_props);
+    vk::GetPhysicalDeviceProperties(Gpu(), &device_props);
     const uint32_t maxVertexInputAttributeOffset = device_props.limits.maxVertexInputAttributeOffset;
     if (maxVertexInputAttributeOffset == 0xFFFFFFFF) {
         GTEST_SKIP() << "maxVertexInputAttributeOffset is max<uint32_t> already";
@@ -447,7 +451,7 @@ TEST_F(NegativeVertexInput, AttributeDescriptionOffset) {
 
     VkVertexInputBindingDescription vertex_input_binding_description{};
     vertex_input_binding_description.binding = 0;
-    vertex_input_binding_description.stride = m_device->phy().limits_.maxVertexInputBindingStride;
+    vertex_input_binding_description.stride = m_device->Physical().limits_.maxVertexInputBindingStride;
     vertex_input_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
     // Test when offset is greater than maximum.
     VkVertexInputAttributeDescription vertex_input_attribute_description{};
@@ -471,7 +475,7 @@ TEST_F(NegativeVertexInput, BindingDescriptions) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    const uint32_t binding_count = m_device->phy().limits_.maxVertexInputBindings + 1;
+    const uint32_t binding_count = m_device->Physical().limits_.maxVertexInputBindings + 1;
 
     std::vector<VkVertexInputBindingDescription> input_bindings(binding_count);
     for (uint32_t i = 0; i < binding_count; ++i) {
@@ -514,7 +518,7 @@ TEST_F(NegativeVertexInput, AttributeDescriptions) {
     input_binding.stride = 4;
     input_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    const uint32_t attribute_count = m_device->phy().limits_.maxVertexInputAttributes + 1;
+    const uint32_t attribute_count = m_device->Physical().limits_.maxVertexInputAttributes + 1;
     std::vector<VkVertexInputAttributeDescription> input_attribs(attribute_count);
     for (uint32_t i = 0; i < attribute_count; ++i) {
         input_attribs[i].binding = 0;
@@ -542,7 +546,7 @@ TEST_F(NegativeVertexInput, AttributeDescriptions) {
 TEST_F(NegativeVertexInput, UsingProvokingVertexModeLastVertexExtDisabled) {
     TEST_DESCRIPTION("Test using VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT but it doesn't enable provokingVertexLast.");
     AddRequiredExtensions(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME);
-    AddDisabledFeature(vkt::Feature::provokingVertexLast);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -562,20 +566,15 @@ TEST_F(NegativeVertexInput, ProvokingVertexModePerPipeline) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    AddRequiredFeature(vkt::Feature::provokingVertexLast);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
 
     VkPhysicalDeviceProvokingVertexPropertiesEXT provoking_vertex_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(provoking_vertex_properties);
     if (provoking_vertex_properties.provokingVertexModePerPipeline == VK_TRUE) {
         GTEST_SKIP() << "provokingVertexModePerPipeline is VK_TRUE";
     }
-
-    VkPhysicalDeviceProvokingVertexFeaturesEXT provoking_vertex_features = vku::InitStructHelper();
-    provoking_vertex_features.provokingVertexLast = VK_TRUE;
-    VkPhysicalDeviceFeatures2 features2 = vku::InitStructHelper(&provoking_vertex_features);
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
-    InitRenderTarget();
 
     CreatePipelineHelper pipe1(*this);
     VkPipelineRasterizationProvokingVertexStateCreateInfoEXT provoking_vertex_state_ci = vku::InitStructHelper();
@@ -591,7 +590,7 @@ TEST_F(NegativeVertexInput, ProvokingVertexModePerPipeline) {
     CreatePipelineHelper pipe3(*this);
     pipe3.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe1.Handle());
 
@@ -608,12 +607,12 @@ TEST_F(NegativeVertexInput, ProvokingVertexModePerPipeline) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertextBinding) {
     TEST_DESCRIPTION("Verify if VkPipelineVertexInputStateCreateInfo matches vkCmdBindVertexBuffers");
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -635,7 +634,7 @@ TEST_F(NegativeVertexInput, VertextBinding) {
     pipe.vi_ci_.pVertexAttributeDescriptions = vtx_attri_des;
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     VkDeviceSize offset = 0;
@@ -648,12 +647,12 @@ TEST_F(NegativeVertexInput, VertextBinding) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertextBindingNonLinear) {
     TEST_DESCRIPTION("Have Binding not be in a linear order");
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -671,7 +670,7 @@ TEST_F(NegativeVertexInput, VertextBindingNonLinear) {
     pipe.vi_ci_.pVertexAttributeDescriptions = vtx_attri_des;
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     VkDeviceSize offset = 0;
@@ -685,14 +684,14 @@ TEST_F(NegativeVertexInput, VertextBindingNonLinear) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertextBindingDynamicState) {
     TEST_DESCRIPTION("Test bad binding with VK_DYNAMIC_STATE_VERTEX_INPUT_EXT");
     AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::vertexInputDynamicState);
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -726,7 +725,7 @@ TEST_F(NegativeVertexInput, VertextBindingDynamicState) {
     attributes[2].binding = 2;
     attributes[2].format = VK_FORMAT_R8G8B8A8_UNORM;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 5, 1, &buffer.handle(), &offset);
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 3, 1, &buffer.handle(), &offset);
@@ -738,12 +737,12 @@ TEST_F(NegativeVertexInput, VertextBindingDynamicState) {
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 1);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, AttributeAlignment) {
     TEST_DESCRIPTION("Check for proper aligment of attribAddress which depends on a bound pipeline and on a bound vertex buffer");
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -813,7 +812,7 @@ TEST_F(NegativeVertexInput, AttributeAlignment) {
     pipe2.vi_ci_ = vi_state;
     pipe2.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
 
     // Test with invalid buffer offset
@@ -837,12 +836,12 @@ TEST_F(NegativeVertexInput, AttributeAlignment) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, BindVertexOffset) {
     TEST_DESCRIPTION("set the pOffset in vkCmdBindVertexBuffers to 3 and use R16");
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -858,7 +857,7 @@ TEST_F(NegativeVertexInput, BindVertexOffset) {
     pipe.vi_ci_.pVertexAttributeDescriptions = &input_attribs;
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -869,12 +868,12 @@ TEST_F(NegativeVertexInput, BindVertexOffset) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertexStride) {
     TEST_DESCRIPTION("set the Stride to 3 and use R16");
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -890,7 +889,7 @@ TEST_F(NegativeVertexInput, VertexStride) {
     pipe.vi_ci_.pVertexAttributeDescriptions = &input_attribs;
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -901,14 +900,14 @@ TEST_F(NegativeVertexInput, VertexStride) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertexStrideDynamicInput) {
     TEST_DESCRIPTION("set the Stride to 3 in VK_DYNAMIC_STATE_VERTEX_INPUT_EXT and use R16");
     AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::vertexInputDynamicState);
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -929,7 +928,7 @@ TEST_F(NegativeVertexInput, VertexStrideDynamicInput) {
     attribute.binding = 0;
     attribute.format = VK_FORMAT_R16_UNORM;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -941,14 +940,14 @@ TEST_F(NegativeVertexInput, VertexStrideDynamicInput) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertexStrideDynamicStride) {
     TEST_DESCRIPTION("set the Stride to 3 in vkCmdBindVertexBuffers2 and use R16");
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::extendedDynamicState);
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -966,7 +965,7 @@ TEST_F(NegativeVertexInput, VertexStrideDynamicStride) {
     pipe.AddDynamicState(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -978,14 +977,14 @@ TEST_F(NegativeVertexInput, VertexStrideDynamicStride) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertexStrideDynamicStrideArray) {
     TEST_DESCRIPTION("set the Stride to 3 in vkCmdBindVertexBuffers2 and use R16");
     AddRequiredExtensions(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::extendedDynamicState);
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -1003,7 +1002,7 @@ TEST_F(NegativeVertexInput, VertexStrideDynamicStrideArray) {
     pipe.AddDynamicState(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -1016,7 +1015,7 @@ TEST_F(NegativeVertexInput, VertexStrideDynamicStrideArray) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertexStrideDoubleDynamicStride) {
@@ -1025,7 +1024,7 @@ TEST_F(NegativeVertexInput, VertexStrideDoubleDynamicStride) {
     AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::vertexInputDynamicState);
     AddRequiredFeature(vkt::Feature::extendedDynamicState);
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -1047,7 +1046,7 @@ TEST_F(NegativeVertexInput, VertexStrideDoubleDynamicStride) {
     attribute.binding = 0;
     attribute.format = VK_FORMAT_R16_UNORM;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     VkDeviceSize offset = 0;
@@ -1069,7 +1068,7 @@ TEST_F(NegativeVertexInput, VertexStrideDoubleDynamicStride) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, AttributeNotConsumed) {
@@ -1368,7 +1367,7 @@ TEST_F(NegativeVertexInput, AttributeTypeMismatchDynamic) {
     vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VkDeviceSize offset = 0;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0, 1, &buffer.handle(), &offset);
     vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 1, &binding, 1, &attribute);
@@ -1377,7 +1376,7 @@ TEST_F(NegativeVertexInput, AttributeTypeMismatchDynamic) {
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, AttributeBindingConflict) {
@@ -1527,7 +1526,7 @@ TEST_F(NegativeVertexInput, AttributeStructTypeBlockLocation64bit) {
     InitRenderTarget();
 
     VkFormatProperties format_props;
-    vk::GetPhysicalDeviceFormatProperties(gpu(), VK_FORMAT_R64G64B64A64_SFLOAT, &format_props);
+    vk::GetPhysicalDeviceFormatProperties(Gpu(), VK_FORMAT_R64G64B64A64_SFLOAT, &format_props);
     if (!(format_props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT)) {
         GTEST_SKIP() << "Device does not support VK_FORMAT_R64G64B64A64_SFLOAT vertex buffers";
     }
@@ -1599,11 +1598,11 @@ TEST_F(NegativeVertexInput, UnsupportedDivisor) {
         GTEST_SKIP() << "Test requires supportsNonZeroFirstInstance to be VK_FALSE";
     }
 
-    VkVertexInputBindingDivisorDescriptionKHR vertex_binding_divisor;
+    VkVertexInputBindingDivisorDescription vertex_binding_divisor;
     vertex_binding_divisor.binding = 0u;
     vertex_binding_divisor.divisor = 2u;
 
-    VkPipelineVertexInputDivisorStateCreateInfoKHR vertex_input_divisor_state = vku::InitStructHelper();
+    VkPipelineVertexInputDivisorStateCreateInfo vertex_input_divisor_state = vku::InitStructHelper();
     vertex_input_divisor_state.vertexBindingDivisorCount = 1u;
     vertex_input_divisor_state.pVertexBindingDivisors = &vertex_binding_divisor;
 
@@ -1625,7 +1624,7 @@ TEST_F(NegativeVertexInput, UnsupportedDivisor) {
     vkt::Buffer buffer(*m_device, 1027u, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VkDeviceSize offset = 0u;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0u, 1u, &buffer.handle(), &offset);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
@@ -1633,7 +1632,7 @@ TEST_F(NegativeVertexInput, UnsupportedDivisor) {
     vk::CmdDraw(m_command_buffer.handle(), 3u, 1u, 0u, 1u);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, UnsupportedDynamicStateDivisor) {
@@ -1671,7 +1670,7 @@ TEST_F(NegativeVertexInput, UnsupportedDynamicStateDivisor) {
     vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VkDeviceSize offset = 0u;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0u, 1u, &buffer.handle(), &offset);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
@@ -1682,7 +1681,7 @@ TEST_F(NegativeVertexInput, UnsupportedDynamicStateDivisor) {
     vk::CmdDraw(m_command_buffer.handle(), 3u, 1u, 0u, 1u);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, BindVertexBufferNull) {
@@ -1690,7 +1689,7 @@ TEST_F(NegativeVertexInput, BindVertexBufferNull) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     VkDeviceSize offsets[2] = {0, 0};
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindVertexBuffers-pBuffers-parameter");
@@ -1704,15 +1703,14 @@ TEST_F(NegativeVertexInput, BindVertexBufferNull) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, BindVertexBufferNullDraw) {
     TEST_DESCRIPTION("Have null vertex but use nullDescriptor feature");
     AddRequiredExtensions(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::nullDescriptor);
-    AddDisabledFeature(vkt::Feature::robustBufferAccess2);
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -1725,7 +1723,7 @@ TEST_F(NegativeVertexInput, BindVertexBufferNullDraw) {
     pipe.vi_ci_.pVertexAttributeDescriptions = &attributes;
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -1739,7 +1737,7 @@ TEST_F(NegativeVertexInput, BindVertexBufferNullDraw) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeVertexInput, VertextBufferDestroyed) {
@@ -1753,7 +1751,7 @@ TEST_F(NegativeVertexInput, VertextBufferDestroyed) {
     CreatePipelineHelper pipe(*this);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     VkDeviceSize offset = 0;
@@ -1797,7 +1795,7 @@ TEST_F(NegativeVertexInput, ResetCmdSetVertexInput) {
     attributes.binding = 0;
     attributes.format = VK_FORMAT_R8G8B8A8_UINT;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0u, 1u, &vertex_buffer.handle(), &offset);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
@@ -1808,6 +1806,72 @@ TEST_F(NegativeVertexInput, ResetCmdSetVertexInput) {
     vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 1, &bindings, 1, &attributes);
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-Input-08734");
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 1);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeVertexInput, VertexInputRebinding) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9027");
+    AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::vertexInputDynamicState);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    char const *vsSource = R"glsl(
+        #version 450
+        layout(location = 0) in float a;
+        layout(location = 1) in float b;
+
+        void main(){
+            gl_Position = vec4(a + b);
+        }
+    )glsl";
+    VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT);
+    pipe.shader_stages_ = {vs.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
+    pipe.CreateGraphicsPipeline();
+
+    VkVertexInputBindingDescription2EXT bindings[2];
+    bindings[0] = vku::InitStructHelper();
+    bindings[0].binding = 0u;
+    bindings[0].stride = sizeof(uint32_t);
+    bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    bindings[0].divisor = 1u;
+    bindings[1] = bindings[0];
+    bindings[1].binding = 1u;
+
+    VkVertexInputAttributeDescription2EXT attributes[2];
+    attributes[0] = vku::InitStructHelper();
+    attributes[0].location = 0u;
+    attributes[0].binding = 0u;
+    attributes[0].format = VK_FORMAT_R32_SFLOAT;
+    attributes[0].offset = 0;
+
+    attributes[1] = vku::InitStructHelper();
+    attributes[1].location = 1u;
+    attributes[1].binding = 1u;
+    attributes[1].format = VK_FORMAT_R32_SFLOAT;
+    attributes[1].offset = 0;
+
+    vkt::Buffer vertex_buffer(*m_device, 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    VkDeviceSize offsets[2] = {0, 0};
+    VkBuffer buffers[2] = {vertex_buffer.handle(), vertex_buffer.handle()};
+
+    m_command_buffer.begin();
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0, 2, buffers, offsets);
+
+    vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 2, bindings, 2, attributes);
+
+    // Invalidate the binding not used
+    vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 2, bindings, 1, attributes);
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-Input-07939");
+    vk::CmdDraw(m_command_buffer.handle(), 3u, 3u, 0u, 0u);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
     m_command_buffer.end();

@@ -30,10 +30,8 @@ TEST_F(PositiveSyncValWsi, PresentAfterSubmit2AutomaticVisibility) {
     RETURN_IF_SKIP(InitSwapchain());
     vkt::Semaphore acquire_semaphore(*m_device);
     vkt::Semaphore submit_semaphore(*m_device);
-    const auto swapchain_images = GetSwapchainImages(m_swapchain);
-
-    uint32_t image_index = 0;
-    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
+    const auto swapchain_images = m_swapchain.GetImages();
+    const uint32_t image_index = m_swapchain.AcquireNextImage(acquire_semaphore, kWaitTimeout);
 
     VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
     // this creates execution dependency with submit's wait semaphore, so layout
@@ -60,24 +58,17 @@ TEST_F(PositiveSyncValWsi, PresentAfterSubmit2AutomaticVisibility) {
     layout_transition.subresourceRange.baseArrayLayer = 0;
     layout_transition.subresourceRange.layerCount = 1;
 
-    VkDependencyInfoKHR dep_info = vku::InitStructHelper();
+    VkDependencyInfo dep_info = vku::InitStructHelper();
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &layout_transition;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
-    m_default_queue->Submit2(m_command_buffer, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, submit_semaphore,
-                             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-
-    VkPresentInfoKHR present = vku::InitStructHelper();
-    present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &submit_semaphore.handle();
-    present.swapchainCount = 1;
-    present.pSwapchains = &m_swapchain;
-    present.pImageIndices = &image_index;
-    ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue->handle(), &present));
+    m_default_queue->Submit2(m_command_buffer, vkt::Wait(acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT),
+                             vkt::Signal(submit_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT));
+    m_default_queue->Present(m_swapchain, image_index, submit_semaphore);
     m_default_queue->Wait();
 }
 
@@ -89,10 +80,8 @@ TEST_F(PositiveSyncValWsi, PresentAfterSubmitAutomaticVisibility) {
     RETURN_IF_SKIP(InitSwapchain());
     vkt::Semaphore acquire_semaphore(*m_device);
     vkt::Semaphore submit_semaphore(*m_device);
-    const auto swapchain_images = GetSwapchainImages(m_swapchain);
-
-    uint32_t image_index = 0;
-    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
+    const auto swapchain_images = m_swapchain.GetImages();
+    const uint32_t image_index = m_swapchain.AcquireNextImage(acquire_semaphore, kWaitTimeout);
 
     VkImageMemoryBarrier layout_transition = vku::InitStructHelper();
     layout_transition.srcAccessMask = 0;
@@ -112,20 +101,14 @@ TEST_F(PositiveSyncValWsi, PresentAfterSubmitAutomaticVisibility) {
     layout_transition.subresourceRange.baseArrayLayer = 0;
     layout_transition.subresourceRange.layerCount = 1;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdPipelineBarrier(m_command_buffer, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &layout_transition);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, submit_semaphore);
-
-    VkPresentInfoKHR present = vku::InitStructHelper();
-    present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &submit_semaphore.handle();
-    present.swapchainCount = 1;
-    present.pSwapchains = &m_swapchain;
-    present.pImageIndices = &image_index;
-    ASSERT_EQ(VK_SUCCESS, vk::QueuePresentKHR(m_default_queue->handle(), &present));
+    m_default_queue->Submit(m_command_buffer, vkt::Wait(acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT),
+                            vkt::Signal(submit_semaphore));
+    m_default_queue->Present(m_swapchain, image_index, submit_semaphore);
     m_default_queue->Wait();
 }
 
@@ -133,17 +116,14 @@ TEST_F(PositiveSyncValWsi, PresentAfterSubmitNoneDstStage) {
     TEST_DESCRIPTION("Test that QueueSubmit's signal semaphore behaves the same way as QueueSubmit2 with ALL_COMMANDS signal.");
     AddSurfaceExtension();
     SetTargetApiVersion(VK_API_VERSION_1_3);
-    VkPhysicalDeviceSynchronization2Features sync2_features = vku::InitStructHelper();
-    sync2_features.synchronization2 = VK_TRUE;
+    AddRequiredFeature(vkt::Feature::synchronization2);
     RETURN_IF_SKIP(InitSyncValFramework());
-    RETURN_IF_SKIP(InitState(nullptr, &sync2_features));
+    RETURN_IF_SKIP(InitState());
     RETURN_IF_SKIP(InitSwapchain());
     vkt::Semaphore acquire_semaphore(*m_device);
     vkt::Semaphore submit_semaphore(*m_device);
-    const auto swapchain_images = GetSwapchainImages(m_swapchain);
-
-    uint32_t image_index = 0;
-    vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
+    const auto swapchain_images = m_swapchain.GetImages();
+    const uint32_t image_index = m_swapchain.AcquireNextImage(acquire_semaphore, kWaitTimeout);
 
     VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
     layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -156,27 +136,20 @@ TEST_F(PositiveSyncValWsi, PresentAfterSubmitNoneDstStage) {
     layout_transition.image = swapchain_images[image_index];
     layout_transition.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-    VkDependencyInfoKHR dep_info = vku::InitStructHelper();
+    VkDependencyInfo dep_info = vku::InitStructHelper();
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &layout_transition;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     // The goal of this test is to use QueueSubmit API (not QueueSubmit2) to
-    // ensure syncval correctly converts SubmitInfo to SubmitInfo2 with
-    // regard to signal semaphore.
-    m_default_queue->Submit(m_command_buffer, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, submit_semaphore);
+    // ensure syncval correctly converts SubmitInfo to SubmitInfo2 with ALL_COMMANDS signal semaphore.
+    m_default_queue->Submit(m_command_buffer, vkt::Wait(acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT),
+                            vkt::Signal(submit_semaphore));
 
-    VkPresentInfoKHR present = vku::InitStructHelper();
-    present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &submit_semaphore.handle();
-    present.swapchainCount = 1;
-    present.pSwapchains = &m_swapchain;
-    present.pImageIndices = &image_index;
-
-    vk::QueuePresentKHR(m_default_queue->handle(), &present);
+    m_default_queue->Present(m_swapchain, image_index, submit_semaphore);
     m_device->Wait();
 }
 
@@ -187,10 +160,10 @@ TEST_F(PositiveSyncValWsi, ThreadedSubmitAndFenceWaitAndPresent) {
     RETURN_IF_SKIP(InitState());
     RETURN_IF_SKIP(InitSwapchain());
 
-    const auto swapchain_images = GetSwapchainImages(m_swapchain);
+    const auto swapchain_images = m_swapchain.GetImages();
     {
         vkt::CommandBuffer cmd(*m_device, m_command_pool);
-        cmd.begin();
+        cmd.Begin();
         for (VkImage image : swapchain_images) {
             VkImageMemoryBarrier transition = vku::InitStructHelper();
             transition.srcAccessMask = 0;
@@ -208,7 +181,7 @@ TEST_F(PositiveSyncValWsi, ThreadedSubmitAndFenceWaitAndPresent) {
             vk::CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
                                    nullptr, 1, &transition);
         }
-        cmd.end();
+        cmd.End();
         m_default_queue->Submit(cmd);
         m_default_queue->Wait();
     }
@@ -226,9 +199,9 @@ TEST_F(PositiveSyncValWsi, ThreadedSubmitAndFenceWaitAndPresent) {
 
         vkt::Fence fence(*m_device);
         for (int i = 0; i < N; i++) {
-            m_command_buffer.begin();
+            m_command_buffer.Begin();
             vk::CmdCopyBuffer(m_command_buffer, src, dst, 1, &copy_info);
-            m_command_buffer.end();
+            m_command_buffer.End();
             {
                 std::unique_lock<std::mutex> lock(queue_mutex);
                 m_default_queue->Submit(m_command_buffer, fence);
@@ -245,21 +218,12 @@ TEST_F(PositiveSyncValWsi, ThreadedSubmitAndFenceWaitAndPresent) {
         vkt::Fence fence(*m_device);
 
         for (int i = 0; i < N; i++) {
-            uint32_t image_index = 0;
-            vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
+            const uint32_t image_index = m_swapchain.AcquireNextImage(acquire_semaphore, kWaitTimeout);
             {
                 std::unique_lock<std::mutex> lock(queue_mutex);
-
-                m_default_queue->Submit(vkt::no_cmd, acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                        submit_semaphore, fence);
-
-                VkPresentInfoKHR present = vku::InitStructHelper();
-                present.waitSemaphoreCount = 1;
-                present.pWaitSemaphores = &submit_semaphore.handle();
-                present.swapchainCount = 1;
-                present.pSwapchains = &m_swapchain;
-                present.pImageIndices = &image_index;
-                vk::QueuePresentKHR(*m_default_queue, &present);
+                m_default_queue->Submit(vkt::no_cmd, vkt::Wait(acquire_semaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT),
+                                        vkt::Signal(submit_semaphore), fence);
+                m_default_queue->Present(m_swapchain, image_index, submit_semaphore);
             }
             vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, kWaitTimeout);
             vk::ResetFences(device(), 1, &fence.handle());
@@ -279,7 +243,7 @@ static void SetImageLayoutPresentSrc(vkt::Queue& queue, vkt::Device& device, VkI
     vkt::CommandPool pool(device, device.graphics_queue_node_index_);
     vkt::CommandBuffer cmd_buf(device, pool);
 
-    cmd_buf.begin();
+    cmd_buf.Begin();
     VkImageMemoryBarrier layout_barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                         nullptr,
                                         0,
@@ -293,7 +257,7 @@ static void SetImageLayoutPresentSrc(vkt::Queue& queue, vkt::Device& device, VkI
 
     vk::CmdPipelineBarrier(cmd_buf.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr,
                            0, nullptr, 1, &layout_barrier);
-    cmd_buf.end();
+    cmd_buf.End();
     queue.Submit(cmd_buf);
     queue.Wait();
 }
@@ -303,7 +267,7 @@ TEST_F(PositiveSyncValWsi, WaitForFencesWithPresentBatches) {
     AddSurfaceExtension();
     RETURN_IF_SKIP(InitSyncVal());
     RETURN_IF_SKIP(InitSwapchain());
-    const auto swapchain_images = GetSwapchainImages(m_swapchain);
+    const auto swapchain_images = m_swapchain.GetImages();
     for (auto image : swapchain_images) {
         SetImageLayoutPresentSrc(*m_default_queue, *m_device, image);
     }
@@ -320,39 +284,27 @@ TEST_F(PositiveSyncValWsi, WaitForFencesWithPresentBatches) {
     vkt::Buffer src_buffer(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     vkt::Buffer dst_buffer(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-    auto present = [this](const vkt::Semaphore& submit_semaphore, uint32_t image_index) {
-        VkPresentInfoKHR present = vku::InitStructHelper();
-        present.waitSemaphoreCount = 1;
-        present.pWaitSemaphores = &submit_semaphore.handle();
-        present.swapchainCount = 1;
-        present.pSwapchains = &m_swapchain;
-        present.pImageIndices = &image_index;
-        vk::QueuePresentKHR(m_default_queue->handle(), &present);
-    };
-
     // Frame 0
     {
-        uint32_t image_index = 0;
-        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
+        const uint32_t image_index = m_swapchain.AcquireNextImage(acquire_semaphore, kWaitTimeout);
 
-        m_command_buffer.begin();
+        m_command_buffer.Begin();
         m_command_buffer.Copy(src_buffer, buffer);
-        m_command_buffer.end();
+        m_command_buffer.End();
 
-        m_default_queue->Submit(m_command_buffer, acquire_semaphore, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, submit_semaphore, fence);
-        present(submit_semaphore, image_index);
+        m_default_queue->Submit(m_command_buffer, vkt::Wait(acquire_semaphore), vkt::Signal(submit_semaphore), fence);
+        m_default_queue->Present(m_swapchain, image_index, submit_semaphore);
     }
     // Frame 1
     {
-        uint32_t image_index = 0;
-        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore2, VK_NULL_HANDLE, &image_index);
+        const uint32_t image_index = m_swapchain.AcquireNextImage(acquire_semaphore2, kWaitTimeout);
 
         // TODO: Present should be able to accept semaphore from Acquire directly, but due to
         // another bug we need this intermediate sumbit. Remove it and make present to wait
         // on image_ready_semaphore semaphore when acquire->present direct synchronization is fixed.
-        m_default_queue->Submit(vkt::no_cmd, acquire_semaphore2, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, submit_semaphore2);
+        m_default_queue->Submit(vkt::no_cmd, vkt::Wait(acquire_semaphore2), vkt::Signal(submit_semaphore2));
 
-        present(submit_semaphore2, image_index);
+        m_default_queue->Present(m_swapchain, image_index, submit_semaphore2);
     }
     // Frame 2
     {
@@ -361,14 +313,146 @@ TEST_F(PositiveSyncValWsi, WaitForFencesWithPresentBatches) {
         // import accesses from regular submits.
         vk::WaitForFences(*m_device, 1, &fence.handle(), VK_TRUE, kWaitTimeout);
 
-        uint32_t image_index = 0;
-        vk::AcquireNextImageKHR(device(), m_swapchain, kWaitTimeout, acquire_semaphore, VK_NULL_HANDLE, &image_index);
+        m_swapchain.AcquireNextImage(acquire_semaphore, kWaitTimeout);  // do not need to keep result
 
         // If WaitForFences leaks accesses from present batches the following copy will cause submit time hazard.
-        m_command_buffer.begin();
+        m_command_buffer.Begin();
         m_command_buffer.Copy(buffer, dst_buffer);
-        m_command_buffer.end();
-        m_default_queue->Submit(m_command_buffer, vkt::wait, acquire_semaphore);
+        m_command_buffer.End();
+        m_default_queue->Submit(m_command_buffer, vkt::Wait(acquire_semaphore));
+    }
+    m_default_queue->Wait();
+}
+
+TEST_F(PositiveSyncValWsi, RecreateBuffer) {
+    TEST_DESCRIPTION("Recreate buffer on each simulation iteration. Use acquire fence synchronization approach.");
+    AddSurfaceExtension();
+    RETURN_IF_SKIP(InitSyncVal());
+    RETURN_IF_SKIP(InitSwapchain());
+
+    const auto swapchain_images = m_swapchain.GetImages();
+
+    std::vector<vkt::Fence> acquire_fences;
+    vkt::Fence current_fence(*m_device);
+    std::vector<vkt::CommandBuffer> command_buffers;
+    std::vector<vkt::Semaphore> submit_semaphores;
+
+    std::vector<vkt::Buffer> src_buffers(swapchain_images.size());
+    std::vector<vkt::Buffer> dst_buffers(swapchain_images.size());
+
+    for (VkImage image : swapchain_images) {
+        SetImageLayoutPresentSrc(*m_default_queue, *m_device, image);
+    }
+    for (size_t i = 0; i < swapchain_images.size(); i++) {
+        acquire_fences.emplace_back(*m_device);
+        command_buffers.emplace_back(*m_device, m_command_pool);
+        submit_semaphores.emplace_back(*m_device);
+    }
+
+    // NOTE: This test can be used for manual inspection of memory usage.
+    // Increase frame count and observe that the test does not continuously allocate memory.
+    // Syncval should not track ranges of deleted resources.
+    const int frame_count = 100;
+
+    for (int i = 0; i < frame_count; i++) {
+        const uint32_t image_index = m_swapchain.AcquireNextImage(current_fence, kWaitTimeout);
+        current_fence.Wait(kWaitTimeout);
+        current_fence.Reset();
+
+        auto &src_buffer = src_buffers[image_index];
+        src_buffer.destroy();
+        src_buffer = vkt::Buffer(*m_device, 1024, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+        auto &dst_buffer = dst_buffers[image_index];
+        dst_buffer.destroy();
+        dst_buffer = vkt::Buffer(*m_device, 1024, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+        auto &command_buffer = command_buffers[image_index];
+        command_buffer.Begin();
+        command_buffer.Copy(src_buffer, dst_buffer);
+        command_buffer.End();
+
+        auto &submit_semaphore = submit_semaphores[image_index];
+        m_default_queue->Submit(command_buffer, vkt::Signal(submit_semaphore));
+        m_default_queue->Present(m_swapchain, image_index, submit_semaphore);
+        std::swap(acquire_fences[image_index], current_fence);
+    }
+    m_default_queue->Wait();
+}
+
+TEST_F(PositiveSyncValWsi, RecreateImage) {
+    TEST_DESCRIPTION("Recreate image on each simulation iteration. Use acquire fence synchronization approach.");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddSurfaceExtension();
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(InitSyncVal());
+    RETURN_IF_SKIP(InitSwapchain());
+
+    constexpr uint32_t width = 256;
+    constexpr uint32_t height = 128;
+    constexpr VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
+
+    const auto swapchain_images = m_swapchain.GetImages();
+
+    std::vector<vkt::Fence> acquire_fences;
+    vkt::Fence current_fence(*m_device);
+    std::vector<vkt::CommandBuffer> command_buffers;
+    std::vector<vkt::Semaphore> submit_semaphores;
+
+    const vkt::Buffer src_buffer(*m_device, width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    std::vector<vkt::Image> dst_images(swapchain_images.size());
+
+    for (auto image : swapchain_images) {
+        SetImageLayoutPresentSrc(*m_default_queue, *m_device, image);
+    }
+    for (size_t i = 0; i < swapchain_images.size(); i++) {
+        acquire_fences.emplace_back(*m_device);
+        command_buffers.emplace_back(*m_device, m_command_pool);
+        submit_semaphores.emplace_back(*m_device);
+    }
+
+    // NOTE: This test can be used for manual inspection of memory usage.
+    // Increase frame count and observe that the test does not continuously allocate memory.
+    // Syncval should not track ranges of deleted resources.
+    const int frame_count = 100;
+
+    for (int i = 0; i < frame_count; i++) {
+        const uint32_t image_index = m_swapchain.AcquireNextImage(current_fence, kWaitTimeout);
+        current_fence.Wait(kWaitTimeout);
+        current_fence.Reset();
+
+        auto &dst_image = dst_images[image_index];
+        dst_image.destroy();
+        dst_image = vkt::Image(*m_device, width, height, 1, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+
+        VkBufferImageCopy region = {};
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.imageExtent = {width, height, 1};
+
+        VkImageMemoryBarrier2 layout_transition = vku::InitStructHelper();
+        layout_transition.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+        layout_transition.srcAccessMask = VK_ACCESS_2_NONE;
+        layout_transition.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+        layout_transition.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        layout_transition.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        layout_transition.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        layout_transition.image = dst_image;
+        layout_transition.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+        VkDependencyInfo dep_info = vku::InitStructHelper();
+        dep_info.imageMemoryBarrierCount = 1;
+        dep_info.pImageMemoryBarriers = &layout_transition;
+
+        auto &command_buffer = command_buffers[image_index];
+        command_buffer.Begin();
+        vk::CmdPipelineBarrier2(command_buffer, &dep_info);
+        vk::CmdCopyBufferToImage(command_buffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        command_buffer.End();
+
+        auto &submit_semaphore = submit_semaphores[image_index];
+        m_default_queue->Submit(command_buffer, vkt::Signal(submit_semaphore));
+        m_default_queue->Present(m_swapchain, image_index, submit_semaphore);
+        std::swap(acquire_fences[image_index], current_fence);
     }
     m_default_queue->Wait();
 }

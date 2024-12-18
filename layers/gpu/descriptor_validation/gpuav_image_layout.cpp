@@ -19,13 +19,16 @@
 #include "gpu/descriptor_validation/gpuav_image_layout.h"
 
 #include "gpu/core/gpuav.h"
-#include "gpu/resources/gpuav_subclasses.h"
+#include "gpu/resources/gpuav_state_trackers.h"
 #include "gpu/cmd_validation/gpuav_copy_buffer_to_image.h"
 #include "utils/image_layout_utils.h"
+#include "drawdispatch/drawdispatch_vuids.h"
+#include "error_message/error_strings.h"
+
 #include "state_tracker/render_pass_state.h"
 
-using LayoutRange = image_layout_map::ImageSubresourceLayoutMap::RangeType;
-using LayoutEntry = image_layout_map::ImageSubresourceLayoutMap::LayoutEntry;
+using LayoutRange = image_layout_map::ImageLayoutRegistry::RangeType;
+using LayoutEntry = image_layout_map::ImageLayoutRegistry::LayoutEntry;
 
 // Utility type for checking Image layouts
 struct LayoutUseCheckAndMessage {
@@ -62,7 +65,7 @@ struct LayoutUseCheckAndMessage {
 
 // Helper to update the Global or Overlay layout map
 struct GlobalLayoutUpdater {
-    bool update(VkImageLayout &dst, const image_layout_map::ImageSubresourceLayoutMap::LayoutEntry &src) const {
+    bool update(VkImageLayout &dst, const image_layout_map::ImageLayoutRegistry::LayoutEntry &src) const {
         if (src.current_layout != image_layout_map::kInvalidLayout && dst != src.current_layout) {
             dst = src.current_layout;
             return true;
@@ -70,7 +73,7 @@ struct GlobalLayoutUpdater {
         return false;
     }
 
-    std::optional<VkImageLayout> insert(const image_layout_map::ImageSubresourceLayoutMap::LayoutEntry &src) const {
+    std::optional<VkImageLayout> insert(const image_layout_map::ImageLayoutRegistry::LayoutEntry &src) const {
         std::optional<VkImageLayout> result;
         if (src.current_layout != image_layout_map::kInvalidLayout) {
             result.emplace(src.current_layout);
@@ -155,25 +158,30 @@ static bool VerifyImageLayoutRange(const Validator &gpuav, const vvl::CommandBuf
                                    VkImageAspectFlags aspect_mask, VkImageLayout explicit_layout, const RangeFactory &range_factory,
                                    const Location &loc, const char *mismatch_layout_vuid, bool *error) {
     bool skip = false;
-    const auto subresource_map = cb_state.GetImageSubresourceLayoutMap(image_state.VkHandle());
-    if (!subresource_map) {
+    const auto image_layout_registry = cb_state.GetImageLayoutRegistry(image_state.VkHandle());
+    if (!image_layout_registry) {
         return skip;
     }
-    const auto &layout_map = subresource_map->GetLayoutMap();
-    const auto *global_map = image_state.layout_range_map.get();
+
+    // TODO - things like ANGLE might have external images which have their layouts transitioned implicitly
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8940
+    if (image_state.external_memory_handle_types != 0) {
+        return skip;
+    }
+
+    const auto &layout_map = image_layout_registry->GetLayoutMap();
+    const auto *global_range_map = image_state.layout_range_map.get();
     GlobalImageLayoutRangeMap empty_map(1);
-    assert(global_map);
-    auto global_map_guard = global_map->ReadLock();
+    assert(global_range_map);
+    auto global_range_map_guard = global_range_map->ReadLock();
 
     auto pos = layout_map.begin();
     const auto end = layout_map.end();
-    sparse_container::parallel_iterator<const GlobalImageLayoutRangeMap> current_layout(empty_map, *global_map, pos->first.begin);
+    sparse_container::parallel_iterator<const GlobalImageLayoutRangeMap> current_layout(empty_map, *global_range_map,
+                                                                                        pos->first.begin);
     while (pos != end) {
-        VkImageLayout initial_layout = pos->second.initial_layout;
-        assert(initial_layout != image_layout_map::kInvalidLayout);
-        if (initial_layout == image_layout_map::kInvalidLayout) {
-            continue;
-        }
+        const VkImageLayout initial_layout = pos->second.initial_layout;
+        ASSERT_AND_CONTINUE(initial_layout != image_layout_map::kInvalidLayout);
 
         VkImageLayout image_layout = kInvalidLayout;
 
@@ -194,14 +202,14 @@ static bool VerifyImageLayoutRange(const Validator &gpuav, const vvl::CommandBuf
                 for (auto index : sparse_container::range_view<decltype(intersected_range)>(intersected_range)) {
                     const auto subresource = image_state.subresource_encoder.Decode(index);
                     const LogObjectList objlist(cb_state.Handle(), image_state.Handle());
-                    skip |= gpuav.LogError(
-                        "UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout", objlist, loc,
-                        "command buffer %s expects %s (subresource: aspectMask %s array layer %" PRIu32 ", mip level %" PRIu32
-                        ") "
-                        "to be in layout %s--instead, current layout is %s.",
-                        gpuav.FormatHandle(cb_state).c_str(), gpuav.FormatHandle(image_state).c_str(),
-                        string_VkImageAspectFlags(subresource.aspectMask).c_str(), subresource.arrayLayer, subresource.mipLevel,
-                        string_VkImageLayout(initial_layout), string_VkImageLayout(image_layout));
+                    // TODO - We need a way to map the action command to which caused this error
+                    const vvl::DrawDispatchVuid &vuid = GetDrawDispatchVuid(vvl::Func::vkCmdDraw);
+                    skip |= gpuav.LogError(vuid.image_layout_09600, objlist, loc,
+                                           "command buffer %s expects %s (subresource: %s) to be in layout %s--instead, current "
+                                           "layout is %s. (Detected from GPU-AV)",
+                                           gpuav.FormatHandle(cb_state).c_str(), gpuav.FormatHandle(image_state).c_str(),
+                                           string_VkImageSubresource(subresource).c_str(), string_VkImageLayout(initial_layout),
+                                           string_VkImageLayout(image_layout));
                 }
             }
         }
@@ -244,16 +252,12 @@ static void RecordCmdWaitEvents2(Validator &gpuav, VkCommandBuffer commandBuffer
 }
 
 void UpdateCmdBufImageLayouts(Validator &gpuav, const vvl::CommandBuffer &cb_state) {
-    for (const auto &layout_map_entry : cb_state.image_layout_map) {
-        const auto image = layout_map_entry.first;
-        const auto subres_map = layout_map_entry.second.map;
-        if (!subres_map) {
-            continue;
-        }
+    for (const auto &[image, image_layout_registry] : cb_state.image_layout_map) {
+        if (!image_layout_registry) continue;
         auto image_state = gpuav.Get<vvl::Image>(image);
-        if (image_state && image_state->GetId() == layout_map_entry.second.id) {
+        if (image_state && image_state->GetId() == image_layout_registry->GetImageId()) {
             auto guard = image_state->layout_range_map->WriteLock();
-            sparse_container::splice(*image_state->layout_range_map, subres_map->GetLayoutMap(), GlobalLayoutUpdater());
+            sparse_container::splice(*image_state->layout_range_map, image_layout_registry->GetLayoutMap(), GlobalLayoutUpdater());
         }
     }
 }
@@ -328,7 +332,7 @@ bool Validator::VerifyImageLayout(const vvl::CommandBuffer &cb_state, const vvl:
     if (disabled[image_layout_validation]) return false;
     // Possible the image state was destroyed and we didn't see it waiting for the queue submit callback
     if (!image_view_state.image_state) return false;
-    auto range_factory = [&image_view_state](const ImageSubresourceLayoutMap &map) {
+    auto range_factory = [&image_view_state](const ImageLayoutRegistry &registry) {
         return image_layout_map::RangeGenerator(image_view_state.range_generator);
     };
 
@@ -449,10 +453,10 @@ void Validator::PreCallRecordCmdClearAttachments(VkCommandBuffer commandBuffer, 
     // TODO???
 }
 
-void Validator::PostCallRecordTransitionImageLayoutEXT(VkDevice device, uint32_t transitionCount,
-                                                       const VkHostImageLayoutTransitionInfoEXT *pTransitions,
-                                                       const RecordObject &record_obj) {
-    BaseClass::PostCallRecordTransitionImageLayoutEXT(device, transitionCount, pTransitions, record_obj);
+void Validator::PostCallRecordTransitionImageLayout(VkDevice device, uint32_t transitionCount,
+                                                    const VkHostImageLayoutTransitionInfo *pTransitions,
+                                                    const RecordObject &record_obj) {
+    BaseClass::PostCallRecordTransitionImageLayout(device, transitionCount, pTransitions, record_obj);
 
     if (VK_SUCCESS != record_obj.result) return;
 
@@ -462,6 +466,12 @@ void Validator::PostCallRecordTransitionImageLayoutEXT(VkDevice device, uint32_t
         if (!image_state) continue;
         image_state->SetImageLayout(transition.subresourceRange, transition.newLayout);
     }
+}
+
+void Validator::PostCallRecordTransitionImageLayoutEXT(VkDevice device, uint32_t transitionCount,
+                                                       const VkHostImageLayoutTransitionInfoEXT *pTransitions,
+                                                       const RecordObject &record_obj) {
+    PostCallRecordTransitionImageLayout(device, transitionCount, pTransitions, record_obj);
 }
 
 void Validator::PreCallRecordCmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout,

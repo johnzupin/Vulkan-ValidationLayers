@@ -154,7 +154,7 @@ struct PresentedImage : public PresentedImageRecord {
     subresource_adapter::ImageRangeGenerator range_gen;
 
     PresentedImage() = default;
-    void UpdateMemoryAccess(SyncStageAccessIndex usage, ResourceUsageTag tag, AccessContext &access_context) const;
+    void UpdateMemoryAccess(SyncAccessIndex usage, ResourceUsageTag tag, AccessContext &access_context) const;
     PresentedImage(const SyncValidator &sync_state, std::shared_ptr<QueueBatchContext> batch, VkSwapchainKHR swapchain,
                    uint32_t image_index, uint32_t present_index, ResourceUsageTag present_tag_);
     // For non-previsously presented images..
@@ -206,16 +206,6 @@ class BatchAccessLog {
         std::shared_ptr<const CommandExecutionContext::AccessLog> log_;
         // label stack at the point when command buffer is submitted to the queue
         std::vector<std::string> initial_label_stack_;
-
-        // TODO: remove this field and use (*cbs_)[0]->GetLabelCommands() directly
-        // when timeline semaphore support is implemented.
-        //
-        // Until then, there is no guarantee command buffers stored in cbs_ are what
-        // they are supposed to be when timeline semaphores are used (they can be reused
-        // after wait on timeline semaphore). When this happens, validation might report
-        // false positives (which is okay for unsupported feeature), but label code can crash.
-        // Make a copy of label commands as a temporary protection measure.
-        std::vector<vvl::CommandBuffer::LabelCommand> label_commands_;
     };
 
     void Import(const BatchRecord &batch, const CommandBufferAccessContext &cb_access,
@@ -304,6 +294,7 @@ class QueueBatchContext : public CommandExecutionContext, public std::enable_sha
     void Trim();
 
     std::string FormatUsage(ResourceUsageTagEx tag_ex) const override;
+    void AddUsageRecordExtraProperties(ResourceUsageTag tag, ReportKeyValues &extra_properties) const override;
     AccessContext *GetCurrentAccessContext() override { return current_access_context_; }
     const AccessContext *GetCurrentAccessContext() const override { return current_access_context_; }
     SyncEventsContext *GetCurrentEventsContext() override { return &events_context_; }
@@ -343,10 +334,11 @@ class QueueBatchContext : public CommandExecutionContext, public std::enable_sha
     void ApplyPredicatedWait(Predicate &predicate);
     void ApplyTaggedWait(QueueId queue_id, ResourceUsageTag tag);
     void ApplyAcquireWait(const AcquiredImage &acquired);
+    void OnResourceDestroyed(const ResourceAccessRange &resource_range);
 
-    void BeginRenderPassReplaySetup(ReplayState &replay, const SyncOpBeginRenderPass &begin_op) override;
-    void NextSubpassReplaySetup(ReplayState &replay) override;
-    void EndRenderPassReplayCleanup(ReplayState &replay) override;
+    void BeginRenderPassReplaySetup(ReplayState &replay, const SyncOpBeginRenderPass &begin_op);
+    void NextSubpassReplaySetup(ReplayState &replay);
+    void EndRenderPassReplayCleanup(ReplayState &replay);
 
     [[nodiscard]] std::vector<ConstPtr> RegisterAsyncContexts(const std::vector<ConstPtr> &batches_resolved);
     void ResolveLastBatch(const QueueBatchContext::ConstPtr &last_batch);

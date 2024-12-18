@@ -18,27 +18,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL EmptyDebugReportCallback(VkDebugReportFlagsEXT me
                                                         size_t, int32_t, const char *, const char *message, void *user_data) {
     return VK_FALSE;
 }
-struct Instance {
-    VkInstance handle = VK_NULL_HANDLE;
-    ~Instance() {
-        if (handle != VK_NULL_HANDLE) {
-            vk::DestroyInstance(handle, nullptr);
-        }
-    }
-    operator VkInstance() const { return handle; }
-};
-
-struct Surface {
-    VkInstance instance = VK_NULL_HANDLE;
-    VkSurfaceKHR handle = VK_NULL_HANDLE;
-    Surface(VkInstance instance) : instance(instance) {}
-    ~Surface() {
-        if (handle != VK_NULL_HANDLE) {
-            vk::DestroySurfaceKHR(instance, handle, nullptr);
-        }
-    }
-    operator VkSurfaceKHR() const { return handle; }
-};
 }  // namespace
 
 class NegativeParent : public ParentTest {};
@@ -47,16 +26,16 @@ TEST_F(NegativeParent, FillBuffer) {
     TEST_DESCRIPTION("Test VUID-*-commonparent checks not sharing the same Device");
 
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     vkt::Buffer buffer(*m_second_device, 4096, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_errorMonitor->SetDesiredError("VUID-vkCmdFillBuffer-commonparent");
     vk::CmdFillBuffer(m_command_buffer.handle(), buffer, 0, VK_WHOLE_SIZE, 0);
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeParent, BindBuffer) {
@@ -64,7 +43,7 @@ TEST_F(NegativeParent, BindBuffer) {
 
     AddRequiredExtensions(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     VkBufferCreateInfo buffer_ci = vku::InitStructHelper();
@@ -80,7 +59,7 @@ TEST_F(NegativeParent, BindBuffer) {
 
     VkMemoryAllocateInfo mem_alloc = vku::InitStructHelper();
     mem_alloc.allocationSize = mem_reqs.size;
-    m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &mem_alloc, 0);
+    m_device->Physical().SetMemoryType(mem_reqs.memoryTypeBits, &mem_alloc, 0);
     vkt::DeviceMemory memory(*m_second_device, mem_alloc);
 
     VkBindBufferMemoryInfo bind_buffer_info = vku::InitStructHelper();
@@ -100,7 +79,7 @@ TEST_F(NegativeParent, DISABLED_BindImage) {
 
     AddRequiredExtensions(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -114,7 +93,7 @@ TEST_F(NegativeParent, DISABLED_BindImage) {
 
     VkMemoryAllocateInfo mem_alloc = vku::InitStructHelper();
     mem_alloc.allocationSize = mem_reqs.size;
-    m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &mem_alloc, 0);
+    m_device->Physical().SetMemoryType(mem_reqs.memoryTypeBits, &mem_alloc, 0);
     vkt::DeviceMemory memory(*m_second_device, mem_alloc);
 
     VkBindImageMemoryInfo bind_image_info = vku::InitStructHelper();
@@ -131,7 +110,7 @@ TEST_F(NegativeParent, ImageView) {
     TEST_DESCRIPTION("Test VUID-*-commonparent checks not sharing the same Device");
 
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -156,7 +135,7 @@ TEST_F(NegativeParent, BindPipeline) {
     TEST_DESCRIPTION("Test binding pipeline from another device");
 
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     VkPipelineLayoutCreateInfo pipeline_layout_ci = vku::InitStructHelper();
@@ -171,16 +150,16 @@ TEST_F(NegativeParent, BindPipeline) {
     pipeline_ci.stage = cs.GetStageCreateInfo();
     vkt::Pipeline pipeline(*m_second_device, pipeline_ci);
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindPipeline-commonparent");
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.handle());
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeParent, PipelineShaderStageCreateInfo) {
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     VkPipelineLayoutCreateInfo pipeline_layout_ci = vku::InitStructHelper();
@@ -203,7 +182,7 @@ TEST_F(NegativeParent, RenderPassFramebuffer) {
 
     RETURN_IF_SKIP(Init());
     InitRenderTarget();  // Renderpass created on first device
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-commonparent");
@@ -220,7 +199,7 @@ TEST_F(NegativeParent, RenderPassImagelessFramebuffer) {
     RETURN_IF_SKIP(InitState(nullptr, &imageless_framebuffer));
 
     InitRenderTarget();
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -256,11 +235,11 @@ TEST_F(NegativeParent, RenderPassImagelessFramebuffer) {
     m_renderPassBeginInfo.pNext = &render_pass_attachment_bi;
     m_renderPassBeginInfo.framebuffer = fb.handle();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_errorMonitor->SetDesiredError("VUID-VkRenderPassBeginInfo-framebuffer-02780");
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeParent, RenderPassCommandBuffer) {
@@ -268,25 +247,25 @@ TEST_F(NegativeParent, RenderPassCommandBuffer) {
     SetTargetApiVersion(VK_API_VERSION_1_2);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();  // Renderpass created on first device
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     vkt::CommandPool command_pool(*m_second_device, m_device->graphics_queue_node_index_, 0);
     vkt::CommandBuffer command_buffer(*m_second_device, command_pool);
 
-    command_buffer.begin();
+    command_buffer.Begin();
     // one for each the framebuffer and renderpass being different from the CommandBuffer
     m_errorMonitor->SetDesiredError("VUID-VkRenderPassBeginInfo-commonparent");
     m_errorMonitor->SetDesiredError("VUID-VkRenderPassBeginInfo-commonparent");
-    auto subpass_begin_info = vku::InitStruct<VkSubpassBeginInfoKHR>(nullptr, VK_SUBPASS_CONTENTS_INLINE);
+    auto subpass_begin_info = vku::InitStruct<VkSubpassBeginInfo>(nullptr, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdBeginRenderPass2(command_buffer.handle(), &m_renderPassBeginInfo, &subpass_begin_info);
     m_errorMonitor->VerifyFound();
-    command_buffer.end();
+    command_buffer.End();
 }
 
 TEST_F(NegativeParent, FreeCommandBuffer) {
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     vkt::CommandPool command_pool_1(*m_device, m_device->graphics_queue_node_index_, 0);
@@ -308,19 +287,17 @@ TEST_F(NegativeParent, Instance_PhysicalDeviceAndSurface) {
     TEST_DESCRIPTION("Surface from a different instance in vkGetPhysicalDeviceSurfaceSupportKHR");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    const auto instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     SurfaceContext surface_context;
-    Surface instance2_surface(instance2);
-    if (CreateSurface(surface_context, instance2_surface.handle, instance2) != VK_SUCCESS) {
+    vkt::Surface instance2_surface;
+    if (CreateSurface(surface_context, instance2_surface, instance2.Handle()) != VK_SUCCESS) {
         GTEST_SKIP() << "Cannot create required surface from 2nd instance";
     }
 
     VkBool32 supported = VK_FALSE;
     m_errorMonitor->SetDesiredError("VUID-vkGetPhysicalDeviceSurfaceSupportKHR-commonparent");
-    vk::GetPhysicalDeviceSurfaceSupportKHR(gpu(), m_device->graphics_queue_node_index_, instance2_surface, &supported);
+    vk::GetPhysicalDeviceSurfaceSupportKHR(Gpu(), m_device->graphics_queue_node_index_, instance2_surface.Handle(), &supported);
     m_errorMonitor->VerifyFound();
 }
 
@@ -328,19 +305,17 @@ TEST_F(NegativeParent, Instance_DeviceAndSurface) {
     TEST_DESCRIPTION("Surface from a different instance in vkGetDeviceGroupSurfacePresentModesKHR");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    const auto instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     SurfaceContext surface_context;
-    Surface instance2_surface(instance2);
-    if (CreateSurface(surface_context, instance2_surface.handle, instance2) != VK_SUCCESS) {
+    vkt::Surface instance2_surface;
+    if (CreateSurface(surface_context, instance2_surface, instance2.Handle()) != VK_SUCCESS) {
         GTEST_SKIP() << "Cannot create required surface from 2nd instance";
     }
 
     VkDeviceGroupPresentModeFlagsKHR flags = 0;
     m_errorMonitor->SetDesiredError("VUID-vkGetDeviceGroupSurfacePresentModesKHR-commonparent");
-    vk::GetDeviceGroupSurfacePresentModesKHR(m_device->handle(), instance2_surface, &flags);
+    vk::GetDeviceGroupSurfacePresentModesKHR(m_device->handle(), instance2_surface.Handle(), &flags);
     m_errorMonitor->VerifyFound();
 }
 
@@ -351,18 +326,16 @@ TEST_F(NegativeParent, Instance_Surface) {
     RETURN_IF_SKIP(InitSurface());
     InitSwapchainInfo();
 
-    const auto instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     SurfaceContext surface_context;
-    Surface instance2_surface(instance2);
-    if (CreateSurface(surface_context, instance2_surface.handle, instance2) != VK_SUCCESS) {
+    vkt::Surface instance2_surface;
+    if (CreateSurface(surface_context, instance2_surface, instance2.Handle()) != VK_SUCCESS) {
         GTEST_SKIP() << "Cannot create required surface from 2nd instance";
     }
 
     auto swapchain_ci = vku::InitStruct<VkSwapchainCreateInfoKHR>();
-    swapchain_ci.surface = instance2_surface;
+    swapchain_ci.surface = instance2_surface.Handle();
     swapchain_ci.minImageCount = m_surface_capabilities.minImageCount;
     swapchain_ci.imageFormat = m_surface_formats[0].format;
     swapchain_ci.imageColorSpace = m_surface_formats[0].colorSpace;
@@ -377,9 +350,8 @@ TEST_F(NegativeParent, Instance_Surface) {
     swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
 
     // surface from a different instance
-    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     m_errorMonitor->SetDesiredError("VUID-VkSwapchainCreateInfoKHR-commonparent");
-    vk::CreateSwapchainKHR(device(), &swapchain_ci, nullptr, &swapchain);
+    vkt::Swapchain swapchain(*m_device, swapchain_ci);
     m_errorMonitor->VerifyFound();
 }
 
@@ -390,29 +362,27 @@ TEST_F(NegativeParent, Device_OldSwapchain) {
     RETURN_IF_SKIP(InitSurface());
     InitSwapchainInfo();
 
-    const auto instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     SurfaceContext surface_context;
-    Surface instance2_surface(instance2);
-    if (CreateSurface(surface_context, instance2_surface.handle, instance2) != VK_SUCCESS) {
+    vkt::Surface instance2_surface;
+    if (CreateSurface(surface_context, instance2_surface, instance2.Handle()) != VK_SUCCESS) {
         GTEST_SKIP() << "Cannot create required surface from 2nd instance";
     }
 
     VkPhysicalDevice instance2_physical_device = VK_NULL_HANDLE;
     {
         uint32_t gpu_count = 0;
-        vk::EnumeratePhysicalDevices(instance2, &gpu_count, nullptr);
+        vk::EnumeratePhysicalDevices(instance2.Handle(), &gpu_count, nullptr);
         assert(gpu_count > 0);
         std::vector<VkPhysicalDevice> physical_devices(gpu_count);
-        vk::EnumeratePhysicalDevices(instance2, &gpu_count, physical_devices.data());
+        vk::EnumeratePhysicalDevices(instance2.Handle(), &gpu_count, physical_devices.data());
         instance2_physical_device = physical_devices[0];
     }
     vkt::Device instance2_device(instance2_physical_device, m_device_extension_names);
 
     auto swapchain_ci = vku::InitStruct<VkSwapchainCreateInfoKHR>();
-    swapchain_ci.surface = instance2_surface;
+    swapchain_ci.surface = instance2_surface.Handle();
     swapchain_ci.minImageCount = m_surface_capabilities.minImageCount;
     swapchain_ci.imageFormat = m_surface_formats[0].format;
     swapchain_ci.imageColorSpace = m_surface_formats[0].colorSpace;
@@ -426,36 +396,31 @@ TEST_F(NegativeParent, Device_OldSwapchain) {
     swapchain_ci.clipped = VK_FALSE;
     swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
 
-    VkSwapchainKHR other_device_swapchain = VK_NULL_HANDLE;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateSwapchainKHR(instance2_device.handle(), &swapchain_ci, nullptr, &other_device_swapchain));
+    vkt::Swapchain other_device_swapchain(instance2_device, swapchain_ci);
 
     // oldSwapchain from a different device
-    swapchain_ci.surface = m_surface;
+    swapchain_ci.surface = m_surface.Handle();
     swapchain_ci.oldSwapchain = other_device_swapchain;
-    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     m_errorMonitor->SetDesiredError("VUID-VkSwapchainCreateInfoKHR-commonparent");
-    vk::CreateSwapchainKHR(device(), &swapchain_ci, nullptr, &swapchain);
+    vkt::Swapchain swapchain(*m_device, swapchain_ci);
     m_errorMonitor->VerifyFound();
-    vk::DestroySwapchainKHR(instance2_device.handle(), other_device_swapchain, nullptr);
 }
 
 TEST_F(NegativeParent, Instance_Surface_2) {
     TEST_DESCRIPTION("Surface from a different instance in vkDestroySurfaceKHR");
     AddSurfaceExtension();
     RETURN_IF_SKIP(Init());
-    const auto instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     SurfaceContext surface_context;
-    Surface instance2_surface(instance2);
-    if (CreateSurface(surface_context, instance2_surface.handle, instance2) != VK_SUCCESS) {
+    vkt::Surface instance2_surface;
+    if (CreateSurface(surface_context, instance2_surface, instance2.Handle()) != VK_SUCCESS) {
         GTEST_SKIP() << "Cannot create required surface from 2nd instance";
     }
 
     // surface from a different instance
     m_errorMonitor->SetDesiredError("VUID-vkDestroySurfaceKHR-surface-parent");
-    vk::DestroySurfaceKHR(instance(), instance2_surface, nullptr);
+    vk::DestroySurfaceKHR(instance(), instance2_surface.Handle(), nullptr);
     m_errorMonitor->VerifyFound();
 }
 
@@ -463,9 +428,7 @@ TEST_F(NegativeParent, Instance_DebugUtilsMessenger) {
     TEST_DESCRIPTION("VkDebugUtilsMessengerEXT from a different instance in vkDestroyDebugUtilsMessengerEXT");
     AddRequiredExtensions(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    const VkInstanceCreateInfo instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     auto empty_callback = [](const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, DebugUtilsLabelCheckData *data) {};
     DebugUtilsLabelCheckData callback_data{};
@@ -478,37 +441,35 @@ TEST_F(NegativeParent, Instance_DebugUtilsMessenger) {
         messenger_ci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
         messenger_ci.pfnUserCallback = DebugUtilsCallback;
         messenger_ci.pUserData = &callback_data;
-        ASSERT_EQ(VK_SUCCESS, vk::CreateDebugUtilsMessengerEXT(instance2, &messenger_ci, nullptr, &messenger));
+        ASSERT_EQ(VK_SUCCESS, vk::CreateDebugUtilsMessengerEXT(instance2.Handle(), &messenger_ci, nullptr, &messenger));
     }
 
     // debug utils messenger from a different instance
     m_errorMonitor->SetDesiredError("VUID-vkDestroyDebugUtilsMessengerEXT-messenger-parent");
     vk::DestroyDebugUtilsMessengerEXT(instance(), messenger, nullptr);
     m_errorMonitor->VerifyFound();
-    vk::DestroyDebugUtilsMessengerEXT(instance2, messenger, nullptr);
+    vk::DestroyDebugUtilsMessengerEXT(instance2.Handle(), messenger, nullptr);
 }
 
 TEST_F(NegativeParent, Instance_DebugReportCallback) {
     TEST_DESCRIPTION("VkDebugReportCallbackEXT from a different instance in vkDestroyDebugReportCallbackEXT");
     AddRequiredExtensions(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    const auto instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     VkDebugReportCallbackEXT callback = VK_NULL_HANDLE;
     {
         auto callback_ci = vku::InitStruct<VkDebugReportCallbackCreateInfoEXT>();
         callback_ci.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT;
         callback_ci.pfnCallback = &EmptyDebugReportCallback;
-        ASSERT_EQ(VK_SUCCESS, vk::CreateDebugReportCallbackEXT(instance2, &callback_ci, nullptr, &callback));
+        ASSERT_EQ(VK_SUCCESS, vk::CreateDebugReportCallbackEXT(instance2.Handle(), &callback_ci, nullptr, &callback));
     }
 
     // debug report callback from a different instance
     m_errorMonitor->SetDesiredError("VUID-vkDestroyDebugReportCallbackEXT-callback-parent");
     vk::DestroyDebugReportCallbackEXT(instance(), callback, nullptr);
     m_errorMonitor->VerifyFound();
-    vk::DestroyDebugReportCallbackEXT(instance2, callback, nullptr);
+    vk::DestroyDebugReportCallbackEXT(instance2.Handle(), callback, nullptr);
 }
 
 TEST_F(NegativeParent, PhysicalDevice_Display) {
@@ -516,17 +477,15 @@ TEST_F(NegativeParent, PhysicalDevice_Display) {
     AddRequiredExtensions(VK_KHR_DISPLAY_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
-    const VkInstanceCreateInfo instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     VkPhysicalDevice instance2_gpu = VK_NULL_HANDLE;
     {
         uint32_t gpu_count = 0;
-        vk::EnumeratePhysicalDevices(instance2, &gpu_count, nullptr);
+        vk::EnumeratePhysicalDevices(instance2.Handle(), &gpu_count, nullptr);
         ASSERT_GT(gpu_count, 0u);
         std::vector<VkPhysicalDevice> physical_devices(gpu_count);
-        vk::EnumeratePhysicalDevices(instance2, &gpu_count, physical_devices.data());
+        vk::EnumeratePhysicalDevices(instance2.Handle(), &gpu_count, physical_devices.data());
         instance2_gpu = physical_devices[0];
     }
     VkDisplayKHR display = VK_NULL_HANDLE;
@@ -543,7 +502,7 @@ TEST_F(NegativeParent, PhysicalDevice_Display) {
     // display from a different physical device
     uint32_t mode_count = 0;
     m_errorMonitor->SetDesiredError("VUID-vkGetDisplayModePropertiesKHR-display-parent");
-    vk::GetDisplayModePropertiesKHR(gpu(), display, &mode_count, nullptr);
+    vk::GetDisplayModePropertiesKHR(Gpu(), display, &mode_count, nullptr);
     m_errorMonitor->VerifyFound();
 }
 
@@ -552,17 +511,15 @@ TEST_F(NegativeParent, PhysicalDevice_RegisterDisplayEvent) {
     AddRequiredExtensions(VK_EXT_DISPLAY_CONTROL_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
-    const VkInstanceCreateInfo instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     VkPhysicalDevice instance2_gpu = VK_NULL_HANDLE;
     {
         uint32_t gpu_count = 0;
-        vk::EnumeratePhysicalDevices(instance2, &gpu_count, nullptr);
+        vk::EnumeratePhysicalDevices(instance2.Handle(), &gpu_count, nullptr);
         ASSERT_GT(gpu_count, 0u);
         std::vector<VkPhysicalDevice> physical_devices(gpu_count);
-        vk::EnumeratePhysicalDevices(instance2, &gpu_count, physical_devices.data());
+        vk::EnumeratePhysicalDevices(instance2.Handle(), &gpu_count, physical_devices.data());
         instance2_gpu = physical_devices[0];
     }
     VkDisplayKHR display = VK_NULL_HANDLE;
@@ -591,17 +548,15 @@ TEST_F(NegativeParent, PhysicalDevice_DisplayMode) {
     AddRequiredExtensions(VK_KHR_DISPLAY_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
-    const VkInstanceCreateInfo instance_create_info = GetInstanceCreateInfo();
-    Instance instance2;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateInstance(&instance_create_info, nullptr, &instance2.handle));
+    vkt::Instance instance2(GetInstanceCreateInfo());
 
     VkPhysicalDevice instance2_gpu = VK_NULL_HANDLE;
     {
         uint32_t gpu_count = 0;
-        vk::EnumeratePhysicalDevices(instance2, &gpu_count, nullptr);
+        vk::EnumeratePhysicalDevices(instance2.Handle(), &gpu_count, nullptr);
         ASSERT_GT(gpu_count, 0u);
         std::vector<VkPhysicalDevice> physical_devices(gpu_count);
-        vk::EnumeratePhysicalDevices(instance2, &gpu_count, physical_devices.data());
+        vk::EnumeratePhysicalDevices(instance2.Handle(), &gpu_count, physical_devices.data());
         instance2_gpu = physical_devices[0];
     }
     VkDisplayKHR display = VK_NULL_HANDLE;
@@ -631,14 +586,13 @@ TEST_F(NegativeParent, PhysicalDevice_DisplayMode) {
     // display mode from a different physical device
     VkDisplayPlaneCapabilitiesKHR plane_capabilities{};
     m_errorMonitor->SetDesiredError("VUID-vkGetDisplayPlaneCapabilitiesKHR-mode-parent");
-    vk::GetDisplayPlaneCapabilitiesKHR(gpu(), display_mode, 0, &plane_capabilities);
+    vk::GetDisplayPlaneCapabilitiesKHR(Gpu(), display_mode, 0, &plane_capabilities);
     m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeParent, PipelineExecutableInfo) {
     TEST_DESCRIPTION("Try making calls without pipelineExecutableInfo.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME);
     RETURN_IF_SKIP(InitFramework());
 
@@ -677,7 +631,7 @@ TEST_F(NegativeParent, UpdateDescriptorSetsBuffer) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     vkt::Buffer buffer(*m_second_device, 4096, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -696,7 +650,7 @@ TEST_F(NegativeParent, UpdateDescriptorSetsImage) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     vkt::Image image(*m_second_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -716,7 +670,7 @@ TEST_F(NegativeParent, DescriptorSetLayout) {
     TEST_DESCRIPTION("Create pipeline layout from a descriptor set layout that was created on a different device");
     RETURN_IF_SKIP(Init());
 
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     OneOffDescriptorSet descriptor_set(m_device,
@@ -735,14 +689,14 @@ TEST_F(NegativeParent, DescriptorSetLayout) {
 
 TEST_F(NegativeParent, FlushInvalidateMemory) {
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     VkMemoryAllocateInfo alloc_info = vku::InitStructHelper();
     alloc_info.memoryTypeIndex = 0;
     alloc_info.allocationSize = 64;
 
-    bool pass = m_device->phy().SetMemoryType(0xFFFFFFFF, &alloc_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    bool pass = m_device->Physical().SetMemoryType(0xFFFFFFFF, &alloc_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     if (!pass) {
         GTEST_SKIP() << "Host Visible memory not found";
     }
@@ -773,7 +727,7 @@ TEST_F(NegativeParent, GetDescriptorSetLayoutSupport) {
     AddRequiredExtensions(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::descriptorBuffer);
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
@@ -788,7 +742,7 @@ TEST_F(NegativeParent, GetDescriptorSetLayoutSupport) {
 
 TEST_F(NegativeParent, BufferView) {
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     vkt::Buffer buffer(*m_second_device, 64, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -803,16 +757,16 @@ TEST_F(NegativeParent, BufferView) {
 
 TEST_F(NegativeParent, CmdPipelineBarrier) {
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     auto image_ci = vkt::Image::ImageCreateInfo2D(256, 256, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::Image image(*m_second_device, image_ci, vkt::set_layout);
 
-    VkImageSubresource image_sub = vkt::Image::subresource(VK_IMAGE_ASPECT_COLOR_BIT, 0, 0);
-    VkImageSubresourceRange image_sub_range = vkt::Image::subresource_range(image_sub);
-    VkImageMemoryBarrier image_barriers[] = {image.image_memory_barrier(0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image_sub_range)};
+    VkImageSubresource image_sub = vkt::Image::Subresource(VK_IMAGE_ASPECT_COLOR_BIT, 0, 0);
+    VkImageSubresourceRange image_sub_range = vkt::Image::SubresourceRange(image_sub);
+    VkImageMemoryBarrier image_barriers[] = {image.ImageMemoryBarrier(0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                                                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image_sub_range)};
 
     m_errorMonitor->SetDesiredError("UNASSIGNED-vkCmdPipelineBarrier-commandBuffer-commonparent");
     vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
@@ -824,7 +778,7 @@ TEST_F(NegativeParent, CmdPipelineBarrier2) {
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredFeature(vkt::Feature::synchronization2);
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     vkt::Buffer buffer(*m_second_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
@@ -842,18 +796,18 @@ TEST_F(NegativeParent, CmdPipelineBarrier2) {
     buffer_dependency.bufferMemoryBarrierCount = 1;
     buffer_dependency.pBufferMemoryBarriers = &buffer_barrier;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_errorMonitor->SetDesiredError("UNASSIGNED-vkCmdPipelineBarrier2-commandBuffer-commonparent");
     vk::CmdPipelineBarrier2(m_command_buffer.handle(), &buffer_dependency);
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeParent, ShaderObjectDescriptorSetLayout) {
     AddRequiredExtensions(VK_EXT_SHADER_OBJECT_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::shaderObject);
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     OneOffDescriptorSet descriptor_set(m_second_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}});
@@ -868,21 +822,21 @@ TEST_F(NegativeParent, ShaderObjectDescriptorSetLayout) {
 TEST_F(NegativeParent, MapMemory2) {
     AddRequiredExtensions(VK_KHR_MAP_MEMORY_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
-    auto features = m_device->phy().features();
+    auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
     VkMemoryAllocateInfo memory_info = vku::InitStructHelper();
     memory_info.allocationSize = 64;
-    m_device->phy().SetMemoryType(vvl::kU32Max, &memory_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    m_device->Physical().SetMemoryType(vvl::kU32Max, &memory_info, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     vkt::DeviceMemory memory(*m_second_device, memory_info);
 
-    VkMemoryMapInfoKHR map_info = vku::InitStructHelper();
+    VkMemoryMapInfo map_info = vku::InitStructHelper();
     map_info.memory = memory;
     map_info.offset = 0;
     map_info.size = memory_info.allocationSize;
 
     uint32_t *pData = nullptr;
-    m_errorMonitor->SetDesiredError("UNASSIGNED-VkMemoryMapInfoKHR-memory-parent");
+    m_errorMonitor->SetDesiredError("UNASSIGNED-VkMemoryMapInfo-memory-parent");
     vk::MapMemory2KHR(device(), &map_info, (void **)&pData);
     m_errorMonitor->VerifyFound();
 }

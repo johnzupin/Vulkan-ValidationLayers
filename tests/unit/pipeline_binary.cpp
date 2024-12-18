@@ -17,52 +17,6 @@
 
 class NegativePipelineBinary : public VkLayerTest {};
 
-TEST_F(NegativePipelineBinary, CacheControl) {
-    TEST_DESCRIPTION("Invalidly trying to disable the pipeline binary internal cache");
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_PIPELINE_BINARY_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::pipelineBinaries);
-
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDevicePipelineBinaryPropertiesKHR pipeline_binary_properties = vku::InitStructHelper();
-    GetPhysicalDeviceProperties2(pipeline_binary_properties);
-
-    if (pipeline_binary_properties.pipelineBinaryInternalCacheControl) {
-        GTEST_SKIP() << "pipelineBinaryInternalCacheControl is VK_TRUE";
-    }
-
-    const auto q_props = vkt::PhysicalDevice(gpu()).queue_properties_;
-    ASSERT_TRUE(q_props.size() > 0);
-    ASSERT_TRUE(q_props[0].queueCount > 0);
-
-    const float q_priority[] = {1.0f};
-    VkDeviceQueueCreateInfo queue_ci = vku::InitStructHelper();
-    queue_ci.queueFamilyIndex = 0;
-    queue_ci.queueCount = 1;
-    queue_ci.pQueuePriorities = q_priority;
-
-    VkDeviceCreateInfo device_ci = vku::InitStructHelper();
-    device_ci.queueCreateInfoCount = 1;
-    device_ci.pQueueCreateInfos = &queue_ci;
-
-    device_ci.enabledExtensionCount = m_device_extension_names.size();
-    device_ci.ppEnabledExtensionNames = m_device_extension_names.data();
-
-    VkDevicePipelineBinaryInternalCacheControlKHR pbicc = vku::InitStructHelper();
-    VkPhysicalDeviceFeatures2KHR features2 = vku::InitStructHelper(&pbicc);
-    device_ci.pNext = &features2;
-
-    pbicc.disableInternalCache = true;
-
-    VkDevice testDevice;
-
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit,
-                                         "VUID-VkDevicePipelineBinaryInternalCacheControlKHR-disableInternalCache-09602");
-    vk::CreateDevice(gpu(), &device_ci, nullptr, &testDevice);
-    m_errorMonitor->VerifyFound();
-}
-
 TEST_F(NegativePipelineBinary, GetPipelineKey) {
     TEST_DESCRIPTION("Try getting the pipeline key with invalid input structures");
     SetTargetApiVersion(VK_API_VERSION_1_1);
@@ -138,7 +92,7 @@ TEST_F(NegativePipelineBinary, ReleaseCapturedDataAllocator) {
     compute_create_info.stage = cs.GetStageCreateInfo();
     compute_create_info.layout = pipeline_layout.handle();
 
-    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
     flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
     compute_create_info.pNext = &flags2;
 
@@ -186,7 +140,7 @@ TEST_F(NegativePipelineBinary, ReleaseCapturedData) {
         m_errorMonitor->VerifyFound();
     }
 
-    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
     flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
 
     CreateComputePipelineHelper pipe2(*this, &flags2);
@@ -213,7 +167,7 @@ TEST_F(NegativePipelineBinary, Destroy) {
     AddRequiredFeature(vkt::Feature::pipelineBinaries);
     RETURN_IF_SKIP(Init());
 
-    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
     flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
 
     CreateComputePipelineHelper pipe(*this, &flags2);
@@ -273,7 +227,7 @@ TEST_F(NegativePipelineBinary, ComputePipeline) {
     ASSERT_EQ(VK_SUCCESS, err);
 
     {
-        VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+        VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
         flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
         m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkCreateComputePipelines-pNext-09617");
         CreateComputePipelineHelper pipe(*this, &flags2);
@@ -312,7 +266,7 @@ TEST_F(NegativePipelineBinary, ComputePipeline) {
     }
 
     {
-        VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+        VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
         flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
 
         CreateComputePipelineHelper pipe(*this, &flags2);
@@ -344,7 +298,7 @@ TEST_F(NegativePipelineBinary, ComputePipeline) {
         feedback.flags = VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT |
                          VK_PIPELINE_CREATION_FEEDBACK_BASE_PIPELINE_ACCELERATION_BIT;
 
-        flags2.flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT;
+        flags2.flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
         flags2.pNext = &binary_info;
         binary_info.pNext = &feedback_create_info;
 
@@ -378,7 +332,7 @@ TEST_F(NegativePipelineBinary, GraphicsPipeline) {
     VkResult err = vk::CreatePipelineCache(device(), &cache_create_info, nullptr, &pipeline_cache);
     ASSERT_EQ(VK_SUCCESS, err);
 
-    m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
+    m_depth_stencil_fmt = FindSupportedDepthStencilFormat(Gpu());
 
     m_depthStencil->Init(*m_device, m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
     m_depthStencil->SetLayout(VK_IMAGE_LAYOUT_GENERAL);
@@ -438,7 +392,7 @@ TEST_F(NegativePipelineBinary, GraphicsPipeline) {
                                                                0};
 
     {
-        VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+        VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
         flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
         graphics_pipeline_create_info.pNext = &flags2;
 
@@ -484,7 +438,7 @@ TEST_F(NegativePipelineBinary, GraphicsPipeline) {
     }
 
     {
-        VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+        VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
         flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
         graphics_pipeline_create_info.pNext = &flags2;
 
@@ -519,7 +473,7 @@ TEST_F(NegativePipelineBinary, GraphicsPipeline) {
         feedback.flags = VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT |
                          VK_PIPELINE_CREATION_FEEDBACK_BASE_PIPELINE_ACCELERATION_BIT;
 
-        flags2.flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT;
+        flags2.flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
         flags2.pNext = &binary_info;
         binary_info.pNext = &feedback_create_info;
 
@@ -576,7 +530,7 @@ TEST_F(NegativePipelineBinary, Creation2) {
     AddRequiredFeature(vkt::Feature::pipelineBinaries);
     RETURN_IF_SKIP(Init());
 
-    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
     flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
 
     CreateComputePipelineHelper pipe(*this, &flags2);
@@ -627,7 +581,7 @@ TEST_F(NegativePipelineBinary, Creation3) {
     compute_create_info.stage = cs.GetStageCreateInfo();
     compute_create_info.layout = pipeline_layout.handle();
 
-    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
     flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
     compute_create_info.pNext = &flags2;
 
@@ -655,7 +609,7 @@ TEST_F(NegativePipelineBinary, Creation4) {
     AddRequiredFeature(vkt::Feature::pipelineBinaries);
     RETURN_IF_SKIP(Init());
 
-    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
     flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
 
     CreateComputePipelineHelper pipe(*this, &flags2);
@@ -705,7 +659,7 @@ TEST_F(NegativePipelineBinary, Creation5) {
         GTEST_SKIP() << "pipelineBinaryInternalCache is VK_FALSE";
     }
 
-    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
     flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
 
     CreateComputePipelineHelper pipe(*this, &flags2);
@@ -775,7 +729,7 @@ TEST_F(NegativePipelineBinary, CreateCacheControl) {
     compute_create_info.stage = cs.GetStageCreateInfo();
     compute_create_info.layout = pipeline_layout.handle();
 
-    VkPipelineCreateFlags2CreateInfoKHR flags2 = vku::InitStructHelper();
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
     flags2.flags = VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR;
     compute_create_info.pNext = &flags2;
 
@@ -791,5 +745,35 @@ TEST_F(NegativePipelineBinary, CreateCacheControl) {
 
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineBinaryCreateInfoKHR-device-09610");
     vk::CreatePipelineBinariesKHR(device(), &binary_create_info, nullptr, &handles_info);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativePipelineBinary, InvalidPNext) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_PIPELINE_BINARY_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::pipelineBinaries);
+    RETURN_IF_SKIP(Init());
+
+    VkShaderObj cs(this, kMinimalShaderGlsl, VK_SHADER_STAGE_COMPUTE_BIT);
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings(0);
+    const vkt::DescriptorSetLayout pipeline_dsl(*m_device, bindings);
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&pipeline_dsl});
+
+    VkComputePipelineCreateInfo compute_create_info = vku::InitStructHelper();
+    compute_create_info.stage = cs.GetStageCreateInfo();
+    compute_create_info.layout = pipeline_layout.handle();
+
+    VkPipelineBinaryInfoKHR pipeline_binary_info = vku::InitStructHelper();
+    pipeline_binary_info.binaryCount = 0;
+
+    compute_create_info.pNext = &pipeline_binary_info;
+
+    VkPipelineCreateInfoKHR pipeline_create_info = vku::InitStructHelper(&compute_create_info);
+
+    VkPipelineBinaryKeyKHR pipeline_key = vku::InitStructHelper(&pipeline_create_info);
+
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkPipelineBinaryKeyKHR-pNext-pNext");
+    vk::GetPipelineKeyKHR(device(), &pipeline_create_info, &pipeline_key);
     m_errorMonitor->VerifyFound();
 }

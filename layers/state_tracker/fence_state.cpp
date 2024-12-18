@@ -34,6 +34,24 @@ vvl::Fence::Fence(ValidationStateTracker &dev, VkFence handle, const VkFenceCrea
       waiter_(completed_.get_future()),
       dev_data_(dev) {}
 
+const VulkanTypedHandle *vvl::Fence::InUse() const {
+    auto guard = ReadLock();
+    // Fence does not have a parent (in the sense of a VVL state object), and the value returned
+    // by the base class InUse is not useful for reporting (it is the fence's own handle)
+    const bool in_use = RefcountedStateObject::InUse() != nullptr;
+    if (!in_use) {
+        return nullptr;
+    }
+    // If the fence is in-use there should be a queue that uses it.
+    // NOTE: in-use checks are always with regard to queue operations.
+    assert(queue_ != nullptr && "Can't find queue that uses the fence");
+    if (queue_) {
+        return &queue_->Handle();
+    }
+    static const VulkanTypedHandle empty{};
+    return &empty;
+}
+
 bool vvl::Fence::EnqueueSignal(vvl::Queue *queue_state, uint64_t next_seq) {
     auto guard = WriteLock();
     if (scope_ != kInternal) {
@@ -154,9 +172,4 @@ void vvl::Fence::SetAcquireFenceSync(const AcquireFenceSync &acquire_fence_sync)
     assert(acquire_fence_sync.submission_refs.empty() || acquire_fence_sync_.submission_refs.empty());
 
     acquire_fence_sync_ = acquire_fence_sync;
-}
-
-bool vvl::Fence::IsAcquireFenceSyncSwapchainChanged(const std::shared_ptr<vvl::Swapchain> &current_swapchain) const {
-    auto guard = ReadLock();
-    return acquire_fence_sync_.swapchain != current_swapchain;
 }

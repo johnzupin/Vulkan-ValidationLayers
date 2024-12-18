@@ -25,6 +25,7 @@
 #include <future>
 #include <thread>
 #include <vector>
+#include <string>
 #include "error_message/error_location.h"
 
 class ValidationStateTracker;
@@ -34,16 +35,33 @@ namespace vvl {
 class CommandBuffer;
 class Queue;
 
+struct CommandBufferSubmission {
+    std::shared_ptr<vvl::CommandBuffer> cb;
+    // Specifically made for GPU-AV, for it has unique problems: Error reporting is done *after*
+    // command buffer submissions, not at Pre/PostCall time.
+    // Contrary to sync val, GPU-AV cannot just look at `GetQueueState()->cmdbuf_label_stack`
+    // to construct an initial label stack. sync-val can do that because validation and error reporting is done
+    // *before* a command buffer list is submitted: validation is performed one command buffer at a time,
+    // and `GetQueueState()->cmdbuf_label_stack` is updated between those validations.
+    // When GPU-AV starts doing error reporting, when command buffers have completed,
+    // the label stack info stored in Queue state is lost.
+    // => GPU-AV needs to track this initial label stack per command buffer submission.
+    std::vector<std::string> initial_label_stack;
+
+    CommandBufferSubmission(std::shared_ptr<vvl::CommandBuffer> cb, std::vector<std::string> initial_label_stack)
+        : cb(std::move(cb)), initial_label_stack(std::move(initial_label_stack)) {}
+    CommandBufferSubmission(CommandBufferSubmission &&other)
+        : cb(std::move(other.cb)), initial_label_stack(std::move(other.initial_label_stack)) {}
+    CommandBufferSubmission &operator=(const CommandBufferSubmission &other) = default;
+    CommandBufferSubmission(const CommandBufferSubmission &) = default;
+};
+
 struct QueueSubmission {
-    struct SemaphoreInfo {
-        SemaphoreInfo(std::shared_ptr<Semaphore> &&sem, uint64_t pl) : semaphore(std::move(sem)), payload(pl) {}
-        std::shared_ptr<Semaphore> semaphore;
-        uint64_t payload{0};
-    };
     QueueSubmission(const Location &loc_) : loc(loc_), completed(), waiter(completed.get_future()) {}
 
     bool end_batch{false};
-    std::vector<std::shared_ptr<vvl::CommandBuffer>> cbs;
+    std::vector<vvl::CommandBufferSubmission> cb_submissions{};
+
     std::vector<SemaphoreInfo> wait_semaphores;
     std::vector<SemaphoreInfo> signal_semaphores;
     std::shared_ptr<Fence> fence;
@@ -53,7 +71,9 @@ struct QueueSubmission {
     std::promise<void> completed;
     std::shared_future<void> waiter;
 
-    void AddCommandBuffer(std::shared_ptr<vvl::CommandBuffer> &&cb_state) { cbs.emplace_back(std::move(cb_state)); }
+    void AddCommandBuffer(std::shared_ptr<vvl::CommandBuffer> cb_state, std::vector<std::string> initial_label_stack) {
+        cb_submissions.emplace_back(std::move(cb_state), std::move(initial_label_stack));
+    }
 
     void AddSignalSemaphore(std::shared_ptr<Semaphore> &&semaphore_state, uint64_t value) {
         signal_semaphores.emplace_back(std::move(semaphore_state), value);
@@ -115,6 +135,10 @@ class Queue : public StateObject {
     // Helper that combines Notify and Wait
     void NotifyAndWait(const Location &loc, uint64_t until_seq = kU64Max);
 
+    // Find a timeline wait that does not have a resolving signal submitted yet.
+    // Check submissions up to and including until_seq.
+    std::optional<SemaphoreInfo> FindTimelineWaitWithoutResolvingSignal(uint64_t until_seq) const;
+
   public:
     // Queue family index. As queueFamilyIndex parameter in vkGetDeviceQueue.
     const uint32_t queue_family_index;
@@ -142,6 +166,9 @@ class Queue : public StateObject {
     virtual void PostSubmit(QueueSubmission &submission) {}
     // called when the worker thread decides a submissions has finished executing
     virtual void Retire(QueueSubmission &submission);
+
+  private:
+    uint32_t timeline_wait_count_ = 0;
 
   private:
     using LockGuard = std::unique_lock<std::mutex>;

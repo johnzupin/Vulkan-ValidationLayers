@@ -133,6 +133,7 @@ vvl::Extension GetExtension(std::string extension) {
         {"VK_KHR_cooperative_matrix", vvl::Extension::_VK_KHR_cooperative_matrix},
         {"VK_KHR_compute_shader_derivatives", vvl::Extension::_VK_KHR_compute_shader_derivatives},
         {"VK_KHR_video_decode_av1", vvl::Extension::_VK_KHR_video_decode_av1},
+        {"VK_KHR_video_encode_av1", vvl::Extension::_VK_KHR_video_encode_av1},
         {"VK_KHR_video_maintenance1", vvl::Extension::_VK_KHR_video_maintenance1},
         {"VK_KHR_vertex_attribute_divisor", vvl::Extension::_VK_KHR_vertex_attribute_divisor},
         {"VK_KHR_load_store_op_none", vvl::Extension::_VK_KHR_load_store_op_none},
@@ -142,6 +143,7 @@ vvl::Extension GetExtension(std::string extension) {
         {"VK_KHR_calibrated_timestamps", vvl::Extension::_VK_KHR_calibrated_timestamps},
         {"VK_KHR_shader_expect_assume", vvl::Extension::_VK_KHR_shader_expect_assume},
         {"VK_KHR_maintenance6", vvl::Extension::_VK_KHR_maintenance6},
+        {"VK_KHR_video_encode_quantization_map", vvl::Extension::_VK_KHR_video_encode_quantization_map},
         {"VK_KHR_shader_relaxed_extended_instruction", vvl::Extension::_VK_KHR_shader_relaxed_extended_instruction},
         {"VK_KHR_maintenance7", vvl::Extension::_VK_KHR_maintenance7},
         {"VK_EXT_debug_report", vvl::Extension::_VK_EXT_debug_report},
@@ -322,6 +324,7 @@ vvl::Extension GetExtension(std::string extension) {
         {"VK_EXT_device_address_binding_report", vvl::Extension::_VK_EXT_device_address_binding_report},
         {"VK_EXT_depth_clip_control", vvl::Extension::_VK_EXT_depth_clip_control},
         {"VK_EXT_primitive_topology_list_restart", vvl::Extension::_VK_EXT_primitive_topology_list_restart},
+        {"VK_EXT_present_mode_fifo_latest_ready", vvl::Extension::_VK_EXT_present_mode_fifo_latest_ready},
         {"VK_FUCHSIA_external_memory", vvl::Extension::_VK_FUCHSIA_external_memory},
         {"VK_FUCHSIA_external_semaphore", vvl::Extension::_VK_FUCHSIA_external_semaphore},
         {"VK_FUCHSIA_buffer_collection", vvl::Extension::_VK_FUCHSIA_buffer_collection},
@@ -396,6 +399,7 @@ vvl::Extension GetExtension(std::string extension) {
         {"VK_QNX_external_memory_screen_buffer", vvl::Extension::_VK_QNX_external_memory_screen_buffer},
         {"VK_MSFT_layered_driver", vvl::Extension::_VK_MSFT_layered_driver},
         {"VK_NV_descriptor_pool_overallocation", vvl::Extension::_VK_NV_descriptor_pool_overallocation},
+        {"VK_NV_display_stereo", vvl::Extension::_VK_NV_display_stereo},
         {"VK_NV_raw_access_chains", vvl::Extension::_VK_NV_raw_access_chains},
         {"VK_NV_command_buffer_inheritance", vvl::Extension::_VK_NV_command_buffer_inheritance},
         {"VK_NV_shader_atomic_float16_vector", vvl::Extension::_VK_NV_shader_atomic_float16_vector},
@@ -404,6 +408,9 @@ vvl::Extension GetExtension(std::string extension) {
         {"VK_EXT_device_generated_commands", vvl::Extension::_VK_EXT_device_generated_commands},
         {"VK_MESA_image_alignment_control", vvl::Extension::_VK_MESA_image_alignment_control},
         {"VK_EXT_depth_clamp_control", vvl::Extension::_VK_EXT_depth_clamp_control},
+        {"VK_HUAWEI_hdr_vivid", vvl::Extension::_VK_HUAWEI_hdr_vivid},
+        {"VK_NV_cooperative_matrix2", vvl::Extension::_VK_NV_cooperative_matrix2},
+        {"VK_EXT_vertex_attribute_robustness", vvl::Extension::_VK_EXT_vertex_attribute_robustness},
         {"VK_KHR_acceleration_structure", vvl::Extension::_VK_KHR_acceleration_structure},
         {"VK_KHR_ray_tracing_pipeline", vvl::Extension::_VK_KHR_ray_tracing_pipeline},
         {"VK_KHR_ray_query", vvl::Extension::_VK_KHR_ray_query},
@@ -508,6 +515,26 @@ const PromotedExtensionInfoMap& GetDevicePromotionInfoMap() {
               vvl::Extension::_VK_EXT_4444_formats,
               vvl::Extension::_VK_EXT_extended_dynamic_state2,
           }}},
+        {VK_API_VERSION_1_4,
+         {"VK_VERSION_1_4",
+          {
+              vvl::Extension::_VK_KHR_push_descriptor,
+              vvl::Extension::_VK_KHR_global_priority,
+              vvl::Extension::_VK_KHR_dynamic_rendering_local_read,
+              vvl::Extension::_VK_KHR_map_memory2,
+              vvl::Extension::_VK_KHR_shader_subgroup_rotate,
+              vvl::Extension::_VK_KHR_maintenance5,
+              vvl::Extension::_VK_KHR_vertex_attribute_divisor,
+              vvl::Extension::_VK_KHR_load_store_op_none,
+              vvl::Extension::_VK_KHR_shader_float_controls2,
+              vvl::Extension::_VK_KHR_index_type_uint8,
+              vvl::Extension::_VK_KHR_line_rasterization,
+              vvl::Extension::_VK_KHR_shader_expect_assume,
+              vvl::Extension::_VK_KHR_maintenance6,
+              vvl::Extension::_VK_EXT_pipeline_robustness,
+              vvl::Extension::_VK_EXT_host_image_copy,
+              vvl::Extension::_VK_EXT_pipeline_protected_access,
+          }}},
 
     };
     return promoted_map;
@@ -519,6 +546,7 @@ const InstanceExtensions::Info& GetInstanceVersionMap(const char* version) {
         {"VK_VERSION_1_1", InstanceExtensions::Info(&InstanceExtensions::vk_feature_version_1_1, {})},
         {"VK_VERSION_1_2", InstanceExtensions::Info(&InstanceExtensions::vk_feature_version_1_2, {})},
         {"VK_VERSION_1_3", InstanceExtensions::Info(&InstanceExtensions::vk_feature_version_1_3, {})},
+        {"VK_VERSION_1_4", InstanceExtensions::Info(&InstanceExtensions::vk_feature_version_1_4, {})},
     };
     const auto info = version_map.find(version);
     return (info != version_map.cend()) ? info->second : empty_info;
@@ -530,6 +558,7 @@ const DeviceExtensions::Info& GetDeviceVersionMap(const char* version) {
         {"VK_VERSION_1_1", DeviceExtensions::Info(&DeviceExtensions::vk_feature_version_1_1, {})},
         {"VK_VERSION_1_2", DeviceExtensions::Info(&DeviceExtensions::vk_feature_version_1_2, {})},
         {"VK_VERSION_1_3", DeviceExtensions::Info(&DeviceExtensions::vk_feature_version_1_3, {})},
+        {"VK_VERSION_1_4", DeviceExtensions::Info(&DeviceExtensions::vk_feature_version_1_4, {})},
     };
     const auto info = version_map.find(version);
     return (info != version_map.cend()) ? info->second : empty_info;

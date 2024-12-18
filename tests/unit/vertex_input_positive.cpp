@@ -389,7 +389,7 @@ TEST_F(PositiveVertexInput, CreatePipeline64BitAttributes) {
     InitRenderTarget();
 
     VkFormatProperties format_props;
-    vk::GetPhysicalDeviceFormatProperties(gpu(), VK_FORMAT_R64G64B64A64_SFLOAT, &format_props);
+    vk::GetPhysicalDeviceFormatProperties(Gpu(), VK_FORMAT_R64G64B64A64_SFLOAT, &format_props);
     if (!(format_props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT)) {
         GTEST_SKIP() << "Device does not support VK_FORMAT_R64G64B64A64_SFLOAT vertex buffers";
     }
@@ -474,7 +474,7 @@ TEST_F(PositiveVertexInput, AttributeStructTypeBlockLocation64bit) {
     InitRenderTarget();
 
     VkFormatProperties format_props;
-    vk::GetPhysicalDeviceFormatProperties(gpu(), VK_FORMAT_R64G64B64A64_SFLOAT, &format_props);
+    vk::GetPhysicalDeviceFormatProperties(Gpu(), VK_FORMAT_R64G64B64A64_SFLOAT, &format_props);
     if (!(format_props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT)) {
         GTEST_SKIP() << "Device does not support VK_FORMAT_R64G64B64A64_SFLOAT vertex buffers";
     }
@@ -565,6 +565,7 @@ TEST_F(PositiveVertexInput, VertexAttributeDivisorFirstInstance) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateDivisor);
     AddRequiredFeature(vkt::Feature::vertexAttributeInstanceRateZeroDivisor);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
@@ -572,8 +573,9 @@ TEST_F(PositiveVertexInput, VertexAttributeDivisorFirstInstance) {
     VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT pdvad_props = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(pdvad_props);
 
-    VkVertexInputBindingDivisorDescriptionEXT vibdd = {};
-    VkPipelineVertexInputDivisorStateCreateInfoEXT pvids_ci = vku::InitStructHelper();
+    VkVertexInputBindingDivisorDescription vibdd = {};
+    vibdd.divisor = 1;
+    VkPipelineVertexInputDivisorStateCreateInfo pvids_ci = vku::InitStructHelper();
     pvids_ci.vertexBindingDivisorCount = 1;
     pvids_ci.pVertexBindingDivisors = &vibdd;
     VkVertexInputBindingDescription vibd = {};
@@ -593,13 +595,13 @@ TEST_F(PositiveVertexInput, VertexAttributeDivisorFirstInstance) {
     vkt::Buffer vertex_buffer(*m_device, 256, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VkDeviceSize offset = 0u;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0u, 1u, &vertex_buffer.handle(), &offset);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdDraw(m_command_buffer.handle(), 3u, 1u, 0u, 1u);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveVertexInput, VertextBindingNonLinear) {
@@ -622,7 +624,7 @@ TEST_F(PositiveVertexInput, VertextBindingNonLinear) {
     pipe.vi_ci_.pVertexAttributeDescriptions = vtx_attri_des;
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     VkDeviceSize offsets[6] = {0, 0, 0, 0, 0, 0};
@@ -633,7 +635,7 @@ TEST_F(PositiveVertexInput, VertextBindingNonLinear) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveVertexInput, VertextBindingDynamicState) {
@@ -673,7 +675,7 @@ TEST_F(PositiveVertexInput, VertextBindingDynamicState) {
     attributes[2].binding = 2;
     attributes[2].format = VK_FORMAT_R8G8B8A8_UNORM;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     VkBuffer buffers[2] = {buffer.handle(), buffer.handle()};
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 5, 2, buffers, offsets);
@@ -684,7 +686,7 @@ TEST_F(PositiveVertexInput, VertextBindingDynamicState) {
 
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 1);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveVertexInput, VertexStrideDynamicStride) {
@@ -707,7 +709,7 @@ TEST_F(PositiveVertexInput, VertexStrideDynamicStride) {
     pipe.AddDynamicState(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -717,7 +719,7 @@ TEST_F(PositiveVertexInput, VertexStrideDynamicStride) {
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveVertexInput, VertexStrideDoubleDynamicStride) {
@@ -747,7 +749,7 @@ TEST_F(PositiveVertexInput, VertexStrideDoubleDynamicStride) {
     attribute.binding = 0;
     attribute.format = VK_FORMAT_R16_UNORM;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     const VkDeviceSize offset = 0;
@@ -765,7 +767,7 @@ TEST_F(PositiveVertexInput, VertexStrideDoubleDynamicStride) {
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveVertexInput, InputBindingMaxVertexInputBindingStrideDynamic) {
@@ -776,7 +778,7 @@ TEST_F(PositiveVertexInput, InputBindingMaxVertexInputBindingStrideDynamic) {
 
     // Test when stride is greater than VkPhysicalDeviceLimits::maxVertexInputBindingStride.
     VkVertexInputBindingDescription vertex_input_binding_description{};
-    vertex_input_binding_description.stride = m_device->phy().limits_.maxVertexInputBindingStride + 1;
+    vertex_input_binding_description.stride = m_device->Physical().limits_.maxVertexInputBindingStride + 1;
 
     const auto set_info = [&](CreatePipelineHelper &helper) {
         helper.AddDynamicState(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE);
@@ -802,7 +804,7 @@ TEST_F(PositiveVertexInput, BindVertexBufferNull) {
     pipe.vi_ci_.pVertexAttributeDescriptions = &attributes;
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -815,12 +817,12 @@ TEST_F(PositiveVertexInput, BindVertexBufferNull) {
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveVertexInput, InterleavedAttributes) {
     TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7892");
-    AddDisabledFeature(vkt::Feature::robustBufferAccess);
+
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -846,7 +848,7 @@ TEST_F(PositiveVertexInput, InterleavedAttributes) {
     pipe1.vi_ci_.pVertexAttributeDescriptions = vtx_attri_des;
     pipe1.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     // We bind, but rebind with valid pipeline
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe0.Handle());  // invalid
@@ -856,7 +858,7 @@ TEST_F(PositiveVertexInput, InterleavedAttributes) {
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveVertexInput, LegacyVertexAttributes) {
@@ -895,14 +897,14 @@ TEST_F(PositiveVertexInput, LegacyVertexAttributes) {
     vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VkDeviceSize offset = 0;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0, 1, &buffer.handle(), &offset);
     vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 1, &binding, 1, &attribute);
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveVertexInput, ResetCmdSetVertexInput) {
@@ -949,7 +951,7 @@ TEST_F(PositiveVertexInput, ResetCmdSetVertexInput) {
     attributes.binding = 0;
     attributes.format = VK_FORMAT_R8G8B8A8_UINT;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0u, 1u, &vertex_buffer.handle(), &offset);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_int.Handle());
@@ -962,6 +964,140 @@ TEST_F(PositiveVertexInput, ResetCmdSetVertexInput) {
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_float.Handle());
     vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 1, &bindings, 1, &attributes);
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 1);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.End();
+}
+
+TEST_F(PositiveVertexInput, VertexAttributeRobustness) {
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_VERTEX_ATTRIBUTE_ROBUSTNESS_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::vertexAttributeRobustness);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    char const *vs_source = R"glsl(
+        #version 450
+        layout(location=0) in vec4 x; /* not provided */
+        void main(){
+           gl_Position = x;
+        }
+    )glsl";
+    VkShaderObj vs(this, vs_source, VK_SHADER_STAGE_VERTEX_BIT);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.shader_stages_ = {vs.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
+    pipe.CreateGraphicsPipeline();
+}
+
+TEST_F(PositiveVertexInput, VertexAttributeRobustnessDynamic) {
+    AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_VERTEX_ATTRIBUTE_ROBUSTNESS_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::vertexInputDynamicState);
+    AddRequiredFeature(vkt::Feature::vertexAttributeRobustness);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    char const *vsSource = R"glsl(
+        #version 450
+        layout(location = 0) in vec4 x;
+        layout(location = 1) in vec4 y;
+        layout(location = 0) out vec4 c;
+        void main() {
+           c = x * y;
+        }
+    )glsl";
+
+    VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.shader_stages_ = {vs.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT);
+    pipe.CreateGraphicsPipeline();
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+
+    vkt::Buffer buffer(*m_device, 16, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    VkDeviceSize offset = 0u;
+    vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0u, 1u, &buffer.handle(), &offset);
+
+    VkVertexInputBindingDescription2EXT vi_binding_description = vku::InitStructHelper();
+    vi_binding_description.binding = 0u;
+    vi_binding_description.stride = sizeof(float) * 4;
+    vi_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    vi_binding_description.divisor = 1u;
+    VkVertexInputAttributeDescription2EXT vi_attribute_description = vku::InitStructHelper();
+    vi_attribute_description.location = 0u;
+    vi_attribute_description.binding = 0u;
+    vi_attribute_description.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    vi_attribute_description.offset = 0u;
+    vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 1u, &vi_binding_description, 1u, &vi_attribute_description);
+
+    vk::CmdDraw(m_command_buffer.handle(), 4u, 1u, 0u, 0u);
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.End();
+}
+
+TEST_F(PositiveVertexInput, VertexInputRebinding) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9027");
+    AddRequiredExtensions(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::vertexInputDynamicState);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    char const *vsSource = R"glsl(
+        #version 450
+        layout(location = 0) in float a;
+
+        void main(){
+            gl_Position = vec4(a);
+        }
+    )glsl";
+    VkShaderObj vs(this, vsSource, VK_SHADER_STAGE_VERTEX_BIT);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.AddDynamicState(VK_DYNAMIC_STATE_VERTEX_INPUT_EXT);
+    pipe.shader_stages_ = {vs.GetStageCreateInfo(), pipe.fs_->GetStageCreateInfo()};
+    pipe.CreateGraphicsPipeline();
+
+    VkVertexInputBindingDescription2EXT bindings[2];
+    bindings[0] = vku::InitStructHelper();
+    bindings[0].binding = 0u;
+    bindings[0].stride = sizeof(uint32_t);
+    bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    bindings[0].divisor = 1u;
+    bindings[1] = bindings[0];
+    bindings[1].binding = 1u;
+
+    VkVertexInputAttributeDescription2EXT attributes[2];
+    attributes[0] = vku::InitStructHelper();
+    attributes[0].location = 1u;
+    attributes[0].binding = 0u;
+    attributes[0].format = VK_FORMAT_R32_SFLOAT;
+    attributes[0].offset = 0;
+
+    attributes[1] = vku::InitStructHelper();
+    attributes[1].location = 0u;
+    attributes[1].binding = 1u;
+    attributes[1].format = VK_FORMAT_R32_SINT;
+    attributes[1].offset = 0;
+
+    vkt::Buffer vertex_buffer(*m_device, 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    VkDeviceSize offsets[2] = {0, 0};
+    VkBuffer buffers[2] = {vertex_buffer.handle(), vertex_buffer.handle()};
+
+    m_command_buffer.begin();
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 2, bindings, 2, attributes);
+
+    attributes[0].location = 0;
+    attributes[0].format = VK_FORMAT_R32_SFLOAT;
+    vk::CmdSetVertexInputEXT(m_command_buffer.handle(), 1, bindings, 1, attributes);
+
+    vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0, 2, buffers, offsets);
+    vk::CmdDraw(m_command_buffer.handle(), 3u, 3u, 0u, 0u);
     m_command_buffer.EndRenderPass();
     m_command_buffer.end();
 }

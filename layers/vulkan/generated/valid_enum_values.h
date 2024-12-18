@@ -98,17 +98,25 @@ ValidValue StatelessValidation::IsValidEnumValue(VkSamplerReductionMode value) c
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkSemaphoreType value) const;
 template <>
+ValidValue StatelessValidation::IsValidEnumValue(VkPipelineRobustnessBufferBehavior value) const;
+template <>
+ValidValue StatelessValidation::IsValidEnumValue(VkPipelineRobustnessImageBehavior value) const;
+template <>
+ValidValue StatelessValidation::IsValidEnumValue(VkQueueGlobalPriority value) const;
+template <>
+ValidValue StatelessValidation::IsValidEnumValue(VkLineRasterizationMode value) const;
+template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkPresentModeKHR value) const;
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkColorSpaceKHR value) const;
-template <>
-ValidValue StatelessValidation::IsValidEnumValue(VkQueueGlobalPriorityKHR value) const;
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkFragmentShadingRateCombinerOpKHR value) const;
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkVideoEncodeTuningModeKHR value) const;
 template <>
-ValidValue StatelessValidation::IsValidEnumValue(VkLineRasterizationModeKHR value) const;
+ValidValue StatelessValidation::IsValidEnumValue(VkVideoEncodeAV1PredictionModeKHR value) const;
+template <>
+ValidValue StatelessValidation::IsValidEnumValue(VkVideoEncodeAV1RateControlGroupKHR value) const;
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkTimeDomainKHR value) const;
 template <>
@@ -119,10 +127,6 @@ template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkShaderInfoTypeAMD value) const;
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkValidationCheckEXT value) const;
-template <>
-ValidValue StatelessValidation::IsValidEnumValue(VkPipelineRobustnessBufferBehaviorEXT value) const;
-template <>
-ValidValue StatelessValidation::IsValidEnumValue(VkPipelineRobustnessImageBehaviorEXT value) const;
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkDisplayPowerStateEXT value) const;
 template <>
@@ -225,6 +229,8 @@ template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkBlockMatchWindowCompareModeQCOM value) const;
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkCubicFilterWeightsQCOM value) const;
+template <>
+ValidValue StatelessValidation::IsValidEnumValue(VkDisplaySurfaceStereoTypeNV value) const;
 template <>
 ValidValue StatelessValidation::IsValidEnumValue(VkIndirectExecutionSetInfoTypeEXT value) const;
 template <>

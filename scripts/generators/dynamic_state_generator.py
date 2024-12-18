@@ -111,13 +111,16 @@ dynamic_state_map = {
         "dependency" : ["viewportWScalingEnable"]
     },
     "VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT" : {
-        "command" : ["vkCmdSetDiscardRectangleEXT"]
+        "command" : ["vkCmdSetDiscardRectangleEXT"],
+        "dependency" : ["rasterizerDiscardEnable", "discardRectangleEnable"]
     },
     "VK_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT" : {
-        "command" : ["vkCmdSetDiscardRectangleEnableEXT"]
+        "command" : ["vkCmdSetDiscardRectangleEnableEXT"],
+        "dependency" : ["rasterizerDiscardEnable"]
     },
     "VK_DYNAMIC_STATE_DISCARD_RECTANGLE_MODE_EXT" : {
-        "command" : ["vkCmdSetDiscardRectangleModeEXT"]
+        "command" : ["vkCmdSetDiscardRectangleModeEXT"],
+        "dependency" : ["rasterizerDiscardEnable", "discardRectangleEnable"]
     },
     "VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT" : {
         "command" : ["vkCmdSetSampleLocationsEXT"],
@@ -142,8 +145,8 @@ dynamic_state_map = {
         "command" : ["vkCmdSetFragmentShadingRateKHR"],
         "dependency" : ["rasterizerDiscardEnable"]
     },
-    "VK_DYNAMIC_STATE_LINE_STIPPLE_KHR" : {
-        "command" : ["vkCmdSetLineStippleKHR"],
+    "VK_DYNAMIC_STATE_LINE_STIPPLE" : {
+        "command" : ["vkCmdSetLineStipple"],
         "dependency" : ["rasterizerDiscardEnable", "stippledLineEnable"]
     },
     "VK_DYNAMIC_STATE_VERTEX_INPUT_EXT" : {
@@ -211,6 +214,7 @@ dynamic_state_map = {
     },
     "VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT" : {
         "command" : ["vkCmdSetSampleLocationsEnableEXT"],
+        "dependency" : ["rasterizerDiscardEnable"]
     },
     "VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT" : {
         "command" : ["vkCmdSetColorBlendAdvancedEXT"],
@@ -351,7 +355,6 @@ class DynamicStateOutputGenerator(BaseGenerator):
     def generateSource(self):
         out = []
         out.append('''
-            #include "core_checks/core_validation.h"
             #include "state_tracker/pipeline_state.h"
 
             VkDynamicState ConvertToDynamicState(CBDynamicState dynamic_state) {
@@ -517,7 +520,7 @@ class DynamicStateOutputGenerator(BaseGenerator):
                 if (!pipeline || pipeline->IsDynamic(CB_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT)) {
                     ss << "vkCmdSetLineStippleEnableEXT last set stippledLineEnable to VK_TRUE.\\n";
                 } else {
-                    ss << "VkPipelineRasterizationLineStateCreateInfoEXT::stippledLineEnable was VK_TRUE in the last bound graphics pipeline.\\n";
+                    ss << "VkPipelineRasterizationLineStateCreateInfo::stippledLineEnable was VK_TRUE in the last bound graphics pipeline.\\n";
                 }''')
             if 'sampleLocationsEnable' in dependency:
                 out.append('''
@@ -546,6 +549,13 @@ class DynamicStateOutputGenerator(BaseGenerator):
                     ss << "vkCmdSetViewportWScalingEnableNV last set viewportWScalingEnable to VK_TRUE.\\n";
                 } else {
                     ss << "VkPipelineViewportStateCreateInfo::pNext->VkPipelineViewportWScalingStateCreateInfoNV::viewportWScalingEnable was VK_TRUE in the last bound graphics pipeline.\\n";
+                }''')
+            if 'discardRectangleEnable' in dependency:
+                out.append('''
+                if (!pipeline || pipeline->IsDynamic(CB_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT)) {
+                    ss << "vkCmdSetDiscardRectangleEnableEXT last set discardRectangleEnable to VK_TRUE.\\n";
+                } else {
+                    ss << "VkGraphicsPipelineCreateInfo::pNext->VkPipelineDiscardRectangleStateCreateInfoEXT::discardRectangleCount was greater than zero in the last bound graphics pipeline.\\n";
                 }''')
 
             out.append('    break;')

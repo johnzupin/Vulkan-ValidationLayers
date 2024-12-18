@@ -185,7 +185,7 @@ TEST_F(NegativeDescriptors, DescriptorSet) {
 
     const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set_layout});
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     // Set invalid set
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter");
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1, &bad_set,
@@ -203,7 +203,7 @@ TEST_F(NegativeDescriptors, DescriptorSet) {
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 2, 1, &good_set,
                               0, NULL);
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, DescriptorSetLayout) {
@@ -235,15 +235,16 @@ TEST_F(NegativeDescriptors, WriteDescriptorSetIntegrity) {
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
-    OneOffDescriptorSet::Bindings bindings = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, NULL},
-                                              {1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
-                                              {2, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()},
-                                              {3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
-                                              {4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
-                                              {5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
-                                              {6, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL},
-                                              {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
-                                              {8, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, NULL},
+        {1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {2, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &sampler.handle()},
+        {3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {6, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL},
+        {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {8, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
     OneOffDescriptorSet descriptor_set(m_device, bindings);
     ASSERT_TRUE(descriptor_set.Initialized());
 
@@ -441,7 +442,7 @@ TEST_F(NegativeDescriptors, WriteDescriptorSetConsecutiveUpdates) {
         pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
         pipe.CreateGraphicsPipeline();
 
-        m_command_buffer.begin();
+        m_command_buffer.Begin();
         m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
 
         vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
@@ -450,7 +451,7 @@ TEST_F(NegativeDescriptors, WriteDescriptorSetConsecutiveUpdates) {
 
         vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
         m_command_buffer.EndRenderPass();
-        m_command_buffer.end();
+        m_command_buffer.End();
     }
     // buffer2 just went out of scope and was destroyed
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
@@ -487,7 +488,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetBufferDestroyed) {
         pipe.descriptor_set_->WriteDescriptorBufferInfo(0, buffer.handle(), 0, 1024);
         pipe.descriptor_set_->UpdateDescriptorSets();
 
-        m_command_buffer.begin();
+        m_command_buffer.Begin();
         m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
         vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
         vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0, 1,
@@ -495,7 +496,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetBufferDestroyed) {
 
         vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
         m_command_buffer.EndRenderPass();
-        m_command_buffer.end();
+        m_command_buffer.End();
     }
     // Destroy buffer should invalidate the cmd buffer, causing error on submit
 
@@ -538,7 +539,7 @@ TEST_F(NegativeDescriptors, DrawDescriptorSetBufferDestroyed) {
 
     // The buffer has now been destroyed, but it has been written into the descriptor set.
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0, 1,
@@ -578,13 +579,13 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     VkDeviceSize align_mod = memory_reqs.size % memory_reqs.alignment;
     VkDeviceSize aligned_size = ((align_mod == 0) ? memory_reqs.size : (memory_reqs.size + memory_reqs.alignment - align_mod));
     memory_info.allocationSize = aligned_size * 2;
-    pass = m_device->phy().SetMemoryType(memory_reqs.memoryTypeBits, &memory_info, 0);
+    pass = m_device->Physical().SetMemoryType(memory_reqs.memoryTypeBits, &memory_info, 0);
     ASSERT_TRUE(pass);
     vkt::DeviceMemory image_memory(*m_device, memory_info);
 
-    tmp_image.bind_memory(image_memory, 0);
+    tmp_image.BindMemory(image_memory, 0);
     // Bind second image to memory right after first image
-    image2.bind_memory(image_memory, aligned_size);
+    image2.BindMemory(image_memory, aligned_size);
 
     // First test deletes this view
     vkt::ImageView tmp_view = tmp_image.CreateView();
@@ -627,7 +628,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     pipe.CreateGraphicsPipeline();
 
     // First error case is destroying sampler prior to cmd buffer submission
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
 
     // Transit image layout from VK_IMAGE_LAYOUT_UNDEFINED into VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     VkImageMemoryBarrier barrier = vku::InitStructHelper();
@@ -652,7 +653,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     // This first submit should be successful
     m_default_queue->Submit(m_command_buffer);
@@ -661,8 +662,8 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     // Now destroy imageview and reset cmdBuffer
     tmp_view.destroy();
 
-    m_command_buffer.reset(0);
-    m_command_buffer.begin();
+    m_command_buffer.Reset(0);
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
@@ -671,20 +672,20 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     // Re-update descriptor with new view
     img_info.imageView = view.handle();
     vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
     // Now test destroying sampler prior to cmd buffer submission
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
     // Destroy sampler invalidates the cmd buffer, causing error on submit
     tmp_sampler.destroy();
     // Attempt to submit cmd buffer
@@ -699,14 +700,14 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     VkCommandBufferBeginInfo info = vku::InitStructHelper();
     info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
     m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pCommandBuffers-00070");
-    m_command_buffer.begin(&info);
+    m_command_buffer.Begin(&info);
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
     // Destroy image invalidates the cmd buffer, causing error on submit
     tmp_image.destroy();
 
@@ -716,7 +717,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
     // Now update descriptor to be valid, but then update and free descriptor
     img_info.imageView = view2.handle();
     vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
-    m_command_buffer.begin(&info);
+    m_command_buffer.Begin(&info);
 
     // Transit image2 layout from VK_IMAGE_LAYOUT_UNDEFINED into VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     barrier.image = image2.handle();
@@ -729,7 +730,7 @@ TEST_F(NegativeDescriptors, CmdBufferDescriptorSetImageSamplerDestroyed) {
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
     m_default_queue->Submit(m_command_buffer);
 
     // Immediately try to update the descriptor set in the active command buffer - failure expected
@@ -804,7 +805,7 @@ TEST_F(NegativeDescriptors, DescriptorSetSamplerDestroyed) {
     pipe.CreateGraphicsPipeline();
 
     // First error case is destroying sampler prior to cmd buffer submission
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
@@ -814,7 +815,7 @@ TEST_F(NegativeDescriptors, DescriptorSetSamplerDestroyed) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, ImageDescriptorLayoutMismatch) {
@@ -870,7 +871,7 @@ TEST_F(NegativeDescriptors, ImageDescriptorLayoutMismatch) {
     };
     constexpr std::array test_list = {kInternal, kExternal};
     constexpr std::array internal_errors = {"VUID-VkDescriptorImageInfo-imageLayout-00344", "VUID-vkCmdDraw-None-08114"};
-    constexpr std::array external_errors = {"UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout"};
+    constexpr std::array external_errors = {"VUID-vkCmdDraw-None-09600"};
 
     // Common steps to create the two classes of errors (or two classes of positives)
     auto do_test = [&](vkt::Image *image, vkt::ImageView *view, VkImageAspectFlags aspect_mask, VkImageLayout image_layout,
@@ -881,21 +882,21 @@ TEST_F(NegativeDescriptors, ImageDescriptorLayoutMismatch) {
         vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
 
         for (TestType test_type : test_list) {
-            cmd_buf.begin();
+            cmd_buf.Begin();
             // record layout different than actual descriptor layout.
             const VkFlags read_write = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-            auto image_barrier = image->image_memory_barrier(read_write, read_write, VK_IMAGE_LAYOUT_UNDEFINED, image_layout,
-                                                             image->subresource_range(aspect_mask));
+            auto image_barrier = image->ImageMemoryBarrier(read_write, read_write, VK_IMAGE_LAYOUT_UNDEFINED, image_layout,
+                                                           image->SubresourceRange(aspect_mask));
             vk::CmdPipelineBarrier(cmd_buf.handle(), VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0,
                                    nullptr, 0, nullptr, 1, &image_barrier);
             image->Layout(image_layout);
 
             if (test_type == kExternal) {
                 // The image layout is external to the command buffer we are recording to test.  Submit to push to instance scope.
-                cmd_buf.end();
+                cmd_buf.End();
                 m_default_queue->Submit(cmd_buf);
                 m_default_queue->Wait();
-                cmd_buf.begin();
+                cmd_buf.Begin();
             }
 
             cmd_buf.BeginRenderPass(m_renderPassBeginInfo);
@@ -917,7 +918,7 @@ TEST_F(NegativeDescriptors, ImageDescriptorLayoutMismatch) {
             }
 
             cmd_buf.EndRenderPass();
-            cmd_buf.end();
+            cmd_buf.End();
 
             // Submit cmd buffer
             if (positive_test || (test_type == kInternal)) {
@@ -938,7 +939,7 @@ TEST_F(NegativeDescriptors, ImageDescriptorLayoutMismatch) {
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, /* positive */ false);
 
     // Create depth stencil image and views
-    const VkFormat format_ds = m_depth_stencil_fmt = FindSupportedDepthStencilFormat(gpu());
+    const VkFormat format_ds = m_depth_stencil_fmt = FindSupportedDepthStencilFormat(Gpu());
     bool ds_test_support = maintenance2 && (format_ds != VK_FORMAT_UNDEFINED);
     const VkImageLayout ds_image_layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
     const VkImageLayout depth_descriptor_layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
@@ -987,7 +988,7 @@ TEST_F(NegativeDescriptors, DescriptorPoolInUseResetSignaled) {
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
@@ -995,7 +996,7 @@ TEST_F(NegativeDescriptors, DescriptorPoolInUseResetSignaled) {
 
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
     // Submit cmd buffer to put pool in-flight
     m_default_queue->Submit(m_command_buffer);
     // Reset pool while in-flight, causing error
@@ -1026,7 +1027,7 @@ TEST_F(NegativeDescriptors, DescriptorImageUpdateNoMemoryBound) {
     // Update descriptor with image and sampler
     descriptor_set.WriteDescriptorImageInfo(0, view.handle(), sampler.handle());
     // Break memory binding and attempt update
-    image.memory().destroy();
+    image.Memory().destroy();
 
     m_errorMonitor->SetDesiredError("UNASSIGNED-VkDescriptorImageInfo-BoundResourceFreedMemoryAccess");
     descriptor_set.UpdateDescriptorSets();
@@ -1058,7 +1059,7 @@ TEST_F(NegativeDescriptors, DynamicOffsetCases) {
                                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
     descriptor_set.UpdateDescriptorSets();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorSets-dynamicOffsetCount-00359");
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
@@ -1088,7 +1089,7 @@ TEST_F(NegativeDescriptors, DynamicOffsetCases) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, DynamicOffsetCasesMaintenance6) {
@@ -1112,10 +1113,10 @@ TEST_F(NegativeDescriptors, DynamicOffsetCasesMaintenance6) {
                                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
     descriptor_set.UpdateDescriptorSets();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
 
-    VkBindDescriptorSetsInfoKHR bind_ds_info = vku::InitStructHelper();
+    VkBindDescriptorSetsInfo bind_ds_info = vku::InitStructHelper();
     bind_ds_info.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     bind_ds_info.layout = pipeline_layout.handle();
     bind_ds_info.firstSet = 0;
@@ -1124,7 +1125,7 @@ TEST_F(NegativeDescriptors, DynamicOffsetCasesMaintenance6) {
     bind_ds_info.dynamicOffsetCount = 0;
     bind_ds_info.pDynamicOffsets = nullptr;
 
-    m_errorMonitor->SetDesiredError("VUID-VkBindDescriptorSetsInfoKHR-dynamicOffsetCount-00359");
+    m_errorMonitor->SetDesiredError("VUID-VkBindDescriptorSetsInfo-dynamicOffsetCount-00359");
     vk::CmdBindDescriptorSets2KHR(m_command_buffer.handle(), &bind_ds_info);
     m_errorMonitor->VerifyFound();
 }
@@ -1147,10 +1148,10 @@ TEST_F(NegativeDescriptors, BindDescriptorSetsInfoPipelineLayout) {
                                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
     descriptor_set.UpdateDescriptorSets();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
 
-    VkBindDescriptorSetsInfoKHR bind_ds_info = vku::InitStructHelper();
+    VkBindDescriptorSetsInfo bind_ds_info = vku::InitStructHelper();
     bind_ds_info.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     bind_ds_info.layout = CastToHandle<VkPipelineLayout, uintptr_t>(0xbaadb1be);
     bind_ds_info.firstSet = 0;
@@ -1159,12 +1160,12 @@ TEST_F(NegativeDescriptors, BindDescriptorSetsInfoPipelineLayout) {
     bind_ds_info.dynamicOffsetCount = 0;
     bind_ds_info.pDynamicOffsets = nullptr;
 
-    m_errorMonitor->SetDesiredError("VUID-VkBindDescriptorSetsInfoKHR-layout-parameter");
+    m_errorMonitor->SetDesiredError("VUID-VkBindDescriptorSetsInfo-layout-parameter");
     vk::CmdBindDescriptorSets2KHR(m_command_buffer.handle(), &bind_ds_info);
     m_errorMonitor->VerifyFound();
 
     bind_ds_info.layout = VK_NULL_HANDLE;
-    m_errorMonitor->SetDesiredError("VUID-VkBindDescriptorSetsInfoKHR-None-09495");
+    m_errorMonitor->SetDesiredError("VUID-VkBindDescriptorSetsInfo-None-09495");
     vk::CmdBindDescriptorSets2KHR(m_command_buffer.handle(), &bind_ds_info);
     m_errorMonitor->VerifyFound();
 }
@@ -1198,7 +1199,7 @@ TEST_F(NegativeDescriptors, DescriptorBufferUpdateNoMemoryBound) {
 TEST_F(NegativeDescriptors, DynamicDescriptorSet) {
     RETURN_IF_SKIP(Init());
 
-    const VkDeviceSize partial_size = m_device->phy().limits_.minUniformBufferOffsetAlignment;
+    const VkDeviceSize partial_size = m_device->Physical().limits_.minUniformBufferOffsetAlignment;
     const VkDeviceSize buffer_size = partial_size * 10;  // make sure way more then alignment multiple
 
     // Create a buffer to update the descriptor with
@@ -1254,7 +1255,7 @@ TEST_F(NegativeDescriptors, DynamicDescriptorSet) {
     descriptor_set_1.UpdateDescriptorSets();
     descriptor_set_2.UpdateDescriptorSets();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
 
     VkDescriptorSet descriptorSets[3] = {descriptor_set_0.set_, descriptor_set_1.set_, descriptor_set_2.set_};
     uint32_t offsets[5] = {0, 0, 0, 0, 0};
@@ -1316,7 +1317,7 @@ TEST_F(NegativeDescriptors, DynamicDescriptorSet) {
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 3, descriptorSets, 5, offsets);
     m_errorMonitor->VerifyFound();
 
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, DynamicOffsetWithNullBuffer) {
@@ -1359,7 +1360,7 @@ TEST_F(NegativeDescriptors, DynamicOffsetWithNullBuffer) {
     vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
     m_errorMonitor->VerifyFound();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
 
     // Create PSO to be used for draw-time errors below
@@ -1392,7 +1393,7 @@ TEST_F(NegativeDescriptors, DynamicOffsetWithNullBuffer) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, BindInvalidPipelineLayout) {
@@ -1428,7 +1429,7 @@ TEST_F(NegativeDescriptors, BindInvalidPipelineLayout) {
         GTEST_SKIP() << "Driver failed to create a invalid pipeline handle";
     }
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_layout_.handle(), 0, 1,
@@ -1438,17 +1439,16 @@ TEST_F(NegativeDescriptors, BindInvalidPipelineLayout) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
-// https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/6944
-TEST_F(NegativeDescriptors, DISABLED_ConstantArrayElementNotBound) {
+TEST_F(NegativeDescriptors, ConstantArrayElementNotBound) {
+    AddRequiredFeature(vkt::Feature::vertexPipelineStoresAndAtomics);
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    VkMemoryPropertyFlags reqs = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    vkt::Buffer offset_buffer(*m_device, 4, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, reqs);
-    vkt::Buffer write_buffer(*m_device, 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, reqs);
+    vkt::Buffer offset_buffer(*m_device, 4, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, kHostVisibleMemProps);
+    vkt::Buffer write_buffer(*m_device, 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kHostVisibleMemProps);
 
     OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
                                                   {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, VK_SHADER_STAGE_ALL, nullptr}});
@@ -1474,7 +1474,7 @@ TEST_F(NegativeDescriptors, DISABLED_ConstantArrayElementNotBound) {
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
@@ -1485,13 +1485,61 @@ TEST_F(NegativeDescriptors, DISABLED_ConstantArrayElementNotBound) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
+}
+
+// https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8918
+TEST_F(NegativeDescriptors, DISABLED_MutableBufferUpdate) {
+    AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::mutableDescriptorType);
+    RETURN_IF_SKIP(Init());
+
+    VkDescriptorType desc_types[2] = {
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    };
+
+    VkMutableDescriptorTypeListEXT type_list = {};
+    type_list.descriptorTypeCount = 2;
+    type_list.pDescriptorTypes = desc_types;
+
+    VkMutableDescriptorTypeCreateInfoEXT mdtci = vku::InitStructHelper();
+    mdtci.mutableDescriptorTypeListCount = 1;
+    mdtci.pMutableDescriptorTypeLists = &type_list;
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_MUTABLE_EXT, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}}, 0,
+                                       &mdtci);
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+    const char *cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0) buffer SSBO { uint x; };
+        void main() {
+            x = 0;
+        }
+    )glsl";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.cp_ci_.layout = pipeline_layout.handle();
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.Begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, NULL);
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-None-08114");
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, UpdateDescriptorSetMismatchType) {
     RETURN_IF_SKIP(Init());
 
-    vkt::Buffer buffer(*m_device, m_device->phy().limits_.minUniformBufferOffsetAlignment, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+    vkt::Buffer buffer(*m_device, m_device->Physical().limits_.minUniformBufferOffsetAlignment, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
                                                   {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_ALL, nullptr}});
@@ -1628,7 +1676,7 @@ TEST_F(NegativeDescriptors, DescriptorSetCompatibility) {
     pipe.gp_ci_.layout = pipe_layout_fs_only.handle();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
 
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
@@ -1696,7 +1744,7 @@ TEST_F(NegativeDescriptors, DescriptorSetCompatibility) {
 
     // Remaining clean-up
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, DescriptorSetCompatibilityCompute) {
@@ -1738,7 +1786,7 @@ TEST_F(NegativeDescriptors, DescriptorSetCompatibilityCompute) {
     pipeline.cp_ci_.layout = pipeline_layout_a.handle();
     pipeline.CreateComputePipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout_a.handle(), 0, 1,
                               &descriptor_set_storage.set_, 0, nullptr);
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout_b.handle(), 1, 1,
@@ -1747,7 +1795,7 @@ TEST_F(NegativeDescriptors, DescriptorSetCompatibilityCompute) {
     m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-None-08600");
     vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, DSUsageBits) {
@@ -1757,7 +1805,7 @@ TEST_F(NegativeDescriptors, DSUsageBits) {
 
     const VkFormat buffer_format = VK_FORMAT_R8_UNORM;
     VkFormatProperties format_properties;
-    vk::GetPhysicalDeviceFormatProperties(gpu(), buffer_format, &format_properties);
+    vk::GetPhysicalDeviceFormatProperties(Gpu(), buffer_format, &format_properties);
     if (!(format_properties.bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT)) {
         GTEST_SKIP() << "Device does not support VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT for this format";
     }
@@ -1790,7 +1838,7 @@ TEST_F(NegativeDescriptors, DSUsageBits) {
     for (uint32_t i = 0; i < kLocalDescriptorTypeRangeSize; ++i) {
         dsl_bindings[0].descriptorType = VkDescriptorType(i);
         ds_layouts.push_back(UpDescriptorSetLayout(new vkt::DescriptorSetLayout(*m_device, dsl_bindings)));
-        descriptor_sets.push_back(UpDescriptorSet(ds_pool.alloc_sets(*m_device, *ds_layouts.back())));
+        descriptor_sets.push_back(UpDescriptorSet(ds_pool.AllocateSets(*m_device, *ds_layouts.back())));
         ASSERT_TRUE(descriptor_sets.back()->initialized());
     }
 
@@ -1799,7 +1847,7 @@ TEST_F(NegativeDescriptors, DSUsageBits) {
     vkt::Buffer buffer(*m_device, buffer_size, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
     vkt::Buffer storage_texel_buffer(*m_device, buffer_size, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT);
 
-    auto buff_view_ci = vkt::BufferView::createInfo(buffer.handle(), VK_FORMAT_R8_UNORM);
+    auto buff_view_ci = vkt::BufferView::CreateInfo(buffer.handle(), VK_FORMAT_R8_UNORM);
     vkt::BufferView buffer_view_obj, storage_texel_buffer_view_obj;
     buffer_view_obj.init(*m_device, buff_view_ci);
     buff_view_ci.buffer = storage_texel_buffer.handle();
@@ -1870,13 +1918,13 @@ TEST_F(NegativeDescriptors, DSUsageBitsFlags2) {
 
     const VkFormat buffer_format = VK_FORMAT_R8_UNORM;
     VkFormatProperties format_properties;
-    vk::GetPhysicalDeviceFormatProperties(gpu(), buffer_format, &format_properties);
+    vk::GetPhysicalDeviceFormatProperties(Gpu(), buffer_format, &format_properties);
     if (!(format_properties.bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT)) {
         GTEST_SKIP() << "Device does not support VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT for this format";
     }
 
-    VkBufferUsageFlags2CreateInfoKHR buffer_usage_flags = vku::InitStructHelper();
-    buffer_usage_flags.usage = VK_BUFFER_USAGE_2_UNIFORM_TEXEL_BUFFER_BIT_KHR;
+    VkBufferUsageFlags2CreateInfo buffer_usage_flags = vku::InitStructHelper();
+    buffer_usage_flags.usage = VK_BUFFER_USAGE_2_UNIFORM_TEXEL_BUFFER_BIT;
 
     VkBufferCreateInfo buffer_create_info = vku::InitStructHelper(&buffer_usage_flags);
     buffer_create_info.size = 1024;
@@ -1912,10 +1960,10 @@ TEST_F(NegativeDescriptors, DSBufferLimit) {
         "Attempt to update buffer descriptor set that has VkDescriptorBufferInfo values that violate device limits.\n"
         "Test cases include:\n"
         "1. range of uniform buffer update exceeds maxUniformBufferRange\n"
-        "2. offset of uniform buffer update is not multiple of minUniformBufferOffsetAlignment\n"
+        "2. offset of uniform buffer update is not a multiple of minUniformBufferOffsetAlignment\n"
         "3. using VK_WHOLE_SIZE with uniform buffer size exceeding maxUniformBufferRange\n"
         "4. range of storage buffer update exceeds maxStorageBufferRange\n"
-        "5. offset of storage buffer update is not multiple of minStorageBufferOffsetAlignment\n"
+        "5. offset of storage buffer update is not a multiple of minStorageBufferOffsetAlignment\n"
         "6. using VK_WHOLE_SIZE with storage buffer size exceeding maxStorageBufferRange");
 
     RETURN_IF_SKIP(Init());
@@ -1931,11 +1979,13 @@ TEST_F(NegativeDescriptors, DSBufferLimit) {
 
     for (const auto &test_case : {
              TestCase({VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                       m_device->phy().limits_.maxUniformBufferRange, "VUID-VkWriteDescriptorSet-descriptorType-00332",
-                       m_device->phy().limits_.minUniformBufferOffsetAlignment, "VUID-VkWriteDescriptorSet-descriptorType-00327"}),
+                       m_device->Physical().limits_.maxUniformBufferRange, "VUID-VkWriteDescriptorSet-descriptorType-00332",
+                       m_device->Physical().limits_.minUniformBufferOffsetAlignment,
+                       "VUID-VkWriteDescriptorSet-descriptorType-00327"}),
              TestCase({VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                       m_device->phy().limits_.maxStorageBufferRange, "VUID-VkWriteDescriptorSet-descriptorType-00333",
-                       m_device->phy().limits_.minStorageBufferOffsetAlignment, "VUID-VkWriteDescriptorSet-descriptorType-00328"}),
+                       m_device->Physical().limits_.maxStorageBufferRange, "VUID-VkWriteDescriptorSet-descriptorType-00333",
+                       m_device->Physical().limits_.minStorageBufferOffsetAlignment,
+                       "VUID-VkWriteDescriptorSet-descriptorType-00328"}),
          }) {
         // Create layout with single buffer
         OneOffDescriptorSet descriptor_set(m_device, {
@@ -1959,7 +2009,7 @@ TEST_F(NegativeDescriptors, DSBufferLimit) {
 
         VkMemoryAllocateInfo mem_alloc = vku::InitStructHelper();
         mem_alloc.allocationSize = mem_reqs.size;
-        bool pass = m_device->phy().SetMemoryType(mem_reqs.memoryTypeBits, &mem_alloc, 0);
+        bool pass = m_device->Physical().SetMemoryType(mem_reqs.memoryTypeBits, &mem_alloc, 0);
         if (!pass) {
             printf("Failed to allocate memory in DSBufferLimitErrors; skipped.\n");
             continue;
@@ -2167,7 +2217,7 @@ TEST_F(NegativeDescriptors, InputAttachmentDepthStencilAspect) {
     TEST_DESCRIPTION("Checks for InputAttachment image view with more than one aspect.");
     RETURN_IF_SKIP(Init());
 
-    VkFormat ds_format = FindSupportedDepthStencilFormat(gpu());
+    VkFormat ds_format = FindSupportedDepthStencilFormat(Gpu());
 
     auto image_ci = vkt::Image::ImageCreateInfo2D(128, 128, 1, 1, ds_format, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
     vkt::Image image2D(*m_device, image_ci, vkt::set_layout);
@@ -2471,21 +2521,10 @@ TEST_F(NegativeDescriptors, InlineUniformBlockEXT) {
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME);
-    AddOptionalExtensions(VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
-    AddOptionalExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    // Enable descriptor indexing if supported, but don't require it.
-    bool has_descriptor_indexing =
-        IsExtensionsEnabled(VK_KHR_MAINTENANCE_3_EXTENSION_NAME) && IsExtensionsEnabled(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-
-    VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptor_indexing_features = vku::InitStructHelper();
-    void *pNext = has_descriptor_indexing ? &descriptor_indexing_features : nullptr;
-    // Create a device that enables inline_uniform_block
-    VkPhysicalDeviceInlineUniformBlockFeaturesEXT inline_uniform_block_features = vku::InitStructHelper(pNext);
-    auto features2 = GetPhysicalDeviceFeatures2(inline_uniform_block_features);
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_3_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::inlineUniformBlock);
+    RETURN_IF_SKIP(Init());
 
     VkPhysicalDeviceInlineUniformBlockPropertiesEXT inline_uniform_props = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(inline_uniform_props);
@@ -2497,7 +2536,7 @@ TEST_F(NegativeDescriptors, InlineUniformBlockEXT) {
     // Test too many bindings
     dslb_vec.clear();
     dslb.binding = 0;
-    dslb.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    dslb.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
     dslb.descriptorCount = 4;
     dslb.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
@@ -2551,7 +2590,7 @@ TEST_F(NegativeDescriptors, InlineUniformBlockEXT) {
 
     // Pool size must be a multiple of 4
     VkDescriptorPoolSize ds_type_count = {};
-    ds_type_count.type = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    ds_type_count.type = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
     ds_type_count.descriptorCount = 33;
 
     VkDescriptorPoolCreateInfo ds_pool_ci = vku::InitStructHelper(&pool_inline_info);
@@ -2574,7 +2613,7 @@ TEST_F(NegativeDescriptors, InlineUniformBlockEXT) {
     // Create two valid sets with 8 bytes each
     dslb_vec.clear();
     dslb.binding = 0;
-    dslb.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    dslb.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
     dslb.descriptorCount = 8;
     dslb.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     dslb_vec.push_back(dslb);
@@ -2596,7 +2635,7 @@ TEST_F(NegativeDescriptors, InlineUniformBlockEXT) {
     ASSERT_EQ(VK_SUCCESS, err);
 
     uint32_t dummyData[8] = {};
-    VkWriteDescriptorSetInlineUniformBlockEXT write_inline_uniform = vku::InitStructHelper();
+    VkWriteDescriptorSetInlineUniformBlock write_inline_uniform = vku::InitStructHelper();
     write_inline_uniform.dataSize = 3;
     write_inline_uniform.pData = &dummyData[0];
 
@@ -2606,7 +2645,7 @@ TEST_F(NegativeDescriptors, InlineUniformBlockEXT) {
     descriptor_write.dstBinding = 0;
     descriptor_write.dstArrayElement = 0;
     descriptor_write.descriptorCount = 3;
-    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
 
     // one for dataSiz and for descriptorCount
     m_errorMonitor->SetDesiredError("VUID-VkWriteDescriptorSet-descriptorType-02220");
@@ -2671,7 +2710,7 @@ TEST_F(NegativeDescriptors, InlineUniformBlockEXTFeature) {
 
     VkDescriptorSetLayoutBinding dslb = {};
     dslb.binding = 0;
-    dslb.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    dslb.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
     dslb.descriptorCount = 1;
     dslb.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
@@ -2692,7 +2731,7 @@ TEST_F(NegativeDescriptors, MaxInlineUniformBlockBindings) {
     RETURN_IF_SKIP(Init());
 
     VkDescriptorPoolSize ds_type_count = {};
-    ds_type_count.type = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    ds_type_count.type = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
     ds_type_count.descriptorCount = 16;
 
     VkDescriptorPoolCreateInfo ds_pool_ci = vku::InitStructHelper();
@@ -2867,7 +2906,7 @@ TEST_F(NegativeDescriptors, DescriptorSetLayoutNullImmutableSamplers) {
 
 TEST_F(NegativeDescriptors, NullDescriptorsDisabled) {
     RETURN_IF_SKIP(InitFramework());
-    RETURN_IF_SKIP(InitState(nullptr, nullptr));
+    RETURN_IF_SKIP(InitState());
 
     OneOffDescriptorSet descriptor_set(m_device, {
                                                      {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr},
@@ -2894,7 +2933,7 @@ TEST_F(NegativeDescriptors, NullDescriptorsDisabled) {
     descriptor_set.Clear();
     m_errorMonitor->VerifyFound();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceSize offset = 0;
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindVertexBuffers-pBuffers-04001");
@@ -2903,17 +2942,9 @@ TEST_F(NegativeDescriptors, NullDescriptorsDisabled) {
 }
 
 TEST_F(NegativeDescriptors, NullDescriptorsEnabled) {
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceRobustness2FeaturesEXT robustness2_features = vku::InitStructHelper();
-    auto features2 = GetPhysicalDeviceFeatures2(robustness2_features);
-
-    if (!robustness2_features.nullDescriptor) {
-        GTEST_SKIP() << "nullDescriptor feature not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredFeature(vkt::Feature::nullDescriptor);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     OneOffDescriptorSet descriptor_set(m_device, {
@@ -2929,7 +2960,7 @@ TEST_F(NegativeDescriptors, NullDescriptorsEnabled) {
     descriptor_set.UpdateDescriptorSets();
     descriptor_set.Clear();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceSize offset = 0;
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0, 1, &buffer, &offset);
@@ -2942,7 +2973,7 @@ TEST_F(NegativeDescriptors, NullDescriptorsEnabled) {
     offset = 1;
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindVertexBuffers-pBuffers-04002");
     vk::CmdBindVertexBuffers(m_command_buffer.handle(), 0, 1, &buffer, &offset);
-    m_command_buffer.end();
+    m_command_buffer.End();
     m_errorMonitor->VerifyFound();
 
     // Make sure sampler with NULL image view doesn't cause a crash or errors
@@ -2968,14 +2999,14 @@ TEST_F(NegativeDescriptors, NullDescriptorsEnabled) {
     pipe.gp_ci_.layout = pipeline_layout.handle();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &sampler_descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8095
@@ -2985,7 +3016,7 @@ TEST_F(NegativeDescriptors, DISABLED_ImageSubresourceOverlapBetweenAttachmentsAn
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    const VkFormat depth_format = FindSupportedDepthOnlyFormat(gpu());
+    const VkFormat depth_format = FindSupportedDepthOnlyFormat(Gpu());
     vkt::Image depth_image(
         *m_device, 64, 64, 1, depth_format,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -3061,7 +3092,7 @@ TEST_F(NegativeDescriptors, DISABLED_ImageSubresourceOverlapBetweenAttachmentsAn
                                                      VK_IMAGE_LAYOUT_GENERAL);
     g_pipe.descriptor_set_->UpdateDescriptorSets();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_renderPassBeginInfo.renderArea = {{0, 0}, {64, 64}};
     m_renderPassBeginInfo.renderPass = rp.Handle();
     m_renderPassBeginInfo.framebuffer = fb.handle();
@@ -3076,7 +3107,7 @@ TEST_F(NegativeDescriptors, DISABLED_ImageSubresourceOverlapBetweenAttachmentsAn
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, CreateDescriptorPoolFlags) {
@@ -3240,19 +3271,14 @@ TEST_F(NegativeDescriptors, CreateDescriptorPoolAllocateFlags) {
 TEST_F(NegativeDescriptors, DescriptorUpdateOfMultipleBindingWithOneUpdateCall) {
     TEST_DESCRIPTION("Update a descriptor set containing multiple bindings with only one update");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MAINTENANCE_1_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
+    AddRequiredFeature(vkt::Feature::inlineUniformBlock);
+    RETURN_IF_SKIP(Init());
 
     VkPhysicalDeviceInlineUniformBlockPropertiesEXT inlineUniformProps = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(inlineUniformProps);
 
-    VkPhysicalDeviceInlineUniformBlockFeaturesEXT extEnable = vku::InitStructHelper();
-    extEnable.inlineUniformBlock = VK_TRUE;
-    extEnable.descriptorBindingInlineUniformBlockUpdateAfterBind = VK_FALSE;
-
-    RETURN_IF_SKIP(InitState(nullptr, &extEnable));
     VkResult res;
 
     float inline_data[] = {1.f, 2.f};
@@ -3262,8 +3288,8 @@ TEST_F(NegativeDescriptors, DescriptorUpdateOfMultipleBindingWithOneUpdateCall) 
         VkDescriptorSetLayoutBinding layoutBinding[3] = {};
         uint32_t bindingCount[] = {sizeof(inline_data) / 2, 0, sizeof(inline_data) / 2};
         uint32_t bindingPoint[] = {0, 1, 2};
-        VkDescriptorType descType[] = {VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
-                                       VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT};
+        VkDescriptorType descType[] = {VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+                                       VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK};
         for (size_t i = 0; i < 3; ++i) {
             layoutBinding[i].binding = bindingPoint[i];
             layoutBinding[i].descriptorCount = bindingCount[i];
@@ -3287,12 +3313,12 @@ TEST_F(NegativeDescriptors, DescriptorUpdateOfMultipleBindingWithOneUpdateCall) 
 
     vkt::DescriptorPool descPool;
     {
-        VkDescriptorPoolInlineUniformBlockCreateInfoEXT descPoolInlineInfo = vku::InitStructHelper();
+        VkDescriptorPoolInlineUniformBlockCreateInfo descPoolInlineInfo = vku::InitStructHelper();
         descPoolInlineInfo.maxInlineUniformBlockBindings = 2;
 
         VkDescriptorPoolSize poolSize[2];
         poolSize[0].descriptorCount = sizeof(inline_data);
-        poolSize[0].type = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+        poolSize[0].type = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
         poolSize[1].descriptorCount = 1;
         poolSize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
 
@@ -3320,13 +3346,13 @@ TEST_F(NegativeDescriptors, DescriptorUpdateOfMultipleBindingWithOneUpdateCall) 
     }
     vkt::DescriptorSet descSet(*m_device, &descPool, descSetHandle);
 
-    VkWriteDescriptorSetInlineUniformBlockEXT writeInlineUbDesc = vku::InitStructHelper();
+    VkWriteDescriptorSetInlineUniformBlock writeInlineUbDesc = vku::InitStructHelper();
     writeInlineUbDesc.dataSize = sizeof(inline_data);
     writeInlineUbDesc.pData = inline_data;
 
     VkWriteDescriptorSet writeDesc = vku::InitStructHelper(&writeInlineUbDesc);
     writeDesc.descriptorCount = sizeof(inline_data);
-    writeDesc.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    writeDesc.descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
     writeDesc.dstBinding = 0;
     writeDesc.dstArrayElement = 0;
     writeDesc.dstSet = descSet.handle();
@@ -3416,7 +3442,6 @@ TEST_F(NegativeDescriptors, MutableDescriptors) {
     TEST_DESCRIPTION("Test mutable descriptors");
 
     AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::mutableDescriptorType);
     RETURN_IF_SKIP(Init());
@@ -3473,7 +3498,7 @@ TEST_F(NegativeDescriptors, MutableDescriptors) {
     vk::CreateDescriptorSetLayout(device(), &ds_layout_ci, NULL, &ds_layout);
     m_errorMonitor->VerifyFound();
 
-    descriptor_types[1] = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+    descriptor_types[1] = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
     m_errorMonitor->SetDesiredError("VUID-VkMutableDescriptorTypeListEXT-pDescriptorTypes-04603");
     vk::CreateDescriptorSetLayout(device(), &ds_layout_ci, NULL, &ds_layout);
     m_errorMonitor->VerifyFound();
@@ -3595,11 +3620,7 @@ TEST_F(NegativeDescriptors, MutableDescriptorSetLayoutMissingFeature) {
     TEST_DESCRIPTION("Create mutable descriptor set layout without mutableDescriptorType feature enabled.");
 
     AddRequiredExtensions(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutable_descriptor_type_features = vku::InitStructHelper();
-    mutable_descriptor_type_features.mutableDescriptorType = VK_FALSE;
-    VkPhysicalDeviceFeatures2KHR features2 = vku::InitStructHelper(&mutable_descriptor_type_features);
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkDescriptorSetLayoutBinding binding = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
@@ -3688,14 +3709,14 @@ TEST_F(NegativeDescriptors, ImageSubresourceOverlapBetweenRenderPassAndDescripto
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-06537");
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(rp.Handle(), framebuffer.handle(), 32, 32, 1, m_renderPassClearValues.data());
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     m_errorMonitor->VerifyFound();
 }
@@ -3804,14 +3825,14 @@ TEST_F(NegativeDescriptors, ImageSubresourceOverlapBetweenRenderPassAndDescripto
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-06537");
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(rp.Handle(), framebuffer.handle(), 32, 32, 1, m_renderPassClearValues.data());
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     m_errorMonitor->VerifyFound();
 }
@@ -3886,14 +3907,14 @@ TEST_F(NegativeDescriptors, DISABLED_DescriptorReadFromWriteAttachment) {
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-09000");
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(rp.Handle(), framebuffer.handle(), width, height, 1, m_renderPassClearValues.data());
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set.set_, 0, nullptr);
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     m_errorMonitor->VerifyFound();
 }
@@ -3972,7 +3993,7 @@ TEST_F(NegativeDescriptors, DescriptorWriteFromReadAttachment) {
                                                              VK_IMAGE_LAYOUT_GENERAL);
     descriptor_set_input_attachment.UpdateDescriptorSets();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(rp.Handle(), framebuffer.handle(), width, height, 1, m_renderPassClearValues.data());
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
@@ -3983,7 +4004,7 @@ TEST_F(NegativeDescriptors, DescriptorWriteFromReadAttachment) {
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 // https://gitlab.khronos.org/vulkan/vulkan/-/issues/3297
@@ -3992,17 +4013,11 @@ TEST_F(NegativeDescriptors, DISABLED_AllocatingVariableDescriptorSets) {
     TEST_DESCRIPTION("Test allocating large variable descriptor sets");
 
     AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexing_features = vku::InitStructHelper();
-    auto features2 = GetPhysicalDeviceFeatures2(indexing_features);
-    if (indexing_features.descriptorBindingVariableDescriptorCount == VK_FALSE) {
-        GTEST_SKIP() << "descriptorBindingVariableDescriptorCount feature not supported";
-    }
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredFeature(vkt::Feature::descriptorBindingVariableDescriptorCount);
+    RETURN_IF_SKIP(Init());
 
-    VkDescriptorBindingFlagsEXT flags[2] = {0, VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT};
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT flags_create_info = vku::InitStructHelper();
+    VkDescriptorBindingFlags flags[2] = {0, VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT};
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flags_create_info = vku::InitStructHelper();
     flags_create_info.bindingCount = 2;
     flags_create_info.pBindingFlags = flags;
 
@@ -4015,7 +4030,7 @@ TEST_F(NegativeDescriptors, DISABLED_AllocatingVariableDescriptorSets) {
     vkt::DescriptorSetLayout ds_layout(*m_device, ds_layout_ci);
     VkDescriptorSetLayout ds_layout_handle = ds_layout.handle();
 
-    VkDescriptorSetVariableDescriptorCountAllocateInfoEXT count_alloc_info = vku::InitStructHelper();
+    VkDescriptorSetVariableDescriptorCountAllocateInfo count_alloc_info = vku::InitStructHelper();
     count_alloc_info.descriptorSetCount = 1;
     uint32_t variable_count = 2;
     count_alloc_info.pDescriptorCounts = &variable_count;
@@ -4115,12 +4130,12 @@ TEST_F(NegativeDescriptors, BindingDescriptorSetFromHostOnlyPool) {
 
     vkt::PipelineLayout pipeline_layout(*m_device, {&ds_layout});
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorSets-pDescriptorSets-04616");
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0, 1,
                               &descriptor_set, 0, nullptr);
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, CopyMutableDescriptors) {
@@ -4224,7 +4239,7 @@ TEST_F(NegativeDescriptors, CopyMutableDescriptors) {
 
         VkDescriptorPoolSize pool_size = {};
         pool_size.type = VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
-        pool_size.descriptorCount = 4;
+        pool_size.descriptorCount = 8;
 
         VkDescriptorPoolCreateInfo ds_pool_ci = vku::InitStructHelper(&mdtci);
         ds_pool_ci.maxSets = 2;
@@ -4498,7 +4513,7 @@ TEST_F(NegativeDescriptors, InvalidDescriptorSetLayoutInlineUniformBlockFlags) {
     AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::inlineUniformBlock);
-    AddDisabledFeature(vkt::Feature::descriptorBindingInlineUniformBlockUpdateAfterBind);
+
     RETURN_IF_SKIP(Init());
 
     VkDescriptorSetLayoutBinding binding;
@@ -4557,7 +4572,7 @@ TEST_F(NegativeDescriptors, DispatchWithUnboundSet) {
     cs_pipeline.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&combined_image_set.layout_, &storage_image_set.layout_});
     cs_pipeline.CreateComputePipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
 
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, cs_pipeline.Handle());
 
@@ -4569,7 +4584,7 @@ TEST_F(NegativeDescriptors, DispatchWithUnboundSet) {
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-None-08600");
     vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
-    m_command_buffer.end();
+    m_command_buffer.End();
 
     m_errorMonitor->VerifyFound();
 }
@@ -4617,11 +4632,11 @@ TEST_F(NegativeDescriptors, SampledImageDepthComparisonForFormat) {
         VkFormatProperties3KHR fmt_props_3 = vku::InitStructHelper();
         VkFormatProperties2 fmt_props = vku::InitStructHelper(&fmt_props_3);
 
-        vk::GetPhysicalDeviceFormatProperties2KHR(gpu(), (VkFormat)fmt, &fmt_props);
+        vk::GetPhysicalDeviceFormatProperties2KHR(Gpu(), (VkFormat)fmt, &fmt_props);
 
-        const bool has_sampling = (fmt_props_3.optimalTilingFeatures & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT_KHR) != 0;
+        const bool has_sampling = (fmt_props_3.optimalTilingFeatures & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT) != 0;
         const bool has_sampling_img_depth_compare =
-            (fmt_props_3.optimalTilingFeatures & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT_KHR) != 0;
+            (fmt_props_3.optimalTilingFeatures & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT) != 0;
 
         if (has_sampling && !has_sampling_img_depth_compare) {
             format = (VkFormat)fmt;
@@ -4664,7 +4679,7 @@ TEST_F(NegativeDescriptors, SampledImageDepthComparisonForFormat) {
                                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     g_pipe.descriptor_set_->UpdateDescriptorSets();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.pipeline_layout_.handle(), 0, 1,
@@ -4675,7 +4690,7 @@ TEST_F(NegativeDescriptors, SampledImageDepthComparisonForFormat) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, BindDescriptorWithoutPipelineLayout) {
@@ -4687,7 +4702,7 @@ TEST_F(NegativeDescriptors, BindDescriptorWithoutPipelineLayout) {
                                                      {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                                  });
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     m_errorMonitor->SetDesiredError("UNASSIGNED-GeneralParameterError-RequiredHandle");
     VkPipelineLayout null_layout = CastFromUint64<VkPipelineLayout>(0);
@@ -4695,7 +4710,7 @@ TEST_F(NegativeDescriptors, BindDescriptorWithoutPipelineLayout) {
                               0, nullptr);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, InvalidImageInfoDescriptorType) {
@@ -4721,9 +4736,7 @@ TEST_F(NegativeDescriptors, InvalidImageInfoDescriptorType) {
     image_ci.flags = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT | VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT;
     image_ci.imageType = VK_IMAGE_TYPE_3D;
     image_ci.format = format;
-    image_ci.extent.width = 32;
-    image_ci.extent.height = 32;
-    image_ci.extent.depth = 2;
+    image_ci.extent = {32, 32, 2};
     image_ci.mipLevels = 1u;
     image_ci.arrayLayers = 1u;
     image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -4740,12 +4753,12 @@ TEST_F(NegativeDescriptors, InvalidImageInfoDescriptorType) {
                                            {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                        });
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorImageInfo-imageView-07795");
     descriptor_set.WriteDescriptorImageInfo(0, view, sampler, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_IMAGE_LAYOUT_GENERAL);
     descriptor_set.UpdateDescriptorSets();
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, CopyDescriptorSetMissingSrcFlag) {
@@ -4780,7 +4793,7 @@ TEST_F(NegativeDescriptors, CopyDescriptorSetMissingSrcFlag) {
     copy_descriptor_set.dstArrayElement = 0u;
     copy_descriptor_set.descriptorCount = 1u;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
 
     m_errorMonitor->SetDesiredError("VUID-VkCopyDescriptorSet-srcSet-01918");
     vk::UpdateDescriptorSets(*m_device, 0u, nullptr, 1u, &copy_descriptor_set);
@@ -4792,7 +4805,7 @@ TEST_F(NegativeDescriptors, CopyDescriptorSetMissingSrcFlag) {
     vk::UpdateDescriptorSets(*m_device, 0u, nullptr, 1u, &copy_descriptor_set);
     m_errorMonitor->VerifyFound();
 
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, InvalidDescriptorWriteImageInfo) {
@@ -4821,7 +4834,7 @@ TEST_F(NegativeDescriptors, BindStorageBufferDynamicAlignment) {
 
     RETURN_IF_SKIP(Init());
 
-    uint32_t alignment = static_cast<uint32_t>(m_device->phy().limits_.minStorageBufferOffsetAlignment);
+    uint32_t alignment = static_cast<uint32_t>(m_device->Physical().limits_.minStorageBufferOffsetAlignment);
     if (alignment < 2) {
         GTEST_SKIP() << "minStorageBufferOffsetAlignment too small";
     }
@@ -4833,30 +4846,23 @@ TEST_F(NegativeDescriptors, BindStorageBufferDynamicAlignment) {
     const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
     uint32_t dynamic_offset = alignment - 1;
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorSets-pDynamicOffsets-01972");
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0u, 1u,
                               &descriptor_set.set_, 1u, &dynamic_offset);
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, DescriptorIndexingMissingFeatures) {
     TEST_DESCRIPTION("Use partially bound descriptor flag without feature.");
 
     AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-    AddDisabledFeature(vkt::Feature::descriptorBindingPartiallyBound);
-    AddDisabledFeature(vkt::Feature::descriptorBindingSampledImageUpdateAfterBind);
-    AddDisabledFeature(vkt::Feature::descriptorBindingStorageImageUpdateAfterBind);
-    AddDisabledFeature(vkt::Feature::descriptorBindingStorageBufferUpdateAfterBind);
-    AddDisabledFeature(vkt::Feature::descriptorBindingStorageTexelBufferUpdateAfterBind);
-    AddDisabledFeature(vkt::Feature::descriptorBindingUniformTexelBufferUpdateAfterBind);
-    AddDisabledFeature(vkt::Feature::descriptorBindingUpdateUnusedWhilePending);
-    AddDisabledFeature(vkt::Feature::descriptorBindingVariableDescriptorCount);
+
     RETURN_IF_SKIP(Init());
 
-    VkDescriptorBindingFlagsEXT flag = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT flags_create_info = vku::InitStructHelper();
+    VkDescriptorBindingFlags flag = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flags_create_info = vku::InitStructHelper();
     flags_create_info.bindingCount = 1u;
     flags_create_info.pBindingFlags = &flag;
 
@@ -4938,13 +4944,13 @@ TEST_F(NegativeDescriptors, IncompatibleDescriptorFlagsWithBindingFlags) {
     bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     bindings[1].pImmutableSamplers = nullptr;
 
-    VkDescriptorBindingFlagsEXT binding_flags[] = {VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT, 0};
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT flags_create_info = vku::InitStructHelper();
+    VkDescriptorBindingFlags binding_flags[] = {VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT, 0};
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flags_create_info = vku::InitStructHelper();
     flags_create_info.bindingCount = 1u;
     flags_create_info.pBindingFlags = binding_flags;
 
     VkDescriptorSetLayoutCreateInfo create_info = vku::InitStructHelper(&flags_create_info);
-    create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+    create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
     create_info.bindingCount = 1u;
     create_info.pBindings = bindings;
 
@@ -5115,22 +5121,22 @@ TEST_F(NegativeDescriptors, PushDescriptorWithoutInfo) {
                                        {
                                            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                        },
-                                       VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
+                                       VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT);
 
     const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     VkWriteDescriptorSet descriptor_write = vku::InitStructHelper();
     descriptor_write.dstSet = descriptor_set.set_;
     descriptor_write.dstBinding = 0;
     descriptor_write.descriptorCount = 1;
     descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdPushDescriptorSetKHR-pDescriptorWrites-06494");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPushDescriptorSet-pDescriptorWrites-06494");
     vk::CmdPushDescriptorSetKHR(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0u, 1u,
                                 &descriptor_write);
     m_errorMonitor->VerifyFound();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeDescriptors, GetSupportMutableDescriptorType) {
@@ -5188,4 +5194,48 @@ TEST_F(NegativeDescriptors, EmptyDescriptorSetLayout) {
     m_errorMonitor->SetDesiredError("VUID-VkWriteDescriptorSet-dstBinding-10009");
     vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptors, DuplicateLayoutDifferentSampler) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8497");
+    RETURN_IF_SKIP(Init());
+    auto sampler_ci = SafeSaneSamplerCreateInfo();
+    vkt::Sampler sampler_0(*m_device, sampler_ci);
+    sampler_ci.maxLod = 8.0;
+    vkt::Sampler sampler_1(*m_device, sampler_ci);
+
+    OneOffDescriptorSet ds_0(m_device,
+                             {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &sampler_0.handle()}});
+    const vkt::PipelineLayout pipeline_layout_0(*m_device, {&ds_0.layout_});
+
+    OneOffDescriptorSet ds_1(m_device,
+                             {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &sampler_1.handle()}});
+
+    m_command_buffer.Begin();
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout_0.handle(), 0, 1,
+                              &ds_1.set_, 0, nullptr);
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeDescriptors, DuplicateLayoutDifferentSamplerArray) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8497");
+    RETURN_IF_SKIP(Init());
+    auto sampler_ci = SafeSaneSamplerCreateInfo();
+    vkt::Sampler sampler_0(*m_device, sampler_ci);
+    sampler_ci.maxLod = 8.0;
+    vkt::Sampler sampler_1(*m_device, sampler_ci);
+    VkSampler sampler_array_0[3] = {sampler_0.handle(), sampler_0.handle(), sampler_0.handle()};
+    VkSampler sampler_array_1[3] = {sampler_0.handle(), sampler_1.handle(), sampler_0.handle()};
+
+    OneOffDescriptorSet ds_0(m_device,
+                             {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, VK_SHADER_STAGE_COMPUTE_BIT, sampler_array_0}});
+    const vkt::PipelineLayout pipeline_layout_0(*m_device, {&ds_0.layout_});
+
+    OneOffDescriptorSet ds_1(m_device,
+                             {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, VK_SHADER_STAGE_COMPUTE_BIT, sampler_array_1}});
+
+    m_command_buffer.Begin();
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout_0.handle(), 0, 1,
+                              &ds_1.set_, 0, nullptr);
+    m_command_buffer.End();
 }

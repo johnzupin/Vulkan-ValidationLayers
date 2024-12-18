@@ -20,9 +20,9 @@
 
 #include "state_tracker/state_object.h"
 #include "utils/hash_util.h"
-#include "utils/vk_layer_utils.h"
 #include "state_tracker/shader_stage_state.h"
 #include "generated/vk_object_types.h"
+#include "generated/error_location_helper.h"
 #include <vulkan/utility/vk_safe_struct.hpp>
 #include <map>
 #include <set>
@@ -47,7 +47,7 @@ struct AllocateDescriptorSetsData;
 
 // "bindless" does not have a concrete definition, but we use it as means to know:
 // "is GPU-AV going to have to validate this or not"
-// (see docs/gpu_av_bindless.md for more details)
+// (see docs/gpu_av_descriptor_indexing.md for more details)
 static inline bool IsBindless(VkDescriptorBindingFlags flags) {
     return (flags & (VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT)) != 0;
 }
@@ -166,6 +166,7 @@ class DescriptorSetLayoutDef {
     size_t hash() const;
 
     uint32_t GetTotalDescriptorCount() const { return descriptor_count_; };
+    uint32_t GetNonInlineDescriptorCount() const { return non_inline_descriptor_count_; };
     uint32_t GetDynamicDescriptorCount() const { return dynamic_descriptor_count_; };
     VkDescriptorSetLayoutCreateFlags GetCreateFlags() const { return flags_; }
     // For a given binding, return the number of descriptors in that binding and all successive bindings
@@ -212,7 +213,7 @@ class DescriptorSetLayoutDef {
 
     // Helper function to get the next valid binding for a descriptor
     uint32_t GetNextValidBinding(const uint32_t) const;
-    bool IsPushDescriptor() const { return GetCreateFlags() & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; };
+    bool IsPushDescriptor() const { return GetCreateFlags() & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT; };
 
     struct BindingTypeStats {
         uint32_t dynamic_buffer_count;
@@ -238,7 +239,11 @@ class DescriptorSetLayoutDef {
     std::vector<IndexRange> global_index_range_;  // range is exclusive of .end
 
     uint32_t binding_count_;     // # of bindings in this layout
-    uint32_t descriptor_count_;  // total # descriptors in this layout
+    // total # descriptors in this layout (used to check if two layouts are the same or not)
+    uint32_t descriptor_count_;
+    // only counts INLINE_UNIFORM_BLOCK descriptors as one.
+    // When using Inline Uniform Block, each descriptor is the number of bytes, which can skew descriptor_count_
+    uint32_t non_inline_descriptor_count_;
     uint32_t dynamic_descriptor_count_;
     BindingTypeStats binding_type_stats_;
 };
@@ -274,6 +279,9 @@ static inline bool operator==(const DescriptorSetLayoutDef &lhs, const Descripto
         if (l.pImmutableSamplers) {
             for (uint32_t s = 0; s < l.descriptorCount; s++) {
                 if (l.pImmutableSamplers[s] != r.pImmutableSamplers[s]) {
+                    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8497
+                    // This just checks pointers, but two different VkSampler handles could be created with same createInfo.
+                    // Since this is rare enough, mark as "not the same" and check later when checking for compatibility.
                     return false;
                 }
             }
@@ -298,6 +306,7 @@ class DescriptorSetLayout : public StateObject {
     const DescriptorSetLayoutDef *GetLayoutDef() const { return layout_id_.get(); }
     DescriptorSetLayoutId GetLayoutId() const { return layout_id_; }
     uint32_t GetTotalDescriptorCount() const { return layout_id_->GetTotalDescriptorCount(); };
+    uint32_t GetNonInlineDescriptorCount() const { return layout_id_->GetNonInlineDescriptorCount(); };
     uint32_t GetDynamicDescriptorCount() const { return layout_id_->GetDynamicDescriptorCount(); };
     uint32_t GetBindingCount() const { return layout_id_->GetBindingCount(); };
     VkDescriptorSetLayoutCreateFlags GetCreateFlags() const { return layout_id_->GetCreateFlags(); }
@@ -357,30 +366,26 @@ class DescriptorSetLayout : public StateObject {
     std::unique_ptr<VkDeviceSize> layout_size_in_bytes;
 };
 
-/*
- * Descriptor classes
- *  Descriptor is an abstract base class from which 5 separate descriptor types are derived.
- *   This allows the WriteUpdate() and CopyUpdate() operations to be specialized per
- *   descriptor type, but all descriptors in a set can be accessed via the common Descriptor*.
- */
-
 // Slightly broader than type, each c++ "class" will has a corresponding "DescriptorClass"
 enum class DescriptorClass {
-    PlainSampler,
-    ImageSampler,
-    Image,
-    TexelBuffer,
-    GeneralBuffer,
-    InlineUniform,
-    AccelerationStructure,
-    Mutable,
-    NoDescriptorClass
+    PlainSampler,           // SAMPLER
+    ImageSampler,           // COMBINED_IMAGE_SAMPLER
+    Image,                  // SAMPLED_IMAGE/STORAGE_IMAGE/INPUT_ATTACHMENT
+    TexelBuffer,            // UNIFORM_TEXEL_BUFFER/VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER
+    GeneralBuffer,          // UNIFORM_BUFFER/VK_DESCRIPTOR_TYPE_STORAGE_BUFFER (and dynamic version)
+    InlineUniform,          // INLINE_UNIFORM_BLOCK
+    AccelerationStructure,  // ACCELERATION_STRUCTURE
+    Mutable,                // MUTABLE
+    Invalid
 };
 
 DescriptorClass DescriptorTypeToClass(VkDescriptorType type);
 
 class DescriptorSet;
 
+// Descriptor is an abstract base class from which many separate descriptor types are derived.
+// This allows the WriteUpdate() and CopyUpdate() operations to be specialized per descriptor type, but all descriptors in a set can
+// be accessed via the common Descriptor.
 class Descriptor {
   public:
     static bool SupportsNotifyInvalidate() { return false; }
@@ -398,6 +403,8 @@ class Descriptor {
     virtual bool IsImmutableSampler() const { return false; };
     virtual bool AddParent(StateObject *state_object) { return false; }
     virtual void RemoveParent(StateObject *state_object) {}
+
+    virtual void UpdateDrawState(vvl::CommandBuffer &cb_state) {}
 
     // return true if resources used by this descriptor are destroyed or otherwise missing
     virtual bool Invalid() const { return false; }
@@ -450,7 +457,7 @@ class ImageDescriptor : public Descriptor {
                      bool is_bindless) override;
     void CopyUpdate(DescriptorSet &set_state, const ValidationStateTracker &dev_data, const Descriptor &, bool is_bindless,
                     VkDescriptorType type) override;
-    void UpdateDrawState(ValidationStateTracker *, vvl::CommandBuffer *cb_state);
+    void UpdateDrawState(vvl::CommandBuffer &cb_state) override;
     VkImageView GetImageView() const;
     const vvl::ImageView *GetImageViewState() const { return image_view_state_.get(); }
     vvl::ImageView *GetImageViewState() { return image_view_state_.get(); }
@@ -566,7 +573,7 @@ class AccelerationStructureDescriptor : public Descriptor {
     vvl::AccelerationStructureNV *GetAccelerationStructureStateNV() { return acc_state_nv_.get(); }
     void CopyUpdate(DescriptorSet &set_state, const ValidationStateTracker &dev_data, const Descriptor &, bool is_bindless,
                     VkDescriptorType type) override;
-    bool is_khr() const { return is_khr_; }
+    bool IsKHR() const { return is_khr_; }
 
     bool AddParent(StateObject *state_object) override;
     void RemoveParent(StateObject *state_object) override;
@@ -590,7 +597,6 @@ class MutableDescriptor : public Descriptor {
                     VkDescriptorType type) override;
 
     void SetDescriptorType(VkDescriptorType type, VkDeviceSize buffer_size);
-    void SetDescriptorType(VkDescriptorType src_type, const Descriptor *src);
     VkDeviceSize GetBufferSize() const { return buffer_size_; }
 
     std::shared_ptr<vvl::Sampler> GetSharedSamplerState() const { return sampler_state_; }
@@ -615,12 +621,12 @@ class MutableDescriptor : public Descriptor {
         return acc_khr != VK_NULL_HANDLE;
     }
 
-    void UpdateDrawState(ValidationStateTracker *, vvl::CommandBuffer *cb_state);
+    void UpdateDrawState(vvl::CommandBuffer &cb_state) override;
 
     bool AddParent(StateObject *state_object) override;
     void RemoveParent(StateObject *state_object) override;
 
-    bool is_khr() const { return is_khr_; }
+    bool IsKHR() const { return is_khr_; }
     bool Invalid() const override;
 
     VkDescriptorType ActiveType() const { return active_descriptor_type_; }
@@ -760,7 +766,7 @@ using MutableBinding = DescriptorBindingImpl<MutableDescriptor>;
 // Helper class to encapsulate the descriptor update template decoding logic
 struct DecodedTemplateUpdate {
     std::vector<VkWriteDescriptorSet> desc_writes;
-    std::vector<VkWriteDescriptorSetInlineUniformBlockEXT> inline_infos;
+    std::vector<VkWriteDescriptorSetInlineUniformBlock> inline_infos;
     std::vector<VkWriteDescriptorSetAccelerationStructureKHR> inline_infos_khr;
     std::vector<VkWriteDescriptorSetAccelerationStructureNV> inline_infos_nv;
     DecodedTemplateUpdate(const ValidationStateTracker &device_data, VkDescriptorSet descriptorSet,
@@ -807,6 +813,7 @@ class DescriptorSet : public StateObject {
 
     // A number of common Get* functions that return data based on layout from which this set was created
     uint32_t GetTotalDescriptorCount() const { return layout_->GetTotalDescriptorCount(); };
+    uint32_t GetNonInlineDescriptorCount() const { return layout_->GetNonInlineDescriptorCount(); };
     uint32_t GetDynamicDescriptorCount() const { return layout_->GetDynamicDescriptorCount(); };
     uint32_t GetBindingCount() const { return layout_->GetBindingCount(); };
     uint32_t GetDescriptorCountFromBinding(const uint32_t binding) const {
@@ -829,8 +836,7 @@ class DescriptorSet : public StateObject {
     VkDescriptorSet VkHandle() const { return handle_.Cast<VkDescriptorSet>(); };
     // Bind given cmd_buffer to this descriptor set and
     // update CB image layout map with image/imagesampler descriptor image layouts
-    void UpdateDrawState(ValidationStateTracker *, vvl::CommandBuffer *cb_state, vvl::Func command, const vvl::Pipeline *,
-                         const BindingVariableMap &);
+    void UpdateDrawStates(ValidationStateTracker *, vvl::CommandBuffer &cb_state, const BindingVariableMap &);
 
     // For a particular binding, get the global index
     const IndexRange GetGlobalIndexRangeFromBinding(const uint32_t binding, bool actual_length = false) const {
@@ -849,6 +855,7 @@ class DescriptorSet : public StateObject {
     uint32_t GetVariableDescriptorCount() const { return variable_count_; }
     vvl::DescriptorPool *GetPoolState() const { return pool_state_; }
 
+    // These are overriding STL so need lower case names
     ConstBindingIterator begin() const { return bindings_.begin(); }
     ConstBindingIterator end() const { return bindings_.end(); }
     ConstBindingIterator FindBinding(uint32_t binding) const {
@@ -983,11 +990,7 @@ class DescriptorSet : public StateObject {
         return DescriptorIterator<ConstBindingIterator>(*this, binding, index);
     }
 
-    virtual bool SkipBinding(const DescriptorBinding &binding, bool is_dynamic_accessed) const {
-        // core validation case: We check if all parts of the descriptor are statically known, from here spirv-val should have
-        // caught any OOB values.
-        return IsBindless(binding.binding_flags) || is_dynamic_accessed;
-    }
+    bool ValidateBindingOnGPU(const DescriptorBinding &binding, bool is_runtime_descriptor_array) const;
 
   protected:
     union AnyBinding {

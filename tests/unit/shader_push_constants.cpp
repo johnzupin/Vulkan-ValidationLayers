@@ -14,6 +14,7 @@
 
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
+#include "../framework/shader_object_helper.h"
 
 class NegativeShaderPushConstants : public VkLayerTest {};
 
@@ -54,13 +55,10 @@ TEST_F(NegativeShaderPushConstants, NotDeclared) {
 
 TEST_F(NegativeShaderPushConstants, PipelineRange) {
     TEST_DESCRIPTION("Invalid use of VkPushConstantRange structs.");
-
     RETURN_IF_SKIP(Init());
 
-    VkPhysicalDeviceProperties device_props = {};
-    vk::GetPhysicalDeviceProperties(gpu(), &device_props);
     // will be at least 256 as required from the spec
-    const uint32_t maxPushConstantsSize = device_props.limits.maxPushConstantsSize;
+    const uint32_t maxPushConstantsSize = m_device->Physical().limits_.maxPushConstantsSize;
 
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkPushConstantRange push_constant_range = {0, 0, 4};
@@ -79,7 +77,7 @@ TEST_F(NegativeShaderPushConstants, PipelineRange) {
     vk::CreatePipelineLayout(device(), &pipeline_layout_info, NULL, &pipeline_layout);
     m_errorMonitor->VerifyFound();
 
-    // offset not multiple of 4
+    // offset not a multiple of 4
     push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 1, 8};
     m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-offset-00295");
     vk::CreatePipelineLayout(device(), &pipeline_layout_info, NULL, &pipeline_layout);
@@ -91,7 +89,7 @@ TEST_F(NegativeShaderPushConstants, PipelineRange) {
     vk::CreatePipelineLayout(device(), &pipeline_layout_info, NULL, &pipeline_layout);
     m_errorMonitor->VerifyFound();
 
-    // size not multiple of 4
+    // size not a multiple of 4
     push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 7};
     m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-size-00297");
     vk::CreatePipelineLayout(device(), &pipeline_layout_info, NULL, &pipeline_layout);
@@ -120,6 +118,72 @@ TEST_F(NegativeShaderPushConstants, PipelineRange) {
     pipeline_layout_info.pPushConstantRanges = push_constant_range_duplicate;
     m_errorMonitor->SetDesiredError("VUID-VkPipelineLayoutCreateInfo-pPushConstantRanges-00292");
     vk::CreatePipelineLayout(device(), &pipeline_layout_info, nullptr, &pipeline_layout);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeShaderPushConstants, PipelineRangeShaderObject) {
+    TEST_DESCRIPTION("Invalid use of VkPushConstantRange structs.");
+    AddRequiredExtensions(VK_EXT_SHADER_OBJECT_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderObject);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Shader shader;
+    VkPushConstantRange push_constant_range = {0, 0, 4};
+    const auto spv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
+    VkShaderCreateInfoEXT ci_info = ShaderCreateInfo(spv, VK_SHADER_STAGE_VERTEX_BIT, 0, nullptr, 1, &push_constant_range);
+
+    // stageFlags of 0
+    m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-stageFlags-requiredbitmask");
+    shader.init(*m_device, ci_info);
+    m_errorMonitor->VerifyFound();
+
+    // will be at least 256 as required from the spec
+    const uint32_t maxPushConstantsSize = m_device->Physical().limits_.maxPushConstantsSize;
+
+    // offset over limit
+    push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, maxPushConstantsSize, 8};
+    m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-offset-00294");
+    m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-size-00298");
+    shader.init(*m_device, ci_info);
+    m_errorMonitor->VerifyFound();
+
+    // offset not a multiple of 4
+    push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 1, 8};
+    m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-offset-00295");
+    shader.init(*m_device, ci_info);
+    m_errorMonitor->VerifyFound();
+
+    // size of 0
+    push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 0};
+    m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-size-00296");
+    shader.init(*m_device, ci_info);
+    m_errorMonitor->VerifyFound();
+
+    // size not a multiple of 4
+    push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 7};
+    m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-size-00297");
+    shader.init(*m_device, ci_info);
+    m_errorMonitor->VerifyFound();
+
+    // size over limit
+    push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, maxPushConstantsSize + 4};
+    m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-size-00298");
+    shader.init(*m_device, ci_info);
+    m_errorMonitor->VerifyFound();
+
+    // size over limit of non-zero offset
+    push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 4, maxPushConstantsSize};
+    m_errorMonitor->SetDesiredError("VUID-VkPushConstantRange-size-00298");
+    shader.init(*m_device, ci_info);
+    m_errorMonitor->VerifyFound();
+
+    push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, maxPushConstantsSize};
+    // Duplicate ranges
+    VkPushConstantRange push_constant_range_duplicate[2] = {push_constant_range, push_constant_range};
+    ci_info.pushConstantRangeCount = 2;
+    ci_info.pPushConstantRanges = push_constant_range_duplicate;
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-pPushConstantRanges-10063");
+    shader.init(*m_device, ci_info);
     m_errorMonitor->VerifyFound();
 }
 
@@ -163,9 +227,9 @@ TEST_F(NegativeShaderPushConstants, Range) {
     // Set limit to be same max as the shader usages
     const uint32_t maxPushConstantsSize = 16;
     VkPhysicalDeviceProperties props;
-    fpvkGetOriginalPhysicalDeviceLimitsEXT(gpu(), &props.limits);
+    fpvkGetOriginalPhysicalDeviceLimitsEXT(Gpu(), &props.limits);
     props.limits.maxPushConstantsSize = maxPushConstantsSize;
-    fpvkSetPhysicalDeviceLimitsEXT(gpu(), &props.limits);
+    fpvkSetPhysicalDeviceLimitsEXT(Gpu(), &props.limits);
 
     RETURN_IF_SKIP(InitState());
     InitRenderTarget();
@@ -192,19 +256,19 @@ TEST_F(NegativeShaderPushConstants, Range) {
 
     const float data[16] = {};  // dummy data to match shader size
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
 
     // size of 0
     m_errorMonitor->SetDesiredError("VUID-vkCmdPushConstants-size-arraylength");
     vk::CmdPushConstants(m_command_buffer.handle(), pipe.pipeline_layout_.handle(), VK_SHADER_STAGE_VERTEX_BIT, 0, 0, data);
     m_errorMonitor->VerifyFound();
 
-    // offset not multiple of 4
+    // offset not a multiple of 4
     m_errorMonitor->SetDesiredError("VUID-vkCmdPushConstants-offset-00368");
     vk::CmdPushConstants(m_command_buffer.handle(), pipe.pipeline_layout_.handle(), VK_SHADER_STAGE_VERTEX_BIT, 1, 4, data);
     m_errorMonitor->VerifyFound();
 
-    // size not multiple of 4
+    // size not a multiple of 4
     m_errorMonitor->SetDesiredError("VUID-vkCmdPushConstants-size-00369");
     vk::CmdPushConstants(m_command_buffer.handle(), pipe.pipeline_layout_.handle(), VK_SHADER_STAGE_VERTEX_BIT, 0, 5, data);
     m_errorMonitor->VerifyFound();
@@ -226,7 +290,7 @@ TEST_F(NegativeShaderPushConstants, Range) {
     vk::CmdPushConstants(m_command_buffer.handle(), pipe.pipeline_layout_.handle(), VK_SHADER_STAGE_VERTEX_BIT, 0,
                          maxPushConstantsSize, data);
 
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeShaderPushConstants, DrawWithoutUpdate) {
@@ -308,7 +372,7 @@ TEST_F(NegativeShaderPushConstants, DrawWithoutUpdate) {
     g_pipe_small_range.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-maintenance4-08602");  // vertex
@@ -341,7 +405,7 @@ TEST_F(NegativeShaderPushConstants, DrawWithoutUpdate) {
     vk::CmdDraw(m_command_buffer.handle(), 1, 0, 0, 0);
 
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeShaderPushConstants, MultipleEntryPoint) {

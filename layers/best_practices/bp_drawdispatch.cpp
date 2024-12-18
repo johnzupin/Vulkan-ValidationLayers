@@ -256,7 +256,7 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cmd_st
         for (const uint8_t* scan_ptr = scan_begin; scan_ptr < scan_end; scan_ptr += scan_stride) {
             uint32_t scan_index;
             uint32_t primitive_restart_value;
-            if (ib_type == VK_INDEX_TYPE_UINT8_KHR) {
+            if (ib_type == VK_INDEX_TYPE_UINT8) {
                 scan_index = *reinterpret_cast<const uint8_t*>(scan_ptr);
                 primitive_restart_value = 0xFF;
             } else if (ib_type == VK_INDEX_TYPE_UINT16) {
@@ -309,7 +309,7 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cmd_st
         // Knowing the size from the last scan allows us to record index usage with bitsets
         for (const uint8_t* scan_ptr = scan_begin; scan_ptr < scan_end; scan_ptr += scan_stride) {
             uint32_t scan_index;
-            if (ib_type == VK_INDEX_TYPE_UINT8_KHR) {
+            if (ib_type == VK_INDEX_TYPE_UINT8) {
                 scan_index = *reinterpret_cast<const uint8_t*>(scan_ptr);
             } else if (ib_type == VK_INDEX_TYPE_UINT16) {
                 scan_index = *reinterpret_cast<const uint16_t*>(scan_ptr);
@@ -594,9 +594,9 @@ void BestPractices::ValidateBoundDescriptorSets(bp_state::CommandBuffer& cb_stat
     auto lvl_bind_point = ConvertToLvlBindPoint(bind_point);
     auto& last_bound = cb_state.lastBound[lvl_bind_point];
 
-    for (const auto& descriptor_set : last_bound.per_set) {
-        if (!descriptor_set.bound_descriptor_set) continue;
-        for (const auto& binding : *descriptor_set.bound_descriptor_set) {
+    for (const auto& ds_slot : last_bound.ds_slots) {
+        if (!ds_slot.ds_state) continue;
+        for (const auto& binding : *ds_slot.ds_state) {
             // For bindless scenarios, we should not attempt to track descriptor set state.
             // It is highly uncertain which resources are actually bound.
             // Resources which are written to such a descriptor should be marked as indeterminate w.r.t. state.

@@ -72,7 +72,7 @@ TEST_F(NegativeTransformFeedback, FeatureEnabled) {
     CreatePipelineHelper pipe(*this);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -106,14 +106,14 @@ TEST_F(NegativeTransformFeedback, NoBoundPipeline) {
 
     InitRenderTarget();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     m_errorMonitor->SetDesiredError("VUID-vkCmdBeginTransformFeedbackEXT-firstCounterBuffer-09630");
     m_errorMonitor->SetDesiredError("VUID-vkCmdBeginTransformFeedbackEXT-None-06233");
     vk::CmdBeginTransformFeedbackEXT(m_command_buffer.handle(), 0, 1, nullptr, nullptr);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeTransformFeedback, CmdBindTransformFeedbackBuffersEXT) {
@@ -127,7 +127,7 @@ TEST_F(NegativeTransformFeedback, CmdBindTransformFeedbackBuffersEXT) {
     pipe.shader_stages_[0] = vs->GetStageCreateInfo();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -266,7 +266,7 @@ TEST_F(NegativeTransformFeedback, CmdBeginTransformFeedbackEXT) {
     pipe.shader_stages_[0] = vs->GetStageCreateInfo();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
@@ -349,7 +349,7 @@ TEST_F(NegativeTransformFeedback, CmdEndTransformFeedbackEXT) {
     pipe.shader_stages_[0] = vs->GetStageCreateInfo();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vkt::Buffer buffer(*m_device, 16, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT);
@@ -445,13 +445,13 @@ TEST_F(NegativeTransformFeedback, ExecuteSecondaryCommandBuffers) {
     hinfo.queryFlags = 0;
     hinfo.pipelineStatistics = 0;
 
-    secondary.begin(&info);
-    secondary.end();
+    secondary.Begin(&info);
+    secondary.End();
 
     CreatePipelineHelper pipe(*this);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
     m_errorMonitor->SetDesiredError("VUID-vkCmdBeginTransformFeedbackEXT-commandBuffer-recording");
@@ -477,7 +477,7 @@ TEST_F(NegativeTransformFeedback, BindPipeline) {
     CreatePipelineHelper pipe_two(*this);
     pipe_two.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vkt::Buffer buffer(*m_device, 16, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT);
     VkDeviceSize offset = 0;
@@ -490,7 +490,7 @@ TEST_F(NegativeTransformFeedback, BindPipeline) {
     m_errorMonitor->VerifyFound();
     vk::CmdEndTransformFeedbackEXT(m_command_buffer.handle(), 0, 1, nullptr, nullptr);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeTransformFeedback, EndRenderPass) {
@@ -505,7 +505,7 @@ TEST_F(NegativeTransformFeedback, EndRenderPass) {
     pipe.shader_stages_[0] = vs->GetStageCreateInfo();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkt::Buffer buffer(*m_device, 16, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT);
     VkDeviceSize offset = 0;
@@ -518,7 +518,7 @@ TEST_F(NegativeTransformFeedback, EndRenderPass) {
     m_errorMonitor->VerifyFound();
     vk::CmdEndTransformFeedbackEXT(m_command_buffer.handle(), 0, 1, nullptr, nullptr);
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
@@ -539,11 +539,11 @@ TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
         CreatePipelineHelper pipeline(*this);
         pipeline.CreateGraphicsPipeline();
 
-        m_command_buffer.begin();
+        m_command_buffer.Begin();
         m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
         vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Handle());
 
-        // if property is not multiple of 4
+        // if property is not a multiple of 4
         m_errorMonitor->SetUnexpectedError("VUID-vkCmdDrawIndirectByteCountEXT-vertexStride-09475");
         m_errorMonitor->SetDesiredError("VUID-vkCmdDrawIndirectByteCountEXT-vertexStride-02289");
         vk::CmdDrawIndirectByteCountEXT(m_command_buffer.handle(), 1, 0, counter_buffer.handle(), 0, 0,
@@ -564,12 +564,12 @@ TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
         m_errorMonitor->VerifyFound();
 
         m_command_buffer.EndRenderPass();
-        m_command_buffer.end();
+        m_command_buffer.End();
     }
 
     std::vector<const char *> device_extension_names;
     device_extension_names.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-    vkt::Device test_device(gpu(), device_extension_names);
+    vkt::Device test_device(Gpu(), device_extension_names);
     vkt::CommandPool commandPool(test_device, 0);
     vkt::CommandBuffer commandBuffer(test_device, commandPool);
     vkt::Buffer counter_buffer2(test_device, 1024, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
@@ -600,7 +600,7 @@ TEST_F(NegativeTransformFeedback, DrawIndirectByteCountEXT) {
     m_renderPassBeginInfo.renderPass = renderpass.handle();
     m_renderPassBeginInfo.framebuffer = fb.handle();
     m_renderPassBeginInfo.renderPass = renderpass.handle();
-    commandBuffer.begin();
+    commandBuffer.Begin();
     vk::CmdBindPipeline(commandBuffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Handle());
     commandBuffer.BeginRenderPass(m_renderPassBeginInfo);
 
@@ -613,14 +613,9 @@ TEST_F(NegativeTransformFeedback, UsingRasterizationStateStreamExtDisabled) {
     TEST_DESCRIPTION("Test using TestRasterizationStateStreamCreateInfoEXT but it doesn't enable geometryStreams.");
 
     AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceTransformFeedbackFeaturesEXT transform_feedback_features = vku::InitStructHelper();
-    transform_feedback_features.geometryStreams = VK_FALSE;  // Invalid
-
-    // Extension enabled via VK_EXT_transform_feedback dependency
-    VkPhysicalDeviceFeatures2KHR features2 = vku::InitStructHelper(&transform_feedback_features);
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredFeature(vkt::Feature::transformFeedback);
+    // geometryStreams not enabled
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     CreatePipelineHelper pipe(*this);
@@ -637,23 +632,10 @@ TEST_F(NegativeTransformFeedback, RuntimeSpirv) {
 
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    VkPhysicalDeviceTransformFeedbackFeaturesEXT transform_feedback_features =
-        vku::InitStructHelper();
-    transform_feedback_features.transformFeedback = VK_TRUE;
-    transform_feedback_features.geometryStreams = VK_TRUE;
-    VkPhysicalDeviceVulkan12Features features12 = vku::InitStructHelper(&transform_feedback_features);
-
-    auto features2 = GetPhysicalDeviceFeatures2(features12);
-    if (features2.features.geometryShader == VK_FALSE) {
-        GTEST_SKIP() << "Device does not support the required geometry shader features";
-    }
-    if (!transform_feedback_features.transformFeedback || !transform_feedback_features.geometryStreams) {
-        GTEST_SKIP() << "transformFeedback or geometryStreams feature is not supported";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    AddRequiredFeature(vkt::Feature::geometryShader);
+    AddRequiredFeature(vkt::Feature::transformFeedback);
+    AddRequiredFeature(vkt::Feature::geometryStreams);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
     VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback_props = vku::InitStructHelper();
@@ -990,7 +972,6 @@ TEST_F(NegativeTransformFeedback, RuntimeSpirv) {
 TEST_F(NegativeTransformFeedback, PipelineRasterizationStateStreamCreateInfoEXT) {
     TEST_DESCRIPTION("Test using TestRasterizationStateStreamCreateInfoEXT with invalid rasterizationStream.");
 
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::transformFeedback);
     AddRequiredFeature(vkt::Feature::geometryStreams);
@@ -1063,7 +1044,7 @@ TEST_F(NegativeTransformFeedback, CmdNextSubpass) {
     pipe.shader_stages_[0] = vs->GetStageCreateInfo();
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
     vkt::Buffer buffer(*m_device, 16, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT);
@@ -1085,7 +1066,7 @@ TEST_F(NegativeTransformFeedback, CmdBeginTransformFeedbackOutsideRenderPass) {
     CreatePipelineHelper pipe(*this);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
 
     vkt::Buffer const buffer_obj(*m_device, 4, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT);
@@ -1106,7 +1087,7 @@ TEST_F(NegativeTransformFeedback, XfbExecutionModeCommand) {
     CreatePipelineHelper pipe(*this);
     pipe.CreateGraphicsPipeline();
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
     vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
     vkt::Buffer buffer(*m_device, 16, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT);
@@ -1116,11 +1097,13 @@ TEST_F(NegativeTransformFeedback, XfbExecutionModeCommand) {
     vk::CmdBeginTransformFeedbackEXT(m_command_buffer.handle(), 0, 1, nullptr, nullptr);
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeTransformFeedback, XfbExecutionModePipeline) {
     TEST_DESCRIPTION("missing Xfb execution mode");
+    AddRequiredFeature(vkt::Feature::geometryShader);
+    AddRequiredFeature(vkt::Feature::sparseBinding);
     RETURN_IF_SKIP(InitBasicTransformFeedback());
 
     InitRenderTarget();
