@@ -3,277 +3,277 @@ Upstream-Name: vulkan-validationlayers
 Source: https://github.com/KhronosGroup/Vulkan-ValidationLayers
 
 Files: *
-Copyright: 2015-2022, LunarG, Inc
-           2015, Valve Corporation
-           after any existing copyrights
-           included
+Copyright: 2015-2024, LunarG, Inc
+           2015-2024, Valve Corporation
 License: Apache-2 or Apache-2.0
 
-Files: cmake/Copyright_cmake.txt
-Copyright: 2011, Fredrik Höglund <fredrik@kde.org>
-           2008, Helio Chissini de Castro <helio@kde.org>
-           2000-2018, Kitware, Inc
-           2013, Martin Gräßlin <mgraesslin@kde.org>
-           2007, Matthias Kretz <kretz@kde.org>
-License: BSD-3-clause
-
-Files: layers/xxhash.c
-       layers/xxhash.h
-Copyright: 2012-2020, Yann Collet
-License: BSD-2-clause
-
-Files: .github/workflows/*
-       .gn
+Files: .github/CODEOWNERS
+       .github/dependabot.yml
+       .github/workflows/*
        BUILD.gn
        CMakeLists.txt
        LICENSE.txt
-       build-android/build_all.sh
-       build-android/install_all.sh
-       build-android/jni/Android.mk
-       build-android/jni/Application.mk
-       build-android/res/*
-       build-android/test_APK.sh
-       build-android/update_external_sources_android.bat
-       build-android/update_external_sources_android.sh
-       build-gn/commit_id.py
-       build-gn/generate_vulkan_layers_json.py
-       build-gn/layers-fuchsia.gni
-       build-gn/remove_files.py
-       build-gn/secondary/*
-       build-gn/update_deps.sh
-       cmake/VVLGenerateSourceCode.cmake
        layers/CMakeLists.txt
        layers/VkLayer_khronos_validation.def
-       layers/android_ndk_types.h
-       layers/base_node.cpp
-       layers/base_node.h
-       layers/best_practices_error_enums.h
-       layers/best_practices_utils.cpp
-       layers/best_practices_validation.h
-       layers/buffer_state.cpp
-       layers/buffer_state.h
-       layers/buffer_validation.cpp
-       layers/buffer_validation.h
-       layers/cast_utils.h
-       layers/cmd_buffer_state.cpp
-       layers/cmd_buffer_state.h
-       layers/convert_to_renderpass2.cpp
-       layers/convert_to_renderpass2.h
-       layers/core_error_location.cpp
-       layers/core_error_location.h
-       layers/core_validation.cpp
-       layers/core_validation.h
-       layers/core_validation_error_enums.h
-       layers/debug_printf.cpp
-       layers/debug_printf.h
-       layers/descriptor_sets.cpp
-       layers/descriptor_sets.h
-       layers/descriptor_validation.cpp
-       layers/device_memory_state.cpp
-       layers/device_memory_state.h
-       layers/device_state.h
-       layers/drawdispatch.cpp
-       layers/generated/best_practices.cpp
-       layers/generated/best_practices.h
-       layers/generated/chassis.cpp
-       layers/generated/chassis.h
-       layers/generated/chassis_dispatch_helper.h
-       layers/generated/command_validation.cpp
-       layers/generated/command_validation.h
-       layers/generated/corechecks_optick_instrumentation.cpp
-       layers/generated/corechecks_optick_instrumentation.h
-       layers/generated/enum_flag_bits.h
-       layers/generated/gpu_as_inspection_comp.h
-       layers/generated/gpu_pre_dispatch_comp.h
-       layers/generated/gpu_pre_draw_vert.h
-       layers/generated/layer_chassis_dispatch.cpp
-       layers/generated/layer_chassis_dispatch.h
-       layers/generated/lvt_function_pointers.cpp
-       layers/generated/lvt_function_pointers.h
-       layers/generated/object_tracker.cpp
-       layers/generated/object_tracker.h
-       layers/generated/parameter_validation.cpp
-       layers/generated/parameter_validation.h
-       layers/generated/spirv_grammar_helper.cpp
-       layers/generated/spirv_grammar_helper.h
-       layers/generated/spirv_tools_commit_id.h
-       layers/generated/spirv_validation_helper.cpp
-       layers/generated/synchronization_validation_types.cpp
-       layers/generated/synchronization_validation_types.h
-       layers/generated/thread_safety.cpp
-       layers/generated/thread_safety.h
-       layers/generated/vk_dispatch_table_helper.h
-       layers/generated/vk_enum_string_helper.h
-       layers/generated/vk_extension_helper.h
-       layers/generated/vk_format_utils.cpp
-       layers/generated/vk_format_utils.h
-       layers/generated/vk_layer_dispatch_table.h
-       layers/generated/vk_object_types.h
-       layers/generated/vk_safe_struct.cpp
-       layers/generated/vk_safe_struct.h
-       layers/generated/vk_typemap_helper.h
-       layers/generated/vk_validation_error_messages.h
-       layers/gpu_shaders/gpu_pre_dispatch.comp
-       layers/gpu_shaders/gpu_pre_draw.vert
-       layers/gpu_shaders/gpu_shaders_constants.h
-       layers/gpu_utils.cpp
-       layers/gpu_utils.h
-       layers/gpu_validation.cpp
-       layers/gpu_validation.h
-       layers/gpu_vuids.h
-       layers/hash_util.h
-       layers/hash_vk_types.h
-       layers/image_layout_map.cpp
-       layers/image_layout_map.h
-       layers/image_state.cpp
-       layers/image_state.h
+       layers/best_practices/*
+       layers/chassis/*
+       layers/containers/*
+       layers/core_checks/*
+       layers/drawdispatch/*
+       layers/error_message/*
+       layers/external/*
+       layers/gpu/cmd_validation/*
+       layers/gpu/core/*
+       layers/gpu/debug_printf/*
+       layers/gpu/descriptor_validation/*
+       layers/gpu/error_message/*
+       layers/gpu/instrumentation/*
+       layers/gpu/resources/*
+       layers/gpu/shaders/cmd_validation/*
+       layers/gpu/shaders/gpuav_error_codes.h
+       layers/gpu/shaders/gpuav_error_header.h
+       layers/gpu/shaders/gpuav_shaders_constants.h
+       layers/gpu/shaders/instrumentation/*
+       layers/gpu/spirv/CMakeLists.txt
+       layers/gpu/spirv/buffer_device_address_pass.cpp
+       layers/gpu/spirv/buffer_device_address_pass.h
+       layers/gpu/spirv/debug_printf_pass.cpp
+       layers/gpu/spirv/debug_printf_pass.h
+       layers/gpu/spirv/descriptor_class_general_buffer_pass.cpp
+       layers/gpu/spirv/descriptor_class_general_buffer_pass.h
+       layers/gpu/spirv/descriptor_class_texel_buffer_pass.cpp
+       layers/gpu/spirv/descriptor_class_texel_buffer_pass.h
+       layers/gpu/spirv/descriptor_indexing_oob_pass.cpp
+       layers/gpu/spirv/descriptor_indexing_oob_pass.h
+       layers/gpu/spirv/function_basic_block.cpp
+       layers/gpu/spirv/function_basic_block.h
+       layers/gpu/spirv/inject_conditional_function_pass.cpp
+       layers/gpu/spirv/inject_conditional_function_pass.h
+       layers/gpu/spirv/inject_function_pass.cpp
+       layers/gpu/spirv/inject_function_pass.h
+       layers/gpu/spirv/instruction.cpp
+       layers/gpu/spirv/instruction.h
+       layers/gpu/spirv/interface.h
+       layers/gpu/spirv/link.h
+       layers/gpu/spirv/module.cpp
+       layers/gpu/spirv/module.h
+       layers/gpu/spirv/pass.cpp
+       layers/gpu/spirv/pass.h
+       layers/gpu/spirv/post_process_descriptor_indexing.cpp
+       layers/gpu/spirv/post_process_descriptor_indexing.h
+       layers/gpu/spirv/ray_query_pass.cpp
+       layers/gpu/spirv/ray_query_pass.h
+       layers/gpu/spirv/type_manager.cpp
+       layers/gpu/spirv/type_manager.h
        layers/layer_options.cpp
        layers/layer_options.h
-       layers/object_lifetime_validation.h
-       layers/object_tracker_utils.cpp
-       layers/parameter_name.h
-       layers/parameter_validation_utils.cpp
-       layers/pipeline_layout_state.cpp
-       layers/pipeline_layout_state.h
-       layers/pipeline_state.cpp
-       layers/pipeline_state.h
-       layers/pipeline_sub_state.cpp
-       layers/pipeline_sub_state.h
-       layers/qfo_transfer.h
-       layers/query_state.h
-       layers/queue_state.cpp
-       layers/queue_state.h
-       layers/range_vector.h
-       layers/ray_tracing_state.h
-       layers/render_pass_state.cpp
-       layers/render_pass_state.h
-       layers/sampler_state.h
-       layers/shader_instruction.cpp
-       layers/shader_instruction.h
-       layers/shader_module.cpp
-       layers/shader_module.h
-       layers/shader_validation.cpp
-       layers/shader_validation.h
-       layers/sparse_containers.h
-       layers/state_tracker.cpp
-       layers/state_tracker.h
-       layers/stateless_validation.h
-       layers/subresource_adapter.cpp
-       layers/subresource_adapter.h
-       layers/sync_utils.cpp
-       layers/sync_utils.h
-       layers/sync_vuid_maps.cpp
-       layers/sync_vuid_maps.h
-       layers/synchronization_validation.cpp
-       layers/synchronization_validation.h
+       layers/object_tracker/*
+       layers/profiling/profiling.cpp
+       layers/profiling/profiling.h
+       layers/state_tracker/*
+       layers/stateless/*
+       layers/sync/*
+       layers/thread_tracker/*
+       layers/utils/*
        layers/vk_layer_config.cpp
        layers/vk_layer_config.h
-       layers/vk_layer_data.h
-       layers/vk_layer_extension_utils.cpp
-       layers/vk_layer_extension_utils.h
-       layers/vk_layer_logging.h
-       layers/vk_layer_settings_ext.h
-       layers/vk_layer_utils.cpp
-       layers/vk_layer_utils.h
+       layers/vulkan/generated/best_practices.cpp
+       layers/vulkan/generated/best_practices.h
+       layers/vulkan/generated/chassis.cpp
+       layers/vulkan/generated/cmd_validation_copy_buffer_to_image_comp.cpp
+       layers/vulkan/generated/cmd_validation_copy_buffer_to_image_comp.h
+       layers/vulkan/generated/cmd_validation_count_buffer_comp.cpp
+       layers/vulkan/generated/cmd_validation_count_buffer_comp.h
+       layers/vulkan/generated/cmd_validation_dispatch_comp.cpp
+       layers/vulkan/generated/cmd_validation_dispatch_comp.h
+       layers/vulkan/generated/cmd_validation_draw_indexed_comp.cpp
+       layers/vulkan/generated/cmd_validation_draw_indexed_comp.h
+       layers/vulkan/generated/cmd_validation_draw_indexed_indirect_index_buffer_comp.cpp
+       layers/vulkan/generated/cmd_validation_draw_indexed_indirect_index_buffer_comp.h
+       layers/vulkan/generated/cmd_validation_draw_indexed_indirect_vertex_buffer_comp.cpp
+       layers/vulkan/generated/cmd_validation_draw_indexed_indirect_vertex_buffer_comp.h
+       layers/vulkan/generated/cmd_validation_draw_mesh_indirect_comp.cpp
+       layers/vulkan/generated/cmd_validation_draw_mesh_indirect_comp.h
+       layers/vulkan/generated/cmd_validation_first_instance_comp.cpp
+       layers/vulkan/generated/cmd_validation_first_instance_comp.h
+       layers/vulkan/generated/cmd_validation_trace_rays_rgen.cpp
+       layers/vulkan/generated/cmd_validation_trace_rays_rgen.h
+       layers/vulkan/generated/command_validation.cpp
+       layers/vulkan/generated/device_features.cpp
+       layers/vulkan/generated/device_features.h
+       layers/vulkan/generated/dispatch_functions.h
+       layers/vulkan/generated/dispatch_object.cpp
+       layers/vulkan/generated/dispatch_object_methods.h
+       layers/vulkan/generated/dispatch_vector.cpp
+       layers/vulkan/generated/dispatch_vector.h
+       layers/vulkan/generated/dynamic_state_helper.cpp
+       layers/vulkan/generated/dynamic_state_helper.h
+       layers/vulkan/generated/enum_flag_bits.h
+       layers/vulkan/generated/error_location_helper.cpp
+       layers/vulkan/generated/error_location_helper.h
+       layers/vulkan/generated/feature_requirements_helper.cpp
+       layers/vulkan/generated/feature_requirements_helper.h
+       layers/vulkan/generated/gpu_av_shader_hash.h
+       layers/vulkan/generated/instrumentation_buffer_device_address_comp.cpp
+       layers/vulkan/generated/instrumentation_buffer_device_address_comp.h
+       layers/vulkan/generated/instrumentation_descriptor_class_general_buffer_comp.cpp
+       layers/vulkan/generated/instrumentation_descriptor_class_general_buffer_comp.h
+       layers/vulkan/generated/instrumentation_descriptor_class_texel_buffer_comp.cpp
+       layers/vulkan/generated/instrumentation_descriptor_class_texel_buffer_comp.h
+       layers/vulkan/generated/instrumentation_descriptor_indexing_oob_bindless_comp.cpp
+       layers/vulkan/generated/instrumentation_descriptor_indexing_oob_bindless_comp.h
+       layers/vulkan/generated/instrumentation_descriptor_indexing_oob_non_bindless_comp.cpp
+       layers/vulkan/generated/instrumentation_descriptor_indexing_oob_non_bindless_comp.h
+       layers/vulkan/generated/instrumentation_post_process_descriptor_index_comp.cpp
+       layers/vulkan/generated/instrumentation_post_process_descriptor_index_comp.h
+       layers/vulkan/generated/instrumentation_ray_query_comp.cpp
+       layers/vulkan/generated/instrumentation_ray_query_comp.h
+       layers/vulkan/generated/object_tracker.cpp
+       layers/vulkan/generated/object_tracker.h
+       layers/vulkan/generated/pnext_chain_extraction.cpp
+       layers/vulkan/generated/pnext_chain_extraction.h
+       layers/vulkan/generated/spirv_grammar_helper.cpp
+       layers/vulkan/generated/spirv_grammar_helper.h
+       layers/vulkan/generated/spirv_tools_commit_id.h
+       layers/vulkan/generated/spirv_validation_helper.cpp
+       layers/vulkan/generated/stateless_validation_helper.cpp
+       layers/vulkan/generated/stateless_validation_helper.h
+       layers/vulkan/generated/sync_validation_types.cpp
+       layers/vulkan/generated/sync_validation_types.h
+       layers/vulkan/generated/test_icd_helper.h
+       layers/vulkan/generated/thread_safety.cpp
+       layers/vulkan/generated/thread_safety_commands.h
+       layers/vulkan/generated/thread_safety_counter_bodies.h
+       layers/vulkan/generated/thread_safety_counter_definitions.h
+       layers/vulkan/generated/thread_safety_counter_instances.h
+       layers/vulkan/generated/valid_enum_values.cpp
+       layers/vulkan/generated/valid_enum_values.h
+       layers/vulkan/generated/valid_flag_values.cpp
+       layers/vulkan/generated/validation_object.cpp
+       layers/vulkan/generated/validation_object_methods.h
+       layers/vulkan/generated/vk_api_version.h
+       layers/vulkan/generated/vk_dispatch_table_helper.cpp
+       layers/vulkan/generated/vk_dispatch_table_helper.h
+       layers/vulkan/generated/vk_extension_helper.cpp
+       layers/vulkan/generated/vk_extension_helper.h
+       layers/vulkan/generated/vk_function_pointers.cpp
+       layers/vulkan/generated/vk_function_pointers.h
+       layers/vulkan/generated/vk_layer_dispatch_table.h
+       layers/vulkan/generated/vk_object_types.cpp
+       layers/vulkan/generated/vk_object_types.h
+       layers/vulkan/generated/vk_validation_error_messages.h
+       scripts/CMakeLists.txt
+       scripts/android.py
        scripts/antialias_source.py
-       scripts/best_practices_generator.py
        scripts/check_code_format.py
-       scripts/cmake_test_min.py
-       scripts/command_validation_generator.py
+       scripts/clang-format-diff.py
        scripts/common_ci.py
-       scripts/common_codegen.py
-       scripts/dispatch_table_helper_generator.py
-       scripts/external_revision_generator.py
-       scripts/format_utils_generator.py
        scripts/generate_source.py
+       scripts/generate_spec_error_message.py
        scripts/generate_spirv.py
-       scripts/github_ci_android.py
-       scripts/github_ci_build_desktop.py
-       scripts/github_ci_gn.py
-       scripts/github_ci_win_linux.py
-       scripts/helper_file_generator.py
-       scripts/layer_chassis_dispatch_generator.py
-       scripts/layer_chassis_generator.py
-       scripts/layer_dispatch_table_generator.py
-       scripts/lvl_genvk.py
-       scripts/lvt_file_generator.py
-       scripts/object_tracker_generator.py
-       scripts/parameter_validation_generator.py
-       scripts/spirv_grammar_generator.py
-       scripts/spirv_validation_generator.py
-       scripts/sync_val_gen.py
-       scripts/thread_safety_generator.py
+       scripts/generators/*
+       scripts/gn/commit_id.py
+       scripts/gn/generate_vulkan_layers_json.py
+       scripts/gn/gn.py
+       scripts/gn/layers-fuchsia.gni
+       scripts/gn/secondary/*
+       scripts/gn/update_deps.sh
+       scripts/tests.py
        scripts/update_deps.py
-       scripts/utils/*
        scripts/vk_validation_stats.py
        tests/CMakeLists.txt
-       tests/icd-spv.h
-       tests/layer_validation_tests.cpp
-       tests/layer_validation_tests.h
+       tests/android/CMakeLists.txt
+       tests/android/mock/android/*
+       tests/android/mock/android_native_app_glue.h
+       tests/android/mock/sys/*
+       tests/framework/android_hardware_buffer.h
+       tests/framework/barrier_queue_family.cpp
+       tests/framework/barrier_queue_family.h
+       tests/framework/binding.cpp
+       tests/framework/binding.h
+       tests/framework/buffer_helper.h
+       tests/framework/config.h.in
+       tests/framework/descriptor_helper.cpp
+       tests/framework/descriptor_helper.h
+       tests/framework/error_monitor.cpp
+       tests/framework/error_monitor.h
+       tests/framework/external_memory_sync.cpp
+       tests/framework/external_memory_sync.h
+       tests/framework/feature_requirements.cpp
+       tests/framework/feature_requirements.h
+       tests/framework/gpu_av_helper.h
+       tests/framework/layer_validation_tests.cpp
+       tests/framework/layer_validation_tests.h
+       tests/framework/pipeline_helper.cpp
+       tests/framework/pipeline_helper.h
+       tests/framework/queue_submit_context.cpp
+       tests/framework/queue_submit_context.h
+       tests/framework/ray_tracing_helper_nv.cpp
+       tests/framework/ray_tracing_helper_nv.h
+       tests/framework/ray_tracing_objects.cpp
+       tests/framework/ray_tracing_objects.h
+       tests/framework/render.cpp
+       tests/framework/render.h
+       tests/framework/render_pass_helper.cpp
+       tests/framework/render_pass_helper.h
+       tests/framework/shader_helper.cpp
+       tests/framework/shader_helper.h
+       tests/framework/shader_object_helper.cpp
+       tests/framework/shader_object_helper.h
+       tests/framework/shader_templates.h
+       tests/framework/test_common.h
+       tests/framework/test_framework.cpp
+       tests/framework/test_framework.h
+       tests/framework/thread_helper.cpp
+       tests/framework/thread_helper.h
+       tests/framework/video_objects.h
+       tests/icd/CMakeLists.txt
+       tests/icd/VVL_Test_ICD.def
+       tests/icd/test_icd.cpp
+       tests/icd/test_icd.h
        tests/layers/CMakeLists.txt
        tests/layers/VkLayer_device_profile_api.def
        tests/layers/device_profile_api.cpp
        tests/layers/vk_lunarg_device_profile_api_layer.h
        tests/positive/*
-       tests/test_common.h
-       tests/vkerrormonitor.cpp
-       tests/vkerrormonitor.h
-       tests/vklayertests_amd_best_practices.cpp
-       tests/vklayertests_android_hardware_buffer.cpp
-       tests/vklayertests_arm_best_practices.cpp
-       tests/vklayertests_best_practices.cpp
-       tests/vklayertests_buffer_image_memory_sampler.cpp
-       tests/vklayertests_command.cpp
-       tests/vklayertests_debug_printf.cpp
-       tests/vklayertests_descriptor_renderpass_framebuffer.cpp
-       tests/vklayertests_dynamic_rendering.cpp
-       tests/vklayertests_gpu.cpp
-       tests/vklayertests_graphics_library.cpp
-       tests/vklayertests_imageless_framebuffer.cpp
-       tests/vklayertests_instanceless.cpp
-       tests/vklayertests_nvidia_best_practices.cpp
-       tests/vklayertests_others.cpp
-       tests/vklayertests_pipeline_shader.cpp
-       tests/vklayertests_portability_subset.cpp
-       tests/vklayertests_ray_tracing.cpp
-       tests/vklayertests_ray_tracing_gpu.cpp
-       tests/vklayertests_ray_tracing_pipeline.cpp
-       tests/vklayertests_viewport_inheritance.cpp
-       tests/vklayertests_wsi.cpp
-       tests/vkrenderframework.cpp
-       tests/vkrenderframework.h
-       tests/vksyncvaltests.cpp
-       tests/vktestbinding.cpp
-       tests/vktestbinding.h
-       tests/vktestframework.cpp
-       tests/vktestframework.h
-       tests/vktestframeworkandroid.cpp
-       tests/vktestframeworkandroid.h
+       tests/spirv/*
+       tests/unit/*
+       tests/vvl_utils/*
 Copyright: 2021-2022, ARM, Inc
-           2020-2022, Advanced Micro Devices, Inc
-           2015-2022, Google Inc
-           2015-2022, Google, Inc
-           2014-2022, LunarG, Inc
+           2017-2024, Advanced Micro Devices, Inc
+           2023-2024, Collabora, Inc
+           2015-2024, Google Inc
+           2015-2024, Google, Inc
+           2014-2024, LunarG, Inc
            2022, NVIDIA CORPORATION
            2021, NVIDIA Corporation
+           2023-2024, Nintendo
+           2015-2024, RasterGrid Kft
            2016-2021, The ANGLE Project Authors
            2015-2017, The Android Open Source Project
            2022, The Fuchsia Authors
            2017, The Glslang Authors
-           2013-2022, The Khronos Group Inc
-           2014-2022, Valve Corporation
-           2014-2022, Valve Software
+           2013-2024, The Khronos Group Inc
+           2014-2024, Valve Corporation
+           2014-2024, Valve Software
            comment block for file
            dates for modified files
            text
 License: Apache-2
 
-Files: layers/vk_mem_alloc.h
+Files: layers/external/xxhash.h
+Copyright: 2012-2021, Yann Collet
+License: BSD-2-clause
+
+Files: layers/external/vma/vk_mem_alloc.h
 Copyright: 2017-2022, Advanced Micro Devices, Inc
 License: Expat
 
+Files: layers/external/inplace_function.h
+License: BSL-1
+
 Files: debian/*
-Copyright: 2023, LunarG Inc <johnz@lunarg.com>
+Copyright: 2024, LunarG Inc <johnz@lunarg.com>
            2016, Timo Aaltonen <tjaalton@debian.org>
 License: BSD-3-clause or GPL-3 or MIT
 
@@ -506,6 +506,9 @@ License: BSD-3-clause
  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
  .
  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSL-1
+Comment: Add the corresponding license text here
 
 License: Expat
  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
