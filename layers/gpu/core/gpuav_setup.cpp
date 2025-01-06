@@ -1,6 +1,6 @@
-/* Copyright (c) 2018-2024 The Khronos Group Inc.
- * Copyright (c) 2018-2024 Valve Corporation
- * Copyright (c) 2018-2024 LunarG, Inc.
+/* Copyright (c) 2018-2025 The Khronos Group Inc.
+ * Copyright (c) 2018-2025 Valve Corporation
+ * Copyright (c) 2018-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -423,6 +423,7 @@ void Validator::PreCallRecordCreateDevice(VkPhysicalDevice physicalDevice, const
         } else {
             // Need to add a VkPhysicalDeviceFeatures pointer
             enabled_features = new VkPhysicalDeviceFeatures;
+            memset(enabled_features, 0, sizeof(VkPhysicalDeviceFeatures));
             enabled_features->shaderInt64 = VK_TRUE;
             modified_create_info->pEnabledFeatures = enabled_features;
         }
@@ -620,9 +621,10 @@ void Validator::InitSettings(const Location &loc) {
                             "sizeof(uint32_t) bytes. No indirect buffer checking will be "
                             "attempted");
         } else if (!supported_features.shaderInt64) {
-            InternalWarning(device, loc,
-                            "shaderInt64 feature not available, countBuffer (as seen in commands like "
-                            "vkCmdDrawIndexedIndirectCount) validation will not be performed.");
+            InternalWarning(
+                device, loc,
+                "shaderInt64 feature not available, indirect trace rays validation and countBuffer (as seen in commands like "
+                "vkCmdDrawIndexedIndirectCount) validation cannot be performed.");
         }
     }
 
@@ -650,7 +652,7 @@ void Validator::InternalVmaError(LogObjectList objlist, const Location &loc, con
     // Once we encounter an internal issue disconnect everything.
     // This prevents need to check "if (aborted)" (which is awful when we easily forget to check somewhere and the user gets spammed
     // with errors making it hard to see the first error with the real source of the problem).
-    dispatch_->ReleaseDeviceValidationObject(LayerObjectTypeGpuAssisted);
+    dispatch_device_->ReleaseValidationObject(LayerObjectTypeGpuAssisted);
 }
 
 VkDeviceAddress Validator::GetBufferDeviceAddressHelper(VkBuffer buffer) const {

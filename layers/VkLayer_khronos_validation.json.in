@@ -4,7 +4,7 @@
         "name": "@JSON_LAYER_NAME@",
         "type": "GLOBAL",
         "library_path": "@JSON_LIBRARY_PATH@",
-        "api_version": "1.4.303",
+        "api_version": "1.4.304",
         "implementation_version": "1",
         "description": "Khronos Validation Layer",
         "introduction": "The main, comprehensive Khronos validation layer.\n\nVulkan is an Explicit API, enabling direct control over how GPUs actually work. By design, minimal error checking is done inside a Vulkan driver. Applications have full control and responsibility for correct operation. Any errors in how Vulkan is used can result in a crash. \n\nThe Khronos Validation Layer can be enabled to assist development by enabling developers to verify their applications correctly use the Vulkan API.",
@@ -163,8 +163,6 @@
                         { "key": "validate_sync", "value": true },
                         { "key": "printf_enable", "value": false },
                         { "key": "gpuav_enable", "value": false },
-                        { "key": "gpuav_shader_instrumentation", "value": false },
-                        { "key": "gpuav_buffers_validation", "value": false },
                         { "key": "validate_best_practices", "value": false },
                         { "key": "report_flags", "value": [ "error" ] },
                         { "key": "debug_action", "value": [ "VK_DBG_LAYER_ACTION_LOG_MSG" ] },
@@ -408,7 +406,7 @@
                                 {
                                     "key": "syncval_shader_accesses_heuristic",
                                     "label": "Shader accesses heuristic",
-                                    "description": "Takes into account memory accesses performed by the shader based on SPIR-V static analysis. Warning: can produce false-positives, can ignore certain types of accesses.",
+                                    "description": "Take into account memory accesses performed by the shader based on SPIR-V static analysis. Warning: can produce false-positives, can ignore certain types of accesses.",
                                     "type": "BOOL",
                                     "default": false,
                                     "status": "STABLE",
@@ -428,14 +426,28 @@
                                     "settings": [
                                         {
                                             "key": "syncval_message_extra_properties",
-                                            "label": "Add extra key-value properties",
-                                            "description": "Appends a section of key-value properties to the error message. This structured information is useful for filtering error messages and may include optional or debug properties that are not found in the main error message.",
+                                            "label": "Extra key-value properties",
+                                            "description": "Append a section of key-value properties to the error message. Useful for filtering errors.",
                                             "type": "BOOL",
                                             "default": false,
                                             "dependence": {
                                                 "mode": "ALL",
                                                 "settings": [
                                                     { "key": "validate_sync", "value": true }
+                                                ]
+                                            }
+                                        },
+                                        {
+                                            "key": "syncval_message_extra_properties_pretty_print",
+                                            "label": "Pretty print extra properties",
+                                            "description": "Enable formatted output of key-value properties. Disabled by default to simplify pattern matching when filtering errors.",
+                                            "type": "BOOL",
+                                            "default": false,
+                                            "dependence": {
+                                                "mode": "ALL",
+                                                "settings": [
+                                                    { "key": "validate_sync", "value": true },
+                                                    { "key": "syncval_message_extra_properties", "value": true }
                                                 ]
                                             }
                                         }
@@ -707,7 +719,7 @@
                                             "label": "Indirect draws parameters",
                                             "type": "BOOL",
                                             "default": true,
-                                            "description": "(Warning - still experimental) Validate buffers containing draw parameters used in indirect draw commands",
+                                            "description": "Validate buffers containing draw parameters used in indirect draw commands. Includes vkCmdDrawMeshTasks* calls as well",
                                             "platforms": [ "WINDOWS", "LINUX" ],
                                             "dependence": {
                                                 "mode": "ALL",
@@ -721,8 +733,8 @@
                                             "key": "gpuav_indirect_dispatches_buffers",
                                             "label": "Indirect dispatches parameters",
                                             "type": "BOOL",
-                                            "default": false,
-                                            "description": "(Warning - still experimental) Validate buffers containing dispatch parameters used in indirect dispatch commands",
+                                            "default": true,
+                                            "description": "Validate buffers containing dispatch parameters used in indirect dispatch commands",
                                             "platforms": [ "WINDOWS", "LINUX" ],
                                             "dependence": {
                                                 "mode": "ALL",
@@ -736,8 +748,8 @@
                                             "key": "gpuav_indirect_trace_rays_buffers",
                                             "label": "Indirect trace rays parameters",
                                             "type": "BOOL",
-                                            "default": false,
-                                            "description": "(Warning - still experimental) Validate buffers containing ray tracing parameters used in indirect ray tracing commands",
+                                            "default": true,
+                                            "description": "Validate buffers containing ray tracing parameters used in indirect ray tracing commands",
                                             "platforms": [ "WINDOWS", "LINUX" ],
                                             "dependence": {
                                                 "mode": "ALL",
@@ -752,7 +764,7 @@
                                             "label": "Buffer copies",
                                             "type": "BOOL",
                                             "default": true,
-                                            "description": "(Warning - still experimental) Validate copies involving a VkBuffer. Right now only validates copy buffer to image.",
+                                            "description": "Validate copies involving a VkBuffer. Right now only validates copy buffer to image.",
                                             "platforms": [ "WINDOWS", "LINUX" ],
                                             "dependence": {
                                                 "mode": "ALL",
@@ -767,7 +779,7 @@
                                             "label": "Index buffers",
                                             "type": "BOOL",
                                             "default": true,
-                                            "description": "(Warning - still experimental) Validate that indexed draws do not fetch indices outside of the bounds of the index buffer. Also validates that those indices are not out of the bounds of the fetched vertex buffers.",
+                                            "description": "Validate that indexed draws do not fetch indices outside of the bounds of the index buffer. Also validates that those indices are not out of the bounds of the fetched vertex buffers.",
                                             "platforms": [ "WINDOWS", "LINUX" ],
                                             "dependence": {
                                                 "mode": "ALL",
@@ -778,6 +790,20 @@
                                             }
                                         }
                                     ]
+                                },
+                                {
+                                    "key": "gpuav_image_layout",
+                                    "label": "Image Layout",
+                                    "description": "(Warning - still known to have false positives) Use GPU-AV to detect which descriptors where accessed. Then using post processing, check that the layout of each image subresource is correct whenever it is used by a command buffer.",
+                                    "type": "BOOL",
+                                    "default": false,
+                                    "platforms": [ "WINDOWS", "LINUX" ],
+                                    "dependence": {
+                                        "mode": "ALL",
+                                        "settings": [
+                                            { "key": "gpuav_enable", "value": true }
+                                        ]
+                                    }
                                 },
                                 {
                                     "key": "gpuav_advanced_settings",

@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (C) 2015-2024 Google Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (C) 2015-2025 Google Inc.
  * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -125,6 +125,13 @@ bool CoreChecks::ValidateSwapchainPresentModesCreateInfo(VkPresentModeKHR presen
     const std::vector<VkPresentModeKHR> compatible_present_modes = surface_state->GetCompatibleModes(physical_device, present_mode);
     for (uint32_t i = 0; i < swapchain_present_modes_ci->presentModeCount; i++) {
         VkPresentModeKHR swapchain_present_mode = swapchain_present_modes_ci->pPresentModes[i];
+
+        if (swapchain_present_mode == VK_PRESENT_MODE_FIFO_LATEST_READY_EXT && !enabled_features.presentModeFifoLatestReady) {
+            skip |= LogError("VUID-VkSwapchainPresentModesCreateInfoEXT-presentModeFifoLatestReady-10160", device,
+                             create_info_loc.pNext(Struct::VkSwapchainPresentModesCreateInfoEXT, Field::pPresentModes, i),
+                             "is %s, but feature presentModeFifoLatestReady is not enabled",
+                             string_VkPresentModeKHR(create_info.presentMode));
+        }
 
         if (std::find(present_modes.begin(), present_modes.end(), swapchain_present_mode) == present_modes.end()) {
             if (LogError("VUID-VkSwapchainPresentModesCreateInfoEXT-None-07762", device,
@@ -666,12 +673,12 @@ bool CoreChecks::ValidateCreateSwapchain(const VkSwapchainCreateInfoKHR &create_
     // Validate pCreateInfo->imageExtent against VkImageFormatProperties::maxExtent
     if ((create_info.imageExtent.width > image_properties.maxExtent.width) ||
         (create_info.imageExtent.height > image_properties.maxExtent.height)) {
-        if (LogError("VUID-VkSwapchainCreateInfoKHR-imageFormat-01778", device, create_info_loc.dot(Field::imageExtent),
-                     "(%s), which is bigger than max extent (%s)"
-                     "returned by vkGetPhysicalDeviceImageFormatProperties(): "
-                     "for imageFormat %s with tiling VK_IMAGE_TILING_OPTIMAL.",
-                     string_VkExtent2D(create_info.imageExtent).c_str(), string_VkExtent3D(image_properties.maxExtent).c_str(),
-                     string_VkFormat(create_info.imageFormat))) {
+        if (LogError(
+                "VUID-VkSwapchainCreateInfoKHR-imageFormat-01778", device, create_info_loc.dot(Field::imageExtent),
+                "(%s), which is bigger than max extent (%s)"
+                " returned by vkGetPhysicalDeviceImageFormatProperties() for imageFormat %s with tiling VK_IMAGE_TILING_OPTIMAL.",
+                string_VkExtent2D(create_info.imageExtent).c_str(), string_VkExtent3D(image_properties.maxExtent).c_str(),
+                string_VkFormat(create_info.imageFormat))) {
             return true;
         }
     }
@@ -694,6 +701,29 @@ bool CoreChecks::ValidateCreateSwapchain(const VkSwapchainCreateInfoKHR &create_
                          "contains VkImageCompressionControlEXT, but imageCompressionControlSwapchain is not enabled");
     }
 
+    const auto *swapchain_counter = vku::FindStructInPNextChain<VkSwapchainCounterCreateInfoEXT>(create_info.pNext);
+    if (swapchain_counter) {
+        VkSurfaceCapabilities2EXT surface_capabilities = vku::InitStructHelper();
+        const VkResult result =
+            DispatchGetPhysicalDeviceSurfaceCapabilities2EXT(physical_device, create_info.surface, &surface_capabilities);
+        if (result != VK_SUCCESS) {
+            skip |= LogError(
+                "VUID-VkSwapchainCounterCreateInfoEXT-surfaceCounters-01244", device,
+                create_info_loc.pNext(Struct::VkSwapchainPresentModesCreateInfoEXT, Field::surfaceCounters),
+                "is %s, but the counters are not supported because the vkGetPhysicalDeviceSurfaceCapabilities2EXT query failed",
+                string_VkSurfaceCounterFlagsEXT(swapchain_counter->surfaceCounters).c_str());
+        } else {
+            if ((swapchain_counter->surfaceCounters & surface_capabilities.supportedSurfaceCounters) !=
+                swapchain_counter->surfaceCounters) {
+                skip |= LogError("VUID-VkSwapchainCounterCreateInfoEXT-surfaceCounters-01244", device,
+                                 create_info_loc.pNext(Struct::VkSwapchainPresentModesCreateInfoEXT, Field::surfaceCounters),
+                                 "is %s, but calling vkGetPhysicalDeviceSurfaceCapabilities2EXT shows only %s is supported",
+                                 string_VkSurfaceCounterFlagsEXT(swapchain_counter->surfaceCounters).c_str(),
+                                 string_VkSurfaceCounterFlagsEXT(surface_capabilities.supportedSurfaceCounters).c_str());
+            }
+        }
+    }
+
     return skip;
 }
 
@@ -714,7 +744,7 @@ void CoreChecks::PreCallRecordDestroySwapchainKHR(VkDevice device, VkSwapchainKH
             qfo_release_image_barrier_map.erase(swapchain_image.image_state->VkHandle());
         }
     }
-    StateTracker::PreCallRecordDestroySwapchainKHR(device, swapchain, pAllocator, record_obj);
+    BaseClass::PreCallRecordDestroySwapchainKHR(device, swapchain, pAllocator, record_obj);
 }
 
 bool CoreChecks::ValidateImageAcquireWait(const vvl::SwapchainImage &swapchain_image, uint32_t image_index,

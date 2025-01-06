@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2022-2024 The Khronos Group Inc.
- * Copyright (c) 2022-2024 RasterGrid Kft.
+ * Copyright (c) 2022-2025 The Khronos Group Inc.
+ * Copyright (c) 2022-2025 RasterGrid Kft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -596,7 +596,7 @@ TEST_F(PositiveVideo, EncodeRateControlVirtualBufferSize) {
 
     vkt::CommandBuffer& cb = context.CmdBuffer();
 
-    cb.begin();
+    cb.Begin();
     cb.BeginVideoCoding(context.Begin());
 
     // initialVirtualBufferSizeInMs can be less than virtualBufferSizeInMs
@@ -610,7 +610,7 @@ TEST_F(PositiveVideo, EncodeRateControlVirtualBufferSize) {
     cb.ControlVideoCoding(context.Control().RateControl(rc_info));
 
     cb.EndVideoCoding(context.End());
-    cb.end();
+    cb.End();
 }
 
 TEST_F(PositiveVideo, VideoEncodeAV1) {
@@ -1208,7 +1208,7 @@ TEST_F(PositiveVideo, GetEncodedSessionParamsAV1) {
     vk::GetEncodedVideoSessionParametersKHR(device(), &get_info, &feedback_info, &data_size, nullptr);
 }
 
-TEST_F(PositiveVideoSyncVal, ImageRangeGenYcbcrSubsampling) {
+TEST_F(PositiveSyncValVideo, ImageRangeGenYcbcrSubsampling) {
     TEST_DESCRIPTION(
         "Test that subsampled YCbCr image planes are handled correctly "
         "by the image range generation utilities used by sync validation");
@@ -1257,7 +1257,7 @@ TEST_F(PositiveVideoSyncVal, ImageRangeGenYcbcrSubsampling) {
     cb.End();
 }
 
-TEST_F(PositiveVideoSyncVal, DecodeCoincide) {
+TEST_F(PositiveSyncValVideo, DecodeCoincide) {
     TEST_DESCRIPTION("Test video decode in coincide mode without sync hazards");
 
     RETURN_IF_SKIP(Init());
@@ -1302,7 +1302,7 @@ TEST_F(PositiveVideoSyncVal, DecodeCoincide) {
     cb.End();
 }
 
-TEST_F(PositiveVideoSyncVal, DecodeDistinct) {
+TEST_F(PositiveSyncValVideo, DecodeDistinct) {
     TEST_DESCRIPTION("Test video decode in distinct mode without sync hazards");
 
     RETURN_IF_SKIP(Init());
@@ -1345,7 +1345,7 @@ TEST_F(PositiveVideoSyncVal, DecodeDistinct) {
     cb.End();
 }
 
-TEST_F(PositiveVideoSyncVal, Encode) {
+TEST_F(PositiveSyncValVideo, Encode) {
     TEST_DESCRIPTION("Test video without sync hazards");
 
     RETURN_IF_SKIP(Init());
@@ -1387,7 +1387,7 @@ TEST_F(PositiveVideoSyncVal, Encode) {
     cb.End();
 }
 
-TEST_F(PositiveVideoSyncVal, EncodeQuantizationMap) {
+TEST_F(PositiveSyncValVideo, EncodeQuantizationMap) {
     TEST_DESCRIPTION("Test video encode quantization map without sync hazards");
 
     AddRequiredExtensions(VK_KHR_VIDEO_ENCODE_QUANTIZATION_MAP_EXTENSION_NAME);

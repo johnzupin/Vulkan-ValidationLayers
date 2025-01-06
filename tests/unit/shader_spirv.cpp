@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -2337,6 +2337,38 @@ TEST_F(NegativeShaderSpirv, DISABLED_SpecConstantTextureIndex) {
     m_errorMonitor->VerifyFound();
 }
 
+TEST_F(NegativeShaderSpirv, SpecConstantArraySize) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/SPIRV-Tools/issues/5921");
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    const char *fragment_source = R"glsl(
+        #version 450
+        layout (constant_id = 0) const int array_size = 4;
+        layout(set = 0, binding = 0, std430) buffer foo {
+            uint a[array_size];
+            uint b; // offset 16 to start
+        };
+
+        void main() {
+            b = 0;
+        }
+    )glsl";
+
+    uint32_t new_array_size = 6;
+    VkSpecializationMapEntry entry = {0, 0, sizeof(uint32_t)};
+    VkSpecializationInfo specialization_info = {1, &entry, sizeof(uint32_t), &new_array_size};
+    const VkShaderObj fs(this, fragment_source, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL,
+                         &specialization_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkPipelineShaderStageCreateInfo-pSpecializationInfo-06849");
+    CreatePipelineHelper pipe(*this);
+    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, VK_SHADER_STAGE_ALL_GRAPHICS, nullptr}};
+    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
+}
+
 TEST_F(NegativeShaderSpirv, DescriptorCountConstant) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
@@ -2583,4 +2615,42 @@ TEST_F(NegativeShaderSpirv, VkShaderModuleCreateInfoPNext) {
     VkShaderObj vs(this, kMinimalShaderGlsl, VK_SHADER_STAGE_VERTEX_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_GLSL, nullptr, "main",
                    &pd_features2);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeShaderSpirv, NullShaderModuleCreateInfo) {
+    RETURN_IF_SKIP(Init());
+    VkShaderModule module;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateShaderModule-pCreateInfo-parameter");
+    vk::CreateShaderModule(device(), nullptr, nullptr, &module);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeShaderSpirv, ShaderTileImageDisabled) {
+    TEST_DESCRIPTION("Validate creating graphics pipeline without shader tile image features enabled.");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredExtensions(VK_EXT_SHADER_TILE_IMAGE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    RETURN_IF_SKIP(Init());
+
+    {
+        // shaderTileImageDepthReadAccess
+        m_errorMonitor->SetDesiredError("VUID-VkShaderModuleCreateInfo-pCode-08740");
+        VkShaderObj::CreateFromASM(this, kShaderTileImageDepthReadSpv, VK_SHADER_STAGE_FRAGMENT_BIT);
+        m_errorMonitor->VerifyFound();
+    }
+
+    {
+        // shaderTileImageStencilReadAccess
+        m_errorMonitor->SetDesiredError("VUID-VkShaderModuleCreateInfo-pCode-08740");
+        VkShaderObj::CreateFromASM(this, kShaderTileImageStencilReadSpv, VK_SHADER_STAGE_FRAGMENT_BIT);
+        m_errorMonitor->VerifyFound();
+    }
+
+    {
+        // shaderTileImageColorReadAccess
+        m_errorMonitor->SetDesiredError("VUID-VkShaderModuleCreateInfo-pCode-08740");
+        VkShaderObj::CreateFromASM(this, kShaderTileImageColorReadSpv, VK_SHADER_STAGE_FRAGMENT_BIT);
+        m_errorMonitor->VerifyFound();
+    }
 }

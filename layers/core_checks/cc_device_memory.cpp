@@ -758,6 +758,25 @@ bool CoreChecks::PreCallValidateAllocateMemory(VkDevice device, const VkMemoryAl
     return skip;
 }
 
+void CoreChecks::PostCallRecordAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
+                                              const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMemory,
+                                              const RecordObject &record_obj) {
+    BaseClass::PostCallRecordAllocateMemory(device, pAllocateInfo, pAllocator, pMemory, record_obj);
+
+    if (VK_SUCCESS != record_obj.result) {
+        // Discussed in https://gitlab.khronos.org/vulkan/vulkan/-/issues/4119
+        // We should help hint the application if this is the reason they fail.
+        // Note, some drivers don't properly report VK_ERROR_OUT_OF_DEVICE_MEMORY so check any error code
+        if (IsExtEnabled(device_extensions.vk_khr_maintenance3) &&
+            pAllocateInfo->allocationSize > phys_dev_props_core11.maxMemoryAllocationSize) {
+            LogWarning("WARNING-CoreValidation-AllocateMemory-maxMemoryAllocationSize", device,
+                       record_obj.location.dot(Field::pAllocateInfo).dot(Field::allocationSize),
+                       "(%" PRIu64 ") is larger than maxMemoryAllocationSize (%" PRIu64 ") and likely why the allocation failed.",
+                       pAllocateInfo->allocationSize, phys_dev_props_core11.maxMemoryAllocationSize);
+        }
+    }
+}
+
 bool CoreChecks::PreCallValidateFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *pAllocator,
                                            const ErrorObject &error_obj) const {
     bool skip = false;
@@ -2060,7 +2079,7 @@ void CoreChecks::PostCallRecordBindImageMemory(VkDevice device, VkImage image, V
                                                const RecordObject &record_obj) {
     if (VK_SUCCESS != record_obj.result) return;
 
-    StateTracker::PostCallRecordBindImageMemory(device, image, memory, memoryOffset, record_obj);
+    BaseClass::PostCallRecordBindImageMemory(device, image, memory, memoryOffset, record_obj);
     if (auto image_state = Get<vvl::Image>(image)) {
         image_state->SetInitialLayoutMap();
     }
@@ -2084,7 +2103,7 @@ void CoreChecks::PostCallRecordBindImageMemory2(VkDevice device, uint32_t bindIn
         }
         return;
     }
-    StateTracker::PostCallRecordBindImageMemory2(device, bindInfoCount, pBindInfos, record_obj);
+    BaseClass::PostCallRecordBindImageMemory2(device, bindInfoCount, pBindInfos, record_obj);
 
     for (uint32_t i = 0; i < bindInfoCount; i++) {
         if (auto image_state = Get<vvl::Image>(pBindInfos[i].image)) {

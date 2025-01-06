@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  * Modifications Copyright (C) 2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -1534,41 +1534,23 @@ TEST_F(NegativeCommand, ClearImage) {
     // Color image
     VkClearColorValue clear_color;
     memset(clear_color.uint32, 0, sizeof(uint32_t) * 4);
-    const VkFormat color_format = VK_FORMAT_B8G8R8A8_UNORM;
-    const int32_t img_width = 32;
-    const int32_t img_height = 32;
-    VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = color_format;
-    image_create_info.extent.width = img_width;
-    image_create_info.extent.height = img_height;
-    image_create_info.extent.depth = 1;
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 1;
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
 
-    image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
-    vkt::Image color_image_no_transfer(*m_device, image_create_info);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image color_image_no_transfer(*m_device, image_ci);
 
-    image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    vkt::Image color_image(*m_device, image_create_info);
+    image_ci.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    vkt::Image color_image(*m_device, image_ci);
 
-    const VkImageSubresourceRange color_range = vkt::Image::SubresourceRange(image_create_info, VK_IMAGE_ASPECT_COLOR_BIT);
+    const VkImageSubresourceRange color_range = vkt::Image::SubresourceRange(image_ci, VK_IMAGE_ASPECT_COLOR_BIT);
 
     // Depth/Stencil image
     VkClearDepthStencilValue clear_value = {0};
-    VkImageCreateInfo ds_image_create_info = vkt::Image::CreateInfo();
-    ds_image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    ds_image_create_info.format = VK_FORMAT_D16_UNORM;
-    ds_image_create_info.extent.width = 64;
-    ds_image_create_info.extent.height = 64;
-    ds_image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    ds_image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image_ci.format = VK_FORMAT_D16_UNORM;
+    image_ci.extent = {64, 64, 1};
+    image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    vkt::Image ds_image(*m_device, image_ci);
 
-    vkt::Image ds_image(*m_device, ds_image_create_info);
-
-    const VkImageSubresourceRange ds_range = vkt::Image::SubresourceRange(ds_image_create_info, VK_IMAGE_ASPECT_DEPTH_BIT);
+    const VkImageSubresourceRange ds_range = vkt::Image::SubresourceRange(image_ci, VK_IMAGE_ASPECT_DEPTH_BIT);
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdClearColorImage-image-00007");
 
@@ -2214,7 +2196,6 @@ TEST_F(NegativeCommand, ExclusiveScissorNV) {
         VkRect2D scissor = {{0, 0}, {64, 64}};
         VkRect2D scissors[100] = {scissor, scissor};
 
-        using std::vector;
         struct TestCase {
             uint32_t viewport_count;
             VkViewport *viewports;
@@ -2223,10 +2204,10 @@ TEST_F(NegativeCommand, ExclusiveScissorNV) {
             uint32_t exclusive_scissor_count;
             VkRect2D *exclusive_scissors;
 
-            vector<std::string> vuids;
+            std::vector<std::string> vuids;
         };
 
-        vector<TestCase> test_cases = {
+        std::vector<TestCase> test_cases = {
             {1,
              viewports,
              1,
@@ -3138,29 +3119,16 @@ TEST_F(NegativeCommand, ClearDepthStencilWithAspect) {
     TEST_DESCRIPTION("Verify ClearDepth with an invalid VkImageAspectFlags.");
     RETURN_IF_SKIP(Init());
     const auto depth_format = FindSupportedDepthStencilFormat(Gpu());
-    InitRenderTarget();
-
-    VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.flags = 0;
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = depth_format;
-    image_create_info.extent = {64, 64, 1};
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 1;
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
     const VkClearDepthStencilValue clear_value = {};
     VkImageSubresourceRange range = {VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1};
 
     m_command_buffer.Begin();
 
-    image_create_info.pNext = nullptr;
-
     range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
-    vkt::Image image(*m_device, image_create_info, vkt::set_layout);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(64, 64, 1, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
 
     // Element of pRanges.aspect includes VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_USAGE_TRANSFER_DST_BIT not included in the
     // VkImageCreateInfo::usage used to create image
@@ -3176,9 +3144,9 @@ TEST_F(NegativeCommand, ClearDepthStencilWithAspect) {
     // Using stencil aspect when format only have depth
     const VkFormat depth_only_format = FindSupportedDepthOnlyFormat(Gpu());
     if (depth_only_format != VK_FORMAT_UNDEFINED) {
-        image_create_info.format = depth_only_format;
-        image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        vkt::Image depth_image(*m_device, image_create_info, vkt::set_layout);
+        image_ci.format = depth_only_format;
+        image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        vkt::Image depth_image(*m_device, image_ci, vkt::set_layout);
 
         m_errorMonitor->SetDesiredError("VUID-vkCmdClearDepthStencilImage-image-02825");
         vk::CmdClearDepthStencilImage(m_command_buffer.handle(), depth_image.handle(), depth_image.Layout(), &clear_value, 1,
@@ -3194,18 +3162,6 @@ TEST_F(NegativeCommand, ClearDepthStencilWithAspectSeparate) {
     AddRequiredExtensions(VK_EXT_SEPARATE_STENCIL_USAGE_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     const auto depth_format = FindSupportedDepthStencilFormat(Gpu());
-    InitRenderTarget();
-
-    VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.flags = 0;
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = depth_format;
-    image_create_info.extent = {64, 64, 1};
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 1;
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
     const VkClearDepthStencilValue clear_value = {};
     VkImageSubresourceRange range = {VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1};
@@ -3215,8 +3171,9 @@ TEST_F(NegativeCommand, ClearDepthStencilWithAspectSeparate) {
     VkImageStencilUsageCreateInfo image_stencil_create_info = vku::InitStructHelper();
     image_stencil_create_info.stencilUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;  // not VK_IMAGE_USAGE_TRANSFER_DST_BIT
 
-    image_create_info.pNext = &image_stencil_create_info;
-    vkt::Image image(*m_device, image_create_info, vkt::set_layout);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(64, 64, 1, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    image_ci.pNext = &image_stencil_create_info;
+    vkt::Image image(*m_device, image_ci, vkt::set_layout);
 
     // Element of pRanges.aspect includes VK_IMAGE_ASPECT_STENCIL_BIT, and image was created with separate stencil usage,
     // VK_IMAGE_USAGE_TRANSFER_DST_BIT not included in the VkImageStencilUsageCreateInfo::stencilUsage used to create image
@@ -3315,7 +3272,6 @@ TEST_F(NegativeCommand, ClearDepthStencilWithRange) {
 TEST_F(NegativeCommand, ClearColorImageWithinRenderPass) {
     // Call CmdClearColorImage within an active RenderPass
     m_errorMonitor->SetDesiredError("VUID-vkCmdClearColorImage-renderpass");
-
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
@@ -3324,25 +3280,14 @@ TEST_F(NegativeCommand, ClearColorImageWithinRenderPass) {
 
     VkClearColorValue clear_color;
     memset(clear_color.uint32, 0, sizeof(uint32_t) * 4);
-    const VkFormat tex_format = VK_FORMAT_B8G8R8A8_UNORM;
-    const int32_t tex_width = 32;
-    const int32_t tex_height = 32;
-    VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = tex_format;
-    image_create_info.extent.width = tex_width;
-    image_create_info.extent.height = tex_height;
-    image_create_info.extent.depth = 1;
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 1;
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    vkt::Image dstImage(*m_device, image_create_info, vkt::set_layout);
 
-    const VkImageSubresourceRange range = vkt::Image::SubresourceRange(image_create_info, VK_IMAGE_ASPECT_COLOR_BIT);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_B8G8R8A8_UNORM,
+                                                  VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image dst_image(*m_device, image_ci, vkt::set_layout);
 
-    vk::CmdClearColorImage(m_command_buffer.handle(), dstImage.handle(), VK_IMAGE_LAYOUT_GENERAL, &clear_color, 1, &range);
+    const VkImageSubresourceRange range = vkt::Image::SubresourceRange(image_ci, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    vk::CmdClearColorImage(m_command_buffer.handle(), dst_image.handle(), VK_IMAGE_LAYOUT_GENERAL, &clear_color, 1, &range);
 
     m_errorMonitor->VerifyFound();
 
@@ -3444,28 +3389,11 @@ TEST_F(NegativeCommand, ClearDepthRangeUnrestricted) {
 
 TEST_F(NegativeCommand, ClearColorImageImageLayout) {
     TEST_DESCRIPTION("Check ClearImage layouts with SHARED_PRESENTABLE_IMAGE extension active.");
-
     AddRequiredExtensions(VK_KHR_SHARED_PRESENTABLE_IMAGE_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
-    const VkFormat tex_format = VK_FORMAT_B8G8R8A8_UNORM;
-    const int32_t tex_width = 32;
-    const int32_t tex_height = 32;
-
-    VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.format = tex_format;
-    image_create_info.extent.width = tex_width;
-    image_create_info.extent.height = tex_height;
-    image_create_info.extent.depth = 1;
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 4;
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    image_create_info.flags = 0;
-    vkt::Image dst_image(*m_device, image_create_info, vkt::set_layout);
+    auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 4, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image dst_image(*m_device, image_ci, vkt::set_layout);
     m_command_buffer.Begin();
 
     VkClearColorValue color_clear_value = {};
@@ -3783,4 +3711,81 @@ TEST_F(NegativeCommand, ClearDsImageWithInvalidAspect) {
         m_command_buffer.EndRenderPass();
         m_command_buffer.End();
     }
+}
+
+TEST_F(NegativeCommand, InvalidCommandBufferInheritanceInfo) {
+    TEST_DESCRIPTION("Test VkCommandBufferInheritanceInfo using disabled featuers.");
+
+    AddRequiredExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    vkt::CommandBuffer secondary_cb(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+
+    VkCommandBufferInheritanceConditionalRenderingInfoEXT inheritance_conditional_rendering_info = vku::InitStructHelper();
+    inheritance_conditional_rendering_info.conditionalRenderingEnable = VK_TRUE;
+
+    VkCommandBufferInheritanceInfo inheritance_info = vku::InitStructHelper(&inheritance_conditional_rendering_info);
+
+    VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.pInheritanceInfo = &inheritance_info;
+
+    m_errorMonitor->SetDesiredError("VUID-VkCommandBufferInheritanceConditionalRenderingInfoEXT-conditionalRenderingEnable-01977");
+    vk::BeginCommandBuffer(secondary_cb.handle(), &begin_info);
+    m_errorMonitor->VerifyFound();
+
+    inheritance_info.pNext = nullptr;
+    inheritance_info.occlusionQueryEnable = VK_TRUE;
+    m_errorMonitor->SetDesiredError("VUID-VkCommandBufferInheritanceInfo-occlusionQueryEnable-00056");
+    vk::BeginCommandBuffer(secondary_cb.handle(), &begin_info);
+    m_errorMonitor->VerifyFound();
+
+    inheritance_info.occlusionQueryEnable = VK_FALSE;
+    inheritance_info.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT;
+    m_errorMonitor->SetDesiredError("VUID-VkCommandBufferInheritanceInfo-pipelineStatistics-00058");
+    vk::BeginCommandBuffer(secondary_cb.handle(), &begin_info);
+    m_errorMonitor->VerifyFound();
+
+    inheritance_info.pipelineStatistics = 0u;
+    inheritance_info.queryFlags = VK_QUERY_CONTROL_PRECISE_BIT;
+    m_errorMonitor->SetDesiredError("VUID-VkCommandBufferInheritanceInfo-queryFlags-02788");
+    vk::BeginCommandBuffer(secondary_cb.handle(), &begin_info);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeCommand, PipelineStatisticsInvalidFlags) {
+    TEST_DESCRIPTION("Use invalid pipelineStatistics flags.");
+
+    AddRequiredFeature(vkt::Feature::pipelineStatisticsQuery);
+    RETURN_IF_SKIP(Init());
+
+    vkt::CommandBuffer secondary_cb(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+
+    VkCommandBufferInheritanceInfo inheritance_info = vku::InitStructHelper();
+
+    VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.pInheritanceInfo = &inheritance_info;
+
+    inheritance_info.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_FLAG_BITS_MAX_ENUM;  // Invalid
+    m_errorMonitor->SetDesiredError("VUID-VkCommandBufferInheritanceInfo-pipelineStatistics-02789");
+    vk::BeginCommandBuffer(secondary_cb.handle(), &begin_info);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeCommand, QueryControlInvalidFlags) {
+    TEST_DESCRIPTION("Use invalid query control flags.");
+
+    AddRequiredFeature(vkt::Feature::inheritedQueries);
+    RETURN_IF_SKIP(Init());
+
+    vkt::CommandBuffer secondary_cb(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+
+    VkCommandBufferInheritanceInfo inheritance_info = vku::InitStructHelper();
+
+    VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.pInheritanceInfo = &inheritance_info;
+
+    inheritance_info.queryFlags = VK_QUERY_CONTROL_FLAG_BITS_MAX_ENUM;  // Invalid
+    m_errorMonitor->SetDesiredError("VUID-VkCommandBufferInheritanceInfo-queryFlags-00057");
+    vk::BeginCommandBuffer(secondary_cb.handle(), &begin_info);
+    m_errorMonitor->VerifyFound();
 }

@@ -236,6 +236,7 @@ VALSTATETRACK_STATE_OBJECT(VkIndirectCommandsLayoutEXT, vvl::IndirectCommandsLay
 
 class ValidationStateTracker : public ValidationObject {
     using Func = vvl::Func;
+    using BaseClass = ValidationObject;
 
   private:
     // NOTE: The Dummy argument allows for *partial* specialization at class scope, as full specialization at class scope
@@ -258,7 +259,17 @@ class ValidationStateTracker : public ValidationObject {
         return (MapTraits::kInstanceScope && (this->*map_member).empty()) ? instance_state->*map_member : this->*map_member;
     }
 
+    // Helper to clean up the state object maps in the correct order
+    void DestroyObjectMaps();
+
   public:
+    ValidationStateTracker(vvl::dispatch::Device* dev, ValidationStateTracker* instance, LayerObjectTypeId type)
+        : BaseClass(dev, type), instance_state(instance) {
+        physical_device_state = instance_state->Get<vvl::PhysicalDevice>(physical_device).get();
+    }
+    ValidationStateTracker(vvl::dispatch::Instance* inst, LayerObjectTypeId type) : BaseClass(inst, type), instance_state(this) {}
+    ~ValidationStateTracker();
+
     static VkBindImageMemoryInfo ConvertImageMemoryInfo(VkDevice device, VkImage image, VkDeviceMemory mem,
                                                         VkDeviceSize memoryOffset);
 
@@ -427,9 +438,6 @@ class ValidationStateTracker : public ValidationObject {
     virtual std::shared_ptr<vvl::PhysicalDevice> CreatePhysicalDeviceState(VkPhysicalDevice handle);
     void PostCallRecordCreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,
                                       VkInstance* pInstance, const RecordObject& record_obj) override;
-    void PostCallRecordEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
-        VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, uint32_t* pCounterCount, VkPerformanceCounterKHR* pCounters,
-        VkPerformanceCounterDescriptionKHR* pCounterDescriptions, const RecordObject& record_obj) override;
     void PostCallRecordGetAccelerationStructureMemoryRequirementsNV(VkDevice device,
                                                                     const VkAccelerationStructureMemoryRequirementsInfoNV* pInfo,
                                                                     VkMemoryRequirements2* pMemoryRequirements,
@@ -1458,9 +1466,6 @@ class ValidationStateTracker : public ValidationObject {
                                                                  VkSwapchainKHR handle);
     void RecordCreateSwapchainState(VkResult result, const VkSwapchainCreateInfoKHR* pCreateInfo, VkSwapchainKHR* pSwapchain,
                                     std::shared_ptr<vvl::Surface>&& surface_state, vvl::Swapchain* old_swapchain_state);
-    void RecordEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCounters(VkPhysicalDevice physicalDevice,
-                                                                          uint32_t queueFamilyIndex, uint32_t* pCounterCount,
-                                                                          VkPerformanceCounterKHR* pCounters);
     void RecordGetDeviceQueueState(uint32_t queue_family_index, uint32_t queue_index, VkDeviceQueueCreateFlags flags,
                                    VkQueue queue);
     void RecordGetExternalFenceState(VkFence fence, VkExternalFenceHandleTypeFlagBits handle_type, const Location& loc);
@@ -1735,6 +1740,7 @@ class ValidationStateTracker : public ValidationObject {
         uint32_t memory_type_index;
         VkBuffer dedicated_buffer;
         VkImage dedicated_image;
+        VkDeviceMemory device_memory;
 
         // External Semaphore
         VkSemaphoreCreateFlags semaphore_flags = 0;

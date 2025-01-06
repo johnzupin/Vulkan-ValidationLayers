@@ -118,6 +118,12 @@ bool StatelessValidation::ValidateSwapchainCreateInfo(const VkSwapchainCreateInf
             }
         }
     }
+
+    if (create_info.presentMode == VK_PRESENT_MODE_FIFO_LATEST_READY_EXT && !enabled_features.presentModeFifoLatestReady) {
+        skip |=
+            LogError("VUID-VkSwapchainCreateInfoKHR-presentModeFifoLatestReady-10161", device, loc.dot(Field::presentMode),
+                     "is %s, but feature presentModeFifoLatestReady is not enabled", string_VkPresentModeKHR(create_info.presentMode));
+    }
     return skip;
 }
 
@@ -286,6 +292,15 @@ bool StatelessValidation::manual_PreCallValidateGetPhysicalDeviceSurfaceFormats2
         skip |= LogError("VUID-vkGetPhysicalDeviceSurfaceFormats2KHR-pSurfaceInfo-06521", physicalDevice,
                          error_obj.location.dot(Field::pSurfaceInfo).dot(Field::surface),
                          "is VK_NULL_HANDLE and VK_GOOGLE_surfaceless_query is not enabled.");
+    }
+    if (pSurfaceFormats) {
+        for (uint32_t i = 0; i < *pSurfaceFormatCount; ++i) {
+            if (vku::FindStructInPNextChain<VkImageCompressionPropertiesEXT>(pSurfaceFormats[i].pNext) &&
+                !enabled_features.imageCompressionControlSwapchain) {
+                skip |= LogError("VUID-VkSurfaceFormat2KHR-pNext-06750", device, error_obj.location.dot(Field::pNext),
+                                 "contains VkImageCompressionPropertiesEXT, but imageCompressionControlSwapchain is not enabled");
+            }
+        }
     }
     return skip;
 }

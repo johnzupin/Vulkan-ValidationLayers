@@ -17,6 +17,7 @@
  */
 
 #include "state_tracker/descriptor_sets.h"
+#include <vulkan/vk_enum_string_helper.h>
 #include "state_tracker/image_state.h"
 #include "state_tracker/buffer_state.h"
 #include "state_tracker/cmd_buffer_state.h"
@@ -189,17 +190,13 @@ bool operator==(const DescriptorSetLayoutDef &lhs, const DescriptorSetLayoutDef 
     if ((lhs.GetCreateFlags() != rhs.GetCreateFlags()) || (lhs.GetBindingFlags() != rhs.GetBindingFlags())) {
         return false;
     }
-    // vectors of enums
-    if (lhs.GetMutableTypes() != rhs.GetMutableTypes()) {
-        return false;
-    }
     // vectors of vku::safe_VkDescriptorSetLayoutBinding structures
     const auto &lhs_bindings = lhs.GetBindings();
     const auto &rhs_bindings = rhs.GetBindings();
     if (lhs_bindings.size() != rhs_bindings.size()) {
         return false;
     }
-    for (size_t i = 0; i < lhs_bindings.size(); i++) {
+    for (uint32_t i = 0; i < lhs_bindings.size(); i++) {
         const auto &l = lhs_bindings[i];
         const auto &r = rhs_bindings[i];
         // For things where we are comparing with the bound pipeline, the binding will always be right, but when comparing two
@@ -214,6 +211,10 @@ bool operator==(const DescriptorSetLayoutDef &lhs, const DescriptorSetLayoutDef 
             if (l.pImmutableSamplers[s] != r.pImmutableSamplers[s]) {
                 return false;
             }
+        }
+        // These have been sorted already so can direct compare
+        if (lhs.GetMutableTypes(i) != rhs.GetMutableTypes(i)) {
+            return false;
         }
     }
     return true;
@@ -243,13 +244,10 @@ std::string DescriptorSetLayoutDef::DescribeDifference(uint32_t index, const Des
             ss << string_VkDescriptorBindingFlags(flag) << " ";
         }
         ss << ")";
-    } else if (GetMutableTypes() != other.GetMutableTypes()) {
-        // TODO - this is a 2d array, need a smarter way to print out details
-        ss << "Mutable types doesn't match";
     } else if (lhs_bindings.size() != rhs_bindings.size()) {
         ss << "binding count " << lhs_bindings.size() << " doesn't match " << rhs_bindings.size();
     } else {
-        for (size_t i = 0; i < lhs_bindings.size(); i++) {
+        for (uint32_t i = 0; i < lhs_bindings.size(); i++) {
             const auto &l = lhs_bindings[i];
             const auto &r = rhs_bindings[i];
             if (l.binding != r.binding) {
@@ -278,6 +276,10 @@ std::string DescriptorSetLayoutDef::DescribeDifference(uint32_t index, const Des
                         break;
                     }
                 }
+            } else if (GetMutableTypes(i) != other.GetMutableTypes(i)) {
+                // These have been sorted already so can direct compare
+                ss << "Mutable types doesn't match at binding " << i << "\n[" << PrintMutableTypes(i) << "]\ndoesn't match"
+                   << "\n[" << other.PrintMutableTypes(i) << "]";
             }
         }
     }
@@ -450,8 +452,23 @@ bool vvl::DescriptorSetLayoutDef::IsTypeMutable(const VkDescriptorType type, uin
     return false;
 }
 
-const std::vector<std::vector<VkDescriptorType>> &vvl::DescriptorSetLayoutDef::GetMutableTypes() const {
-    return mutable_types_;
+std::string vvl::DescriptorSetLayoutDef::PrintMutableTypes(uint32_t binding) const {
+    if (binding >= mutable_types_.size()) {
+        return "no Mutable Type list at this binding";
+    }
+    std::ostringstream ss;
+    const auto mutable_types = mutable_types_[binding];
+    if (mutable_types.empty()) {
+        ss << "pMutableDescriptorTypeLists is empty";
+    } else {
+        for (uint32_t i = 0; i < mutable_types.size(); i++) {
+            ss << string_VkDescriptorType(mutable_types[i]);
+            if (i + 1 != mutable_types.size()) {
+                ss << ", ";
+            }
+        }
+    }
+    return ss.str();
 }
 
 const std::vector<VkDescriptorType> &vvl::DescriptorSetLayoutDef::GetMutableTypes(uint32_t binding) const {
@@ -767,7 +784,7 @@ static void ReplaceStatePtr(DescriptorSet &set_state, T &dst, const T &src, bool
 
 void vvl::SamplerDescriptor::WriteUpdate(DescriptorSet &set_state, const ValidationStateTracker &dev_data,
                                                      const VkWriteDescriptorSet &update, const uint32_t index, bool is_bindless) {
-    if (!immutable_) {
+    if (!immutable_ && update.pImageInfo) {
         ReplaceStatePtr(set_state, sampler_state_, dev_data.GetConstCastShared<vvl::Sampler>(update.pImageInfo[index].sampler),
                         is_bindless);
     }
@@ -813,6 +830,7 @@ bool vvl::SamplerDescriptor::Invalid() const { return !sampler_state_ || sampler
 void vvl::ImageSamplerDescriptor::WriteUpdate(DescriptorSet &set_state, const ValidationStateTracker &dev_data,
                                                           const VkWriteDescriptorSet &update, const uint32_t index,
                                                           bool is_bindless) {
+    if (!update.pImageInfo) return;
     const auto &image_info = update.pImageInfo[index];
     if (!immutable_) {
         ReplaceStatePtr(set_state, sampler_state_, dev_data.GetConstCastShared<vvl::Sampler>(image_info.sampler), is_bindless);
@@ -867,6 +885,7 @@ bool vvl::ImageSamplerDescriptor::Invalid() const {
 
 void vvl::ImageDescriptor::WriteUpdate(DescriptorSet &set_state, const ValidationStateTracker &dev_data,
                                                    const VkWriteDescriptorSet &update, const uint32_t index, bool is_bindless) {
+    if (!update.pImageInfo) return;
     const auto &image_info = update.pImageInfo[index];
     image_layout_ = image_info.imageLayout;
     ReplaceStatePtr(set_state, image_view_state_, dev_data.GetConstCastShared<vvl::ImageView>(image_info.imageView), is_bindless);
@@ -1098,48 +1117,56 @@ void vvl::MutableDescriptor::WriteUpdate(DescriptorSet &set_state, const Validat
     VkDeviceSize buffer_size = 0;
     switch (DescriptorTypeToClass(update.descriptorType)) {
         case DescriptorClass::PlainSampler:
-            if (!immutable_) {
+            if (!immutable_ && update.pImageInfo) {
                 ReplaceStatePtr(set_state, sampler_state_,
                                 dev_data.GetConstCastShared<vvl::Sampler>(update.pImageInfo[index].sampler), is_bindless);
             }
             break;
         case DescriptorClass::ImageSampler: {
-            const auto &image_info = update.pImageInfo[index];
-            if (!immutable_) {
-                ReplaceStatePtr(set_state, sampler_state_, dev_data.GetConstCastShared<vvl::Sampler>(image_info.sampler),
+            if (update.pImageInfo) {
+                const auto &image_info = update.pImageInfo[index];
+                if (!immutable_) {
+                    ReplaceStatePtr(set_state, sampler_state_, dev_data.GetConstCastShared<vvl::Sampler>(image_info.sampler),
+                                    is_bindless);
+                }
+                image_layout_ = image_info.imageLayout;
+                ReplaceStatePtr(set_state, image_view_state_, dev_data.GetConstCastShared<vvl::ImageView>(image_info.imageView),
                                 is_bindless);
             }
-            image_layout_ = image_info.imageLayout;
-            ReplaceStatePtr(set_state, image_view_state_, dev_data.GetConstCastShared<vvl::ImageView>(image_info.imageView),
-                            is_bindless);
             break;
         }
         case DescriptorClass::Image: {
-            const auto &image_info = update.pImageInfo[index];
-            image_layout_ = image_info.imageLayout;
-            ReplaceStatePtr(set_state, image_view_state_, dev_data.GetConstCastShared<vvl::ImageView>(image_info.imageView),
-                            is_bindless);
+            if (update.pImageInfo) {
+                const auto &image_info = update.pImageInfo[index];
+                image_layout_ = image_info.imageLayout;
+                ReplaceStatePtr(set_state, image_view_state_, dev_data.GetConstCastShared<vvl::ImageView>(image_info.imageView),
+                                is_bindless);
+            }
             break;
         }
         case DescriptorClass::GeneralBuffer: {
-            const auto &buffer_info = update.pBufferInfo[index];
-            offset_ = buffer_info.offset;
-            range_ = buffer_info.range;
-            // can be null if using nullDescriptors
-            const auto buffer_state = dev_data.GetConstCastShared<vvl::Buffer>(update.pBufferInfo->buffer);
-            if (buffer_state) {
-                buffer_size = buffer_state->create_info.size;
+            if (update.pBufferInfo) {
+                const auto &buffer_info = update.pBufferInfo[index];
+                offset_ = buffer_info.offset;
+                range_ = buffer_info.range;
+                // can be null if using nullDescriptors
+                const auto buffer_state = dev_data.GetConstCastShared<vvl::Buffer>(update.pBufferInfo->buffer);
+                if (buffer_state) {
+                    buffer_size = buffer_state->create_info.size;
+                }
+                ReplaceStatePtr(set_state, buffer_state_, buffer_state, is_bindless);
             }
-            ReplaceStatePtr(set_state, buffer_state_, buffer_state, is_bindless);
             break;
         }
         case DescriptorClass::TexelBuffer: {
-            // can be null if using nullDescriptors
-            const auto buffer_view = dev_data.GetConstCastShared<vvl::BufferView>(update.pTexelBufferView[index]);
-            if (buffer_view) {
-                buffer_size = buffer_view->buffer_state->create_info.size;
+            if (update.pTexelBufferView) {
+                // can be null if using nullDescriptors
+                const auto buffer_view = dev_data.GetConstCastShared<vvl::BufferView>(update.pTexelBufferView[index]);
+                if (buffer_view) {
+                    buffer_size = buffer_view->buffer_state->create_info.size;
+                }
+                ReplaceStatePtr(set_state, buffer_view_state_, buffer_view, is_bindless);
             }
-            ReplaceStatePtr(set_state, buffer_view_state_, buffer_view, is_bindless);
             break;
         }
         case DescriptorClass::AccelerationStructure: {
