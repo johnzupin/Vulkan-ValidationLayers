@@ -31,6 +31,7 @@ typedef vvl::unordered_map<const vvl::Image*, std::optional<GlobalImageLayoutRan
 
 namespace vvl {
 struct DrawDispatchVuid;
+class DescriptorBinding;
 }  // namespace vvl
 
 namespace spirv {
@@ -42,8 +43,8 @@ struct DAGNode;
 struct SemaphoreSubmitState;
 
 class CoreChecks : public ValidationStateTracker {
+    using BaseClass = ValidationStateTracker;
   public:
-    using StateTracker = ValidationStateTracker;
     using Func = vvl::Func;
     using Struct = vvl::Struct;
     using Field = vvl::Field;
@@ -64,7 +65,8 @@ class CoreChecks : public ValidationStateTracker {
     spvtools::ValidatorOptions spirv_val_options;
     uint32_t spirv_val_option_hash;
 
-    CoreChecks() { container_type = LayerObjectTypeCoreValidation; }
+    CoreChecks(vvl::dispatch::Device* dev, CoreChecks* instance_vo) : BaseClass(dev, instance_vo, LayerObjectTypeCoreValidation) {}
+    CoreChecks(vvl::dispatch::Instance* inst) : BaseClass(inst, LayerObjectTypeCoreValidation) {}
 
     ReadLockGuard ReadLock() const override;
     WriteLockGuard WriteLock() override;
@@ -598,27 +600,40 @@ class CoreChecks : public ValidationStateTracker {
                                            const vvl::PipelineLayout& fs_layout, std::string& error_msg) const;
 
     // Validate contents of a CopyUpdate
-    using DescriptorSet = vvl::DescriptorSet;
     bool ValidateCopyUpdate(const VkCopyDescriptorSet& update, const Location& copy_loc) const;
-    bool VerifyCopyUpdateContents(const VkCopyDescriptorSet& update, const DescriptorSet& src_set, VkDescriptorType src_type,
-                                  uint32_t src_index, const DescriptorSet& dst_set, VkDescriptorType dst_type, uint32_t dst_index,
-                                  const Location& copy_loc) const;
-    bool VerifyUpdateConsistency(const DescriptorSet& set, uint32_t binding, uint32_t offset, uint32_t update_count,
-                                 const char* vuid, const Location& set_loc) const;
+    bool ValidateCopyUpdateDescriptorSetLayoutFlags(const VkCopyDescriptorSet& update, const vvl::DescriptorSetLayout& src_layout,
+                                                    const vvl::DescriptorSetLayout& dst_layout, const Location& copy_loc) const;
+    bool ValidateCopyUpdateDescriptorPoolFlags(const VkCopyDescriptorSet& update, const vvl::DescriptorSet& src_set,
+                                               const vvl::DescriptorSet& dst_set, const Location& copy_loc) const;
+    bool ValidateCopyUpdateDescriptorTypes(const VkCopyDescriptorSet& update, const vvl::DescriptorSet& src_set,
+                                           const vvl::DescriptorSet& dst_set, const vvl::DescriptorSetLayout& src_layout,
+                                           const vvl::DescriptorSetLayout& dst_layout, const Location& copy_loc) const;
+    bool VerifyUpdateConsistency(const vvl::DescriptorSet& set, uint32_t binding, uint32_t offset, uint32_t update_count,
+                                 bool is_copy, const Location& set_loc) const;
     // Validate contents of a WriteUpdate
-    bool ValidateWriteUpdate(const DescriptorSet& dst_set, const VkWriteDescriptorSet& update, const Location& write_loc,
+    bool ValidateWriteUpdate(const vvl::DescriptorSet& dst_set, const VkWriteDescriptorSet& update, const Location& write_loc,
                              bool push) const;
-    bool VerifyWriteUpdateContents(const DescriptorSet& dst_set, const VkWriteDescriptorSet& update, const uint32_t index,
-                                   const Location& write_loc, bool push) const;
+    bool ValidateWriteUpdateDescriptorType(const vvl::DescriptorSetLayout& dst_layout, const vvl::DescriptorSet& dst_set,
+                                           const vvl::DescriptorBinding& dst_binding, const VkWriteDescriptorSet& update,
+                                           const Location& write_loc) const;
+    bool ValidateWriteUpdateBufferInfo(const vvl::DescriptorSetLayout& dst_layout, const VkWriteDescriptorSet& update,
+                                       const Location& write_loc) const;
+    bool ValidateWriteUpdateInlineUniformBlock(const vvl::DescriptorSetLayout& dst_layout, const VkWriteDescriptorSet& update,
+                                               const Location& write_loc) const;
+    bool ValidateWriteUpdateAccelerationStructureKHR(const vvl::DescriptorSetLayout& dst_layout, const VkWriteDescriptorSet& update,
+                                                     const Location& write_loc) const;
+    bool ValidateWriteUpdateAccelerationStructureNV(const vvl::DescriptorSetLayout& dst_layout, const VkWriteDescriptorSet& update,
+                                                    const Location& write_loc) const;
+    bool VerifyWriteUpdateContents(const vvl::DescriptorSet& dst_set, const VkWriteDescriptorSet& update, const Location& write_loc,
+                                   bool push) const;
     // Shared helper functions - These are useful because the shared sampler image descriptor type
     //  performs common functions with both sampler and image descriptors so they can share their common functions
     bool ValidateImageUpdate(const vvl::ImageView& view_state, VkImageLayout image_layout, VkDescriptorType type,
                              const Location& image_info_loc) const;
     // Validate contents of a push descriptor update
-    bool ValidatePushDescriptorsUpdate(const DescriptorSet& push_set, uint32_t descriptorWriteCount,
+    bool ValidatePushDescriptorsUpdate(const vvl::DescriptorSet& push_set, uint32_t descriptorWriteCount,
                                        const VkWriteDescriptorSet* pDescriptorWrites, const Location& loc) const;
     // Descriptor Set Validation Functions
-    bool ValidateSampler(VkSampler) const;
     bool ValidateBufferUsage(const vvl::Buffer& buffer_state, VkDescriptorType type, const Location& buffer_loc) const;
     bool ValidateBufferUpdate(const VkDescriptorBufferInfo& buffer_info, VkDescriptorType type,
                               const Location& buffer_info_loc) const;
@@ -763,7 +778,7 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateConservativeRasterization(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
                                            const spirv::StatelessData& stateless_data, const Location& loc) const;
     bool ValidatePushConstantUsage(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
-                                   const vvl::Pipeline& pipeline, const Location& loc) const;
+                                   const vvl::Pipeline* pipeline, const ShaderStageState& stage_state, const Location& loc) const;
     bool ValidateBuiltinLimits(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
                                const vvl::Pipeline* pipeline, const Location& loc) const;
     bool ValidatePrimitiveTopology(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
@@ -1285,6 +1300,9 @@ class CoreChecks : public ValidationStateTracker {
     void PostCallRecordAllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo,
                                               VkDescriptorSet* pDescriptorSets, const RecordObject& record_obj,
                                               vvl::AllocateDescriptorSetsData& ads_state) override;
+    void PostCallRecordAllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo,
+                                      const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory,
+                                      const RecordObject& record_obj) override;
     bool PreCallValidateCreateRayTracingPipelinesNV(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
                                                     const VkRayTracingPipelineCreateInfoNV* pCreateInfos,
                                                     const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,

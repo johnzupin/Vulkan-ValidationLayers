@@ -1,6 +1,6 @@
-/* Copyright (c) 2024 The Khronos Group Inc.
- * Copyright (c) 2024 Valve Corporation
- * Copyright (c) 2024 LunarG, Inc.
+/* Copyright (c) 2024-2025 The Khronos Group Inc.
+ * Copyright (c) 2024-2025 Valve Corporation
+ * Copyright (c) 2024-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,19 +51,65 @@ void ReportKeyValues::Add(std::string_view key, std::string_view value) {
     key_values.emplace_back(KeyValue{std::string(key), std::string(value)});
 }
 
-std::string ReportKeyValues::GetExtraPropertiesSection() const {
+void ReportKeyValues::Add(std::string_view key, uint64_t value) {
+    key_values.emplace_back(KeyValue{std::string(key), std::to_string(value)});
+}
+
+static auto SortKeyValues(const std::vector<ReportKeyValues::KeyValue> &key_values) {
+    auto get_sort_order = [](const std::string &key) -> uint32_t {
+        // message_type goes first
+        if (key == kPropertyMessageType) {
+            return 0;
+        }
+        // then some common properties
+        const char *common_properties[] = {kPropertyAccess, kPropertyPriorAccess, kPropertyReadBarriers, kPropertyWriteBarriers};
+        if (IsValueIn(key, common_properties)) {
+            return 1;
+        }
+        // debug properties are at the end
+        const char *debug_properties[] = {kPropertySeqNo, kPropertySubCmd, kPropertyResetNo, kPropertyBatchTag};
+        if (IsValueIn(key, debug_properties)) {
+            return 3;
+        }
+        // everything else
+        return 2;
+    };
+    auto sorted = key_values;
+    std::stable_sort(sorted.begin(), sorted.end(), [&get_sort_order](const auto &a, const auto &b) {
+        const uint32_t a_order = get_sort_order(a.key);
+        const uint32_t b_order = get_sort_order(b.key);
+        // Sort ordering groups
+        if (a_order != b_order) {
+            return a_order < b_order;
+        }
+        // Do not rearrange elements within a group. By returning false we indicate neither element
+        // in the group is less than the other one. Stable sort will keep the original order.
+        return false;
+    });
+    return sorted;
+}
+
+std::string ReportKeyValues::GetExtraPropertiesSection(bool pretty_print) const {
     if (key_values.empty()) {
         return {};
     }
+    const auto sorted = SortKeyValues(key_values);
     std::stringstream ss;
-    ss << "\nExtra properties:\n";
+    ss << "\n[Extra properties]\n";
     bool first = true;
-    for (const auto &kv : key_values) {
+    for (const auto &kv : sorted) {
         if (!first) {
             ss << "\n";
         }
         first = false;
-        ss << kv.key << " : " << kv.value;
+
+        const uint32_t pretty_print_alignment = 18;
+        uint32_t extra_space_count = 0;
+        if (pretty_print && kv.key.length() < pretty_print_alignment) {
+            extra_space_count = pretty_print_alignment - (uint32_t)kv.key.length();
+        }
+
+        ss << kv.key << std::string(extra_space_count, ' ') << " = " << kv.value;
     }
     return ss.str();
 }
@@ -217,7 +263,8 @@ static std::string string_SyncStageAccessFlags(const SyncAccessFlags &accesses, 
     return accesses_str;
 }
 
-static std::string FormatHazardState(const HazardResult::HazardState &hazard, VkQueueFlags queue_flags) {
+static std::string FormatHazardState(const HazardResult::HazardState &hazard, VkQueueFlags queue_flags,
+                                     ReportKeyValues &key_values) {
     std::stringstream out;
     assert(hazard.access_index < static_cast<SyncAccessIndex>(syncAccessInfoByAccessIndex().size()));
     assert(hazard.prior_access_index < static_cast<SyncAccessIndex>(syncAccessInfoByAccessIndex().size()));
@@ -227,24 +274,35 @@ static std::string FormatHazardState(const HazardResult::HazardState &hazard, Vk
     if (!hazard.recorded_access.get()) {
         // if we have a recorded usage the usage is reported from the recorded contexts point of view
         out << "usage: " << usage_info.name << ", ";
+        key_values.Add(kPropertyAccess, usage_info.name);
     }
     out << "prior_usage: " << prior_usage_info.name;
+    key_values.Add(kPropertyPriorAccess, prior_usage_info.name);
     if (IsHazardVsRead(hazard.hazard)) {
-        const auto barriers = hazard.access_state->GetReadBarriers(hazard.prior_access_index);
-        out << ", read_barriers: " << string_VkPipelineStageFlags2(barriers);
+        const VkPipelineStageFlags2 barriers = hazard.access_state->GetReadBarriers(hazard.prior_access_index);
+        const std::string barriers_str = string_VkPipelineStageFlags2(barriers);
+        out << ", read_barriers: " << barriers_str;
+        key_values.Add(kPropertyReadBarriers, barriers_str);
     } else {
-        SyncAccessFlags write_barrier = hazard.access_state->GetWriteBarriers();
-        out << ", write_barriers: " << string_SyncStageAccessFlags(write_barrier, queue_flags);
+        const SyncAccessFlags barriers = hazard.access_state->GetWriteBarriers();
+        const std::string barriers_str = string_SyncStageAccessFlags(barriers, queue_flags);
+        out << ", write_barriers: " << barriers_str;
+        key_values.Add(kPropertyWriteBarriers, barriers_str);
     }
     return out.str();
 }
 
-std::string CommandExecutionContext::FormatHazard(const HazardResult &hazard) const {
+std::string CommandExecutionContext::FormatHazard(const HazardResult &hazard, ReportKeyValues &key_values) const {
     std::stringstream out;
     assert(hazard.IsHazard());
-    out << FormatHazardState(hazard.State(), queue_flags_);
+    out << FormatHazardState(hazard.State(), queue_flags_, key_values);
     out << ", " << FormatUsage(hazard.TagEx()) << ")";
     return out.str();
+}
+
+std::string CommandExecutionContext::FormatHazard(const HazardResult &hazard) const {
+    ReportKeyValues key_values;
+    return FormatHazard(hazard, key_values);
 }
 
 std::string CommandBufferAccessContext::FormatUsage(ResourceUsageTagEx tag_ex) const {
@@ -261,11 +319,11 @@ std::string CommandBufferAccessContext::FormatUsage(ResourceUsageTagEx tag_ex) c
 void CommandBufferAccessContext::AddUsageRecordExtraProperties(ResourceUsageTag tag, ReportKeyValues &extra_properties) const {
     if (tag >= access_log_->size()) return;
     const ResourceUsageRecord &record = (*access_log_)[tag];
-    extra_properties.Add("seq_no", record.seq_num);
+    extra_properties.Add(kPropertySeqNo, record.seq_num);
     if (record.sub_command != 0) {
-        extra_properties.Add("subcmd", record.sub_command);
+        extra_properties.Add(kPropertySubCmd, record.sub_command);
     }
-    extra_properties.Add("reset_no", record.reset_count);
+    extra_properties.Add(kPropertyResetNo, record.reset_count);
 }
 
 std::string QueueBatchContext::FormatUsage(ResourceUsageTagEx tag_ex) const {
@@ -277,12 +335,9 @@ std::string QueueBatchContext::FormatUsage(ResourceUsageTagEx tag_ex) const {
         if (batch.queue) {
             // Queue and Batch information (for enqueued operations)
             out << FormatStateObject(SyncNodeFormatter(sync_state_, batch.queue->GetQueueState()));
-            out << ", submit: " << batch.submit_index << ", batch: " << batch.batch_index;
+            out << ", submit: " << batch.submit_index << ", batch: " << batch.batch_index << ", ";
         }
-
-        // Commandbuffer Usages Information
-        out << ", "
-            << FormatResourceUsageRecord(record.Formatter(sync_state_, nullptr, access.debug_name_provider, tag_ex.handle_index));
+        out << FormatResourceUsageRecord(record.Formatter(sync_state_, nullptr, access.debug_name_provider, tag_ex.handle_index));
     }
     return out.str();
 }
@@ -290,6 +345,6 @@ std::string QueueBatchContext::FormatUsage(ResourceUsageTagEx tag_ex) const {
 void QueueBatchContext::AddUsageRecordExtraProperties(ResourceUsageTag tag, ReportKeyValues &extra_properties) const {
     BatchAccessLog::AccessRecord access = batch_log_.GetAccessRecord(tag);
     if (access.IsValid()) {
-        extra_properties.Add("batch_tag", access.batch->base_tag);
+        extra_properties.Add(kPropertyBatchTag, access.batch->base_tag);
     }
 }

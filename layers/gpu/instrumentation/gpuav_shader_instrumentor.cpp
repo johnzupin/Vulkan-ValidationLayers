@@ -206,9 +206,6 @@ bool GpuShaderInstrumentor::PreCallValidateCmdWaitEvents(
     VkPipelineStageFlags dstStageMask, uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers,
     uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier *pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount,
     const VkImageMemoryBarrier *pImageMemoryBarriers, const ErrorObject &error_obj) const {
-    BaseClass::PreCallValidateCmdWaitEvents(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, memoryBarrierCount,
-                                            pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers,
-                                            imageMemoryBarrierCount, pImageMemoryBarriers, error_obj);
     return ValidateCmdWaitEvents(commandBuffer, static_cast<VkPipelineStageFlags2>(srcStageMask), error_obj.location);
 }
 
@@ -228,7 +225,6 @@ bool GpuShaderInstrumentor::PreCallValidateCmdWaitEvents2(VkCommandBuffer comman
         src_stage_mask |= stage_masks.src;
     }
 
-    BaseClass::PreCallValidateCmdWaitEvents2(commandBuffer, eventCount, pEvents, pDependencyInfos, error_obj);
     return ValidateCmdWaitEvents(commandBuffer, src_stage_mask, error_obj.location);
 }
 
@@ -651,17 +647,16 @@ void GpuShaderInstrumentor::PostCallRecordCreateRayTracingPipelinesKHR(
 
     const bool is_operation_deferred = deferredOperation != VK_NULL_HANDLE && record_obj.result == VK_OPERATION_DEFERRED_KHR;
 
-    auto layer_data = GetLayerData(device);
     if (is_operation_deferred) {
         for (uint32_t i = 0; i < count; ++i) {
             UtilCopyCreatePipelineFeedbackData(pCreateInfos[i], chassis_state->modified_create_infos[i]);
         }
 
-        if (dispatch_->wrap_handles) {
-            deferredOperation = layer_data->Unwrap(deferredOperation);
+        if (dispatch_device_->wrap_handles) {
+            deferredOperation = dispatch_device_->Unwrap(deferredOperation);
         }
 
-        auto found = layer_data->deferred_operation_post_check.pop(deferredOperation);
+        auto found = dispatch_device_->deferred_operation_post_check.pop(deferredOperation);
         std::vector<std::function<void(const std::vector<VkPipeline> &)>> deferred_op_post_checks;
         if (found->first) {
             deferred_op_post_checks = std::move(found->second);
@@ -687,7 +682,7 @@ void GpuShaderInstrumentor::PostCallRecordCreateRayTracingPipelinesKHR(
                     PostCallRecordPipelineCreationShaderInstrumentation(*pipeline_state, shader_instrumentation_metadata);
                 }
             });
-        layer_data->deferred_operation_post_check.insert(deferredOperation, std::move(deferred_op_post_checks));
+        dispatch_device_->deferred_operation_post_check.insert(deferredOperation, std::move(deferred_op_post_checks));
     } else {
         for (uint32_t i = 0; i < count; ++i) {
             UtilCopyCreatePipelineFeedbackData(pCreateInfos[i], chassis_state->modified_create_infos[i]);
@@ -1287,7 +1282,7 @@ void GpuShaderInstrumentor::InternalError(LogObjectList objlist, const Location 
     // Once we encounter an internal issue disconnect everything.
     // This prevents need to check "if (aborted)" (which is awful when we easily forget to check somewhere and the user gets spammed
     // with errors making it hard to see the first error with the real source of the problem).
-    dispatch_->ReleaseDeviceValidationObject(LayerObjectTypeGpuAssisted);
+    dispatch_device_->ReleaseValidationObject(LayerObjectTypeGpuAssisted);
 }
 
 void GpuShaderInstrumentor::InternalWarning(LogObjectList objlist, const Location &loc, const char *const specific_message) const {

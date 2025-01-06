@@ -78,54 +78,77 @@ enum class ValidValue {
 };
 
 // Layer chassis validation object base class definition
-class ValidationObject {
+class ValidationObject : public Logger {
   public:
-    APIVersion api_version;
-    DebugReport* debug_report = nullptr;
-    template <typename T>
-    std::string FormatHandle(T&& h) const {
-        return debug_report->FormatHandle(std::forward<T>(h));
-    }
-    DispatchObject* dispatch_{};
+    const APIVersion api_version;
+    vvl::dispatch::Instance* dispatch_instance_{};
+    vvl::dispatch::Device* dispatch_device_{};
 
-    InstanceExtensions instance_extensions;
-    DeviceExtensions device_extensions = {};
-    GlobalSettings global_settings = {};
-    GpuAVSettings gpuav_settings = {};
-    SyncValSettings syncval_settings = {};
+    const InstanceExtensions& instance_extensions;
+    DeviceExtensions device_extensions;
+    const GlobalSettings& global_settings;
+    GpuAVSettings& gpuav_settings;
+    const SyncValSettings& syncval_settings;
 
-    CHECK_DISABLED disabled = {};
-    CHECK_ENABLED enabled = {};
+    const CHECK_DISABLED& disabled;
+    const CHECK_ENABLED& enabled;
 
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice physical_device = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
+
+    const LayerObjectTypeId container_type;
+
     bool is_device_lost = false;
 
-    LayerObjectTypeId container_type;
+    ValidationObject(vvl::dispatch::Device* dev, LayerObjectTypeId type_id)
+        : Logger(dev->debug_report),
+          api_version(dev->api_version),
+          dispatch_instance_(dev->dispatch_instance),
+          dispatch_device_(dev),
+          instance_extensions(dev->dispatch_instance->instance_extensions),
+          device_extensions(dev->device_extensions),
+          global_settings(dev->settings.global_settings),
+          gpuav_settings(dev->settings.gpuav_settings),
+          syncval_settings(dev->settings.syncval_settings),
+          disabled(dev->settings.disabled),
+          enabled(dev->settings.enabled),
+          instance(dev->dispatch_instance->instance),
+          physical_device(dev->physical_device),
+          device(dev->device),
+          container_type(type_id) {}
 
-    std::string layer_name = "CHASSIS";
+    ValidationObject(vvl::dispatch::Instance* instance, LayerObjectTypeId type_id)
+        : Logger(instance->debug_report),
+          api_version(instance->api_version),
+          dispatch_instance_(instance),
+          dispatch_device_(nullptr),
+          instance_extensions(instance->instance_extensions),
+          device_extensions(instance->device_extensions),
+          global_settings(instance->settings.global_settings),
+          gpuav_settings(instance->settings.gpuav_settings),
+          syncval_settings(instance->settings.syncval_settings),
+          disabled(instance->settings.disabled),
+          enabled(instance->settings.enabled),
+          instance(instance->instance),
+          physical_device(VK_NULL_HANDLE),
+          device(VK_NULL_HANDLE),
+          container_type(type_id) {}
 
-    ValidationObject() {}
     virtual ~ValidationObject() {}
 
     void CopyDispatchState() {
-        api_version = dispatch_->api_version;
-        debug_report = dispatch_->debug_report;
-
-        instance_extensions = dispatch_->instance_extensions;
-        device_extensions = dispatch_->device_extensions;
-
-        global_settings = dispatch_->global_settings;
-        gpuav_settings = dispatch_->gpuav_settings;
-        syncval_settings = dispatch_->syncval_settings;
-
-        enabled = dispatch_->enabled;
-        disabled = dispatch_->disabled;
-
-        instance = dispatch_->instance;
-        physical_device = dispatch_->physical_device;
-        device = dispatch_->device;
+        if (dispatch_device_) {
+            device_extensions = dispatch_device_->device_extensions;
+            instance = dispatch_device_->dispatch_instance->instance;
+            physical_device = dispatch_device_->physical_device;
+            device = dispatch_device_->device;
+        } else {
+            device_extensions = dispatch_instance_->device_extensions;
+            instance = dispatch_instance_->instance;
+            physical_device = VK_NULL_HANDLE;
+            device = VK_NULL_HANDLE;
+        }
     }
 
     mutable std::shared_mutex validation_object_mutex;
@@ -170,71 +193,6 @@ class ValidationObject {
         if (record_guard) {
             record_guard->lock();
         }
-    }
-
-    // Debug Logging Helpers
-    bool DECORATE_PRINTF(5, 6)
-        LogError(std::string_view vuid_text, const LogObjectList& objlist, const Location& loc, const char* format, ...) const {
-        va_list argptr;
-        va_start(argptr, format);
-        const bool result = debug_report->LogMsg(kErrorBit, objlist, loc, vuid_text, format, argptr);
-        va_end(argptr);
-        return result;
-    }
-
-    // Currently works like LogWarning, but allows developer to better categorize the warning
-    bool DECORATE_PRINTF(5, 6) LogUndefinedValue(std::string_view vuid_text, const LogObjectList& objlist, const Location& loc,
-                                                 const char* format, ...) const {
-        va_list argptr;
-        va_start(argptr, format);
-        const bool result = debug_report->LogMsg(kWarningBit, objlist, loc, vuid_text, format, argptr);
-        va_end(argptr);
-        return result;
-    }
-
-    bool DECORATE_PRINTF(5, 6)
-        LogWarning(std::string_view vuid_text, const LogObjectList& objlist, const Location& loc, const char* format, ...) const {
-        va_list argptr;
-        va_start(argptr, format);
-        const bool result = debug_report->LogMsg(kWarningBit, objlist, loc, vuid_text, format, argptr);
-        va_end(argptr);
-        return result;
-    }
-
-    bool DECORATE_PRINTF(5, 6) LogPerformanceWarning(std::string_view vuid_text, const LogObjectList& objlist, const Location& loc,
-                                                     const char* format, ...) const {
-        va_list argptr;
-        va_start(argptr, format);
-        const bool result = debug_report->LogMsg(kPerformanceWarningBit, objlist, loc, vuid_text, format, argptr);
-        va_end(argptr);
-        return result;
-    }
-
-    bool DECORATE_PRINTF(5, 6)
-        LogInfo(std::string_view vuid_text, const LogObjectList& objlist, const Location& loc, const char* format, ...) const {
-        va_list argptr;
-        va_start(argptr, format);
-        const bool result = debug_report->LogMsg(kInformationBit, objlist, loc, vuid_text, format, argptr);
-        va_end(argptr);
-        return result;
-    }
-
-    bool DECORATE_PRINTF(5, 6)
-        LogVerbose(std::string_view vuid_text, const LogObjectList& objlist, const Location& loc, const char* format, ...) const {
-        va_list argptr;
-        va_start(argptr, format);
-        const bool result = debug_report->LogMsg(kVerboseBit, objlist, loc, vuid_text, format, argptr);
-        va_end(argptr);
-        return result;
-    }
-
-    void LogInternalError(std::string_view failure_location, const LogObjectList& obj_list, const Location& loc,
-                          std::string_view entrypoint, VkResult err) const {
-        const std::string_view err_string = string_VkResult(err);
-        std::string vuid = "INTERNAL-ERROR-";
-        vuid += entrypoint;
-        LogError(vuid, obj_list, loc, "at %s: %s() was called in the Validation Layer state tracking and failed with result = %s.",
-                 failure_location.data(), entrypoint.data(), err_string.data());
     }
 
     virtual void CoreLayerDestroyValidationCacheEXT(VkDevice device, VkValidationCacheEXT validationCache,

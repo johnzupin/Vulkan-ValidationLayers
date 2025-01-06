@@ -185,13 +185,15 @@ VALSTATETRACK_DERIVED_STATE_OBJECT(VkDescriptorPool, bp_state::DescriptorPool, v
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkPipeline, bp_state::Pipeline, vvl::Pipeline)
 
 class BestPractices : public ValidationStateTracker {
+    using BaseClass = ValidationStateTracker;
   public:
-    using StateTracker = ValidationStateTracker;
     using Func = vvl::Func;
     using Struct = vvl::Struct;
     using Field = vvl::Field;
 
-    BestPractices() { container_type = LayerObjectTypeBestPractices; }
+    BestPractices(vvl::dispatch::Device* dev, BestPractices* instance_vo)
+        : BaseClass(dev, instance_vo, LayerObjectTypeBestPractices) {}
+    BestPractices(vvl::dispatch::Instance* inst) : BaseClass(inst, LayerObjectTypeBestPractices) {}
 
     ReadLockGuard ReadLock() const override;
     WriteLockGuard WriteLock() override;
@@ -202,6 +204,8 @@ class BestPractices : public ValidationStateTracker {
     void LogErrorCode(const RecordObject& record_obj) const;
 
     bool ValidateCmdDrawType(VkCommandBuffer cmd_buffer, const Location& loc) const;
+
+    bool ValidateCmdDispatchType(VkCommandBuffer cmd_buffer, const Location& loc) const;
 
     bool ValidatePushConstants(VkCommandBuffer cmd_buffer, const Location& loc) const;
 
@@ -545,6 +549,14 @@ class BestPractices : public ValidationStateTracker {
 
     bool PreCallValidateCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
                                     const ErrorObject& error_obj) const override;
+    bool PreCallValidateCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                            const ErrorObject& error_obj) const override;
+    bool PreCallValidateCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                        uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
+                                        const ErrorObject& error_obj) const override;
+    bool PreCallValidateCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                           uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
+                                           const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdEndRenderPass(VkCommandBuffer commandBuffer, const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdEndRenderPass2(VkCommandBuffer commandBuffer, const VkSubpassEndInfo* pSubpassEndInfo,
                                           const ErrorObject& error_obj) const override;

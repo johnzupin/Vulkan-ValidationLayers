@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  * Modifications Copyright (C) 2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -172,7 +172,7 @@ TEST_F(NegativeFragmentShadingRate, CombinerOpsLimit) {
     VkFragmentShadingRateCombinerOpKHR combinerOps[2] = {VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
                                                          VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR};
 
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     {
         // primitiveFragmentShadingRate
         combinerOps[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR;
@@ -2052,13 +2052,12 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateImageNV) {
         csosci.sampleOrderType = VK_COARSE_SAMPLE_ORDER_TYPE_CUSTOM_NV;
         csosci.customSampleOrderCount = 1;
 
-        using std::vector;
         struct TestCase {
             const VkCoarseSampleOrderCustomNV *order;
-            vector<std::string> vuids;
+            std::vector<std::string> vuids;
         };
 
-        vector<TestCase> test_cases = {
+        std::vector<TestCase> test_cases = {
             {&sampOrdBadShadingRate, {"VUID-VkCoarseSampleOrderCustomNV-shadingRate-02073"}},
             {&sampOrdBadSampleCount,
              {"VUID-VkCoarseSampleOrderCustomNV-sampleCount-02074", "VUID-VkCoarseSampleOrderCustomNV-sampleLocationCount-02075"}},

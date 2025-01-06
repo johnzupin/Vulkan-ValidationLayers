@@ -39,11 +39,29 @@ struct ReportKeyValues {
     std::vector<KeyValue> key_values;
 
     void Add(std::string_view key, std::string_view value);
+    void Add(std::string_view key, uint64_t value);
 
-    template <typename ValueType>
-    void Add(std::string_view key, const ValueType &value) {
-        key_values.emplace_back(KeyValue{std::string(key), std::to_string(value)});
-    }
-
-    std::string GetExtraPropertiesSection() const;
+    std::string GetExtraPropertiesSection(bool pretty_print) const;
 };
+
+inline constexpr const char *kPropertyMessageType = "message_type";
+inline constexpr const char *kPropertyAccess = "access";
+inline constexpr const char *kPropertyPriorAccess = "prior_access";
+inline constexpr const char *kPropertyReadBarriers = "read_barriers";
+inline constexpr const char *kPropertyWriteBarriers = "write_barriers";
+inline constexpr const char *kPropertyLoadOp = "load_op";
+inline constexpr const char *kPropertyStoreOp = "store_op";
+inline constexpr const char *kPropertyResolveMode = "resolve_mode";
+inline constexpr const char *kPropertyOldLayout = "old_layout";
+inline constexpr const char *kPropertyNewLayout = "new_layout";
+inline constexpr const char *kPropertyResourceParameter = "resource_parameter";
+inline constexpr const char *kPropertyDescriptorType = "descriptor_type";
+inline constexpr const char *kPropertyImageLayout = "image_layout";
+inline constexpr const char *kPropertyImageAspect = "image_aspect";
+
+// debug properties
+inline constexpr const char *kPropertySeqNo = "seq_no";
+inline constexpr const char *kPropertySubCmd = "subcmd";
+inline constexpr const char *kPropertyResetNo = "reset_no";
+inline constexpr const char *kPropertyBatchTag = "batch_tag";
+

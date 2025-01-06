@@ -362,7 +362,7 @@ bool CoreChecks::ValidateQueueSubmit2(VkQueue queue, uint32_t submitCount, const
             }
 
             if (suspended_render_pass_instance && cb_state->hasRenderPassInstance && !cb_state->resumesRenderPassInstance) {
-                skip |= LogError("VUID-VkSubmitInfo2KHR-commandBuffer-06012", queue, submit_loc,
+                skip |= LogError("VUID-VkSubmitInfo2-commandBuffer-06012", queue, submit_loc,
                                  "has a suspended render pass instance, but pCommandBuffers[%" PRIu32
                                  "] has its own render pass instance that does not resume it.",
                                  i);
@@ -372,7 +372,7 @@ bool CoreChecks::ValidateQueueSubmit2(VkQueue queue, uint32_t submitCount, const
             }
             if (cb_state->resumesRenderPassInstance) {
                 if (!suspended_render_pass_instance) {
-                    skip |= LogError("VUID-VkSubmitInfo2KHR-commandBuffer-06192", queue, cb_loc,
+                    skip |= LogError("VUID-VkSubmitInfo2-commandBuffer-06192", queue, cb_loc,
                                      "resumes a render pass instance, but there is no suspended render pass instance.");
                 }
                 suspended_render_pass_instance = false;
@@ -381,7 +381,7 @@ bool CoreChecks::ValidateQueueSubmit2(VkQueue queue, uint32_t submitCount, const
             skip |= ValidateRenderPassStripeSubmitInfo(queue, *cb_state, submit.pCommandBufferInfos[i].pNext, info_loc);
         }
         if (suspended_render_pass_instance) {
-            skip |= LogError("VUID-VkSubmitInfo2KHR-commandBuffer-06010", queue, submit_loc,
+            skip |= LogError("VUID-VkSubmitInfo2-commandBuffer-06010", queue, submit_loc,
                              "has a suspended render pass instance that was not resumed.");
         }
     }
@@ -401,7 +401,7 @@ bool CoreChecks::PreCallValidateQueueSubmit2(VkQueue queue, uint32_t submitCount
 
 void CoreChecks::PostCallRecordQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence,
                                            const RecordObject &record_obj) {
-    StateTracker::PostCallRecordQueueSubmit(queue, submitCount, pSubmits, fence, record_obj);
+    BaseClass::PostCallRecordQueueSubmit(queue, submitCount, pSubmits, fence, record_obj);
 
     if (record_obj.result != VK_SUCCESS) return;
     // The triply nested for duplicates that in the StateTracker, but avoids the need for two additional callbacks.
@@ -448,7 +448,7 @@ void CoreChecks::PostCallRecordQueueSubmit2KHR(VkQueue queue, uint32_t submitCou
 
 void CoreChecks::PostCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence,
                                             const RecordObject &record_obj) {
-    StateTracker::PostCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
+    BaseClass::PostCallRecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
     RecordQueueSubmit2(queue, submitCount, pSubmits, fence, record_obj);
 }
 

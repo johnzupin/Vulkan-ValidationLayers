@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (C) 2015-2024 Google Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (C) 2015-2025 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
@@ -42,6 +42,8 @@
 #include "state_tracker/device_generated_commands_state.h"
 #include "chassis/chassis_modification_state.h"
 #include "spirv-tools/optimizer.hpp"
+
+ValidationStateTracker::~ValidationStateTracker() { DestroyObjectMaps(); }
 
 // NOTE:  Beware the lifespan of the rp_begin when holding  the return.  If the rp_begin isn't a "safe" copy, "IMAGELESS"
 //        attachments won't persist past the API entry point exit.
@@ -380,31 +382,29 @@ void ValidationStateTracker::PostCallRecordCreateBuffer(VkDevice device, const V
 
     std::shared_ptr<vvl::Buffer> buffer_state = CreateBufferState(*pBuffer, pCreateInfo);
 
-    if (pCreateInfo) {
-        const auto *opaque_capture_address = vku::FindStructInPNextChain<VkBufferOpaqueCaptureAddressCreateInfo>(pCreateInfo->pNext);
-        if (opaque_capture_address && (opaque_capture_address->opaqueCaptureAddress != 0)) {
-            WriteLockGuard guard(buffer_address_lock_);
-            // address is used for GPU-AV and ray tracing buffer validation
-            buffer_state->deviceAddress = opaque_capture_address->opaqueCaptureAddress;
-            const auto address_range = buffer_state->DeviceAddressRange();
+    const auto *opaque_capture_address = vku::FindStructInPNextChain<VkBufferOpaqueCaptureAddressCreateInfo>(pCreateInfo->pNext);
+    if (opaque_capture_address && (opaque_capture_address->opaqueCaptureAddress != 0)) {
+        WriteLockGuard guard(buffer_address_lock_);
+        // address is used for GPU-AV and ray tracing buffer validation
+        buffer_state->deviceAddress = opaque_capture_address->opaqueCaptureAddress;
+        const auto address_range = buffer_state->DeviceAddressRange();
 
-            BufferAddressInfillUpdateOps ops{{buffer_state.get()}};
-            sparse_container::infill_update_range(buffer_address_map_, address_range, ops);
+        BufferAddressInfillUpdateOps ops{{buffer_state.get()}};
+        sparse_container::infill_update_range(buffer_address_map_, address_range, ops);
+    }
+
+    const VkBufferUsageFlags descriptor_buffer_usages =
+        VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+
+    if ((buffer_state->usage & descriptor_buffer_usages) != 0) {
+        descriptorBufferAddressSpaceSize += pCreateInfo->size;
+
+        if ((buffer_state->usage & VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT) != 0) {
+            resourceDescriptorBufferAddressSpaceSize += pCreateInfo->size;
         }
 
-        const VkBufferUsageFlags descriptor_buffer_usages =
-            VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
-
-        if ((buffer_state->usage & descriptor_buffer_usages) != 0) {
-            descriptorBufferAddressSpaceSize += pCreateInfo->size;
-
-            if ((buffer_state->usage & VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT) != 0) {
-                resourceDescriptorBufferAddressSpaceSize += pCreateInfo->size;
-            }
-
-            if ((buffer_state->usage & VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT) != 0) {
-                samplerDescriptorBufferAddressSpaceSize += pCreateInfo->size;
-            }
+        if ((buffer_state->usage & VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT) != 0) {
+            samplerDescriptorBufferAddressSpaceSize += pCreateInfo->size;
         }
     }
     Add(std::move(buffer_state));
@@ -691,13 +691,10 @@ void ValidationStateTracker::PostCallRecordCreateDevice(VkPhysicalDevice gpu, co
     if (VK_SUCCESS != record_obj.result) return;
 
     // The current object represents the VkInstance, look up / create the object for the device.
-    DispatchObject *device_object = GetLayerData(*pDevice);
+    vvl::dispatch::Device *device_object = vvl::dispatch::GetData(*pDevice);
     ValidationObject *validation_data = device_object->GetValidationObject(this->container_type);
     ValidationStateTracker *device_state = static_cast<ValidationStateTracker *>(validation_data);
 
-    device_state->instance_state = this;
-    // Save local link to this device's physical device state
-    device_state->physical_device_state = Get<vvl::PhysicalDevice>(gpu).get();
     // finish setup in the object representing the device
     device_state->PostCreateDevice(pCreateInfo, record_obj.location);
 }
@@ -1220,15 +1217,29 @@ void ValidationStateTracker::PostCreateDevice(const VkDeviceCreateInfo *pCreateI
         DispatchGetPhysicalDeviceQueueFamilyProperties2Helper(physical_device, &queue_family_count, props.data());
     }
 
+    if (IsExtEnabled(dev_ext.vk_khr_performance_query)) {
+        uint32_t queue_family_count = (uint32_t)physical_device_state->queue_family_properties.size();
+        for (uint32_t i = 0; i < queue_family_count; ++i) {
+            uint32_t counterCount;
+            DispatchEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(physical_device, i, &counterCount, nullptr,
+                                                                                  nullptr);
+
+            std::unique_ptr<QueueFamilyPerfCounters> queue_family_counters(new QueueFamilyPerfCounters());
+            queue_family_counters->counters.resize(counterCount);
+
+            DispatchEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(physical_device, i, &counterCount,
+                                                                                  queue_family_counters->counters.data(), nullptr);
+
+            physical_device_state->perf_counters[i] = std::move(queue_family_counters);
+        }
+    }
+
     // internal pipeline cache control
     const auto *cache_control = vku::FindStructInPNextChain<VkDevicePipelineBinaryInternalCacheControlKHR>(pCreateInfo->pNext);
     disable_internal_pipeline_cache = cache_control && cache_control->disableInternalCache;
 }
 
-void ValidationStateTracker::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator,
-                                                        const RecordObject &record_obj) {
-    if (!device) return;
-
+void ValidationStateTracker::DestroyObjectMaps() {
     command_pool_map_.clear();
     assert(command_buffer_map_.empty());
     pipeline_map_.clear();
@@ -1257,6 +1268,13 @@ void ValidationStateTracker::PreCallRecordDestroyDevice(VkDevice device, const V
         entry.second->Destroy();
     }
     queue_map_.clear();
+}
+
+void ValidationStateTracker::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator,
+                                                        const RecordObject &record_obj) {
+    if (!device) return;
+
+    DestroyObjectMaps();
 }
 
 static void UpdateCmdBufLabelStack(const vvl::CommandBuffer &cb_state, vvl::Queue &queue_state) {
@@ -1444,6 +1462,30 @@ void ValidationStateTracker::PreCallRecordFreeMemory(VkDevice device, VkDeviceMe
     if (auto mem_info = Get<vvl::DeviceMemory>(mem)) {
         fake_memory.Free(mem_info->fake_base_address);
     }
+    {
+        WriteLockGuard guard(fd_handle_map_lock_);
+        for (auto it = fd_handle_map_.begin(); it != fd_handle_map_.end();) {
+            if (it->second.device_memory == mem) {
+                it = fd_handle_map_.erase(it);
+                break;
+            } else {
+                ++it;
+            }
+        }
+    }
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    {
+        WriteLockGuard guard(win32_handle_map_lock_);
+        for (auto it = win32_handle_map_.begin(); it != win32_handle_map_.end();) {
+            if (it->second.device_memory == mem) {
+                it = win32_handle_map_.erase(it);
+                break;
+            } else {
+                ++it;
+            }
+        }
+    }
+#endif
     Destroy<vvl::DeviceMemory>(mem);
 }
 
@@ -2189,12 +2231,11 @@ void ValidationStateTracker::PostCallRecordCreateRayTracingPipelinesKHR(
         // vkGetDeferredOperationResultKHR => Store the deferred logic to do that in
         // `deferred_operation_post_check`.
 
-        auto layer_data = GetLayerData(device);
-        if (dispatch_->wrap_handles) {
-            deferredOperation = layer_data->Unwrap(deferredOperation);
+        if (dispatch_device_->wrap_handles) {
+            deferredOperation = dispatch_device_->Unwrap(deferredOperation);
         }
         std::vector<std::function<void(const std::vector<VkPipeline> &)>> cleanup_fn;
-        auto find_res = layer_data->deferred_operation_post_check.pop(deferredOperation);
+        auto find_res = dispatch_device_->deferred_operation_post_check.pop(deferredOperation);
         if (find_res->first) {
             cleanup_fn = std::move(find_res->second);
         }
@@ -2208,7 +2249,7 @@ void ValidationStateTracker::PostCallRecordCreateRayTracingPipelinesKHR(
                 this->Add(std::move(pipeline_states[i]));
             }
         });
-        layer_data->deferred_operation_post_check.insert(deferredOperation, cleanup_fn);
+        dispatch_device_->deferred_operation_post_check.insert(deferredOperation, cleanup_fn);
     }
 }
 
@@ -3788,6 +3829,7 @@ void ValidationStateTracker::PostCallRecordGetMemoryWin32HandleKHR(VkDevice devi
         external_info.memory_type_index = memory_state->allocate_info.memoryTypeIndex;
         external_info.dedicated_buffer = memory_state->GetDedicatedBuffer();
         external_info.dedicated_image = memory_state->GetDedicatedImage();
+        external_info.device_memory = pGetWin32HandleInfo->memory;
 
         WriteLockGuard guard(win32_handle_map_lock_);
         // `insert_or_assign` ensures that information is updated when the system decides to re-use
@@ -3809,6 +3851,7 @@ void ValidationStateTracker::PostCallRecordGetMemoryFdKHR(VkDevice device, const
         external_info.memory_type_index = memory_state->allocate_info.memoryTypeIndex;
         external_info.dedicated_buffer = memory_state->GetDedicatedBuffer();
         external_info.dedicated_image = memory_state->GetDedicatedImage();
+        external_info.device_memory = memory_state->VkHandle();
 
         WriteLockGuard guard(fd_handle_map_lock_);
         // `insert_or_assign` ensures that information is updated when the system decides to re-use
@@ -4063,7 +4106,6 @@ void ValidationStateTracker::PostCallRecordCreateInstance(const VkInstanceCreate
         return;
     }
 
-    instance_state = this;
     uint32_t count = 0;
     // this can fail if the allocator fails
     VkResult result = DispatchEnumeratePhysicalDevices(*pInstance, &count, nullptr);
@@ -4408,28 +4450,6 @@ void ValidationStateTracker::PreCallRecordCmdInsertDebugUtilsLabelEXT(VkCommandB
     cb_state->RecordCmd(record_obj.location.function);
     // Squirrel away an easily accessible copy.
     cb_state->debug_label = LoggingLabel(pLabelInfo);
-}
-
-void ValidationStateTracker::RecordEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCounters(VkPhysicalDevice physicalDevice,
-                                                                                              uint32_t queueFamilyIndex,
-                                                                                              uint32_t *pCounterCount,
-                                                                                              VkPerformanceCounterKHR *pCounters) {
-    if (NULL == pCounters) return;
-
-    auto pd_state = Get<vvl::PhysicalDevice>(physicalDevice);
-
-    std::unique_ptr<QueueFamilyPerfCounters> queue_family_counters(new QueueFamilyPerfCounters());
-    queue_family_counters->counters.resize(*pCounterCount);
-    for (uint32_t i = 0; i < *pCounterCount; i++) queue_family_counters->counters[i] = pCounters[i];
-
-    pd_state->perf_counters[queueFamilyIndex] = std::move(queue_family_counters);
-}
-
-void ValidationStateTracker::PostCallRecordEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
-    VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, uint32_t *pCounterCount, VkPerformanceCounterKHR *pCounters,
-    VkPerformanceCounterDescriptionKHR *pCounterDescriptions, const RecordObject &record_obj) {
-    if ((VK_SUCCESS != record_obj.result) && (VK_INCOMPLETE != record_obj.result)) return;
-    RecordEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCounters(physicalDevice, queueFamilyIndex, pCounterCount, pCounters);
 }
 
 void ValidationStateTracker::PostCallRecordAcquireProfilingLockKHR(VkDevice device, const VkAcquireProfilingLockInfoKHR *pInfo,

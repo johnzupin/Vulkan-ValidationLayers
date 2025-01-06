@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -90,7 +90,6 @@ TEST_F(NegativeBuffer, BufferViewObject) {
     // Then destroy view itself and verify that same error is hit
     VkResult err;
 
-    m_errorMonitor->SetDesiredError("VUID-VkWriteDescriptorSet-descriptorType-02994");
     RETURN_IF_SKIP(Init());
 
     OneOffDescriptorSet descriptor_set(m_device, {
@@ -104,7 +103,7 @@ TEST_F(NegativeBuffer, BufferViewObject) {
         bvci.format = VK_FORMAT_R32_SFLOAT;
         bvci.range = VK_WHOLE_SIZE;
 
-        err = vk::CreateBufferView(device(), &bvci, NULL, &view);
+        err = vk::CreateBufferView(device(), &bvci, nullptr, &view);
         ASSERT_EQ(VK_SUCCESS, err);
     }
     // First Destroy buffer underlying view which should hit error in CV
@@ -116,13 +115,14 @@ TEST_F(NegativeBuffer, BufferViewObject) {
     descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
     descriptor_write.pTexelBufferView = &view;
 
-    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
+    m_errorMonitor->SetDesiredError("VUID-VkWriteDescriptorSet-descriptorType-02994");
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
     m_errorMonitor->VerifyFound();
 
     // Now destroy view itself and verify same error, which is hit in PV this time
-    vk::DestroyBufferView(device(), view, NULL);
+    vk::DestroyBufferView(device(), view, nullptr);
     m_errorMonitor->SetDesiredError("VUID-VkWriteDescriptorSet-descriptorType-02994");
-    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, NULL);
+    vk::UpdateDescriptorSets(device(), 1, &descriptor_write, 0, nullptr);
     m_errorMonitor->VerifyFound();
 }
 
@@ -662,6 +662,14 @@ TEST_F(NegativeBuffer, CreateBufferSize) {
     info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     info.size = 0;
     CreateBufferTest(*this, &info, "VUID-VkBufferCreateInfo-size-00912");
+}
+
+TEST_F(NegativeBuffer, NullBufferCreateInfo) {
+    RETURN_IF_SKIP(Init());
+    VkBuffer buffer = VK_NULL_HANDLE;
+    m_errorMonitor->SetDesiredError("VUID-vkCreateBuffer-pCreateInfo-parameter");
+    vk::CreateBuffer(device(), nullptr, nullptr, &buffer);
+    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativeBuffer, DedicatedAllocationBufferFlags) {

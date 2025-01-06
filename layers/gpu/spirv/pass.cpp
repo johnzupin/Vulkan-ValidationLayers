@@ -14,6 +14,10 @@
  */
 
 #include "pass.h"
+#include <cstdint>
+#include <spirv/unified1/spirv.hpp>
+#include "generated/spirv_grammar_helper.h"
+#include "instruction.h"
 #include "module.h"
 #include "gpu/shaders/gpuav_error_codes.h"
 
@@ -195,7 +199,7 @@ const Instruction* Pass::GetDecoration(uint32_t id, spv::Decoration decoration) 
     return nullptr;
 }
 
-const Instruction* Pass::GetMemeberDecoration(uint32_t id, uint32_t member_index, spv::Decoration decoration) {
+const Instruction* Pass::GetMemberDecoration(uint32_t id, uint32_t member_index, spv::Decoration decoration) {
     for (const auto& annotation : module_.annotations_) {
         if (annotation->Opcode() == spv::OpMemberDecorate && annotation->Word(1) == id && annotation->Word(2) == member_index &&
             spv::Decoration(annotation->Word(3)) == decoration) {
@@ -205,22 +209,112 @@ const Instruction* Pass::GetMemeberDecoration(uint32_t id, uint32_t member_index
     return nullptr;
 }
 
+// In an ideal world, this would be baked into the Type class when we construct it. The core issue is OpTypeMatrix size can be
+// different depending where it is used. Because of this, we need to have a higher level view what is going on in order to correctly
+// figure out the size of a given type.
+uint32_t Pass::FindTypeByteSize(uint32_t type_id, uint32_t matrix_stride, bool col_major, bool in_matrix) {
+    const Type& type = *module_.type_manager_.FindTypeById(type_id);
+    switch (type.spv_type_) {
+        case SpvType::kPointer:
+            return 8;  // Assuming PhysicalStorageBuffer pointer
+            break;
+        case SpvType::kMatrix: {
+            if (matrix_stride == 0) {
+                module_.InternalError("FindTypeByteSize", "missing matrix stride");
+            }
+            if (col_major) {
+                return type.inst_.Word(3) * matrix_stride;
+            } else {
+                const Type* vector_type = module_.type_manager_.FindTypeById(type.inst_.Word(2));
+                return vector_type->inst_.Word(3) * matrix_stride;
+            }
+        }
+        case SpvType::kVector: {
+            uint32_t size = type.inst_.Word(3);
+            const Type* component_type = module_.type_manager_.FindTypeById(type.inst_.Word(2));
+            // if vector in row major matrix, the vector is strided so return the number of bytes spanned by the vector
+            if (in_matrix && !col_major && matrix_stride > 0) {
+                return (size - 1) * matrix_stride + FindTypeByteSize(component_type->Id());
+            } else if (component_type->spv_type_ == SpvType::kFloat || component_type->spv_type_ == SpvType::kInt) {
+                const uint32_t width = component_type->inst_.Word(2);
+                size *= width;
+            } else {
+                module_.InternalError("FindTypeByteSize", "unexpected vector type");
+            }
+            return size / 8;
+        }
+        case SpvType::kFloat:
+        case SpvType::kInt: {
+            const uint32_t width = type.inst_.Word(2);
+            return width / 8;
+        }
+        case SpvType::kArray: {
+            const uint32_t array_stride = GetDecoration(type_id, spv::DecorationArrayStride)->Word(3);
+            const Constant* count = module_.type_manager_.FindConstantById(type.inst_.Operand(1));
+            // TODO - Need to handle spec constant here, for now return one to have things not blowup
+            assert(count && !count->is_spec_constant_);
+            const uint32_t array_length = (count && !count->is_spec_constant_) ? count->inst_.Operand(0) : 1;
+            return array_length * array_stride;
+        }
+        case SpvType::kStruct: {
+            const uint32_t struct_length = type.inst_.Length() - 2;
+            const uint32_t struct_id = type.inst_.ResultId();
+            // We do our best to find the "size" of the struct (see https://gitlab.khronos.org/spirv/SPIR-V/-/issues/763)
+            uint32_t highest_element_index = 0;
+            uint32_t highest_element_offset = 0;
+
+            for (uint32_t i = 0; i < struct_length; i++) {
+                for (const auto& annotation : module_.annotations_) {
+                    if (annotation->Opcode() == spv::OpMemberDecorate && annotation->Word(1) == struct_id &&
+                        annotation->Word(2) == i && spv::Decoration(annotation->Word(3)) == spv::DecorationOffset) {
+                        const uint32_t member_offset = annotation->Word(4);
+                        if (member_offset > highest_element_offset) {
+                            highest_element_index = i;
+                            highest_element_offset = member_offset;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            const uint32_t last_offset_id = type.inst_.Operand(highest_element_index);
+            const Type* last_offset_type = module_.type_manager_.FindTypeById(last_offset_id);
+            uint32_t highest_element_size = 0;
+            if (last_offset_type->spv_type_ == SpvType::kMatrix) {
+                // TODO - We need a better way to handle Matrix at the end of structs
+                const Instruction* decoration_matrix_stride =
+                    GetMemberDecoration(struct_id, highest_element_index, spv::DecorationMatrixStride);
+                matrix_stride = decoration_matrix_stride ? decoration_matrix_stride->Word(4) : 0;
+                const Instruction* decoration_col_major =
+                    GetMemberDecoration(struct_id, highest_element_index, spv::DecorationColMajor);
+                col_major = decoration_col_major != nullptr;
+                highest_element_size = FindTypeByteSize(last_offset_id, matrix_stride, col_major, true);
+            } else {
+                highest_element_size = FindTypeByteSize(last_offset_id);
+            }
+            return highest_element_offset + highest_element_size;
+        }
+        default:
+            break;
+    }
+    return 1;
+}
+
 // Find outermost buffer type and its access chain index.
 // Because access chains indexes can be runtime values, we need to build arithmetic logic in the SPIR-V to get the runtime value of
 // the indexing
-uint32_t Pass::GetLastByte(const Instruction& var_inst, const Instruction& access_chain_inst, BasicBlock& block,
+uint32_t Pass::GetLastByte(const Type& descriptor_type, std::vector<const Instruction*>& access_chain_insts, BasicBlock& block,
                            InstructionIt* inst_it) {
-    const Type* pointer_type = module_.type_manager_.FindTypeById(var_inst.TypeId());
-    const Type* descriptor_type = module_.type_manager_.FindTypeById(pointer_type->inst_.Word(3));
-
+    assert(!access_chain_insts.empty());
     uint32_t current_type_id = 0;
-    uint32_t ac_word_index = 4;
+    const uint32_t reset_ac_word = 4;  // points to first "Index" operand of an OpAccessChain
+    uint32_t ac_word_index = reset_ac_word;
 
-    if (descriptor_type->spv_type_ == SpvType::kArray || descriptor_type->spv_type_ == SpvType::kRuntimeArray) {
-        current_type_id = descriptor_type->inst_.Operand(0);
-        ac_word_index++;
-    } else if (descriptor_type->spv_type_ == SpvType::kStruct) {
-        current_type_id = descriptor_type->Id();
+    if (descriptor_type.IsArray()) {
+        current_type_id = descriptor_type.inst_.Operand(0);
+        ac_word_index++;  // this jumps over the array of descriptors so we first start on the descriptor itself
+    } else if (descriptor_type.spv_type_ == SpvType::kStruct) {
+        current_type_id = descriptor_type.Id();
     } else {
         module_.InternalError(Name(), "GetLastByte has unexpected descriptor type");
         return 0;
@@ -236,8 +330,26 @@ uint32_t Pass::GetLastByte(const Instruction& var_inst, const Instruction& acces
     uint32_t matrix_stride_id = 0;
     bool in_matrix = false;
 
-    while (ac_word_index < access_chain_inst.Length()) {
-        const uint32_t ac_index_id = access_chain_inst.Word(ac_word_index);
+    // This loop gets use to the last element, so if we have something like
+    //
+    // Struct foo {
+    //   uint a; // 4 bytes
+    //   vec4 b; // 16 bytes
+    //   float c; <--- accessing
+    // }
+    //
+    // it will get us to 20 bytes
+    auto access_chain_iter = access_chain_insts.rbegin();
+
+    // This occurs in things like Slang where they have a single OpAccessChain for the descriptor
+    // (GLSL/HLSL will combine 2 indexes into the last OpAccessChain)
+    if (ac_word_index >= (*access_chain_iter)->Length()) {
+        ++access_chain_iter;
+        ac_word_index = reset_ac_word;
+    }
+
+    while (access_chain_iter != access_chain_insts.rend()) {
+        const uint32_t ac_index_id = (*access_chain_iter)->Word(ac_word_index);
         uint32_t current_offset_id = 0;
 
         const Type* current_type = module_.type_manager_.FindTypeById(current_type_id);
@@ -245,12 +357,13 @@ uint32_t Pass::GetLastByte(const Instruction& var_inst, const Instruction& acces
             case SpvType::kArray:
             case SpvType::kRuntimeArray: {
                 // Get array stride and multiply by current index
-                uint32_t arr_stride = GetDecoration(current_type_id, spv::DecorationArrayStride)->Word(3);
-                const uint32_t arr_stride_id = module_.type_manager_.GetConstantUInt32(arr_stride).Id();
+                const uint32_t array_stride = GetDecoration(current_type_id, spv::DecorationArrayStride)->Word(3);
+                const uint32_t array_stride_id = module_.type_manager_.GetConstantUInt32(array_stride).Id();
                 const uint32_t ac_index_id_32 = ConvertTo32(ac_index_id, block, inst_it);
 
                 current_offset_id = module_.TakeNextId();
-                block.CreateInstruction(spv::OpIMul, {uint32_type.Id(), current_offset_id, arr_stride_id, ac_index_id_32}, inst_it);
+                block.CreateInstruction(spv::OpIMul, {uint32_type.Id(), current_offset_id, array_stride_id, ac_index_id_32},
+                                        inst_it);
 
                 // Get element type for next step
                 current_type_id = current_type->inst_.Operand(0);
@@ -269,7 +382,7 @@ uint32_t Pass::GetLastByte(const Instruction& var_inst, const Instruction& acces
                     col_stride_id = matrix_stride_id;
                 } else {
                     const uint32_t component_type_id = module_.type_manager_.FindTypeById(vec_type_id)->inst_.Operand(0);
-                    const uint32_t col_stride = module_.type_manager_.FindTypeByteSize(component_type_id);
+                    const uint32_t col_stride = FindTypeByteSize(component_type_id);
                     col_stride_id = module_.type_manager_.GetConstantUInt32(col_stride).Id();
                 }
 
@@ -291,7 +404,7 @@ uint32_t Pass::GetLastByte(const Instruction& var_inst, const Instruction& acces
                     block.CreateInstruction(spv::OpIMul, {uint32_type.Id(), current_offset_id, matrix_stride_id, ac_index_id_32},
                                             inst_it);
                 } else {
-                    const uint32_t component_type_size = module_.type_manager_.FindTypeByteSize(component_type_id);
+                    const uint32_t component_type_size = FindTypeByteSize(component_type_id);
                     const uint32_t size_id = module_.type_manager_.GetConstantUInt32(component_type_size).Id();
 
                     current_offset_id = module_.TakeNextId();
@@ -305,7 +418,7 @@ uint32_t Pass::GetLastByte(const Instruction& var_inst, const Instruction& acces
                 const Constant* member_constant = module_.type_manager_.FindConstantById(ac_index_id);
                 assert(!member_constant->is_spec_constant_);
                 uint32_t member_index = member_constant->inst_.Operand(0);
-                uint32_t member_offset = GetMemeberDecoration(current_type_id, member_index, spv::DecorationOffset)->Word(4);
+                uint32_t member_offset = GetMemberDecoration(current_type_id, member_index, spv::DecorationOffset)->Word(4);
                 current_offset_id = module_.type_manager_.GetConstantUInt32(member_offset).Id();
 
                 // Look for matrix stride for this member if there is one. The matrix
@@ -313,11 +426,11 @@ uint32_t Pass::GetLastByte(const Instruction& var_inst, const Instruction& acces
                 // enclosing struct type at the member index. If none found, reset
                 // stride to 0.
                 const Instruction* decoration_matrix_stride =
-                    GetMemeberDecoration(current_type_id, member_index, spv::DecorationMatrixStride);
+                    GetMemberDecoration(current_type_id, member_index, spv::DecorationMatrixStride);
                 matrix_stride = decoration_matrix_stride ? decoration_matrix_stride->Word(4) : 0;
 
                 const Instruction* decoration_col_major =
-                    GetMemeberDecoration(current_type_id, member_index, spv::DecorationColMajor);
+                    GetMemberDecoration(current_type_id, member_index, spv::DecorationColMajor);
                 col_major = decoration_col_major != nullptr;
 
                 // Get element type for next step
@@ -335,17 +448,22 @@ uint32_t Pass::GetLastByte(const Instruction& var_inst, const Instruction& acces
             block.CreateInstruction(spv::OpIAdd, {uint32_type.Id(), new_sum_id, sum_id, current_offset_id}, inst_it);
             sum_id = new_sum_id;
         }
+
         ac_word_index++;
+        if (ac_word_index >= (*access_chain_iter)->Length()) {
+            ++access_chain_iter;
+            ac_word_index = reset_ac_word;
+        }
     }
 
     // Add in offset of last byte of referenced object
-    uint32_t bsize = module_.type_manager_.FindTypeByteSize(current_type_id, matrix_stride, col_major, in_matrix);
-    uint32_t last = bsize - 1;
+    const uint32_t accessed_type_size = FindTypeByteSize(current_type_id, matrix_stride, col_major, in_matrix);
+    const uint32_t last_byte_index = accessed_type_size - 1;
 
-    const uint32_t last_id = module_.type_manager_.GetConstantUInt32(last).Id();
+    const uint32_t last_byte_index_id = module_.type_manager_.GetConstantUInt32(last_byte_index).Id();
 
     const uint32_t new_sum_id = module_.TakeNextId();
-    block.CreateInstruction(spv::OpIAdd, {uint32_type.Id(), new_sum_id, sum_id, last_id}, inst_it);
+    block.CreateInstruction(spv::OpIAdd, {uint32_type.Id(), new_sum_id, sum_id, last_byte_index_id}, inst_it);
     return new_sum_id;
 }
 

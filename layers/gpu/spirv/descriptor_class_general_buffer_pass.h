@@ -37,8 +37,13 @@ class DescriptorClassGeneralBufferPass : public Pass {
     uint32_t link_function_id = 0;
     uint32_t GetLinkFunctionId();
 
-    const Instruction* access_chain_inst_ = nullptr;
-    const Instruction* var_inst_ = nullptr;
+    // List of OpAccessChains fom the Store/Load down to the OpVariable
+    // The front() will be closet to the exact spot accesssed
+    // The back() will be closest to the OpVariable
+    // (note GLSL will try to always create a single large OpAccessChain)
+    std::vector<const Instruction*> access_chain_insts_;
+    // The Type of the OpVariable that is being accessed
+    const Type* descriptor_type_ = nullptr;
 
     uint32_t descriptor_set_ = 0;
     uint32_t descriptor_binding_ = 0;

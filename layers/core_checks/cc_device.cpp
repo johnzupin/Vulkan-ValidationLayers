@@ -341,7 +341,7 @@ bool CoreChecks::PreCallValidateCreateDevice(VkPhysicalDevice gpu, const VkDevic
 
 void CoreChecks::PostCreateDevice(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) {
     // The state tracker sets up the device state (also if extension and/or features are enabled)
-    StateTracker::PostCreateDevice(pCreateInfo, loc);
+    BaseClass::PostCreateDevice(pCreateInfo, loc);
 
     AdjustValidatorOptions(device_extensions, enabled_features, spirv_val_options, &spirv_val_option_hash);
 
@@ -377,7 +377,7 @@ void CoreChecks::PreCallRecordDestroyDevice(VkDevice device, const VkAllocationC
                                             const RecordObject &record_obj) {
     if (!device) return;
 
-    StateTracker::PreCallRecordDestroyDevice(device, pAllocator, record_obj);
+    BaseClass::PreCallRecordDestroyDevice(device, pAllocator, record_obj);
 
     if (core_validation_cache) {
         Location loc(Func::vkDestroyDevice);
@@ -737,7 +737,7 @@ bool CoreChecks::PreCallValidateGetCalibratedTimestampsKHR(VkDevice device, uint
                              string_VkTimeDomainKHR(time_domain));
             break;  // no reason to check after finding 1 duplicate
         } else if (!IsValueIn(time_domain, valid_time_domains)) {
-            skip |= LogError("VUID-VkCalibratedTimestampInfoEXT-timeDomain-02354", device,
+            skip |= LogError("VUID-VkCalibratedTimestampInfoKHR-timeDomain-02354", device,
                              error_obj.location.dot(Field::pTimestampInfos, i).dot(Field::timeDomain), "is %s.",
                              string_VkTimeDomainKHR(time_domain));
         }

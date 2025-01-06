@@ -1243,7 +1243,7 @@ void CoreChecks::PreCallRecordCmdWaitEvents(VkCommandBuffer commandBuffer, uint3
                                             uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier *pBufferMemoryBarriers,
                                             uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *pImageMemoryBarriers,
                                             const RecordObject &record_obj) {
-    StateTracker::PreCallRecordCmdWaitEvents(commandBuffer, eventCount, pEvents, sourceStageMask, dstStageMask, memoryBarrierCount,
+    BaseClass::PreCallRecordCmdWaitEvents(commandBuffer, eventCount, pEvents, sourceStageMask, dstStageMask, memoryBarrierCount,
                                              pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers,
                                              imageMemoryBarrierCount, pImageMemoryBarriers, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
@@ -1267,7 +1267,7 @@ void CoreChecks::PreCallRecordCmdWaitEvents2KHR(VkCommandBuffer commandBuffer, u
 
 void CoreChecks::PreCallRecordCmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent *pEvents,
                                              const VkDependencyInfo *pDependencyInfos, const RecordObject &record_obj) {
-    StateTracker::PreCallRecordCmdWaitEvents2(commandBuffer, eventCount, pEvents, pDependencyInfos, record_obj);
+    BaseClass::PreCallRecordCmdWaitEvents2(commandBuffer, eventCount, pEvents, pDependencyInfos, record_obj);
     RecordCmdWaitEvents2(commandBuffer, eventCount, pEvents, pDependencyInfos, record_obj.location.function);
 }
 
@@ -1377,7 +1377,7 @@ void CoreChecks::PreCallRecordCmdPipelineBarrier(VkCommandBuffer commandBuffer, 
                                                  const VkBufferMemoryBarrier *pBufferMemoryBarriers,
                                                  uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *pImageMemoryBarriers,
                                                  const RecordObject &record_obj) {
-    StateTracker::PreCallRecordCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount,
+    BaseClass::PreCallRecordCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount,
                                                   pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers,
                                                   imageMemoryBarrierCount, pImageMemoryBarriers, record_obj);
 
@@ -1395,7 +1395,7 @@ void CoreChecks::PreCallRecordCmdPipelineBarrier2KHR(VkCommandBuffer commandBuff
 
 void CoreChecks::PreCallRecordCmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDependencyInfo *pDependencyInfo,
                                                   const RecordObject &record_obj) {
-    StateTracker::PreCallRecordCmdPipelineBarrier2(commandBuffer, pDependencyInfo, record_obj);
+    BaseClass::PreCallRecordCmdPipelineBarrier2(commandBuffer, pDependencyInfo, record_obj);
 
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     RecordBarriers(record_obj.location.function, *cb_state, *pDependencyInfo);
@@ -2336,18 +2336,6 @@ bool CoreChecks::ValidateBufferBarrier(const LogObjectList &objects, const Locat
             const auto &vuid = GetBufferBarrierVUID(size_loc, BufferError::kSizeZero);
             skip |= LogError(vuid, objects, barrier_loc, "%s has a size of 0.", FormatHandle(mem_barrier.buffer).c_str());
         }
-    }
-
-    if ((mem_barrier.srcQueueFamilyIndex != mem_barrier.dstQueueFamilyIndex) &&
-        (mem_barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
-         mem_barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT) &&
-        (mem_barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
-         mem_barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)) {
-        auto loc = barrier_loc.dot(Field::srcQueueFamilyIndex);
-        const auto &vuid = GetBufferBarrierVUID(loc, BufferError::kQueueFamilyExternal);
-        skip |=
-            LogError(vuid, objects, loc,
-                     "both srcQueueFamilyIndex and dstQueueFamilyIndex are VK_QUEUE_FAMILY_EXTERNAL/VK_QUEUE_FAMILY_FOREIGN_EXT.");
     }
     return skip;
 }

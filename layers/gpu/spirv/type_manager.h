@@ -53,6 +53,7 @@ struct Type {
 
     bool operator==(Type const& other) const;
     uint32_t Id() const { return inst_.ResultId(); }
+    bool IsArray() const { return spv_type_ == SpvType::kArray || spv_type_ == SpvType::kRuntimeArray; }
 
     const SpvType spv_type_;
     const Instruction& inst_;
@@ -103,6 +104,7 @@ class TypeManager {
 
     const Type& AddType(std::unique_ptr<Instruction> new_inst, SpvType spv_type);
     const Type* FindTypeById(uint32_t id) const;
+    const Type* FindValueTypeById(uint32_t id) const;
     const Type* FindFunctionType(const Instruction& inst) const;
     // There shouldn't be a case where we need to query for a specific type, but then not add it if not found.
     const Type& GetTypeVoid();
@@ -135,8 +137,6 @@ class TypeManager {
 
     const Variable& AddVariable(std::unique_ptr<Instruction> new_inst, const Type& type);
     const Variable* FindVariableById(uint32_t id) const;
-
-    uint32_t FindTypeByteSize(uint32_t type_id, uint32_t matrix_stride = 0, bool col_major = false, bool in_matrix = false);
 
   private:
     Module& module_;

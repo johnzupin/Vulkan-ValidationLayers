@@ -1,6 +1,6 @@
 ﻿/*
- * Copyright (c) 2023-2024 Nintendo
- * Copyright (c) 2023-2024 LunarG, Inc.
+ * Copyright (c) 2023-2025 Nintendo
+ * Copyright (c) 2023-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -6980,7 +6980,7 @@ TEST_F(NegativeShaderObject, SetPrimitiveTopologyNonPatch) {
                                  GLSLToSPV(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, kTessellationEvalMinimalGlsl));
     const vkt::Shader fragShader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT,
                                  GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl));
-    m_command_buffer.begin();
+    m_command_buffer.Begin();
     m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
     SetDefaultDynamicStatesExclude();
     const VkShaderStageFlagBits stages[] = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
@@ -6995,7 +6995,7 @@ TEST_F(NegativeShaderObject, SetPrimitiveTopologyNonPatch) {
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRendering();
-    m_command_buffer.end();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeShaderObject, DescriptorWrongStage) {
@@ -7016,7 +7016,7 @@ TEST_F(NegativeShaderObject, DescriptorWrongStage) {
         }
     )glsl";
 
-    m_errorMonitor->SetDesiredError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-stage");
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10383");
     const vkt::Shader comp_shader(*m_device, VK_SHADER_STAGE_COMPUTE_BIT, GLSLToSPV(VK_SHADER_STAGE_COMPUTE_BIT, comp_src),
                                   &descriptor_set.layout_.handle());
     m_errorMonitor->VerifyFound();
@@ -7040,7 +7040,7 @@ TEST_F(NegativeShaderObject, DescriptorWrongStageMultipleBindings) {
         }
     )glsl";
 
-    m_errorMonitor->SetDesiredError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-stage");
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10383");
     const vkt::Shader comp_shader(*m_device, VK_SHADER_STAGE_COMPUTE_BIT, GLSLToSPV(VK_SHADER_STAGE_COMPUTE_BIT, comp_src),
                                   &descriptor_set.layout_.handle());
     m_errorMonitor->VerifyFound();
@@ -7069,7 +7069,7 @@ TEST_F(NegativeShaderObject, DescriptorWrongStageMultipleSets) {
     VkDescriptorSetLayout dsl[3] = {descriptor_set0.layout_.handle(), descriptor_set1.layout_.handle(),
                                     descriptor_set2.layout_.handle()};
     VkShaderCreateInfoEXT create_info = ShaderCreateInfo(comp_spv, VK_SHADER_STAGE_COMPUTE_BIT, 3, dsl);
-    m_errorMonitor->SetDesiredError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-stage");
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10383");
     const vkt::Shader comp_shader(*m_device, create_info);
     m_errorMonitor->VerifyFound();
 }
@@ -7085,7 +7085,7 @@ TEST_F(NegativeShaderObject, DescriptorNotProvided) {
         }
     )glsl";
 
-    m_errorMonitor->SetDesiredError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-stage");
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10383");
     const vkt::Shader comp_shader(*m_device, VK_SHADER_STAGE_COMPUTE_BIT, GLSLToSPV(VK_SHADER_STAGE_COMPUTE_BIT, comp_src));
     m_errorMonitor->VerifyFound();
 }
@@ -7102,7 +7102,7 @@ TEST_F(NegativeShaderObject, DescriptorTypeMismatch) {
     )glsl";
 
     OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr}});
-    m_errorMonitor->SetDesiredError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-mutable");
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10384");
     const vkt::Shader comp_shader(*m_device, VK_SHADER_STAGE_COMPUTE_BIT, GLSLToSPV(VK_SHADER_STAGE_COMPUTE_BIT, comp_src),
                                   &descriptor_set.layout_.handle());
     m_errorMonitor->VerifyFound();
@@ -7120,7 +7120,7 @@ TEST_F(NegativeShaderObject, DescriptorCount) {
     )glsl";
 
     OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, VK_SHADER_STAGE_ALL, nullptr}});
-    m_errorMonitor->SetDesiredError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-descriptorCount");
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10385");
     const vkt::Shader comp_shader(*m_device, VK_SHADER_STAGE_COMPUTE_BIT, GLSLToSPV(VK_SHADER_STAGE_COMPUTE_BIT, comp_src),
                                   &descriptor_set.layout_.handle());
     m_errorMonitor->VerifyFound();
@@ -7150,8 +7150,62 @@ TEST_F(NegativeShaderObject, InlineUniformBlockArray) {
                                        },
                                        0, nullptr, 0, nullptr, &pool_inline_info);
 
-    m_errorMonitor->SetDesiredError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-inline");
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10386");
     const vkt::Shader comp_shader(*m_device, VK_SHADER_STAGE_COMPUTE_BIT, GLSLToSPV(VK_SHADER_STAGE_COMPUTE_BIT, comp_src),
                                   &descriptor_set.layout_.handle());
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeShaderObject, PushConstantNotDeclared) {
+    TEST_DESCRIPTION("Test missing push constant declaration.");
+
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitRenderTarget();
+
+    char const* vsSource = R"glsl(
+        #version 450
+        layout(push_constant, std430) uniform foo { float x; } consts;
+        void main(){
+           gl_Position = vec4(consts.x);
+        }
+    )glsl";
+
+    // Set up a push constant range
+    VkPushConstantRange push_constant_range = {};
+    // Set to the wrong stage to challenge core_validation
+    push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    push_constant_range.size = 4u;
+
+    const vkt::PipelineLayout pipeline_layout(*m_device, {}, {push_constant_range});
+
+    const auto vspv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, vsSource);
+
+    VkShaderCreateInfoEXT createInfo = vku::InitStructHelper();
+    createInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    createInfo.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
+    createInfo.codeSize = vspv.size() * sizeof(vspv[0]);
+    createInfo.pCode = vspv.data();
+    createInfo.pName = "main";
+
+    VkShaderEXT shader;
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10064");
+    vk::CreateShadersEXT(m_device->handle(), 1u, &createInfo, nullptr, &shader);
+    m_errorMonitor->VerifyFound();
+
+    createInfo.pushConstantRangeCount = 1u;
+    createInfo.pPushConstantRanges = &push_constant_range;
+
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10064");
+    vk::CreateShadersEXT(m_device->handle(), 1u, &createInfo, nullptr, &shader);
+    m_errorMonitor->VerifyFound();
+
+    push_constant_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    push_constant_range.offset = 4u;
+
+    m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-codeType-10065");
+    vk::CreateShadersEXT(m_device->handle(), 1u, &createInfo, nullptr, &shader);
+    m_errorMonitor->VerifyFound();
+
+    push_constant_range.offset = 0u;
+    const vkt::Shader validShader(*m_device, createInfo);
 }

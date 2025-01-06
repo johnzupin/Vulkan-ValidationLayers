@@ -132,7 +132,7 @@ void BestPractices::PreCallRecordFreeMemory(VkDevice device, VkDeviceMemory memo
         }
     }
 
-    ValidationStateTracker::PreCallRecordFreeMemory(device, memory, pAllocator, record_obj);
+    BaseClass::PreCallRecordFreeMemory(device, memory, pAllocator, record_obj);
 }
 
 bool BestPractices::PreCallValidateFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* pAllocator,
@@ -146,7 +146,7 @@ bool BestPractices::PreCallValidateFreeMemory(VkDevice device, VkDeviceMemory me
     for (const auto& item : mem_info->ObjectBindings()) {
         const auto& obj = item.first;
         const LogObjectList objlist(device, obj, mem_info->Handle());
-        skip |= LogWarning(layer_name.c_str(), objlist, error_obj.location, "VK Object %s still has a reference to mem obj %s.",
+        skip |= LogWarning("BestPractices", objlist, error_obj.location, "VK Object %s still has a reference to mem obj %s.",
                            FormatHandle(obj).c_str(), FormatHandle(mem_info->Handle()).c_str());
     }
 

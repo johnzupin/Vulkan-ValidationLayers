@@ -204,6 +204,7 @@ const char *VK_LAYER_GPUAV_INDIRECT_DISPATCHES_BUFFERS = "gpuav_indirect_dispatc
 const char *VK_LAYER_GPUAV_INDIRECT_TRACE_RAYS_BUFFERS = "gpuav_indirect_trace_rays_buffers";
 const char *VK_LAYER_GPUAV_BUFFER_COPIES = "gpuav_buffer_copies";
 const char *VK_LAYER_GPUAV_INDEX_BUFFERS = "gpuav_index_buffers";
+const char *VK_LAYER_GPUAV_IMAGE_LAYOUT = "gpuav_image_layout";
 
 const char *VK_LAYER_GPUAV_RESERVE_BINDING_SLOT = "gpuav_reserve_binding_slot";
 const char *VK_LAYER_GPUAV_VMA_LINEAR_OUTPUT = "gpuav_vma_linear_output";
@@ -219,6 +220,7 @@ const char *VK_LAYER_GPUAV_DEBUG_PRINT_INSTRUMENTATION_INFO = "gpuav_debug_print
 const char *VK_LAYER_SYNCVAL_SUBMIT_TIME_VALIDATION = "syncval_submit_time_validation";
 const char *VK_LAYER_SYNCVAL_SHADER_ACCESSES_HEURISTIC = "syncval_shader_accesses_heuristic";
 const char *VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES = "syncval_message_extra_properties";
+const char *VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES_PRETTY_PRINT = "syncval_message_extra_properties_pretty_print";
 
 // Message Formatting
 // ---
@@ -611,6 +613,8 @@ static void ValidateLayerSettingsProvided(const VkLayerSettingsCreateInfoEXT *la
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
         } else if (strcmp(VK_LAYER_GPUAV_INDEX_BUFFERS, setting.pSettingName) == 0) {
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
+        } else if (strcmp(VK_LAYER_GPUAV_IMAGE_LAYOUT, setting.pSettingName) == 0) {
+            required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
         } else if (strcmp(VK_LAYER_GPUAV_RESERVE_BINDING_SLOT, setting.pSettingName) == 0) {
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
         } else if (strcmp(VK_LAYER_GPUAV_VMA_LINEAR_OUTPUT, setting.pSettingName) == 0) {
@@ -620,6 +624,8 @@ static void ValidateLayerSettingsProvided(const VkLayerSettingsCreateInfoEXT *la
         } else if (strcmp(VK_LAYER_SYNCVAL_SHADER_ACCESSES_HEURISTIC, setting.pSettingName) == 0) {
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
         } else if (strcmp(VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES, setting.pSettingName) == 0) {
+            required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
+        } else if (strcmp(VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES_PRETTY_PRINT, setting.pSettingName) == 0) {
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
         } else if (strcmp(VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME, setting.pSettingName) == 0) {
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
@@ -1110,6 +1116,10 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
         }
     }
 
+    if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_IMAGE_LAYOUT)) {
+        vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_IMAGE_LAYOUT, gpuav_settings.validate_image_layout);
+    }
+
     if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_RESERVE_BINDING_SLOT)) {
         SetValidationSetting(layer_setting_set, settings_data->enables, gpu_validation_reserve_binding_slot,
                              VK_LAYER_GPUAV_RESERVE_BINDING_SLOT);
@@ -1199,6 +1209,11 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES)) {
         vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES,
                                 syncval_settings.message_extra_properties);
+    }
+
+    if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES_PRETTY_PRINT)) {
+        vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES_PRETTY_PRINT,
+                                syncval_settings.message_extra_properties_pretty_print);
     }
 
     const auto *validation_features_ext = vku::FindStructInPNextChain<VkValidationFeaturesEXT>(settings_data->create_info);

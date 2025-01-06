@@ -106,7 +106,8 @@ bool CoreChecks::ValidateConservativeRasterization(const spirv::Module &module_s
 }
 
 bool CoreChecks::ValidatePushConstantUsage(const spirv::Module &module_state, const spirv::EntryPoint &entrypoint,
-                                           const vvl::Pipeline &pipeline, const Location &loc) const {
+                                           const vvl::Pipeline *pipeline, const ShaderStageState &stage_state,
+                                           const Location &loc) const {
     bool skip = false;
 
     // TODO - Workaround for https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/5911
@@ -120,26 +121,40 @@ bool CoreChecks::ValidatePushConstantUsage(const spirv::Module &module_state, co
         return skip;
     }
 
-    std::vector<VkPushConstantRange> const *push_constant_ranges =
-        pipeline.PipelineLayoutState()->push_constant_ranges_layout.get();
+    PushConstantRangesId shader_object_push_constant_ranges_id;
+    std::vector<VkPushConstantRange> const *push_constant_ranges;
+    std::string stage_vuid;
+    std::string range_vuid;
+    if (pipeline) {
+        push_constant_ranges = pipeline->PipelineLayoutState()->push_constant_ranges_layout.get();
 
-    std::string vuid;
-    switch (pipeline.GetCreateInfoSType()) {
-        case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO:
-            vuid = "VUID-VkGraphicsPipelineCreateInfo-layout-07987";
-            break;
-        case VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO:
-            vuid = "VUID-VkComputePipelineCreateInfo-layout-07987";
-            break;
-        case VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR:
-            vuid = "VUID-VkRayTracingPipelineCreateInfoKHR-layout-07987";
-            break;
-        case VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV:
-            vuid = "VUID-VkRayTracingPipelineCreateInfoNV-layout-07987";
-            break;
-        default:
-            assert(false);
-            break;
+        switch (pipeline->GetCreateInfoSType()) {
+            case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO:
+                stage_vuid = "VUID-VkGraphicsPipelineCreateInfo-layout-07987";
+                range_vuid = "VUID-VkGraphicsPipelineCreateInfo-layout-10069";
+                break;
+            case VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO:
+                stage_vuid = "VUID-VkComputePipelineCreateInfo-layout-07987";
+                range_vuid = "VUID-VkComputePipelineCreateInfo-layout-10069";
+                break;
+            case VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR:
+                stage_vuid = "VUID-VkRayTracingPipelineCreateInfoKHR-layout-07987";
+                range_vuid = "VUID-VkRayTracingPipelineCreateInfoKHR-layout-10069";
+                break;
+            case VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV:
+                stage_vuid = "VUID-VkRayTracingPipelineCreateInfoNV-layout-07987";
+                range_vuid = "VUID-VkRayTracingPipelineCreateInfoNV-layout-10069";
+                break;
+            default:
+                assert(false);
+                break;
+        }
+    } else {
+        shader_object_push_constant_ranges_id = GetCanonicalId(stage_state.shader_object_create_info->pushConstantRangeCount,
+                                                          stage_state.shader_object_create_info->pPushConstantRanges);
+        push_constant_ranges = shader_object_push_constant_ranges_id.get();
+        stage_vuid = "VUID-VkShaderCreateInfoEXT-codeType-10064";
+        range_vuid = "VUID-VkShaderCreateInfoEXT-codeType-10065";
     }
 
     bool found_stage = false;
@@ -151,10 +166,13 @@ bool CoreChecks::ValidatePushConstantUsage(const spirv::Module &module_state, co
             // spec: "If a push constant block is declared in a shader"
             // Is checked regardless if element in Block is not statically used
             if ((push_constant_variable->offset < range.offset) | (push_constant_end > range_end)) {
-                const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
-                skip |= LogError(vuid, objlist, loc,
+                LogObjectList objlist(module_state.handle());
+                if (pipeline) {
+                    objlist.add(pipeline->PipelineLayoutState()->Handle());
+                }
+                skip |= LogError(range_vuid, objlist, loc,
                                  "SPIR-V (%s) has a push constant buffer Block with range [%" PRIu32 ", %" PRIu32
-                                 "] which outside the pipeline layout range of [%" PRIu32 ", %" PRIu32 "].",
+                                 "] which outside the VkPushConstantRange of [%" PRIu32 ", %" PRIu32 "].",
                                  string_VkShaderStageFlags(stage).c_str(), push_constant_variable->offset, push_constant_end,
                                  range.offset, range_end);
                 break;
@@ -163,10 +181,16 @@ bool CoreChecks::ValidatePushConstantUsage(const spirv::Module &module_state, co
     }
 
     if (!found_stage) {
-        const LogObjectList objlist(module_state.handle(), pipeline.PipelineLayoutState()->Handle());
-        skip |= LogError(vuid, objlist, loc, "SPIR-V (%s) Push constant are used, but %s doesn't set %s.",
-                         string_VkShaderStageFlags(stage).c_str(), FormatHandle(pipeline.PipelineLayoutState()->Handle()).c_str(),
-                         string_VkShaderStageFlags(stage).c_str());
+        LogObjectList objlist(module_state.handle());
+        std::string msg = "";
+        if (pipeline) {
+            objlist.add(pipeline->PipelineLayoutState()->Handle());
+            msg = FormatHandle(pipeline->PipelineLayoutState()->Handle());
+        } else {
+            msg = "VkShaderCreateInfoEXT::pPushConstantRanges";
+        }
+        skip |= LogError(stage_vuid, objlist, loc, "SPIR-V (%s) Push constant are used, but %s doesn't set %s.",
+                         string_VkShaderStageFlags(stage).c_str(), msg.c_str(), string_VkShaderStageFlags(stage).c_str());
     }
     return skip;
 }
@@ -1945,7 +1969,7 @@ bool CoreChecks::ValidateShaderInterfaceVariablePipeline(const spirv::Module &mo
                          string_VkDescriptorType(binding->descriptorType), string_DescriptorTypeSet(descriptor_type_set).c_str());
     } else if (binding->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK && variable.array_length) {
         skip |=
-            LogError(GetPipelineInterfaceVariableVUID(pipeline, vvl::PipelineInterfaceVariableError::Inline), objlist, loc,
+            LogError(GetPipelineInterfaceVariableVUID(pipeline, vvl::PipelineInterfaceVariableError::Inline_10391), objlist, loc,
                      "SPIR-V (%s) uses descriptor %s as VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, but it is an array of descriptor.",
                      string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str());
 
@@ -1985,33 +2009,31 @@ bool CoreChecks::ValidateShaderInterfaceVariableShaderObject(const VkShaderCreat
         }
     }
 
-    // VUIDs being added in https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/7020
-
     if (!binding) {
-        skip |= LogError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-stage", device, loc,
+        skip |= LogError("VUID-VkShaderCreateInfoEXT-codeType-10383", device, loc,
                          "SPIR-V (%s) uses descriptor %s (type %s) but was not declared in pSetLayouts[%" PRIu32 "].",
                          string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
                          string_DescriptorTypeSet(descriptor_type_set).c_str(), set);
     } else if (~binding->stageFlags & variable.stage) {
         skip |=
-            LogError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-stage", device, loc,
+            LogError("VUID-VkShaderCreateInfoEXT-codeType-10383", device, loc,
                      "SPIR-V (%s) uses descriptor %s (type %s) but the VkDescriptorSetLayoutBinding::stageFlags was %s.",
                      string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
                      string_DescriptorTypeSet(descriptor_type_set).c_str(), string_VkShaderStageFlags(binding->stageFlags).c_str());
     } else if ((binding->descriptorType != VK_DESCRIPTOR_TYPE_MUTABLE_EXT) &&
                (descriptor_type_set.find(binding->descriptorType) == descriptor_type_set.end())) {
-        skip |= LogError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-mutable", device, loc,
+        skip |= LogError("VUID-VkShaderCreateInfoEXT-codeType-10384", device, loc,
                          "SPIR-V (%s) uses descriptor %s of type %s but expected %s.", string_VkShaderStageFlagBits(variable.stage),
                          variable.DescribeDescriptor().c_str(), string_VkDescriptorType(binding->descriptorType),
                          string_DescriptorTypeSet(descriptor_type_set).c_str());
     } else if (binding->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK && variable.array_length) {
         skip |=
-            LogError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-inline", device, loc,
+            LogError("VUID-VkShaderCreateInfoEXT-codeType-10386", device, loc,
                      "SPIR-V (%s) uses descriptor %s as VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, but it is an array of descriptor.",
                      string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str());
 
     } else if (binding->descriptorCount < variable.array_length && variable.array_length != spirv::kRuntimeArray) {
-        skip |= LogError("UNASSIGNED-VkShaderCreateInfoEXT-pSetLayouts-descriptorCount", device, loc,
+        skip |= LogError("VUID-VkShaderCreateInfoEXT-codeType-10385", device, loc,
                          "SPIR-V (%s) uses descriptor %s with a VkDescriptorSetLayoutBinding::descriptorCount of %" PRIu32
                          ", but requires at least %" PRIu32 " in the SPIR-V.",
                          string_VkShaderStageFlagBits(variable.stage), variable.DescribeDescriptor().c_str(),
@@ -2324,22 +2346,6 @@ bool CoreChecks::ValidateShaderTileImage(const spirv::Module &module_state, cons
                              "minSampleShading (%f) is not equal to 1.0.", ms_state->minSampleShading);
         }
     }
-
-    if (module_state.static_data_.has_shader_tile_image_depth_read && !enabled_features.shaderTileImageDepthReadAccess) {
-        skip |= LogError("VUID-RuntimeSpirv-shaderTileImageDepthReadAccess-08729", module_state.handle(), loc,
-                         "shaderTileImageDepthReadAccess was not enabled");
-    }
-
-    if (module_state.static_data_.has_shader_tile_image_stencil_read && !enabled_features.shaderTileImageStencilReadAccess) {
-        skip |= LogError("VUID-RuntimeSpirv-shaderTileImageStencilReadAccess-08730", module_state.handle(), loc,
-                         "shaderTileImageStencilReadAccess was not enabled");
-    }
-
-    if (module_state.static_data_.has_shader_tile_image_color_read && !enabled_features.shaderTileImageColorReadAccess) {
-        skip |= LogError("VUID-RuntimeSpirv-shaderTileImageColorReadAccess-08728", module_state.handle(), loc,
-                         "shaderTileImageColorReadAccess was not enabled");
-    }
-
     return skip;
 }
 
@@ -2544,6 +2550,7 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
     skip |= ValidateImageWrite(module_state, loc);
     skip |= ValidateShaderExecutionModes(module_state, entrypoint, stage, pipeline, loc);
     skip |= ValidateBuiltinLimits(module_state, entrypoint, pipeline, loc);
+    skip |= ValidatePushConstantUsage(module_state, entrypoint, pipeline, stage_state, loc);
     if (enabled_features.cooperativeMatrix) {
         skip |= ValidateCooperativeMatrix(module_state, entrypoint, stage_state, local_size_x, local_size_y, local_size_z, loc);
     }
@@ -2560,7 +2567,6 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
         }
         skip |= ValidatePointSizeShaderState(module_state, entrypoint, *pipeline, stage, loc);
         skip |= ValidatePrimitiveTopology(module_state, entrypoint, *pipeline, loc);
-        skip |= ValidatePushConstantUsage(module_state, entrypoint, *pipeline, loc);
 
         if (stage == VK_SHADER_STAGE_FRAGMENT_BIT && pipeline->GraphicsCreateInfo().renderPass == VK_NULL_HANDLE &&
             module_state.HasCapability(spv::CapabilityInputAttachment) && !enabled_features.dynamicRenderingLocalRead) {
@@ -2677,7 +2683,7 @@ void CoreChecks::PreCallRecordCreateShaderModule(VkDevice device, const VkShader
                                                  const RecordObject &record_obj, chassis::CreateShaderModule &chassis_state) {
     // Normally would validate in PreCallValidate, but need a non-const function to update chassis_state
     // This is on the stack, we don't have to worry about threading hazards and this could be moved and used const_cast
-    ValidationStateTracker::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, record_obj,
+    BaseClass::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, record_obj,
                                                             chassis_state);
     chassis_state.skip |= ValidateSpirvStateless(*chassis_state.module_state, chassis_state.stateless_data, record_obj.location);
 }
@@ -2685,7 +2691,7 @@ void CoreChecks::PreCallRecordCreateShaderModule(VkDevice device, const VkShader
 void CoreChecks::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
                                                const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
                                                const RecordObject &record_obj, chassis::ShaderObject &chassis_state) {
-    ValidationStateTracker::PreCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj,
+    BaseClass::PreCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj,
                                                           chassis_state);
     for (uint32_t i = 0; i < createInfoCount; ++i) {
         if (chassis_state.module_states[i]) {
