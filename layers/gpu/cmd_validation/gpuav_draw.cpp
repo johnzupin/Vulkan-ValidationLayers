@@ -1,6 +1,6 @@
-/* Copyright (c) 2018-2024 The Khronos Group Inc.
- * Copyright (c) 2018-2024 Valve Corporation
- * Copyright (c) 2018-2024 LunarG, Inc.
+/* Copyright (c) 2018-2025 The Khronos Group Inc.
+ * Copyright (c) 2018-2025 Valve Corporation
+ * Copyright (c) 2018-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -261,13 +261,14 @@ void FirstInstance(Validator &gpuav, CommandBuffer &cb_state, const Location &lo
         {
             FirstInstanceValidationShader shader_resources;
             shader_resources.push_constants.draw_cmds_stride_dwords = draw_cmds_byte_stride / sizeof(uint32_t);
+            shader_resources.push_constants.cpu_draw_count = draw_count;
             shader_resources.push_constants.first_instance_member_pos = first_instance_member_pos;
 
             shader_resources.draw_buffer_binding.info = {draw_buffer, 0, VK_WHOLE_SIZE};
             shader_resources.push_constants.draw_buffer_dwords_offset = (uint32_t)draw_buffer_offset / sizeof(uint32_t);
             if (count_buffer) {
                 shader_resources.push_constants.flags |= gpuav::glsl::kFirstInstanceFlags_DrawCountFromBuffer;
-                shader_resources.count_buffer_binding.info = {count_buffer, 0, sizeof(uint32_t) + count_buffer_offset};
+                shader_resources.count_buffer_binding.info = {count_buffer, 0, sizeof(uint32_t)};
                 shader_resources.push_constants.count_buffer_dwords_offset = (uint32_t)count_buffer_offset / sizeof(uint32_t);
 
             } else {
@@ -460,7 +461,7 @@ void CountBuffer(Validator &gpuav, CommandBuffer &cb_state, const Location &loc,
             shader_resources.push_constants.draw_cmd_byte_size = draw_indirect_struct_byte_size;
             shader_resources.push_constants.device_limit_max_draw_indirect_count = gpuav.phys_dev_props.limits.maxDrawIndirectCount;
 
-            shader_resources.count_buffer_binding.info = {count_buffer, 0, count_buffer_offset + sizeof(uint32_t)};
+            shader_resources.count_buffer_binding.info = {count_buffer, 0, sizeof(uint32_t)};
             shader_resources.push_constants.count_buffer_dwords_offset = (uint32_t)count_buffer_offset / sizeof(uint32_t);
 
             validation_pipeline.BindShaderResources(gpuav, cb_state, draw_i, error_logger_i, shader_resources);
@@ -621,6 +622,7 @@ void DrawMeshIndirect(Validator &gpuav, CommandBuffer &cb_state, const Location 
             {
                 MeshValidationShader shader_resources;
                 shader_resources.push_constants.draw_cmds_stride_dwords = draw_cmds_byte_stride / sizeof(uint32_t);
+                shader_resources.push_constants.cpu_draw_count = draw_count;
                 if (is_task_shader) {
                     shader_resources.push_constants.max_workgroup_count_x =
                         gpuav.phys_dev_ext_props.mesh_shader_props_ext.maxTaskWorkGroupCount[0];
@@ -645,7 +647,7 @@ void DrawMeshIndirect(Validator &gpuav, CommandBuffer &cb_state, const Location 
                 shader_resources.push_constants.draw_buffer_dwords_offset = (uint32_t)draw_buffer_offset / sizeof(uint32_t);
                 if (count_buffer != VK_NULL_HANDLE) {
                     shader_resources.push_constants.flags |= glsl::kDrawMeshFlags_DrawCountFromBuffer;
-                    shader_resources.count_buffer_binding.info = {count_buffer, 0, count_buffer_offset + sizeof(uint32_t)};
+                    shader_resources.count_buffer_binding.info = {count_buffer, 0, sizeof(uint32_t)};
                     shader_resources.push_constants.count_buffer_dwords_offset = (uint32_t)count_buffer_offset / sizeof(uint32_t);
                 } else {
                     shader_resources.count_buffer_binding.info = {shared_draw_validation_resources.dummy_buffer.VkHandle(), 0,
@@ -1146,6 +1148,10 @@ void DrawIndexedIndirectIndexBuffer(Validator &gpuav, CommandBuffer &cb_state, c
     }
 
     if (gpuav.enabled_features.robustBufferAccess2) {
+        return;
+    }
+
+    if (gpuav.enabled_features.pipelineRobustness) {
         const LvlBindPoint lv_bind_point = ConvertToLvlBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS);
         const LastBound &last_bound = cb_state.lastBound[lv_bind_point];
         const vvl::Pipeline *pipeline_state = last_bound.pipeline_state;
@@ -1187,7 +1193,7 @@ void DrawIndexedIndirectIndexBuffer(Validator &gpuav, CommandBuffer &cb_state, c
             DrawIndexedIndirectIndexBufferShader shader_resources;
             if (count_buffer != VK_NULL_HANDLE) {
                 shader_resources.push_constants.flags |= glsl::kIndexedIndirectDrawFlags_DrawCountFromBuffer;
-                shader_resources.count_buffer_binding.info = {count_buffer, 0, count_buffer_offset + sizeof(uint32_t)};
+                shader_resources.count_buffer_binding.info = {count_buffer, 0, sizeof(uint32_t)};
                 shader_resources.push_constants.count_buffer_dwords_offset = (uint32_t)count_buffer_offset / sizeof(uint32_t);
 
             } else {
@@ -1397,7 +1403,7 @@ void DrawIndexedIndirectVertexBuffer(Validator &gpuav, CommandBuffer &cb_state, 
                 DrawIndexedIndirectVertexBufferShader shader_resources;
                 if (count_buffer != VK_NULL_HANDLE) {
                     shader_resources.push_constants.flags |= glsl::kIndexedIndirectDrawFlags_DrawCountFromBuffer;
-                    shader_resources.count_buffer_binding.info = {count_buffer, 0, count_buffer_offset + sizeof(uint32_t)};
+                    shader_resources.count_buffer_binding.info = {count_buffer, 0, sizeof(uint32_t)};
                     shader_resources.push_constants.count_buffer_dwords_offset = (uint32_t)count_buffer_offset / sizeof(uint32_t);
                 } else {
                     shader_resources.count_buffer_binding.info = {shared_draw_validation_resources.dummy_buffer.VkHandle(), 0,

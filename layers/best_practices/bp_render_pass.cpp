@@ -265,21 +265,20 @@ bool BestPractices::ValidateCmdBeginRenderPass(VkCommandBuffer commandBuffer, co
 bool BestPractices::ValidateCmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo,
                                               const Location& loc) const {
     bool skip = false;
-    const Location rendering_info = loc.dot(Field::pRenderingInfo);
+    const Location rendering_info_loc = loc.dot(Field::pRenderingInfo);
 
     for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i) {
-        const auto& color_attachment = pRenderingInfo->pColorAttachments[i];
-        const Location color_attachment_info = rendering_info.dot(Field::pColorAttachments, i);
+        const VkRenderingAttachmentInfo& color_attachment = pRenderingInfo->pColorAttachments[i];
+        if (color_attachment.imageView == VK_NULL_HANDLE) continue;
+        const Location color_attachment_loc = rendering_info_loc.dot(Field::pColorAttachments, i);
 
         auto image_view_state = Get<vvl::ImageView>(color_attachment.imageView);
-        if (!image_view_state) {
-            continue;
-        }
+        ASSERT_AND_CONTINUE(image_view_state);
 
         if (VendorCheckEnabled(kBPVendorNVIDIA)) {
             if (color_attachment.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
                 const VkFormat format = image_view_state->create_info.format;
-                skip |= ValidateClearColor(commandBuffer, format, color_attachment.clearValue.color, color_attachment_info);
+                skip |= ValidateClearColor(commandBuffer, format, color_attachment.clearValue.color, color_attachment_loc);
             }
         }
 
@@ -290,7 +289,7 @@ bool BestPractices::ValidateCmdBeginRendering(VkCommandBuffer commandBuffer, con
                 image_view_state->image_state->create_info.samples != VK_SAMPLE_COUNT_1_BIT) {
                 const LogObjectList objlist(commandBuffer, resolve_image_view_state->Handle(), image_view_state->Handle());
                 skip |= LogWarning("BestPractices-VkRenderingInfo-ResolveModeNone", commandBuffer,
-                                   color_attachment_info.dot(Field::resolveMode),
+                                   color_attachment_loc.dot(Field::resolveMode),
                                    "is VK_RESOLVE_MODE_NONE but resolveImageView is pointed to a valid VkImageView with "
                                    "VK_SAMPLE_COUNT_1_BIT and imageView is pointed to a VkImageView with %s. If "
                                    "VK_RESOLVE_MODE_NONE is set, the resolveImageView value is ignored.",
@@ -848,10 +847,10 @@ void BestPractices::RecordAttachmentAccess(bp_state::CommandBuffer& cb_state, ui
     }
 }
 
-void BestPractices::RecordAttachmentClearAttachments(bp_state::CommandBuffer& cmd_state, uint32_t fb_attachment,
+void BestPractices::RecordAttachmentClearAttachments(bp_state::CommandBuffer& cb_state, uint32_t fb_attachment,
                                                      uint32_t color_attachment, VkImageAspectFlags aspects, uint32_t rectCount,
                                                      const VkClearRect* pRects) {
-    auto& rp_state = cmd_state.render_pass_state;
+    auto& rp_state = cb_state.render_pass_state;
     // If we observe a full clear before any other access to a frame buffer attachment,
     // we have candidate for redundant clear attachments.
     auto itr =
@@ -870,7 +869,7 @@ void BestPractices::RecordAttachmentClearAttachments(bp_state::CommandBuffer& cm
         return;
     }
 
-    if (cmd_state.IsSecondary()) {
+    if (cb_state.IsSecondary()) {
         // The first command might be a clear, but might not be the first in the render pass, defer any checks until
         // CmdExecuteCommands.
         rp_state.earlyClearAttachments.push_back(

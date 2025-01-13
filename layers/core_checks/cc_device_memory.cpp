@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (C) 2015-2024 Google Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (C) 2015-2025 Google Inc.
  * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -2092,21 +2092,14 @@ bool CoreChecks::PreCallValidateBindImageMemory2(VkDevice device, uint32_t bindI
 
 void CoreChecks::PostCallRecordBindImageMemory2(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo *pBindInfos,
                                                 const RecordObject &record_obj) {
-    if (VK_SUCCESS != record_obj.result) {
-        // if bindInfoCount is 1, we know for sure if that single image was bound or not
-        if (bindInfoCount > 1) {
-            for (uint32_t i = 0; i < bindInfoCount; i++) {
-                if (auto image_state = Get<vvl::Image>(pBindInfos[i].image)) {
-                    image_state->indeterminate_state = true;
-                }
-            }
-        }
-        return;
-    }
+    // Don't check |record_obj.result| as some binds might still be valid
     BaseClass::PostCallRecordBindImageMemory2(device, bindInfoCount, pBindInfos, record_obj);
 
     for (uint32_t i = 0; i < bindInfoCount; i++) {
         if (auto image_state = Get<vvl::Image>(pBindInfos[i].image)) {
+            // Need to protect if some VkBindMemoryStatus are not VK_SUCCESS
+            if (!image_state->HasBeenBound()) continue;
+
             image_state->SetInitialLayoutMap();
         }
     }
