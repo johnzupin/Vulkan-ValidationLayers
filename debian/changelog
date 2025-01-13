@@ -1,3 +1,100 @@
+vulkan-validationlayers (1.4.304.0~rc2-1lunarg22.04-1) jammy; urgency=medium
+
+  [ ziga-lunarg ]
+  * sync: Fix creating dynamic rendering attachments in sync val
+  * tests: Test dynamic rendering attachment without aspect
+
+  [ spencer-lunarg ]
+  * bp: Use cb_state name like CoreCheck
+  * bp: Use LastBound for dynamic state values
+  * tests: Split up Push Descriptor test
+  * layers: Improve Push Descriptor error messages
+
+  [ Artem Kharytoniuk ]
+  * tests: Fix compilation error
+
+  [ spencer-lunarg ]
+  * scripts: Remove Version::number from VulkanObject
+  * layers: Remove ConvertImageMemoryInfo
+  * layers: Fix UpdateBindBufferMemoryState
+  * layers: Fix indeterminate_state
+  * layers: Unify VkBindMemoryStatus checks
+  * tests: Cleanup VkBindMemoryStatus tests
+  * layers: Cleanup vkCmdBeginRendering
+
+  [ Victor Hugo Vianna Silva ]
+  * build: Fix a C++23 build error
+
+  [ ziga-lunarg ]
+  * layers: Fix checking discard rectangle dynamic state
+  * tests: Test not setting dynamic discard rectangles
+  * tests: Add missing shader object tests
+  * layers: Fix checking mesh pipeline dynamic states
+  * tests: Test mesh pipeline with tessellation dynamic state
+  * tests: Add missing vertex and index buffer tests
+  * layers: Fix checking for swapchain protected bit support
+
+  [ Spencer Fricke ]
+  * layers: Fix cc_wsi.cpp from 9159
+
+  [ arno-lunarg ]
+  * gpuav: Fix handling of count buffer
+  * gpuav: Disable vertex buffer fetching validation
+
+  [ spencer-lunarg ]
+  * tests: Move Sync Object test from SyncVal
+  * tests: Use vkt::Event the same
+  * layers: Use alias passthrough for recording functions
+
+  [ ziga-lunarg ]
+  * layers: Add robustness supported VUIDs
+  * tests: Test robustness supported VUIDs
+
+  [ Artem Kharytoniuk ]
+  * docs: Update syncval known limitations list
+
+  [ spencer-lunarg ]
+  * layers: Fix vkCmdWaitEvents2 VU
+
+  [ Artem Kharytoniuk ]
+  * sync: Generate expansion for ALL_TRANSFER stage
+
+  [ ziga-lunarg ]
+  * bp: Fix signaling events
+  * tests: Best practice destroy event
+
+  [ spencer-lunarg ]
+  * layers: Move VK_EXT_robustness2 check to corechecks
+
+  [ ziga-lunarg ]
+  * layers: Fix robustBufferAccess2 check for 08798
+  * tests: Test index oob with robustBufferAccess2
+
+  [ spencer-lunarg ]
+  * scripts: Temp remove VkPhysicalDeviceLayeredApiPropertiesKHR
+
+  [ Jeremy Gebben ]
+  * chassis: Remove tls caching of device/instance state
+  * tests: Add NegativeInstanceless.DestroyDeviceRace
+
+  [ spencer-lunarg ]
+  * tests: Renable ClearRectWith2DArray
+
+  [ ziga-lunarg ]
+  * tests: Add invalid queue family tests
+  * tests: Test buffer in barrier is bound to memory
+
+  [ spencer-lunarg ]
+  * docs: Small cleanup from feedback
+
+  [ ziga-lunarg ]
+  * tests: Add missing barrier access mask tests
+
+  [ Spencer Fricke ]
+  * layers: Fix VK_EXT_robustness2 check
+
+ -- john <john@odin>  Mon, 13 Jan 2025 11:42:54 -0700
+
 vulkan-validationlayers (1.4.304.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ spencer-lunarg ]
