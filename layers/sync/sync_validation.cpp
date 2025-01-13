@@ -1,6 +1,6 @@
-/* Copyright (c) 2019-2024 The Khronos Group Inc.
- * Copyright (c) 2019-2024 Valve Corporation
- * Copyright (c) 2019-2024 LunarG, Inc.
+/* Copyright (c) 2019-2025 The Khronos Group Inc.
+ * Copyright (c) 2019-2025 Valve Corporation
+ * Copyright (c) 2019-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -262,6 +262,10 @@ void SyncValidator::UpdateSyncImageMemoryBindState(uint32_t count, const VkBindI
     for (const auto &info : vvl::make_span(infos, count)) {
         if (VK_NULL_HANDLE == info.image) continue;
         auto image_state = Get<ImageState>(info.image);
+
+        // Need to protect if some VkBindMemoryStatus are not VK_SUCCESS
+        if (!image_state->HasBeenBound()) continue;
+
         if (image_state->IsTiled()) {
             image_state->SetOpaqueBaseAddress(*this);
         }
@@ -709,13 +713,7 @@ bool SyncValidator::PreCallValidateCmdPipelineBarrier2(VkCommandBuffer commandBu
 
 void SyncValidator::PreCallRecordCmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer, const VkDependencyInfoKHR *pDependencyInfo,
                                                         const RecordObject &record_obj) {
-    auto cb_state = Get<syncval_state::CommandBuffer>(commandBuffer);
-    assert(cb_state);
-    if (!cb_state) return;
-    auto *cb_access_context = &cb_state->access_context;
-
-    cb_access_context->RecordSyncOp<SyncOpPipelineBarrier>(record_obj.location.function, *this, cb_access_context->GetQueueFlags(),
-                                                           *pDependencyInfo);
+    PreCallRecordCmdPipelineBarrier2(commandBuffer, pDependencyInfo, record_obj);
 }
 
 void SyncValidator::PreCallRecordCmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDependencyInfo *pDependencyInfo,
@@ -2958,18 +2956,22 @@ void SyncValidator::PreCallRecordCmdExecuteCommands(VkCommandBuffer commandBuffe
     }
 }
 
-void SyncValidator::PostCallRecordBindImageMemory(VkDevice device, VkImage image, VkDeviceMemory mem, VkDeviceSize memoryOffset,
+void SyncValidator::PostCallRecordBindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset,
                                                   const RecordObject &record_obj) {
-    BaseClass::PostCallRecordBindImageMemory(device, image, mem, memoryOffset, record_obj);
+    BaseClass::PostCallRecordBindImageMemory(device, image, memory, memoryOffset, record_obj);
     if (VK_SUCCESS != record_obj.result) return;
-    const VkBindImageMemoryInfo bind_info = ConvertImageMemoryInfo(device, image, mem, memoryOffset);
+    VkBindImageMemoryInfo bind_info = vku::InitStructHelper();
+    bind_info.image = image;
+    bind_info.memory = memory;
+    bind_info.memoryOffset = memoryOffset;
     UpdateSyncImageMemoryBindState(1, &bind_info);
 }
 
 void SyncValidator::PostCallRecordBindImageMemory2(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo *pBindInfos,
                                                    const RecordObject &record_obj) {
+    // Don't check |record_obj.result| as some binds might still be valid
     BaseClass::PostCallRecordBindImageMemory2(device, bindInfoCount, pBindInfos, record_obj);
-    if (VK_SUCCESS != record_obj.result) return;
+
     UpdateSyncImageMemoryBindState(bindInfoCount, pBindInfos);
 }
 

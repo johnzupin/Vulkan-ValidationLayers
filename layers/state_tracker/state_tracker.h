@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (C) 2015-2024 Google Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (C) 2015-2025 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
@@ -269,9 +269,6 @@ class ValidationStateTracker : public ValidationObject {
     }
     ValidationStateTracker(vvl::dispatch::Instance* inst, LayerObjectTypeId type) : BaseClass(inst, type), instance_state(this) {}
     ~ValidationStateTracker();
-
-    static VkBindImageMemoryInfo ConvertImageMemoryInfo(VkDevice device, VkImage image, VkDeviceMemory mem,
-                                                        VkDeviceSize memoryOffset);
 
     template <typename State, typename HandleType = typename state_object::Traits<State>::HandleType>
     void Add(std::shared_ptr<State>&& state_object) {
@@ -1478,8 +1475,8 @@ class ValidationStateTracker : public ValidationObject {
     void RecordImportFenceState(VkFence fence, VkExternalFenceHandleTypeFlagBits handle_type, VkFenceImportFlags flags);
     void RecordMappedMemory(VkDeviceMemory mem, VkDeviceSize offset, VkDeviceSize size, void** ppData);
     void RecordVulkanSurface(VkSurfaceKHR* pSurface);
-    void UpdateBindBufferMemoryState(VkBuffer buffer, VkDeviceMemory mem, VkDeviceSize memoryOffset);
-    void UpdateBindImageMemoryState(const VkBindImageMemoryInfo& bindInfo);
+    void UpdateBindBufferMemoryState(const VkBindBufferMemoryInfo& bind_info);
+    void UpdateBindImageMemoryState(const VkBindImageMemoryInfo& bind_info);
     void UpdateAllocateDescriptorSetsData(const VkDescriptorSetAllocateInfo*, vvl::AllocateDescriptorSetsData&) const;
 
     void PostCallRecordCopyAccelerationStructureKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
@@ -1819,9 +1816,10 @@ class ValidationStateTracker : public ValidationObject {
     // Enabling the other robustness features can reduce performance on GPU, so just the
     // support is needed to check
     bool has_robust_image_access;  // VK_EXT_image_robustness
-    // TODO - Issue 5657
-    // bool has_robust_image_access2;  // VK_EXT_robustness2
-    // bool has_robust_buffer_access2; // VK_EXT_robustness2
+    // Validation requires special handling for VkPhysicalDeviceRobustness2FeaturesEXT, because for some cases robustness features
+    // // need to only be supported, not enabled
+    bool has_robust_image_access2;   // VK_EXT_robustness2
+    bool has_robust_buffer_access2;  // VK_EXT_robustness2
 
     // Device extension properties -- storing properties gathered from VkPhysicalDeviceProperties2::pNext chain
     struct DeviceExtensionProperties {

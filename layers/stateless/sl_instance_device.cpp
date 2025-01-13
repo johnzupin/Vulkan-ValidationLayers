@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (C) 2015-2024 Google Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (C) 2015-2025 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -248,6 +248,7 @@ void StatelessValidation::CommonPostCallRecordEnumeratePhysicalDevice(const VkPh
                     scissor_exclusive_extension_version = ext_props[j].specVersion;
                 }
             }
+
             device_extensions_enumerated[phys_device] = std::move(dev_exts_enumerated);
         }
     }

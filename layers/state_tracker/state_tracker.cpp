@@ -751,6 +751,18 @@ void ValidationStateTracker::PostCreateDevice(const VkDeviceCreateInfo *pCreateI
         has_robust_image_access =
             (api_version >= VK_API_VERSION_1_3 || IsExtEnabled(instance_extensions.vk_khr_get_physical_device_properties2)) &&
             phys_dev_extensions.find(vvl::Extension::_VK_EXT_image_robustness) != phys_dev_extensions.end();
+
+        if (IsExtEnabled(instance_extensions.vk_khr_get_physical_device_properties2) &&
+            phys_dev_extensions.find(vvl::Extension::_VK_EXT_robustness2) != phys_dev_extensions.end()) {
+            VkPhysicalDeviceRobustness2FeaturesEXT robustness_2_features = vku::InitStructHelper();
+            VkPhysicalDeviceFeatures2 features2 = vku::InitStructHelper(&robustness_2_features);
+            DispatchGetPhysicalDeviceFeatures2Helper(physical_device, &features2);
+            has_robust_image_access2 = robustness_2_features.robustImageAccess2;
+            has_robust_buffer_access2 = robustness_2_features.robustBufferAccess2;
+        } else {
+            has_robust_image_access2 = false;
+            has_robust_buffer_access2 = false;
+        }
     }
 
     const auto &dev_ext = device_extensions;
@@ -1766,19 +1778,24 @@ void ValidationStateTracker::PreCallRecordDestroyQueryPool(VkDevice device, VkQu
     Destroy<vvl::QueryPool>(queryPool);
 }
 
-void ValidationStateTracker::UpdateBindBufferMemoryState(VkBuffer buffer, VkDeviceMemory mem, VkDeviceSize memoryOffset) {
-    if (auto buffer_state = Get<vvl::Buffer>(buffer)) {
-        // Track objects tied to memory
-        if (auto mem_state = Get<vvl::DeviceMemory>(mem)) {
-            buffer_state->BindMemory(buffer_state.get(), mem_state, memoryOffset, 0u, buffer_state->requirements.size);
-        }
+void ValidationStateTracker::UpdateBindBufferMemoryState(const VkBindBufferMemoryInfo &bind_info) {
+    auto buffer_state = Get<vvl::Buffer>(bind_info.buffer);
+    if (!buffer_state) return;
+
+    // Track objects tied to memory
+    if (auto mem_state = Get<vvl::DeviceMemory>(bind_info.memory)) {
+        buffer_state->BindMemory(buffer_state.get(), mem_state, bind_info.memoryOffset, 0u, buffer_state->requirements.size);
     }
 }
 
-void ValidationStateTracker::PostCallRecordBindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory mem,
+void ValidationStateTracker::PostCallRecordBindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory,
                                                             VkDeviceSize memoryOffset, const RecordObject &record_obj) {
     if (VK_SUCCESS != record_obj.result) return;
-    UpdateBindBufferMemoryState(buffer, mem, memoryOffset);
+    VkBindBufferMemoryInfo bind_info = vku::InitStructHelper();
+    bind_info.buffer = buffer;
+    bind_info.memory = memory;
+    bind_info.memoryOffset = memoryOffset;
+    UpdateBindBufferMemoryState(bind_info);
 }
 
 void ValidationStateTracker::PostCallRecordBindBufferMemory2(VkDevice device, uint32_t bindInfoCount,
@@ -1788,16 +1805,20 @@ void ValidationStateTracker::PostCallRecordBindBufferMemory2(VkDevice device, ui
         // if bindInfoCount is 1, we know for sure if that single buffer was bound or not
         if (bindInfoCount > 1) {
             for (uint32_t i = 0; i < bindInfoCount; i++) {
-                if (auto buffer_state = Get<vvl::Buffer>(pBindInfos[i].buffer)) {
+                // If user passed in VkBindMemoryStatus, we can update which buffers are valid or not
+                if (auto *bind_memory_status = vku::FindStructInPNextChain<VkBindMemoryStatus>(pBindInfos[i].pNext)) {
+                    if (bind_memory_status->pResult && *bind_memory_status->pResult == VK_SUCCESS) {
+                        UpdateBindBufferMemoryState(pBindInfos[i]);
+                    }
+                } else if (auto buffer_state = Get<vvl::Buffer>(pBindInfos[i].buffer)) {
                     buffer_state->indeterminate_state = true;
                 }
             }
         }
-        return;
-    }
-
-    for (uint32_t i = 0; i < bindInfoCount; i++) {
-        UpdateBindBufferMemoryState(pBindInfos[i].buffer, pBindInfos[i].memory, pBindInfos[i].memoryOffset);
+    } else {
+        for (uint32_t i = 0; i < bindInfoCount; i++) {
+            UpdateBindBufferMemoryState(pBindInfos[i]);
+        }
     }
 }
 
@@ -3682,55 +3703,66 @@ void ValidationStateTracker::PreCallRecordUnmapMemory2KHR(VkDevice device, const
     PreCallRecordUnmapMemory2(device, pMemoryUnmapInfo, record_obj);
 }
 
-void ValidationStateTracker::UpdateBindImageMemoryState(const VkBindImageMemoryInfo &bindInfo) {
-    if (auto image_state = Get<vvl::Image>(bindInfo.image)) {
-        // An Android sepcial image cannot get VkSubresourceLayout until the image binds a memory.
-        // See: VUID-vkGetImageSubresourceLayout-image-09432
-        image_state->fragment_encoder =
-            std::unique_ptr<const subresource_adapter::ImageRangeEncoder>(new subresource_adapter::ImageRangeEncoder(*image_state));
-        const auto swapchain_info = vku::FindStructInPNextChain<VkBindImageMemorySwapchainInfoKHR>(bindInfo.pNext);
-        if (swapchain_info) {
-            if (auto swapchain = Get<vvl::Swapchain>(swapchain_info->swapchain)) {
-                // All images bound to this swapchain and index are aliases
-                image_state->SetSwapchain(swapchain, swapchain_info->imageIndex);
+void ValidationStateTracker::UpdateBindImageMemoryState(const VkBindImageMemoryInfo &bind_info) {
+    auto image_state = Get<vvl::Image>(bind_info.image);
+    if (!image_state) return;
+
+    // An Android sepcial image cannot get VkSubresourceLayout until the image binds a memory.
+    // See: VUID-vkGetImageSubresourceLayout-image-09432
+    image_state->fragment_encoder =
+        std::unique_ptr<const subresource_adapter::ImageRangeEncoder>(new subresource_adapter::ImageRangeEncoder(*image_state));
+    const auto swapchain_info = vku::FindStructInPNextChain<VkBindImageMemorySwapchainInfoKHR>(bind_info.pNext);
+    if (swapchain_info) {
+        if (auto swapchain = Get<vvl::Swapchain>(swapchain_info->swapchain)) {
+            // All images bound to this swapchain and index are aliases
+            image_state->SetSwapchain(swapchain, swapchain_info->imageIndex);
+        }
+    } else {
+        // Track bound memory range information
+        if (auto mem_info = Get<vvl::DeviceMemory>(bind_info.memory)) {
+            VkDeviceSize plane_index = 0u;
+            if (image_state->disjoint && image_state->IsExternalBuffer() == false) {
+                auto plane_info = vku::FindStructInPNextChain<VkBindImagePlaneMemoryInfo>(bind_info.pNext);
+                plane_index = vkuGetPlaneIndex(plane_info->planeAspect);
             }
-        } else {
-            // Track bound memory range information
-            if (auto mem_info = Get<vvl::DeviceMemory>(bindInfo.memory)) {
-                VkDeviceSize plane_index = 0u;
-                if (image_state->disjoint && image_state->IsExternalBuffer() == false) {
-                    auto plane_info = vku::FindStructInPNextChain<VkBindImagePlaneMemoryInfo>(bindInfo.pNext);
-                    plane_index = vkuGetPlaneIndex(plane_info->planeAspect);
-                }
-                image_state->BindMemory(
-                    image_state.get(), mem_info, bindInfo.memoryOffset, plane_index,
-                    image_state->requirements[static_cast<decltype(image_state->requirements)::size_type>(plane_index)].size);
-            }
+            image_state->BindMemory(
+                image_state.get(), mem_info, bind_info.memoryOffset, plane_index,
+                image_state->requirements[static_cast<decltype(image_state->requirements)::size_type>(plane_index)].size);
         }
     }
 }
 
-VkBindImageMemoryInfo ValidationStateTracker::ConvertImageMemoryInfo(VkDevice device, VkImage image, VkDeviceMemory mem,
-                                                                     VkDeviceSize memoryOffset) {
-    VkBindImageMemoryInfo bind_info = vku::InitStructHelper();
-    bind_info.image = image;
-    bind_info.memory = mem;
-    bind_info.memoryOffset = memoryOffset;
-    return bind_info;
-}
-
-void ValidationStateTracker::PostCallRecordBindImageMemory(VkDevice device, VkImage image, VkDeviceMemory mem,
+void ValidationStateTracker::PostCallRecordBindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory,
                                                            VkDeviceSize memoryOffset, const RecordObject &record_obj) {
     if (VK_SUCCESS != record_obj.result) return;
-    UpdateBindImageMemoryState(ConvertImageMemoryInfo(device, image, mem, memoryOffset));
+    VkBindImageMemoryInfo bind_info = vku::InitStructHelper();
+    bind_info.image = image;
+    bind_info.memory = memory;
+    bind_info.memoryOffset = memoryOffset;
+    UpdateBindImageMemoryState(bind_info);
 }
 
 void ValidationStateTracker::PostCallRecordBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
                                                             const VkBindImageMemoryInfo *pBindInfos,
                                                             const RecordObject &record_obj) {
-    if (VK_SUCCESS != record_obj.result) return;
-    for (uint32_t i = 0; i < bindInfoCount; i++) {
-        UpdateBindImageMemoryState(pBindInfos[i]);
+    if (VK_SUCCESS != record_obj.result) {
+        // if bindInfoCount is 1, we know for sure if that single image was bound or not
+        if (bindInfoCount > 1) {
+            for (uint32_t i = 0; i < bindInfoCount; i++) {
+                // If user passed in VkBindMemoryStatus, we can update which images are valid or not
+                if (auto *bind_memory_status = vku::FindStructInPNextChain<VkBindMemoryStatus>(pBindInfos[i].pNext)) {
+                    if (bind_memory_status->pResult && *bind_memory_status->pResult == VK_SUCCESS) {
+                        UpdateBindImageMemoryState(pBindInfos[i]);
+                    }
+                } else if (auto image_state = Get<vvl::Image>(pBindInfos[i].image)) {
+                    image_state->indeterminate_state = true;
+                }
+            }
+        }
+    } else {
+        for (uint32_t i = 0; i < bindInfoCount; i++) {
+            UpdateBindImageMemoryState(pBindInfos[i]);
+        }
     }
 }
 
@@ -4516,17 +4548,17 @@ void ValidationStateTracker::PreCallRecordCmdPushDescriptorSetWithTemplate(VkCom
                                                                            const RecordObject &record_obj) {
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto template_state = Get<vvl::DescriptorUpdateTemplate>(descriptorUpdateTemplate);
-    auto layout_data = Get<vvl::PipelineLayout>(layout);
-    if (!cb_state || !template_state || !layout_data) {
+    auto pipeline_layout = Get<vvl::PipelineLayout>(layout);
+    if (!cb_state || !template_state || !pipeline_layout) {
         return;
     }
 
     cb_state->RecordCmd(record_obj.location.function);
-    auto dsl = layout_data->GetDsl(set);
+    auto dsl = pipeline_layout->set_layouts[set];
     const auto &template_ci = template_state->create_info;
     // Decode the template into a set of write updates
     vvl::DecodedTemplateUpdate decoded_template(*this, VK_NULL_HANDLE, template_state.get(), pData, dsl->VkHandle());
-    cb_state->PushDescriptorSetState(template_ci.pipelineBindPoint, *layout_data, record_obj.location.function, set,
+    cb_state->PushDescriptorSetState(template_ci.pipelineBindPoint, *pipeline_layout, record_obj.location.function, set,
                                      static_cast<uint32_t>(decoded_template.desc_writes.size()),
                                      decoded_template.desc_writes.data());
 }
@@ -4543,19 +4575,19 @@ void ValidationStateTracker::PreCallRecordCmdPushDescriptorSetWithTemplate2(
     const RecordObject &record_obj) {
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto template_state = Get<vvl::DescriptorUpdateTemplate>(pPushDescriptorSetWithTemplateInfo->descriptorUpdateTemplate);
-    auto layout_data = Get<vvl::PipelineLayout>(pPushDescriptorSetWithTemplateInfo->layout);
-    if (!cb_state || !template_state || !layout_data) {
+    auto pipeline_layout = Get<vvl::PipelineLayout>(pPushDescriptorSetWithTemplateInfo->layout);
+    if (!cb_state || !template_state || !pipeline_layout) {
         return;
     }
 
     cb_state->RecordCmd(record_obj.location.function);
-    auto dsl = layout_data->GetDsl(pPushDescriptorSetWithTemplateInfo->set);
+    auto dsl = pipeline_layout->set_layouts[pPushDescriptorSetWithTemplateInfo->set];
     const auto &template_ci = template_state->create_info;
     // Decode the template into a set of write updates
     vvl::DecodedTemplateUpdate decoded_template(*this, VK_NULL_HANDLE, template_state.get(),
                                                 pPushDescriptorSetWithTemplateInfo->pData, dsl->VkHandle());
     cb_state->PushDescriptorSetState(
-        template_ci.pipelineBindPoint, *layout_data, record_obj.location.function, pPushDescriptorSetWithTemplateInfo->set,
+        template_ci.pipelineBindPoint, *pipeline_layout, record_obj.location.function, pPushDescriptorSetWithTemplateInfo->set,
         static_cast<uint32_t>(decoded_template.desc_writes.size()), decoded_template.desc_writes.data());
 }
 
