@@ -1,3 +1,17 @@
+vulkan-validationlayers (1.4.304.1~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ spencer-lunarg ]
+  * layers: Update new ANNOTATED_SPEC_LINK format
+  * layers: Fix crash in shader objects
+
+  [ ziga-lunarg ]
+  * layers: Fix crash when sub cb state doesn't have render pass
+
+  [ John Zupin ]
+  * packaging: debian: update vvl error link
+
+ -- john <john@odin>  Tue, 04 Feb 2025 14:55:37 -0700
+
 vulkan-validationlayers (1.4.304.0~rc2-1lunarg22.04-1) jammy; urgency=medium
 
   [ ziga-lunarg ]
