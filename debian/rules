@@ -33,7 +33,7 @@ override_dh_auto_configure:
 				-DROBIN_HOOD_HASHING_INSTALL_DIR="/usr/include/robin-hood-hashing" \
 				-DUSE_ROBIN_HOOD_HASHING="ON" \
 				-DBUILD_TESTS="OFF" \
-				-DANNOTATED_SPEC_LINK="\"https://vulkan.lunarg.com/doc/view/$(VK_VERSION)/linux/$(MAJOR_MINOR)-extensions/vkspec.html\"" ..
+				-DANNOTATED_SPEC_LINK="\"https://vulkan.lunarg.com/doc/view/$(VK_VERSION)/linux/antora/spec/latest/\"" ..
 
 # override_dh_auto_build:
 # 	dh_auto_build --max-parallel=12
