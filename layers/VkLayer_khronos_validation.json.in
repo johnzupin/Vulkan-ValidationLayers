@@ -4,7 +4,7 @@
         "name": "@JSON_LAYER_NAME@",
         "type": "GLOBAL",
         "library_path": "@JSON_LIBRARY_PATH@",
-        "api_version": "1.4.304",
+        "api_version": "1.4.309",
         "implementation_version": "1",
         "description": "Khronos Validation Layer",
         "introduction": "The main, comprehensive Khronos validation layer.\n\nVulkan is an Explicit API, enabling direct control over how GPUs actually work. By design, minimal error checking is done inside a Vulkan driver. Applications have full control and responsibility for correct operation. Any errors in how Vulkan is used can result in a crash. \n\nThe Khronos Validation Layer can be enabled to assist development by enabling developers to verify their applications correctly use the Vulkan API.",
@@ -86,7 +86,7 @@
                         { "key": "printf_enable", "value": false },
                         { "key": "gpuav_enable", "value": false },
                         { "key": "validate_best_practices", "value": false },
-                        { "key": "report_flags", "value": [ "error" ] },
+                        { "key": "report_flags", "value": [ "error", "warn" ] },
                         { "key": "debug_action", "value": [ "VK_DBG_LAYER_ACTION_LOG_MSG" ] },
                         { "key": "enable_message_limit", "value": true }
                     ]
@@ -684,6 +684,22 @@
                                             }
                                         },
                                         {
+                                            "key": "gpuav_vertex_attribute_fetch_oob",
+                                            "label": "Out of bounds vertex attribute fetching",
+                                            "description": "Validate that no vertex attribute fetching is out of bonds",
+                                            "type": "BOOL",
+                                            "default": true,
+                                            "platforms": [ "WINDOWS", "LINUX" ],
+                                            "dependence": {
+                                                "mode": "ALL",
+                                                "settings": [
+                                                    { "key": "gpuav_enable", "value": true },
+                                                    { "key": "gpuav_shader_instrumentation", "value": true }
+                                                ]
+                                            }
+                                        },
+
+                                        {
                                             "key": "gpuav_select_instrumented_shaders",
                                             "label": "Enable instrumenting shaders selectively",
                                             "description": "Select which shaders to instrument passing a VkValidationFeaturesEXT struct with GPU-AV enabled in the VkShaderModuleCreateInfo pNext",
@@ -1139,12 +1155,28 @@
                     "expanded": true,
                     "settings": [
                         {
+                            "key": "message_format_verbose",
+                            "label": "Verbose",
+                            "description": "Display Validation Type, Object Handles, Message ID, Spec Link",
+                            "type": "BOOL",
+                            "default": true,
+                            "platforms": [ "WINDOWS", "LINUX", "MACOS", "ANDROID" ]
+                        },
+                        {
                             "key": "message_format_display_application_name",
                             "label": "Display Application Name",
                             "description": "Useful when running multiple instances to know which instance the message is from.",
                             "type": "BOOL",
                             "default": false,
                             "platforms": [ "WINDOWS", "LINUX", "MACOS", "ANDROID" ]
+                        },
+                        {
+                            "key": "debug_stable_messages",
+                            "label": "Stable messages",
+                            "view": "ADVANCED",
+                            "description": "Improves the reproducibility of error messages by removing fields that can vary between application runs (e.g., dispatchable handles) for comparison purposes.",
+                            "type": "BOOL",
+                            "default": false
                         }
                     ]
                 },

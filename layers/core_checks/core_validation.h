@@ -43,8 +43,143 @@ struct SubpassLayout;
 struct DAGNode;
 struct SemaphoreSubmitState;
 
-class CoreChecks : public ValidationStateTracker {
-    using BaseClass = ValidationStateTracker;
+namespace core {
+class Instance : public vvl::Instance {
+    using BaseClass = vvl::Instance;
+
+  public:
+    using Func = vvl::Func;
+    using Struct = vvl::Struct;
+    using Field = vvl::Field;
+
+    Instance(vvl::dispatch::Instance* dispatch) : BaseClass(dispatch, LayerObjectTypeCoreValidation) {}
+
+    bool PreCallValidateDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator,
+                                          const ErrorObject& error_obj) const override;
+    bool PreCallValidateCreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo,
+                                                     const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface,
+                                                     const ErrorObject& error_obj) const override;
+    bool ValidateGetPhysicalDeviceDisplayPlanePropertiesKHRQuery(VkPhysicalDevice physicalDevice, uint32_t planeIndex,
+                                                                 const Location& loc) const;
+    bool ValidateGetPhysicalDeviceImageFormatProperties2ANDROID(VkPhysicalDevice physical_device,
+                                                                const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
+                                                                const VkImageFormatProperties2* pImageFormatProperties,
+                                                                const ErrorObject& error_obj) const;
+    bool PreCallValidateCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo* pCreateInfo,
+                                     const VkAllocationCallbacks* pAllocator, VkDevice* pDevice,
+                                     const ErrorObject& error_obj) const override;
+    bool ValidateQueueFamilyIndex(const vvl::PhysicalDevice& pd_state, uint32_t requested_queue_family, const char* vuid,
+                                  const Location& loc) const;
+    bool ValidateDeviceQueueCreateInfos(const vvl::PhysicalDevice& pd_state, uint32_t info_count,
+                                        const VkDeviceQueueCreateInfo* infos, const Location& loc) const;
+    bool ValidateGetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice gpu,
+                                                         const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
+                                                         VkImageFormatProperties2* pImageFormatProperties,
+                                                         const ErrorObject& error_obj) const;
+    bool PreCallValidateGetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
+                                                                const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
+                                                                VkImageFormatProperties2* pImageFormatProperties,
+                                                                const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceImageFormatProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                                   const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
+                                                                   VkImageFormatProperties2* pImageFormatProperties,
+                                                                   const ErrorObject& error_obj) const override;
+    bool ValidatePhysicalDeviceSurfaceSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, const char* vuid,
+                                              const Location& loc) const;
+    bool PreCallValidateGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+                                                           VkSurfaceKHR surface, VkBool32* pSupported,
+                                                           const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex,
+                                                            uint32_t* pDisplayCount, VkDisplayKHR* pDisplays,
+                                                            const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex,
+                                                       VkDisplayPlaneCapabilitiesKHR* pCapabilities,
+                                                       const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetDisplayPlaneCapabilities2KHR(VkPhysicalDevice physicalDevice,
+                                                        const VkDisplayPlaneInfo2KHR* pDisplayPlaneInfo,
+                                                        VkDisplayPlaneCapabilities2KHR* pCapabilities,
+                                                        const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice,
+                                                              const VkVideoProfileInfoKHR* pVideoProfile,
+                                                              VkVideoCapabilitiesKHR* pCapabilities,
+                                                              const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
+                                                                  const VkPhysicalDeviceVideoFormatInfoKHR* pVideoFormatInfo,
+                                                                  uint32_t* pVideoFormatPropertyCount,
+                                                                  VkVideoFormatPropertiesKHR* pVideoFormatProperties,
+                                                                  const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(
+        VkPhysicalDevice physicalDevice, const VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR* pQualityLevelInfo,
+        VkVideoEncodeQualityLevelPropertiesKHR* pQualityLevelProperties, const ErrorObject& error_obj) const override;
+
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    bool PreCallValidateGetPhysicalDeviceSurfacePresentModes2EXT(VkPhysicalDevice physicalDevice,
+                                                                 const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo,
+                                                                 uint32_t* pPresentModeCount, VkPresentModeKHR* pPresentModes,
+                                                                 const ErrorObject& error_obj) const override;
+#endif
+    bool PreCallValidateGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                              uint32_t* pRectCount, VkRect2D* pRects,
+                                                              const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceSurfaceCapabilities2EXT(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                                 VkSurfaceCapabilities2EXT* pSurfaceCapabilities,
+                                                                 const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDevice,
+                                                                 const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo,
+                                                                 VkSurfaceCapabilities2KHR* pSurfaceCapabilities,
+                                                                 const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                                VkSurfaceCapabilitiesKHR* pSurfaceCapabilities,
+                                                                const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physicalDevice,
+                                                            const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo,
+                                                            uint32_t* pSurfaceFormatCount, VkSurfaceFormat2KHR* pSurfaceFormats,
+                                                            const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                           uint32_t* pSurfaceFormatCount, VkSurfaceFormatKHR* pSurfaceFormats,
+                                                           const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                                uint32_t* pPresentModeCount, VkPresentModeKHR* pPresentModes,
+                                                                const ErrorObject& error_obj) const override;
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    bool PreCallValidateGetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+                                                                       struct wl_display* display,
+                                                                       const ErrorObject& error_obj) const override;
+#endif  // VK_USE_PLATFORM_WAYLAND_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    bool PreCallValidateGetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+                                                                     const ErrorObject& error_obj) const override;
+#endif  // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_XCB_KHR
+    bool PreCallValidateGetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+                                                                   xcb_connection_t* connection, xcb_visualid_t visual_id,
+                                                                   const ErrorObject& error_obj) const override;
+#endif  // VK_USE_PLATFORM_XCB_KHR
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+    bool PreCallValidateGetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+                                                                    Display* dpy, VisualID visualID,
+                                                                    const ErrorObject& error_obj) const override;
+#endif  // VK_USE_PLATFORM_XLIB_KHR
+#ifdef VK_USE_PLATFORM_SCREEN_QNX
+    bool PreCallValidateGetPhysicalDeviceScreenPresentationSupportQNX(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+                                                                      struct _screen_window* window,
+                                                                      const ErrorObject& error_obj) const override;
+#endif  // VK_USE_PLATFORM_SCREEN_QNX
+};
+
+template <typename StateObject>
+bool ValidateVideoProfileInfo(const StateObject& state, const VkVideoProfileInfoKHR* profile, const ErrorObject& error_obj,
+                              const Location& loc);
+template <typename StateObject>
+bool ValidateVideoProfileListInfo(const StateObject& state, const VkVideoProfileListInfoKHR* profile_list,
+                                  const ErrorObject& error_obj, const Location& loc, bool expect_decode_profile,
+                                  const char* missing_decode_profile_msg_code, bool expect_encode_profile,
+                                  const char* missing_encode_profile_msg_code);
+}  // namespace core
+
+class CoreChecks : public vvl::Device {
+    using BaseClass = vvl::Device;
+
   public:
     using Func = vvl::Func;
     using Struct = vvl::Struct;
@@ -66,8 +201,8 @@ class CoreChecks : public ValidationStateTracker {
     spvtools::ValidatorOptions spirv_val_options;
     uint32_t spirv_val_option_hash;
 
-    CoreChecks(vvl::dispatch::Device* dev, CoreChecks* instance_vo) : BaseClass(dev, instance_vo, LayerObjectTypeCoreValidation) {}
-    CoreChecks(vvl::dispatch::Instance* inst) : BaseClass(inst, LayerObjectTypeCoreValidation) {}
+    CoreChecks(vvl::dispatch::Device* dev, core::Instance* instance_vo)
+        : BaseClass(dev, instance_vo, LayerObjectTypeCoreValidation) {}
 
     ReadLockGuard ReadLock() const override;
     WriteLockGuard WriteLock() override;
@@ -83,8 +218,6 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateComputePipelineDerivatives(PipelineStates& pipeline_states, uint32_t pipe_index, const Location& loc) const;
     bool ValidateMultiViewShaders(const vvl::Pipeline& pipeline, const Location& multiview_loc, uint32_t view_mask,
                                   bool dynamic_rendering) const;
-    bool ValidateDrawPipelineVertexAttribute(const vvl::CommandBuffer& cb_state, const vvl::Pipeline& pipeline,
-                                             const vvl::DrawDispatchVuid& vuid) const;
     bool ValidateGraphicsPipeline(const vvl::Pipeline& pipeline, const void* pipeline_ci_pnext,
                                   const Location& create_info_loc) const;
     bool ValidImageBufferQueue(const vvl::CommandBuffer& cb_state, const VulkanTypedHandle& object, uint32_t queueFamilyIndex,
@@ -141,11 +274,6 @@ class CoreChecks : public ValidationStateTracker {
                                          const VulkanTypedHandle& rp2_object, const vvl::RenderPass& rp2_state, const Location& loc,
                                          const char* vuid) const;
     bool ReportInvalidCommandBuffer(const vvl::CommandBuffer& cb_state, const Location& loc, const char* vuid) const;
-    bool ValidateQueueFamilyIndex(const vvl::PhysicalDevice& pd_state, uint32_t requested_queue_family, const char* vuid,
-                                  const Location& loc) const;
-    bool ValidateDeviceQueueCreateInfos(const vvl::PhysicalDevice& pd_state, uint32_t info_count,
-                                        const VkDeviceQueueCreateInfo* infos, const Location& loc) const;
-
     bool ValidateProtectedImage(const vvl::CommandBuffer& cb_state, const vvl::Image& image_state, const Location& image_loc,
                                 const char* vuid, const char* more_message = "") const override;
     bool ValidateUnprotectedImage(const vvl::CommandBuffer& cb_state, const vvl::Image& image_state, const Location& image_loc,
@@ -205,8 +333,8 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateAccessMask(const LogObjectList& objlist, const Location& access_mask_loc, const Location& stage_mask_loc,
                             VkQueueFlags queue_flags, VkAccessFlags2KHR access_mask, VkPipelineStageFlags2KHR stage_mask) const;
     bool ValidateMemoryBarrier(const LogObjectList& objlist, const Location& barrier_loc, const vvl::CommandBuffer& cb_state,
-                               const MemoryBarrier& barrier,
-                               OwnershipTransferOp ownership_transfer_op = OwnershipTransferOp::none) const;
+                               const MemoryBarrier& barrier, OwnershipTransferOp ownership_transfer_op = OwnershipTransferOp::none,
+                               VkDependencyFlags dependency_flags = 0) const;
 
     bool ValidateSubpassDependency(const ErrorObject& error_obj, const Location& loc, const VkSubpassDependency2& barrier) const;
 
@@ -258,8 +386,6 @@ class CoreChecks : public ValidationStateTracker {
                     VkImageUsageFlagBits usage_flag, const char* vuid, const Location& create_info_loc) const;
     bool ValidateBindImageMemory(uint32_t bindInfoCount, const VkBindImageMemoryInfo* pBindInfos,
                                  const ErrorObject& error_obj) const;
-    bool ValidateGetPhysicalDeviceDisplayPlanePropertiesKHRQuery(VkPhysicalDevice physicalDevice, uint32_t planeIndex,
-                                                                 const Location& loc) const;
     static bool VerifyQueryIsReset(const vvl::CommandBuffer& cb_state, const QueryObject& query_obj, Func command,
                                    VkQueryPool& firstPerfQueryPool, uint32_t perfPass, QueryMap* localQueryToStateMap);
     static bool ValidatePerformanceQuery(const vvl::CommandBuffer& cb_state, const QueryObject& query_obj, Func command,
@@ -399,12 +525,6 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateVideoPictureResource(const vvl::VideoPictureResource& picture_resource, VkCommandBuffer cmdbuf,
                                       const vvl::VideoSession& vs_state, const Location& loc,
                                       const char* coded_offset_vuid = nullptr, const char* coded_extent_vuid = nullptr) const;
-    template <typename HandleT>
-    bool ValidateVideoProfileInfo(const VkVideoProfileInfoKHR* profile, const HandleT object, const Location& loc) const;
-    template <typename HandleT>
-    bool ValidateVideoProfileListInfo(const VkVideoProfileListInfoKHR* profile_list, const HandleT object, const Location& loc,
-                                      bool expect_decode_profile, const char* missing_decode_profile_msg_code,
-                                      bool expect_encode_profile, const char* missing_encode_profile_msg_code) const;
     bool ValidateDecodeH264ParametersAddInfo(const vvl::VideoSession& vs_state,
                                              const VkVideoDecodeH264SessionParametersAddInfoKHR* add_info, VkDevice device,
                                              const Location& loc,
@@ -464,6 +584,9 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateImageBufferCopyMemoryOverlap(const vvl::CommandBuffer& cb_state, const RegionType& region,
                                               const vvl::Image& image_state, const vvl::Buffer& buffer_state,
                                               const Location& region_loc) const;
+    bool ValidateQueueFamilySupport(const vvl::CommandBuffer& cb_state, const vvl::PhysicalDevice& physical_device_state,
+                                    VkImageAspectFlags aspectMask, const vvl::Image& image_state, const Location& aspect_mask_loc,
+                                    const char* vuid) const;
     bool ValidateCmdSubpassState(const vvl::CommandBuffer& cb_state, const Location& loc, const char* vuid) const;
     bool ValidateCmd(const vvl::CommandBuffer& cb_state, const Location& loc) const;
     bool ValidateIndirectCmd(const vvl::CommandBuffer& cb_state, const vvl::Buffer& buffer_state, const Location& loc) const;
@@ -510,25 +633,16 @@ class CoreChecks : public ValidationStateTracker {
                                     QFOTransferCBScoreboards<QFOBufferTransferBarrier>* qfo_buffer_scoreboards,
                                     const Location& loc) const;
 
-    template <typename Barrier, typename Scoreboard>
-    bool ValidateAndUpdateQFOScoreboard(const vvl::CommandBuffer& cb_state, const char* operation, const Barrier& barrier,
-                                        Scoreboard* scoreboard, const Location& loc) const;
-
     void RecordBarrierValidationInfo(const Location& loc, vvl::CommandBuffer& cb_state, const BufferBarrier& barrier,
                                      QFOTransferBarrierSets<QFOBufferTransferBarrier>& barrier_sets);
     void RecordBarrierValidationInfo(const Location& loc, vvl::CommandBuffer& cb_state, const ImageBarrier& barrier,
                                      QFOTransferBarrierSets<QFOImageTransferBarrier>& barrier_sets);
 
-    template <typename Barrier, typename TransferBarrier>
-    bool ValidateQFOTransferBarrierUniqueness(const Location& barrier_loc, const vvl::CommandBuffer& cb_state,
-                                              const Barrier& barrier,
-                                              const QFOTransferBarrierSets<TransferBarrier>& barrier_sets) const;
-
     bool ValidatePrimaryCommandBufferState(const Location& loc, const vvl::CommandBuffer& cb_state, uint32_t current_submit_count,
                                            QFOTransferCBScoreboards<QFOImageTransferBarrier>* qfo_image_scoreboards,
                                            QFOTransferCBScoreboards<QFOBufferTransferBarrier>* qfo_buffer_scoreboards) const;
     bool ValidateDrawPipelineRenderpass(const LastBound& last_bound_state, const vvl::Pipeline& pipeline,
-                                        const vvl::DrawDispatchVuid& vuid) const;
+                                        const vvl::RenderPass& rp_state, const vvl::DrawDispatchVuid& vuid) const;
     bool ValidateDrawPipelineDynamicRenderpass(const LastBound& last_bound_state, const vvl::Pipeline& pipeline,
                                                const VkRenderingInfo& rendering_info, const vvl::DrawDispatchVuid& vuid) const;
     bool ValidateDrawPipelineDynamicRenderpassSampleCount(const LastBound& last_bound_state, const vvl::Pipeline& pipeline,
@@ -734,7 +848,6 @@ class CoreChecks : public ValidationStateTracker {
 
     // Auto-generated helper functions
     bool ValidateShaderCapabilitiesAndExtensions(const spirv::Instruction& insn, const Location& loc) const;
-    VkFormat CompatibleSpirvImageFormat(uint32_t spirv_image_format) const;
 
     bool ValidateShaderStageInputOutputLimits(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
                                               const spirv::StatelessData& stateless_data, const Location& loc) const;
@@ -749,6 +862,8 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateCooperativeMatrix(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
                                    const ShaderStageState& stage_state, const uint32_t local_size_x, const uint32_t local_size_y,
                                    const uint32_t local_size_z, const Location& loc) const;
+    bool ValidateCooperativeVector(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
+                                   const ShaderStageState& stage_state, const Location& loc) const;
     bool ValidateShaderResolveQCOM(const spirv::Module& module_state, VkShaderStageFlagBits stage, const vvl::Pipeline& pipeline,
                                    const Location& loc) const;
     bool ValidateShaderSubgroupSizeControl(VkShaderStageFlagBits stage, const ShaderStageState& stage_state,
@@ -763,6 +878,9 @@ class CoreChecks : public ValidationStateTracker {
                                     const spirv::StatelessData& stateless_data, const Location& loc) const;
     bool ValidateExecutionModes(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
                                 const spirv::StatelessData& stateless_data, const Location& loc) const;
+    bool ValidatePhysicalStorageBuffers(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
+                                        const Location& loc) const;
+    bool Validate8And16BitStorage(const spirv::Module& module_state, const spirv::Instruction& var_insn, const Location& loc) const;
     bool ValidateShaderExecutionModes(const spirv::Module& module_state, const spirv::EntryPoint& entrypoint,
                                       VkShaderStageFlagBits stage, const vvl::Pipeline* pipeline, const Location& loc) const;
     bool ValidateInterfaceVertexInput(const vvl::Pipeline& pipeline, const spirv::Module& module_state,
@@ -1050,9 +1168,9 @@ class CoreChecks : public ValidationStateTracker {
 
     void UpdateCmdBufImageLayouts(const vvl::CommandBuffer& cb_state);
 
-    bool VerifyBoundMemoryIsValid(const vvl::DeviceMemory* mem_state, const LogObjectList& objlist,
+    bool VerifyBoundMemoryIsValid(const vvl::DeviceMemory* memory_state, const LogObjectList& objlist,
                                   const VulkanTypedHandle& typed_handle, const Location& loc, const char* vuid) const;
-    bool VerifyBoundMemoryIsDeviceVisible(const vvl::DeviceMemory* mem_state, const LogObjectList& objlist,
+    bool VerifyBoundMemoryIsDeviceVisible(const vvl::DeviceMemory* memory_state, const LogObjectList& objlist,
                                           const VulkanTypedHandle& typed_handle, const Location& loc, const char* vuid) const;
 
     bool ValidateLayoutVsAttachmentDescription(const VkImageLayout first_layout, const uint32_t attachment,
@@ -1247,10 +1365,10 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidatePhysicalDeviceQueueFamilies(uint32_t queue_family_count, const uint32_t* queue_families, const Location& loc,
                                              const char* vuid) const;
     bool ValidateAllocateMemoryANDROID(const VkMemoryAllocateInfo& allocate_info, const Location& allocate_info_loc) const;
+    bool ValidateAllocateMemoryMetal(const VkMemoryAllocateInfo& allocate_info,
+                                     const VkMemoryDedicatedAllocateInfo* dedicated_allocation_info,
+                                     const Location& allocate_info_loc) const;
     bool ValidateGetImageMemoryRequirementsANDROID(const VkImage image, const Location& loc) const;
-    bool ValidateGetPhysicalDeviceImageFormatProperties2ANDROID(const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
-                                                                const VkImageFormatProperties2* pImageFormatProperties,
-                                                                const ErrorObject& error_obj) const;
     bool ValidateBufferImportedHandleANDROID(VkExternalMemoryHandleTypeFlags handle_types, VkDeviceMemory memory, VkBuffer buffer,
                                              const Location& loc) const;
     bool ValidateImageImportedHandleANDROID(VkExternalMemoryHandleTypeFlags handle_types, VkDeviceMemory memory, VkImage image,
@@ -1296,9 +1414,6 @@ class CoreChecks : public ValidationStateTracker {
     void PostCallRecordAllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo,
                                               VkDescriptorSet* pDescriptorSets, const RecordObject& record_obj,
                                               vvl::AllocateDescriptorSetsData& ads_state) override;
-    void PostCallRecordAllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo,
-                                      const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory,
-                                      const RecordObject& record_obj) override;
     bool PreCallValidateCreateRayTracingPipelinesNV(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
                                                     const VkRayTracingPipelineCreateInfoNV* pCreateInfos,
                                                     const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
@@ -1342,10 +1457,7 @@ class CoreChecks : public ValidationStateTracker {
                                                  const ErrorObject& error_obj) const override;
     bool ValidateDeferredOperation(VkDevice device, VkDeferredOperationKHR deferred_operation, const Location& loc,
                                    const char* vuid) const;
-    bool PreCallValidateCreateDevice(VkPhysicalDevice gpu, const VkDeviceCreateInfo* pCreateInfo,
-                                     const VkAllocationCallbacks* pAllocator, VkDevice* pDevice,
-                                     const ErrorObject& error_obj) const override;
-    void PostCreateDevice(const VkDeviceCreateInfo* pCreateInfo, const Location& loc) override;
+    void FinishDeviceSetup(const VkDeviceCreateInfo* pCreateInfo, const Location& loc) override;
     bool PreCallValidateCmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset,
                                         VkDeviceSize dataSize, const void* pData, const ErrorObject& error_obj) const override;
     bool PreCallValidateGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue,
@@ -1433,17 +1545,6 @@ class CoreChecks : public ValidationStateTracker {
     bool PreCallValidateGetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2* pInfo,
                                                        VkMemoryRequirements2* pMemoryRequirements,
                                                        const ErrorObject& error_obj) const override;
-    bool ValidateGetPhysicalDeviceImageFormatProperties2(const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
-                                                         VkImageFormatProperties2* pImageFormatProperties,
-                                                         const ErrorObject& error_obj) const;
-    bool PreCallValidateGetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
-                                                                const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
-                                                                VkImageFormatProperties2* pImageFormatProperties,
-                                                                const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceImageFormatProperties2KHR(VkPhysicalDevice physicalDevice,
-                                                                   const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
-                                                                   VkImageFormatProperties2* pImageFormatProperties,
-                                                                   const ErrorObject& error_obj) const override;
     bool GetPhysicalDeviceImageFormatProperties(vvl::Image& image_state, const char* vuid_string, const Location& loc) const;
     bool PreCallValidateDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks* pAllocator,
                                         const ErrorObject& error_obj) const override;
@@ -1527,6 +1628,8 @@ class CoreChecks : public ValidationStateTracker {
     bool PreCallValidateEndCommandBuffer(VkCommandBuffer commandBuffer, const ErrorObject& error_obj) const override;
     bool PreCallValidateResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags,
                                            const ErrorObject& error_obj) const override;
+    bool ValidateCmdBindPipelineRenderPassMultisample(const vvl::CommandBuffer& cb_state, const vvl::Pipeline& pipeline_state,
+                                                      const vvl::RenderPass& rp_state, const Location& loc) const;
     bool PreCallValidateCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline,
                                         const ErrorObject& error_obj) const override;
     bool PreCallValidateCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT* pCreateInfos,
@@ -1896,6 +1999,10 @@ class CoreChecks : public ValidationStateTracker {
                                           const ErrorObject& error_obj) const override;
     void PostCallRecordCmdEndRenderPass2(VkCommandBuffer commandBuffer, const VkSubpassEndInfo* pSubpassEndInfo,
                                          const RecordObject& record_obj) override;
+    bool ValidateFragmentDensityMapOffsetEnd(const vvl::CommandBuffer& cb_state, const vvl::RenderPass& rp_state,
+                                             const VkSubpassFragmentDensityMapOffsetEndInfoQCOM& fdm_offset_end_info,
+                                             const Location& subpass_end_loc) const;
+
     class ViewportScissorInheritanceTracker;
     bool PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBuffersCount,
                                            const VkCommandBuffer* pCommandBuffers, const ErrorObject& error_obj) const override;
@@ -1956,6 +2063,14 @@ class CoreChecks : public ValidationStateTracker {
                                                        const VkSemaphoreGetZirconHandleInfoFUCHSIA* pGetZirconHandleInfo,
                                                        zx_handle_t* pZirconHandle, const RecordObject& record_obj) override;
 #endif
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    bool PreCallValidateGetMemoryMetalHandleEXT(VkDevice device, const VkMemoryGetMetalHandleInfoEXT* pGetMetalHandleInfo,
+                                                void** pHandle, const ErrorObject& error_obj) const override;
+    bool PreCallValidateGetMemoryMetalHandlePropertiesEXT(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType,
+                                                          const void* handle,
+                                                          VkMemoryMetalHandlePropertiesEXT* pMemoryMetalHandleProperties,
+                                                          const ErrorObject& error_obj) const override;
+#endif  // VK_USE_PLATFORM_METAL_EXT
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     bool PreCallValidateGetMemoryWin32HandleKHR(VkDevice device, const VkMemoryGetWin32HandleInfoKHR* pGetWin32HandleInfo,
                                                 HANDLE* pHandle, const ErrorObject& error_obj) const override;
@@ -2003,11 +2118,6 @@ class CoreChecks : public ValidationStateTracker {
                                              const ErrorObject& error_obj) const override;
     bool PreCallValidateWaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t presentId, uint64_t timeout,
                                           const ErrorObject& error_obj) const override;
-    bool PreCallValidateDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator,
-                                          const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-                                                           VkSurfaceKHR surface, VkBool32* pSupported,
-                                                           const ErrorObject& error_obj) const override;
     bool PreCallValidateCreateDescriptorUpdateTemplate(VkDevice device, const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo,
                                                        const VkAllocationCallbacks* pAllocator,
                                                        VkDescriptorUpdateTemplate* pDescriptorUpdateTemplate,
@@ -2039,19 +2149,6 @@ class CoreChecks : public ValidationStateTracker {
                                                             VkDescriptorUpdateTemplate descriptorUpdateTemplate,
                                                             VkPipelineLayout layout, uint32_t set, const void* pData,
                                                             const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex,
-                                                            uint32_t* pDisplayCount, VkDisplayKHR* pDisplays,
-                                                            const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex,
-                                                       VkDisplayPlaneCapabilitiesKHR* pCapabilities,
-                                                       const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetDisplayPlaneCapabilities2KHR(VkPhysicalDevice physicalDevice,
-                                                        const VkDisplayPlaneInfo2KHR* pDisplayPlaneInfo,
-                                                        VkDisplayPlaneCapabilities2KHR* pCapabilities,
-                                                        const ErrorObject& error_obj) const override;
-    bool PreCallValidateCreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo,
-                                                     const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface,
-                                                     const ErrorObject& error_obj) const override;
     bool PreCallValidateCmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer, const ErrorObject& error_obj) const override;
 
     bool PreCallValidateCmdBeginQueryIndexedEXT(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query,
@@ -2064,18 +2161,6 @@ class CoreChecks : public ValidationStateTracker {
     void PreCallRecordCmdEndQueryIndexedEXT(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query, uint32_t index,
                                             const RecordObject& record_obj) override;
 
-    bool PreCallValidateGetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice,
-                                                              const VkVideoProfileInfoKHR* pVideoProfile,
-                                                              VkVideoCapabilitiesKHR* pCapabilities,
-                                                              const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
-                                                                  const VkPhysicalDeviceVideoFormatInfoKHR* pVideoFormatInfo,
-                                                                  uint32_t* pVideoFormatPropertyCount,
-                                                                  VkVideoFormatPropertiesKHR* pVideoFormatProperties,
-                                                                  const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(
-        VkPhysicalDevice physicalDevice, const VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR* pQualityLevelInfo,
-        VkVideoEncodeQualityLevelPropertiesKHR* pQualityLevelProperties, const ErrorObject& error_obj) const override;
     bool PreCallValidateCreateVideoSessionKHR(VkDevice device, const VkVideoSessionCreateInfoKHR* pCreateInfo,
                                               const VkAllocationCallbacks* pAllocator, VkVideoSessionKHR* pVideoSession,
                                               const ErrorObject& error_obj) const override;
@@ -2471,43 +2556,14 @@ class CoreChecks : public ValidationStateTracker {
                                                           const ErrorObject& error_obj) const override;
 #endif
 
-    bool ValidatePhysicalDeviceSurfaceSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, const char* vuid,
-                                              const Location& loc) const;
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     bool PreCallValidateGetDeviceGroupSurfacePresentModes2EXT(VkDevice device, const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo,
                                                               VkDeviceGroupPresentModeFlagsKHR* pModes,
                                                               const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceSurfacePresentModes2EXT(VkPhysicalDevice physicalDevice,
-                                                                 const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo,
-                                                                 uint32_t* pPresentModeCount, VkPresentModeKHR* pPresentModes,
-                                                                 const ErrorObject& error_obj) const override;
 #endif
     bool PreCallValidateGetDeviceGroupSurfacePresentModesKHR(VkDevice device, VkSurfaceKHR surface,
                                                              VkDeviceGroupPresentModeFlagsKHR* pModes,
                                                              const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-                                                              uint32_t* pRectCount, VkRect2D* pRects,
-                                                              const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceSurfaceCapabilities2EXT(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-                                                                 VkSurfaceCapabilities2EXT* pSurfaceCapabilities,
-                                                                 const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDevice,
-                                                                 const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo,
-                                                                 VkSurfaceCapabilities2KHR* pSurfaceCapabilities,
-                                                                 const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-                                                                VkSurfaceCapabilitiesKHR* pSurfaceCapabilities,
-                                                                const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physicalDevice,
-                                                            const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo,
-                                                            uint32_t* pSurfaceFormatCount, VkSurfaceFormat2KHR* pSurfaceFormats,
-                                                            const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-                                                           uint32_t* pSurfaceFormatCount, VkSurfaceFormatKHR* pSurfaceFormats,
-                                                           const ErrorObject& error_obj) const override;
-    bool PreCallValidateGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-                                                                uint32_t* pPresentModeCount, VkPresentModeKHR* pPresentModes,
-                                                                const ErrorObject& error_obj) const override;
     void PostCallRecordGetQueryPoolResults(VkDevice device, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount,
                                            size_t dataSize, void* pData, VkDeviceSize stride, VkQueryResultFlags flags,
                                            const RecordObject& record_obj) override;
@@ -2694,30 +2750,17 @@ class CoreChecks : public ValidationStateTracker {
                                                               struct AHardwareBuffer** pBuffer,
                                                               const ErrorObject& error_obj) const override;
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    bool PreCallValidateGetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-                                                                       struct wl_display* display,
-                                                                       const ErrorObject& error_obj) const override;
-#endif  // VK_USE_PLATFORM_WAYLAND_KHR
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-    bool PreCallValidateGetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-                                                                     const ErrorObject& error_obj) const override;
-#endif  // VK_USE_PLATFORM_WIN32_KHR
-#ifdef VK_USE_PLATFORM_XCB_KHR
-    bool PreCallValidateGetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-                                                                   xcb_connection_t* connection, xcb_visualid_t visual_id,
-                                                                   const ErrorObject& error_obj) const override;
-#endif  // VK_USE_PLATFORM_XCB_KHR
-#ifdef VK_USE_PLATFORM_XLIB_KHR
-    bool PreCallValidateGetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-                                                                    Display* dpy, VisualID visualID,
-                                                                    const ErrorObject& error_obj) const override;
-#endif  // VK_USE_PLATFORM_XLIB_KHR
-#ifdef VK_USE_PLATFORM_SCREEN_QNX
-    bool PreCallValidateGetPhysicalDeviceScreenPresentationSupportQNX(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-                                                                      struct _screen_window* window,
-                                                                      const ErrorObject& error_obj) const override;
-#endif  // VK_USE_PLATFORM_SCREEN_QNX
+
+    bool ValidateVkConvertCooperativeVectorMatrixInfoNV(const LogObjectList& objlist,
+                                                        const VkConvertCooperativeVectorMatrixInfoNV& info,
+                                                        const Location& info_loc) const;
+
+    bool PreCallValidateConvertCooperativeVectorMatrixNV(VkDevice device, const VkConvertCooperativeVectorMatrixInfoNV* pInfo,
+                                                         const ErrorObject& error_obj) const override;
+    bool PreCallValidateCmdConvertCooperativeVectorMatrixNV(VkCommandBuffer commandBuffer, uint32_t infoCount,
+                                                            const VkConvertCooperativeVectorMatrixInfoNV* pInfos,
+                                                            const ErrorObject& error_obj) const override;
+
     std::shared_ptr<vvl::CommandBuffer> CreateCmdBufferState(VkCommandBuffer handle,
                                                              const VkCommandBufferAllocateInfo* pAllocateInfo,
                                                              const vvl::CommandPool* pool) final;

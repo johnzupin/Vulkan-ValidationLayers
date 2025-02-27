@@ -682,6 +682,10 @@ class BufferView : public internal::NonDispHandle<VkBufferView> {
   public:
     BufferView() = default;
     BufferView(const Device &dev, const VkBufferViewCreateInfo &info) { init(dev, info); }
+    BufferView(const Device &dev, VkBuffer buffer, VkFormat format, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE) {
+        VkBufferViewCreateInfo buffer_view_ci = CreateInfo(buffer, format, offset, range);
+        init(dev, buffer_view_ci);
+    }
     ~BufferView() noexcept;
     void destroy() noexcept;
 
@@ -892,8 +896,11 @@ class ShaderModule : public internal::NonDispHandle<VkShaderModule> {
 class Shader : public internal::NonDispHandle<VkShaderEXT> {
   public:
     Shader() = default;
+    Shader(const Device &dev, VkShaderEXT shader) { NonDispHandle::init(dev.handle(), shader); }
     Shader(const Device &dev, const VkShaderCreateInfoEXT &info) { init(dev, info); }
     Shader(const Device &dev, const VkShaderStageFlagBits stage, const std::vector<uint32_t> &spv,
+           const VkDescriptorSetLayout *descriptorSetLayout = nullptr, const VkPushConstantRange *pushConstRange = nullptr);
+    Shader(const Device &dev, const VkShaderStageFlagBits stage, const char* code,
            const VkDescriptorSetLayout *descriptorSetLayout = nullptr, const VkPushConstantRange *pushConstRange = nullptr);
     Shader(const Device &dev, const VkShaderStageFlagBits stage, const std::vector<uint8_t> &binary,
            const VkDescriptorSetLayout *descriptorSetLayout = nullptr, const VkPushConstantRange *pushConstRange = nullptr);
@@ -1162,8 +1169,15 @@ class CommandBuffer : public internal::Handle<VkCommandBuffer> {
     void BeginRenderingColor(const VkImageView imageView, VkRect2D render_area);
     void EndRendering();
 
-    void BindVertFragShader(const vkt::Shader &vert_shader, const vkt::Shader &frag_shader);
+    void BindShaders(const vkt::Shader &vert_shader, const vkt::Shader &frag_shader);
+    void BindShaders(const vkt::Shader &vert_shader, const vkt::Shader &geom_shader, const vkt::Shader &frag_shader);
+    void BindShaders(const vkt::Shader &vert_shader, const vkt::Shader &tesc_shader, const vkt::Shader &tese_shader,
+                     const vkt::Shader &frag_shader);
+    void BindShaders(const vkt::Shader &vert_shader, const vkt::Shader &tesc_shader, const vkt::Shader &tese_shader,
+                     const vkt::Shader &geom_shader, const vkt::Shader &frag_shader);
     void BindCompShader(const vkt::Shader &comp_shader);
+    void BindMeshShaders(const vkt::Shader &mesh_shader, const vkt::Shader &frag_shader);
+    void BindMeshShaders(const vkt::Shader &task_shader, const vkt::Shader &mesh_shader, const vkt::Shader &frag_shader);
 
     void BeginVideoCoding(const VkVideoBeginCodingInfoKHR &beginInfo);
     void ControlVideoCoding(const VkVideoCodingControlInfoKHR &controlInfo);
@@ -1183,6 +1197,8 @@ class CommandBuffer : public internal::Handle<VkCommandBuffer> {
 
     void Copy(const Buffer &src, const Buffer &dst);
     void ExecuteCommands(const CommandBuffer &secondary);
+
+    void FullMemoryBarrier();
 
   private:
     VkDevice dev_handle_;
@@ -1493,6 +1509,13 @@ class Surface {
         handle_ = src.handle_;
         src.handle_ = {};
         return *this;
+    }
+
+    // This is ONLY for tests that need a way test destroying an instance and leak the Surface object (and calling
+    // vkDestroySurfaceKHR will be invalid)
+    void DestroyExplicitly() {
+        handle_ = VK_NULL_HANDLE;
+        instance_ = VK_NULL_HANDLE;
     }
 
   private:

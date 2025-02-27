@@ -7,7 +7,7 @@
             "sub_dir": "Vulkan-Headers",
             "build_dir": "Vulkan-Headers/build",
             "install_dir": "Vulkan-Headers/build/install",
-            "commit": "v1.4.304"
+            "commit": "v1.4.309"
         },
         {
             "name": "Vulkan-Utility-Libraries",
@@ -15,7 +15,7 @@
             "sub_dir": "Vulkan-Utility-Libraries",
             "build_dir": "Vulkan-Utility-Libraries/build",
             "install_dir": "Vulkan-Utility-Libraries/build/install",
-            "commit": "v1.4.304",
+            "commit": "v1.4.309",
             "deps": [
                 {
                     "var_name": "VULKAN_HEADERS_INSTALL_DIR",
@@ -29,7 +29,7 @@
             "sub_dir": "SPIRV-Headers",
             "build_dir": "SPIRV-Headers/build",
             "install_dir": "SPIRV-Headers/build/install",
-            "commit": "3f17b2af6784bfa2c5aa5dbb8e0e74a607dd8b3b"
+            "commit": "09913f088a1197aba4aefd300a876b2ebbaa3391"
         },
         {
             "name": "SPIRV-Tools",
@@ -43,7 +43,7 @@
                 "-DSPIRV_SKIP_TESTS=ON",
                 "-DSPIRV_SKIP_EXECUTABLES=OFF"
             ],
-            "commit": "4d2f0b40bfe290dea6c6904dafdf7fd8328ba346"
+            "commit": "dc1641d168304d3ef97bba23d5fc45c9bead45f5"
         },
         {
             "name": "robin-hood-hashing",
@@ -95,7 +95,7 @@
             "sub_dir": "glslang",
             "build_dir": "glslang/build",
             "install_dir": "glslang/build/install",
-            "commit": "b3a6aa7b03c51ba976e4f4e96b1e31f77f43f312",
+            "commit": "00ac5651f528d84cc3cf7320b34407bce7d38d93",
             "cmake_options": [
                 "-DENABLE_OPT=OFF"
             ],
@@ -110,7 +110,7 @@
             "sub_dir": "Vulkan-Loader",
             "build_dir": "Vulkan-Loader/build",
             "install_dir": "Vulkan-Loader/build/install",
-            "commit": "v1.4.304",
+            "commit": "v1.4.309",
             "build_step": "skip",
             "optional": [
                 "tests"
@@ -123,7 +123,7 @@
             "sub_dir": "Vulkan-Profiles",
             "build_dir": "Vulkan-Profiles/build",
             "install_dir": "Vulkan-Profiles/build/install",
-            "commit": "515c10b31404ee0ec5337a092d6e28e7ce152358",
+            "commit": "v1.4.306",
             "build_step": "skip",
             "optional": [
                 "tests"
@@ -136,7 +136,7 @@
             "sub_dir": "Vulkan-Tools",
             "build_dir": "Vulkan-Tools/build",
             "install_dir": "Vulkan-Tools/build/install",
-            "commit": "v1.4.304",
+            "commit": "v1.4.309",
             "build_step": "skip",
             "optional": [
                 "tests"

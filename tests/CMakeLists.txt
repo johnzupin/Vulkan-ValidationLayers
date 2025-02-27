@@ -73,6 +73,8 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/buffer_positive.cpp
     unit/command.cpp
     unit/command_positive.cpp
+    unit/cooperative_vector.cpp
+    unit/cooperative_vector_positive.cpp
     unit/copy_buffer_image.cpp
     unit/copy_buffer_image_positive.cpp
     unit/debug_extensions.cpp
@@ -97,6 +99,7 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/dynamic_rendering_local_read_positive.cpp
     unit/dynamic_state.cpp
     unit/dynamic_state_positive.cpp
+    unit/external_memory_metal.cpp
     unit/external_memory_sync.cpp
     unit/external_memory_sync_positive.cpp
     unit/fragment_shading_rate.cpp
@@ -106,6 +109,8 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/gpu_av.cpp
     unit/gpu_av_buffer_device_address.cpp
     unit/gpu_av_buffer_device_address_positive.cpp
+    unit/gpu_av_cooperative_vector.cpp
+    unit/gpu_av_cooperative_vector_positive.cpp
     unit/gpu_av_debug_printf.cpp
     unit/gpu_av_descriptor_buffer_positive.cpp
     unit/gpu_av_descriptor_class_general_buffer.cpp
@@ -195,6 +200,7 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/shader_compute_positive.cpp
     unit/shader_cooperative_matrix.cpp
     unit/shader_cooperative_matrix_positive.cpp
+    unit/shader_debug_info.cpp
     unit/shader_image_access.cpp
     unit/shader_image_access_positive.cpp
     unit/shader_interface.cpp
@@ -224,8 +230,12 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/sync_val.cpp
     unit/sync_val_positive.cpp
     unit/sync_val_reporting.cpp
+    unit/sync_val_ray_tracing.cpp
+    unit/sync_val_ray_tracing_positive.cpp
     unit/sync_val_semaphore.cpp
     unit/sync_val_semaphore_positive.cpp
+    unit/sync_val_video.cpp
+    unit/sync_val_video_positive.cpp
     unit/sync_val_wsi.cpp
     unit/sync_val_wsi_positive.cpp
     unit/threading.cpp
@@ -237,6 +247,24 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/vertex_input_positive.cpp
     unit/video.cpp
     unit/video_positive.cpp
+    unit/video_decode.cpp
+    unit/video_decode_positive.cpp
+    unit/video_decode_av1.cpp
+    unit/video_decode_av1_positive.cpp
+    unit/video_decode_h264.cpp
+    unit/video_decode_h264_positive.cpp
+    unit/video_decode_h265.cpp
+    unit/video_decode_h265_positive.cpp
+    unit/video_encode.cpp
+    unit/video_encode_positive.cpp
+    unit/video_encode_av1.cpp
+    unit/video_encode_av1_positive.cpp
+    unit/video_encode_h264.cpp
+    unit/video_encode_h264_positive.cpp
+    unit/video_encode_h265.cpp
+    unit/video_encode_h265_positive.cpp
+    unit/video_encode_quantization_map.cpp
+    unit/video_encode_quantization_map_positive.cpp
     unit/viewport_inheritance.cpp
     unit/wsi.cpp
     unit/wsi_positive.cpp
@@ -328,6 +356,5 @@ install(TARGETS vk_layer_validation_tests)
 include(GoogleTest)
 gtest_discover_tests(vk_layer_validation_tests DISCOVERY_TIMEOUT 100)
 
-add_subdirectory(spirv)
 add_subdirectory(layers)
 add_subdirectory(icd)

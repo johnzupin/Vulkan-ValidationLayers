@@ -3,9 +3,9 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  * Copyright (c) 2015-2024 Google Inc.
  * Copyright (c) 2023-2024 RasterGrid Kft.
  *
@@ -41,17 +41,18 @@
 #include "object_tracker/object_lifetime_validation.h"
 #include "core_checks/core_validation.h"
 #include "best_practices/best_practices_validation.h"
-#include "gpu/core/gpuav.h"
+#include "gpuav/core/gpuav.h"
 #include "sync/sync_validation.h"
 
 namespace vvl {
 namespace dispatch {
 
 void Device::InitObjectDispatchVectors() {
-#define BUILD_DISPATCH_VECTOR(name)                                                                                            \
-    init_object_dispatch_vector(InterceptId##name, typeid(&ValidationObject::name), typeid(&ThreadSafety::name),               \
-                                typeid(&StatelessValidation::name), typeid(&ObjectLifetimes::name), typeid(&CoreChecks::name), \
-                                typeid(&BestPractices::name), typeid(&gpuav::Validator::name), typeid(&SyncValidator::name));
+#define BUILD_DISPATCH_VECTOR(name)                                                                                       \
+    init_object_dispatch_vector(InterceptId##name, typeid(&vvl::base::Device::name), typeid(&threadsafety::Device::name), \
+                                typeid(&stateless::Device::name), typeid(&object_lifetimes::Device::name),                \
+                                typeid(&CoreChecks::name), typeid(&BestPractices::name), typeid(&gpuav::Validator::name), \
+                                typeid(&SyncValidator::name));
 
     auto init_object_dispatch_vector = [this](InterceptId id, const std::type_info& vo_typeid, const std::type_info& tt_typeid,
                                               const std::type_info& tpv_typeid, const std::type_info& tot_typeid,
@@ -1769,6 +1770,12 @@ void Device::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallValidateGetDynamicRenderingTilePropertiesQCOM);
     BUILD_DISPATCH_VECTOR(PreCallRecordGetDynamicRenderingTilePropertiesQCOM);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetDynamicRenderingTilePropertiesQCOM);
+    BUILD_DISPATCH_VECTOR(PreCallValidateConvertCooperativeVectorMatrixNV);
+    BUILD_DISPATCH_VECTOR(PreCallRecordConvertCooperativeVectorMatrixNV);
+    BUILD_DISPATCH_VECTOR(PostCallRecordConvertCooperativeVectorMatrixNV);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdConvertCooperativeVectorMatrixNV);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdConvertCooperativeVectorMatrixNV);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdConvertCooperativeVectorMatrixNV);
     BUILD_DISPATCH_VECTOR(PreCallValidateSetLatencySleepModeNV);
     BUILD_DISPATCH_VECTOR(PreCallRecordSetLatencySleepModeNV);
     BUILD_DISPATCH_VECTOR(PostCallRecordSetLatencySleepModeNV);
@@ -1792,6 +1799,18 @@ void Device::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallRecordGetScreenBufferPropertiesQNX);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetScreenBufferPropertiesQNX);
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+    BUILD_DISPATCH_VECTOR(PreCallValidateGetClusterAccelerationStructureBuildSizesNV);
+    BUILD_DISPATCH_VECTOR(PreCallRecordGetClusterAccelerationStructureBuildSizesNV);
+    BUILD_DISPATCH_VECTOR(PostCallRecordGetClusterAccelerationStructureBuildSizesNV);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdBuildClusterAccelerationStructureIndirectNV);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdBuildClusterAccelerationStructureIndirectNV);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdBuildClusterAccelerationStructureIndirectNV);
+    BUILD_DISPATCH_VECTOR(PreCallValidateGetPartitionedAccelerationStructuresBuildSizesNV);
+    BUILD_DISPATCH_VECTOR(PreCallRecordGetPartitionedAccelerationStructuresBuildSizesNV);
+    BUILD_DISPATCH_VECTOR(PostCallRecordGetPartitionedAccelerationStructuresBuildSizesNV);
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdBuildPartitionedAccelerationStructuresNV);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdBuildPartitionedAccelerationStructuresNV);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdBuildPartitionedAccelerationStructuresNV);
     BUILD_DISPATCH_VECTOR(PreCallValidateGetGeneratedCommandsMemoryRequirementsEXT);
     BUILD_DISPATCH_VECTOR(PreCallRecordGetGeneratedCommandsMemoryRequirementsEXT);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetGeneratedCommandsMemoryRequirementsEXT);
@@ -1819,6 +1838,14 @@ void Device::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallValidateUpdateIndirectExecutionSetShaderEXT);
     BUILD_DISPATCH_VECTOR(PreCallRecordUpdateIndirectExecutionSetShaderEXT);
     BUILD_DISPATCH_VECTOR(PostCallRecordUpdateIndirectExecutionSetShaderEXT);
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    BUILD_DISPATCH_VECTOR(PreCallValidateGetMemoryMetalHandleEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordGetMemoryMetalHandleEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordGetMemoryMetalHandleEXT);
+    BUILD_DISPATCH_VECTOR(PreCallValidateGetMemoryMetalHandlePropertiesEXT);
+    BUILD_DISPATCH_VECTOR(PreCallRecordGetMemoryMetalHandlePropertiesEXT);
+    BUILD_DISPATCH_VECTOR(PostCallRecordGetMemoryMetalHandlePropertiesEXT);
+#endif  // VK_USE_PLATFORM_METAL_EXT
     BUILD_DISPATCH_VECTOR(PreCallValidateCreateAccelerationStructureKHR);
     BUILD_DISPATCH_VECTOR(PreCallRecordCreateAccelerationStructureKHR);
     BUILD_DISPATCH_VECTOR(PostCallRecordCreateAccelerationStructureKHR);

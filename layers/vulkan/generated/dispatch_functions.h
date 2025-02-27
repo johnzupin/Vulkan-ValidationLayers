@@ -25,6 +25,8 @@
 // This file contains contains convience functions for non-chassis code that needs to
 // make vulkan calls.
 
+#pragma once
+
 #include "chassis/dispatch_object.h"
 
 static inline void DispatchDestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) {
@@ -4094,6 +4096,25 @@ static inline VkResult DispatchGetDynamicRenderingTilePropertiesQCOM(VkDevice de
     return dispatch->GetDynamicRenderingTilePropertiesQCOM(device, pRenderingInfo, pProperties);
 }
 
+static inline VkResult DispatchGetPhysicalDeviceCooperativeVectorPropertiesNV(VkPhysicalDevice physicalDevice,
+                                                                              uint32_t* pPropertyCount,
+                                                                              VkCooperativeVectorPropertiesNV* pProperties) {
+    auto dispatch = vvl::dispatch::GetData(physicalDevice);
+    return dispatch->GetPhysicalDeviceCooperativeVectorPropertiesNV(physicalDevice, pPropertyCount, pProperties);
+}
+
+static inline VkResult DispatchConvertCooperativeVectorMatrixNV(VkDevice device,
+                                                                const VkConvertCooperativeVectorMatrixInfoNV* pInfo) {
+    auto dispatch = vvl::dispatch::GetData(device);
+    return dispatch->ConvertCooperativeVectorMatrixNV(device, pInfo);
+}
+
+static inline void DispatchCmdConvertCooperativeVectorMatrixNV(VkCommandBuffer commandBuffer, uint32_t infoCount,
+                                                               const VkConvertCooperativeVectorMatrixInfoNV* pInfos) {
+    auto dispatch = vvl::dispatch::GetData(commandBuffer);
+    dispatch->CmdConvertCooperativeVectorMatrixNV(commandBuffer, infoCount, pInfos);
+}
+
 static inline VkResult DispatchSetLatencySleepModeNV(VkDevice device, VkSwapchainKHR swapchain,
                                                      const VkLatencySleepModeInfoNV* pSleepModeInfo) {
     auto dispatch = vvl::dispatch::GetData(device);
@@ -4134,6 +4155,32 @@ static inline VkResult DispatchGetScreenBufferPropertiesQNX(VkDevice device, con
     return dispatch->GetScreenBufferPropertiesQNX(device, buffer, pProperties);
 }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+
+static inline void DispatchGetClusterAccelerationStructureBuildSizesNV(VkDevice device,
+                                                                       const VkClusterAccelerationStructureInputInfoNV* pInfo,
+                                                                       VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
+    auto dispatch = vvl::dispatch::GetData(device);
+    dispatch->GetClusterAccelerationStructureBuildSizesNV(device, pInfo, pSizeInfo);
+}
+
+static inline void DispatchCmdBuildClusterAccelerationStructureIndirectNV(
+    VkCommandBuffer commandBuffer, const VkClusterAccelerationStructureCommandsInfoNV* pCommandInfos) {
+    auto dispatch = vvl::dispatch::GetData(commandBuffer);
+    dispatch->CmdBuildClusterAccelerationStructureIndirectNV(commandBuffer, pCommandInfos);
+}
+
+static inline void DispatchGetPartitionedAccelerationStructuresBuildSizesNV(
+    VkDevice device, const VkPartitionedAccelerationStructureInstancesInputNV* pInfo,
+    VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
+    auto dispatch = vvl::dispatch::GetData(device);
+    dispatch->GetPartitionedAccelerationStructuresBuildSizesNV(device, pInfo, pSizeInfo);
+}
+
+static inline void DispatchCmdBuildPartitionedAccelerationStructuresNV(
+    VkCommandBuffer commandBuffer, const VkBuildPartitionedAccelerationStructureInfoNV* pBuildInfo) {
+    auto dispatch = vvl::dispatch::GetData(commandBuffer);
+    dispatch->CmdBuildPartitionedAccelerationStructuresNV(commandBuffer, pBuildInfo);
+}
 
 static inline void DispatchGetGeneratedCommandsMemoryRequirementsEXT(VkDevice device,
                                                                      const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo,
@@ -4202,6 +4249,21 @@ static inline VkResult DispatchGetPhysicalDeviceCooperativeMatrixFlexibleDimensi
     auto dispatch = vvl::dispatch::GetData(physicalDevice);
     return dispatch->GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(physicalDevice, pPropertyCount, pProperties);
 }
+#ifdef VK_USE_PLATFORM_METAL_EXT
+
+static inline VkResult DispatchGetMemoryMetalHandleEXT(VkDevice device, const VkMemoryGetMetalHandleInfoEXT* pGetMetalHandleInfo,
+                                                       void** pHandle) {
+    auto dispatch = vvl::dispatch::GetData(device);
+    return dispatch->GetMemoryMetalHandleEXT(device, pGetMetalHandleInfo, pHandle);
+}
+
+static inline VkResult DispatchGetMemoryMetalHandlePropertiesEXT(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType,
+                                                                 const void* pHandle,
+                                                                 VkMemoryMetalHandlePropertiesEXT* pMemoryMetalHandleProperties) {
+    auto dispatch = vvl::dispatch::GetData(device);
+    return dispatch->GetMemoryMetalHandlePropertiesEXT(device, handleType, pHandle, pMemoryMetalHandleProperties);
+}
+#endif  // VK_USE_PLATFORM_METAL_EXT
 
 static inline VkResult DispatchCreateAccelerationStructureKHR(VkDevice device,
                                                               const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
@@ -4384,6 +4446,138 @@ static inline void DispatchCmdDrawMeshTasksIndirectCountEXT(VkCommandBuffer comm
                                                             uint32_t maxDrawCount, uint32_t stride) {
     auto dispatch = vvl::dispatch::GetData(commandBuffer);
     dispatch->CmdDrawMeshTasksIndirectCountEXT(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+}
+// We make many internal dispatch calls to extended query functions which can depend on the API version
+
+static inline void DispatchGetPhysicalDeviceFeatures2Helper(APIVersion api_version, VkPhysicalDevice physicalDevice,
+                                                            VkPhysicalDeviceFeatures2* pFeatures) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceFeatures2(physicalDevice, pFeatures);
+    } else {
+        return DispatchGetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures);
+    }
+}
+
+static inline void DispatchGetPhysicalDeviceProperties2Helper(APIVersion api_version, VkPhysicalDevice physicalDevice,
+                                                              VkPhysicalDeviceProperties2* pProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceProperties2(physicalDevice, pProperties);
+    } else {
+        return DispatchGetPhysicalDeviceProperties2KHR(physicalDevice, pProperties);
+    }
+}
+
+static inline void DispatchGetPhysicalDeviceFormatProperties2Helper(APIVersion api_version, VkPhysicalDevice physicalDevice,
+                                                                    VkFormat format, VkFormatProperties2* pFormatProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceFormatProperties2(physicalDevice, format, pFormatProperties);
+    } else {
+        return DispatchGetPhysicalDeviceFormatProperties2KHR(physicalDevice, format, pFormatProperties);
+    }
+}
+
+static inline VkResult DispatchGetPhysicalDeviceImageFormatProperties2Helper(
+    APIVersion api_version, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
+    VkImageFormatProperties2* pImageFormatProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceImageFormatProperties2(physicalDevice, pImageFormatInfo, pImageFormatProperties);
+    } else {
+        return DispatchGetPhysicalDeviceImageFormatProperties2KHR(physicalDevice, pImageFormatInfo, pImageFormatProperties);
+    }
+}
+
+static inline void DispatchGetPhysicalDeviceQueueFamilyProperties2Helper(APIVersion api_version, VkPhysicalDevice physicalDevice,
+                                                                         uint32_t* pQueueFamilyPropertyCount,
+                                                                         VkQueueFamilyProperties2* pQueueFamilyProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
+    } else {
+        return DispatchGetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice, pQueueFamilyPropertyCount,
+                                                                  pQueueFamilyProperties);
+    }
+}
+
+static inline void DispatchGetPhysicalDeviceMemoryProperties2Helper(APIVersion api_version, VkPhysicalDevice physicalDevice,
+                                                                    VkPhysicalDeviceMemoryProperties2* pMemoryProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceMemoryProperties2(physicalDevice, pMemoryProperties);
+    } else {
+        return DispatchGetPhysicalDeviceMemoryProperties2KHR(physicalDevice, pMemoryProperties);
+    }
+}
+
+static inline void DispatchGetPhysicalDeviceSparseImageFormatProperties2Helper(
+    APIVersion api_version, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo,
+    uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceSparseImageFormatProperties2(physicalDevice, pFormatInfo, pPropertyCount, pProperties);
+    } else {
+        return DispatchGetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice, pFormatInfo, pPropertyCount, pProperties);
+    }
+}
+
+static inline void DispatchGetPhysicalDeviceExternalSemaphorePropertiesHelper(
+    APIVersion api_version, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo,
+    VkExternalSemaphoreProperties* pExternalSemaphoreProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceExternalSemaphoreProperties(physicalDevice, pExternalSemaphoreInfo,
+                                                                    pExternalSemaphoreProperties);
+    } else {
+        return DispatchGetPhysicalDeviceExternalSemaphorePropertiesKHR(physicalDevice, pExternalSemaphoreInfo,
+                                                                       pExternalSemaphoreProperties);
+    }
+}
+
+static inline void DispatchGetPhysicalDeviceExternalFencePropertiesHelper(
+    APIVersion api_version, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo,
+    VkExternalFenceProperties* pExternalFenceProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceExternalFenceProperties(physicalDevice, pExternalFenceInfo, pExternalFenceProperties);
+    } else {
+        return DispatchGetPhysicalDeviceExternalFencePropertiesKHR(physicalDevice, pExternalFenceInfo, pExternalFenceProperties);
+    }
+}
+
+static inline void DispatchGetPhysicalDeviceExternalBufferPropertiesHelper(
+    APIVersion api_version, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo,
+    VkExternalBufferProperties* pExternalBufferProperties) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetPhysicalDeviceExternalBufferProperties(physicalDevice, pExternalBufferInfo, pExternalBufferProperties);
+    } else {
+        return DispatchGetPhysicalDeviceExternalBufferPropertiesKHR(physicalDevice, pExternalBufferInfo, pExternalBufferProperties);
+    }
+}
+
+static inline void DispatchGetImageMemoryRequirements2Helper(APIVersion api_version, VkDevice device,
+                                                             const VkImageMemoryRequirementsInfo2* pInfo,
+                                                             VkMemoryRequirements2* pMemoryRequirements) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetImageMemoryRequirements2(device, pInfo, pMemoryRequirements);
+    } else {
+        return DispatchGetImageMemoryRequirements2KHR(device, pInfo, pMemoryRequirements);
+    }
+}
+
+static inline void DispatchGetBufferMemoryRequirements2Helper(APIVersion api_version, VkDevice device,
+                                                              const VkBufferMemoryRequirementsInfo2* pInfo,
+                                                              VkMemoryRequirements2* pMemoryRequirements) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetBufferMemoryRequirements2(device, pInfo, pMemoryRequirements);
+    } else {
+        return DispatchGetBufferMemoryRequirements2KHR(device, pInfo, pMemoryRequirements);
+    }
+}
+
+static inline void DispatchGetImageSparseMemoryRequirements2Helper(APIVersion api_version, VkDevice device,
+                                                                   const VkImageSparseMemoryRequirementsInfo2* pInfo,
+                                                                   uint32_t* pSparseMemoryRequirementCount,
+                                                                   VkSparseImageMemoryRequirements2* pSparseMemoryRequirements) {
+    if (api_version >= VK_API_VERSION_1_1) {
+        return DispatchGetImageSparseMemoryRequirements2(device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements);
+    } else {
+        return DispatchGetImageSparseMemoryRequirements2KHR(device, pInfo, pSparseMemoryRequirementCount,
+                                                            pSparseMemoryRequirements);
+    }
 }
 
 // NOLINTEND

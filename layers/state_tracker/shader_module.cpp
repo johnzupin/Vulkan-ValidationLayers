@@ -1,4 +1,4 @@
-﻿/* Copyright (c) 2021-2024 The Khronos Group Inc.
+﻿/* Copyright (c) 2021-2025 The Khronos Group Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,9 +21,13 @@
 
 #include "utils/hash_util.h"
 #include "generated/spirv_grammar_helper.h"
+#include "generated/spirv_validation_helper.h"
+
+#include <spirv/unified1/spirv.hpp>
 #include <spirv/1.2/GLSL.std.450.h>
 #include <spirv/unified1/NonSemanticShaderDebugInfo100.h>
 #include "error_message/spirv_logging.h"
+#include "utils/vk_layer_utils.h"
 
 namespace spirv {
 
@@ -345,6 +349,10 @@ static void FindPointersAndObjects(const Instruction& insn, vvl::unordered_set<u
         case spv::OpAccessChain:
         case spv::OpInBoundsAccessChain:
             result.insert(insn.Word(3));  // base ptr
+            break;
+        case spv::OpArrayLength:
+            // This is not an access of memory, but counts as static usage of the variable
+            result.insert(insn.Word(3));
             break;
         case spv::OpSampledImage:
         case spv::OpImageSampleImplicitLod:
@@ -821,9 +829,13 @@ EntryPoint::EntryPoint(const Module& module_state, const Instruction& entrypoint
         } else {
             user_defined_interface_variables.push_back(&variable);
 
+            if (variable.base_type.StorageClass() == spv::StorageClassPhysicalStorageBuffer) {
+                has_physical_storage_buffer_interface = true;
+            }
+
             // After creating, make lookup table
             if (variable.interface_slots.empty()) {
-                continue;
+                continue;  // will skip for things like PhysicalStorageBuffer
             }
             for (const auto& slot : variable.interface_slots) {
                 if (variable.storage_class == spv::StorageClassInput) {
@@ -1084,6 +1096,18 @@ Module::StaticData::StaticData(const Module& module_state, StatelessData* statel
                 cooperative_matrix_inst.push_back(&insn);
                 break;
             }
+
+            case spv::OpTypeCooperativeVectorNV:
+            case spv::OpCooperativeVectorLoadNV:
+            case spv::OpCooperativeVectorStoreNV:
+            case spv::OpCooperativeVectorMatrixMulNV:
+            case spv::OpCooperativeVectorMatrixMulAddNV:
+            case spv::OpCooperativeVectorReduceSumAccumulateNV:
+            case spv::OpCooperativeVectorOuterProductAccumulateNV: {
+                cooperative_vector_inst.push_back(&insn);
+                break;
+            }
+
             case spv::OpExtInst: {
                 if (insn.Word(4) == GLSLstd450InterpolateAtSample) {
                     uses_interpolate_at_sample = true;
@@ -1398,8 +1422,8 @@ std::string Module::DescribeInstruction(const Instruction& error_insn) const {
 
     std::ostringstream ss;
     ss << error_insn.Describe();
-    ss << "\nFrom shader debug information ";
-    GetShaderSourceInfo(ss, static_data_.instructions, *last_line_inst);
+    ss << "\nError occurred at ";
+    GetShaderSourceInfo(ss, words_, *last_line_inst);
     return ss.str();
 }
 
@@ -1810,6 +1834,11 @@ std::vector<InterfaceSlot> StageInterfaceVariable::GetInterfaceSlots(StageInterf
         return slots;
     }
 
+    if (variable.base_type.StorageClass() == spv::StorageClassPhysicalStorageBuffer) {
+        // PhysicalStorageBuffer interfaces not supported (https://gitlab.khronos.org/spirv/SPIR-V/-/issues/779)
+        return slots;
+    }
+
     if (variable.type_struct_info) {
         // Structs has two options being labeled
         // 1. The block is given a Location, need to walk though and add up starting for that value
@@ -1824,11 +1853,8 @@ std::vector<InterfaceSlot> StageInterfaceVariable::GetInterfaceSlots(StageInterf
 
                 // Info needed to test type matching later
                 const Instruction* numerical_type = module_state.GetBaseTypeInstruction(member_id);
-                // TODO 5374 - Handle PhysicalStorageBuffer interfaces
-                if (!numerical_type) {
-                    variable.physical_storage_buffer = true;
-                    break;
-                }
+                ASSERT_AND_CONTINUE(numerical_type);
+
                 const uint32_t numerical_type_opcode = numerical_type->Opcode();
                 // TODO - Handle nested structs
                 if (numerical_type_opcode == spv::OpTypeStruct) {
@@ -1875,7 +1901,7 @@ std::vector<InterfaceSlot> StageInterfaceVariable::GetInterfaceSlots(StageInterf
     } else {
         uint32_t locations = 0;
         // Will have array peeled off already
-        uint32_t type_id = variable.base_type.ResultId();
+        const uint32_t type_id = variable.base_type.ResultId();
 
         locations = module_state.GetLocationsConsumedByType(type_id);
         const uint32_t components = module_state.GetComponentsConsumedByType(type_id);
@@ -1941,7 +1967,6 @@ StageInterfaceVariable::StageInterfaceVariable(const Module& module_state, const
       base_type(FindBaseType(*this, module_state)),
       is_builtin(IsBuiltin(*this, module_state)),
       nested_struct(false),
-      physical_storage_buffer(false),
       interface_slots(GetInterfaceSlots(*this, module_state)),
       builtin_block(GetBuiltinBlock(*this, module_state)),
       total_builtin_components(GetBuiltinComponents(*this, module_state)) {}
@@ -1973,14 +1998,6 @@ const Instruction& ResourceInterfaceVariable::FindBaseType(ResourceInterfaceVari
     return *type;
 }
 
-uint32_t ResourceInterfaceVariable::FindImageSampledTypeWidth(const Module& module_state, const Instruction& base_type) {
-    return (base_type.Opcode() == spv::OpTypeImage) ? module_state.GetTypeBitsSize(&base_type) : 0;
-}
-
-NumericType ResourceInterfaceVariable::FindImageFormatType(const Module& module_state, const Instruction& base_type) {
-    return (base_type.Opcode() == spv::OpTypeImage) ? module_state.GetNumericType(base_type.Word(2)) : NumericTypeUnknown;
-}
-
 bool ResourceInterfaceVariable::IsStorageBuffer(const ResourceInterfaceVariable& variable) {
     // before VK_KHR_storage_buffer_storage_class Storage Buffer were a Uniform storage class
     const bool physical_storage_buffer = variable.storage_class == spv::StorageClassPhysicalStorageBuffer;
@@ -2003,17 +2020,19 @@ ResourceInterfaceVariable::ResourceInterfaceVariable(const Module& module_state,
       is_sampled_image(false),
       base_type(FindBaseType(*this, module_state)),
       is_runtime_descriptor_array(module_state.HasRuntimeArray(type_id)),
-      image_sampled_type_width(FindImageSampledTypeWidth(module_state, base_type)),
       is_storage_buffer(IsStorageBuffer(*this)) {
     // to make sure no padding in-between the struct produce noise and force same data to become a different hash
     info = {};  // will be cleared with c++11 initialization
-    info.image_format_type = FindImageFormatType(module_state, base_type);
     info.image_dim = base_type.FindImageDim();
     info.is_image_array = base_type.IsImageArray();
     info.is_multisampled = base_type.IsImageMultisampled();
 
     // Handle anything specific to the base type
     if (base_type.Opcode() == spv::OpTypeImage) {
+        info.image_format = CompatibleSpirvImageFormat(base_type.Word(8));
+        info.image_sampled_type_numeric = module_state.GetNumericType(base_type.Word(2));
+        info.image_sampled_type_width = (uint8_t)module_state.GetTypeBitsSize(&base_type);
+
         // Things marked regardless of the image being accessed or not
         const bool is_sampled_without_sampler = base_type.Word(7) == 2;  // Word(7) == Sampled
         if (is_sampled_without_sampler) {

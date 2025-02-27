@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (C) 2015-2024 Google Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (C) 2015-2025 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2022 RasterGrid Kft.
  *
@@ -28,11 +28,11 @@
 #include "generated/dynamic_state_helper.h"
 
 class CoreChecks;
-class ValidationStateTracker;
 
 namespace vvl {
 class Bindable;
 class Buffer;
+class Device;
 class Framebuffer;
 class RenderPass;
 class VideoSession;
@@ -113,8 +113,6 @@ class Event : public StateObject {
     const bool metal_event_export;
 #endif  // VK_USE_PLATFORM_METAL_EXT
 
-    int write_in_use = 0;
-
     // Signaling state.
     // Gets updated at queue submission granularity or when signaled from the host.
     bool signaled = false;
@@ -130,7 +128,7 @@ class Event : public StateObject {
 // Track command pools and their command buffers
 class CommandPool : public StateObject {
   public:
-    ValidationStateTracker &dev_data;
+    Device &dev_data;
     const VkCommandPoolCreateFlags createFlags;
     const uint32_t queueFamilyIndex;
     const VkQueueFlags queue_flags;
@@ -138,7 +136,7 @@ class CommandPool : public StateObject {
     // Cmd buffers allocated from this pool
     vvl::unordered_map<VkCommandBuffer, CommandBuffer *> commandBuffers;
 
-    CommandPool(ValidationStateTracker &dev, VkCommandPool handle, const VkCommandPoolCreateInfo *create_info, VkQueueFlags flags);
+    CommandPool(Device &dev, VkCommandPool handle, const VkCommandPoolCreateInfo *create_info, VkQueueFlags flags);
     virtual ~CommandPool() { Destroy(); }
 
     VkCommandPool VkHandle() const { return handle_.Cast<VkCommandPool>(); }
@@ -167,7 +165,7 @@ class CommandBuffer : public RefcountedStateObject {
     VkCommandBufferInheritanceInfo inheritanceInfo;
     // since command buffers can only be destroyed by their command pool, this does not need to be a shared_ptr
     const vvl::CommandPool *command_pool;
-    ValidationStateTracker &dev_data;
+    Device &dev_data;
     bool unprotected;  // can't be used for protected memory
     bool hasRenderPassInstance;
     bool suspendsRenderPassInstance;
@@ -419,21 +417,31 @@ class CommandBuffer : public RefcountedStateObject {
     // Track if any dynamic state is set that is static in the currently bound pipeline
     bool dirtyStaticState;
 
+    // Device Mask at start of command buffer
     uint32_t initial_device_mask;
+    // Device mask from vkCmdBeginRenderPass/vkCmdBeginRendering
+    uint32_t render_pass_device_mask;
 
-    // The RenderPass created from vkCmdBeginRenderPass or vkCmdBeginRendering
-    std::shared_ptr<vvl::RenderPass> activeRenderPass;
+    // This is null if we are outside a renderPass/rendering
+    //
+    // There are 4 ways we populate this pointer
+    // 1. vkCmdBeginRenderPass this becomes a reference to the state created a vkCreateRenderPass time.
+    // 2. VkCommandBufferInheritanceInfo same as (1) but for secondary command buffers.
+    // 3. vkCmdBeginRendering we create the state object and store it here.
+    // 4. VkCommandBufferInheritanceRenderingInfo same as (3) but for secondary command buffers.
+    std::shared_ptr<vvl::RenderPass> active_render_pass;
+
     // Used for both type of renderPass
     AttachmentSource attachment_source;
     // There is no concept of "attachment index" with dynamic rendering, we use this for both dynamic/non-dynamic rendering though.
     // The attachments are packed the following: | color | color resolve | depth | depth resolve | stencil | stencil resolve |
     std::vector<AttachmentInfo> active_attachments;
     vvl::unordered_set<uint32_t> active_color_attachments_index;
-    uint32_t active_render_pass_device_mask;
     bool has_render_pass_striped;
     uint32_t striped_count;
+    VkRect2D render_area;
     // only when not using dynamic rendering
-    vku::safe_VkRenderPassBeginInfo active_render_pass_begin_info;
+    const VkRenderPassSampleLocationsBeginInfoEXT *sample_locations_begin_info;
     std::vector<SubpassInfo> active_subpasses;
 
     VkSubpassContents activeSubpassContents;
@@ -487,8 +495,7 @@ class CommandBuffer : public RefcountedStateObject {
     // If primary, the secondary command buffers we will call.
     vvl::unordered_set<CommandBuffer *> linkedCommandBuffers;
     // Validation functions run at primary CB queue submit time
-    using QueueCallback = std::function<bool(const ValidationStateTracker &device_data, const class vvl::Queue &queue_state,
-                                             const CommandBuffer &cb_state)>;
+    using QueueCallback = std::function<bool(const class vvl::Queue &queue_state, const CommandBuffer &cb_state)>;
     std::vector<QueueCallback> queue_submit_functions;
     // Used by some layers to defer actions until vkCmdEndRenderPass time.
     // Layers using this are responsible for inserting the callbacks into queue_submit_functions.
@@ -543,7 +550,7 @@ class CommandBuffer : public RefcountedStateObject {
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock); }
     WriteLockGuard WriteLock() { return WriteLockGuard(lock); }
 
-    CommandBuffer(ValidationStateTracker &dev, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *allocate_info,
+    CommandBuffer(Device &dev, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *allocate_info,
                   const vvl::CommandPool *cmd_pool);
 
     virtual ~CommandBuffer() { Destroy(); }

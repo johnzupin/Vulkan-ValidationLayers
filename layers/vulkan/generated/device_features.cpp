@@ -3,8 +3,8 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2023-2024 Google Inc.
- * Copyright (c) 2023-2024 LunarG, Inc.
+ * Copyright (c) 2023-2025 Google Inc.
+ * Copyright (c) 2023-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -720,6 +720,24 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->maintenance7 |= enabled->maintenance7 == VK_TRUE;
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR: {
+                const VkPhysicalDeviceMaintenance8FeaturesKHR *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceMaintenance8FeaturesKHR *>(pNext);
+                features->maintenance8 |= enabled->maintenance8 == VK_TRUE;
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_2_FEATURES_KHR: {
+                const VkPhysicalDeviceVideoMaintenance2FeaturesKHR *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceVideoMaintenance2FeaturesKHR *>(pNext);
+                features->videoMaintenance2 |= enabled->videoMaintenance2 == VK_TRUE;
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_KHR: {
+                const VkPhysicalDeviceDepthClampZeroOneFeaturesKHR *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceDepthClampZeroOneFeaturesKHR *>(pNext);
+                features->depthClampZeroOne |= enabled->depthClampZeroOne == VK_TRUE;
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT: {
                 const VkPhysicalDeviceTransformFeedbackFeaturesEXT *enabled =
                     reinterpret_cast<const VkPhysicalDeviceTransformFeedbackFeaturesEXT *>(pNext);
@@ -1287,12 +1305,6 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->descriptorSetHostMapping |= enabled->descriptorSetHostMapping == VK_TRUE;
                 break;
             }
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_EXT: {
-                const VkPhysicalDeviceDepthClampZeroOneFeaturesEXT *enabled =
-                    reinterpret_cast<const VkPhysicalDeviceDepthClampZeroOneFeaturesEXT *>(pNext);
-                features->depthClampZeroOne |= enabled->depthClampZeroOne == VK_TRUE;
-                break;
-            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT: {
                 const VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT *enabled =
                     reinterpret_cast<const VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT *>(pNext);
@@ -1329,6 +1341,13 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->deviceGeneratedCompute |= enabled->deviceGeneratedCompute == VK_TRUE;
                 features->deviceGeneratedComputePipelines |= enabled->deviceGeneratedComputePipelines == VK_TRUE;
                 features->deviceGeneratedComputeCaptureReplay |= enabled->deviceGeneratedComputeCaptureReplay == VK_TRUE;
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_LINEAR_SWEPT_SPHERES_FEATURES_NV: {
+                const VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV *>(pNext);
+                features->spheres |= enabled->spheres == VK_TRUE;
+                features->linearSweptSpheres |= enabled->linearSweptSpheres == VK_TRUE;
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINEAR_COLOR_ATTACHMENT_FEATURES_NV: {
@@ -1480,6 +1499,13 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->rayTracingInvocationReorder |= enabled->rayTracingInvocationReorder == VK_TRUE;
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_FEATURES_NV: {
+                const VkPhysicalDeviceCooperativeVectorFeaturesNV *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceCooperativeVectorFeaturesNV *>(pNext);
+                features->cooperativeVector |= enabled->cooperativeVector == VK_TRUE;
+                features->cooperativeVectorTraining |= enabled->cooperativeVectorTraining == VK_TRUE;
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_FEATURES_NV: {
                 const VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV *enabled =
                     reinterpret_cast<const VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV *>(pNext);
@@ -1597,6 +1623,18 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->rayTracingValidation |= enabled->rayTracingValidation == VK_TRUE;
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_FEATURES_NV: {
+                const VkPhysicalDeviceClusterAccelerationStructureFeaturesNV *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceClusterAccelerationStructureFeaturesNV *>(pNext);
+                features->clusterAccelerationStructure |= enabled->clusterAccelerationStructure == VK_TRUE;
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_FEATURES_NV: {
+                const VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV *enabled =
+                    reinterpret_cast<const VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV *>(pNext);
+                features->partitionedAccelerationStructure |= enabled->partitionedAccelerationStructure == VK_TRUE;
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT: {
                 const VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT *enabled =
                     reinterpret_cast<const VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT *>(pNext);
@@ -1634,10 +1672,22 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->cooperativeMatrixBlockLoads |= enabled->cooperativeMatrixBlockLoads == VK_TRUE;
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_OPACITY_MICROMAP_FEATURES_ARM: {
+                const VkPhysicalDevicePipelineOpacityMicromapFeaturesARM *enabled =
+                    reinterpret_cast<const VkPhysicalDevicePipelineOpacityMicromapFeaturesARM *>(pNext);
+                features->pipelineOpacityMicromap |= enabled->pipelineOpacityMicromap == VK_TRUE;
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_ROBUSTNESS_FEATURES_EXT: {
                 const VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT *enabled =
                     reinterpret_cast<const VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT *>(pNext);
                 features->vertexAttributeRobustness |= enabled->vertexAttributeRobustness == VK_TRUE;
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_METERING_FEATURES_NV: {
+                const VkPhysicalDevicePresentMeteringFeaturesNV *enabled =
+                    reinterpret_cast<const VkPhysicalDevicePresentMeteringFeaturesNV *>(pNext);
+                features->presentMetering |= enabled->presentMetering == VK_TRUE;
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR: {

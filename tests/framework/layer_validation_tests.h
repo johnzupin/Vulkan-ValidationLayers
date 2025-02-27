@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,16 +84,7 @@ static const VkLayerSettingEXT kDisableMessageLimitSetting = {OBJECT_LAYER_NAME,
 [[maybe_unused]] static VkLayerSettingsCreateInfoEXT kDisableMessageLimit = {VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
                                                                              nullptr, 1, &kDisableMessageLimitSetting};
 
-//--------------------------------------------------------------------------------------
-// Mesh and VertexFormat Data
-//--------------------------------------------------------------------------------------
-
 // Static arrays helper
-template <class ElementT, size_t array_size>
-size_t size(ElementT (&)[array_size]) {
-    return array_size;
-}
-
 template <class ElementT, size_t array_size>
 uint32_t size32(ElementT (&)[array_size]) {
     return static_cast<uint32_t>(array_size);
@@ -286,6 +277,7 @@ class VkSyncValTest : public VkLayerTest {
     void InitSyncValFramework(const SyncValSettings *p_sync_settings = nullptr);
     void InitSyncVal(const SyncValSettings *p_sync_settings = nullptr);
     void InitTimelineSemaphore();
+    void InitRayTracing();
 };
 
 class AndroidExternalResolveTest : public VkLayerTest {
@@ -382,6 +374,11 @@ class ShaderObjectTest : public virtual VkLayerTest {
   public:
     void InitBasicShaderObject();
     void InitBasicMeshShaderObject(APIVersion target_api_version);
+
+    // Many tests just need a basic vert/frag shader
+    vkt::Shader m_vert_shader;
+    vkt::Shader m_frag_shader;
+    void CreateMinimalShaders();
 };
 
 class SyncObjectTest : public VkLayerTest {

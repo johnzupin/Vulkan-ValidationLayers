@@ -1,6 +1,6 @@
-/* Copyright (c) 2023-2024 The Khronos Group Inc.
- * Copyright (c) 2023-2024 Valve Corporation
- * Copyright (c) 2023-2024 LunarG, Inc.
+/* Copyright (c) 2023-2025 The Khronos Group Inc.
+ * Copyright (c) 2023-2025 Valve Corporation
+ * Copyright (c) 2023-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -541,15 +541,15 @@ TEST_F(PositiveGpuAVDescriptorIndexing, ImageMultiBinding) {
     VkShaderObj vs(this, vs_source, VK_SHADER_STAGE_VERTEX_BIT);
 
     char const *fs_source = R"glsl(
-	#version 450
-	#extension GL_EXT_nonuniform_qualifier : enable
+    #version 450
+    #extension GL_EXT_nonuniform_qualifier : enable
 
-	layout(set = 0, binding = 2) uniform sampler3D tex3d[];
-	layout(set = 0, binding = 2) uniform sampler2D tex[];
-	layout(location = 0) out vec4 uFragColor;
-	layout(location = 0) in flat uint index;
-	void main() {
-	    if ((index & 1) != 0) {
+    layout(set = 0, binding = 2) uniform sampler3D tex3d[];
+    layout(set = 0, binding = 2) uniform sampler2D tex[];
+    layout(location = 0) out vec4 uFragColor;
+    layout(location = 0) in flat uint index;
+    void main() {
+        if ((index & 1) != 0) {
                 uFragColor = texture(tex[index], vec2(0, 0));
             } else {
                 uFragColor = texture(tex3d[index], vec3(0, 0, 0));
@@ -828,8 +828,9 @@ TEST_F(PositiveGpuAVDescriptorIndexing, SampledImageShareBindingBDA) {
     m_default_queue->Wait();
 }
 
+// Disabled as this is a perf testing test, not much value in normal CI
 // If on Mesa, also add MESA_SHADER_CACHE_DISABLE=1
-TEST_F(PositiveGpuAVDescriptorIndexing, Stress) {
+TEST_F(PositiveGpuAVDescriptorIndexing, DISABLED_Stress) {
     TEST_DESCRIPTION("Do many indexing into the shader");
     RETURN_IF_SKIP(InitGpuVUDescriptorIndexing());
     InitRenderTarget();
@@ -930,6 +931,72 @@ TEST_F(PositiveGpuAVDescriptorIndexing, Stress) {
 
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
+    pipe.cp_ci_.layout = pipeline_layout.handle();
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.Begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.End();
+
+    m_default_queue->Submit(m_command_buffer);
+    m_default_queue->Wait();
+}
+
+// Disabled as this is a perf testing test, not much value in normal CI
+TEST_F(PositiveGpuAVDescriptorIndexing, DISABLED_Stress2) {
+    TEST_DESCRIPTION("Do many indexing into the shader");
+    RETURN_IF_SKIP(InitGpuVUDescriptorIndexing());
+
+    // Will look like
+    //     layout(set = 0, binding = 0) buffer SSBO {
+    //         float a0;
+    //         uint b0, b1, b2, ... bn;
+    //     } x[2];
+    //     void main() {
+    //         float a = x[1].a0;
+    //         x[1].b0 = floatBitsToUint(a * 0);
+    //         x[1].b0 = floatBitsToUint(a * 1);
+    //         x[1].b0 = floatBitsToUint(a * 2);
+    //         // ...
+    //         x[1].bn = floatBitsToUint(a * n);
+    //     }
+    const uint32_t field_count = 100;
+    std::stringstream cs_source;
+    cs_source << R"glsl(
+        #version 450
+        layout(set = 0, binding = 0) buffer SSBO {
+            float a0;
+            uint )glsl";
+    for (uint32_t i = 0; i < field_count; i++) {
+        cs_source << "b" << i << ", ";
+    }
+    cs_source << R"glsl(bn;
+        } x[2];
+        void main() {
+            float a = x[1].a0;
+    )glsl";
+
+    for (uint32_t i = 0; i < field_count; i++) {
+        cs_source << "x[1].b" << i << " = floatBitsToUint(a * " << i << ".0);\n";
+    }
+    cs_source << "\n}";
+
+    vkt::Buffer buffer(*m_device, 4096, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kHostVisibleMemProps);
+
+    OneOffDescriptorIndexingSet descriptor_set(m_device, {
+                                                             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, VK_SHADER_STAGE_ALL, nullptr,
+                                                              VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT},
+                                                         });
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0);
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+    descriptor_set.UpdateDescriptorSets();
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source.str().c_str(), VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipe.cp_ci_.layout = pipeline_layout.handle();
     pipe.CreateComputePipeline();
 
@@ -2248,7 +2315,7 @@ TEST_F(PositiveGpuAVDescriptorIndexing, SpecConstantNullDescriptor) {
     VkSpecializationInfo spec_info = {1, &entry, sizeof(uint32_t), &value};
 
     CreateComputePipelineHelper pipe(*this);
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, VK_SHADER_STAGE_ALL, nullptr};
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2, SPV_SOURCE_GLSL,
                                              &spec_info);
     pipe.CreateComputePipeline();
@@ -2349,11 +2416,7 @@ TEST_F(PositiveGpuAVDescriptorIndexing, TexelFetch) {
 
     vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     vkt::Buffer uniform_texel_buffer(*m_device, 64, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
-    VkBufferViewCreateInfo bvci = vku::InitStructHelper();
-    bvci.buffer = uniform_texel_buffer.handle();
-    bvci.format = VK_FORMAT_R32_SFLOAT;
-    bvci.range = VK_WHOLE_SIZE;
-    vkt::BufferView uniform_buffer_view(*m_device, bvci);
+    vkt::BufferView uniform_buffer_view(*m_device, uniform_texel_buffer, VK_FORMAT_R32_SFLOAT);
 
     auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
     vkt::Image image(*m_device, image_ci);

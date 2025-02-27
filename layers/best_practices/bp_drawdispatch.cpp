@@ -28,7 +28,7 @@ bool BestPractices::ValidateCmdDrawType(VkCommandBuffer cmd_buffer, const Locati
     bool skip = false;
     const auto cb_state = GetRead<bp_state::CommandBuffer>(cmd_buffer);
     if (const auto* pipe = cb_state->GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS)) {
-        if (const auto rp_state = pipe->RenderPassState()) {
+        if (const auto rp_state = cb_state->active_render_pass.get()) {
             for (uint32_t i = 0; i < rp_state->create_info.subpassCount; ++i) {
                 const auto& subpass = rp_state->create_info.pSubpasses[i];
                 const auto* ds_state = pipe->DepthStencilState();
@@ -54,7 +54,7 @@ bool BestPractices::ValidateCmdDispatchType(VkCommandBuffer cmd_buffer, const Lo
 }
 
 bool BestPractices::ValidatePushConstants(VkCommandBuffer cmd_buffer, const Location& loc) const {
-    using Range = sparse_container::range<uint32_t>;
+    using Range = vvl::range<uint32_t>;
 
     bool skip = false;
 
@@ -106,8 +106,14 @@ void BestPractices::RecordCmdDrawType(bp_state::CommandBuffer& cb_state, uint32_
     }
 
     const auto* pipeline_state = cb_state.GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
-    if (pipeline_state && pipeline_state->vertex_input_state && !pipeline_state->vertex_input_state->bindings.empty()) {
-        cb_state.uses_vertex_buffer = true;
+    if (pipeline_state && !pipeline_state->IsDynamic(CB_DYNAMIC_STATE_VERTEX_INPUT_EXT)) {
+        if (pipeline_state->vertex_input_state && !pipeline_state->vertex_input_state->bindings.empty()) {
+            cb_state.uses_vertex_buffer = true;
+        }
+    } else {
+        if (!cb_state.dynamic_state_value.vertex_bindings.empty()) {
+            cb_state.uses_vertex_buffer = true;
+        }
     }
 }
 
@@ -221,10 +227,10 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cb_sta
     }
 
     const VkIndexType ib_type = cb_state.index_buffer_binding.index_type;
-    const auto ib_mem_state = ib_state->MemState();
-    if (!ib_mem_state) return skip;
+    const auto ib_memory_state = ib_state->MemoryState();
+    if (!ib_memory_state) return skip;
 
-    const void* ib_mem = ib_mem_state->p_driver_data;
+    const void* ib_mem = ib_memory_state->p_driver_data;
 
     const auto& last_bound_state = cb_state.lastBound[ConvertToLvlBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS)];
     const bool primitive_restart_enable = last_bound_state.IsPrimitiveRestartEnable();
@@ -233,7 +239,7 @@ bool BestPractices::ValidateIndexBufferArm(const bp_state::CommandBuffer& cb_sta
     if (ib_mem) {
         const uint32_t scan_stride = GetIndexAlignment(ib_type);
         // Check if all indices are within the memory allocation size, if robustness is enabled they might not be
-        if ((firstIndex + indexCount) * scan_stride > ib_mem_state->allocate_info.allocationSize) {
+        if ((firstIndex + indexCount) * scan_stride > ib_memory_state->allocate_info.allocationSize) {
             return skip;
         }
         const uint8_t* scan_begin = static_cast<const uint8_t*>(ib_mem) + firstIndex * scan_stride;

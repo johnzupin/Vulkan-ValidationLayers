@@ -1,6 +1,6 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@
 #include "generated/vk_validation_error_messages.h"
 #include "error_location.h"
 #include "utils/hash_util.h"
+#include "utils/text_utils.h"
 #include "error_message/log_message_type.h"
 
 [[maybe_unused]] const char *kVUIDUndefined = "VUID_Undefined";
@@ -110,18 +111,23 @@ bool DebugReport::UpdateLogMsgCounts(int32_t vuid_hash) const {
     }
 }
 
-bool DebugReport::DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, const char *msg, const char *text_vuid) const {
-    bool bail = false;
+bool DebugReport::LogMessage(VkFlags msg_flags, std::string_view vuid_text, const LogObjectList &objects, const Location &loc,
+                             const std::string &main_message) {
+    // Convert the info to the VK_EXT_debug_utils format
+    VkDebugUtilsMessageSeverityFlagsEXT msg_severity;
+    VkDebugUtilsMessageTypeFlagsEXT msg_type;
+    DebugReportFlagsToAnnotFlags(msg_flags, &msg_severity, &msg_type);
+
+    std::unique_lock<std::mutex> lock(debug_output_mutex);
+
+    // Avoid logging cost if msg is to be ignored
+    const uint32_t vuid_hash = hash_util::VuidHash(vuid_text);
+    if (!LogMsgEnabled(vuid_hash, msg_severity, msg_type)) {
+        return false;
+    }
+
     std::vector<VkDebugUtilsLabelEXT> queue_labels;
     std::vector<VkDebugUtilsLabelEXT> cmd_buf_labels;
-
-    // Convert the info to the VK_EXT_debug_utils format
-    VkDebugUtilsMessageTypeFlagsEXT msg_type;
-    VkDebugUtilsMessageSeverityFlagsEXT msg_severity;
-    DebugReportFlagsToAnnotFlags(msg_flags, &msg_severity, &msg_type);
-    if (!(active_msg_severities & msg_severity) || !(active_msg_types & msg_type)) {
-        return false;  // quick check again to make sure user wants these printed
-    }
 
     std::vector<std::string> object_labels;
     // Ensures that push_back will not reallocate, thereby providing pointer
@@ -172,12 +178,10 @@ bool DebugReport::DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, c
         object_name_infos.push_back(object_name_info);
     }
 
-    const uint32_t message_id_number = text_vuid ? hash_util::VuidHash(text_vuid) : 0U;
-
     VkDebugUtilsMessengerCallbackDataEXT callback_data = vku::InitStructHelper();
     callback_data.flags = 0;
-    callback_data.pMessageIdName = text_vuid;
-    callback_data.messageIdNumber = vvl_bit_cast<int32_t>(message_id_number);
+    callback_data.pMessageIdName = vuid_text.data();
+    callback_data.messageIdNumber = vvl_bit_cast<int32_t>(vuid_hash);
     callback_data.pMessage = nullptr;
     callback_data.queueLabelCount = static_cast<uint32_t>(queue_labels.size());
     callback_data.pQueueLabels = queue_labels.empty() ? nullptr : queue_labels.data();
@@ -186,47 +190,7 @@ bool DebugReport::DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, c
     callback_data.objectCount = static_cast<uint32_t>(object_name_infos.size());
     callback_data.pObjects = object_name_infos.data();
 
-    std::ostringstream oss;
-
-#if defined(BUILD_SELF_VVL)
-    oss << "Self ";
-#endif
-
-    if (message_format_settings.display_application_name && !message_format_settings.application_name.empty()) {
-        oss << "[AppName: " << message_format_settings.application_name << "] ";
-    }
-
-    if (msg_flags & kErrorBit) {
-        oss << "Validation Error: ";
-    } else if (msg_flags & kWarningBit) {
-        oss << "Validation Warning: ";
-    } else if (msg_flags & kPerformanceWarningBit) {
-        oss << "Validation Performance Warning: ";
-    } else if (msg_flags & kInformationBit) {
-        oss << "Validation Information: ";
-    } else if (msg_flags & kVerboseBit) {
-        oss << "Verbose Information: ";
-    }
-
-    if (text_vuid != nullptr) {
-        oss << "[ " << text_vuid << " ] ";
-    }
-    uint32_t index = 0;
-    for (const auto &src_object : object_name_infos) {
-        if (0 != src_object.objectHandle) {
-            oss << "Object " << index++ << ": handle = 0x" << std::hex << src_object.objectHandle;
-            if (src_object.pObjectName) {
-                oss << ", name = " << src_object.pObjectName << ", type = ";
-            } else {
-                oss << ", type = ";
-            }
-            oss << string_VkObjectType(src_object.objectType) << "; ";
-        } else {
-            oss << "Object " << index++ << ": VK_NULL_HANDLE, type = " << string_VkObjectType(src_object.objectType) << "; ";
-        }
-    }
-    oss << "| MessageID = 0x" << std::hex << message_id_number << " | " << msg;
-    std::string composite = oss.str();
+    std::string full_message = CreateMessageText(msg_flags, loc, object_name_infos, vuid_hash, vuid_text, main_message);
 
     const auto callback_list = &debug_callback_list;
     // We only output to default callbacks if there are no non-default callbacks
@@ -242,6 +206,7 @@ bool DebugReport::DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, c
 #endif
 
     const char *layer_prefix = "Validation";
+    bool bail = false;
     for (const auto &current_callback : *callback_list) {
         // Skip callback if it's a default callback and there are non-default callbacks present
         if (current_callback.IsDefault() && !use_default_callbacks) continue;
@@ -249,7 +214,7 @@ bool DebugReport::DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, c
         // VK_EXT_debug_utils callback
         if (current_callback.IsUtils() && (current_callback.debug_utils_msg_flags & msg_severity) &&
             (current_callback.debug_utils_msg_type & msg_type)) {
-            callback_data.pMessage = composite.c_str();
+            callback_data.pMessage = full_message.c_str();
             if (current_callback.debug_utils_callback_function_ptr(
                     static_cast<VkDebugUtilsMessageSeverityFlagBitsEXT>(msg_severity), msg_type, &callback_data,
                     current_callback.pUserData)) {
@@ -265,13 +230,130 @@ bool DebugReport::DebugLogMsg(VkFlags msg_flags, const LogObjectList &objects, c
             }
             if (current_callback.debug_report_callback_function_ptr(
                     msg_flags, ConvertCoreObjectToDebugReportObject(object_name_infos[0].objectType),
-                    object_name_infos[0].objectHandle, message_id_number, 0, layer_prefix, composite.c_str(),
+                    object_name_infos[0].objectHandle, vuid_hash, 0, layer_prefix, full_message.c_str(),
                     current_callback.pUserData)) {
                 bail = true;
             }
         }
     }
     return bail;
+}
+
+std::string DebugReport::CreateMessageText(VkFlags msg_flags, const Location &loc,
+                                           const std::vector<VkDebugUtilsObjectNameInfoEXT> &object_name_infos,
+                                           const uint32_t vuid_hash, std::string_view vuid_text, const std::string &main_message) {
+    std::ostringstream oss;
+
+#if defined(BUILD_SELF_VVL)
+    oss << "Self ";  // How we know if the error is from Self Validation when debugging GPU-AV
+#endif
+
+    if (message_format_settings.display_application_name && !message_format_settings.application_name.empty()) {
+        oss << "[AppName: " << message_format_settings.application_name << "] ";
+    }
+
+    // User can get this from VkDebugUtilsMessageSeverityFlagBitsEXT if desired
+    if (message_format_settings.verbose) {
+        if (msg_flags & kErrorBit) {
+            oss << "Validation Error: ";
+        } else if (msg_flags & kWarningBit) {
+            oss << "Validation Warning: ";
+        } else if (msg_flags & kPerformanceWarningBit) {
+            oss << "Validation Performance Warning: ";
+        } else if (msg_flags & kInformationBit) {
+            oss << "Validation Information: ";
+        } else if (msg_flags & kVerboseBit) {
+            oss << "Verbose Information: ";
+        }
+    }
+
+    if (!vuid_text.empty()) {
+        oss << "[ " << vuid_text << " ]";
+    }
+
+    // User can get these from VkDebugUtilsMessengerCallbackDataEXT::pObjects if desired
+    if (message_format_settings.verbose) {
+        if (!object_name_infos.empty()) {
+            oss << " Objects: ";
+        }
+        for (uint32_t i = 0; i < object_name_infos.size(); i++) {
+            const VkDebugUtilsObjectNameInfoEXT &src_object = object_name_infos[i];
+            if (0 != src_object.objectHandle) {
+                oss << string_VkObjectTypeHandleName(src_object.objectType) << " ";
+                if (!debug_stable_messages) {
+                    oss << "0x" << std::hex << src_object.objectHandle;
+                }
+                if (src_object.pObjectName) {
+                    oss << "[" << src_object.pObjectName << "]";
+                }
+            } else {
+                oss << string_VkObjectTypeHandleName(src_object.objectType) << " VK_NULL_HANDLE";
+            }
+
+            if (i + 1 != object_name_infos.size()) {
+                oss << ", ";
+            }
+        }
+
+        oss << " | MessageID = 0x" << std::hex << vuid_hash;
+    }
+
+    // Add a new line to seperate everything from the start of the "real" error message
+    if (message_format_settings.verbose) {
+        oss << "\n";
+    } else {
+        oss << " ";
+    }
+
+    oss << loc.Message() << " " << main_message;
+
+    // Append the spec error text to the error message, unless it contains a word treated as special
+    if ((vuid_text.find("VUID-") != std::string::npos)) {
+        // Linear search makes no assumptions about the layout of the string table. This is not fast, but it does not need to be at
+        // this point in the error reporting path
+        uint32_t num_vuids = sizeof(vuid_spec_text) / sizeof(vuid_spec_text_pair);
+        const char *spec_text = nullptr;
+        // Only the Antora site will make use of the sections
+        const char *spec_url_section = nullptr;
+        for (uint32_t i = 0; i < num_vuids; i++) {
+            if (0 == strncmp(vuid_text.data(), vuid_spec_text[i].vuid, vuid_text.size())) {
+                spec_text = vuid_spec_text[i].spec_text;
+                spec_url_section = vuid_spec_text[i].url_id;
+                break;
+            }
+        }
+
+        // Construct and append the specification text and link to the appropriate version of the spec
+        if (spec_text && spec_url_section) {
+#ifdef ANNOTATED_SPEC_LINK
+            const char *spec_url_base = ANNOTATED_SPEC_LINK;
+#else
+            const char *spec_url_base = "https://docs.vulkan.org/spec/latest/";
+#endif
+
+            // Add period at end if forgotten
+            // This provides better seperation between error message and spec text
+            if (main_message.back() != '.' && main_message.back() != '\n') {
+                oss << '.';
+            }
+
+            // Start Vulkan spec text with a new line to make it easier visually
+            if (main_message.back() != '\n') {
+                oss << '\n';
+            }
+
+            oss << "The Vulkan spec states: " << spec_text;
+
+            // Spec link can always be found searching the VUID.
+            // But regardless of "verbose" setting, print the spec text as sometimes the error message in the layer is designed to
+            // complement it.
+            if (message_format_settings.verbose) {
+                oss << " (" << spec_url_base << spec_url_section << "#" << vuid_text << ")";
+            }
+        }
+    }
+
+    return oss.str();
 }
 
 void DebugReport::SetUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT *pNameInfo) {
@@ -321,8 +403,24 @@ std::string DebugReport::FormatHandle(const char *handle_type_name, uint64_t han
         handle_name = GetMarkerObjectNameNoLock(handle);
     }
 
+    bool print_handle = true;
+    if (debug_stable_messages) {
+        if (!strcmp(handle_type_name, "VkInstance") || !strcmp(handle_type_name, "VkPhysicalDevice") ||
+            !strcmp(handle_type_name, "VkDevice") || !strcmp(handle_type_name, "VkQueue") ||
+            !strcmp(handle_type_name, "VkCommandBuffer")) {
+            // In stable message mode do not print dispatchable handles because they vary
+            print_handle = false;
+        }
+    }
+
     std::ostringstream str;
-    str << handle_type_name << " 0x" << std::hex << handle << "[" << handle_name.c_str() << "]";
+    str << handle_type_name << " ";
+    if (print_handle) {
+        str << "0x" << std::hex << handle;
+    }
+    if (!handle_name.empty()) {
+        str << "[" << handle_name.c_str() << "]";
+    }
     return str.str();
 }
 
@@ -531,118 +629,26 @@ VKAPI_ATTR void DeactivateInstanceDebugCallbacks(DebugReport *debug_report) {
 
 // helper for VUID based filtering. This needs to be separate so it can be called before incurring
 // the cost of sprintf()-ing the err_msg needed by LogMsgLocked().
-bool DebugReport::LogMsgEnabled(std::string_view vuid_text, VkDebugUtilsMessageSeverityFlagsEXT msg_severity,
+bool DebugReport::LogMsgEnabled(uint32_t vuid_hash, VkDebugUtilsMessageSeverityFlagsEXT msg_severity,
                                 VkDebugUtilsMessageTypeFlagsEXT msg_type) {
     if (!(active_msg_severities & msg_severity) || !(active_msg_types & msg_type)) {
         return false;
     }
     // If message is in filter list, bail out very early
-    const uint32_t message_id = hash_util::VuidHash(vuid_text);
-    if (filter_message_ids.find(message_id) != filter_message_ids.end()) {
+    if (filter_message_ids.find(vuid_hash) != filter_message_ids.end()) {
         return false;
     }
-    if ((duplicate_message_limit > 0) && UpdateLogMsgCounts(static_cast<int32_t>(message_id))) {
+    if ((duplicate_message_limit > 0) && UpdateLogMsgCounts(static_cast<int32_t>(vuid_hash))) {
         // Count for this particular message is over the limit, ignore it
         return false;
     }
     return true;
 }
 
-bool DebugReport::LogMsg(VkFlags msg_flags, const LogObjectList &objects, const Location &loc, std::string_view vuid_text,
-                         const char *format, va_list argptr) {
-    assert(*(vuid_text.data() + vuid_text.size()) == '\0');
-
-    VkDebugUtilsMessageSeverityFlagsEXT msg_severity;
-    VkDebugUtilsMessageTypeFlagsEXT msg_type;
-
-    DebugReportFlagsToAnnotFlags(msg_flags, &msg_severity, &msg_type);
-    std::unique_lock<std::mutex> lock(debug_output_mutex);
-    // Avoid logging cost if msg is to be ignored
-    if (!LogMsgEnabled(vuid_text, msg_severity, msg_type)) {
-        return false;
-    }
-
-    // Best guess at an upper bound for message length. At least some of the extra space
-    // should get used to store the VUID URL and text in the common case, without additional allocations.
-    std::string full_message(1024, '\0');
-
-    // vsnprintf() returns the number of characters that *would* have been printed, if there was
-    // enough space. If we have a huge message, reallocate the string and try again.
-    int result;
-    size_t old_size = full_message.size();
-    // The va_list will be destroyed by the call to vsnprintf(), so use a copy in case we need
-    // to try again.
-    va_list arg_copy;
-    va_copy(arg_copy, argptr);
-    result = vsnprintf(full_message.data(), full_message.size(), format, arg_copy);
-    va_end(arg_copy);
-
-    assert(result >= 0);
-    if (result < 0) {
-        full_message = "Message generation failure";
-    } else if (static_cast<size_t>(result) <= old_size) {
-        // Shrink the string to exactly fit the successfully printed string
-        full_message.resize(result);
-    } else {
-        // Grow buffer to fit needed size. Note that the input size to vsnprintf() must
-        // include space for the trailing '\0' character, but the return value DOES NOT
-        // include the `\0' character.
-        full_message.resize(result + 1);
-        // consume the va_list passed to us by the caller
-        result = vsnprintf(full_message.data(), full_message.size(), format, argptr);
-        // remove the `\0' character from the string
-        full_message.resize(result);
-    }
-
-    full_message = loc.Message() + " " + full_message;
-
-    // Append the spec error text to the error message, unless it contains a word treated as special
-    if ((vuid_text.find("VUID-") != std::string::npos)) {
-        // Linear search makes no assumptions about the layout of the string table. This is not fast, but it does not need to be at
-        // this point in the error reporting path
-        uint32_t num_vuids = sizeof(vuid_spec_text) / sizeof(vuid_spec_text_pair);
-        const char *spec_text = nullptr;
-        // Only the Antora site will make use of the sections
-        std::string spec_url_section;
-        for (uint32_t i = 0; i < num_vuids; i++) {
-            if (0 == strncmp(vuid_text.data(), vuid_spec_text[i].vuid, vuid_text.size())) {
-                spec_text = vuid_spec_text[i].spec_text;
-                spec_url_section = vuid_spec_text[i].url_id;
-                break;
-            }
-        }
-
-        // Construct and append the specification text and link to the appropriate version of the spec
-        if (nullptr != spec_text) {
-#ifdef ANNOTATED_SPEC_LINK
-            std::string spec_url_base = ANNOTATED_SPEC_LINK;
-#else
-            std::string spec_url_base = "https://docs.vulkan.org/spec/latest/";
-#endif
-
-            // Add period at end if forgotten
-            // This provides better seperation between error message and spec text
-            if (full_message.back() != '.' && full_message.back() != '\n') {
-                full_message.append(".");
-            }
-
-            // Start Vulkan spec text with a new line to make it easier visually
-            if (full_message.back() != '\n') {
-                full_message.append("\n");
-            }
-
-            full_message.append("The Vulkan spec states: ");
-            full_message.append(spec_text);
-            full_message.append(" (");
-            full_message.append(spec_url_base);
-            full_message.append(spec_url_section);
-            full_message.append("#");  // CMake hates hashes
-            full_message.append(vuid_text);
-            full_message.append(")");
-        }
-    }
-
-    return DebugLogMsg(msg_flags, objects, full_message.c_str(), vuid_text.data());
+bool DebugReport::LogMessageVaList(VkFlags msg_flags, std::string_view vuid_text, const LogObjectList &objects, const Location &loc,
+                                   const char *format, va_list argptr) {
+    const std::string main_message = text::VFormat(format, argptr);
+    return LogMessage(msg_flags, vuid_text, objects, loc, main_message);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL MessengerBreakCallback([[maybe_unused]] VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,

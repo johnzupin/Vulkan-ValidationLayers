@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ TEST_F(PositiveShaderInterface, InputAndOutputComponents) {
                 layout(location = 7, component = 3) out float ar3;
 
                 void main() {
-	                    vec2 xy = vec2((gl_VertexIndex >> 1u) & 1u, gl_VertexIndex & 1u);
+                        vec2 xy = vec2((gl_VertexIndex >> 1u) & 1u, gl_VertexIndex & 1u);
                         gl_Position = vec4(xy, 0.0f, 1.0f);
                         out_color_0 = vec4(1.0f, 0.0f, 1.0f, 0.0f);
                         out_color_1 = vec4(0.0f, 1.0f, 0.0f, 1.0f);
@@ -523,7 +523,7 @@ TEST_F(PositiveShaderInterface, InputAttachmentMissingNotRead) {
 
     const auto set_info = [&](CreatePipelineHelper &helper) {
         helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-        helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+        helper.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     };
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
 }
@@ -564,7 +564,7 @@ TEST_F(PositiveShaderInterface, InputAttachmentArray) {
 
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
             helper.gp_ci_.renderPass = rp.Handle();
         };
         CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
@@ -584,7 +584,7 @@ TEST_F(PositiveShaderInterface, InputAttachmentArray) {
 
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
             helper.gp_ci_.renderPass = rp.Handle();
         };
         CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
@@ -605,7 +605,7 @@ TEST_F(PositiveShaderInterface, InputAttachmentArray) {
 
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
             helper.gp_ci_.renderPass = rp.Handle();
         };
         CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
@@ -625,7 +625,7 @@ TEST_F(PositiveShaderInterface, InputAttachmentArray) {
 
         const auto set_info = [&](CreatePipelineHelper &helper) {
             helper.shader_stages_ = {helper.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-            helper.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+            helper.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
             helper.gp_ci_.renderPass = rp.Handle();
         };
         CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
@@ -755,7 +755,7 @@ TEST_F(PositiveShaderInterface, AlphaToCoverageOutputIndex0) {
         #version 460
         layout(location = 0, index = 0) out vec4 c0;
         void main() {
-		    c0 = vec4(0.0f);
+            c0 = vec4(0.0f);
         }
     )glsl";
     VkShaderObj fs(this, fs_src, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1445,10 +1445,9 @@ TEST_F(PositiveShaderInterface, MultipleFragmentAttachment) {
     rp.AddColorAttachment(1);
     rp.CreateRenderPass();
 
-    VkPipelineColorBlendAttachmentState cb_as[2] = {{VK_FALSE, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD,
-                                                     VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, 0xf},
-                                                    {VK_FALSE, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD,
-                                                     VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, 0xf}};
+    VkPipelineColorBlendAttachmentState cb_as[2];
+    cb_as[0] = DefaultColorBlendAttachmentState();
+    cb_as[1] = DefaultColorBlendAttachmentState();
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
@@ -1515,7 +1514,41 @@ TEST_F(PositiveShaderInterface, MissingInputAttachmentIndex) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     pipe.gp_ci_.renderPass = rp.Handle();
     pipe.CreateGraphicsPipeline();
+}
+
+TEST_F(PositiveShaderInterface, PhysicalStorageBufferGlslang3) {
+    TEST_DESCRIPTION(
+        "Taken from glslang spv.bufferhandle3.frag test - just creating the shader is valid, interface is tested elsewhere");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    RETURN_IF_SKIP(Init());
+
+    char const *fs_source = R"glsl(
+        #version 450
+        #extension GL_EXT_buffer_reference : enable
+
+        layout(buffer_reference, std430) buffer t3 {
+            int h;
+        };
+
+        layout(set = 1, binding = 2, buffer_reference, std430) buffer t4 {
+            layout(offset = 0)  int j;
+            t3 k;
+        } x;
+
+        layout(set = 0, binding = 0, std430) buffer t5 {
+            t4 m;
+        } s5;
+
+        layout(location = 0) flat in t4 k;
+
+        t4 foo(t4 y) { return y; }
+        void main() {}
+    )glsl";
+
+    VkShaderObj fs(this, fs_source, VK_SHADER_STAGE_FRAGMENT_BIT);
 }

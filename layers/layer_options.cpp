@@ -1,6 +1,6 @@
-/* Copyright (c) 2020-2024 The Khronos Group Inc.
- * Copyright (c) 2020-2024 Valve Corporation
- * Copyright (c) 2020-2024 LunarG, Inc.
+/* Copyright (c) 2020-2025 The Khronos Group Inc.
+ * Copyright (c) 2020-2025 Valve Corporation
+ * Copyright (c) 2020-2025 LunarG, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +30,7 @@
 #include <vector>
 #include <vulkan/layer/vk_layer_settings.hpp>
 
-#include "gpu/core/gpuav_settings.h"
+#include "gpuav/core/gpuav_settings.h"
 
 #include "sync/sync_settings.h"
 #include "vk_layer_config.h"
@@ -173,6 +173,7 @@ const char *VK_LAYER_DUPLICATE_MESSAGE_LIMIT = "duplicate_message_limit";
 const char *VK_LAYER_FINE_GRAINED_LOCKING = "fine_grained_locking";
 // Debug settings used for internal development
 const char *VK_LAYER_DEBUG_DISABLE_SPIRV_VAL = "debug_disable_spirv_val";
+const char *VK_LAYER_DEBUG_STABLE_MESSAGES = "debug_stable_messages";
 
 // DebugPrintf (which is now part of GPU-AV internally)
 // ---
@@ -196,6 +197,7 @@ const char *VK_LAYER_GPUAV_VALIDATE_RAY_QUERY = "gpuav_validate_ray_query";
 // Post Process are designed to allow the user to "assume" the access is valid and want to know after the GPU executes what
 // happened. These are much lighter checks and can be used while the rest of GPU-AV is turned off
 const char *VK_LAYER_GPUAV_POST_PROCESS_DESCRIPTOR_INDEXING = "gpuav_post_process_descriptor_indexing";
+const char *VK_LAYER_GPUAV_VERTEX_ATTRIBUTE_FETCH_OOB = "gpuav_vertex_attribute_fetch_oob";
 const char *VK_LAYER_GPUAV_SELECT_INSTRUMENTED_SHADERS = "gpuav_select_instrumented_shaders";
 
 const char *VK_LAYER_GPUAV_BUFFERS_VALIDATION = "gpuav_buffers_validation";
@@ -224,6 +226,7 @@ const char *VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES_PRETTY_PRINT = "syncval_me
 
 // Message Formatting
 // ---
+const char *VK_LAYER_MESSAGE_FORMAT_VERBOSE = "message_format_verbose";
 const char *VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME = "message_format_display_application_name";
 // Until post 1.3.290 SDK release, these were not possible to set via environment variables
 const char *VK_LAYER_LOG_FILENAME = "log_filename";
@@ -481,19 +484,19 @@ static bool ValidateLayerSettingsCreateInfo(const VkLayerSettingsCreateInfoEXT *
     if (layer_settings->pSettings) {
         for (const auto [i, setting] : vvl::enumerate(layer_settings->pSettings, layer_settings->settingCount)) {
             const Location setting_loc = create_info_loc.dot(vvl::Field::pSettings, i);
-            if (setting->valueCount > 0 && !setting->pValues) {
+            if (setting.valueCount > 0 && !setting.pValues) {
                 ss << "[ VUID-VkLayerSettingEXT-valueCount-10070 ] " << setting_loc.dot(vvl::Field::pValues).Message()
                    << " is NULL";
                 printf("Validation Layer Error: %s\n", ss.str().c_str());
                 valid = false;
             }
-            if (!setting->pLayerName) {
+            if (!setting.pLayerName) {
                 ss << "[ VUID-VkLayerSettingEXT-pLayerName-parameter ] " << setting_loc.dot(vvl::Field::pLayerName).Message()
                    << " is NULL";
                 printf("Validation Layer Error: %s\n", ss.str().c_str());
                 valid = false;
             }
-            if (!setting->pSettingName) {
+            if (!setting.pSettingName) {
                 ss << "[ VUID-VkLayerSettingEXT-pSettingName-parameter ] " << setting_loc.dot(vvl::Field::pSettingName).Message()
                    << " is NULL";
                 printf("Validation Layer Error: %s\n", ss.str().c_str());
@@ -626,6 +629,8 @@ static void ValidateLayerSettingsProvided(const VkLayerSettingsCreateInfoEXT *la
         } else if (strcmp(VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES, setting.pSettingName) == 0) {
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
         } else if (strcmp(VK_LAYER_SYNCVAL_MESSAGE_EXTRA_PROPERTIES_PRETTY_PRINT, setting.pSettingName) == 0) {
+            required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
+        } else if (strcmp(VK_LAYER_MESSAGE_FORMAT_VERBOSE, setting.pSettingName) == 0) {
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
         } else if (strcmp(VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME, setting.pSettingName) == 0) {
             required_type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
@@ -762,6 +767,10 @@ static void ProcessDebugReportSettings(ConfigAndEnvSettings *settings_data, VkuL
     }
     debug_report->duplicate_message_limit = duplicate_message_limit;
 
+    if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_MESSAGE_FORMAT_VERBOSE)) {
+        vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_MESSAGE_FORMAT_VERBOSE, debug_report->message_format_settings.verbose);
+    }
+
     if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME)) {
         vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_MESSAGE_FORMAT_DISPLAY_APPLICATION_NAME,
                                 debug_report->message_format_settings.display_application_name);
@@ -772,6 +781,11 @@ static void ProcessDebugReportSettings(ConfigAndEnvSettings *settings_data, VkuL
         vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_LOG_FILENAME, log_filename);
     }
     const bool is_stdout = log_filename.compare("stdout") == 0;
+
+    // Debug mode to simplify comparison of error messages between application runs
+    if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_DEBUG_STABLE_MESSAGES)) {
+        vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_DEBUG_STABLE_MESSAGES, debug_report->debug_stable_messages);
+    }
 
     // Default
     std::vector<std::string> debug_actions_list = {"VK_DBG_LAYER_ACTION_DEFAULT", "VK_DBG_LAYER_ACTION_LOG_MSG"};
@@ -811,7 +825,7 @@ static void ProcessDebugReportSettings(ConfigAndEnvSettings *settings_data, VkuL
         }
     }
 
-    std::vector<std::string> report_flags_list = {"error"};  // Default
+    std::vector<std::string> report_flags_list = {"error", "warn"};  // Default
     if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_REPORT_FLAGS)) {
         vkuGetLayerSettingValues(layer_setting_set, VK_LAYER_REPORT_FLAGS, report_flags_list);
     }
@@ -1036,7 +1050,12 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
         }
         if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_POST_PROCESS_DESCRIPTOR_INDEXING)) {
             vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_POST_PROCESS_DESCRIPTOR_INDEXING,
-                                    gpuav_settings.shader_instrumentation.post_process_descriptor_index);
+                                    gpuav_settings.shader_instrumentation.post_process_descriptor_indexing);
+        }
+
+        if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_VERTEX_ATTRIBUTE_FETCH_OOB)) {
+            vkuGetLayerSettingValue(layer_setting_set, VK_LAYER_GPUAV_VERTEX_ATTRIBUTE_FETCH_OOB,
+                                    gpuav_settings.shader_instrumentation.vertex_attribute_fetch_oob);
         }
 
         if (vkuHasLayerSetting(layer_setting_set, VK_LAYER_GPUAV_WARN_ON_ROBUST_OOB)) {
@@ -1348,7 +1367,8 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     }
 
     for (const auto &warning : setting_warnings) {
-        settings_data->debug_report->DebugLogMsg(kWarningBit, {}, warning.c_str(), "VALIDATION-SETTINGS");
+        Location loc(vvl::Func::vkCreateInstance);
+        settings_data->debug_report->LogMessage(kWarningBit, "VALIDATION-SETTINGS", {}, loc, warning);
     }
 
     vkuDestroyLayerSettingSet(layer_setting_set, nullptr);

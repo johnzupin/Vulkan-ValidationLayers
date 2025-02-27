@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2021-2022 ARM, Inc. All rights reserved.
  *
@@ -24,8 +24,16 @@ TEST_F(NegativeDynamicRendering, CommandBufferInheritanceRenderingInfo) {
     TEST_DESCRIPTION("VkCommandBufferInheritanceRenderingInfo Dynamic Rendering Tests.");
     SetTargetApiVersion(VK_API_VERSION_1_2);
     AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    AddOptionalExtensions(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
+    AddOptionalExtensions(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::dynamicRendering);
+
     RETURN_IF_SKIP(Init());
+    const bool amd_samples = IsExtensionsEnabled(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
+    const bool nv_samples = IsExtensionsEnabled(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
+    if (!amd_samples && !nv_samples) {
+        GTEST_SKIP() << "Test requires either VK_AMD_mixed_attachment_samples or VK_NV_framebuffer_mixed_samples";
+    }
 
     VkPhysicalDeviceMultiviewProperties multiview_props = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(multiview_props);
@@ -462,6 +470,7 @@ TEST_F(NegativeDynamicRendering, ClearAttachments) {
                 const VkResult err = vk::CreateFramebuffer(m_device->handle(), &framebuffer_ci, nullptr, &framebuffers[1]);
                 ASSERT_EQ(VK_SUCCESS, err);
                 renderpass_bi.framebuffer = framebuffers[1];
+                m_command_buffer.FullMemoryBarrier();
                 m_command_buffer.BeginRenderPass(renderpass_bi);
             }
 
@@ -497,6 +506,7 @@ TEST_F(NegativeDynamicRendering, ClearAttachments) {
                 if (use_dynamic_rendering) {
                     m_command_buffer.BeginRendering(begin_rendering_info);
                 } else {
+                    m_command_buffer.FullMemoryBarrier();
                     m_command_buffer.BeginRenderPass(renderpass_bi);
                 }
 
@@ -524,6 +534,7 @@ TEST_F(NegativeDynamicRendering, ClearAttachments) {
                 if (use_dynamic_rendering) {
                     m_command_buffer.BeginRendering(begin_rendering_info);
                 } else {
+                    m_command_buffer.FullMemoryBarrier();
                     m_command_buffer.BeginRenderPass(renderpass_bi);
                 }
 
@@ -547,6 +558,7 @@ TEST_F(NegativeDynamicRendering, ClearAttachments) {
 
             // Clear color, subpass has unused attachments
             if (!use_dynamic_rendering) {
+                m_command_buffer.FullMemoryBarrier();
                 m_command_buffer.BeginRenderPass(renderpass_bi);
                 m_command_buffer.NextSubpass();
                 std::array<VkClearAttachment, 4> clears = {{{VK_IMAGE_ASPECT_DEPTH_BIT, 0},
@@ -1557,7 +1569,9 @@ TEST_F(NegativeDynamicRendering, PipelineMissingFlags) {
     bool shading_rate = IsExtensionsEnabled(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
 
     VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties = vku::InitStructHelper();
-    GetPhysicalDeviceProperties2(fsr_properties);
+    if (IsExtensionsEnabled(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME)) {
+        GetPhysicalDeviceProperties2(fsr_properties);
+    }
 
     InitRenderTarget();
 
@@ -2897,8 +2911,15 @@ TEST_F(NegativeDynamicRendering, LibraryViewMask) {
 
 TEST_F(NegativeDynamicRendering, AttachmentSampleCount) {
     TEST_DESCRIPTION("Create pipeline with invalid color attachment samples");
+    AddOptionalExtensions(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
+    AddOptionalExtensions(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
     RETURN_IF_SKIP(InitBasicDynamicRendering());
     InitRenderTarget();
+    const bool amd_samples = IsExtensionsEnabled(VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME);
+    const bool nv_samples = IsExtensionsEnabled(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME);
+    if (!amd_samples && !nv_samples) {
+        GTEST_SKIP() << "Test requires either VK_AMD_mixed_attachment_samples or VK_NV_framebuffer_mixed_samples";
+    }
 
     VkSampleCountFlagBits color_attachment_samples = VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM;
 
@@ -3037,7 +3058,7 @@ TEST_F(NegativeDynamicRendering, PipelineMissingMultisampleState) {
 
     {
         CreatePipelineHelper pipe(*this);
-        pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
+        pipe.VertexShaderOnly();
         pipe.gp_ci_.pMultisampleState = nullptr;
         pipe.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
         // No fragment shader implies no fragment shader state and rasterizerDiscardEnable == true implies no fragment
@@ -5863,7 +5884,7 @@ TEST_F(NegativeDynamicRendering, MismatchingDepthAttachmentFormatInSecondaryCmdB
                                    VK_FORMAT_D16_UNORM,         VK_FORMAT_X8_D24_UNORM_PACK32, VK_FORMAT_D32_SFLOAT};
     VkFormat depth_format1 = VK_FORMAT_UNDEFINED;
     VkFormat depth_format2 = VK_FORMAT_UNDEFINED;
-    for (uint32_t i = 0; i < size(ds_formats); ++i) {
+    for (uint32_t i = 0; i < size32(ds_formats); ++i) {
         VkFormatProperties format_props;
         vk::GetPhysicalDeviceFormatProperties(m_device->Physical().handle(), ds_formats[i], &format_props);
 
@@ -6413,6 +6434,43 @@ TEST_F(NegativeDynamicRendering, RenderPassLegacyDithering) {
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-09642");
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
     m_errorMonitor->VerifyFound();
+    m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeDynamicRendering, DrawInPrimaryCmdBufferWithContentsSecondary) {
+    RETURN_IF_SKIP(InitBasicDynamicRendering());
+    InitRenderTarget();
+
+    VkPipelineRenderingCreateInfo pipeline_rendering_info = vku::InitStructHelper();
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &m_render_target_fmt;
+
+    CreatePipelineHelper pipe(*this, &pipeline_rendering_info);
+    pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
+    pipe.CreateGraphicsPipeline();
+
+    vkt::ImageView render_target_view = m_renderTargets[0]->CreateView();
+
+    VkRenderingAttachmentInfo color_attachment = vku::InitStructHelper();
+    color_attachment.imageView = render_target_view.handle();
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkRenderingInfo rendering_info = vku::InitStructHelper();
+    rendering_info.flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT;
+    rendering_info.renderArea = m_renderPassBeginInfo.renderArea;
+    rendering_info.layerCount = 1u;
+    rendering_info.colorAttachmentCount = 1u;
+    rendering_info.pColorAttachments = &color_attachment;
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRendering(rendering_info);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-flags-10582");
+    vk::CmdDraw(m_command_buffer.handle(), 4u, 1u, 0u, 0u);
+    m_errorMonitor->VerifyFound();
+
     m_command_buffer.EndRendering();
     m_command_buffer.End();
 }

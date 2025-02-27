@@ -1,6 +1,6 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2020-2024 The Khronos Group Inc.
+# Copyright (c) 2020-2025 The Khronos Group Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 import sys
 import os
 import json
-from generators.vulkan_object import SpirvEnables
-from generators.base_generator import BaseGenerator
+from vulkan_object import SpirvEnables
+from base_generator import BaseGenerator
 from generators.generator_utils import IsNonVulkanSprivCapability
 
 #
@@ -115,13 +115,12 @@ class SpirvValidationHelperOutputGenerator(BaseGenerator):
         return "".join(out)
 
     def generate(self):
-        out = []
-        out.append(f'''// *** THIS FILE IS GENERATED - DO NOT EDIT ***
+        self.write(f'''// *** THIS FILE IS GENERATED - DO NOT EDIT ***
             // See {os.path.basename(__file__)} for modifications
 
             /***************************************************************************
             *
-            * Copyright (c) 2020-2024 The Khronos Group Inc.
+            * Copyright (c) 2020-2025 The Khronos Group Inc.
             *
             * Licensed under the Apache License, Version 2.0 (the "License");
             * you may not use this file except in compliance with the License.
@@ -140,7 +139,31 @@ class SpirvValidationHelperOutputGenerator(BaseGenerator):
             *
             ****************************************************************************/
             ''')
-        out.append('// NOLINTBEGIN') # Wrap for clang-tidy to ignore
+        self.write('// NOLINTBEGIN') # Wrap for clang-tidy to ignore
+
+        if self.filename == 'spirv_validation_helper.h':
+            self.generateHeader()
+        elif self.filename == 'spirv_validation_helper.cpp':
+            self.generateSource()
+        else:
+            self.write(f'\nFile name {self.filename} has no code to generate\n')
+
+        self.write('// NOLINTEND') # Wrap for clang-tidy to ignore
+
+    def generateHeader(self):
+        out = []
+        out.append('''
+            #pragma once
+            #include <vulkan/vulkan_core.h>
+
+            // This is the one function that requires mapping SPIR-V enums to Vulkan enums
+            VkFormat CompatibleSpirvImageFormat(uint32_t spirv_image_format);
+        ''')
+
+        self.write("".join(out))
+
+    def generateSource(self):
+        out = []
         out.append('''
             #include <string>
             #include <string_view>
@@ -233,10 +256,10 @@ class SpirvValidationHelperOutputGenerator(BaseGenerator):
         # Creates SPIR-V image format helper
         out.append('''
             // Will return the Vulkan format for a given SPIR-V image format value
-            // Note: will return VK_FORMAT_UNDEFINED if non valid input
+            // Note: will return VK_FORMAT_UNDEFINED if non valid input (or if ImageFormatUnknown)
             // This was in vk_format_utils but the SPIR-V Header dependency was an issue
             //   see https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/4647
-            VkFormat CoreChecks::CompatibleSpirvImageFormat(uint32_t spirv_image_format) const {
+            VkFormat CompatibleSpirvImageFormat(uint32_t spirv_image_format) {
                 switch (spirv_image_format) {
             ''')
         for format in [x for x in self.vk.formats.values() if x.spirvImageFormat]:
@@ -344,7 +367,7 @@ static inline std::string SpvExtensionRequirments(std::string_view extension) {
                         } else if (it->second.extension) {
                             // kEnabledByApiLevel is not valid as some extension are promoted with feature bits to be used.
                             // If the new Api Level gives support, it will be caught in the "it->second.version" check instead.
-                            if (IsExtEnabledByCreateinfo(device_extensions.*(it->second.extension))) {
+                            if (IsExtEnabledByCreateinfo(extensions.*(it->second.extension))) {
                                 has_support = true;
                             }
                         } else if (it->second.property) {
@@ -384,7 +407,7 @@ static inline std::string SpvExtensionRequirments(std::string_view extension) {
                 }
 
                 // Portability checks
-                if (IsExtEnabled(device_extensions.vk_khr_portability_subset)) {
+                if (IsExtEnabled(extensions.vk_khr_portability_subset)) {
                     if ((VK_FALSE == enabled_features.shaderSampleRateInterpolationFunctions) &&
                         (spv::CapabilityInterpolationFunction == insn.Word(1))) {
                         skip |= LogError("VUID-RuntimeSpirv-shaderSampleRateInterpolationFunctions-06325", device, loc,
@@ -427,7 +450,7 @@ static inline std::string SpvExtensionRequirments(std::string_view extension) {
                             has_support = true;
                         }
                     } else if (it->second.extension) {
-                        if (IsExtEnabled(device_extensions.*(it->second.extension))) {
+                        if (IsExtEnabled(extensions.*(it->second.extension))) {
                             has_support = true;
                         }
                     }
@@ -442,5 +465,4 @@ static inline std::string SpvExtensionRequirments(std::string_view extension) {
             return skip;
             }
             ''')
-        out.append('// NOLINTEND') # Wrap for clang-tidy to ignore
         self.write("".join(out))

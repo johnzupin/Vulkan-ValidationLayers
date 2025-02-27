@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2019-2024 Valve Corporation
- * Copyright (c) 2019-2024 LunarG, Inc.
+ * Copyright (c) 2019-2025 Valve Corporation
+ * Copyright (c) 2019-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -548,12 +548,14 @@ void ResourceAccessState::ApplyPendingBarriers(const ResourceUsageTag tag) {
     if (pending_layout_transition) {
         // SetWrite clobbers the last_reads array, and thus we don't have to clear the read_state out.
         const SyncAccessInfo &layout_usage_info = AccessInfo(SYNC_IMAGE_LAYOUT_TRANSITION);
-        SetWrite(layout_usage_info, ResourceUsageTagEx{tag});  // Side effect notes below
-        UpdateFirst(ResourceUsageTagEx{tag}, layout_usage_info, SyncOrdering::kNonAttachment);
+        const ResourceUsageTagEx tag_ex = ResourceUsageTagEx{tag, pending_layout_transition_handle_index};
+        SetWrite(layout_usage_info, tag_ex);  // Side effect notes below
+        UpdateFirst(tag_ex, layout_usage_info, SyncOrdering::kNonAttachment);
         TouchupFirstForLayoutTransition(tag, last_write->GetPendingLayoutOrdering());
 
         last_write->ApplyPendingBarriers();
         pending_layout_transition = false;
+        pending_layout_transition_handle_index = vvl::kNoIndex32;
     } else {
         // Apply the accumulate execution barriers (and thus update chaining information)
         // for layout transition, last_reads is reset by SetWrite, so this will be skipped.
@@ -958,11 +960,12 @@ HazardResult::HazardState::HazardState(const ResourceAccessState *access_state_,
 
 SyncExecScope SyncExecScope::MakeSrc(VkQueueFlags queue_flags, VkPipelineStageFlags2 mask_param,
                                      const VkPipelineStageFlags2 disabled_feature_mask) {
+    const VkPipelineStageFlags2 expanded_mask = sync_utils::ExpandPipelineStages(mask_param, queue_flags, disabled_feature_mask);
+
     SyncExecScope result;
     result.mask_param = mask_param;
-    result.expanded_mask = sync_utils::ExpandPipelineStages(mask_param, queue_flags, disabled_feature_mask);
-    result.exec_scope = sync_utils::WithEarlierPipelineStages(result.expanded_mask);
-    result.valid_accesses = SyncStageAccess::AccessScopeByStage(result.expanded_mask);
+    result.exec_scope = sync_utils::WithEarlierPipelineStages(expanded_mask);
+    result.valid_accesses = SyncStageAccess::AccessScopeByStage(expanded_mask);
     // ALL_COMMANDS stage includes all accesses performed by the gpu, not only accesses defined by the stages
     if (mask_param & VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT) {
         result.valid_accesses |= SYNC_IMAGE_LAYOUT_TRANSITION_BIT;
@@ -971,11 +974,11 @@ SyncExecScope SyncExecScope::MakeSrc(VkQueueFlags queue_flags, VkPipelineStageFl
 }
 
 SyncExecScope SyncExecScope::MakeDst(VkQueueFlags queue_flags, VkPipelineStageFlags2 mask_param) {
+    const VkPipelineStageFlags2 expanded_mask = sync_utils::ExpandPipelineStages(mask_param, queue_flags);
     SyncExecScope result;
     result.mask_param = mask_param;
-    result.expanded_mask = sync_utils::ExpandPipelineStages(mask_param, queue_flags);
-    result.exec_scope = sync_utils::WithLaterPipelineStages(result.expanded_mask);
-    result.valid_accesses = SyncStageAccess::AccessScopeByStage(result.expanded_mask);
+    result.exec_scope = sync_utils::WithLaterPipelineStages(expanded_mask);
+    result.valid_accesses = SyncStageAccess::AccessScopeByStage(expanded_mask);
     // ALL_COMMANDS stage includes all accesses performed by the gpu, not only accesses defined by the stages
     if (mask_param & VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT) {
         result.valid_accesses |= SYNC_IMAGE_LAYOUT_TRANSITION_BIT;
@@ -1056,4 +1059,34 @@ const char *string_SyncHazardVUID(SyncHazard hazard) {
             assert(0);
     }
     return "SYNC-HAZARD-INVALID";
+}
+
+SyncHazardInfo GetSyncHazardInfo(SyncHazard hazard) {
+    switch (hazard) {
+        case SyncHazard::NONE:
+            return SyncHazardInfo{};
+        case SyncHazard::READ_AFTER_WRITE:
+            return SyncHazardInfo{false, true};
+        case SyncHazard::WRITE_AFTER_READ:
+            return SyncHazardInfo{true, false};
+        case SyncHazard::WRITE_AFTER_WRITE:
+            return SyncHazardInfo{true, true};
+        case SyncHazard::READ_RACING_WRITE:
+            return SyncHazardInfo{false, true, true};
+        case SyncHazard::WRITE_RACING_WRITE:
+            return SyncHazardInfo{true, true, true};
+        case SyncHazard::WRITE_RACING_READ:
+            return SyncHazardInfo{true, false, true};
+        case SyncHazard::READ_AFTER_PRESENT:
+            return SyncHazardInfo{false, true};
+        case SyncHazard::WRITE_AFTER_PRESENT:
+            return SyncHazardInfo{true, true};
+        case SyncHazard::PRESENT_AFTER_WRITE:
+            return SyncHazardInfo{true, true};
+        case SyncHazard::PRESENT_AFTER_READ:
+            return SyncHazardInfo{true, false};
+        default:
+            assert(false && "Unhandled SyncHazard value");
+            return SyncHazardInfo{};
+    }
 }

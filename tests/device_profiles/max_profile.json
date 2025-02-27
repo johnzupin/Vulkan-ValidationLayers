@@ -3,7 +3,7 @@
     "profiles": {
         "MAX_PROFILE": {
             "version": 1,
-            "api-version": "1.3.238",
+            "api-version": "1.4.304",
             "label": "Max Profile",
             "description": "Profile that supports everything possible",
             "contributors": {},
@@ -168,6 +168,9 @@
                 },
                 "VkPhysicalDeviceMaintenance7FeaturesKHR": {
                     "maintenance7": true
+                },
+                "VkPhysicalDeviceMaintenance8FeaturesKHR": {
+                    "maintenance8": true
                 },
                 "VkPhysicalDeviceShaderDrawParametersFeatures": {
                     "shaderDrawParameters": true
@@ -539,6 +542,29 @@
                     "shaderIntegerDotProduct": true,
                     "maintenance4": true
                 },
+                "VkPhysicalDeviceVulkan14Features": {
+                    "globalPriorityQuery": true,
+                    "shaderSubgroupRotate": true,
+                    "shaderSubgroupRotateClustered": true,
+                    "shaderFloatControls2": true,
+                    "shaderExpectAssume": true,
+                    "rectangularLines": true,
+                    "bresenhamLines": true,
+                    "smoothLines": true,
+                    "stippledRectangularLines": true,
+                    "stippledBresenhamLines": true,
+                    "stippledSmoothLines": true,
+                    "vertexAttributeInstanceRateDivisor": true,
+                    "vertexAttributeInstanceRateZeroDivisor": true,
+                    "indexTypeUint8": true,
+                    "dynamicRenderingLocalRead": true,
+                    "maintenance5": true,
+                    "maintenance6": true,
+                    "pipelineProtectedAccess": true,
+                    "pipelineRobustness": true,
+                    "hostImageCopy": true,
+                    "pushDescriptor": true
+                },
                 "VkPhysicalDeviceCoherentMemoryFeaturesAMD": {
                     "deviceCoherentMemory": true
                 },
@@ -893,6 +919,9 @@
                 "VkPhysicalDeviceVideoMaintenance1FeaturesKHR": {
                     "videoMaintenance1": true
                 },
+                "VkPhysicalDeviceVideoMaintenance2FeaturesKHR": {
+                    "videoMaintenance2": true
+                },
                 "VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR": {
                     "videoEncodeQuantizationMap": true
                 },
@@ -929,7 +958,7 @@
             "properties": {
                 "VkPhysicalDeviceProperties": {
                     "vendorID": 1,
-                    "apiVersion": 4206830,
+                    "apiVersion": 4210688,
                     "pipelineCacheUUID": [
                         0,
                         0,
@@ -1554,7 +1583,12 @@
                     "maxSubsampledArrayLayers": 4096,
                     "maxDescriptorSetSubsampledSamplers": 4096
                 },
-                "VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM": {},
+                "VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM": {
+                    "fragmentDensityOffsetGranularity": {
+                        "width": 8,
+                        "height": 8
+                    }
+                },
                 "VkPhysicalDeviceCooperativeMatrixPropertiesNV": {
                     "cooperativeMatrixSupportedStages": [
                         "VK_SHADER_STAGE_VERTEX_BIT",
@@ -1750,6 +1784,14 @@
                     "uniformTexelBufferOffsetSingleTexelAlignment": true,
                     "uniformTexelBufferOffsetAlignmentBytes": 16,
                     "maxBufferSize": 1073741824
+                },
+                "VkPhysicalDeviceVulkan14Properties": {
+                    "maxVertexAttribDivisor": 4294967000,
+                    "supportsNonZeroFirstInstance": true,
+                    "maxPushDescriptors": 4294967000,
+                    "blockTexelViewCompatibleMultipleLayers": true,
+                    "maxCombinedImageSamplerDescriptorCount": 1073741824,
+                    "identicalMemoryTypeRequirements": true
                 },
                 "VkPhysicalDeviceCustomBorderColorPropertiesEXT": {
                     "maxCustomBorderColorSamplers": 4294967000
@@ -2152,6 +2194,7 @@
                 "VK_KHR_maintenance5": 1,
                 "VK_KHR_maintenance6": 1,
                 "VK_KHR_maintenance7": 1,
+                "VK_KHR_maintenance8": 1,
                 "VK_KHR_multiview": 1,
                 "VK_KHR_performance_query": 1,
                 "VK_KHR_pipeline_binary": 1,
@@ -2205,6 +2248,7 @@
                 "VK_KHR_video_encode_queue": 1,
                 "VK_KHR_video_encode_quantization_map": 1,
                 "VK_KHR_video_maintenance1": 1,
+                "VK_KHR_video_maintenance2": 1,
                 "VK_KHR_video_queue": 1,
                 "VK_KHR_vulkan_memory_model": 1,
                 "VK_KHR_wayland_surface": 1,
@@ -8402,7 +8446,8 @@
                             ]
                         },
                         "VkVideoDecodeAV1ProfileInfoKHR": {
-                            "stdProfile": "STD_VIDEO_AV1_PROFILE_MAIN"
+                            "stdProfile": "STD_VIDEO_AV1_PROFILE_MAIN",
+                            "filmGrainSupport": false
                         }
                     }
                 },
@@ -8421,7 +8466,28 @@
                             ]
                         },
                         "VkVideoDecodeAV1ProfileInfoKHR": {
-                            "stdProfile": "STD_VIDEO_AV1_PROFILE_MAIN"
+                            "stdProfile": "STD_VIDEO_AV1_PROFILE_MAIN",
+                            "filmGrainSupport": false
+                        }
+                    }
+                },
+                {
+                    "profile": {
+                        "VkVideoProfileInfoKHR": {
+                            "videoCodecOperation": "VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR",
+                            "chromaSubsampling": [
+                                "VK_VIDEO_CHROMA_SUBSAMPLING_422_BIT_KHR"
+                            ],
+                            "lumaBitDepth": [
+                                "VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR"
+                            ],
+                            "chromaBitDepth": [
+                                "VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR"
+                            ]
+                        },
+                        "VkVideoDecodeAV1ProfileInfoKHR": {
+                            "stdProfile": "STD_VIDEO_AV1_PROFILE_MAIN",
+                            "filmGrainSupport": true
                         }
                     }
                 },
@@ -8440,7 +8506,28 @@
                             ]
                         },
                         "VkVideoDecodeAV1ProfileInfoKHR": {
-                            "stdProfile": "STD_VIDEO_AV1_PROFILE_MAIN"
+                            "stdProfile": "STD_VIDEO_AV1_PROFILE_MAIN",
+                            "filmGrainSupport": false
+                        }
+                    }
+                },
+                {
+                    "profile": {
+                        "VkVideoProfileInfoKHR": {
+                            "videoCodecOperation": "VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR",
+                            "chromaSubsampling": [
+                                "VK_VIDEO_CHROMA_SUBSAMPLING_444_BIT_KHR"
+                            ],
+                            "lumaBitDepth": [
+                                "VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR"
+                            ],
+                            "chromaBitDepth": [
+                                "VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR"
+                            ]
+                        },
+                        "VkVideoDecodeAV1ProfileInfoKHR": {
+                            "stdProfile": "STD_VIDEO_AV1_PROFILE_MAIN",
+                            "filmGrainSupport": true
                         }
                     }
                 },
@@ -9460,9 +9547,11 @@
                 },
                 {
                     "profile": {
-                        "chromaSubsampling": [
-                            "VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR"
-                        ]
+                        "VkVideoProfileInfoKHR": {
+                            "chromaSubsampling": [
+                                "VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR"
+                            ]
+                        }
                     },
                     "capabilities": {
                         "VkVideoDecodeCapabilitiesKHR": {}
@@ -9551,9 +9640,11 @@
                 },
                 {
                     "profile": {
-                        "chromaSubsampling": [
-                            "VK_VIDEO_CHROMA_SUBSAMPLING_422_BIT_KHR"
-                        ]
+                        "VkVideoProfileInfoKHR": {
+                            "chromaSubsampling": [
+                                "VK_VIDEO_CHROMA_SUBSAMPLING_422_BIT_KHR"
+                            ]
+                        }
                     },
                     "capabilities": {
                         "VkVideoDecodeCapabilitiesKHR": {}
@@ -9638,9 +9729,11 @@
                 },
                 {
                     "profile": {
-                        "chromaSubsampling": [
-                            "VK_VIDEO_CHROMA_SUBSAMPLING_444_BIT_KHR"
-                        ]
+                        "VkVideoProfileInfoKHR": {
+                            "chromaSubsampling": [
+                                "VK_VIDEO_CHROMA_SUBSAMPLING_444_BIT_KHR"
+                            ]
+                        }
                     },
                     "capabilities": {
                         "VkVideoDecodeCapabilitiesKHR": {}
@@ -9700,9 +9793,11 @@
                 },
                 {
                     "profile": {
-                        "chromaSubsampling": [
-                            "VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR"
-                        ]
+                        "VkVideoProfileInfoKHR": {
+                            "chromaSubsampling": [
+                                "VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR"
+                            ]
+                        }
                     },
                     "capabilities": {
                         "VkVideoEncodeCapabilitiesKHR": {}
@@ -9789,9 +9884,11 @@
                 },
                 {
                     "profile": {
-                        "chromaSubsampling": [
-                            "VK_VIDEO_CHROMA_SUBSAMPLING_422_BIT_KHR"
-                        ]
+                        "VkVideoProfileInfoKHR": {
+                            "chromaSubsampling": [
+                                "VK_VIDEO_CHROMA_SUBSAMPLING_422_BIT_KHR"
+                            ]
+                        }
                     },
                     "capabilities": {
                         "VkVideoEncodeCapabilitiesKHR": {}
@@ -9876,9 +9973,11 @@
                 },
                 {
                     "profile": {
-                        "chromaSubsampling": [
-                            "VK_VIDEO_CHROMA_SUBSAMPLING_444_BIT_KHR"
-                        ]
+                        "VkVideoProfileInfoKHR": {
+                            "chromaSubsampling": [
+                                "VK_VIDEO_CHROMA_SUBSAMPLING_444_BIT_KHR"
+                            ]
+                        }
                     },
                     "capabilities": {
                         "VkVideoEncodeCapabilitiesKHR": {}

@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2024 Valve Corporation
- * Copyright (c) 2024 LunarG, Inc.
+ * Copyright (c) 2024-2025 Valve Corporation
+ * Copyright (c) 2024-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -156,7 +156,7 @@ TEST_F(NegativeImageLayout, Compute) {
 
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr};
     pipe.CreateComputePipeline();
 
     const VkFormat fmt = VK_FORMAT_R8G8B8A8_UNORM;
@@ -217,7 +217,7 @@ TEST_F(NegativeImageLayout, Compute11) {
 
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr};
     pipe.CreateComputePipeline();
 
     const VkFormat fmt = VK_FORMAT_R8G8B8A8_UNORM;
@@ -266,7 +266,7 @@ TEST_F(NegativeImageLayout, MultipleCommandDispatches) {
 
     CreateComputePipelineHelper pipe(*this);
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs, VK_SHADER_STAGE_COMPUTE_BIT);
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr};
     pipe.CreateComputePipeline();
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
@@ -542,6 +542,7 @@ TEST_F(NegativeImageLayout, Basic) {
                                              1,
                                              &copy_region2};
 
+        m_command_buffer.FullMemoryBarrier();
         vk::CmdCopyImage2KHR(m_command_buffer.handle(), &copy_image_info2);
 
         m_errorMonitor->SetDesiredError("VUID-VkCopyImageInfo2-srcImageLayout-00128");
@@ -552,6 +553,7 @@ TEST_F(NegativeImageLayout, Basic) {
 
         // Now verify same checks for dst
         copy_image_info2.srcImageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        m_command_buffer.FullMemoryBarrier();
         vk::CmdCopyImage2KHR(m_command_buffer.handle(), &copy_image_info2);
 
         m_errorMonitor->SetDesiredError("VUID-VkCopyImageInfo2-dstImageLayout-00133");
@@ -566,7 +568,7 @@ TEST_F(NegativeImageLayout, Basic) {
     transfer_dst_image_barrier[0] = vku::InitStructHelper();
     transfer_dst_image_barrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     transfer_dst_image_barrier[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    transfer_dst_image_barrier[0].srcAccessMask = 0;
+    transfer_dst_image_barrier[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     transfer_dst_image_barrier[0].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     transfer_dst_image_barrier[0].image = dst_image.handle();
     transfer_dst_image_barrier[0].subresourceRange.layerCount = image_create_info.arrayLayers;
@@ -731,7 +733,7 @@ TEST_F(NegativeImageLayout, ArrayLayers) {
     VkShaderObj fs(this, kFragmentSamplerGlsl, VK_SHADER_STAGE_FRAGMENT_BIT);
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     pipe.CreateGraphicsPipeline();
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
@@ -791,7 +793,7 @@ TEST_F(NegativeImageLayout, MultiArrayLayers) {
     VkShaderObj fs(this, fs_source, VK_SHADER_STAGE_FRAGMENT_BIT);
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_[1] = fs.GetStageCreateInfo();
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     pipe.CreateGraphicsPipeline();
 
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());

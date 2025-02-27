@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2023-2024 Valve Corporation
- * Copyright (c) 2023-2024 LunarG, Inc.
+ * Copyright (c) 2023-2025 Valve Corporation
+ * Copyright (c) 2023-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -339,7 +339,7 @@ TEST_F(NegativeParent, Instance_Surface) {
     swapchain_ci.minImageCount = m_surface_capabilities.minImageCount;
     swapchain_ci.imageFormat = m_surface_formats[0].format;
     swapchain_ci.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_ci.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_ci.imageExtent = m_surface_capabilities.minImageExtent;
     swapchain_ci.imageArrayLayers = 1;
     swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -386,7 +386,7 @@ TEST_F(NegativeParent, Device_OldSwapchain) {
     swapchain_ci.minImageCount = m_surface_capabilities.minImageCount;
     swapchain_ci.imageFormat = m_surface_formats[0].format;
     swapchain_ci.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_ci.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_ci.imageExtent = m_surface_capabilities.minImageExtent;
     swapchain_ci.imageArrayLayers = 1;
     swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -627,6 +627,34 @@ TEST_F(NegativeParent, PipelineExecutableInfo) {
     m_errorMonitor->VerifyFound();
 }
 
+// TODO - https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9176
+TEST_F(NegativeParent, DISABLED_PipelineInfoEXT) {
+    TEST_DESCRIPTION("Try making calls without pipelineExecutableInfo.");
+
+    AddRequiredExtensions(VK_EXT_PIPELINE_PROPERTIES_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitFramework());
+
+    VkPhysicalDevicePipelinePropertiesFeaturesEXT pipeline_features = vku::InitStructHelper();
+    GetPhysicalDeviceFeatures2(pipeline_features);
+    RETURN_IF_SKIP(InitState(nullptr, &pipeline_features));
+    InitRenderTarget();
+
+    m_second_device = new vkt::Device(gpu_, m_device_extension_names, nullptr, &pipeline_features);
+
+    CreatePipelineHelper pipe(*this);
+    pipe.CreateGraphicsPipeline();
+
+    VkPipelineInfoEXT pipeline_info = vku::InitStructHelper();
+    pipeline_info.sType = VK_STRUCTURE_TYPE_PIPELINE_PROPERTIES_IDENTIFIER_EXT;
+    pipeline_info.pipeline = pipe.Handle();
+
+    VkBaseOutStructure out_struct;
+    out_struct.sType = VK_STRUCTURE_TYPE_PIPELINE_PROPERTIES_IDENTIFIER_EXT;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-vkGetPipelinePropertiesEXT-pipeline-06738");
+    vk::GetPipelinePropertiesEXT(*m_second_device, &pipeline_info, &out_struct);
+    m_errorMonitor->VerifyFound();
+}
+
 TEST_F(NegativeParent, UpdateDescriptorSetsBuffer) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
@@ -705,10 +733,12 @@ TEST_F(NegativeParent, UpdateDescriptorSetsCombinedImageSampler) {
                                          {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                      });
 
-    m_errorMonitor->SetDesiredError("VUID-vkUpdateDescriptorSets-pDescriptorWrites-06238");
-    ds.WriteDescriptorImageInfo(0, image_view, bad_sampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-    ds.UpdateDescriptorSets();
-    m_errorMonitor->VerifyFound();
+    // TODO - This might involve state tracking in ObjectTracker, but likely will be resolved from
+    // https://gitlab.khronos.org/vulkan/vulkan/-/issues/4177
+    // m_errorMonitor->SetDesiredError("VUID-vkUpdateDescriptorSets-pDescriptorWrites-06238");
+    // ds.WriteDescriptorImageInfo(0, image_view, bad_sampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    // ds.UpdateDescriptorSets();
+    // m_errorMonitor->VerifyFound();
 
     ds.Clear();
     m_errorMonitor->SetDesiredError("VUID-vkUpdateDescriptorSets-pDescriptorWrites-06239");

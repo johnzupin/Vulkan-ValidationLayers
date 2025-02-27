@@ -1,8 +1,8 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2024 Valve Corporation
-# Copyright (c) 2015-2024 LunarG, Inc.
-# Copyright (c) 2015-2024 Google Inc.
+# Copyright (c) 2015-2025 Valve Corporation
+# Copyright (c) 2015-2025 LunarG, Inc.
+# Copyright (c) 2015-2025 Google Inc.
 # Copyright (c) 2023-2024 RasterGrid Kft.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,8 +22,8 @@
 # layers and interceptors.
 
 import os
-from generators.vulkan_object import Command
-from generators.base_generator import BaseGenerator
+from vulkan_object import Command
+from base_generator import BaseGenerator
 from generators.generator_utils import PlatformGuardHelper
 
 # This class is a container for any source code, data, or other behavior that is necessary to
@@ -49,7 +49,7 @@ class APISpecific:
 #include "object_tracker/object_lifetime_validation.h"
 #include "core_checks/core_validation.h"
 #include "best_practices/best_practices_validation.h"
-#include "gpu/core/gpuav.h"
+#include "gpuav/core/gpuav.h"
 #include "sync/sync_validation.h"
 
 namespace vvl {
@@ -59,10 +59,10 @@ void Device::InitObjectDispatchVectors() {
 
 #define BUILD_DISPATCH_VECTOR(name) \\
     init_object_dispatch_vector(InterceptId ## name, \\
-                                typeid(&ValidationObject::name), \\
-                                typeid(&ThreadSafety::name), \\
-                                typeid(&StatelessValidation::name), \\
-                                typeid(&ObjectLifetimes::name), \\
+                                typeid(&vvl::base::Device::name), \\
+                                typeid(&threadsafety::Device::name), \\
+                                typeid(&stateless::Device::name), \\
+                                typeid(&object_lifetimes::Device::name), \\
                                 typeid(&CoreChecks::name), \\
                                 typeid(&BestPractices::name), \\
                                 typeid(&gpuav::Validator::name), \\
@@ -152,9 +152,9 @@ class DispatchVectorGenerator(BaseGenerator):
 
             /***************************************************************************
             *
-            * Copyright (c) 2015-2024 The Khronos Group Inc.
-            * Copyright (c) 2015-2024 Valve Corporation
-            * Copyright (c) 2015-2024 LunarG, Inc.
+            * Copyright (c) 2015-2025 The Khronos Group Inc.
+            * Copyright (c) 2015-2025 Valve Corporation
+            * Copyright (c) 2015-2025 LunarG, Inc.
             * Copyright (c) 2015-2024 Google Inc.
             * Copyright (c) 2023-2024 RasterGrid Kft.
             *

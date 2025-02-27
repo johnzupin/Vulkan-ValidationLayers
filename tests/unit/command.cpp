@@ -2463,7 +2463,7 @@ TEST_F(NegativeCommand, FilterCubicSamplerInCmdDraw) {
 
     CreatePipelineHelper g_pipe(*this);
     g_pipe.shader_stages_ = {g_pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    g_pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     g_pipe.CreateGraphicsPipeline();
 
     g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, imageView, sampler_reduction.handle());
@@ -2547,7 +2547,7 @@ TEST_F(NegativeCommand, ImageFilterCubicSamplerInCmdDraw) {
 
     CreatePipelineHelper g_pipe(*this);
     g_pipe.shader_stages_ = {g_pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    g_pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     g_pipe.CreateGraphicsPipeline();
 
     g_pipe.descriptor_set_->WriteDescriptorImageInfo(0, imageView, sampler.handle());
@@ -2824,6 +2824,7 @@ TEST_F(NegativeCommand, EndConditionalRendering) {
     m_command_buffer.EndRenderPass();
     vk::CmdEndConditionalRenderingEXT(m_command_buffer.handle());
 
+    m_command_buffer.FullMemoryBarrier();
     vk::CmdBeginRenderPass(m_command_buffer.handle(), &rpbi, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdBeginConditionalRenderingEXT(m_command_buffer.handle(), &conditional_rendering_begin);
     m_command_buffer.NextSubpass();

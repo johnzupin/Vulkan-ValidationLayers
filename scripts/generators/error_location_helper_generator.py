@@ -1,7 +1,7 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2023-2024 The Khronos Group Inc.
-# Copyright (c) 2023-2024 Valve Corporation
+# Copyright (c) 2023-2025 The Khronos Group Inc.
+# Copyright (c) 2023-2025 Valve Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 # limitations under the License.
 
 import os
-from generators.base_generator import BaseGenerator
+from base_generator import BaseGenerator
 
 class ErrorLocationHelperOutputGenerator(BaseGenerator):
     def __init__(self):
@@ -31,8 +31,8 @@ class ErrorLocationHelperOutputGenerator(BaseGenerator):
 
             /***************************************************************************
             *
-            * Copyright (c) 2023-2024 The Khronos Group Inc.
-            * Copyright (c) 2023-2024 Valve Corporation
+            * Copyright (c) 2023-2025 The Khronos Group Inc.
+            * Copyright (c) 2023-2025 Valve Corporation
             *
             * Licensed under the Apache License, Version 2.0 (the "License");
             * you may not use this file except in compliance with the License.

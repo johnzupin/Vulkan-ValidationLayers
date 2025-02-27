@@ -80,6 +80,8 @@ enum class Feature {
     bufferDeviceAddressCaptureReplay,
     // VkPhysicalDeviceBufferDeviceAddressFeatures, VkPhysicalDeviceVulkan12Features
     bufferDeviceAddressMultiDevice,
+    // VkPhysicalDeviceClusterAccelerationStructureFeaturesNV
+    clusterAccelerationStructure,
     // VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI
     clustercullingShader,
     // VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI
@@ -116,6 +118,10 @@ enum class Feature {
     cooperativeMatrix,
     // VkPhysicalDeviceCooperativeMatrixFeaturesKHR, VkPhysicalDeviceCooperativeMatrixFeaturesNV
     cooperativeMatrixRobustBufferAccess,
+    // VkPhysicalDeviceCooperativeVectorFeaturesNV
+    cooperativeVector,
+    // VkPhysicalDeviceCooperativeVectorFeaturesNV
+    cooperativeVectorTraining,
     // VkPhysicalDeviceCopyMemoryIndirectFeaturesNV
     indirectCopy,
     // VkPhysicalDeviceCornerSampledImageFeaturesNV
@@ -144,7 +150,7 @@ enum class Feature {
     leastRepresentableValueForceUnormRepresentation,
     // VkPhysicalDeviceDepthClampControlFeaturesEXT
     depthClampControl,
-    // VkPhysicalDeviceDepthClampZeroOneFeaturesEXT
+    // VkPhysicalDeviceDepthClampZeroOneFeaturesKHR
     depthClampZeroOne,
     // VkPhysicalDeviceDepthClipControlFeaturesEXT
     depthClipControl,
@@ -522,6 +528,8 @@ enum class Feature {
     maintenance6,
     // VkPhysicalDeviceMaintenance7FeaturesKHR
     maintenance7,
+    // VkPhysicalDeviceMaintenance8FeaturesKHR
+    maintenance8,
     // VkPhysicalDeviceMapMemoryPlacedFeaturesEXT
     memoryMapPlaced,
     // VkPhysicalDeviceMapMemoryPlacedFeaturesEXT
@@ -576,6 +584,8 @@ enum class Feature {
     opticalFlow,
     // VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT
     pageableDeviceLocalMemory,
+    // VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV
+    partitionedAccelerationStructure,
     // VkPhysicalDevicePerStageDescriptorSetFeaturesNV
     dynamicPipelineLayout,
     // VkPhysicalDevicePerStageDescriptorSetFeaturesNV
@@ -592,6 +602,8 @@ enum class Feature {
     pipelineExecutableInfo,
     // VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT
     pipelineLibraryGroupHandles,
+    // VkPhysicalDevicePipelineOpacityMicromapFeaturesARM
+    pipelineOpacityMicromap,
     // VkPhysicalDevicePipelinePropertiesFeaturesEXT
     pipelinePropertiesIdentifier,
     // VkPhysicalDevicePipelineProtectedAccessFeatures, VkPhysicalDeviceVulkan14Features
@@ -632,6 +644,8 @@ enum class Feature {
     presentBarrier,
     // VkPhysicalDevicePresentIdFeaturesKHR
     presentId,
+    // VkPhysicalDevicePresentMeteringFeaturesNV
+    presentMetering,
     // VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT
     presentModeFifoLatestReady,
     // VkPhysicalDevicePresentWaitFeaturesKHR
@@ -668,6 +682,10 @@ enum class Feature {
     rayQuery,
     // VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV
     rayTracingInvocationReorder,
+    // VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV
+    linearSweptSpheres,
+    // VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV
+    spheres,
     // VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR
     rayTracingMaintenance1,
     // VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR
@@ -876,6 +894,8 @@ enum class Feature {
     videoEncodeQuantizationMap,
     // VkPhysicalDeviceVideoMaintenance1FeaturesKHR
     videoMaintenance1,
+    // VkPhysicalDeviceVideoMaintenance2FeaturesKHR
+    videoMaintenance2,
     // VkPhysicalDeviceVulkan12Features
     descriptorIndexing,
     // VkPhysicalDeviceVulkan12Features

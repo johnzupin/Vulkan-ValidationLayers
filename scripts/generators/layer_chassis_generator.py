@@ -1,8 +1,8 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2024 Valve Corporation
-# Copyright (c) 2015-2024 LunarG, Inc.
-# Copyright (c) 2015-2024 Google Inc.
+# Copyright (c) 2015-2025 Valve Corporation
+# Copyright (c) 2015-2025 LunarG, Inc.
+# Copyright (c) 2015-2025 Google Inc.
 # Copyright (c) 2023-2024 RasterGrid Kft.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,8 +22,8 @@
 # layers and interceptors.
 
 import os
-from generators.vulkan_object import Command
-from generators.base_generator import BaseGenerator
+from vulkan_object import Command
+from base_generator import BaseGenerator
 from generators.generator_utils import PlatformGuardHelper
 
 # This class is a container for any source code, data, or other behavior that is necessary to
@@ -103,13 +103,6 @@ class LayerChassisOutputGenerator(BaseGenerator):
         'vkGetPhysicalDeviceToolPropertiesEXT',
     )
 
-    extended_query_exts = (
-        'VK_KHR_get_physical_device_properties2',
-        'VK_KHR_external_semaphore_capabilities',
-        'VK_KHR_external_fence_capabilities',
-        'VK_KHR_external_memory_capabilities',
-    )
-
     def __init__(self):
         BaseGenerator.__init__(self)
 
@@ -134,9 +127,9 @@ class LayerChassisOutputGenerator(BaseGenerator):
 
             /***************************************************************************
             *
-            * Copyright (c) 2015-2024 The Khronos Group Inc.
-            * Copyright (c) 2015-2024 Valve Corporation
-            * Copyright (c) 2015-2024 LunarG, Inc.
+            * Copyright (c) 2015-2025 The Khronos Group Inc.
+            * Copyright (c) 2015-2025 Valve Corporation
+            * Copyright (c) 2015-2025 LunarG, Inc.
             * Copyright (c) 2015-2024 Google Inc.
             * Copyright (c) 2023-2024 RasterGrid Kft.
             *
@@ -154,8 +147,10 @@ class LayerChassisOutputGenerator(BaseGenerator):
             ****************************************************************************/\n''')
         self.write('// NOLINTBEGIN') # Wrap for clang-tidy to ignore
 
-        if self.filename == 'validation_object_methods.h':
-            self.generateMethods()
+        if self.filename == 'validation_object_instance_methods.h':
+            self.generateInstanceMethods()
+        elif self.filename == 'validation_object_device_methods.h':
+            self.generateDeviceMethods()
         elif self.filename == 'validation_object.cpp':
             self.generateVOSource()
         elif self.filename == 'chassis.cpp':
@@ -165,23 +160,13 @@ class LayerChassisOutputGenerator(BaseGenerator):
 
         self.write('// NOLINTEND') # Wrap for clang-tidy to ignore
 
-    def generateMethods(self):
+    def generateMethods(self, want_instance):
         out = []
-        out.append('''
-            // This file contains methods for class ValidationObject and it is designed to ONLY be
-            // included into validation_object.h.
-            ''')
-        out = []
-        out.append('// We make many internal dispatch calls to extended query functions which can depend on the API version\n')
-        for extended_query_ext in self.extended_query_exts:
-            for command in self.vk.extensions[extended_query_ext].commands:
-                parameters = (command.cPrototype.split('(')[1])[:-2] # leaves just the parameters
-                out.append(f'{command.returnType} Dispatch{command.alias[2:]}Helper({parameters}) const;\n')
-
-        out.append('// Pre/post hook point declarations\n')
 
         guard_helper = PlatformGuardHelper()
         for command in [x for x in self.vk.commands.values() if x.name not in self.ignore_functions and 'ValidationCache' not in x.name]:
+            if command.instance != want_instance:
+                continue
             parameters = (command.cPrototype.split('(')[1])[:-2] # leaves just the parameters
             parameters = parameters.replace('\n', '')
             parameters = ' '.join(parameters.split()) # remove duplicate whitespace
@@ -193,6 +178,26 @@ class LayerChassisOutputGenerator(BaseGenerator):
         out.extend(guard_helper.add_guard(None))
         self.write("".join(out))
 
+    def generateInstanceMethods(self):
+        out = []
+        out.append('''
+            // This file contains methods for class vvl::base::Instance and it is designed to ONLY be
+            // included into validation_object.h.
+            ''')
+        self.write("".join(out))
+
+        self.generateMethods(True)
+
+    def generateDeviceMethods(self):
+        out = []
+        out.append('''
+            // This file contains methods for class vvl::base::Device and it is designed to ONLY be
+            // included into validation_object.h.
+            ''')
+        self.write("".join(out))
+
+        self.generateMethods(False)
+
     def generateVOSource(self):
         out = []
         out.append('''
@@ -202,22 +207,11 @@ class LayerChassisOutputGenerator(BaseGenerator):
 
             #include "chassis/validation_object.h"
 
-            thread_local WriteLockGuard* ValidationObject::record_guard{};
+            namespace vvl::base {
+            thread_local WriteLockGuard* Device::record_guard{};
 
-            ''')
-        for extended_query_ext in self.extended_query_exts:
-            for command in self.vk.extensions[extended_query_ext].commands:
-                parameters = (command.cPrototype.split('(')[1])[:-2] # leaves just the parameters
-                arguments = ','.join([x.name for x in command.params])
-                dispatch = 'dispatch_instance_' if command.instance else 'dispatch_device_'
-                out.append(f'''\n{command.returnType} ValidationObject::Dispatch{command.alias[2:]}Helper({parameters}) const {{
-                    if (api_version >= VK_API_VERSION_1_1) {{
-                        return {dispatch}->{command.alias[2:]}({arguments});
-                    }} else {{
-                        return {dispatch}->{command.name[2:]}({arguments});
-                    }}
-                }}
-                ''')
+            } // namespace vvl::base
+        ''')
         self.write("".join(out))
 
 
@@ -328,32 +322,44 @@ VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysicalDevi
 
             # Generate pre-call validation source code
             out.append('''{
-                VVL_ZoneScopedN("PreCallValidate");
+                VVL_ZoneScopedN("PreCallValidate_" __FUNCTION__);
             ''')
             if not command.instance:
-                out.append(f'    for (const auto& vo : {dispatch}->intercept_vectors[InterceptIdPreCallValidate{command.name[2:]}]) {{\n')
+                out.append(f'for (const auto& vo : {dispatch}->intercept_vectors[InterceptIdPreCallValidate{command.name[2:]}]) {{\n')
+                out.append(f'   if (!vo) {{\n')
+                out.append(f'      continue;\n')
+                out.append(f'   }}\n')
+                out.append('    auto lock = vo->ReadLock();\n')
             else:
-                out.append(f'    for (const auto& vo : {dispatch}->object_dispatch) {{\n')
-            out.append(f'''
-                    auto lock = vo->ReadLock();
-                        skip |= vo->PreCallValidate{command.name[2:]}({paramsList}, error_obj);
-                        if (skip) {return_map[command.returnType]}
-                    }}\n''')
+                out.append(f'for (const auto& vo : {dispatch}->object_dispatch) {{\n')
+                out.append('    if (!vo) {\n')
+                out.append('        continue;\n')
+                out.append('    }\n')
+
+            out.append(f'    skip |= vo->PreCallValidate{command.name[2:]}({paramsList}, error_obj);\n')
+            out.append(f'    if (skip) {return_map[command.returnType]}\n')
+            out.append('}\n')
             out.append('}\n')
 
             # Generate pre-call state recording source code
             out.append(f'RecordObject record_obj(vvl::Func::{command.name});\n')
             out.append('''{
-                VVL_ZoneScopedN("PreCallRecord");
+                VVL_ZoneScopedN("PreCallRecord_" __FUNCTION__);
             ''')
             if not command.instance:
-                out.append(f'    for (auto& vo : {dispatch}->intercept_vectors[InterceptIdPreCallRecord{command.name[2:]}]) {{\n')
+                out.append(f'for (auto& vo : {dispatch}->intercept_vectors[InterceptIdPreCallRecord{command.name[2:]}]) {{\n')
+                out.append(f'   if (!vo) {{\n')
+                out.append(f'      continue;\n')
+                out.append(f'   }}\n')
+                out.append('    auto lock = vo->WriteLock();\n')
             else:
-                out.append(f'    for (auto& vo : {dispatch}->object_dispatch) {{\n')
-            out.append(f'''
-                    auto lock = vo->WriteLock();
-                    vo->PreCallRecord{command.name[2:]}({paramsList}, record_obj);
-            }}\n''')
+                out.append(f'for (auto& vo : {dispatch}->object_dispatch) {{\n')
+                out.append('    if (!vo) {\n')
+                out.append('        continue;\n')
+                out.append('    }\n')
+
+            out.append(f'vo->PreCallRecord{command.name[2:]}({paramsList}, record_obj);\n')
+            out.append('    }\n')
             out.append('}\n')
 
             # Insert pre-dispatch debug utils function call
@@ -369,17 +375,30 @@ VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysicalDevi
             # Output dispatch (down-chain) function call
             if (command.returnType != 'void'):
                 out.append(f'{command.returnType} result;')
+
+            # Tracy profiler
             out.append('''{
-                VVL_ZoneScopedN("Dispatch");
+                VVL_ZoneScopedN("Dispatch_" __FUNCTION__);
             ''')
+
+            if "QueueSubmit" in command.name:
+                out.append('''
+                    VVL_TracyVkNamedZoneStart(GetTracyVkCtx(), queue, "gpu_QueueSubmit", submit_gpu_zone);
+                ''')
             assignResult = f'result = ' if (command.returnType != 'void') else ''
             method_name = command.name.replace('vk', f'{dispatch}->')
             out.append(f'        {assignResult}{method_name}({paramsList});\n')
+
+            # Tracy profiler
+            if "QueueSubmit" in command.name:
+                out.append('''
+                    VVL_TracyVkNamedZoneEnd(submit_gpu_zone, queue);
+                ''')
+                out.append('''#if defined(VVL_TRACY_GPU)
+                    TracyVkCollector::TrySubmitCollectCb(queue);
+                #endif
+                ''')
             out.append('}\n')
-
-
-            if command.name == 'vkQueuePresentKHR':
-                out.append('VVL_TracyCFrameMark;\n')
 
             # Insert post-dispatch debug utils function call
             post_dispatch_debug_utils_functions = {
@@ -399,16 +418,20 @@ VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysicalDevi
 
             # Generate post-call object processing source code
             out.append('''{
-                VVL_ZoneScopedN("PostCallRecord");
+                VVL_ZoneScopedN("PostCallRecord_" __FUNCTION__);
             ''')
 
             if not command.instance:
                 out.append(f'for (auto& vo : {dispatch}->intercept_vectors[InterceptIdPostCallRecord{command.name[2:]}]) {{\n')
             else:
                 out.append(f'for (auto& vo : {dispatch}->object_dispatch) {{\n')
+            out.append('    if (!vo) {\n')
+            out.append('        continue;\n')
+            out.append('    }\n')
+
 
             # These commands perform blocking operations during PostRecord phase. We might need to
-            # release ValidationObject's lock for the period of blocking operation to avoid deadlocks.
+            # release base::Device's lock for the period of blocking operation to avoid deadlocks.
             # The released mutex can be re-acquired by the command that sets wait finish condition.
             # This functionality is needed when fine grained locking is disabled or not implemented.
             commands_with_blocking_operations = [
@@ -420,14 +443,14 @@ VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysicalDevi
                 'vkGetSemaphoreCounterValue',
                 'vkGetSemaphoreCounterValueKHR',
             ]
+            if not command.instance:
+                if command.name not in commands_with_blocking_operations:
+                    out.append('auto lock = vo->WriteLock();\n')
+                else:
+                    out.append('vvl::base::Device::BlockingOperationGuard lock(vo);\n')
 
-            if command.name not in commands_with_blocking_operations:
-                out.append('auto lock = vo->WriteLock();\n')
-            else:
-                out.append('ValidationObject::BlockingOperationGuard lock(vo);\n')
-
-            # Because each intercept is a copy of ValidationObject, we need to update it for each
-            if command.errorCodes and 'VK_ERROR_DEVICE_LOST' in command.errorCodes:
+            # Because each intercept is a copy of vvl::base::Device, we need to update it for each
+            if not command.instance and command.errorCodes and 'VK_ERROR_DEVICE_LOST' in command.errorCodes:
                 out.append('''
                     if (result == VK_ERROR_DEVICE_LOST) {
                         vo->is_device_lost = true;
@@ -441,6 +464,19 @@ VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysicalDevi
             # Return result variable, if any.
             if command.returnType != 'void':
                 out.append('    return result;\n')
+
+            # Tracy create GPU queries collectors
+            if command.name == "vkGetDeviceQueue":
+                out.append('''#if defined(VVL_TRACY_GPU)
+                    TracyVkCollector::Create(device, *pQueue, queueFamilyIndex);
+                #endif
+                ''')
+
+            if command.name == "vkGetDeviceQueue2":
+                out.append('''#if defined(VVL_TRACY_GPU)
+                    TracyVkCollector::Create(device, *pQueue, pQueueInfo->queueFamilyIndex);
+                #endif
+                ''')
             out.append('}\n')
             out.append('\n')
 

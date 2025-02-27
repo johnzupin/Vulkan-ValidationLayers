@@ -1,5 +1,5 @@
 /* Copyright (c) 2023-2024 Nintendo
- * Copyright (c) 2023-2024 LunarG, Inc.
+ * Copyright (c) 2023-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,14 @@
 
 #include "stateless/stateless_validation.h"
 
-bool StatelessValidation::manual_PreCallValidateCreateShadersEXT(VkDevice device, uint32_t createInfoCount,
-                                                                 const VkShaderCreateInfoEXT *pCreateInfos,
-                                                                 const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
-                                                                 const ErrorObject &error_obj) const {
+namespace stateless {
+
+bool Device::manual_PreCallValidateCreateShadersEXT(VkDevice device, uint32_t createInfoCount,
+                                                    const VkShaderCreateInfoEXT *pCreateInfos,
+                                                    const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
+                                                    const Context &context) const {
     bool skip = false;
+    const auto &error_obj = context.error_obj;
 
     for (uint32_t i = 0; i < createInfoCount; ++i) {
         const Location create_info_loc = error_obj.location.dot(Field::pCreateInfos, i);
@@ -150,9 +153,10 @@ bool StatelessValidation::manual_PreCallValidateCreateShadersEXT(VkDevice device
     return skip;
 }
 
-bool StatelessValidation::manual_PreCallValidateGetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t *pDataSize,
-                                                                       void *pData, const ErrorObject &error_obj) const {
+bool Device::manual_PreCallValidateGetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t *pDataSize, void *pData,
+                                                          const Context &context) const {
     bool skip = false;
+    const auto &error_obj = context.error_obj;
 
     if (pData) {
         auto ptr = reinterpret_cast<std::uintptr_t>(pData);
@@ -164,3 +168,4 @@ bool StatelessValidation::manual_PreCallValidateGetShaderBinaryDataEXT(VkDevice 
 
     return skip;
 }
+}  // namespace stateless

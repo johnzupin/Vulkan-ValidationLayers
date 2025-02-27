@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -796,6 +796,40 @@ TEST_F(NegativePipeline, PipelineCreationCacheControl) {
     m_errorMonitor->VerifyFound();
 }
 
+TEST_F(NegativePipeline, PipelineCreationCacheFeaturesMaintenance8) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkPipelineCache pipeline_cache;
+    VkPipelineCacheCreateInfo cache_create_info = vku::InitStructHelper();
+    cache_create_info.initialDataSize = 0;
+    cache_create_info.flags = VK_PIPELINE_CACHE_CREATE_INTERNALLY_SYNCHRONIZED_MERGE_BIT_KHR;
+    m_errorMonitor->SetDesiredError("VUID-VkPipelineCacheCreateInfo-maintenance8-10200");
+    vk::CreatePipelineCache(device(), &cache_create_info, nullptr, &pipeline_cache);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativePipeline, PipelineCreationFlagsMix) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::pipelineCreationCacheControl);
+    AddRequiredFeature(vkt::Feature::maintenance8);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkPipelineCache pipeline_cache;
+    VkPipelineCacheCreateInfo cache_create_info = vku::InitStructHelper();
+    cache_create_info.initialDataSize = 0;
+    cache_create_info.flags =
+        VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT | VK_PIPELINE_CACHE_CREATE_INTERNALLY_SYNCHRONIZED_MERGE_BIT_KHR;
+    m_errorMonitor->SetDesiredError("VUID-VkPipelineCacheCreateInfo-flags-10201");
+    vk::CreatePipelineCache(device(), &cache_create_info, nullptr, &pipeline_cache);
+    m_errorMonitor->VerifyFound();
+}
+
 TEST_F(NegativePipeline, NumSamplesMismatch) {
     // Create CommandBuffer where MSAA samples doesn't match RenderPass
     // sampleCount
@@ -987,6 +1021,68 @@ TEST_F(NegativePipeline, MissingEntrypoint) {
         vk::CreateComputePipelines(device(), VK_NULL_HANDLE, 3, create_infos, nullptr, pipelines);
         m_errorMonitor->VerifyFound();
     }
+}
+
+TEST_F(NegativePipeline, MissingEntrypoint2) {
+    RETURN_IF_SKIP(Init());
+
+    char const *shader_source = R"(
+        OpCapability Shader
+        OpMemoryModel Logical GLSL450
+        OpEntryPoint GLCompute %foo "foo"
+        OpEntryPoint GLCompute %not_main "not_main"
+        OpEntryPoint GLCompute %not_main "still_no_main"
+        OpEntryPoint Vertex %not_this "not_this"
+        OpExecutionMode %foo LocalSize 1 1 1
+        OpExecutionMode %not_main LocalSize 1 1 1
+%void = OpTypeVoid
+   %4 = OpTypeFunction %void
+ %foo = OpFunction %void None %4
+  %l0 = OpLabel
+        OpReturn
+        OpFunctionEnd
+%not_main = OpFunction %void None %4
+  %l1 = OpLabel
+        OpReturn
+        OpFunctionEnd
+%not_this = OpFunction %void None %4
+  %l2 = OpLabel
+        OpReturn
+        OpFunctionEnd
+)";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM,
+                                             nullptr, "main");
+    m_errorMonitor->SetDesiredError("VUID-VkPipelineShaderStageCreateInfo-pName-00707");
+    pipe.CreateComputePipeline();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativePipeline, MissingEntrypointInline) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    std::vector<uint32_t> shader;
+    GLSLtoSPV(m_device->Physical().limits_, VK_SHADER_STAGE_FRAGMENT_BIT, kMinimalShaderGlsl, shader);
+
+    VkShaderModuleCreateInfo module_create_info = vku::InitStructHelper();
+    module_create_info.pCode = shader.data();
+    module_create_info.codeSize = shader.size() * sizeof(uint32_t);
+
+    VkPipelineShaderStageCreateInfo stage_ci = vku::InitStructHelper(&module_create_info);
+    stage_ci.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stage_ci.module = VK_NULL_HANDLE;
+    stage_ci.pName = "foo";
+
+    CreatePipelineHelper pipe(*this);
+    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo(), stage_ci};
+    m_errorMonitor->SetDesiredError("VUID-VkPipelineShaderStageCreateInfo-pName-00707");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativePipeline, DepthStencilRequired) {

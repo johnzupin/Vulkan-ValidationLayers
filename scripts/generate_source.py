@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# Copyright (c) 2021-2024 The Khronos Group Inc.
-# Copyright (c) 2021-2024 Valve Corporation
-# Copyright (c) 2021-2024 LunarG, Inc.
+# Copyright (c) 2021-2025 The Khronos Group Inc.
+# Copyright (c) 2021-2025 Valve Corporation
+# Copyright (c) 2021-2025 LunarG, Inc.
 # Copyright (c) 2021-2024 Google Inc.
 # Copyright (c) 2023-2024 RasterGrid Kft.
 #
@@ -57,7 +57,7 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
         print("Inside Vulkan-Headers there is a registry/reg.py file that is used.")
         sys.exit(1) # Return without call stack so easy to spot error
 
-    from generators.base_generator import BaseGeneratorOptions
+    from base_generator import BaseGeneratorOptions
     from generators.thread_safety_generator import ThreadSafetyOutputGenerator
     from generators.stateless_validation_helper_generator import StatelessValidationHelperOutputGenerator
     from generators.object_tracker_generator import  ObjectTrackerOutputGenerator
@@ -88,7 +88,7 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
 
     # These set fields that are needed by both OutputGenerator and BaseGenerator,
     # but are uniform and don't need to be set at a per-generated file level
-    from generators.base_generator import SetOutputDirectory, SetTargetApiName, SetMergedApiNames, EnableCaching
+    from base_generator import SetOutputDirectory, SetTargetApiName, SetMergedApiNames, EnableCaching
     SetOutputDirectory(directory)
     SetTargetApiName(api)
 
@@ -97,19 +97,11 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
     # Build up a list of all generators
     # Note: Options variable names MUST match order of constructor variable in generator
     generators = {
-        'thread_safety_counter_definitions.h' : {
+        'thread_safety_instance_defs.h' : {
             'generator' : ThreadSafetyOutputGenerator,
             'genCombined': True,
         },
-        'thread_safety_counter_instances.h' : {
-            'generator' : ThreadSafetyOutputGenerator,
-            'genCombined': True,
-        },
-        'thread_safety_counter_bodies.h' : {
-            'generator' : ThreadSafetyOutputGenerator,
-            'genCombined': True,
-        },
-        'thread_safety_commands.h' : {
+        'thread_safety_device_defs.h' : {
             'generator' : ThreadSafetyOutputGenerator,
             'genCombined': True,
         },
@@ -117,7 +109,12 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : ThreadSafetyOutputGenerator,
             'genCombined': True,
         },
-        'stateless_validation_helper.h' : {
+        'stateless_device_methods.h' : {
+            'generator' : StatelessValidationHelperOutputGenerator,
+            'genCombined': False,
+            'options' : [valid_usage_file],
+        },
+        'stateless_instance_methods.h' : {
             'generator' : StatelessValidationHelperOutputGenerator,
             'genCombined': False,
             'options' : [valid_usage_file],
@@ -144,7 +141,12 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : ValidFlagValuesOutputGenerator,
             'genCombined': True,
         },
-        'object_tracker.h' : {
+        'object_tracker_device_methods.h' : {
+            'generator' : ObjectTrackerOutputGenerator,
+            'genCombined': True,
+            'options' : [valid_usage_file],
+        },
+        'object_tracker_instance_methods.h' : {
             'generator' : ObjectTrackerOutputGenerator,
             'genCombined': True,
             'options' : [valid_usage_file],
@@ -202,7 +204,11 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : ApiVersionOutputGenerator,
             'genCombined': True,
         },
-        'validation_object_methods.h' : {
+        'validation_object_instance_methods.h' : {
+            'generator' : LayerChassisOutputGenerator,
+            'genCombined': True,
+        },
+        'validation_object_device_methods.h' : {
             'generator' : LayerChassisOutputGenerator,
             'genCombined': True,
         },
@@ -238,7 +244,11 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : DispatchVectorGenerator,
             'genCombined': True,
         },
-        'best_practices.h' : {
+        'best_practices_device_methods.h' : {
+            'generator' : BestPracticesOutputGenerator,
+            'genCombined': True,
+        },
+        'best_practices_instance_methods.h' : {
             'generator' : BestPracticesOutputGenerator,
             'genCombined': True,
         },
@@ -254,6 +264,11 @@ def RunGenerators(api: str, registry: str, grammar: str, directory: str, styleFi
             'generator' : SyncValidationOutputGenerator,
             'genCombined': True,
             'regenerate' : True
+        },
+        'spirv_validation_helper.h' : {
+            'generator' : SpirvValidationHelperOutputGenerator,
+            'genCombined': False,
+            'options' : [grammar],
         },
         'spirv_validation_helper.cpp' : {
             'generator' : SpirvValidationHelperOutputGenerator,
@@ -395,24 +410,24 @@ def main(argv):
     # The shaders requires glslangvalidator, so they are updated manually with generate_spirv when needed
     verify_exclude = [
         '.clang-format',
-        'cmd_validation_copy_buffer_to_image_comp.h',
-        'cmd_validation_copy_buffer_to_image_comp.cpp',
-        'cmd_validation_dispatch_comp.h',
-        'cmd_validation_dispatch_comp.cpp',
-        'cmd_validation_count_buffer_comp.h',
-        'cmd_validation_count_buffer_comp.cpp',
-        'cmd_validation_first_instance_comp.h',
-        'cmd_validation_first_instance_comp.cpp',
-        'cmd_validation_draw_indexed_comp.h',
-        'cmd_validation_draw_indexed_comp.cpp',
-        'cmd_validation_draw_indexed_indirect_index_buffer_comp.h',
-        'cmd_validation_draw_indexed_indirect_index_buffer_comp.cpp',
-        'cmd_validation_draw_indexed_indirect_vertex_buffer_comp.h',
-        'cmd_validation_draw_indexed_indirect_vertex_buffer_comp.cpp',
-        'cmd_validation_draw_mesh_indirect_comp.h',
-        'cmd_validation_draw_mesh_indirect_comp.cpp',
-        'cmd_validation_trace_rays_rgen.h',
-        'cmd_validation_trace_rays_rgen.cpp',
+        'validation_cmd_copy_buffer_to_image_comp.h',
+        'validation_cmd_copy_buffer_to_image_comp.cpp',
+        'validation_cmd_dispatch_comp.h',
+        'validation_cmd_dispatch_comp.cpp',
+        'validation_cmd_count_buffer_comp.h',
+        'validation_cmd_count_buffer_comp.cpp',
+        'validation_cmd_first_instance_comp.h',
+        'validation_cmd_first_instance_comp.cpp',
+        'validation_cmd_draw_indexed_comp.h',
+        'validation_cmd_draw_indexed_comp.cpp',
+        'validation_cmd_draw_indexed_indirect_index_buffer_comp.h',
+        'validation_cmd_draw_indexed_indirect_index_buffer_comp.cpp',
+        'validation_cmd_draw_indexed_indirect_vertex_buffer_comp.h',
+        'validation_cmd_draw_indexed_indirect_vertex_buffer_comp.cpp',
+        'validation_cmd_draw_mesh_indirect_comp.h',
+        'validation_cmd_draw_mesh_indirect_comp.cpp',
+        'validation_cmd_trace_rays_rgen.h',
+        'validation_cmd_trace_rays_rgen.cpp',
         'instrumentation_buffer_device_address_comp.h',
         'instrumentation_buffer_device_address_comp.cpp',
         'instrumentation_descriptor_indexing_oob_bindless_comp.h',
@@ -427,6 +442,8 @@ def main(argv):
         'instrumentation_ray_query_comp.cpp',
         'instrumentation_post_process_descriptor_index_comp.h',
         'instrumentation_post_process_descriptor_index_comp.cpp',
+        'instrumentation_vertex_attribute_fetch_oob_vert.cpp',
+        'instrumentation_vertex_attribute_fetch_oob_vert.h',
         'feature_requirements_helper.h', # https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8969
         'feature_requirements_helper.cpp'
     ]

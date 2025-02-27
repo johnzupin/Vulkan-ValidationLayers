@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2019-2024 Valve Corporation
- * Copyright (c) 2019-2024 LunarG, Inc.
+ * Copyright (c) 2019-2025 Valve Corporation
+ * Copyright (c) 2019-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,13 +27,22 @@
 #include "sync/sync_stats.h"
 #include "sync/sync_submit.h"
 
+namespace syncval {
+// sync validation has no instance-level functionality
+class Instance : public vvl::Instance {
+  public:
+    Instance(vvl::dispatch::Instance *dispatch) : vvl::Instance(dispatch, LayerObjectTypeSyncValidation) {}
+};
+}  // namespace syncval
+
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkImage, syncval_state::ImageState, vvl::Image)
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkImageView, syncval_state::ImageViewState, vvl::ImageView)
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkCommandBuffer, syncval_state::CommandBuffer, vvl::CommandBuffer)
 VALSTATETRACK_DERIVED_STATE_OBJECT(VkSwapchainKHR, syncval_state::Swapchain, vvl::Swapchain)
 
-class SyncValidator : public ValidationStateTracker, public SyncStageAccess {
-    using BaseClass = ValidationStateTracker;
+class SyncValidator : public vvl::Device, public SyncStageAccess {
+    using BaseClass = vvl::Device;
+
   public:
     using ImageState = syncval_state::ImageState;
     using ImageViewState = syncval_state::ImageViewState;
@@ -41,9 +50,8 @@ class SyncValidator : public ValidationStateTracker, public SyncStageAccess {
     using Struct = vvl::Struct;
     using Field = vvl::Field;
 
-    SyncValidator(vvl::dispatch::Device *dev, SyncValidator *instance_vo)
+    SyncValidator(vvl::dispatch::Device *dev, syncval::Instance *instance_vo)
         : BaseClass(dev, instance_vo, LayerObjectTypeSyncValidation), error_messages_(*this) {}
-    SyncValidator(vvl::dispatch::Instance *inst) : BaseClass(inst, LayerObjectTypeSyncValidation), error_messages_(*this) {}
     ~SyncValidator();
 
     syncval::ErrorMessages error_messages_;
@@ -148,7 +156,7 @@ class SyncValidator : public ValidationStateTracker, public SyncStageAccess {
     void RecordCmdEndRenderPass(VkCommandBuffer commandBuffer, const VkSubpassEndInfo *pSubpassEndInfo, Func command);
     bool SupressedBoundDescriptorWAW(const HazardResult &hazard) const;
 
-    void PostCreateDevice(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) override;
+    void FinishDeviceSetup(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) override;
 
     void PostCallRecordCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo *pCreateInfo,
                                        const VkAllocationCallbacks *pAllocator, VkSemaphore *pSemaphore,
@@ -623,5 +631,11 @@ class SyncValidator : public ValidationStateTracker, public SyncStageAccess {
                                                    const RecordObject &record_obj) override;
     void PostCallRecordGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t *pSwapchainImageCount,
                                              VkImage *pSwapchainImages, const RecordObject &record_obj) override;
+    bool PreCallValidateCmdBuildAccelerationStructuresKHR(
+        VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
+        const VkAccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos, const ErrorObject &error_obj) const override;
+    void PreCallRecordCmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t infoCount,
+                                                        const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
+                                                        const VkAccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos,
+                                                        const RecordObject &record_obj) override;
 };
-

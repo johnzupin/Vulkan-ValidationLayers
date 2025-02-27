@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2019-2024 Valve Corporation
- * Copyright (c) 2019-2024 LunarG, Inc.
+ * Copyright (c) 2019-2025 Valve Corporation
+ * Copyright (c) 2019-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -159,8 +159,7 @@ std::optional<SignalInfo> SignalsUpdate::OnTimelineWait(VkSemaphore semaphore, u
     return resolving_signal;  // empty result if it is a wait-before-signal
 }
 
-syncval_state::Swapchain::Swapchain(ValidationStateTracker& dev_data, const VkSwapchainCreateInfoKHR* pCreateInfo,
-                                    VkSwapchainKHR handle)
+syncval_state::Swapchain::Swapchain(vvl::Device& dev_data, const VkSwapchainCreateInfoKHR* pCreateInfo, VkSwapchainKHR handle)
     : vvl::Swapchain(dev_data, pCreateInfo, handle) {}
 
 void syncval_state::Swapchain::RecordPresentedImage(PresentedImage&& presented_image) {
@@ -223,7 +222,6 @@ class ApplyAcquireNextSemaphoreAction {
     const SyncExecScope& getPresentSrcScope() const {
         static const SyncExecScope kPresentSrcScope =
             SyncExecScope(VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL,  // mask_param (unused)
-                          VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL,  // expanded_mask
                           VK_PIPELINE_STAGE_2_PRESENT_ENGINE_BIT_SYNCVAL,  // exec_scope
                           getPresentValidAccesses());                      // valid_accesses
         return kPresentSrcScope;
@@ -453,8 +451,9 @@ bool QueueBatchContext::DoQueuePresentValidate(const Location& loc, const Presen
             const auto queue_handle = queue_state_->Handle();
             const auto swap_handle = vvl::StateObject::Handle(presented.swapchain_state.lock());
             const auto image_handle = vvl::StateObject::Handle(presented.image);
-            const auto error = sync_state_.error_messages_.PresentError(hazard, *this, presented.present_index, swap_handle,
-                                                                        presented.image_index, image_handle);
+            const auto error =
+                sync_state_.error_messages_.PresentError(hazard, *this, presented.present_index, swap_handle, presented.image_index,
+                                                         image_handle, vvl::Func::vkQueuePresentKHR);
             skip |= sync_state_.SyncError(hazard.Hazard(), queue_handle, loc, error);
             if (skip) break;
         }

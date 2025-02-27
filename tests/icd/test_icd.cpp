@@ -19,6 +19,7 @@
 #include "test_icd.h"
 #include "test_icd_helper.h"
 #include <vulkan/utility/vk_format_utils.h>
+#include <cstddef>
 #include <vulkan/utility/vk_struct_helper.hpp>
 
 namespace icd {
@@ -536,8 +537,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL EnumerateInstanceExtensionProperties(const
                 if (i == *pPropertyCount) {
                     break;
                 }
-                std::strncpy(pProperties[i].extensionName, name_ver_pair.first.c_str(), sizeof(pProperties[i].extensionName));
-                pProperties[i].extensionName[sizeof(pProperties[i].extensionName) - 1] = 0;
+                std::strncpy(pProperties[i].extensionName, name_ver_pair.first.c_str(), sizeof(pProperties[i].extensionName) - 1);
+                pProperties[i].extensionName[sizeof(pProperties[i].extensionName) - 1] = '\0';
                 pProperties[i].specVersion = name_ver_pair.second;
                 ++i;
             }
@@ -562,8 +563,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysi
                 if (i == *pPropertyCount) {
                     break;
                 }
-                std::strncpy(pProperties[i].extensionName, name_ver_pair.first.c_str(), sizeof(pProperties[i].extensionName));
-                pProperties[i].extensionName[sizeof(pProperties[i].extensionName) - 1] = 0;
+                std::strncpy(pProperties[i].extensionName, name_ver_pair.first.c_str(), sizeof(pProperties[i].extensionName) - 1);
+                pProperties[i].extensionName[sizeof(pProperties[i].extensionName) - 1] = '\0';
                 pProperties[i].specVersion = name_ver_pair.second;
                 ++i;
             }
@@ -633,7 +634,16 @@ static VKAPI_ATTR VkResult VKAPI_CALL MapMemory(VkDevice device, VkDeviceMemory 
         else
             size = 0x10000;
     }
-    void* map_addr = malloc((size_t)size);
+
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8776
+    // things like shaderGroupBaseAlignment can be as big as 64, since these values are dynamically set in the Profile JSON, we need
+    // to create the large alignment possible to satisfy them all
+    static const size_t memory_alignment = 64;
+#if defined(_WIN32)
+    void* map_addr = _aligned_malloc((size_t)size, memory_alignment);
+#else
+    void* map_addr = aligned_alloc(memory_alignment, (size_t)size);
+#endif
     mapped_memory_map[memory].push_back(map_addr);
     *ppData = map_addr;
     return VK_SUCCESS;
@@ -1115,6 +1125,10 @@ static VKAPI_ATTR void VKAPI_CALL GetPhysicalDeviceFeatures2(VkPhysicalDevice ph
     auto video_maintenance1_features = vku::FindStructInPNextChain<VkPhysicalDeviceVideoMaintenance1FeaturesKHR>(pFeatures->pNext);
     if (video_maintenance1_features) {
         video_maintenance1_features->videoMaintenance1 = VK_TRUE;
+    }
+    auto video_maintenance2_features = vku::FindStructInPNextChain<VkPhysicalDeviceVideoMaintenance2FeaturesKHR>(pFeatures->pNext);
+    if (video_maintenance2_features) {
+        video_maintenance2_features->videoMaintenance2 = VK_TRUE;
     }
     auto device_generated_commands_features =
         vku::FindStructInPNextChain<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT>(pFeatures->pNext);

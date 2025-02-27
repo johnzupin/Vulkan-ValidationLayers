@@ -276,8 +276,8 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapReferences) {
     // Set wrong VkImageLayout
     ref = {0, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
     subpass = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 0, nullptr, nullptr, nullptr, 0, nullptr};
-    rpfdmi = vku::InitStruct<VkRenderPassFragmentDensityMapCreateInfoEXT >(nullptr, ref);
-    rpci = vku::InitStruct<VkRenderPassCreateInfo >(&rpfdmi, 0u, 1u, &attach, 1u, &subpass, 0u, nullptr);
+    rpfdmi = vku::InitStruct<VkRenderPassFragmentDensityMapCreateInfoEXT>(nullptr, ref);
+    rpci = vku::InitStruct<VkRenderPassCreateInfo>(&rpfdmi, 0u, 1u, &attach, 1u, &subpass, 0u, nullptr);
 
     TestRenderPassCreate(m_errorMonitor, *m_device, rpci, false,
                          "VUID-VkRenderPassFragmentDensityMapCreateInfoEXT-fragmentDensityMapAttachment-02549", nullptr);
@@ -295,8 +295,8 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapReferences) {
 
     ref = {0, VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT};
     subpass = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 0, nullptr, nullptr, nullptr, 0, nullptr};
-    rpfdmi = vku::InitStruct<VkRenderPassFragmentDensityMapCreateInfoEXT >(nullptr, ref);
-    rpci = vku::InitStruct<VkRenderPassCreateInfo >(&rpfdmi, 0u, 1u, &attach, 1u, &subpass, 0u, nullptr);
+    rpfdmi = vku::InitStruct<VkRenderPassFragmentDensityMapCreateInfoEXT>(nullptr, ref);
+    rpci = vku::InitStruct<VkRenderPassCreateInfo>(&rpfdmi, 0u, 1u, &attach, 1u, &subpass, 0u, nullptr);
 
     TestRenderPassCreate(m_errorMonitor, *m_device, rpci, false,
                          "VUID-VkRenderPassFragmentDensityMapCreateInfoEXT-fragmentDensityMapAttachment-02550", nullptr);
@@ -314,7 +314,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapReferences) {
 
     ref = {0, VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT};
     subpass = {0, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, nullptr, 0, nullptr, nullptr, nullptr, 0, nullptr};
-    rpfdmi = vku::InitStruct<VkRenderPassFragmentDensityMapCreateInfoEXT >(nullptr, ref);
+    rpfdmi = vku::InitStruct<VkRenderPassFragmentDensityMapCreateInfoEXT>(nullptr, ref);
     rpci = vku::InitStruct<VkRenderPassCreateInfo>(&rpfdmi, 0u, 1u, &attach, 1u, &subpass, 0u, nullptr);
 
     TestRenderPassCreate(m_errorMonitor, *m_device, rpci, false,
@@ -477,10 +477,8 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapEnabled) {
     RETURN_IF_SKIP(InitFramework());
     const bool fdm2Supported = IsExtensionsEnabled(VK_EXT_FRAGMENT_DENSITY_MAP_2_EXTENSION_NAME);
 
-    VkPhysicalDeviceFragmentDensityMapFeaturesEXT density_map_features =
-        vku::InitStructHelper();
-    VkPhysicalDeviceFragmentDensityMap2FeaturesEXT density_map2_features =
-        vku::InitStructHelper(&density_map_features);
+    VkPhysicalDeviceFragmentDensityMapFeaturesEXT density_map_features = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMap2FeaturesEXT density_map2_features = vku::InitStructHelper(&density_map_features);
     VkPhysicalDeviceFeatures2KHR features2 = GetPhysicalDeviceFeatures2(density_map2_features);
 
     if (density_map_features.fragmentDensityMapDynamic == VK_FALSE) {
@@ -1362,8 +1360,7 @@ TEST_F(NegativeFragmentShadingRate, PrimitiveWriteMultiViewportLimit) {
     const bool vil_extension = IsExtensionsEnabled(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
     const bool va2_extension = IsExtensionsEnabled(VK_NV_VIEWPORT_ARRAY_2_EXTENSION_NAME);
 
-    VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties =
-        vku::InitStructHelper();
+    VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fsr_properties);
 
     if (fsr_properties.primitiveFragmentShadingRateWithMultipleViewports) {
@@ -1592,258 +1589,892 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapAttachmentCount) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetQCOM) {
-    TEST_DESCRIPTION("Ensure RenderPass end meets the requirements for VK_QCOM_fragment_density_map_offset");
-
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMissingImageFlags) {
     AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::multiview);
-    RETURN_IF_SKIP(InitFramework(&kDisableMessageLimit));
-    RETURN_IF_SKIP(InitState());
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
 
-    const VkFormat ds_format = FindSupportedDepthStencilFormat(Gpu());
+    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
 
-    std::array<VkAttachmentDescription2, 7> attachments = {
-        // FDM attachments
-        vku::InitStruct<VkAttachmentDescription2>(nullptr, 0u, VK_FORMAT_R8G8_UNORM, VK_SAMPLE_COUNT_1_BIT,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT),
-        // input attachments
-        vku::InitStruct<VkAttachmentDescription2>(nullptr, 0u, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_4_BIT,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL),
-        // color attachments
-        vku::InitStruct<VkAttachmentDescription2>(nullptr, 0u, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_4_BIT,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-        vku::InitStruct<VkAttachmentDescription2>(nullptr, 0u, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_4_BIT,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-        // depth attachment
-        vku::InitStruct<VkAttachmentDescription2>(nullptr, 0u, ds_format, VK_SAMPLE_COUNT_4_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                                                VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                                                VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                                                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
-        // resolve attachment
-        vku::InitStruct<VkAttachmentDescription2>(nullptr, 0u, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-        // preserve attachments
-        vku::InitStruct<VkAttachmentDescription2>(nullptr, 0u, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_4_BIT,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-    };
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.attachment = VK_ATTACHMENT_UNUSED;
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
 
-    /* TODO
-    std::array<VkAttachmentReference2, 1> fdm = {
-        vku::InitStruct<VkAttachmentReference2>(nullptr, 0u, VK_IMAGE_LAYOUT_GENERAL, VkImageAspectFlags{VK_IMAGE_ASPECT_COLOR_BIT}),
-    };
-    */
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = VK_FORMAT_R8G8_UNORM;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
 
-    std::array<VkAttachmentReference2, 1> input = {
-        vku::InitStruct<VkAttachmentReference2>(nullptr, 1u, VK_IMAGE_LAYOUT_GENERAL, VkImageAspectFlags{VK_IMAGE_ASPECT_COLOR_BIT}),
-    };
+    VkSubpassDescription subpass_description = {};
 
-    std::array<VkAttachmentReference2, 2> color = {
-        vku::InitStruct<VkAttachmentReference2>(nullptr, 2u, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                              VkImageAspectFlags{VK_IMAGE_ASPECT_COLOR_BIT}),
-        vku::InitStruct<VkAttachmentReference2>(nullptr, 3u, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                              VkImageAspectFlags{VK_IMAGE_ASPECT_COLOR_BIT}),
-    };
-    auto depth = vku::InitStruct<VkAttachmentReference2>(nullptr, 4u, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                                                       VkImageAspectFlags{VK_IMAGE_ASPECT_DEPTH_BIT});
-    std::vector<VkAttachmentReference2> resolve = {
-        vku::InitStruct<VkAttachmentReference2>(nullptr, 5u, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                              VkImageAspectFlags{VK_IMAGE_ASPECT_COLOR_BIT}),
-        vku::InitStruct<VkAttachmentReference2>(nullptr, VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0u),
-    };
-    std::vector<uint32_t> preserve = {6};
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
 
-    auto subpass = vku::InitStruct<VkSubpassDescription2>(nullptr, 0u, VK_PIPELINE_BIND_POINT_GRAPHICS, 0u, size32(input),
-                                                        input.data(), size32(color), color.data(), resolve.data(), &depth,
-                                                        size32(preserve), preserve.data());
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1u, &image_view.handle());
 
-    // Create a renderPass with a single color attachment for fragment density map
-    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_create_info = vku::InitStructHelper();
-    fragment_density_map_create_info.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_GENERAL;
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
 
-    auto rpci = vku::InitStruct<VkRenderPassCreateInfo2>(&fragment_density_map_create_info, 0u, size32(attachments),
-                                                       attachments.data(), 1u, &subpass, 0u, nullptr, 0u, nullptr);
+    m_command_buffer.Begin();
 
-    // Create rp2[0] without Multiview (zero viewMask), rp2[1] with Multiview
-    vkt::RenderPass rp2[2];
-    rp2[0].init(*m_device, rpci);
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-    subpass.viewMask = 0x3u;
-    rp2[1].init(*m_device, rpci);
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(fdm_offset_properties);
+
+    int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
+    int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
+    VkOffset2D offset = {width, height};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-renderPass-06502");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMissingFeature) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.attachment = VK_ATTACHMENT_UNUSED;
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = VK_FORMAT_R8G8_UNORM;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkSubpassDescription subpass_description = {};
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1u, &image_view.handle());
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkOffset2D offset = {0, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapOffsets-06503");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapAttachment) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = VK_FORMAT_R8G8_UNORM;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkSubpassDescription subpass_description = {};
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1u, &image_view.handle());
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkOffset2D offset = {0, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapAttachment-06504");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapDepthAttachment) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
+    vkt::Image ds_image(*m_device, 32u, 32u, 1u, VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    vkt::ImageView ds_image_view = ds_image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.attachment = VK_ATTACHMENT_UNUSED;
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_descriptions[2];
+    attachment_descriptions[0].flags = 0u;
+    attachment_descriptions[0].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[0].finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+    attachment_descriptions[1].flags = 0u;
+    attachment_descriptions[1].format = VK_FORMAT_D24_UNORM_S8_UINT;
+    attachment_descriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference ds_attachment_reference;
+    ds_attachment_reference.attachment = 1u;
+    ds_attachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass_description = {};
+    subpass_description.pDepthStencilAttachment = &ds_attachment_reference;
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 2u;
+    render_pass_ci.pAttachments = attachment_descriptions;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    VkImageView image_views[2] = {image_view.handle(), ds_image_view.handle()};
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 2u, image_views);
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkOffset2D offset = {0, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pDepthStencilAttachment-06505");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapInputAttachment) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
+    vkt::Image input_image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    vkt::ImageView input_image_view = input_image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.attachment = VK_ATTACHMENT_UNUSED;
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_descriptions[2];
+    attachment_descriptions[0].flags = 0u;
+    attachment_descriptions[0].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[0].finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+    attachment_descriptions[1].flags = 0u;
+    attachment_descriptions[1].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[1].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkAttachmentReference input_attachment_reference;
+    input_attachment_reference.attachment = 1u;
+    input_attachment_reference.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkSubpassDescription subpass_description = {};
+    subpass_description.inputAttachmentCount = 1u;
+    subpass_description.pInputAttachments = &input_attachment_reference;
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 2u;
+    render_pass_ci.pAttachments = attachment_descriptions;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    VkImageView image_views[2] = {image_view.handle(), input_image_view.handle()};
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 2u, image_views);
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkOffset2D offset = {0, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pInputAttachments-06506");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapColorAttachment) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
+    vkt::Image color_image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::ImageView color_image_view = color_image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.attachment = VK_ATTACHMENT_UNUSED;
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_descriptions[2];
+    attachment_descriptions[0].flags = 0u;
+    attachment_descriptions[0].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[0].finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+    attachment_descriptions[1].flags = 0u;
+    attachment_descriptions[1].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[1].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkAttachmentReference color_attachment_reference;
+    color_attachment_reference.attachment = 1u;
+    color_attachment_reference.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkSubpassDescription subpass_description = {};
+    subpass_description.colorAttachmentCount = 1u;
+    subpass_description.pColorAttachments = &color_attachment_reference;
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 2u;
+    render_pass_ci.pAttachments = attachment_descriptions;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    VkImageView image_views[2] = {image_view.handle(), color_image_view.handle()};
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 2u, image_views);
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkOffset2D offset = {0, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pColorAttachments-06507");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapResolveAttachment) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8_UNORM;
-    image_create_info.extent.width = 16;
-    image_create_info.extent.height = 16;
-    image_create_info.extent.depth = 1;
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 3;
+    image_create_info.extent = {32u, 32u, 1u};
+    image_create_info.mipLevels = 1u;
+    image_create_info.arrayLayers = 1u;
+    image_create_info.samples = VK_SAMPLE_COUNT_4_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image color_image(*m_device, image_create_info);
+    vkt::ImageView color_image_view = color_image.CreateView();
+    vkt::Image resolve_image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::ImageView resolve_image_view = resolve_image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.attachment = VK_ATTACHMENT_UNUSED;
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_descriptions[3];
+    attachment_descriptions[0].flags = 0u;
+    attachment_descriptions[0].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[0].finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+    attachment_descriptions[1].flags = 0u;
+    attachment_descriptions[1].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[1].samples = VK_SAMPLE_COUNT_4_BIT;
+    attachment_descriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[1].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+    attachment_descriptions[2].flags = 0u;
+    attachment_descriptions[2].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[2].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[2].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[2].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkAttachmentReference color_attachment_reference;
+    color_attachment_reference.attachment = 1u;
+    color_attachment_reference.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkAttachmentReference resolve_attachment_reference;
+    resolve_attachment_reference.attachment = 2u;
+    resolve_attachment_reference.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkSubpassDescription subpass_description = {};
+    subpass_description.colorAttachmentCount = 1u;
+    subpass_description.pColorAttachments = &color_attachment_reference;
+    subpass_description.pResolveAttachments = &resolve_attachment_reference;
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 3u;
+    render_pass_ci.pAttachments = attachment_descriptions;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    VkImageView image_views[3] = {image_view.handle(), color_image_view.handle(), resolve_image_view.handle()};
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 3u, image_views);
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkOffset2D offset = {0, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pResolveAttachments-06508");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapPreserveAttachment) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
+    vkt::Image color_image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::ImageView color_image_view = color_image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.attachment = VK_ATTACHMENT_UNUSED;
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_descriptions[2];
+    attachment_descriptions[0].flags = 0u;
+    attachment_descriptions[0].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[0].finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+    attachment_descriptions[1].flags = 0u;
+    attachment_descriptions[1].format = VK_FORMAT_R8G8_UNORM;
+    attachment_descriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_descriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_descriptions[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_descriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_descriptions[1].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    uint32_t preserve_attachment = 1u;
+    VkSubpassDescription subpass_description = {};
+    subpass_description.preserveAttachmentCount = 1u;
+    subpass_description.pPreserveAttachments = &preserve_attachment;
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 2u;
+    render_pass_ci.pAttachments = attachment_descriptions;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    VkImageView image_views[2] = {image_view.handle(), color_image_view.handle()};
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 2u, image_views);
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkOffset2D offset = {0, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pPreserveAttachments-06509");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapMultiview) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    AddRequiredFeature(vkt::Feature::multiview);
+    RETURN_IF_SKIP(Init());
+
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_R8G8_UNORM;
+    image_create_info.extent = {32u, 32u, 1u};
+    image_create_info.mipLevels = 1u;
+    image_create_info.arrayLayers = 1u;
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.usage = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT;
-    image_create_info.flags = 0;
-
-    vkt::Image fdm_image(*m_device, image_create_info, vkt::set_layout);
-
-    image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_create_info.usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-    image_create_info.samples = VK_SAMPLE_COUNT_4_BIT;
-    vkt::Image input_image(*m_device, image_create_info, vkt::set_layout);
-
     image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    vkt::Image color_image1(*m_device, image_create_info, vkt::set_layout);
-    vkt::Image color_image2(*m_device, image_create_info, vkt::set_layout);
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image image(*m_device, image_create_info);
+    vkt::ImageView image_view = image.CreateView();
 
-    image_create_info.format = ds_format;
-    image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    vkt::Image depth_image(*m_device, image_create_info, vkt::set_layout);
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
 
-    image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkAttachmentDescription2 attachment_description = vku::InitStructHelper();
+    attachment_description.format = VK_FORMAT_R8G8_UNORM;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkSubpassDescription2 subpass_description = vku::InitStructHelper();
+    subpass_description.viewMask = 0x3u;
+
+    VkRenderPassCreateInfo2 render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1u, &image_view.handle());
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkOffset2D offset = {0, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityOffsetCount-06510");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapInvalidCount) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_R8G8_UNORM;
+    image_create_info.extent = {32u, 32u, 1u};
+    image_create_info.mipLevels = 1u;
+    image_create_info.arrayLayers = 1u;
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    vkt::Image resolve_image(*m_device, image_create_info, vkt::set_layout);
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image image(*m_device, image_create_info);
+    vkt::ImageView image_view = image.CreateView();
 
-    image_create_info.samples = VK_SAMPLE_COUNT_4_BIT;
-    vkt::Image preserve_image(*m_device, image_create_info, vkt::set_layout);
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
 
-    // Create view attachment
-    VkImageView iv[7];
-    VkImageViewCreateInfo ivci = vku::InitStructHelper();
-    ivci.image = fdm_image.handle();
-    ivci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-    ivci.format = VK_FORMAT_R8G8_UNORM;
-    ivci.flags = 0;
-    ivci.subresourceRange.layerCount = 3;
-    ivci.subresourceRange.baseMipLevel = 0;
-    ivci.subresourceRange.levelCount = 1;
-    ivci.subresourceRange.baseArrayLayer = 0;
-    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    vkt::ImageView iv0(*m_device, ivci);
-    ASSERT_TRUE(iv0.initialized());
-    iv[0] = iv0.handle();
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = VK_FORMAT_R8G8_UNORM;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
 
-    ivci.format = VK_FORMAT_R8G8B8A8_UNORM;
-    ivci.image = input_image.handle();
-    vkt::ImageView iv1(*m_device, ivci);
-    ASSERT_TRUE(iv1.initialized());
-    iv[1] = iv1.handle();
+    VkSubpassDescription subpass_description = {};
 
-    ivci.image = color_image1.handle();
-    vkt::ImageView iv2(*m_device, ivci);
-    ASSERT_TRUE(iv2.initialized());
-    iv[2] = iv2.handle();
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
 
-    ivci.image = color_image2.handle();
-    vkt::ImageView iv3(*m_device, ivci);
-    ASSERT_TRUE(iv3.initialized());
-    iv[3] = iv3.handle();
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1u, &image_view.handle());
 
-    ivci.format = ds_format;
-    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    ivci.image = depth_image.handle();
-    vkt::ImageView iv4(*m_device, ivci);
-    ASSERT_TRUE(iv4.initialized());
-    iv[4] = iv4.handle();
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
 
-    ivci.format = VK_FORMAT_R8G8B8A8_UNORM;
-    ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    ivci.image = resolve_image.handle();
-    vkt::ImageView iv5(*m_device, ivci);
-    ASSERT_TRUE(iv5.initialized());
-    iv[5] = iv5.handle();
+    m_command_buffer.Begin();
 
-    ivci.image = preserve_image.handle();
-    vkt::ImageView iv6(*m_device, ivci);
-    ASSERT_TRUE(iv6.initialized());
-    iv[6] = iv6.handle();
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkt::Framebuffer fb1(*m_device, rp2[0].handle(), 7, iv, 16, 16);
-    vkt::Framebuffer fb2(*m_device, rp2[1].handle(), 7, iv, 16, 16);
+    VkOffset2D offsets[2] = {{0, 0}, {0, 0}};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 2u;
+    fdm_offset_end_info.pFragmentDensityOffsets = offsets;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    // define renderpass begin info
-    auto rpbi1 =
-        vku::InitStruct<VkRenderPassBeginInfo>(nullptr, rp2[0].handle(), fb1.handle(), VkRect2D{{0, 0}, {16u, 16u}}, 0u, nullptr);
-    auto rpbi2 =
-        vku::InitStruct<VkRenderPassBeginInfo>(nullptr, rp2[1].handle(), fb2.handle(), VkRect2D{{0, 0}, {16u, 16u}}, 0u, nullptr);
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityOffsetCount-06511");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
 
-    {
-        VkSubpassFragmentDensityMapOffsetEndInfoQCOM offsetting = vku::InitStructHelper();
-        VkSubpassEndInfo subpassEndInfo = vku::InitStructHelper(&offsetting);
-        VkOffset2D m_vOffsets[2];
-        offsetting.pFragmentDensityOffsets = m_vOffsets;
-        offsetting.fragmentDensityOffsetCount = 2;
+    m_command_buffer.EndRenderPass();
 
-        VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
-        GetPhysicalDeviceProperties2(fdm_offset_properties);
+    m_command_buffer.End();
+}
 
-        m_vOffsets[0].x = 1;
-        m_vOffsets[0].y = 1;
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapWidthGranularity) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
 
-        m_vOffsets[1].x = 1;
-        m_vOffsets[1].y = 1;
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(fdm_offset_properties);
 
-        m_command_buffer.Reset();
-        m_command_buffer.Begin();
-
-        // begin renderpass that uses rbpi1 renderpass begin info
-        vk::CmdBeginRenderPass(m_command_buffer.handle(), &rpbi1, VK_SUBPASS_CONTENTS_INLINE);
-
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapOffsets-06503");
-
-        if (fdm_offset_properties.fragmentDensityOffsetGranularity.width > 1) {
-            m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-x-06512", 2);
-        }
-
-        if (fdm_offset_properties.fragmentDensityOffsetGranularity.height > 1) {
-            m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-y-06513", 2);
-        }
-
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-renderPass-06502", 7);
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapAttachment-06504");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pInputAttachments-06506");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pColorAttachments-06507", 2);
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pDepthStencilAttachment-06505");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pResolveAttachments-06508");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pPreserveAttachments-06509");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityOffsetCount-06511");
-        vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpassEndInfo);
-        m_errorMonitor->VerifyFound();
-
-        m_command_buffer.Reset();
-        m_command_buffer.Begin();
-
-        // begin renderpass that uses rbpi2 renderpass begin info
-        vk::CmdBeginRenderPass(m_command_buffer.handle(), &rpbi2, VK_SUBPASS_CONTENTS_INLINE);
-        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-x-06512");
-        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-x-06512");
-        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-y-06513");
-        m_errorMonitor->SetUnexpectedError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-y-06513");
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-renderPass-06502", 7);
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapOffsets-06503");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapAttachment-06504");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pInputAttachments-06506");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pColorAttachments-06507", 2);
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pDepthStencilAttachment-06505");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pResolveAttachments-06508");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pPreserveAttachments-06509");
-        m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityOffsetCount-06510");
-        vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpassEndInfo);
-        m_errorMonitor->VerifyFound();
+    if (fdm_offset_properties.fragmentDensityOffsetGranularity.width == 1u) {
+        GTEST_SKIP() << "fragmentDensityOffsetGranularity width is 1";
     }
+
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_R8G8_UNORM;
+    image_create_info.extent = {32u, 32u, 1u};
+    image_create_info.mipLevels = 1u;
+    image_create_info.arrayLayers = 1u;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image image(*m_device, image_create_info);
+    vkt::ImageView image_view = image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = VK_FORMAT_R8G8_UNORM;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkSubpassDescription subpass_description = {};
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1u, &image_view.handle());
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
+    VkOffset2D offset = {width + 1, 0};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-x-06512");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapHeightGranularity) {
+    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(fdm_offset_properties);
+
+    if (fdm_offset_properties.fragmentDensityOffsetGranularity.height == 1u) {
+        GTEST_SKIP() << "fragmentDensityOffsetGranularity height is 1";
+    }
+
+    VkImageCreateInfo image_create_info = vku::InitStructHelper();
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = VK_FORMAT_R8G8_UNORM;
+    image_create_info.extent = {32u, 32u, 1u};
+    image_create_info.mipLevels = 1u;
+    image_create_info.arrayLayers = 1u;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkt::Image image(*m_device, image_create_info);
+    vkt::ImageView image_view = image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = VK_FORMAT_R8G8_UNORM;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkSubpassDescription subpass_description = {};
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1u, &image_view.handle());
+
+    VkRenderPassBeginInfo begin_info = vku::InitStructHelper();
+    begin_info.renderPass = render_pass.handle();
+    begin_info.framebuffer = framebuffer.handle();
+    begin_info.renderArea = {{0, 0}, {32u, 32u}};
+
+    m_command_buffer.Begin();
+
+    vk::CmdBeginRenderPass(m_command_buffer.handle(), &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
+    VkOffset2D offset = {0, height + 1};
+    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-y-06513");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeFragmentShadingRate, ShadingRateImageNV) {
@@ -2234,425 +2865,69 @@ TEST_F(NegativeFragmentShadingRate, ImageMaxLimitsQCOM) {
     CreateImageTest(*this, &image_ci, "VUID-VkImageCreateInfo-fragmentDensityMapOffset-06515");
 }
 
-// https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/4273#issuecomment-1178598315
-// Failing at Renderpass creation time because it is trying to use a color attachment
-TEST_F(NegativeFragmentShadingRate, DISABLED_Framebuffer) {
+TEST_F(NegativeFragmentShadingRate, Framebuffer) {
     TEST_DESCRIPTION("VUIDs related to framebuffer creation");
 
-    AddOptionalExtensions(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
-    AddOptionalExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
-    AddOptionalExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_2_EXTENSION_NAME);
-    AddOptionalExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-    // TODO - Currently not working on MockICD with Profiles
-    if (IsPlatformMockICD()) {
-        GTEST_SKIP() << "Test not supported by MockICD";
-    }
-
-    bool imageless_framebuffer_support = IsExtensionsEnabled(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
-
-    bool push_fragment_density_support = IsExtensionsEnabled(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME) ||
-                                         IsExtensionsEnabled(VK_EXT_FRAGMENT_DENSITY_MAP_2_EXTENSION_NAME);
-    if (!push_fragment_density_support) {
-        GTEST_SKIP() << "Neither " << VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME << " nor "
-                     << VK_EXT_FRAGMENT_DENSITY_MAP_2_EXTENSION_NAME << " are supported.";
-    }
-
-    VkPhysicalDeviceFragmentDensityMapFeaturesEXT fdm_features = vku::InitStructHelper();
-    auto features2 = GetPhysicalDeviceFeatures2(fdm_features);
-    if (!fdm_features.fragmentDensityMap) {
-        GTEST_SKIP() << "fragmentDensityMap not supported.";
-    }
-
-    RETURN_IF_SKIP(InitState(nullptr, &features2));
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    const bool multiview_supported =
-        IsExtensionsEnabled(VK_KHR_MULTIVIEW_EXTENSION_NAME) || (DeviceValidationVersion() >= VK_API_VERSION_1_1);
+    VkPhysicalDeviceFragmentDensityMapPropertiesEXT fdm_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(fdm_properties);
 
-    // Create a renderPass with a single color attachment
-    VkAttachmentReference attach = {};
-    attach.layout = VK_IMAGE_LAYOUT_GENERAL;
-    VkSubpassDescription subpass = {};
-    subpass.pColorAttachments = &attach;
-    VkRenderPassCreateInfo rpci = vku::InitStructHelper();
-    rpci.subpassCount = 1;
-    rpci.pSubpasses = &subpass;
-    rpci.attachmentCount = 1;
-    VkAttachmentDescription attach_desc = {};
-    attach_desc.format = VK_FORMAT_B8G8R8A8_UNORM;
-    attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
-    attach_desc.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    attach_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-    rpci.pAttachments = &attach_desc;
+    VkFormat format = VK_FORMAT_R8G8_UNORM;
 
-    vkt::ImageView rt_view0 = m_renderTargets[0]->CreateView();
-    vkt::ImageView rt_view1 = m_renderTargets[0]->CreateView();
-    VkImageView ivs[2];
-    ivs[0] = rt_view0;
-    ivs[1] = rt_view1;
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_GENERAL;
 
-    VkFramebufferCreateInfo fb_info = vku::InitStructHelper();
-    fb_info.pAttachments = ivs;
-    fb_info.width = 100;
-    fb_info.height = 100;
-    fb_info.layers = 1;
-    VkFramebuffer fb;
-    {
-        vkt::RenderPass rp(*m_device, rpci);
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = format;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
 
-        fb_info.renderPass = rp.handle();
-        // Set mis-matching attachmentCount
-        fb_info.attachmentCount = 2;
+    VkSubpassDescription subpass_description = {};
 
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-attachmentCount-00876");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-    }
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
 
-    {
-        // Create a renderPass with a depth-stencil attachment created with
-        // IMAGE_USAGE_COLOR_ATTACHMENT
-        // Add our color attachment to pDepthStencilAttachment
-        subpass.pDepthStencilAttachment = &attach;
-        subpass.pColorAttachments = NULL;
+    vkt::Image image2(*m_device, 32u, 32u, 1u, format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
 
-        vkt::RenderPass rp_ds(*m_device, rpci);
-        // Set correct attachment count, but attachment has COLOR usage bit set
-        fb_info.attachmentCount = 1;
-        fb_info.renderPass = rp_ds.handle();
+    VkImageViewCreateInfo image_view_ci = vku::InitStructHelper();
+    image_view_ci.image = image2.handle();
+    image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    image_view_ci.format = format;
+    image_view_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_view_ci.subresourceRange.baseMipLevel = 0u;
+    image_view_ci.subresourceRange.levelCount = 1u;
+    image_view_ci.subresourceRange.baseArrayLayer = 0u;
+    image_view_ci.subresourceRange.layerCount = 1u;
+    vkt::ImageView view(*m_device, image_view_ci);
 
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-02633");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-    }
+    VkFramebufferCreateInfo framebuffer_ci = vku::InitStructHelper();
+    framebuffer_ci.renderPass = render_pass.handle();
+    framebuffer_ci.attachmentCount = 1u;
+    framebuffer_ci.pAttachments = &view.handle();
+    framebuffer_ci.width = 33u * fdm_properties.maxFragmentDensityTexelSize.width;
+    framebuffer_ci.height = 32u;
+    framebuffer_ci.layers = 1u;
 
-    {
-        VkImageCreateInfo image_ci = vku::InitStructHelper();
-        image_ci.imageType = VK_IMAGE_TYPE_3D;
-        image_ci.format = VK_FORMAT_B8G8R8A8_UNORM;
-        image_ci.extent.width = 256;
-        image_ci.extent.height = 256;
-        image_ci.extent.depth = 1;
-        image_ci.mipLevels = 1;
-        image_ci.arrayLayers = 1;
-        image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
-        image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
-        image_ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        image_ci.flags = 0;
-        vkt::Image image(*m_device, image_ci, vkt::set_layout);
-
-        vkt::ImageView view = image.CreateView(VK_FORMAT_D16_UNORM);
-
-        auto fci = vku::InitStruct<VkFramebufferCreateInfo>(nullptr, 0u, m_renderPass, 1u, &view.handle(), 256u, 256u, 1u);
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-00891");
-        m_errorMonitor->SetUnexpectedError("VUID-VkFramebufferCreateInfo-pAttachments-00880");
-        vk::CreateFramebuffer(device(), &fci, nullptr, &fb);
-        m_errorMonitor->VerifyFound();
-    }
-
-    {
-        // Create new renderpass with alternate attachment format from fb
-        attach_desc.format = VK_FORMAT_R8G8B8A8_UNORM;
-        subpass.pDepthStencilAttachment = NULL;
-        subpass.pColorAttachments = &attach;
-        vkt::RenderPass rp(*m_device, rpci);
-
-        // Cause error due to mis-matched formats between rp & fb
-        //  rp attachment 0 now has RGBA8 but corresponding fb attach is BGRA8
-        fb_info.renderPass = rp.handle();
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-00880");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-    }
-    {
-        // Create new renderpass with alternate sample count from fb
-        attach_desc.format = VK_FORMAT_B8G8R8A8_UNORM;
-        attach_desc.samples = VK_SAMPLE_COUNT_4_BIT;
-        vkt::RenderPass rp(*m_device, rpci);
-
-        // Cause error due to mis-matched sample count between rp & fb
-        fb_info.renderPass = rp.handle();
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-00881");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-    }
-
-    {
-        // Create an image with 2 mip levels.
-        vkt::Image image(*m_device, 128, 128, 2, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
-
-        // Create a image view with two mip levels.
-        VkImageViewCreateInfo ivci = vku::InitStructHelper();
-        ivci.image = image.handle();
-        ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        ivci.format = VK_FORMAT_B8G8R8A8_UNORM;
-        ivci.subresourceRange.layerCount = 1;
-        ivci.subresourceRange.baseMipLevel = 0;
-        // Set level count to 2 (only 1 is allowed for FB attachment)
-        ivci.subresourceRange.levelCount = 2;
-        ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        vkt::ImageView view(*m_device, ivci);
-
-        // Re-create renderpass to have matching sample count
-        attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
-        subpass.colorAttachmentCount = 1;
-        vkt::RenderPass rp(*m_device, rpci);
-
-        subpass.colorAttachmentCount = 0;
-
-        fb_info.renderPass = rp.handle();
-        fb_info.pAttachments = &view.handle();
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-00883");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-
-        // Update view to original color buffer and grow FB dimensions too big
-        fb_info.pAttachments = ivs;
-        fb_info.width = 1024;
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-flags-04533");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-
-        fb_info.width = 256;
-
-        fb_info.height = 1024;
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-flags-04534");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-
-        fb_info.height = 256;
-
-        fb_info.layers = 2;
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-flags-04535");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-    }
-    fb_info.layers = 1;
-
-    if (!push_fragment_density_support || !imageless_framebuffer_support) {
-        printf("VK_EXT_fragment_density_map or VK_KHR_imageless_framebuffer extension not supported, skipping tests\n");
-    } else {
-        uint32_t attachment_width = 512;
-        uint32_t attachment_height = 512;
-        VkFormat attachment_format = VK_FORMAT_R8G8_UNORM;
-        uint32_t frame_width = 512;
-        uint32_t frame_height = 512;
-
-        // Create a renderPass with a single color attachment for fragment density map
-        VkAttachmentDescription attach_desc_fragment_density_map = {};
-        attach_desc_fragment_density_map.format = attachment_format;
-        attach_desc_fragment_density_map.samples = VK_SAMPLE_COUNT_1_BIT;
-        attach_desc_fragment_density_map.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
-        VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_create_info = vku::InitStructHelper();
-        fragment_density_map_create_info.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_GENERAL;
-        VkSubpassDescription subpass_fragment_density_map = {};
-        VkRenderPassCreateInfo rpci_fragment_density_map = vku::InitStructHelper(&fragment_density_map_create_info);
-        rpci_fragment_density_map.subpassCount = 1;
-        rpci_fragment_density_map.pSubpasses = &subpass_fragment_density_map;
-        rpci_fragment_density_map.attachmentCount = 1;
-        rpci_fragment_density_map.pAttachments = &attach_desc_fragment_density_map;
-        vkt::RenderPass rp_fragment_density_map(*m_device, rpci_fragment_density_map);
-
-        // Create view attachment
-        VkImageViewCreateInfo ivci = vku::InitStructHelper();
-        ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        ivci.format = attachment_format;
-        ivci.flags = 0;
-        ivci.subresourceRange.layerCount = 1;
-        ivci.subresourceRange.baseMipLevel = 0;
-        ivci.subresourceRange.levelCount = 1;
-        ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-        VkFramebufferAttachmentImageInfo fb_fdm = vku::InitStructHelper();
-        fb_fdm.usage = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT;
-        fb_fdm.width = frame_width;
-        fb_fdm.height = frame_height;
-        fb_fdm.layerCount = 1;
-        fb_fdm.viewFormatCount = 1;
-        fb_fdm.pViewFormats = &attachment_format;
-        VkFramebufferAttachmentsCreateInfo fb_aci_fdm = vku::InitStructHelper();
-        fb_aci_fdm.attachmentImageInfoCount = 1;
-        fb_aci_fdm.pAttachmentImageInfos = &fb_fdm;
-
-        VkFramebufferCreateInfo fbci = vku::InitStructHelper(&fb_aci_fdm);
-        fbci.flags = 0;
-        fbci.width = frame_width;
-        fbci.height = frame_height;
-        fbci.layers = 1;
-        fbci.renderPass = rp_fragment_density_map.handle();
-        fbci.attachmentCount = 1;
-
-        {
-            // Set small width
-            vkt::Image image2(*m_device, 16, attachment_height, 1, attachment_format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
-
-            ivci.image = image2.handle();
-            vkt::ImageView view_fragment_density_map(*m_device, ivci);
-
-            fbci.pAttachments = &view_fragment_density_map.handle();
-
-            m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-02555");
-            vk::CreateFramebuffer(device(), &fbci, NULL, &fb);
-
-            m_errorMonitor->VerifyFound();
-        }
-        {
-            // Set small height
-            vkt::Image image3(*m_device, attachment_width, 16, 1, attachment_format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
-
-            ivci.image = image3.handle();
-            vkt::ImageView view_fragment_density_map(*m_device, ivci);
-
-            fbci.pAttachments = &view_fragment_density_map.handle();
-
-            m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-02556");
-            vk::CreateFramebuffer(device(), &fbci, NULL, &fb);
-            m_errorMonitor->VerifyFound();
-        }
-    }
-
-    {
-        // Create an image with one mip level.
-        vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
-
-        // Create view attachment with non-identity swizzle
-        VkImageViewCreateInfo ivci = vku::InitStructHelper();
-        ivci.image = image.handle();
-        ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        ivci.format = VK_FORMAT_B8G8R8A8_UNORM;
-        ivci.subresourceRange.layerCount = 1;
-        ivci.subresourceRange.baseMipLevel = 0;
-        ivci.subresourceRange.levelCount = 1;
-        ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        ivci.components.r = VK_COMPONENT_SWIZZLE_G;
-        ivci.components.g = VK_COMPONENT_SWIZZLE_R;
-        ivci.components.b = VK_COMPONENT_SWIZZLE_A;
-        ivci.components.a = VK_COMPONENT_SWIZZLE_B;
-        vkt::ImageView view(*m_device, ivci);
-
-        fb_info.pAttachments = &view.handle();
-        fb_info.height = 100;
-        fb_info.width = 100;
-        fb_info.layers = 1;
-
-        m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-00884");
-        vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-        m_errorMonitor->VerifyFound();
-    }
-
-    if (!multiview_supported) {
-        printf("VK_KHR_Multiview Extension not supported, skipping tests\n");
-    } else {
-        // Test multiview renderpass with more than 1 layer
-        uint32_t viewMasks[] = {0x3u};
-        auto rpmvci = vku::InitStruct<VkRenderPassMultiviewCreateInfo>(nullptr, 1u, viewMasks, 0u, nullptr, 0u, nullptr);
-        auto rpci_mv = vku::InitStruct<VkRenderPassCreateInfo>(&rpmvci, 0u, 0u, nullptr, 1u, &subpass, 0u, nullptr);
-
-        VkFramebufferCreateInfo fb_info_mv = fb_info;
-        {
-            vkt::RenderPass rp_mv(*m_device, rpci_mv);
-
-            fb_info_mv.layers = 2;
-            fb_info_mv.attachmentCount = 0;
-            fb_info_mv.renderPass = rp_mv.handle();
-
-            m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-renderPass-02531");
-            vk::CreateFramebuffer(device(), &fb_info_mv, NULL, &fb);
-            m_errorMonitor->VerifyFound();
-        }
-        {
-            VkAttachmentDescription attach_desc_mv = {};
-            attach_desc_mv.format = VK_FORMAT_R8G8B8A8_UNORM;
-            attach_desc_mv.finalLayout = attach_desc_mv.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-            attach_desc_mv.samples = VK_SAMPLE_COUNT_1_BIT;
-            rpci_mv.attachmentCount = 1;
-            rpci_mv.pAttachments = &attach_desc_mv;
-            subpass.colorAttachmentCount = 1;
-            subpass.pColorAttachments = &attach;
-            vkt::RenderPass rp_mv(*m_device, rpci_mv);
-
-            // Create an image with 1 layer
-            vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-            image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
-
-            VkImageViewCreateInfo ivci = vku::InitStructHelper();
-            ivci.image = image.handle();
-            ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            ivci.format = VK_FORMAT_R8G8B8A8_UNORM;
-            ivci.subresourceRange.layerCount = 1;
-            ivci.subresourceRange.baseMipLevel = 0;
-            ivci.subresourceRange.levelCount = 1;
-            ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            vkt::ImageView view(*m_device, ivci);
-
-            fb_info_mv.renderPass = rp_mv.handle();
-            fb_info_mv.layers = 1;
-            fb_info_mv.pAttachments = &view.handle();
-            fb_info_mv.attachmentCount = 1;
-
-            m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-renderPass-04536");
-            vk::CreateFramebuffer(device(), &fb_info_mv, NULL, &fb);
-            m_errorMonitor->VerifyFound();
-        }
-    }
-
-    // reset attachment to color attachment
-    fb_info.pAttachments = ivs;
-
-    // Request fb that exceeds max width
-    fb_info.width = m_device->Physical().limits_.maxFramebufferWidth + 1;
-    fb_info.height = 100;
-    fb_info.layers = 1;
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-width-00886");
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-flags-04533");
-    vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
+    VkFramebuffer framebuffer;
+    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-02555");
+    vk::CreateFramebuffer(device(), &framebuffer_ci, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
 
-    // and width=0
-    fb_info.width = 0;
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-width-00885");
-    vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-    m_errorMonitor->VerifyFound();
-
-    // Request fb that exceeds max height
-    fb_info.width = 100;
-    fb_info.height = m_device->Physical().limits_.maxFramebufferHeight + 1;
-    fb_info.layers = 1;
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-height-00888");
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-flags-04534");
-    vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-    m_errorMonitor->VerifyFound();
-
-    // and height=0
-    fb_info.height = 0;
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-height-00887");
-    vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-    m_errorMonitor->VerifyFound();
-
-    // Request fb that exceeds max layers
-    fb_info.width = 100;
-    fb_info.height = 100;
-    fb_info.layers = m_device->Physical().limits_.maxFramebufferLayers + 1;
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-layers-00890");
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-flags-04535");
-    vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-    m_errorMonitor->VerifyFound();
-
-    // and layers=0
-    fb_info.layers = 0;
-    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-layers-00889");
-    vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
-    m_errorMonitor->VerifyFound();
-
-    // Try to create with pAttachments = NULL
-    fb_info.layers = 1;
-    fb_info.pAttachments = NULL;
-    m_errorMonitor->SetDesiredError("VUID_Undefined");
-    vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
+    framebuffer_ci.width = 32u;
+    framebuffer_ci.height = 33u * fdm_properties.maxFragmentDensityTexelSize.height;
+    m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-pAttachments-02556");
+    vk::CreateFramebuffer(device(), &framebuffer_ci, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
 }
 

@@ -1,6 +1,6 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  * Copyright (C) 2015-2024 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2022 RasterGrid Kft.
@@ -20,12 +20,11 @@
 #pragma once
 #include <variant>
 #include "state_tracker/device_memory_state.h"
-#include "containers/range_vector.h"
-
-class ValidationStateTracker;
+#include "containers/range.h"
 
 namespace vvl {
 
+class Device;
 class VideoProfileDesc;
 
 class Buffer : public Bindable {
@@ -40,7 +39,7 @@ class Buffer : public Bindable {
 
     unordered_set<std::shared_ptr<const VideoProfileDesc>> supported_video_profiles;
 
-    Buffer(ValidationStateTracker &dev_data, VkBuffer handle, const VkBufferCreateInfo *pCreateInfo);
+    Buffer(Device &dev_data, VkBuffer handle, const VkBufferCreateInfo *pCreateInfo);
 
     Buffer(Buffer const &rh_obj) = delete;
 
@@ -69,9 +68,7 @@ class Buffer : public Bindable {
         return buffer_state ? buffer_state->GetRegionSize(offset, size) : 0;
     }
 
-    sparse_container::range<VkDeviceAddress> DeviceAddressRange() const {
-        return {deviceAddress, deviceAddress + create_info.size};
-    }
+    vvl::range<VkDeviceAddress> DeviceAddressRange() const { return {deviceAddress, deviceAddress + create_info.size}; }
 
     // This function is only used for comparing Imported External Dedicated Memory
     bool CompareCreateInfo(const Buffer &other) const;
