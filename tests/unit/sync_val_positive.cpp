@@ -64,6 +64,7 @@ void VkSyncValTest::InitSyncValFramework(const SyncValSettings *p_sync_settings)
     }
     validation_features.pNext = &settings_create_info;
 
+    AddRequiredExtensions(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
     InitFramework(&validation_features);
 }
 
@@ -77,6 +78,68 @@ void VkSyncValTest::InitTimelineSemaphore() {
     AddRequiredFeature(vkt::Feature::synchronization2);
     AddRequiredFeature(vkt::Feature::timelineSemaphore);
     RETURN_IF_SKIP(InitSyncVal());
+}
+
+void VkSyncValTest::InitRayTracing() {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+
+    AddRequiredExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredFeature(vkt::Feature::accelerationStructure);
+    AddRequiredFeature(vkt::Feature::rayTracingPipeline);
+
+    RETURN_IF_SKIP(InitSyncVal());
+}
+
+TEST_F(PositiveSyncVal, BufferCopyNonOverlappedRegions) {
+    TEST_DESCRIPTION("Copy to non-overlapped regions of the same buffer");
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+    VkBufferCopy first_half = {0, 0, 128};
+    VkBufferCopy second_half = {128, 128, 128};
+
+    m_command_buffer.Begin();
+    vk::CmdCopyBuffer(m_command_buffer, buffer_b, buffer_a, 1, &first_half);
+    vk::CmdCopyBuffer(m_command_buffer, buffer_b, buffer_a, 1, &second_half);
+    m_command_buffer.End();
+}
+
+TEST_F(PositiveSyncVal, BufferCopySecondary) {
+    TEST_DESCRIPTION("Execution dependency protects protects READ access from subsequent WRITEs");
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer buffer_c(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    // buffer_c READ
+    vkt::CommandBuffer secondary_cb1(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    secondary_cb1.Begin();
+    secondary_cb1.Copy(buffer_c, buffer_a);
+    secondary_cb1.End();
+
+    // Execution dependency
+    vkt::CommandBuffer secondary_cb2(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    secondary_cb2.Begin();
+    vk::CmdPipelineBarrier(secondary_cb2, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr,
+                           0, nullptr);
+    secondary_cb2.End();
+
+    // buffer_c WRITE
+    vkt::CommandBuffer secondary_cb3(*m_device, m_command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    secondary_cb3.Begin();
+    secondary_cb3.Copy(buffer_b, buffer_c);
+    secondary_cb3.End();
+
+    m_command_buffer.Begin();
+    VkCommandBuffer three_cbs[3] = {secondary_cb1, secondary_cb2, secondary_cb3};
+    vk::CmdExecuteCommands(m_command_buffer, 3, three_cbs);
+    m_command_buffer.End();
 }
 
 TEST_F(PositiveSyncVal, CmdClearAttachmentLayer) {
@@ -644,8 +707,8 @@ TEST_F(PositiveSyncVal, TexelBufferArrayConstantIndexing) {
 
     const vkt::Buffer buffer0(*m_device, 1024, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT);
     const vkt::Buffer buffer1(*m_device, 1024, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT);
-    const vkt::BufferView buffer_view0(*m_device, vkt::BufferView::CreateInfo(buffer0, VK_FORMAT_R8G8B8A8_UINT));
-    const vkt::BufferView buffer_view1(*m_device, vkt::BufferView::CreateInfo(buffer1, VK_FORMAT_R8G8B8A8_UINT));
+    const vkt::BufferView buffer_view0(*m_device, buffer0, VK_FORMAT_R8G8B8A8_UINT);
+    const vkt::BufferView buffer_view1(*m_device, buffer1, VK_FORMAT_R8G8B8A8_UINT);
 
     OneOffDescriptorSet descriptor_set(m_device, {
                                                      {0, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 2, VK_SHADER_STAGE_ALL, nullptr},
@@ -2132,5 +2195,81 @@ TEST_F(PositiveSyncVal, DynamicRenderingDSWithOnlyStencilAspect) {
     m_command_buffer.Begin();
     m_command_buffer.BeginRendering(rendering_info);
     m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
+TEST_F(PositiveSyncVal, AmdBufferMarker) {
+    TEST_DESCRIPTION("Use barrier to synchronize with AMD buffer marker accesses");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    AddRequiredExtensions(VK_AMD_BUFFER_MARKER_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+    VkBufferMemoryBarrier2 barrier = vku::InitStructHelper();
+    // AMD marker access is WRITE on TRANSFER stage
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    // Buffer copy access
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier.buffer = buffer_a;
+    barrier.size = 256;
+
+    VkDependencyInfo dep_info = vku::InitStructHelper();
+    dep_info.bufferMemoryBarrierCount = 1;
+    dep_info.pBufferMemoryBarriers = &barrier;
+
+    m_command_buffer.Begin();
+    vk::CmdWriteBufferMarkerAMD(m_command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, buffer_a, 0, 1);
+    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Copy(buffer_b, buffer_a);
+    m_command_buffer.End();
+}
+
+TEST_F(PositiveSyncVal, VertexBufferWithEventSync) {
+    TEST_DESCRIPTION("Use Event to synchronize vertex buffer accesses");
+    RETURN_IF_SKIP(InitSyncValFramework());
+    void *p_next = nullptr;
+    VkPhysicalDevicePortabilitySubsetFeaturesKHR portability_subset_features = vku::InitStructHelper();
+    if (IsExtensionsEnabled(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
+        p_next = &portability_subset_features;
+        GetPhysicalDeviceFeatures2(portability_subset_features);
+        if (!portability_subset_features.events) {
+            GTEST_SKIP() << "VkPhysicalDevicePortabilitySubsetFeaturesKHR::events not supported";
+        }
+    }
+    RETURN_IF_SKIP(InitState(nullptr, p_next));
+    InitRenderTarget();
+
+    vkt::Buffer vertex_buffer(*m_device, 12, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer source_buffer(*m_device, 12, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    const VkDeviceSize offset = 0;
+
+    VkBufferMemoryBarrier barrier = vku::InitStructHelper();
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.buffer = vertex_buffer;
+    barrier.size = 12;
+
+    vkt::Event event(*m_device);
+
+    CreatePipelineHelper gfx_pipe(*this);
+    gfx_pipe.CreateGraphicsPipeline();
+
+    m_command_buffer.Begin();
+    m_command_buffer.Copy(source_buffer, vertex_buffer);
+    m_command_buffer.SetEvent(event, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindVertexBuffers(m_command_buffer, 0, 1, &vertex_buffer.handle(), &offset);
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gfx_pipe.Handle());
+    vk::CmdWaitEvents(m_command_buffer, 1, &event.handle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+                      nullptr, 1, &barrier, 0, nullptr);
+    vk::CmdDraw(m_command_buffer, 1, 0, 0, 0);
+    m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 }

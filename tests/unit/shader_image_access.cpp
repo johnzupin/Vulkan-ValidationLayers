@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2023-2024 LunarG, Inc.
- * Copyright (c) 2023-2024 Valve Corporation
+ * Copyright (c) 2023-2025 LunarG, Inc.
+ * Copyright (c) 2023-2025 Valve Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,6 +11,7 @@
 
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
+#include "error_message/log_message_type.h"
 
 class NegativeShaderImageAccess : public VkLayerTest {};
 
@@ -181,7 +182,7 @@ TEST_F(NegativeShaderImageAccess, UnnormalizedCoordinatesFunction) {
 
     CreatePipelineHelper g_pipe(*this);
     g_pipe.shader_stages_ = {g_pipe.vs_->GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    g_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+    g_pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     g_pipe.CreateGraphicsPipeline();
 
     VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -519,20 +520,20 @@ TEST_F(NegativeShaderImageAccess, AliasImageBinding) {
         #version 460
         #extension GL_EXT_samplerless_texture_functions : require
 
-        layout(set = 0, binding = 0) uniform texture2D float_textures[3];
-        layout(set = 0, binding = 0) uniform utexture2D uint_textures[3];
+        // This should be an GLSL error, if both of these are accessed (without PARTIALLY_BOUND), you need to satisfy both, which is impossible
+        layout(set = 0, binding = 0) uniform texture2D float_textures[2];
+        layout(set = 0, binding = 0) uniform utexture2D uint_textures[2];
         layout(set = 0, binding = 1) buffer output_buffer { vec4 data; }; // avoid optimization
 
         void main() {
-            const vec4 value = texelFetch(float_textures[0], ivec2(0), 0); // good
-            const uint mask_a = texelFetch(uint_textures[1], ivec2(0), 0).x; // good
-            const uint mask_b = texelFetch(uint_textures[2], ivec2(0), 0).x; // bad
-            data = (mask_a + mask_b) > 0 ? value : vec4(0.0);
+            const vec4 value = texelFetch(float_textures[0], ivec2(0), 0);
+            const uint mask_a = texelFetch(uint_textures[1], ivec2(0), 0).x;
+            data = mask_a > 0 ? value : vec4(0.0);
         }
     )glsl";
 
     CreateComputePipelineHelper pipe(*this);
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 3, VK_SHADER_STAGE_ALL, nullptr},
+    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 2, VK_SHADER_STAGE_ALL, nullptr},
                           {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
     pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
     pipe.CreateComputePipeline();
@@ -551,8 +552,6 @@ TEST_F(NegativeShaderImageAccess, AliasImageBinding) {
                                                    VK_IMAGE_LAYOUT_GENERAL, 0);
     pipe.descriptor_set_->WriteDescriptorImageInfo(0, uint_image_view, VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                                                    VK_IMAGE_LAYOUT_GENERAL, 1);
-    pipe.descriptor_set_->WriteDescriptorImageInfo(0, float_image_view, VK_NULL_HANDLE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                                   VK_IMAGE_LAYOUT_GENERAL, 2);
     pipe.descriptor_set_->WriteDescriptorBufferInfo(1, buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
     pipe.descriptor_set_->UpdateDescriptorSets();
 

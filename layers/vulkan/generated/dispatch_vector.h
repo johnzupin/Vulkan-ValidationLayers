@@ -3,9 +3,9 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  * Copyright (c) 2015-2024 Google Inc.
  * Copyright (c) 2023-2024 RasterGrid Kft.
  *
@@ -1694,6 +1694,12 @@ typedef enum InterceptId {
     InterceptIdPreCallValidateGetDynamicRenderingTilePropertiesQCOM,
     InterceptIdPreCallRecordGetDynamicRenderingTilePropertiesQCOM,
     InterceptIdPostCallRecordGetDynamicRenderingTilePropertiesQCOM,
+    InterceptIdPreCallValidateConvertCooperativeVectorMatrixNV,
+    InterceptIdPreCallRecordConvertCooperativeVectorMatrixNV,
+    InterceptIdPostCallRecordConvertCooperativeVectorMatrixNV,
+    InterceptIdPreCallValidateCmdConvertCooperativeVectorMatrixNV,
+    InterceptIdPreCallRecordCmdConvertCooperativeVectorMatrixNV,
+    InterceptIdPostCallRecordCmdConvertCooperativeVectorMatrixNV,
     InterceptIdPreCallValidateSetLatencySleepModeNV,
     InterceptIdPreCallRecordSetLatencySleepModeNV,
     InterceptIdPostCallRecordSetLatencySleepModeNV,
@@ -1715,6 +1721,18 @@ typedef enum InterceptId {
     InterceptIdPreCallValidateGetScreenBufferPropertiesQNX,
     InterceptIdPreCallRecordGetScreenBufferPropertiesQNX,
     InterceptIdPostCallRecordGetScreenBufferPropertiesQNX,
+    InterceptIdPreCallValidateGetClusterAccelerationStructureBuildSizesNV,
+    InterceptIdPreCallRecordGetClusterAccelerationStructureBuildSizesNV,
+    InterceptIdPostCallRecordGetClusterAccelerationStructureBuildSizesNV,
+    InterceptIdPreCallValidateCmdBuildClusterAccelerationStructureIndirectNV,
+    InterceptIdPreCallRecordCmdBuildClusterAccelerationStructureIndirectNV,
+    InterceptIdPostCallRecordCmdBuildClusterAccelerationStructureIndirectNV,
+    InterceptIdPreCallValidateGetPartitionedAccelerationStructuresBuildSizesNV,
+    InterceptIdPreCallRecordGetPartitionedAccelerationStructuresBuildSizesNV,
+    InterceptIdPostCallRecordGetPartitionedAccelerationStructuresBuildSizesNV,
+    InterceptIdPreCallValidateCmdBuildPartitionedAccelerationStructuresNV,
+    InterceptIdPreCallRecordCmdBuildPartitionedAccelerationStructuresNV,
+    InterceptIdPostCallRecordCmdBuildPartitionedAccelerationStructuresNV,
     InterceptIdPreCallValidateGetGeneratedCommandsMemoryRequirementsEXT,
     InterceptIdPreCallRecordGetGeneratedCommandsMemoryRequirementsEXT,
     InterceptIdPostCallRecordGetGeneratedCommandsMemoryRequirementsEXT,
@@ -1742,6 +1760,12 @@ typedef enum InterceptId {
     InterceptIdPreCallValidateUpdateIndirectExecutionSetShaderEXT,
     InterceptIdPreCallRecordUpdateIndirectExecutionSetShaderEXT,
     InterceptIdPostCallRecordUpdateIndirectExecutionSetShaderEXT,
+    InterceptIdPreCallValidateGetMemoryMetalHandleEXT,
+    InterceptIdPreCallRecordGetMemoryMetalHandleEXT,
+    InterceptIdPostCallRecordGetMemoryMetalHandleEXT,
+    InterceptIdPreCallValidateGetMemoryMetalHandlePropertiesEXT,
+    InterceptIdPreCallRecordGetMemoryMetalHandlePropertiesEXT,
+    InterceptIdPostCallRecordGetMemoryMetalHandlePropertiesEXT,
     InterceptIdPreCallValidateCreateAccelerationStructureKHR,
     InterceptIdPreCallRecordCreateAccelerationStructureKHR,
     InterceptIdPostCallRecordCreateAccelerationStructureKHR,

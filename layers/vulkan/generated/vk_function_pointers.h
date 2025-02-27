@@ -3,9 +3,9 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -762,6 +762,9 @@ extern PFN_vkCmdBindShadersEXT CmdBindShadersEXT;
 extern PFN_vkCmdSetDepthClampRangeEXT CmdSetDepthClampRangeEXT;
 extern PFN_vkGetFramebufferTilePropertiesQCOM GetFramebufferTilePropertiesQCOM;
 extern PFN_vkGetDynamicRenderingTilePropertiesQCOM GetDynamicRenderingTilePropertiesQCOM;
+extern PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV GetPhysicalDeviceCooperativeVectorPropertiesNV;
+extern PFN_vkConvertCooperativeVectorMatrixNV ConvertCooperativeVectorMatrixNV;
+extern PFN_vkCmdConvertCooperativeVectorMatrixNV CmdConvertCooperativeVectorMatrixNV;
 extern PFN_vkSetLatencySleepModeNV SetLatencySleepModeNV;
 extern PFN_vkLatencySleepNV LatencySleepNV;
 extern PFN_vkSetLatencyMarkerNV SetLatencyMarkerNV;
@@ -771,6 +774,10 @@ extern PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT CmdSetAttachmentFeedbackLoopE
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
 extern PFN_vkGetScreenBufferPropertiesQNX GetScreenBufferPropertiesQNX;
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+extern PFN_vkGetClusterAccelerationStructureBuildSizesNV GetClusterAccelerationStructureBuildSizesNV;
+extern PFN_vkCmdBuildClusterAccelerationStructureIndirectNV CmdBuildClusterAccelerationStructureIndirectNV;
+extern PFN_vkGetPartitionedAccelerationStructuresBuildSizesNV GetPartitionedAccelerationStructuresBuildSizesNV;
+extern PFN_vkCmdBuildPartitionedAccelerationStructuresNV CmdBuildPartitionedAccelerationStructuresNV;
 extern PFN_vkGetGeneratedCommandsMemoryRequirementsEXT GetGeneratedCommandsMemoryRequirementsEXT;
 extern PFN_vkCmdPreprocessGeneratedCommandsEXT CmdPreprocessGeneratedCommandsEXT;
 extern PFN_vkCmdExecuteGeneratedCommandsEXT CmdExecuteGeneratedCommandsEXT;
@@ -781,6 +788,10 @@ extern PFN_vkDestroyIndirectExecutionSetEXT DestroyIndirectExecutionSetEXT;
 extern PFN_vkUpdateIndirectExecutionSetPipelineEXT UpdateIndirectExecutionSetPipelineEXT;
 extern PFN_vkUpdateIndirectExecutionSetShaderEXT UpdateIndirectExecutionSetShaderEXT;
 extern PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV;
+#ifdef VK_USE_PLATFORM_METAL_EXT
+extern PFN_vkGetMemoryMetalHandleEXT GetMemoryMetalHandleEXT;
+extern PFN_vkGetMemoryMetalHandlePropertiesEXT GetMemoryMetalHandlePropertiesEXT;
+#endif  // VK_USE_PLATFORM_METAL_EXT
 extern PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR;
 extern PFN_vkDestroyAccelerationStructureKHR DestroyAccelerationStructureKHR;
 extern PFN_vkCmdBuildAccelerationStructuresKHR CmdBuildAccelerationStructuresKHR;

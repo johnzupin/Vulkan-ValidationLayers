@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2020-2024 The Khronos Group Inc.
- * Copyright (c) 2020-2024 Valve Corporation
- * Copyright (c) 2020-2024 LunarG, Inc.
- * Copyright (c) 2020-2024 Google, Inc.
+ * Copyright (c) 2020-2025 The Khronos Group Inc.
+ * Copyright (c) 2020-2025 Valve Corporation
+ * Copyright (c) 2020-2025 LunarG, Inc.
+ * Copyright (c) 2020-2025 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,15 +44,10 @@ TEST_F(PositiveGpuAVDescriptorClassTexelBuffer, ImageLoadStoreTexelFetch) {
     pipe.CreateComputePipeline();
 
     vkt::Buffer uniform_texel_buffer(*m_device, 20, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT, kHostVisibleMemProps);
-    VkBufferViewCreateInfo bvci = vku::InitStructHelper();
-    bvci.buffer = uniform_texel_buffer.handle();
-    bvci.format = VK_FORMAT_R32_SFLOAT;
-    bvci.range = VK_WHOLE_SIZE;
-    vkt::BufferView uniform_buffer_view(*m_device, bvci);
+    vkt::BufferView uniform_buffer_view(*m_device, uniform_texel_buffer, VK_FORMAT_R32_SFLOAT);
 
     vkt::Buffer storage_texel_buffer(*m_device, 24, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, kHostVisibleMemProps);
-    bvci.buffer = storage_texel_buffer.handle();
-    vkt::BufferView storage_buffer_view(*m_device, bvci);
+    vkt::BufferView storage_buffer_view(*m_device, storage_texel_buffer, VK_FORMAT_R32_SFLOAT);
 
     pipe.descriptor_set_->WriteDescriptorBufferView(0, uniform_buffer_view.handle(), VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
     pipe.descriptor_set_->WriteDescriptorBufferView(1, storage_buffer_view.handle(), VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER);
@@ -97,16 +92,12 @@ TEST_F(PositiveGpuAVDescriptorClassTexelBuffer, AtomicImageLoadStore) {
     )glsl";
 
     CreateComputePipelineHelper pipe(*this);
-    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr};
     pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_2);
     pipe.CreateComputePipeline();
 
     vkt::Buffer storage_texel_buffer(*m_device, 16, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, kHostVisibleMemProps);
-    VkBufferViewCreateInfo bvci = vku::InitStructHelper();
-    bvci.buffer = storage_texel_buffer.handle();
-    bvci.format = VK_FORMAT_R32_SFLOAT;
-    bvci.range = VK_WHOLE_SIZE;
-    vkt::BufferView storage_buffer_view(*m_device, bvci);
+    vkt::BufferView storage_buffer_view(*m_device, storage_texel_buffer, VK_FORMAT_R32_SFLOAT);
 
     pipe.descriptor_set_->WriteDescriptorBufferView(0, storage_buffer_view.handle(), VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER);
     pipe.descriptor_set_->UpdateDescriptorSets();

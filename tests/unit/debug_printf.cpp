@@ -31,6 +31,7 @@ void DebugPrintfTests::InitDebugPrintfFramework(void *p_next, bool reserve_slot)
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
     RETURN_IF_SKIP(InitFramework(&features));
 
     if (!CanEnableGpuAV(*this)) {
@@ -1669,7 +1670,7 @@ TEST_F(NegativeDebugPrintf, GPLFragmentIndependentSets) {
         frag_out_lib.Handle(),
     };
     VkPipelineLibraryCreateInfoKHR link_info = vku::InitStructHelper();
-    link_info.libraryCount = size(libraries);
+    link_info.libraryCount = size32(libraries);
     link_info.pLibraries = libraries;
 
     VkGraphicsPipelineCreateInfo exe_pipe_ci = vku::InitStructHelper(&link_info);
@@ -2160,7 +2161,7 @@ TEST_F(NegativeDebugPrintf, ShaderObjectFragment) {
     m_command_buffer.Begin();
     m_command_buffer.BeginRendering(renderingInfo);
     SetDefaultDynamicStatesExclude({VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT});
-    m_command_buffer.BindVertFragShader(vert_shader, frag_shader);
+    m_command_buffer.BindShaders(vert_shader, frag_shader);
     vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
     m_command_buffer.EndRendering();
     m_command_buffer.End();
@@ -3253,21 +3254,18 @@ TEST_F(NegativeDebugPrintf, MisformattedNewLine) {
 
 TEST_F(NegativeDebugPrintf, ValidationAbort) {
     TEST_DESCRIPTION("Verify that aborting DebugPrintf is safe.");
-    RETURN_IF_SKIP(InitDebugPrintfFramework());
+    SetTargetApiVersion(VK_API_VERSION_1_0);
+    AddRequiredExtensions(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
 
-    PFN_vkSetPhysicalDeviceFeaturesEXT fpvkSetPhysicalDeviceFeaturesEXT = nullptr;
-    PFN_vkGetOriginalPhysicalDeviceFeaturesEXT fpvkGetOriginalPhysicalDeviceFeaturesEXT = nullptr;
-    if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFeaturesEXT, fpvkGetOriginalPhysicalDeviceFeaturesEXT)) {
-        GTEST_SKIP() << "Failed to load device profile layer.";
-    }
+    VkValidationFeatureEnableEXT enables[] = {VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT};
+    VkValidationFeaturesEXT features = vku::InitStructHelper();
+    // Most tests don't need to reserve the slot, so keep it as an option for now
+    features.enabledValidationFeatureCount = 1;
+    features.disabledValidationFeatureCount = 0;
+    features.pEnabledValidationFeatures = enables;
+    RETURN_IF_SKIP(InitFramework(&features));
 
-    VkPhysicalDeviceFeatures features = {};
-    fpvkGetOriginalPhysicalDeviceFeaturesEXT(Gpu(), &features);
-
-    // Disable features so initialization aborts
-    features.vertexPipelineStoresAndAtomics = false;
-    features.fragmentStoresAndAtomics = false;
-    fpvkSetPhysicalDeviceFeaturesEXT(Gpu(), features);
     m_errorMonitor->SetDesiredError("DebugPrintf is being disabled");
     RETURN_IF_SKIP(InitState());
     m_errorMonitor->VerifyFound();
@@ -4244,6 +4242,140 @@ TEST_F(NegativeDebugPrintf, InlineUniformBlock) {
     m_command_buffer.End();
 
     m_errorMonitor->SetDesiredInfo("binding [0] = 3 | [1] = 5 | [2] = 3");
+    m_default_queue->Submit(m_command_buffer);
+    m_default_queue->Wait();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDebugPrintf, StorageBufferLength) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::scalarBlockLayout);
+    RETURN_IF_SKIP(InitDebugPrintfFramework());
+    RETURN_IF_SKIP(InitState());
+    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit | kInformationBit);
+
+    char const *shader_source = R"glsl(
+        #version 450
+        #extension GL_EXT_debug_printf : enable
+        #extension GL_EXT_scalar_block_layout : enable
+
+        layout(set = 0, binding = 0, scalar) buffer SSBO {
+            float a;
+            float b;
+            vec4 c[]; // offset 8
+        };
+
+        void main() {
+            debugPrintfEXT("c length = %u", c.length());
+        }
+    )glsl";
+
+    vkt::Buffer buffer_large(*m_device, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kHostVisibleMemProps);
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}});
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+    // Will have a length of 8
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer_large, 0, 136, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cp_ci_.layout = pipeline_layout.handle();
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.Begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.End();
+
+    m_errorMonitor->SetDesiredInfo("c length = 8");
+    m_default_queue->Submit(m_command_buffer);
+    m_default_queue->Wait();
+    m_errorMonitor->VerifyFound();
+
+    // Will only have a length of 1 vec4
+    vkt::Buffer buffer_small(*m_device, 24, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kHostVisibleMemProps);
+    descriptor_set.Clear();
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer_small, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    // Need to rebind even for the length - https://gitlab.khronos.org/vulkan/vulkan/-/issues/4143
+    m_command_buffer.Begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.End();
+
+    m_errorMonitor->SetDesiredInfo("c length = 1");
+    m_default_queue->Submit(m_command_buffer);
+    m_default_queue->Wait();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDebugPrintf, StorageBufferLengthUpdateAfterBind) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::scalarBlockLayout);
+    AddRequiredFeature(vkt::Feature::descriptorBindingStorageBufferUpdateAfterBind);
+    RETURN_IF_SKIP(InitDebugPrintfFramework());
+    RETURN_IF_SKIP(InitState());
+    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit | kInformationBit);
+
+    char const *shader_source = R"glsl(
+        #version 450
+        #extension GL_EXT_debug_printf : enable
+        #extension GL_EXT_scalar_block_layout : enable
+
+        layout(set = 0, binding = 0, scalar) buffer SSBO {
+            float a;
+            float b;
+            vec4 c[]; // offset 8
+        };
+
+        void main() {
+            debugPrintfEXT("c length = %u", c.length());
+        }
+    )glsl";
+
+    OneOffDescriptorIndexingSet descriptor_set(m_device, {
+                                                             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr,
+                                                              VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT},
+                                                         });
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cp_ci_.layout = pipeline_layout.handle();
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.Begin();
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.End();
+
+    vkt::Buffer buffer_large(*m_device, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kHostVisibleMemProps);
+    // Will have a length of 8
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer_large, 0, 136, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    m_errorMonitor->SetDesiredInfo("c length = 8");
+    m_default_queue->Submit(m_command_buffer);
+    m_default_queue->Wait();
+    m_errorMonitor->VerifyFound();
+
+    // Will only have a length of 1 vec4
+    vkt::Buffer buffer_small(*m_device, 24, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kHostVisibleMemProps);
+    descriptor_set.Clear();
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer_small, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    m_errorMonitor->SetDesiredInfo("c length = 1");
     m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
     m_errorMonitor->VerifyFound();

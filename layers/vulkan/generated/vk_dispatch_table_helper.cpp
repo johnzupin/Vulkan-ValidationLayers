@@ -3,10 +3,10 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1270,6 +1270,16 @@ static VKAPI_ATTR VkResult VKAPI_CALL StubGetDynamicRenderingTilePropertiesQCOM(
                                                                                 VkTilePropertiesQCOM*) {
     return VK_SUCCESS;
 }
+static VKAPI_ATTR VkResult VKAPI_CALL StubGetPhysicalDeviceCooperativeVectorPropertiesNV(VkPhysicalDevice, uint32_t*,
+                                                                                         VkCooperativeVectorPropertiesNV*) {
+    return VK_SUCCESS;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL StubConvertCooperativeVectorMatrixNV(VkDevice,
+                                                                           const VkConvertCooperativeVectorMatrixInfoNV*) {
+    return VK_SUCCESS;
+}
+static VKAPI_ATTR void VKAPI_CALL StubCmdConvertCooperativeVectorMatrixNV(VkCommandBuffer, uint32_t,
+                                                                          const VkConvertCooperativeVectorMatrixInfoNV*) {}
 static VKAPI_ATTR VkResult VKAPI_CALL StubSetLatencySleepModeNV(VkDevice, VkSwapchainKHR, const VkLatencySleepModeInfoNV*) {
     return VK_SUCCESS;
 }
@@ -1286,6 +1296,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL StubGetScreenBufferPropertiesQNX(VkDevice,
     return VK_SUCCESS;
 }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+static VKAPI_ATTR void VKAPI_CALL StubGetClusterAccelerationStructureBuildSizesNV(VkDevice,
+                                                                                  const VkClusterAccelerationStructureInputInfoNV*,
+                                                                                  VkAccelerationStructureBuildSizesInfoKHR*) {}
+static VKAPI_ATTR void VKAPI_CALL
+StubCmdBuildClusterAccelerationStructureIndirectNV(VkCommandBuffer, const VkClusterAccelerationStructureCommandsInfoNV*) {}
+static VKAPI_ATTR void VKAPI_CALL StubGetPartitionedAccelerationStructuresBuildSizesNV(
+    VkDevice, const VkPartitionedAccelerationStructureInstancesInputNV*, VkAccelerationStructureBuildSizesInfoKHR*) {}
+static VKAPI_ATTR void VKAPI_CALL
+StubCmdBuildPartitionedAccelerationStructuresNV(VkCommandBuffer, const VkBuildPartitionedAccelerationStructureInfoNV*) {}
 static VKAPI_ATTR void VKAPI_CALL StubGetGeneratedCommandsMemoryRequirementsEXT(VkDevice,
                                                                                 const VkGeneratedCommandsMemoryRequirementsInfoEXT*,
                                                                                 VkMemoryRequirements2*) {}
@@ -1314,6 +1333,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL StubGetPhysicalDeviceCooperativeMatrixFlex
     VkPhysicalDevice, uint32_t*, VkCooperativeMatrixFlexibleDimensionsPropertiesNV*) {
     return VK_SUCCESS;
 }
+#ifdef VK_USE_PLATFORM_METAL_EXT
+static VKAPI_ATTR VkResult VKAPI_CALL StubGetMemoryMetalHandleEXT(VkDevice, const VkMemoryGetMetalHandleInfoEXT*, void**) {
+    return VK_SUCCESS;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL StubGetMemoryMetalHandlePropertiesEXT(VkDevice, VkExternalMemoryHandleTypeFlagBits,
+                                                                            const void*, VkMemoryMetalHandlePropertiesEXT*) {
+    return VK_SUCCESS;
+}
+#endif  // VK_USE_PLATFORM_METAL_EXT
 static VKAPI_ATTR VkResult VKAPI_CALL StubCreateAccelerationStructureKHR(VkDevice, const VkAccelerationStructureCreateInfoKHR*,
                                                                          const VkAllocationCallbacks*,
                                                                          VkAccelerationStructureKHR*) {
@@ -1872,6 +1900,8 @@ const auto& GetApiExtensionMap() {
         {"vkCmdSetDepthClampRangeEXT", {vvl::Extension::_VK_EXT_shader_object, vvl::Extension::_VK_EXT_depth_clamp_control}},
         {"vkGetFramebufferTilePropertiesQCOM", {vvl::Extension::_VK_QCOM_tile_properties}},
         {"vkGetDynamicRenderingTilePropertiesQCOM", {vvl::Extension::_VK_QCOM_tile_properties}},
+        {"vkConvertCooperativeVectorMatrixNV", {vvl::Extension::_VK_NV_cooperative_vector}},
+        {"vkCmdConvertCooperativeVectorMatrixNV", {vvl::Extension::_VK_NV_cooperative_vector}},
         {"vkSetLatencySleepModeNV", {vvl::Extension::_VK_NV_low_latency2}},
         {"vkLatencySleepNV", {vvl::Extension::_VK_NV_low_latency2}},
         {"vkSetLatencyMarkerNV", {vvl::Extension::_VK_NV_low_latency2}},
@@ -1879,6 +1909,10 @@ const auto& GetApiExtensionMap() {
         {"vkQueueNotifyOutOfBandNV", {vvl::Extension::_VK_NV_low_latency2}},
         {"vkCmdSetAttachmentFeedbackLoopEnableEXT", {vvl::Extension::_VK_EXT_attachment_feedback_loop_dynamic_state}},
         {"vkGetScreenBufferPropertiesQNX", {vvl::Extension::_VK_QNX_external_memory_screen_buffer}},
+        {"vkGetClusterAccelerationStructureBuildSizesNV", {vvl::Extension::_VK_NV_cluster_acceleration_structure}},
+        {"vkCmdBuildClusterAccelerationStructureIndirectNV", {vvl::Extension::_VK_NV_cluster_acceleration_structure}},
+        {"vkGetPartitionedAccelerationStructuresBuildSizesNV", {vvl::Extension::_VK_NV_partitioned_acceleration_structure}},
+        {"vkCmdBuildPartitionedAccelerationStructuresNV", {vvl::Extension::_VK_NV_partitioned_acceleration_structure}},
         {"vkGetGeneratedCommandsMemoryRequirementsEXT", {vvl::Extension::_VK_EXT_device_generated_commands}},
         {"vkCmdPreprocessGeneratedCommandsEXT", {vvl::Extension::_VK_EXT_device_generated_commands}},
         {"vkCmdExecuteGeneratedCommandsEXT", {vvl::Extension::_VK_EXT_device_generated_commands}},
@@ -1888,6 +1922,8 @@ const auto& GetApiExtensionMap() {
         {"vkDestroyIndirectExecutionSetEXT", {vvl::Extension::_VK_EXT_device_generated_commands}},
         {"vkUpdateIndirectExecutionSetPipelineEXT", {vvl::Extension::_VK_EXT_device_generated_commands}},
         {"vkUpdateIndirectExecutionSetShaderEXT", {vvl::Extension::_VK_EXT_device_generated_commands}},
+        {"vkGetMemoryMetalHandleEXT", {vvl::Extension::_VK_EXT_external_memory_metal}},
+        {"vkGetMemoryMetalHandlePropertiesEXT", {vvl::Extension::_VK_EXT_external_memory_metal}},
         {"vkCreateAccelerationStructureKHR", {vvl::Extension::_VK_KHR_acceleration_structure}},
         {"vkDestroyAccelerationStructureKHR", {vvl::Extension::_VK_KHR_acceleration_structure}},
         {"vkCmdBuildAccelerationStructuresKHR", {vvl::Extension::_VK_KHR_acceleration_structure}},
@@ -4066,6 +4102,17 @@ void layer_init_device_dispatch_table(VkDevice device, VkLayerDispatchTable* tab
         table->GetDynamicRenderingTilePropertiesQCOM =
             (PFN_vkGetDynamicRenderingTilePropertiesQCOM)StubGetDynamicRenderingTilePropertiesQCOM;
     }
+    table->ConvertCooperativeVectorMatrixNV =
+        (PFN_vkConvertCooperativeVectorMatrixNV)gpa(device, "vkConvertCooperativeVectorMatrixNV");
+    if (table->ConvertCooperativeVectorMatrixNV == nullptr) {
+        table->ConvertCooperativeVectorMatrixNV = (PFN_vkConvertCooperativeVectorMatrixNV)StubConvertCooperativeVectorMatrixNV;
+    }
+    table->CmdConvertCooperativeVectorMatrixNV =
+        (PFN_vkCmdConvertCooperativeVectorMatrixNV)gpa(device, "vkCmdConvertCooperativeVectorMatrixNV");
+    if (table->CmdConvertCooperativeVectorMatrixNV == nullptr) {
+        table->CmdConvertCooperativeVectorMatrixNV =
+            (PFN_vkCmdConvertCooperativeVectorMatrixNV)StubCmdConvertCooperativeVectorMatrixNV;
+    }
     table->SetLatencySleepModeNV = (PFN_vkSetLatencySleepModeNV)gpa(device, "vkSetLatencySleepModeNV");
     if (table->SetLatencySleepModeNV == nullptr) {
         table->SetLatencySleepModeNV = (PFN_vkSetLatencySleepModeNV)StubSetLatencySleepModeNV;
@@ -4098,6 +4145,30 @@ void layer_init_device_dispatch_table(VkDevice device, VkLayerDispatchTable* tab
         table->GetScreenBufferPropertiesQNX = (PFN_vkGetScreenBufferPropertiesQNX)StubGetScreenBufferPropertiesQNX;
     }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+    table->GetClusterAccelerationStructureBuildSizesNV =
+        (PFN_vkGetClusterAccelerationStructureBuildSizesNV)gpa(device, "vkGetClusterAccelerationStructureBuildSizesNV");
+    if (table->GetClusterAccelerationStructureBuildSizesNV == nullptr) {
+        table->GetClusterAccelerationStructureBuildSizesNV =
+            (PFN_vkGetClusterAccelerationStructureBuildSizesNV)StubGetClusterAccelerationStructureBuildSizesNV;
+    }
+    table->CmdBuildClusterAccelerationStructureIndirectNV =
+        (PFN_vkCmdBuildClusterAccelerationStructureIndirectNV)gpa(device, "vkCmdBuildClusterAccelerationStructureIndirectNV");
+    if (table->CmdBuildClusterAccelerationStructureIndirectNV == nullptr) {
+        table->CmdBuildClusterAccelerationStructureIndirectNV =
+            (PFN_vkCmdBuildClusterAccelerationStructureIndirectNV)StubCmdBuildClusterAccelerationStructureIndirectNV;
+    }
+    table->GetPartitionedAccelerationStructuresBuildSizesNV =
+        (PFN_vkGetPartitionedAccelerationStructuresBuildSizesNV)gpa(device, "vkGetPartitionedAccelerationStructuresBuildSizesNV");
+    if (table->GetPartitionedAccelerationStructuresBuildSizesNV == nullptr) {
+        table->GetPartitionedAccelerationStructuresBuildSizesNV =
+            (PFN_vkGetPartitionedAccelerationStructuresBuildSizesNV)StubGetPartitionedAccelerationStructuresBuildSizesNV;
+    }
+    table->CmdBuildPartitionedAccelerationStructuresNV =
+        (PFN_vkCmdBuildPartitionedAccelerationStructuresNV)gpa(device, "vkCmdBuildPartitionedAccelerationStructuresNV");
+    if (table->CmdBuildPartitionedAccelerationStructuresNV == nullptr) {
+        table->CmdBuildPartitionedAccelerationStructuresNV =
+            (PFN_vkCmdBuildPartitionedAccelerationStructuresNV)StubCmdBuildPartitionedAccelerationStructuresNV;
+    }
     table->GetGeneratedCommandsMemoryRequirementsEXT =
         (PFN_vkGetGeneratedCommandsMemoryRequirementsEXT)gpa(device, "vkGetGeneratedCommandsMemoryRequirementsEXT");
     if (table->GetGeneratedCommandsMemoryRequirementsEXT == nullptr) {
@@ -4143,6 +4214,17 @@ void layer_init_device_dispatch_table(VkDevice device, VkLayerDispatchTable* tab
         table->UpdateIndirectExecutionSetShaderEXT =
             (PFN_vkUpdateIndirectExecutionSetShaderEXT)StubUpdateIndirectExecutionSetShaderEXT;
     }
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    table->GetMemoryMetalHandleEXT = (PFN_vkGetMemoryMetalHandleEXT)gpa(device, "vkGetMemoryMetalHandleEXT");
+    if (table->GetMemoryMetalHandleEXT == nullptr) {
+        table->GetMemoryMetalHandleEXT = (PFN_vkGetMemoryMetalHandleEXT)StubGetMemoryMetalHandleEXT;
+    }
+    table->GetMemoryMetalHandlePropertiesEXT =
+        (PFN_vkGetMemoryMetalHandlePropertiesEXT)gpa(device, "vkGetMemoryMetalHandlePropertiesEXT");
+    if (table->GetMemoryMetalHandlePropertiesEXT == nullptr) {
+        table->GetMemoryMetalHandlePropertiesEXT = (PFN_vkGetMemoryMetalHandlePropertiesEXT)StubGetMemoryMetalHandlePropertiesEXT;
+    }
+#endif  // VK_USE_PLATFORM_METAL_EXT
     table->CreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)gpa(device, "vkCreateAccelerationStructureKHR");
     if (table->CreateAccelerationStructureKHR == nullptr) {
         table->CreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)StubCreateAccelerationStructureKHR;
@@ -4807,6 +4889,12 @@ void layer_init_instance_dispatch_table(VkInstance instance, VkLayerInstanceDisp
     if (table->GetPhysicalDeviceOpticalFlowImageFormatsNV == nullptr) {
         table->GetPhysicalDeviceOpticalFlowImageFormatsNV =
             (PFN_vkGetPhysicalDeviceOpticalFlowImageFormatsNV)StubGetPhysicalDeviceOpticalFlowImageFormatsNV;
+    }
+    table->GetPhysicalDeviceCooperativeVectorPropertiesNV =
+        (PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV)gpa(instance, "vkGetPhysicalDeviceCooperativeVectorPropertiesNV");
+    if (table->GetPhysicalDeviceCooperativeVectorPropertiesNV == nullptr) {
+        table->GetPhysicalDeviceCooperativeVectorPropertiesNV =
+            (PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV)StubGetPhysicalDeviceCooperativeVectorPropertiesNV;
     }
     table->GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV =
         (PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV)gpa(

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2020-2024 The Khronos Group Inc.
- * Copyright (c) 2020-2024 Valve Corporation
- * Copyright (c) 2020-2024 LunarG, Inc.
- * Copyright (c) 2020-2024 Google, Inc.
+ * Copyright (c) 2020-2025 The Khronos Group Inc.
+ * Copyright (c) 2020-2025 Valve Corporation
+ * Copyright (c) 2020-2025 LunarG, Inc.
+ * Copyright (c) 2020-2025 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,21 +21,10 @@ class NegativeGpuAV : public GpuAVTest {};
 
 TEST_F(NegativeGpuAV, ValidationAbort) {
     TEST_DESCRIPTION("GPU validation: Verify that aborting GPU-AV is safe.");
-    RETURN_IF_SKIP(InitGpuAvFramework());
-
-    PFN_vkSetPhysicalDeviceFeaturesEXT fpvkSetPhysicalDeviceFeaturesEXT = nullptr;
-    PFN_vkGetOriginalPhysicalDeviceFeaturesEXT fpvkGetOriginalPhysicalDeviceFeaturesEXT = nullptr;
-    if (!LoadDeviceProfileLayer(fpvkSetPhysicalDeviceFeaturesEXT, fpvkGetOriginalPhysicalDeviceFeaturesEXT)) {
-        GTEST_SKIP() << "Failed to load device profile layer.";
-    }
-
-    VkPhysicalDeviceFeatures features = {};
-    fpvkGetOriginalPhysicalDeviceFeaturesEXT(Gpu(), &features);
-
-    // Disable features necessary for GPU-AV so initialization aborts
-    features.vertexPipelineStoresAndAtomics = false;
-    features.fragmentStoresAndAtomics = false;
-    fpvkSetPhysicalDeviceFeaturesEXT(Gpu(), features);
+    // GPU Shader Instrumentation requires Vulkan 1.1 or later
+    SetTargetApiVersion(VK_API_VERSION_1_0);
+    VkValidationFeaturesEXT validation_features = GetGpuAvValidationFeatures();
+    RETURN_IF_SKIP(InitFramework(&validation_features));
     m_errorMonitor->SetDesiredError("GPU-AV is being disabled");
     RETURN_IF_SKIP(InitState());
     m_errorMonitor->VerifyFound();
@@ -58,6 +47,7 @@ TEST_F(NegativeGpuAV, ValidationAbort) {
 TEST_F(NegativeGpuAV, ValidationFeatures) {
     TEST_DESCRIPTION("Validate Validation Features");
     SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
     VkValidationFeatureEnableEXT enables[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT};
     VkValidationFeaturesEXT features = vku::InitStructHelper();
     features.enabledValidationFeatureCount = 1;
@@ -341,7 +331,7 @@ TEST_F(NegativeGpuAV, ForceUniformAndStorageBuffer8BitAccess) {
     m_errorMonitor->SetAllowedFailureMsg(
         "Buffer device address validation option was enabled, but required buffer device address extension and/or features are not "
         "enabled");
-    m_errorMonitor->SetAllowedFailureMsg("Ray Query validation option was enabled, but the rayQuery feature is not enabled");
+    m_errorMonitor->SetAllowedFailureMsg("Ray Query validation option was enabled");
     m_errorMonitor->SetAllowedFailureMsg(
         "vkGetDeviceProcAddr(): pName is trying to grab vkGetPhysicalDeviceCalibrateableTimeDomainsKHR which is an instance level "
         "function");
@@ -560,5 +550,88 @@ TEST_F(NegativeGpuAV, CopyBufferToImageD32U8Vk13) {
     m_errorMonitor->SetDesiredError("has a float value at offset 20475 that is not in the range [0, 1]");
     m_default_queue->Submit(m_command_buffer);
     m_default_queue->Wait();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeGpuAV, UseAllDescriptorSlotsPipelineLayout) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    // Use robustness to make sure we don't crash as we won't catch the invalid shader
+    AddRequiredFeature(vkt::Feature::robustBufferAccess);
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
+
+    vkt::Buffer buffer(*m_device, 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kHostVisibleMemProps);
+
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}});
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer.handle(), 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+
+    // Add one to use the descriptor slot we tried to reserve
+    const uint32_t set_limit = m_device->Physical().limits_.maxBoundDescriptorSets + 1;
+
+    std::vector<const vkt::DescriptorSetLayout *> empty_layouts(set_limit);
+    for (uint32_t i = 0; i < set_limit; i++) {
+        empty_layouts[i] = &descriptor_set.layout_;
+    }
+
+    m_errorMonitor->SetAllowedFailureMsg("This Pipeline Layout has too many descriptor sets");
+    vkt::PipelineLayout bad_pipe_layout(*m_device, empty_layouts);
+
+    char const *shader_source = R"glsl(
+        #version 450
+        layout(set = 0, binding = 0) buffer foo {
+            int x;
+            int indices[];
+        };
+        void main()  {
+            x = indices[64]; // OOB
+        }
+    )glsl";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1);
+    pipe.cp_ci_.layout = bad_pipe_layout.handle();
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.Begin();
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, bad_pipe_layout.handle(), 0, 1,
+                              &descriptor_set.set_, 0, nullptr);
+    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_command_buffer.End();
+
+    // normally would produce a VUID-vkCmdDispatch-storageBuffers-06936 warning, but we didn't instrument the shader in the end
+    m_default_queue->Submit(m_command_buffer);
+    m_default_queue->Wait();
+}
+
+TEST_F(NegativeGpuAV, RemoveGpuAvInPresenceOfSyncVal) {
+    TEST_DESCRIPTION("Disabling GPU-AV when requirements are not met and sync val is on should not cause a crash");
+
+    SetTargetApiVersion(VK_API_VERSION_1_0);  // GPU-AV needs >1.1
+
+    const std::array validation_enables = {
+        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
+        VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+    };
+    const std::array validation_disables = {
+        VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT, VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT,
+        VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT, VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
+
+    AddRequiredExtensions(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+    VkValidationFeaturesEXT validation_features = vku::InitStructHelper();
+    validation_features.enabledValidationFeatureCount = size32(validation_enables);
+    validation_features.pEnabledValidationFeatures = validation_enables.data();
+    if (m_gpuav_disable_core) {
+        validation_features.disabledValidationFeatureCount = size32(validation_disables);
+        validation_features.pDisabledValidationFeatures = validation_disables.data();
+    }
+
+    RETURN_IF_SKIP(InitFramework(&validation_features));
+
+    m_errorMonitor->SetDesiredError("UNASSIGNED-GPU-Assisted-Validation");
+    RETURN_IF_SKIP(InitState(nullptr));
     m_errorMonitor->VerifyFound();
 }

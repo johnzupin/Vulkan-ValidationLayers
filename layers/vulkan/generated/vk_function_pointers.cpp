@@ -3,9 +3,9 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -799,6 +799,9 @@ PFN_vkCmdBindShadersEXT CmdBindShadersEXT;
 PFN_vkCmdSetDepthClampRangeEXT CmdSetDepthClampRangeEXT;
 PFN_vkGetFramebufferTilePropertiesQCOM GetFramebufferTilePropertiesQCOM;
 PFN_vkGetDynamicRenderingTilePropertiesQCOM GetDynamicRenderingTilePropertiesQCOM;
+PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV GetPhysicalDeviceCooperativeVectorPropertiesNV;
+PFN_vkConvertCooperativeVectorMatrixNV ConvertCooperativeVectorMatrixNV;
+PFN_vkCmdConvertCooperativeVectorMatrixNV CmdConvertCooperativeVectorMatrixNV;
 PFN_vkSetLatencySleepModeNV SetLatencySleepModeNV;
 PFN_vkLatencySleepNV LatencySleepNV;
 PFN_vkSetLatencyMarkerNV SetLatencyMarkerNV;
@@ -808,6 +811,10 @@ PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT CmdSetAttachmentFeedbackLoopEnableEX
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
 PFN_vkGetScreenBufferPropertiesQNX GetScreenBufferPropertiesQNX;
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+PFN_vkGetClusterAccelerationStructureBuildSizesNV GetClusterAccelerationStructureBuildSizesNV;
+PFN_vkCmdBuildClusterAccelerationStructureIndirectNV CmdBuildClusterAccelerationStructureIndirectNV;
+PFN_vkGetPartitionedAccelerationStructuresBuildSizesNV GetPartitionedAccelerationStructuresBuildSizesNV;
+PFN_vkCmdBuildPartitionedAccelerationStructuresNV CmdBuildPartitionedAccelerationStructuresNV;
 PFN_vkGetGeneratedCommandsMemoryRequirementsEXT GetGeneratedCommandsMemoryRequirementsEXT;
 PFN_vkCmdPreprocessGeneratedCommandsEXT CmdPreprocessGeneratedCommandsEXT;
 PFN_vkCmdExecuteGeneratedCommandsEXT CmdExecuteGeneratedCommandsEXT;
@@ -818,6 +825,10 @@ PFN_vkDestroyIndirectExecutionSetEXT DestroyIndirectExecutionSetEXT;
 PFN_vkUpdateIndirectExecutionSetPipelineEXT UpdateIndirectExecutionSetPipelineEXT;
 PFN_vkUpdateIndirectExecutionSetShaderEXT UpdateIndirectExecutionSetShaderEXT;
 PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV;
+#ifdef VK_USE_PLATFORM_METAL_EXT
+PFN_vkGetMemoryMetalHandleEXT GetMemoryMetalHandleEXT;
+PFN_vkGetMemoryMetalHandlePropertiesEXT GetMemoryMetalHandlePropertiesEXT;
+#endif  // VK_USE_PLATFORM_METAL_EXT
 PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR;
 PFN_vkDestroyAccelerationStructureKHR DestroyAccelerationStructureKHR;
 PFN_vkCmdBuildAccelerationStructuresKHR CmdBuildAccelerationStructuresKHR;
@@ -2485,6 +2496,13 @@ void InitDeviceExtension(VkInstance instance, VkDevice device, const char* exten
             }
         },
         {
+            "VK_NV_cooperative_vector", [](VkInstance instance, VkDevice device) {
+                ConvertCooperativeVectorMatrixNV = reinterpret_cast<PFN_vkConvertCooperativeVectorMatrixNV>(GetDeviceProcAddr(device, "vkConvertCooperativeVectorMatrixNV"));
+                CmdConvertCooperativeVectorMatrixNV = reinterpret_cast<PFN_vkCmdConvertCooperativeVectorMatrixNV>(GetDeviceProcAddr(device, "vkCmdConvertCooperativeVectorMatrixNV"));
+                GetPhysicalDeviceCooperativeVectorPropertiesNV = reinterpret_cast<PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV>(GetInstanceProcAddr(instance, "vkGetPhysicalDeviceCooperativeVectorPropertiesNV"));
+            }
+        },
+        {
             "VK_NV_low_latency2", [](VkInstance , VkDevice device) {
                 SetLatencySleepModeNV = reinterpret_cast<PFN_vkSetLatencySleepModeNV>(GetDeviceProcAddr(device, "vkSetLatencySleepModeNV"));
                 LatencySleepNV = reinterpret_cast<PFN_vkLatencySleepNV>(GetDeviceProcAddr(device, "vkLatencySleepNV"));
@@ -2505,6 +2523,18 @@ void InitDeviceExtension(VkInstance instance, VkDevice device, const char* exten
             }
         },
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+        {
+            "VK_NV_cluster_acceleration_structure", [](VkInstance , VkDevice device) {
+                GetClusterAccelerationStructureBuildSizesNV = reinterpret_cast<PFN_vkGetClusterAccelerationStructureBuildSizesNV>(GetDeviceProcAddr(device, "vkGetClusterAccelerationStructureBuildSizesNV"));
+                CmdBuildClusterAccelerationStructureIndirectNV = reinterpret_cast<PFN_vkCmdBuildClusterAccelerationStructureIndirectNV>(GetDeviceProcAddr(device, "vkCmdBuildClusterAccelerationStructureIndirectNV"));
+            }
+        },
+        {
+            "VK_NV_partitioned_acceleration_structure", [](VkInstance , VkDevice device) {
+                GetPartitionedAccelerationStructuresBuildSizesNV = reinterpret_cast<PFN_vkGetPartitionedAccelerationStructuresBuildSizesNV>(GetDeviceProcAddr(device, "vkGetPartitionedAccelerationStructuresBuildSizesNV"));
+                CmdBuildPartitionedAccelerationStructuresNV = reinterpret_cast<PFN_vkCmdBuildPartitionedAccelerationStructuresNV>(GetDeviceProcAddr(device, "vkCmdBuildPartitionedAccelerationStructuresNV"));
+            }
+        },
         {
             "VK_EXT_device_generated_commands", [](VkInstance , VkDevice device) {
                 GetGeneratedCommandsMemoryRequirementsEXT = reinterpret_cast<PFN_vkGetGeneratedCommandsMemoryRequirementsEXT>(GetDeviceProcAddr(device, "vkGetGeneratedCommandsMemoryRequirementsEXT"));
@@ -2528,6 +2558,14 @@ void InitDeviceExtension(VkInstance instance, VkDevice device, const char* exten
                 GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV = reinterpret_cast<PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV>(GetInstanceProcAddr(instance, "vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV"));
             }
         },
+#ifdef VK_USE_PLATFORM_METAL_EXT
+        {
+            "VK_EXT_external_memory_metal", [](VkInstance , VkDevice device) {
+                GetMemoryMetalHandleEXT = reinterpret_cast<PFN_vkGetMemoryMetalHandleEXT>(GetDeviceProcAddr(device, "vkGetMemoryMetalHandleEXT"));
+                GetMemoryMetalHandlePropertiesEXT = reinterpret_cast<PFN_vkGetMemoryMetalHandlePropertiesEXT>(GetDeviceProcAddr(device, "vkGetMemoryMetalHandlePropertiesEXT"));
+            }
+        },
+#endif  // VK_USE_PLATFORM_METAL_EXT
         {
             "VK_KHR_acceleration_structure", [](VkInstance , VkDevice device) {
                 CreateAccelerationStructureKHR = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(GetDeviceProcAddr(device, "vkCreateAccelerationStructureKHR"));
@@ -3062,6 +3100,9 @@ void ResetAllExtensions() {
     CmdSetDepthClampRangeEXT = nullptr;
     GetFramebufferTilePropertiesQCOM = nullptr;
     GetDynamicRenderingTilePropertiesQCOM = nullptr;
+    GetPhysicalDeviceCooperativeVectorPropertiesNV = nullptr;
+    ConvertCooperativeVectorMatrixNV = nullptr;
+    CmdConvertCooperativeVectorMatrixNV = nullptr;
     SetLatencySleepModeNV = nullptr;
     LatencySleepNV = nullptr;
     SetLatencyMarkerNV = nullptr;
@@ -3071,6 +3112,10 @@ void ResetAllExtensions() {
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
     GetScreenBufferPropertiesQNX = nullptr;
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+    GetClusterAccelerationStructureBuildSizesNV = nullptr;
+    CmdBuildClusterAccelerationStructureIndirectNV = nullptr;
+    GetPartitionedAccelerationStructuresBuildSizesNV = nullptr;
+    CmdBuildPartitionedAccelerationStructuresNV = nullptr;
     GetGeneratedCommandsMemoryRequirementsEXT = nullptr;
     CmdPreprocessGeneratedCommandsEXT = nullptr;
     CmdExecuteGeneratedCommandsEXT = nullptr;
@@ -3081,6 +3126,10 @@ void ResetAllExtensions() {
     UpdateIndirectExecutionSetPipelineEXT = nullptr;
     UpdateIndirectExecutionSetShaderEXT = nullptr;
     GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV = nullptr;
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    GetMemoryMetalHandleEXT = nullptr;
+    GetMemoryMetalHandlePropertiesEXT = nullptr;
+#endif  // VK_USE_PLATFORM_METAL_EXT
     CreateAccelerationStructureKHR = nullptr;
     DestroyAccelerationStructureKHR = nullptr;
     CmdBuildAccelerationStructuresKHR = nullptr;

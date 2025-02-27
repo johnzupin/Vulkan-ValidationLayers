@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  * Modifications Copyright (C) 2020-2022 Advanced Micro Devices, Inc. All rights reserved.
  * Modifications Copyright (C) 2021 ARM, Inc. All rights reserved.
  *
@@ -381,7 +381,7 @@ TEST_F(NegativeDescriptorBuffer, NotEnabledGetAccelerationStructureOpaqueCapture
     RETURN_IF_SKIP(Init());
 
     auto blas = vkt::as::blueprint::AccelStructSimpleOnDeviceBottomLevel(*m_device, 4096);
-    blas->Build();
+    blas->Create();
 
     uint8_t data[256];
 
@@ -659,6 +659,29 @@ TEST_F(NegativeDescriptorBuffer, BindingInfoUsage) {
         m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-bufferlessPushDescriptors-08056");
     }
     m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-usage-08124");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-pBindingInfos-08055");
+    vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptorBuffer, BindingInfoUsage2) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9228");
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(InitBasicDescriptorBuffer());
+
+    m_command_buffer.Begin();
+
+    vkt::Buffer buffer(*m_device, 4096, 0, vkt::device_address);
+
+    VkBufferUsageFlags2CreateInfo buffer_usage_flags = vku::InitStructHelper();
+    buffer_usage_flags.usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+
+    VkDescriptorBufferBindingInfoEXT dbbi = vku::InitStructHelper(&buffer_usage_flags);
+    dbbi.address = buffer.Address();
+
+    m_errorMonitor->SetDesiredError("VUID-VkDescriptorBufferBindingInfoEXT-usage-08122");
     m_errorMonitor->SetDesiredError("VUID-vkCmdBindDescriptorBuffersEXT-pBindingInfos-08055");
     vk::CmdBindDescriptorBuffersEXT(m_command_buffer.handle(), 1, &dbbi);
     m_errorMonitor->VerifyFound();
@@ -1632,7 +1655,7 @@ TEST_F(NegativeDescriptorBuffer, MaxTexelBufferElements) {
     if (!(format_properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT)) {
         GTEST_SKIP() << "Test requires support for VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT";
     }
-    VkDeviceSize format_size = static_cast<VkDeviceSize>(vkuFormatElementSize(VK_FORMAT_R8G8B8A8_UNORM));
+    VkDeviceSize format_size = static_cast<VkDeviceSize>(vkuFormatTexelBlockSize(VK_FORMAT_R8G8B8A8_UNORM));
 
     VkDescriptorAddressInfoEXT dai = vku::InitStructHelper();
     dai.address = 0;

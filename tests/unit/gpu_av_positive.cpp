@@ -1,6 +1,6 @@
-/* Copyright (c) 2023-2024 The Khronos Group Inc.
- * Copyright (c) 2023-2024 Valve Corporation
- * Copyright (c) 2023-2024 LunarG, Inc.
+/* Copyright (c) 2023-2025 The Khronos Group Inc.
+ * Copyright (c) 2023-2025 Valve Corporation
+ * Copyright (c) 2023-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
 #include "../framework/gpu_av_helper.h"
-#include "../../layers/gpu/shaders/gpuav_shaders_constants.h"
+#include "../../layers/gpuav/shaders/gpuav_shaders_constants.h"
 
 class PositiveGpuAV : public GpuAVTest {};
 
@@ -1107,7 +1107,7 @@ TEST_P(PositiveGpuAVParameterized, SettingsCombinations) {
         VkBool32 &layer_setting_value = layer_settings_values[setting_name_i];
 
         layer_setting_value = (setting_values & (1u << setting_name_i)) ? VK_TRUE : VK_FALSE;
-        layer_setting = {OBJECT_LAYER_NAME, *setting_name, VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &layer_setting_value};
+        layer_setting = {OBJECT_LAYER_NAME, setting_name, VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &layer_setting_value};
     }
 
     VkLayerSettingsCreateInfoEXT layer_settings_create_info = vku::InitStructHelper();
@@ -1578,7 +1578,7 @@ TEST_F(PositiveGpuAV, PipelineLayoutMixing) {
     pipe_1.CreateGraphicsPipeline();
 
     CreatePipelineHelper pipe_2(*this);
-    pipe_2.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}};
+    pipe_2.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
     pipe_2.CreateGraphicsPipeline();
 
     vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -1904,17 +1904,17 @@ TEST_F(PositiveGpuAV, DISABLED_DeviceGeneratedCommandsIES) {
     VkPipelineCreateFlags2CreateInfo pipe_flags2 = vku::InitStructHelper();
     pipe_flags2.flags = VK_PIPELINE_CREATE_2_INDIRECT_BINDABLE_BIT_EXT;
     CreateComputePipelineHelper init_pipe(*this, &pipe_flags2);
-    init_pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    init_pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr};
     init_pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source_1, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1);
     init_pipe.CreateComputePipeline();
 
     CreateComputePipelineHelper pipe_1(*this, &pipe_flags2);
-    pipe_1.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe_1.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr};
     pipe_1.cs_ = std::make_unique<VkShaderObj>(this, shader_source_2, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1);
     pipe_1.CreateComputePipeline();
 
     CreateComputePipelineHelper pipe_2(*this, &pipe_flags2);
-    pipe_2.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe_2.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr};
     pipe_2.cs_ = std::make_unique<VkShaderObj>(this, shader_source_3, VK_SHADER_STAGE_COMPUTE_BIT, SPV_ENV_VULKAN_1_1);
     pipe_2.CreateComputePipeline();
 

@@ -3,8 +3,8 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2023-2024 Google Inc.
- * Copyright (c) 2023-2024 LunarG, Inc.
+ * Copyright (c) 2023-2025 Google Inc.
+ * Copyright (c) 2023-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,6 +86,8 @@ struct DeviceFeatures {
     bool bufferDeviceAddressEXT;
     // VkPhysicalDeviceBufferDeviceAddressFeaturesEXT
     bool bufferDeviceAddressMultiDeviceEXT;
+    // VkPhysicalDeviceClusterAccelerationStructureFeaturesNV
+    bool clusterAccelerationStructure;
     // VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI
     bool clustercullingShader;
     // VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI
@@ -124,6 +126,10 @@ struct DeviceFeatures {
     bool cooperativeMatrix;
     // VkPhysicalDeviceCooperativeMatrixFeaturesKHR, VkPhysicalDeviceCooperativeMatrixFeaturesNV
     bool cooperativeMatrixRobustBufferAccess;
+    // VkPhysicalDeviceCooperativeVectorFeaturesNV
+    bool cooperativeVector;
+    // VkPhysicalDeviceCooperativeVectorFeaturesNV
+    bool cooperativeVectorTraining;
     // VkPhysicalDeviceCopyMemoryIndirectFeaturesNV
     bool indirectCopy;
     // VkPhysicalDeviceCornerSampledImageFeaturesNV
@@ -152,7 +158,7 @@ struct DeviceFeatures {
     bool leastRepresentableValueForceUnormRepresentation;
     // VkPhysicalDeviceDepthClampControlFeaturesEXT
     bool depthClampControl;
-    // VkPhysicalDeviceDepthClampZeroOneFeaturesEXT
+    // VkPhysicalDeviceDepthClampZeroOneFeaturesKHR
     bool depthClampZeroOne;
     // VkPhysicalDeviceDepthClipControlFeaturesEXT
     bool depthClipControl;
@@ -532,6 +538,8 @@ struct DeviceFeatures {
     bool maintenance6;
     // VkPhysicalDeviceMaintenance7FeaturesKHR
     bool maintenance7;
+    // VkPhysicalDeviceMaintenance8FeaturesKHR
+    bool maintenance8;
     // VkPhysicalDeviceMapMemoryPlacedFeaturesEXT
     bool memoryMapPlaced;
     // VkPhysicalDeviceMapMemoryPlacedFeaturesEXT
@@ -586,6 +594,8 @@ struct DeviceFeatures {
     bool opticalFlow;
     // VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT
     bool pageableDeviceLocalMemory;
+    // VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV
+    bool partitionedAccelerationStructure;
     // VkPhysicalDevicePerStageDescriptorSetFeaturesNV
     bool dynamicPipelineLayout;
     // VkPhysicalDevicePerStageDescriptorSetFeaturesNV
@@ -602,6 +612,8 @@ struct DeviceFeatures {
     bool pipelineExecutableInfo;
     // VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT
     bool pipelineLibraryGroupHandles;
+    // VkPhysicalDevicePipelineOpacityMicromapFeaturesARM
+    bool pipelineOpacityMicromap;
     // VkPhysicalDevicePipelinePropertiesFeaturesEXT
     bool pipelinePropertiesIdentifier;
     // VkPhysicalDevicePipelineProtectedAccessFeatures, VkPhysicalDeviceVulkan14Features
@@ -642,6 +654,8 @@ struct DeviceFeatures {
     bool presentBarrier;
     // VkPhysicalDevicePresentIdFeaturesKHR
     bool presentId;
+    // VkPhysicalDevicePresentMeteringFeaturesNV
+    bool presentMetering;
     // VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT
     bool presentModeFifoLatestReady;
     // VkPhysicalDevicePresentWaitFeaturesKHR
@@ -678,6 +692,10 @@ struct DeviceFeatures {
     bool rayQuery;
     // VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV
     bool rayTracingInvocationReorder;
+    // VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV
+    bool linearSweptSpheres;
+    // VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV
+    bool spheres;
     // VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR
     bool rayTracingMaintenance1;
     // VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR
@@ -886,6 +904,8 @@ struct DeviceFeatures {
     bool videoEncodeQuantizationMap;
     // VkPhysicalDeviceVideoMaintenance1FeaturesKHR
     bool videoMaintenance1;
+    // VkPhysicalDeviceVideoMaintenance2FeaturesKHR
+    bool videoMaintenance2;
     // VkPhysicalDeviceVulkan12Features
     bool descriptorIndexing;
     // VkPhysicalDeviceVulkan12Features

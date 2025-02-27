@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (C) 2015-2024 Google Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (C) 2015-2025 Google Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,11 +52,8 @@ bool CoreChecks::ValidateInterfaceVertexInput(const vvl::Pipeline &pipeline, con
     }
 
     for (uint32_t i = 0; i < input_state->vertexAttributeDescriptionCount; ++i) {
-        // Vertex input attributes use VkFormat, but only to make use of how they define sizes, things such as
-        // depth/multi-plane/compressed will never be used here because they would mean nothing. So we can ensure these are
-        // "standard" color formats being used
         const VkFormat format = input_state->pVertexAttributeDescriptions[i].format;
-        const uint32_t format_size = vkuFormatElementSize(format);
+        const uint32_t format_size = GetVertexInputFormatSize(format);
         // Vulkan Spec: Location is made up of 16 bytes, never can have 0 Locations
         const uint32_t bytes_in_location = 16;
         const uint32_t num_locations = ((format_size - 1) / bytes_in_location) + 1;
@@ -345,7 +342,7 @@ bool CoreChecks::ValidateShaderStageInputOutputLimits(const spirv::Module &modul
                                  max_output_slot.Describe().c_str(), limits.maxTessellationEvaluationOutputComponents);
             }
             // Portability validation
-            if (IsExtEnabled(device_extensions.vk_khr_portability_subset)) {
+            if (IsExtEnabled(extensions.vk_khr_portability_subset)) {
                 if (is_iso_lines && (VK_FALSE == enabled_features.tessellationIsolines)) {
                     skip |= LogError("VUID-RuntimeSpirv-tessellationShader-06326", module_state.handle(), loc,
                                      "(portability error) SPIR-V (Tessellation evaluation stage)"
@@ -452,7 +449,7 @@ bool CoreChecks::ValidateShaderStageInputOutputLimits(const spirv::Module &modul
     //
     // This limit was created from Vulkan 1.0, with the move to bindless, this limit has slowly become less relevant, if using
     // descriptor indexing, the limit should basically be UINT32_MAX
-    if (stage == VK_SHADER_STAGE_FRAGMENT_BIT && !IsExtEnabled(device_extensions.vk_ext_descriptor_indexing)) {
+    if (stage == VK_SHADER_STAGE_FRAGMENT_BIT && !IsExtEnabled(extensions.vk_ext_descriptor_indexing)) {
         // Variables can be aliased, so use Location to mark things as unique
         vvl::unordered_set<uint32_t> color_attachments;
         for (const auto *variable : entrypoint.user_defined_interface_variables) {
@@ -513,16 +510,17 @@ bool CoreChecks::ValidateInterfaceBetweenStages(const spirv::Module &producer, c
 
     for (const auto &[interface_slot, stage_variable] : producer_entrypoint.output_interface_slots) {
         auto &slot = slot_map[interface_slot.Location()][interface_slot.Component()];
-        if (stage_variable->nested_struct || stage_variable->physical_storage_buffer) {
+        if (stage_variable->nested_struct) {
             return skip;  // TODO workaround
         }
         slot.output = stage_variable;
         slot.output_type = interface_slot.type;
         slot.output_width = interface_slot.bit_width;
     }
+
     for (const auto &[interface_slot, stage_variable] : consumer_entrypoint.input_interface_slots) {
         auto &slot = slot_map[interface_slot.Location()][interface_slot.Component()];
-        if (stage_variable->nested_struct || stage_variable->physical_storage_buffer) {
+        if (stage_variable->nested_struct) {
             return skip;  // TODO workaround
         }
         slot.input = stage_variable;

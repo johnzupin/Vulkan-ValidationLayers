@@ -234,24 +234,6 @@ TEST_F(VkLayerTest, SpecLinksExplicit) {
 }
 #endif  // ANNOTATED_SPEC_LINK
 
-TEST_F(VkLayerTest, DeviceIDPropertiesUnsupported) {
-    TEST_DESCRIPTION("VkPhysicalDeviceIDProperties cannot be used without extensions in 1.0");
-
-    SetTargetApiVersion(VK_API_VERSION_1_0);
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(InitFramework());
-
-    if (DeviceValidationVersion() != VK_API_VERSION_1_0) {
-        GTEST_SKIP() << "Test's for 1.0 only";
-    }
-
-    VkPhysicalDeviceIDProperties id_props = vku::InitStructHelper();
-    VkPhysicalDeviceProperties2 props2 = vku::InitStructHelper(&id_props);
-    m_errorMonitor->SetDesiredError("VUID-VkPhysicalDeviceProperties2-pNext-pNext");
-    vk::GetPhysicalDeviceProperties2KHR(Gpu(), &props2);
-    m_errorMonitor->VerifyFound();
-}
-
 TEST_F(VkLayerTest, UsePnextOnlyStructWithoutExtensionEnabled) {
     TEST_DESCRIPTION(
         "Validate that using VkPipelineTessellationDomainOriginStateCreateInfo in VkPipelineTessellationStateCreateInfo.pNext "
@@ -277,8 +259,7 @@ TEST_F(VkLayerTest, UsePnextOnlyStructWithoutExtensionEnabled) {
     pipe.gp_ci_.pTessellationState = &tsci;
     pipe.gp_ci_.pInputAssemblyState = &iasci;
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), tcs.GetStageCreateInfo(), tes.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    // one for each struct
-    m_errorMonitor->SetDesiredError("VUID-VkPipelineTessellationStateCreateInfo-pNext-pNext");
+
     m_errorMonitor->SetDesiredError("VUID-VkPipelineTessellationStateCreateInfo-pNext-pNext");
     pipe.CreateGraphicsPipeline();
     m_errorMonitor->VerifyFound();
@@ -951,7 +932,7 @@ TEST_F(VkLayerTest, GetCalibratedTimestampsDuplicate) {
 
     uint64_t timestamps[2];
     uint64_t max_deviation;
-    m_errorMonitor->SetDesiredError("VUID-vkGetCalibratedTimestampsEXT-timeDomain-09246");
+    m_errorMonitor->SetDesiredError("VUID-vkGetCalibratedTimestampsKHR-timeDomain-09246");
     vk::GetCalibratedTimestampsEXT(device(), 2, timestamp_infos, timestamps, &max_deviation);
     m_errorMonitor->VerifyFound();
 }
@@ -975,7 +956,7 @@ TEST_F(VkLayerTest, GetCalibratedTimestampsDuplicateKHR) {
 
     uint64_t timestamps[2];
     uint64_t max_deviation;
-    m_errorMonitor->SetDesiredError("VUID-vkGetCalibratedTimestampsEXT-timeDomain-09246");
+    m_errorMonitor->SetDesiredError("VUID-vkGetCalibratedTimestampsKHR-timeDomain-09246");
     vk::GetCalibratedTimestampsKHR(device(), 2, timestamp_infos, timestamps, &max_deviation);
     m_errorMonitor->VerifyFound();
 }
@@ -1200,20 +1181,6 @@ TEST_F(VkLayerTest, ExtensionXmlDependsLogic3) {
     m_errorMonitor->VerifyFound();
 }
 
-TEST_F(VkLayerTest, MissingExtensionPhysicalDeviceProperties) {
-    TEST_DESCRIPTION("Don't enable instance extension needed");
-
-    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-    RETURN_IF_SKIP(Init());
-
-    // requires VK_KHR_external_fence_capabilities
-    VkPhysicalDeviceIDPropertiesKHR id_properties = vku::InitStructHelper();
-    VkPhysicalDeviceProperties2 properties2 = vku::InitStructHelper(&id_properties);
-    m_errorMonitor->SetDesiredError("VUID-VkPhysicalDeviceProperties2-pNext-pNext");
-    vk::GetPhysicalDeviceProperties2KHR(Gpu(), &properties2);
-    m_errorMonitor->VerifyFound();
-}
-
 TEST_F(VkLayerTest, InvalidGetExternalBufferPropertiesUsage) {
     TEST_DESCRIPTION("Call vkGetPhysicalDeviceExternalBufferProperties with invalid usage");
 
@@ -1232,9 +1199,11 @@ TEST_F(VkLayerTest, InvalidGetExternalBufferPropertiesUsage) {
 
     VkExternalBufferProperties externalBufferProperties = vku::InitStructHelper();
 
-    m_errorMonitor->SetDesiredError("VUID-VkPhysicalDeviceExternalBufferInfo-None-09499");
-    vk::GetPhysicalDeviceExternalBufferPropertiesKHR(Gpu(), &externalBufferInfo, &externalBufferProperties);
-    m_errorMonitor->VerifyFound();
+    if (!DeviceExtensionSupported(Gpu(), nullptr, VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        m_errorMonitor->SetDesiredError("VUID-VkPhysicalDeviceExternalBufferInfo-None-09499");
+        vk::GetPhysicalDeviceExternalBufferPropertiesKHR(Gpu(), &externalBufferInfo, &externalBufferProperties);
+        m_errorMonitor->VerifyFound();
+    }
 
     externalBufferInfo.usage = 0u;
     m_errorMonitor->SetDesiredError("VUID-VkPhysicalDeviceExternalBufferInfo-None-09500");
@@ -1273,7 +1242,6 @@ TEST_F(VkLayerTest, MissingExtensionStruct) {
     buffer_view_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
     buffer_view_ci.range = VK_WHOLE_SIZE;
     buffer_view_ci.buffer = buffer.handle();
-    m_errorMonitor->SetDesiredError("VUID-VkBufferViewCreateInfo-pNext-pNext");
     m_errorMonitor->SetDesiredError("VUID-VkBufferViewCreateInfo-pNext-pNext");
     vkt::BufferView view(*m_device, buffer_view_ci);
     m_errorMonitor->VerifyFound();

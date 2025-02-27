@@ -1,6 +1,6 @@
-/* Copyright (c) 2019-2024 The Khronos Group Inc.
- * Copyright (c) 2019-2024 Valve Corporation
- * Copyright (c) 2019-2024 LunarG, Inc.
+/* Copyright (c) 2019-2025 The Khronos Group Inc.
+ * Copyright (c) 2019-2025 Valve Corporation
+ * Copyright (c) 2019-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,6 +65,19 @@ enum class SyncOrdering : uint8_t {
 };
 const char *string_SyncHazardVUID(SyncHazard hazard);
 
+struct SyncHazardInfo {
+    bool is_write = false;
+    bool is_prior_write = false;
+    bool is_racing_hazard = false;
+
+    bool IsWrite() const { return is_write; }
+    bool IsRead() const { return !is_write; }
+    bool IsPriorWrite() const { return is_prior_write; }
+    bool IsPriorRead() const { return !is_prior_write; }
+    bool IsRacingHazard() const { return is_racing_hazard; }
+};
+SyncHazardInfo GetSyncHazardInfo(SyncHazard hazard);
+
 class HazardResult {
   public:
     struct HazardState {
@@ -114,15 +127,13 @@ class HazardResult {
 };
 
 struct SyncExecScope {
-    VkPipelineStageFlags2 mask_param;     // the xxxStageMask parameter passed by the caller
-    VkPipelineStageFlags2 expanded_mask;  // all stage bits covered by any 'catch all bits' in the parameter (eg. ALL_GRAPHICS_BIT).
-    VkPipelineStageFlags2 exec_scope;     // all earlier or later stages that would be affected by a barrier using this scope.
-    SyncAccessFlags valid_accesses;       // all valid accesses that can be used with this scope.
+    VkPipelineStageFlags2 mask_param;  // the xxxStageMask parameter passed by the caller
+    VkPipelineStageFlags2 exec_scope;  // all earlier or later stages that would be affected by a barrier using this scope.
+    SyncAccessFlags valid_accesses;    // all valid accesses that can be used with this scope.
 
-    SyncExecScope() : mask_param(0), expanded_mask(0), exec_scope(0), valid_accesses(0) {}
-    SyncExecScope(VkPipelineStageFlags2 mask_param_, VkPipelineStageFlags2 expanded_mask_, VkPipelineStageFlags2 exec_scope_,
-                  const SyncAccessFlags &valid_accesses_)
-        : mask_param(mask_param_), expanded_mask(expanded_mask_), exec_scope(exec_scope_), valid_accesses(valid_accesses_) {}
+    SyncExecScope() : mask_param(0), exec_scope(0), valid_accesses(0) {}
+    SyncExecScope(VkPipelineStageFlags2 mask_param, VkPipelineStageFlags2 exec_scope, const SyncAccessFlags &valid_accesses)
+        : mask_param(mask_param), exec_scope(exec_scope), valid_accesses(valid_accesses) {}
 
     static SyncExecScope MakeSrc(VkQueueFlags queue_flags, VkPipelineStageFlags2 src_stage_mask,
                                  const VkPipelineStageFlags2 disabled_feature_mask = 0);
@@ -361,7 +372,8 @@ class ResourceAccessState : public SyncStageAccess {
     void ApplyBarriers(const std::vector<SyncBarrier> &barriers, bool layout_transition);
     void ApplyBarriersImmediate(const std::vector<SyncBarrier> &barriers);
     template <typename ScopeOps>
-    void ApplyBarrier(ScopeOps &&scope, const SyncBarrier &barrier, bool layout_transition);
+    void ApplyBarrier(ScopeOps &&scope, const SyncBarrier &barrier, bool layout_transition,
+                      uint32_t layout_transition_handle_index = vvl::kNoIndex32);
     void ApplyPendingBarriers(ResourceUsageTag tag);
     void ApplySemaphore(const SemaphoreScope &signal, const SemaphoreScope wait);
 
@@ -512,6 +524,7 @@ class ResourceAccessState : public SyncStageAccess {
     // Not part of the write state, logically.  Can exist when !last_write
     // Pending execution state to support independent parallel barriers
     bool pending_layout_transition;
+    uint32_t pending_layout_transition_handle_index = vvl::kNoIndex32;
 
     FirstAccesses first_accesses_;
     VkPipelineStageFlags2 first_read_stages_;
@@ -529,7 +542,8 @@ using ResourceRangeMergeIterator = sparse_container::parallel_iterator<ResourceA
 // of the batch have been processed. Also, depending on whether layout transition happens, we'll either
 // replace the current write barriers or add to them, so accumulate to pending as well.
 template <typename ScopeOps>
-void ResourceAccessState::ApplyBarrier(ScopeOps &&scope, const SyncBarrier &barrier, bool layout_transition) {
+void ResourceAccessState::ApplyBarrier(ScopeOps &&scope, const SyncBarrier &barrier, bool layout_transition,
+                                       uint32_t layout_transition_handle_index) {
     // For independent barriers we need to track what the new barriers and dependency chain *will* be when we're done
     // applying the memory barriers
     // NOTE: We update the write barrier if the write is in the first access scope or if there is a layout
@@ -543,6 +557,7 @@ void ResourceAccessState::ApplyBarrier(ScopeOps &&scope, const SyncBarrier &barr
         last_write->UpdatePendingBarriers(barrier);
         last_write->UpdatePendingLayoutOrdering(barrier);
         pending_layout_transition = true;
+        pending_layout_transition_handle_index = layout_transition_handle_index;
     } else {
         if (scope.WriteInScope(barrier, *this)) {
             last_write->UpdatePendingBarriers(barrier);

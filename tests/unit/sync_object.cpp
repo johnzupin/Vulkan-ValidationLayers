@@ -65,6 +65,7 @@ TEST_F(NegativeSyncObject, ImageBarrierSubpassConflicts) {
     m_errorMonitor->VerifyFound();
     m_command_buffer.EndRenderPass();
 
+    m_command_buffer.FullMemoryBarrier();
     m_command_buffer.BeginRenderPass(rp.handle(), fb.handle(), 32, 32);
     VkImageMemoryBarrier img_barrier = vku::InitStructHelper();
     img_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -1295,59 +1296,6 @@ TEST_F(NegativeSyncObject, BarrierQueueFamilyOneFamily) {
     conc_test(VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
 }
 
-TEST_F(NegativeSyncObject, BarrierQueueFamily2) {
-    TEST_DESCRIPTION("Create and submit barriers with invalid queue families");
-    SetTargetApiVersion(VK_API_VERSION_1_0);
-    RETURN_IF_SKIP(Init());
-
-    // Find queues of two families
-    const uint32_t submit_family = m_device->graphics_queue_node_index_;
-    const uint32_t queue_family_count = static_cast<uint32_t>(m_device->Physical().queue_properties_.size());
-    const uint32_t other_family = submit_family != 0 ? 0 : 1;
-    const bool only_one_family = (queue_family_count == 1) ||
-                                 (m_device->Physical().queue_properties_[other_family].queueCount == 0) ||
-                                 ((m_device->Physical().queue_properties_[other_family].queueFlags & VK_QUEUE_TRANSFER_BIT) == 0);
-
-    if (only_one_family) {
-        GTEST_SKIP() << "Single queue family found";
-    }
-    std::vector<uint32_t> qf_indices{{submit_family, other_family}};
-    BarrierQueueFamilyTestHelper::Context test_context(this, qf_indices);
-
-    BarrierQueueFamilyTestHelper excl_test(&test_context);
-    excl_test.Init(nullptr);
-
-    // Although other_family does not match submit_family, because the barrier families are
-    // equal here, no ownership transfer actually happens, and this barrier is valid by the spec.
-    excl_test(other_family, other_family, submit_family);
-
-    // positive test (testing both the index logic and the QFO transfer tracking.
-    excl_test(submit_family, other_family, submit_family);
-    excl_test(submit_family, other_family, other_family);
-    excl_test(other_family, submit_family, other_family);
-    excl_test(other_family, submit_family, submit_family);
-
-    // negative testing for QFO transfer tracking
-    // Duplicate release in one CB
-    excl_test("WARNING-VkImageMemoryBarrier-image-00001", "WARNING-VkBufferMemoryBarrier-buffer-00001", submit_family, other_family,
-              submit_family, BarrierQueueFamilyTestHelper::DOUBLE_RECORD);
-    // Duplicate pending release
-    excl_test("WARNING-VkImageMemoryBarrier-image-00003", "WARNING-VkBufferMemoryBarrier-buffer-00003", submit_family, other_family,
-              submit_family);
-    // Duplicate acquire in one CB
-    excl_test("WARNING-VkImageMemoryBarrier-image-00001", "WARNING-VkBufferMemoryBarrier-buffer-00001", submit_family, other_family,
-              other_family, BarrierQueueFamilyTestHelper::DOUBLE_RECORD);
-    // No pending release
-    excl_test("VUID-vkQueueSubmit-pSubmits-02207", "VUID-vkQueueSubmit-pSubmits-02207", submit_family, other_family, other_family);
-    // Duplicate release in two CB
-    excl_test("WARNING-VkImageMemoryBarrier-image-00002", "WARNING-VkBufferMemoryBarrier-buffer-00002", submit_family, other_family,
-              submit_family, BarrierQueueFamilyTestHelper::DOUBLE_COMMAND_BUFFER);
-    // Duplicate acquire in two CB
-    excl_test(submit_family, other_family, submit_family);  // need a succesful release
-    excl_test("WARNING-VkImageMemoryBarrier-image-00002", "WARNING-VkBufferMemoryBarrier-buffer-00002", submit_family, other_family,
-              other_family, BarrierQueueFamilyTestHelper::DOUBLE_COMMAND_BUFFER);
-}
-
 TEST_F(NegativeSyncObject, ImageOwnershipTransferQueueMismatch) {
     TEST_DESCRIPTION("Neither src nor dst barrier queue family matches submit queue family");
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -2528,7 +2476,7 @@ TEST_F(NegativeSyncObject, CmdWaitEvents2DependencyFlags) {
     dependency_info.dependencyFlags = VK_DEPENDENCY_VIEW_LOCAL_BIT;
 
     m_command_buffer.Begin();
-    m_errorMonitor->SetDesiredError("UNASSIGNED-vkCmdWaitEvents2-dependencyFlags");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdWaitEvents2-dependencyFlags-10394");
     vk::CmdWaitEvents2KHR(m_command_buffer.handle(), 1, &event_handle, &dependency_info);
     m_errorMonitor->VerifyFound();
     m_command_buffer.End();
@@ -3456,6 +3404,7 @@ TEST_F(NegativeSyncObject, EventStageMaskOneCommandBufferFail) {
     m_command_buffer.Begin();
     vk::CmdSetEvent(m_command_buffer.handle(), event.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     // wrong srcStageMask
+    m_errorMonitor->SetAllowedFailureMsg("VUID-vkCmdWaitEvents-srcStageMask-01158");
     vk::CmdWaitEvents(m_command_buffer.handle(), 1, &event.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
     m_command_buffer.End();
@@ -3582,25 +3531,21 @@ TEST_F(NegativeSyncObject, DetectInterQueueEventUsage2) {
     m_device->Wait();
 }
 
-TEST_F(NegativeSyncObject, QueueForwardProgressFenceWait) {
+TEST_F(NegativeSyncObject, SignalSignaledSemaphore) {
     TEST_DESCRIPTION("Call VkQueueSubmit with a semaphore that is already signaled but not waited on by the queue.");
     RETURN_IF_SKIP(Init());
 
-    // TODO: the test works according to description but that's not what VUID describes
-    const char *queue_forward_progress_message = "VUID-vkQueueSubmit-pCommandBuffers-00065";
-
-    vkt::CommandBuffer cb1(*m_device, m_command_pool);
-    cb1.Begin();
-    cb1.End();
-
     vkt::Semaphore semaphore(*m_device);
-    m_default_queue->Submit(cb1, vkt::Signal(semaphore));
 
-    m_command_buffer.Begin();
-    m_command_buffer.End();
+    // Signal semaphore
+    vkt::CommandBuffer cb(*m_device, m_command_pool);
+    cb.Begin();
+    cb.End();
+    m_default_queue->Submit(cb, vkt::Signal(semaphore));
 
-    m_errorMonitor->SetDesiredError(queue_forward_progress_message);
-    m_default_queue->Submit(m_command_buffer, vkt::Signal(semaphore));
+    // Signal again
+    m_errorMonitor->SetDesiredError("VUID-vkQueueSubmit-pSignalSemaphores-00067");
+    m_default_queue->Submit(vkt::no_cmd, vkt::Signal(semaphore));
     m_errorMonitor->VerifyFound();
 
     m_device->Wait();
@@ -3825,7 +3770,9 @@ TEST_F(NegativeSyncObject, ResetEventThenSet) {
     m_default_queue->Wait();
 }
 
-// TODO: https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8748
+// This test should only be used for manual inspection
+// Because a command buffer with vkCmdWaitEvents is submitted with an
+// event that is never signaled, the test results in a VK_ERROR_DEVICE_LOST
 TEST_F(NegativeSyncObject, DISABLED_WaitEventThenSet) {
 #if defined(VVL_ENABLE_TSAN)
     // NOTE: This test in particular has failed sporadically on CI when TSAN is enabled.
@@ -3833,7 +3780,18 @@ TEST_F(NegativeSyncObject, DISABLED_WaitEventThenSet) {
 #endif
     TEST_DESCRIPTION("Wait on a event then set it after the wait has been submitted.");
 
-    RETURN_IF_SKIP(Init());
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    RETURN_IF_SKIP(InitFramework());
+    void *pNext = nullptr;
+    VkPhysicalDevicePortabilitySubsetFeaturesKHR portability_subset_features = vku::InitStructHelper();
+    if (IsExtensionsEnabled(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
+        pNext = &portability_subset_features;
+        GetPhysicalDeviceFeatures2(portability_subset_features);
+        if (!portability_subset_features.events) {
+            GTEST_SKIP() << "VkPhysicalDevicePortabilitySubsetFeaturesKHR::events not supported";
+        }
+    }
+    RETURN_IF_SKIP(InitState(nullptr, pNext));
 
     vkt::Event event(*m_device);
 
@@ -3847,7 +3805,6 @@ TEST_F(NegativeSyncObject, DISABLED_WaitEventThenSet) {
     m_errorMonitor->SetDesiredError("VUID-vkSetEvent-event-09543");
     vk::SetEvent(device(), event.handle());
     m_errorMonitor->VerifyFound();
-    m_default_queue->Wait();
 }
 
 TEST_F(NegativeSyncObject, RenderPassPipelineBarrierGraphicsStage) {
@@ -3972,6 +3929,118 @@ TEST_F(NegativeSyncObject, BufferBarrierStageNotSupportedByQueue) {
     vk::CmdPipelineBarrier2(compute_cb.handle(), &dep_info_dst_gfx);
     m_errorMonitor->VerifyFound();
     compute_cb.End();
+}
+
+TEST_F(NegativeSyncObject, BufferOwnershipTransferStageNotSupportedByQueue) {
+    TEST_DESCRIPTION("Buffer memory barrier with ownership transfer uses pipeline stages not supported by the queue family");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    // Enable feature to use stage other than ALL_COMMANDS during ownership transfer
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::maintenance8);
+    RETURN_IF_SKIP(Init());
+
+    std::optional<uint32_t> transfer_only_family = m_device->TransferOnlyQueueFamily();
+    if (!transfer_only_family.has_value()) {
+        GTEST_SKIP() << "Transfer-only queue family is required";
+    }
+    vkt::CommandPool transfer_pool(*m_device, transfer_only_family.value(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    vkt::CommandBuffer transfer_cb(*m_device, transfer_pool);
+
+    vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    // Acquire operation on transfer queue.
+    // The src stage should be a valid transfer stage.
+    VkBufferMemoryBarrier2 acquire_barrier = vku::InitStructHelper();
+    acquire_barrier.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;  // Not a valid transfer stage
+    acquire_barrier.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    acquire_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    acquire_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    acquire_barrier.srcQueueFamilyIndex = m_default_queue->family_index;
+    acquire_barrier.dstQueueFamilyIndex = transfer_only_family.value();
+    acquire_barrier.buffer = buffer;
+    acquire_barrier.offset = 0;
+    acquire_barrier.size = 256;
+
+    VkDependencyInfo acquire_dep_info = vku::InitStructHelper();
+    // Use this dependency flag to be able to use src stage other then ALL_COMMAND
+    acquire_dep_info.dependencyFlags = VK_DEPENDENCY_QUEUE_FAMILY_OWNERSHIP_TRANSFER_USE_ALL_STAGES_BIT_KHR;
+    acquire_dep_info.bufferMemoryBarrierCount = 1;
+    acquire_dep_info.pBufferMemoryBarriers = &acquire_barrier;
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-srcStageMask-09675");
+    transfer_cb.Begin();
+    vk::CmdPipelineBarrier2(transfer_cb, &acquire_dep_info);
+    transfer_cb.End();
+    m_errorMonitor->VerifyFound();
+
+    // Release operation on transfer queue.
+    // The dst stage should be a valid transfer stage.
+    VkBufferMemoryBarrier2 release_barrier = vku::InitStructHelper();
+    release_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    release_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    release_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;  // Not valid transfer stage
+    release_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    release_barrier.srcQueueFamilyIndex = transfer_only_family.value();
+    release_barrier.dstQueueFamilyIndex = m_default_queue->family_index;
+    release_barrier.buffer = buffer;
+    release_barrier.offset = 0;
+    release_barrier.size = 256;
+
+    VkDependencyInfo release_dep_info = vku::InitStructHelper();
+    // Use this dependency flag to be able to use dst stage other then ALL_COMMAND
+    release_dep_info.dependencyFlags = VK_DEPENDENCY_QUEUE_FAMILY_OWNERSHIP_TRANSFER_USE_ALL_STAGES_BIT_KHR;
+    release_dep_info.bufferMemoryBarrierCount = 1;
+    release_dep_info.pBufferMemoryBarriers = &release_barrier;
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier2-dstStageMask-09676");
+    transfer_cb.Begin();
+    vk::CmdPipelineBarrier2(transfer_cb, &release_dep_info);
+    transfer_cb.End();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeSyncObject, BarrierOwnershipTransferUseAllStages) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    // Enable extension but do not enable maintenance8 feature
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Buffer buffer(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkBufferMemoryBarrier barrier = vku::InitStructHelper();
+    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.buffer = buffer;
+    barrier.offset = 0;
+    barrier.size = 256;
+
+    m_command_buffer.Begin();
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-maintenance8-10206");
+    vk::CmdPipelineBarrier(m_command_buffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           VK_DEPENDENCY_QUEUE_FAMILY_OWNERSHIP_TRANSFER_USE_ALL_STAGES_BIT_KHR, 0, nullptr, 1, &barrier, 0,
+                           nullptr);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeSyncObject, EventOwnershipTransferUseAllStages) {
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    // Enable extension but do not enable maintenance8 feature
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Event event(*m_device);
+
+    VkDependencyInfo dependency_info = vku::InitStructHelper();
+    dependency_info.dependencyFlags = VK_DEPENDENCY_QUEUE_FAMILY_OWNERSHIP_TRANSFER_USE_ALL_STAGES_BIT_KHR;
+
+    m_command_buffer.Begin();
+    m_errorMonitor->SetDesiredError("VUID-vkCmdWaitEvents2-maintenance8-10205");
+    vk::CmdWaitEvents2(m_command_buffer.handle(), 1, &event.handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeSyncObject, ImageBarrierStageNotSupportedByQueue) {
@@ -4703,6 +4772,146 @@ TEST_F(NegativeSyncObject, ImageMemoryBarrier2QueueFamilyForeign) {
     imb.srcQueueFamilyIndex = m_default_queue->family_index;
     imb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT;
     m_errorMonitor->SetDesiredError("VUID-VkImageMemoryBarrier2-dstQueueFamilyIndex-09122");
+    vk::CmdPipelineBarrier2KHR(m_command_buffer.handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeSyncObject, UnsupportedPipelineBarrierStages) {
+    AddOptionalExtensions(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
+    AddOptionalExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME);
+    AddOptionalExtensions(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
+    AddOptionalExtensions(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    m_command_buffer.Begin();
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-dstStageMask-04091");
+    vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                           VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT, 0u, 0u, nullptr, 0u, nullptr, 0u, nullptr);
+    m_errorMonitor->VerifyFound();
+
+    if (IsExtensionsEnabled(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME)) {
+        m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-dstStageMask-04092");
+        vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                               VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0u, 0u, nullptr, 0u, nullptr, 0u, nullptr);
+        m_errorMonitor->VerifyFound();
+    }
+
+    if (IsExtensionsEnabled(VK_EXT_FRAGMENT_DENSITY_MAP_EXTENSION_NAME)) {
+        m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-dstStageMask-04093");
+        vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                               VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT, 0u, 0u, nullptr, 0u, nullptr, 0u, nullptr);
+        m_errorMonitor->VerifyFound();
+    }
+
+    if (IsExtensionsEnabled(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
+        m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-dstStageMask-04094");
+        vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                               VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT, 0u, 0u, nullptr, 0u, nullptr, 0u, nullptr);
+        m_errorMonitor->VerifyFound();
+    }
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-dstStageMask-03937");
+    vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0u, 0u, 0u, nullptr, 0u, nullptr, 0u,
+                           nullptr);
+    m_errorMonitor->VerifyFound();
+
+    if (IsExtensionsEnabled(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME)) {
+        m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-dstStageMask-07318");
+        vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                               VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR, 0u, 0u, nullptr, 0u, nullptr, 0u,
+                               nullptr);
+        m_errorMonitor->VerifyFound();
+    }
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeSyncObject, UnsupportedBufferMemoryBarrier2Stages) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    AddRequiredExtensions(VK_HUAWEI_SUBPASS_SHADING_EXTENSION_NAME);
+    AddRequiredExtensions(VK_HUAWEI_INVOCATION_MASK_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+    VkBufferMemoryBarrier2 barrier = vku::InitStructHelper();
+    barrier.buffer = buffer.handle();
+    barrier.size = VK_WHOLE_SIZE;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_SUBPASS_SHADER_BIT_HUAWEI;
+
+    VkDependencyInfo dependency_info = vku::InitStructHelper();
+    dependency_info.bufferMemoryBarrierCount = 1u;
+    dependency_info.pBufferMemoryBarriers = &barrier;
+
+    m_command_buffer.Begin();
+
+    m_errorMonitor->SetDesiredError("VUID-VkBufferMemoryBarrier2-dstStageMask-04957");
+    vk::CmdPipelineBarrier2KHR(m_command_buffer.handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_INVOCATION_MASK_BIT_HUAWEI;
+    m_errorMonitor->SetDesiredError("VUID-VkBufferMemoryBarrier2-dstStageMask-04995");
+    vk::CmdPipelineBarrier2KHR(m_command_buffer.handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeSyncObject, InvalidBarrierPNext) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Buffer buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+
+    VkImageCreateInfo image_ci =
+        vkt::Image::ImageCreateInfo2D(32u, 32u, 1u, 1u, VK_FORMAT_B8G8R8A8_UNORM,
+                                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_TILING_OPTIMAL);
+    vkt::Image image(*m_device, image_ci);
+
+    VkMemoryBarrier2 memory_barrier = vku::InitStructHelper();
+
+    VkBufferMemoryBarrier2 buffer_barrier = vku::InitStructHelper(&memory_barrier);
+    buffer_barrier.buffer = buffer.handle();
+    buffer_barrier.size = VK_WHOLE_SIZE;
+    buffer_barrier.dstStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR;
+
+    VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper(&memory_barrier);
+    image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR;
+    image_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    image_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    image_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    image_barrier.image = image.handle();
+    image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    VkDependencyInfo dependency_info = vku::InitStructHelper();
+    dependency_info.bufferMemoryBarrierCount = 1u;
+    dependency_info.pBufferMemoryBarriers = &buffer_barrier;
+    dependency_info.pImageMemoryBarriers = &image_barrier;
+
+    m_command_buffer.Begin();
+
+    m_errorMonitor->SetDesiredError("VUID-VkBufferMemoryBarrier2-pNext-pNext");
+    vk::CmdPipelineBarrier2KHR(m_command_buffer.handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    dependency_info.bufferMemoryBarrierCount = 0u;
+    dependency_info.imageMemoryBarrierCount = 1u;
+
+    m_errorMonitor->SetDesiredError("VUID-VkImageMemoryBarrier2-pNext-pNext");
+    vk::CmdPipelineBarrier2KHR(m_command_buffer.handle(), &dependency_info);
+    m_errorMonitor->VerifyFound();
+
+    dependency_info.imageMemoryBarrierCount = 0u;
+    dependency_info.pNext = &memory_barrier;
+    m_errorMonitor->SetDesiredError("VUID-VkDependencyInfo-pNext-pNext");
     vk::CmdPipelineBarrier2KHR(m_command_buffer.handle(), &dependency_info);
     m_errorMonitor->VerifyFound();
 

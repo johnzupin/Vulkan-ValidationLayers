@@ -1,6 +1,6 @@
-/* Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+/* Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  * Copyright (C) 2015-2024 Google Inc.
  * Modifications Copyright (C) 2020-2024 Advanced Micro Devices, Inc. All rights reserved.
  *
@@ -46,11 +46,11 @@ bool CoreChecks::ValidateCmdDrawInstance(const vvl::CommandBuffer &cb_state, uin
     const auto *pipeline_state = cb_state.GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
 
     // Verify maxMultiviewInstanceIndex
-    if (cb_state.activeRenderPass && cb_state.activeRenderPass->has_multiview_enabled &&
+    if (cb_state.active_render_pass && cb_state.active_render_pass->has_multiview_enabled &&
         ((static_cast<uint64_t>(instanceCount) + static_cast<uint64_t>(firstInstance)) >
          static_cast<uint64_t>(phys_dev_props_core11.maxMultiviewInstanceIndex))) {
         LogObjectList objlist = cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS);
-        objlist.add(cb_state.activeRenderPass->Handle());
+        objlist.add(cb_state.active_render_pass->Handle());
         skip |= LogError(vuid.max_multiview_instance_index_02688, objlist, loc,
                          "renderpass instance has multiview enabled, and maxMultiviewInstanceIndex: %" PRIu32
                          ", but instanceCount: %" PRIu32 " and firstInstance: %" PRIu32 ".",
@@ -554,7 +554,7 @@ bool CoreChecks::PreCallValidateCmdDrawIndirectCount(VkCommandBuffer commandBuff
                      error_obj.location.dot(Field::countBufferOffset), "(%" PRIu64 "), is not a multiple of 4.", countBufferOffset);
     }
 
-    if ((device_extensions.vk_khr_draw_indirect_count != kEnabledByCreateinfo) &&
+    if ((extensions.vk_khr_draw_indirect_count != kEnabledByCreateinfo) &&
         ((api_version >= VK_API_VERSION_1_2) && (enabled_features.drawIndirectCount == VK_FALSE))) {
         skip |= LogError("VUID-vkCmdDrawIndirectCount-None-04445", cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS),
                          error_obj.location,
@@ -605,7 +605,7 @@ bool CoreChecks::PreCallValidateCmdDrawIndexedIndirectCount(VkCommandBuffer comm
                          cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), error_obj.location.dot(Field::countBufferOffset),
                          "(%" PRIu64 "), is not a multiple of 4.", countBufferOffset);
     }
-    if ((device_extensions.vk_khr_draw_indirect_count != kEnabledByCreateinfo) &&
+    if ((extensions.vk_khr_draw_indirect_count != kEnabledByCreateinfo) &&
         ((api_version >= VK_API_VERSION_1_2) && (enabled_features.drawIndirectCount == VK_FALSE))) {
         skip |= LogError("VUID-vkCmdDrawIndexedIndirectCount-None-04445", cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS),
                          error_obj.location,
@@ -655,8 +655,7 @@ bool CoreChecks::PreCallValidateCmdDrawIndirectByteCountEXT(VkCommandBuffer comm
                          cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), error_obj.location,
                          "transformFeedback feature is not enabled.");
     }
-    if (IsExtEnabled(device_extensions.vk_ext_transform_feedback) &&
-        !phys_dev_ext_props.transform_feedback_props.transformFeedbackDraw) {
+    if (IsExtEnabled(extensions.vk_ext_transform_feedback) && !phys_dev_ext_props.transform_feedback_props.transformFeedbackDraw) {
         skip |= LogError("VUID-vkCmdDrawIndirectByteCountEXT-transformFeedbackDraw-02288",
                          cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), error_obj.location,
                          "VkPhysicalDeviceTransformFeedbackPropertiesEXT::transformFeedbackDraw is not supported");
@@ -902,6 +901,13 @@ bool CoreChecks::ValidateCmdTraceRaysKHR(const Location &loc, const vvl::Command
                                                             : "VUID-vkCmdTraceRaysKHR-pRayGenShaderBindingTable-03680";
         const char *vuid_binding_table_flag = is_indirect ? "VUID-vkCmdTraceRaysIndirectKHR-pRayGenShaderBindingTable-03681"
                                                           : "VUID-vkCmdTraceRaysKHR-pRayGenShaderBindingTable-03681";
+        // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9368
+        // TODO - waiting for https://gitlab.khronos.org/vulkan/vulkan/-/issues/4173
+        if (const auto buffers = GetBuffersByAddress(pRaygenShaderBindingTable->deviceAddress); buffers.empty()) {
+            skip |= LogError("UNASSIGNED-TraceRays-InvalidRayGenSBTAddress", cb_state.Handle(), table_loc.dot(Field::deviceAddress),
+                             "(0x%" PRIx64 ") does not belong to a valid VkBuffer.",
+                             pRaygenShaderBindingTable->deviceAddress);
+        }
         skip |= ValidateRaytracingShaderBindingTable(cb_state.VkHandle(), table_loc, vuid_single_device_memory,
                                                      vuid_binding_table_flag, *pRaygenShaderBindingTable);
     }

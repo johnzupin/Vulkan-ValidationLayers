@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -181,7 +181,7 @@ TEST_F(PositivePipeline, IgnoredMultisampleState) {
     void *bad_pointer = sizeof(void *) == 8 ? reinterpret_cast<void *>(fake_address_64) : reinterpret_cast<void *>(fake_address_32);
 
     CreatePipelineHelper pipe(*this);
-    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
+    pipe.VertexShaderOnly();
     pipe.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
     pipe.gp_ci_.pMultisampleState = reinterpret_cast<const VkPipelineMultisampleStateCreateInfo *>(bad_pointer);
     pipe.CreateGraphicsPipeline();
@@ -399,7 +399,7 @@ TEST_F(PositivePipeline, CreateGraphicsPipelineWithIgnoredPointers) {
             VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             nullptr,                              // pNext
             0,                                    // flags
-            static_cast<uint32_t>(size(stages)),  // stageCount
+            size32(stages),  // stageCount
             stages,
             &pipeline_vertex_input_state_create_info,
             &pipeline_input_assembly_state_create_info,
@@ -463,7 +463,7 @@ TEST_F(PositivePipeline, CreateGraphicsPipelineWithIgnoredPointers) {
         VkGraphicsPipelineCreateInfo graphics_pipeline_create_info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
                                                                    nullptr,                              // pNext
                                                                    0,                                    // flags
-                                                                   static_cast<uint32_t>(size(stages)),  // stageCount
+                                                                   size32(stages),  // stageCount
                                                                    stages,
                                                                    &pipeline_vertex_input_state_create_info,
                                                                    &pipeline_input_assembly_state_create_info,
@@ -486,6 +486,7 @@ TEST_F(PositivePipeline, CreateGraphicsPipelineWithIgnoredPointers) {
 
 TEST_F(PositivePipeline, CoreChecksDisabled) {
     TEST_DESCRIPTION("Test CreatePipeline while the CoreChecks validation object is disabled");
+    AddRequiredExtensions(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
 
     // Enable KHR validation features extension
     VkValidationFeatureDisableEXT disables[] = {VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT};
@@ -781,7 +782,7 @@ TEST_F(PositivePipeline, RasterizationDiscardEnableTrue) {
     pipe.gp_ci_.renderPass = rp.Handle();
 
     // When rasterizer discard is enabled, fragment shader state must not be present.
-    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
+    pipe.VertexShaderOnly();
 
     // Skip the test in NexusPlayer. The driver crashes when pViewportState, pMultisampleState, pDepthStencilState, pColorBlendState
     // are NULL.
@@ -825,9 +826,7 @@ TEST_F(PositivePipeline, SamplerDataForCombinedImageSampler) {
     VkShaderObj fs(this, fsSource, VK_SHADER_STAGE_FRAGMENT_BIT, SPV_ENV_VULKAN_1_0, SPV_SOURCE_ASM);
 
     CreatePipelineHelper pipe(*this);
-    pipe.dsl_bindings_ = {
-        {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr},
-    };
+    pipe.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr};
     pipe.shader_stages_ = {fs.GetStageCreateInfo(), pipe.vs_->GetStageCreateInfo()};
     pipe.CreateGraphicsPipeline();
 
@@ -1325,7 +1324,7 @@ TEST_F(PositivePipeline, AttachmentsDisableRasterization) {
     CreatePipelineHelper pipe(*this);
     pipe.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
     // Rasterization discard enable prohibits fragment shader.
-    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
+    pipe.VertexShaderOnly();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -1571,7 +1570,7 @@ TEST_F(PositivePipeline, DepthStencilStateIgnored) {
     // disable with rasterizerDiscardEnable
     {
         CreatePipelineHelper pipe(*this);
-        pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
+        pipe.VertexShaderOnly();
         pipe.rs_state_ci_.rasterizerDiscardEnable = VK_TRUE;
         pipe.gp_ci_.renderPass = rp.Handle();
         pipe.CreateGraphicsPipeline();
@@ -1635,7 +1634,7 @@ TEST_F(PositivePipeline, ViewportStateNotSetRasterizerDiscardEnabled) {
     pipe.AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT);
     pipe.gp_ci_.pRasterizationState = &rasterization_state;
     pipe.gp_ci_.pViewportState = nullptr;
-    pipe.shader_stages_ = {pipe.vs_->GetStageCreateInfo()};
+    pipe.VertexShaderOnly();
     pipe.CreateGraphicsPipeline();
 }
 
@@ -1667,7 +1666,7 @@ TEST_F(PositivePipeline, InterpolateAtSample) {
         layout(location = 0) out vec2 uv;
         void main() {
             uv = vec2(gl_VertexIndex & 1, (gl_VertexIndex >> 1) & 1);
-		    gl_Position = vec4(uv, 0.0f, 1.0f);
+            gl_Position = vec4(uv, 0.0f, 1.0f);
         }
     )glsl";
     static const char fs_src[] = R"glsl(
@@ -1675,7 +1674,7 @@ TEST_F(PositivePipeline, InterpolateAtSample) {
         layout(location = 0) out vec4 uFragColor;
         layout(location = 0) in vec2 v;
         void main() {
-		    vec2 sample1 = interpolateAtSample(v, 0);
+            vec2 sample1 = interpolateAtSample(v, 0);
             uFragColor = vec4(0.1f);
         }
     )glsl";
@@ -1905,4 +1904,20 @@ TEST_F(PositivePipeline, DepthClampControlNullRange) {
     CreatePipelineHelper pipe(*this);
     pipe.vp_state_ci_.pNext = &clamp_control;
     pipe.CreateGraphicsPipeline();
+}
+
+TEST_F(PositivePipeline, GetPipelinePropertiesEXT) {
+    AddRequiredExtensions(VK_EXT_PIPELINE_PROPERTIES_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::pipelinePropertiesIdentifier);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    CreatePipelineHelper pipe(*this);
+    pipe.CreateGraphicsPipeline();
+
+    VkPipelineInfoEXT pipeline_info = vku::InitStructHelper();
+    pipeline_info.pipeline = pipe.Handle();
+
+    VkBaseOutStructure out_struct = {VK_STRUCTURE_TYPE_PIPELINE_PROPERTIES_IDENTIFIER_EXT, nullptr};
+    vk::GetPipelinePropertiesEXT(device(), &pipeline_info, &out_struct);
 }

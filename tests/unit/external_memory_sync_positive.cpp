@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  * Copyright (c) 2015-2024 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,6 +44,8 @@ TEST_F(PositiveExternalMemorySync, ImportMemoryFd) {
     TEST_DESCRIPTION("Basic importing of POXIS handle for memory allocation");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+    // Required to pass in various memory flags without querying for corresponding extensions.
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     IgnoreHandleTypeError(m_errorMonitor);
 
@@ -193,8 +195,7 @@ TEST_F(PositiveExternalMemorySync, ExternalMemory) {
     }
 
     // Allocate memory to be exported
-    vkt::DeviceMemory memory_export;
-    memory_export.init(*m_device, alloc_info);
+    vkt::DeviceMemory memory_export(*m_device, alloc_info);
 
     // Bind exported memory
     buffer_export.BindMemory(memory_export, 0);
@@ -217,11 +218,14 @@ TEST_F(PositiveExternalMemorySync, ExternalMemory) {
     VkImportMemoryFdInfoKHR import_info = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, nullptr, handle_type, fd};
 #endif
 
-    // Import memory
+    // Import
+    if (dedicated_allocation) {
+        dedicated_info.buffer = buffer_import;
+        import_info.pNext = &dedicated_info;
+    }
     alloc_info = vkt::DeviceMemory::GetResourceAllocInfo(*m_device, buffer_import.MemoryRequirements(), mem_flags);
     alloc_info.pNext = &import_info;
-    vkt::DeviceMemory memory_import;
-    memory_import.init(*m_device, alloc_info);
+    vkt::DeviceMemory memory_import(*m_device, alloc_info);
 
     // Bind imported memory
     buffer_import.BindMemory(memory_import, 0);
@@ -255,6 +259,8 @@ TEST_F(PositiveExternalMemorySync, ExternalMemory) {
 TEST_F(PositiveExternalMemorySync, BufferDedicatedAllocation) {
     TEST_DESCRIPTION("Create external buffer that requires dedicated allocation.");
     SetTargetApiVersion(VK_API_VERSION_1_1);
+    // Required to pass in various memory flags without querying for corresponding extensions.
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     IgnoreHandleTypeError(m_errorMonitor);
 
@@ -450,6 +456,8 @@ TEST_F(PositiveExternalMemorySync, ExportFromImportedFence) {
     TEST_DESCRIPTION("Export from fence with imported payload");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_WIN32_EXTENSION_NAME);
+    // Required to pass in various memory flags without querying for corresponding extensions.
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     IgnoreHandleTypeError(m_errorMonitor);
 
@@ -498,6 +506,8 @@ TEST_F(PositiveExternalMemorySync, ImportMemoryWin32BufferDifferentDedicated) {
     TEST_DESCRIPTION("https://gitlab.khronos.org/vulkan/Vulkan-ValidationLayers/-/issues/35");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
+    // Required to pass in various memory flags without querying for corresponding extensions.
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     IgnoreHandleTypeError(m_errorMonitor);
 
@@ -554,6 +564,8 @@ TEST_F(PositiveExternalMemorySync, MultipleExportOpaqueFd) {
     TEST_DESCRIPTION("regression from dEQP-VK.api.external.semaphore.opaque_fd.export_multiple_times_temporary");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
+    // Required to pass in various memory flags without querying for corresponding extensions.
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     IgnoreHandleTypeError(m_errorMonitor);
 
@@ -576,6 +588,8 @@ TEST_F(PositiveExternalMemorySync, ImportMemoryFdBufferDifferentDedicated) {
     TEST_DESCRIPTION("https://gitlab.khronos.org/vulkan/Vulkan-ValidationLayers/-/issues/35");
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredExtensions(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+    // Required to pass in various memory flags without querying for corresponding extensions.
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
     IgnoreHandleTypeError(m_errorMonitor);
 

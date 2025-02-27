@@ -33,7 +33,7 @@
 #include "object_tracker/object_lifetime_validation.h"
 #include "core_checks/core_validation.h"
 #include "best_practices/best_practices_validation.h"
-#include "gpu/core/gpuav.h"
+#include "gpuav/core/gpuav.h"
 #include "sync/sync_validation.h"
 
 #define DISPATCH_MAX_STACK_ALLOCATIONS 32
@@ -45,25 +45,25 @@ void Instance::InitValidationObjects() {
     // Note that this DEFINES THE ORDER IN WHICH THE LAYER VALIDATION OBJECTS ARE CALLED
 
     if (!settings.disabled[thread_safety]) {
-        object_dispatch.emplace_back(new ThreadSafety(this));
+        object_dispatch.emplace_back(new threadsafety::Instance(this));
     }
     if (!settings.disabled[stateless_checks]) {
-        object_dispatch.emplace_back(new StatelessValidation(this));
+        object_dispatch.emplace_back(new stateless::Instance(this));
     }
     if (!settings.disabled[object_tracking]) {
-        object_dispatch.emplace_back(new ObjectLifetimes(this));
+        object_dispatch.emplace_back(new object_lifetimes::Instance(this));
     }
     if (!settings.disabled[core_checks]) {
-        object_dispatch.emplace_back(new CoreChecks(this));
+        object_dispatch.emplace_back(new core::Instance(this));
     }
     if (settings.enabled[best_practices]) {
-        object_dispatch.emplace_back(new BestPractices(this));
+        object_dispatch.emplace_back(new bp_state::Instance(this));
     }
     if (settings.enabled[gpu_validation] || settings.enabled[debug_printf_validation]) {
-        object_dispatch.emplace_back(new gpuav::Validator(this));
+        object_dispatch.emplace_back(new gpuav::Instance(this));
     }
     if (settings.enabled[sync_validation]) {
-        object_dispatch.emplace_back(new SyncValidator(this));
+        object_dispatch.emplace_back(new syncval::Instance(this));
     }
 }
 
@@ -71,32 +71,32 @@ void Device::InitValidationObjects() {
     // Note that this DEFINES THE ORDER IN WHICH THE LAYER VALIDATION OBJECTS ARE CALLED
 
     if (!settings.disabled[thread_safety]) {
-        object_dispatch.emplace_back(
-            new ThreadSafety(this, static_cast<ThreadSafety*>(dispatch_instance->GetValidationObject(LayerObjectTypeThreading))));
+        object_dispatch.emplace_back(new threadsafety::Device(
+            this, static_cast<threadsafety::Instance*>(dispatch_instance->GetValidationObject(LayerObjectTypeThreading))));
     }
     if (!settings.disabled[stateless_checks]) {
-        object_dispatch.emplace_back(new StatelessValidation(
-            this, static_cast<StatelessValidation*>(dispatch_instance->GetValidationObject(LayerObjectTypeParameterValidation))));
+        object_dispatch.emplace_back(new stateless::Device(
+            this, static_cast<stateless::Instance*>(dispatch_instance->GetValidationObject(LayerObjectTypeParameterValidation))));
     }
     if (!settings.disabled[object_tracking]) {
-        object_dispatch.emplace_back(new ObjectLifetimes(
-            this, static_cast<ObjectLifetimes*>(dispatch_instance->GetValidationObject(LayerObjectTypeObjectTracker))));
+        object_dispatch.emplace_back(new object_lifetimes::Device(
+            this, static_cast<object_lifetimes::Instance*>(dispatch_instance->GetValidationObject(LayerObjectTypeObjectTracker))));
     }
     if (!settings.disabled[core_checks]) {
-        object_dispatch.emplace_back(
-            new CoreChecks(this, static_cast<CoreChecks*>(dispatch_instance->GetValidationObject(LayerObjectTypeCoreValidation))));
+        object_dispatch.emplace_back(new CoreChecks(
+            this, static_cast<core::Instance*>(dispatch_instance->GetValidationObject(LayerObjectTypeCoreValidation))));
     }
     if (settings.enabled[best_practices]) {
         object_dispatch.emplace_back(new BestPractices(
-            this, static_cast<BestPractices*>(dispatch_instance->GetValidationObject(LayerObjectTypeBestPractices))));
+            this, static_cast<bp_state::Instance*>(dispatch_instance->GetValidationObject(LayerObjectTypeBestPractices))));
     }
     if (settings.enabled[gpu_validation] || settings.enabled[debug_printf_validation]) {
         object_dispatch.emplace_back(new gpuav::Validator(
-            this, static_cast<gpuav::Validator*>(dispatch_instance->GetValidationObject(LayerObjectTypeGpuAssisted))));
+            this, static_cast<gpuav::Instance*>(dispatch_instance->GetValidationObject(LayerObjectTypeGpuAssisted))));
     }
     if (settings.enabled[sync_validation]) {
         object_dispatch.emplace_back(new SyncValidator(
-            this, static_cast<SyncValidator*>(dispatch_instance->GetValidationObject(LayerObjectTypeSyncValidation))));
+            this, static_cast<syncval::Instance*>(dispatch_instance->GetValidationObject(LayerObjectTypeSyncValidation))));
     }
 }
 
@@ -7208,7 +7208,21 @@ VkResult Device::GetMemoryRemoteAddressNV(VkDevice device, const VkMemoryGetRemo
 
 VkResult Device::GetPipelinePropertiesEXT(VkDevice device, const VkPipelineInfoEXT* pPipelineInfo,
                                           VkBaseOutStructure* pPipelineProperties) {
-    VkResult result = device_dispatch_table.GetPipelinePropertiesEXT(device, pPipelineInfo, pPipelineProperties);
+    if (!wrap_handles) return device_dispatch_table.GetPipelinePropertiesEXT(device, pPipelineInfo, pPipelineProperties);
+    vku::safe_VkPipelineInfoKHR var_local_pPipelineInfo;
+    vku::safe_VkPipelineInfoKHR* local_pPipelineInfo = nullptr;
+    {
+        if (pPipelineInfo) {
+            local_pPipelineInfo = &var_local_pPipelineInfo;
+            local_pPipelineInfo->initialize(pPipelineInfo);
+
+            if (pPipelineInfo->pipeline) {
+                local_pPipelineInfo->pipeline = Unwrap(pPipelineInfo->pipeline);
+            }
+        }
+    }
+    VkResult result =
+        device_dispatch_table.GetPipelinePropertiesEXT(device, (const VkPipelineInfoKHR*)local_pPipelineInfo, pPipelineProperties);
 
     return result;
 }
@@ -8019,6 +8033,25 @@ VkResult Device::GetDynamicRenderingTilePropertiesQCOM(VkDevice device, const Vk
     return result;
 }
 
+VkResult Instance::GetPhysicalDeviceCooperativeVectorPropertiesNV(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount,
+                                                                  VkCooperativeVectorPropertiesNV* pProperties) {
+    VkResult result =
+        instance_dispatch_table.GetPhysicalDeviceCooperativeVectorPropertiesNV(physicalDevice, pPropertyCount, pProperties);
+
+    return result;
+}
+
+VkResult Device::ConvertCooperativeVectorMatrixNV(VkDevice device, const VkConvertCooperativeVectorMatrixInfoNV* pInfo) {
+    VkResult result = device_dispatch_table.ConvertCooperativeVectorMatrixNV(device, pInfo);
+
+    return result;
+}
+
+void Device::CmdConvertCooperativeVectorMatrixNV(VkCommandBuffer commandBuffer, uint32_t infoCount,
+                                                 const VkConvertCooperativeVectorMatrixInfoNV* pInfos) {
+    device_dispatch_table.CmdConvertCooperativeVectorMatrixNV(commandBuffer, infoCount, pInfos);
+}
+
 VkResult Device::SetLatencySleepModeNV(VkDevice device, VkSwapchainKHR swapchain, const VkLatencySleepModeInfoNV* pSleepModeInfo) {
     if (!wrap_handles) return device_dispatch_table.SetLatencySleepModeNV(device, swapchain, pSleepModeInfo);
     { swapchain = Unwrap(swapchain); }
@@ -8075,6 +8108,27 @@ VkResult Device::GetScreenBufferPropertiesQNX(VkDevice device, const struct _scr
     return result;
 }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+
+void Device::GetClusterAccelerationStructureBuildSizesNV(VkDevice device, const VkClusterAccelerationStructureInputInfoNV* pInfo,
+                                                         VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
+    device_dispatch_table.GetClusterAccelerationStructureBuildSizesNV(device, pInfo, pSizeInfo);
+}
+
+void Device::CmdBuildClusterAccelerationStructureIndirectNV(VkCommandBuffer commandBuffer,
+                                                            const VkClusterAccelerationStructureCommandsInfoNV* pCommandInfos) {
+    device_dispatch_table.CmdBuildClusterAccelerationStructureIndirectNV(commandBuffer, pCommandInfos);
+}
+
+void Device::GetPartitionedAccelerationStructuresBuildSizesNV(VkDevice device,
+                                                              const VkPartitionedAccelerationStructureInstancesInputNV* pInfo,
+                                                              VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
+    device_dispatch_table.GetPartitionedAccelerationStructuresBuildSizesNV(device, pInfo, pSizeInfo);
+}
+
+void Device::CmdBuildPartitionedAccelerationStructuresNV(VkCommandBuffer commandBuffer,
+                                                         const VkBuildPartitionedAccelerationStructureInfoNV* pBuildInfo) {
+    device_dispatch_table.CmdBuildPartitionedAccelerationStructuresNV(commandBuffer, pBuildInfo);
+}
 
 void Device::GetGeneratedCommandsMemoryRequirementsEXT(VkDevice device, const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo,
                                                        VkMemoryRequirements2* pMemoryRequirements) {
@@ -8249,6 +8303,38 @@ VkResult Instance::GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertie
 
     return result;
 }
+#ifdef VK_USE_PLATFORM_METAL_EXT
+
+VkResult Device::GetMemoryMetalHandleEXT(VkDevice device, const VkMemoryGetMetalHandleInfoEXT* pGetMetalHandleInfo,
+                                         void** pHandle) {
+    if (!wrap_handles) return device_dispatch_table.GetMemoryMetalHandleEXT(device, pGetMetalHandleInfo, pHandle);
+    vku::safe_VkMemoryGetMetalHandleInfoEXT var_local_pGetMetalHandleInfo;
+    vku::safe_VkMemoryGetMetalHandleInfoEXT* local_pGetMetalHandleInfo = nullptr;
+    {
+        if (pGetMetalHandleInfo) {
+            local_pGetMetalHandleInfo = &var_local_pGetMetalHandleInfo;
+            local_pGetMetalHandleInfo->initialize(pGetMetalHandleInfo);
+
+            if (pGetMetalHandleInfo->memory) {
+                local_pGetMetalHandleInfo->memory = Unwrap(pGetMetalHandleInfo->memory);
+            }
+        }
+    }
+    VkResult result = device_dispatch_table.GetMemoryMetalHandleEXT(
+        device, (const VkMemoryGetMetalHandleInfoEXT*)local_pGetMetalHandleInfo, pHandle);
+
+    return result;
+}
+
+VkResult Device::GetMemoryMetalHandlePropertiesEXT(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType,
+                                                   const void* pHandle,
+                                                   VkMemoryMetalHandlePropertiesEXT* pMemoryMetalHandleProperties) {
+    VkResult result =
+        device_dispatch_table.GetMemoryMetalHandlePropertiesEXT(device, handleType, pHandle, pMemoryMetalHandleProperties);
+
+    return result;
+}
+#endif  // VK_USE_PLATFORM_METAL_EXT
 
 VkResult Device::CreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                                 const VkAllocationCallbacks* pAllocator,

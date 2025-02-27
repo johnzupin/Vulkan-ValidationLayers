@@ -1,8 +1,8 @@
 /***************************************************************************
  *
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  * Copyright (c) 2015-2024 Google Inc.
  * Copyright (c) 2023-2024 RasterGrid Kft.
  *
@@ -47,7 +47,7 @@
 #include "generated/vk_dispatch_table_helper.h"
 #include "chassis/dispatch_object.h"
 #include "generated/vk_extension_helper.h"
-#include "gpu/core/gpuav_settings.h"
+#include "gpuav/core/gpuav_settings.h"
 #include "sync/sync_settings.h"
 
 namespace chassis {
@@ -77,15 +77,15 @@ enum class ValidValue {
     NoExtension,  // trying to use a proper value, but the extension is required
 };
 
-// Layer chassis validation object base class definition
-class ValidationObject : public Logger {
+// Validation Object base classes
+namespace vvl::base {
+
+class Instance : public Logger {
   public:
     const APIVersion api_version;
     vvl::dispatch::Instance* dispatch_instance_{};
-    vvl::dispatch::Device* dispatch_device_{};
 
-    const InstanceExtensions& instance_extensions;
-    DeviceExtensions device_extensions;
+    DeviceExtensions extensions;
     const GlobalSettings& global_settings;
     GpuAVSettings& gpuav_settings;
     const SyncValSettings& syncval_settings;
@@ -94,92 +94,124 @@ class ValidationObject : public Logger {
     const CHECK_ENABLED& enabled;
 
     VkInstance instance = VK_NULL_HANDLE;
-    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
-    VkDevice device = VK_NULL_HANDLE;
-
     const LayerObjectTypeId container_type;
 
-    bool is_device_lost = false;
-
-    ValidationObject(vvl::dispatch::Device* dev, LayerObjectTypeId type_id)
-        : Logger(dev->debug_report),
-          api_version(dev->api_version),
-          dispatch_instance_(dev->dispatch_instance),
-          dispatch_device_(dev),
-          instance_extensions(dev->dispatch_instance->instance_extensions),
-          device_extensions(dev->device_extensions),
-          global_settings(dev->settings.global_settings),
-          gpuav_settings(dev->settings.gpuav_settings),
-          syncval_settings(dev->settings.syncval_settings),
-          disabled(dev->settings.disabled),
-          enabled(dev->settings.enabled),
-          instance(dev->dispatch_instance->instance),
-          physical_device(dev->physical_device),
-          device(dev->device),
-          container_type(type_id) {}
-
-    ValidationObject(vvl::dispatch::Instance* instance, LayerObjectTypeId type_id)
+    Instance(vvl::dispatch::Instance* instance, LayerObjectTypeId type_id)
         : Logger(instance->debug_report),
           api_version(instance->api_version),
           dispatch_instance_(instance),
-          dispatch_device_(nullptr),
-          instance_extensions(instance->instance_extensions),
-          device_extensions(instance->device_extensions),
+          extensions(instance->extensions),
           global_settings(instance->settings.global_settings),
           gpuav_settings(instance->settings.gpuav_settings),
           syncval_settings(instance->settings.syncval_settings),
           disabled(instance->settings.disabled),
           enabled(instance->settings.enabled),
           instance(instance->instance),
-          physical_device(VK_NULL_HANDLE),
-          device(VK_NULL_HANDLE),
           container_type(type_id) {}
+    virtual ~Instance() {}
 
-    virtual ~ValidationObject() {}
-
-    void CopyDispatchState() {
-        if (dispatch_device_) {
-            device_extensions = dispatch_device_->device_extensions;
-            instance = dispatch_device_->dispatch_instance->instance;
-            physical_device = dispatch_device_->physical_device;
-            device = dispatch_device_->device;
-        } else {
-            device_extensions = dispatch_instance_->device_extensions;
-            instance = dispatch_instance_->instance;
-            physical_device = VK_NULL_HANDLE;
-            device = VK_NULL_HANDLE;
-        }
+    // Modify a parameter to CreateDevice
+    virtual void PreCallRecordCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo,
+                                           const VkAllocationCallbacks* pAllocator, VkDevice* pDevice,
+                                           const RecordObject& record_obj, vku::safe_VkDeviceCreateInfo* modified_create_info) {
+        PreCallRecordCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice, record_obj);
     }
+    void CopyDispatchState() { instance = dispatch_instance_->instance; }
+    VkInstance VkHandle() const { return instance; }
+
+#include "generated/validation_object_instance_methods.h"
+};
+
+class Device : public Logger {
+  public:
+    const APIVersion api_version;
+    vvl::dispatch::Instance* dispatch_instance_{};
+    vvl::dispatch::Device* dispatch_device_{};
+
+    DeviceExtensions extensions;
+    const DeviceFeatures& enabled_features;
+    const VkPhysicalDeviceMemoryProperties& phys_dev_mem_props;
+    const VkPhysicalDeviceProperties& phys_dev_props;
+    const VkPhysicalDeviceVulkan11Properties& phys_dev_props_core11;
+    const VkPhysicalDeviceVulkan12Properties& phys_dev_props_core12;
+    const VkPhysicalDeviceVulkan13Properties& phys_dev_props_core13;
+    const VkPhysicalDeviceVulkan14Properties& phys_dev_props_core14;
+    const DeviceExtensionProperties& phys_dev_ext_props;
+    const GlobalSettings& global_settings;
+    GpuAVSettings& gpuav_settings;
+    const SyncValSettings& syncval_settings;
+
+    const CHECK_DISABLED& disabled;
+    const CHECK_ENABLED& enabled;
+
+    const VkInstance instance;
+    const VkPhysicalDevice physical_device;
+    VkDevice device = VK_NULL_HANDLE;
+
+    const LayerObjectTypeId container_type;
+
+    bool is_device_lost = false;
 
     mutable std::shared_mutex validation_object_mutex;
-    virtual ReadLockGuard ReadLock() const { return ReadLockGuard(validation_object_mutex); }
-    virtual WriteLockGuard WriteLock() { return WriteLockGuard(validation_object_mutex); }
-
     // If the Record phase calls a function that blocks, we might need to release
     // the lock that protects Record itself in order to avoid mutual waiting.
     static thread_local WriteLockGuard* record_guard;
+
+    Device(vvl::dispatch::Device* dispatch_dev, Instance* instance, LayerObjectTypeId type_id)
+        : Logger(dispatch_dev->debug_report),
+          api_version(dispatch_dev->api_version),
+          dispatch_instance_(dispatch_dev->dispatch_instance),
+          dispatch_device_(dispatch_dev),
+          extensions(dispatch_dev->extensions),
+          enabled_features(dispatch_dev->enabled_features),
+          phys_dev_mem_props(dispatch_dev->phys_dev_mem_props),
+          phys_dev_props(dispatch_dev->phys_dev_props),
+          phys_dev_props_core11(dispatch_dev->phys_dev_props_core11),
+          phys_dev_props_core12(dispatch_dev->phys_dev_props_core12),
+          phys_dev_props_core13(dispatch_dev->phys_dev_props_core13),
+          phys_dev_props_core14(dispatch_dev->phys_dev_props_core14),
+          phys_dev_ext_props(dispatch_dev->phys_dev_ext_props),
+          global_settings(dispatch_dev->settings.global_settings),
+          gpuav_settings(dispatch_dev->settings.gpuav_settings),
+          syncval_settings(dispatch_dev->settings.syncval_settings),
+          disabled(dispatch_dev->settings.disabled),
+          enabled(dispatch_dev->settings.enabled),
+          instance(instance->instance),
+          physical_device(dispatch_dev->physical_device),
+          device(dispatch_dev->device),
+          container_type(type_id) {}
+    virtual ~Device() {}
+
+    VkDevice VkHandle() const { return device; }
+
+    void CopyDispatchState() {
+        extensions = dispatch_device_->extensions;
+        device = dispatch_device_->device;
+    }
+    virtual ReadLockGuard ReadLock() const { return ReadLockGuard(validation_object_mutex); }
+    virtual WriteLockGuard WriteLock() { return WriteLockGuard(validation_object_mutex); }
 
     // Should be used instead of WriteLock() if the Record phase wants to release
     // its lock during the blocking operation.
     struct BlockingOperationGuard {
         WriteLockGuard lock;
-        ValidationObject* validation_object = nullptr;
+        Device* dev = nullptr;
 
-        BlockingOperationGuard(ValidationObject* validation_object) : validation_object(validation_object) {
+        BlockingOperationGuard(Device* dev_) : dev(dev_) {
             // This assert detects recursive calls. It is here mostly for documentation purposes
             // because WriteLock() also triggers errors during recursion.
             // Recursion is not allowed since record_guard is a thread-local variable and it can
             // reference only one frame of the callstack.
-            assert(validation_object->record_guard == nullptr);
+            assert(dev->record_guard == nullptr);
 
-            lock = validation_object->WriteLock();
+            lock = dev->WriteLock();
 
             // Initialize record_guard only when Record is actually protected by the
             // mutex. It's not the case when fine grained locking is enabled.
             record_guard = lock.owns_lock() ? &lock : nullptr;
         }
 
-        ~BlockingOperationGuard() { validation_object->record_guard = nullptr; }
+        ~BlockingOperationGuard() { dev->record_guard = nullptr; }
     };
 
     // The following Begin/End methods should be called during the Record phase
@@ -206,6 +238,10 @@ class ValidationObject : public Logger {
         return VK_SUCCESS;
     }
     // Manually generated pre/post hooks
+
+    // called after vkCreateDevice() completes successfully
+    virtual void FinishDeviceSetup(const VkDeviceCreateInfo* pCreateInfo, const Location& loc) {}
+
     // Allow additional state parameter for CreateGraphicsPipelines
     virtual bool PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount,
                                                         const VkGraphicsPipelineCreateInfo* pCreateInfos,
@@ -363,12 +399,7 @@ class ValidationObject : public Logger {
         PreCallRecordCreateBuffer(device, pCreateInfo, pAllocator, pBuffer, record_obj);
     }
 
-    // Modify a parameter to CreateDevice
-    virtual void PreCallRecordCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo,
-                                           const VkAllocationCallbacks* pAllocator, VkDevice* pDevice,
-                                           const RecordObject& record_obj, vku::safe_VkDeviceCreateInfo* modified_create_info) {
-        PreCallRecordCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice, record_obj);
-    }
-
-#include "generated/validation_object_methods.h"
+#include "generated/validation_object_device_methods.h"
 };
+
+}  // namespace vvl::base

@@ -1,8 +1,8 @@
 /***************************************************************************
  *
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
  * Copyright (c) 2015-2024 Google Inc.
  * Copyright (c) 2023-2024 RasterGrid Kft.
  *
@@ -30,14 +30,13 @@
 #include "error_message/logging.h"
 #include "utils/vk_layer_utils.h"
 #include "layer_options.h"
-#include "gpu/core/gpuav_settings.h"
+#include "gpuav/core/gpuav_settings.h"
 #include "sync/sync_settings.h"
+#include "generated/device_features.h"
 #include "generated/dispatch_vector.h"
 #include "generated/vk_api_version.h"
 #include "generated/vk_extension_helper.h"
 #include "generated/vk_layer_dispatch_table.h"
-
-class ValidationObject;
 
 // Layer object type identifiers
 enum LayerObjectTypeId {
@@ -65,6 +64,58 @@ struct HashedUint64 {
 };
 
 namespace vvl {
+namespace base {
+class Instance;
+class Device;
+}  // namespace base
+
+// Device extension properties -- storing properties gathered from VkPhysicalDeviceProperties2::pNext chain
+// TODO: this could be defined and initialized via generated code
+struct DeviceExtensionProperties {
+    VkPhysicalDeviceShadingRateImagePropertiesNV shading_rate_image_props;
+    VkPhysicalDeviceMeshShaderPropertiesNV mesh_shader_props_nv;
+    VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_props_ext;
+    VkPhysicalDeviceCooperativeMatrixPropertiesNV cooperative_matrix_props;
+    VkPhysicalDeviceCooperativeMatrixPropertiesKHR cooperative_matrix_props_khr;
+    VkPhysicalDeviceCooperativeMatrix2PropertiesNV cooperative_matrix_props2_nv;
+    VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback_props;
+    VkPhysicalDeviceRayTracingPropertiesNV ray_tracing_props_nv;
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR ray_tracing_props_khr;
+    VkPhysicalDeviceAccelerationStructurePropertiesKHR acc_structure_props;
+    VkPhysicalDeviceFragmentDensityMapPropertiesEXT fragment_density_map_props;
+    VkPhysicalDeviceFragmentDensityMap2PropertiesEXT fragment_density_map2_props;
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fragment_density_map_offset_props;
+    VkPhysicalDevicePerformanceQueryPropertiesKHR performance_query_props;
+    VkPhysicalDeviceSampleLocationsPropertiesEXT sample_locations_props;
+    VkPhysicalDeviceCustomBorderColorPropertiesEXT custom_border_color_props;
+    VkPhysicalDeviceMultiviewProperties multiview_props;
+    VkPhysicalDevicePortabilitySubsetPropertiesKHR portability_props;
+    VkPhysicalDeviceFragmentShadingRatePropertiesKHR fragment_shading_rate_props;
+    VkPhysicalDeviceProvokingVertexPropertiesEXT provoking_vertex_props;
+    VkPhysicalDeviceMultiDrawPropertiesEXT multi_draw_props;
+    VkPhysicalDeviceDiscardRectanglePropertiesEXT discard_rectangle_props;
+    VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT blend_operation_advanced_props;
+    VkPhysicalDeviceConservativeRasterizationPropertiesEXT conservative_rasterization_props;
+    VkPhysicalDeviceSubgroupProperties subgroup_props;
+    VkPhysicalDeviceExtendedDynamicState3PropertiesEXT extended_dynamic_state3_props;
+    VkPhysicalDeviceImageProcessingPropertiesQCOM image_processing_props;
+    VkPhysicalDeviceImageAlignmentControlPropertiesMESA image_alignment_control_props;
+    VkPhysicalDeviceMaintenance7PropertiesKHR maintenance7_props;
+    VkPhysicalDeviceNestedCommandBufferPropertiesEXT nested_command_buffer_props;
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_props;
+    VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT descriptor_buffer_density_props;
+    VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT device_generated_commands_props;
+    VkPhysicalDevicePipelineBinaryPropertiesKHR pipeline_binary_props;
+    VkPhysicalDeviceMapMemoryPlacedPropertiesEXT map_memory_placed_props;
+    VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR compute_shader_derivatives_props;
+    VkPhysicalDeviceCooperativeVectorPropertiesNV cooperative_vector_props_nv;
+    VkPhysicalDeviceRenderPassStripedPropertiesARM renderpass_striped_props;
+    VkPhysicalDeviceExternalMemoryHostPropertiesEXT external_memory_host_props;
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+    VkPhysicalDeviceExternalFormatResolvePropertiesANDROID android_format_resolve_props;
+#endif
+};
+
 namespace dispatch {
 
 class Instance;
@@ -174,15 +225,14 @@ class Instance : public HandleWrapper {
         display_id_reverse_mapping.insert_or_assign(handle, unique_id);
         return (VkDisplayKHR)unique_id;
     }
-    ValidationObject* GetValidationObject(LayerObjectTypeId object_type) const;
+    base::Instance* GetValidationObject(LayerObjectTypeId object_type) const;
 
     Settings settings;
 
     APIVersion api_version;
-    InstanceExtensions instance_extensions;
-    DeviceExtensions device_extensions = {};
+    DeviceExtensions extensions{};
 
-    mutable std::vector<std::unique_ptr<ValidationObject>> object_dispatch;
+    mutable std::vector<std::unique_ptr<base::Instance>> object_dispatch;
 
     VkInstance instance = VK_NULL_HANDLE;
     VkLayerInstanceDispatchTable instance_dispatch_table;
@@ -190,6 +240,23 @@ class Instance : public HandleWrapper {
     vvl::concurrent_unordered_map<VkDisplayKHR, uint64_t, 0> display_id_reverse_mapping;
 
 #include "generated/dispatch_object_instance_methods.h"
+
+    template <bool init = true, typename ExtProp>
+    void GetPhysicalDeviceExtProperties(VkPhysicalDevice gpu, ExtEnabled enabled, ExtProp* ext_prop) {
+        assert(ext_prop);
+        // Extensions that use two calls to get properties don't want to init on the second call
+        if constexpr (init) {
+            *ext_prop = vku::InitStructHelper();
+        }
+        if (IsExtEnabled(enabled)) {
+            VkPhysicalDeviceProperties2 prop2 = vku::InitStructHelper(ext_prop);
+            if (api_version >= VK_API_VERSION_1_1) {
+                GetPhysicalDeviceProperties2(gpu, &prop2);
+            } else {
+                GetPhysicalDeviceProperties2KHR(gpu, &prop2);
+            }
+        }
+    }
 };
 
 class Device : public HandleWrapper {
@@ -200,7 +267,7 @@ class Device : public HandleWrapper {
     void InitObjectDispatchVectors();
     void InitValidationObjects();
     void ReleaseValidationObject(LayerObjectTypeId type_id) const;
-    ValidationObject* GetValidationObject(LayerObjectTypeId object_type) const;
+    base::Device* GetValidationObject(LayerObjectTypeId object_type) const;
 
     bool IsSecondary(VkCommandBuffer cb) const;
 
@@ -208,15 +275,27 @@ class Device : public HandleWrapper {
     Instance* dispatch_instance;
 
     APIVersion api_version;
-    DeviceExtensions device_extensions = {};
+    DeviceExtensions extensions{};
+    DeviceFeatures enabled_features{};
+
+    VkPhysicalDeviceMemoryProperties phys_dev_mem_props{};
+    VkPhysicalDeviceProperties phys_dev_props{};
+    VkPhysicalDeviceVulkan11Properties phys_dev_props_core11{};
+    VkPhysicalDeviceVulkan12Properties phys_dev_props_core12{};
+    VkPhysicalDeviceVulkan13Properties phys_dev_props_core13{};
+    VkPhysicalDeviceVulkan14Properties phys_dev_props_core14{};
+    // To store the 2 lists from VkPhysicalDeviceHostImageCopyProperties
+    std::vector<VkImageLayout> host_image_copy_props_copy_src_layouts{};
+    std::vector<VkImageLayout> host_imape_copy_props_copy_dst_layouts{};
+    DeviceExtensionProperties phys_dev_ext_props = {};
 
     VkPhysicalDevice physical_device = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
     VkLayerDispatchTable device_dispatch_table;
 
-    mutable std::vector<std::unique_ptr<ValidationObject>> object_dispatch;
-    mutable std::vector<std::unique_ptr<ValidationObject>> aborted_object_dispatch;
-    mutable std::vector<std::vector<ValidationObject*>> intercept_vectors;
+    mutable std::vector<std::unique_ptr<base::Device>> object_dispatch;
+    mutable std::vector<std::unique_ptr<base::Device>> aborted_object_dispatch;
+    mutable std::vector<std::vector<base::Device*>> intercept_vectors;
     // Handle Wrapping Data
     // Wrapping Descriptor Template Update structures requires access to the template createinfo structs
     vvl::unordered_map<uint64_t, std::unique_ptr<TemplateState>> desc_template_createinfo_map;

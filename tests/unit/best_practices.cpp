@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2015-2024 The Khronos Group Inc.
- * Copyright (c) 2015-2024 Valve Corporation
- * Copyright (c) 2015-2024 LunarG, Inc.
- * Copyright (c) 2015-2024 Google, Inc.
+ * Copyright (c) 2015-2025 The Khronos Group Inc.
+ * Copyright (c) 2015-2025 Valve Corporation
+ * Copyright (c) 2015-2025 LunarG, Inc.
+ * Copyright (c) 2015-2025 Google, Inc.
  * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,7 @@ void VkBestPracticesLayerTest::InitBestPracticesFramework(const char *vendor_che
 
     features_.pNext = &layer_settings_create_info;
 
+    AddRequiredExtensions(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
     InitFramework(&features_);
 }
 
@@ -103,9 +104,13 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedInstanceExtensions) {
         // Extra error if VK_EXT_debug_report is used on Android still
         m_errorMonitor->SetDesiredWarning("BestPractices-deprecated-extension");
     }
-    m_errorMonitor->SetDesiredWarning("BestPractices-deprecated-extension");
-    m_errorMonitor->SetDesiredWarning("BestPractices-specialuse-extension");
-    VkInstance dummy;
+
+    m_errorMonitor->SetDesiredWarning("BestPractices-deprecated-extension");  // VK_KHR_get_physical_device_properties2
+    m_errorMonitor->SetDesiredWarning("BestPractices-deprecated-extension");  // VK_EXT_validation_features
+    m_errorMonitor->SetDesiredWarning("BestPractices-specialuse-extension");  // VK_EXT_debug_utils
+    m_errorMonitor->SetDesiredWarning("BestPractices-specialuse-extension");  // VK_EXT_validation_features
+
+    VkInstance dummy = VK_NULL_HANDLE;
     auto features = features_;
     auto ici = GetInstanceCreateInfo();
     features.pNext = ici.pNext;
@@ -113,9 +118,6 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedInstanceExtensions) {
     vk::CreateInstance(&ici, nullptr, &dummy);
     m_errorMonitor->VerifyFound();
 
-    // Create a 1.0 vulkan instance and request an extension promoted to core in 1.1
-    m_errorMonitor->SetUnexpectedError("khronos-Validation-debug-build-warning-message");
-    m_errorMonitor->SetUnexpectedError("khronos-Validation-fine-grained-locking-warning-message");
     VkApplicationInfo new_info{};
     new_info.apiVersion = VK_API_VERSION_1_0;
     new_info.pApplicationName = ici.pApplicationInfo->pApplicationName;
@@ -123,8 +125,22 @@ TEST_F(VkBestPracticesLayerTest, UseDeprecatedInstanceExtensions) {
     new_info.pEngineName = ici.pApplicationInfo->pEngineName;
     new_info.engineVersion = ici.pApplicationInfo->engineVersion;
     ici.pApplicationInfo = &new_info;
+
+    // Create a 1.0 vulkan instance and request an extension promoted to core in 1.1
+    if (IsExtensionsEnabled(VK_EXT_DEBUG_REPORT_EXTENSION_NAME)) {
+        // Extra error if VK_EXT_debug_report is used on Android still
+        m_errorMonitor->SetDesiredWarning("BestPractices-deprecated-extension");
+    }
+    m_errorMonitor->SetUnexpectedError("khronos-Validation-debug-build-warning-message");
+    m_errorMonitor->SetUnexpectedError("khronos-Validation-fine-grained-locking-warning-message");
+    m_errorMonitor->SetDesiredWarning("BestPractices-deprecated-extension");  // VK_EXT_validation_features
+    m_errorMonitor->SetDesiredWarning("BestPractices-specialuse-extension");  // VK_EXT_debug_utils
+    m_errorMonitor->SetDesiredWarning("BestPractices-specialuse-extension");  // VK_EXT_validation_features
     vk::CreateInstance(&ici, nullptr, &dummy);
-    vk::DestroyInstance(dummy, nullptr);
+    m_errorMonitor->VerifyFound();
+    if (dummy != VK_NULL_HANDLE) {
+        vk::DestroyInstance(dummy, nullptr);
+    }
 }
 
 TEST_F(VkBestPracticesLayerTest, UseDeprecatedDeviceExtensions) {
@@ -858,7 +874,7 @@ TEST_F(VkBestPracticesLayerTest, TripleBufferingTest) {
     swapchain_create_info.minImageCount = 2;
     swapchain_create_info.imageFormat = m_surface_formats[0].format;
     swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = m_surface_capabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = imageUsage;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -922,7 +938,7 @@ TEST_F(VkBestPracticesLayerTest, SwapchainCreationTest) {
 
     swapchain_create_info.imageFormat = m_surface_formats[0].format;
     swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = m_surface_capabilities.minImageExtent;
 
     // GetPhysicalDeviceSurfacePresentModesKHR() not called before trying to create a swapchain
     m_errorMonitor->SetDesiredWarning("BestPractices-vkCreateSwapchainKHR-present-mode-no-surface");
@@ -1295,6 +1311,47 @@ TEST_F(VkBestPracticesLayerTest, OverAllocateFromDescriptorPool) {
     alloc_info.descriptorPool = ds_pool.handle();
     alloc_info.pSetLayouts = set_layouts;
     m_errorMonitor->SetDesiredWarning("BestPractices-vkAllocateDescriptorSets-EmptyDescriptorPool");
+    vk::AllocateDescriptorSets(device(), &alloc_info, descriptor_sets);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkBestPracticesLayerTest, OverAllocateTypeFromDescriptorPool) {
+    TEST_DESCRIPTION("Attempt to allocate more sets and descriptors than descriptor pool has available.");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    RETURN_IF_SKIP(InitBestPracticesFramework());
+    RETURN_IF_SKIP(InitState());
+    InitRenderTarget();
+
+    VkDescriptorPoolSize ds_type_count = {};
+    ds_type_count.type = VK_DESCRIPTOR_TYPE_SAMPLER;
+    ds_type_count.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo ds_pool_ci = vku::InitStructHelper();
+    ds_pool_ci.flags = 0;
+    ds_pool_ci.maxSets = 2;
+    ds_pool_ci.poolSizeCount = 1;
+    ds_pool_ci.pPoolSizes = &ds_type_count;
+
+    vkt::DescriptorPool ds_pool(*m_device, ds_pool_ci);
+
+    VkDescriptorSetLayoutBinding dsl_binding_samp = {};
+    dsl_binding_samp.binding = 0;
+    dsl_binding_samp.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    dsl_binding_samp.descriptorCount = 1;
+    dsl_binding_samp.stageFlags = VK_SHADER_STAGE_ALL;
+    dsl_binding_samp.pImmutableSamplers = NULL;
+
+    const vkt::DescriptorSetLayout ds_layout_samp(*m_device, {dsl_binding_samp});
+
+    // Try to allocate 2 sets when pool only has 1 set
+    VkDescriptorSet descriptor_sets[2];
+    VkDescriptorSetLayout set_layouts[2] = {ds_layout_samp.handle(), ds_layout_samp.handle()};
+    VkDescriptorSetAllocateInfo alloc_info = vku::InitStructHelper();
+    alloc_info.descriptorSetCount = 2;
+    alloc_info.descriptorPool = ds_pool.handle();
+    alloc_info.pSetLayouts = set_layouts;
+    m_errorMonitor->SetDesiredWarning("BestPractices-vkAllocateDescriptorSets-EmptyDescriptorPoolType");
     vk::AllocateDescriptorSets(device(), &alloc_info, descriptor_sets);
     m_errorMonitor->VerifyFound();
 }
@@ -1793,7 +1850,7 @@ TEST_F(VkBestPracticesLayerTest, ImageMemoryBarrierAccessLayoutCombinations) {
     vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0,
                            nullptr, 0, nullptr, 1, &img_barrier);
 
-    // PRESENT_SRC_KHR	- Must be 0
+    // PRESENT_SRC_KHR - Must be 0
     img_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     img_barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
     m_errorMonitor->SetDesiredWarning("BestPractices-ImageBarrierAccessLayout");

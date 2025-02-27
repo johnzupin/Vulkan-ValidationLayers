@@ -3,7 +3,7 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2020-2024 The Khronos Group Inc.
+ * Copyright (c) 2020-2025 The Khronos Group Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,9 @@
  * to SPIR-V. Anything related to the SPIR-V grammar belongs in spirv_grammar_helper
  *
  ****************************************************************************/
+
 // NOLINTBEGIN
+
 #include <string>
 #include <string_view>
 #include <functional>
@@ -263,6 +265,11 @@ const std::unordered_multimap<uint32_t, RequiredSpirvInfo> &GetSpirvCapabilites(
         {spv::CapabilityCooperativeMatrixPerElementOperationsNV, {0, &DeviceFeatures::cooperativeMatrixPerElementOperations, nullptr, ""}},
         {spv::CapabilityCooperativeMatrixTensorAddressingNV, {0, &DeviceFeatures::cooperativeMatrixTensorAddressing, nullptr, ""}},
         {spv::CapabilityCooperativeMatrixBlockLoadsNV, {0, &DeviceFeatures::cooperativeMatrixBlockLoads, nullptr, ""}},
+        {spv::CapabilityRayTracingSpheresGeometryNV, {0, &DeviceFeatures::spheres, nullptr, ""}},
+        {spv::CapabilityRayTracingLinearSweptSpheresGeometryNV, {0, &DeviceFeatures::linearSweptSpheres, nullptr, ""}},
+        {spv::CapabilityRayTracingClusterAccelerationStructureNV, {0, &DeviceFeatures::clusterAccelerationStructure, nullptr, ""}},
+        {spv::CapabilityCooperativeVectorNV, {0, &DeviceFeatures::cooperativeVector, nullptr, ""}},
+        {spv::CapabilityCooperativeVectorTrainingNV, {0, &DeviceFeatures::cooperativeVectorTraining, nullptr, ""}},
     };
     // clang-format on
     return spirv_capabilities;
@@ -379,6 +386,9 @@ const std::unordered_multimap<std::string_view, RequiredSpirvInfo> &GetSpirvExte
         {"SPV_KHR_relaxed_extended_instruction", {0, nullptr, &DeviceExtensions::vk_khr_shader_relaxed_extended_instruction, ""}},
         {"SPV_NV_cooperative_matrix2", {0, nullptr, &DeviceExtensions::vk_nv_cooperative_matrix2, ""}},
         {"SPV_NV_tensor_addressing", {0, nullptr, &DeviceExtensions::vk_nv_cooperative_matrix2, ""}},
+        {"SPV_NV_linear_swept_spheres", {0, nullptr, &DeviceExtensions::vk_nv_ray_tracing_linear_swept_spheres, ""}},
+        {"SPV_NV_cluster_acceleration_structure", {0, nullptr, &DeviceExtensions::vk_nv_cluster_acceleration_structure, ""}},
+        {"SPV_NV_cooperative_vector", {0, nullptr, &DeviceExtensions::vk_nv_cooperative_vector, ""}},
     };
     // clang-format on
     return spirv_extensions;
@@ -692,12 +702,18 @@ static inline const char *string_SpvCapability(uint32_t input_value) {
             return "BindlessTextureNV";
         case spv::CapabilityRayQueryPositionFetchKHR:
             return "RayQueryPositionFetchKHR";
+        case spv::CapabilityCooperativeVectorNV:
+            return "CooperativeVectorNV";
         case spv::CapabilityAtomicFloat16VectorNV:
             return "AtomicFloat16VectorNV";
         case spv::CapabilityRayTracingDisplacementMicromapNV:
             return "RayTracingDisplacementMicromapNV";
         case spv::CapabilityRawAccessChainsNV:
             return "RawAccessChainsNV";
+        case spv::CapabilityRayTracingSpheresGeometryNV:
+            return "RayTracingSpheresGeometryNV";
+        case spv::CapabilityRayTracingLinearSweptSpheresGeometryNV:
+            return "RayTracingLinearSweptSpheresGeometryNV";
         case spv::CapabilityCooperativeMatrixReductionsNV:
             return "CooperativeMatrixReductionsNV";
         case spv::CapabilityCooperativeMatrixConversionsNV:
@@ -708,6 +724,10 @@ static inline const char *string_SpvCapability(uint32_t input_value) {
             return "CooperativeMatrixTensorAddressingNV";
         case spv::CapabilityCooperativeMatrixBlockLoadsNV:
             return "CooperativeMatrixBlockLoadsNV";
+        case spv::CapabilityCooperativeVectorTrainingNV:
+            return "CooperativeVectorTrainingNV";
+        case spv::CapabilityRayTracingClusterAccelerationStructureNV:
+            return "RayTracingClusterAccelerationStructureNV";
         case spv::CapabilityTensorAddressingNV:
             return "TensorAddressingNV";
         case spv::CapabilityIntegerFunctions2INTEL:
@@ -754,6 +774,14 @@ static inline const char *string_SpvCapability(uint32_t input_value) {
             return "ArithmeticFenceEXT";
         case spv::CapabilitySubgroupBufferPrefetchINTEL:
             return "SubgroupBufferPrefetchINTEL";
+        case spv::CapabilitySubgroup2DBlockIOINTEL:
+            return "Subgroup2DBlockIOINTEL";
+        case spv::CapabilitySubgroup2DBlockTransformINTEL:
+            return "Subgroup2DBlockTransformINTEL";
+        case spv::CapabilitySubgroup2DBlockTransposeINTEL:
+            return "Subgroup2DBlockTransposeINTEL";
+        case spv::CapabilitySubgroupMatrixMultiplyAccumulateINTEL:
+            return "SubgroupMatrixMultiplyAccumulateINTEL";
         case spv::CapabilityGroupUniformArithmeticKHR:
             return "GroupUniformArithmeticKHR";
         default:
@@ -762,10 +790,10 @@ static inline const char *string_SpvCapability(uint32_t input_value) {
 }
 
 // Will return the Vulkan format for a given SPIR-V image format value
-// Note: will return VK_FORMAT_UNDEFINED if non valid input
+// Note: will return VK_FORMAT_UNDEFINED if non valid input (or if ImageFormatUnknown)
 // This was in vk_format_utils but the SPIR-V Header dependency was an issue
 //   see https://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/4647
-VkFormat CoreChecks::CompatibleSpirvImageFormat(uint32_t spirv_image_format) const {
+VkFormat CompatibleSpirvImageFormat(uint32_t spirv_image_format) {
     switch (spirv_image_format) {
         case spv::ImageFormatR8:
             return VK_FORMAT_R8_UNORM;
@@ -1018,6 +1046,11 @@ static inline const char* SpvCapabilityRequirements(uint32_t capability) {
     {spv::CapabilityCooperativeMatrixPerElementOperationsNV, "VkPhysicalDeviceCooperativeMatrix2FeaturesNV::cooperativeMatrixPerElementOperations"},
     {spv::CapabilityCooperativeMatrixTensorAddressingNV, "VkPhysicalDeviceCooperativeMatrix2FeaturesNV::cooperativeMatrixTensorAddressing"},
     {spv::CapabilityCooperativeMatrixBlockLoadsNV, "VkPhysicalDeviceCooperativeMatrix2FeaturesNV::cooperativeMatrixBlockLoads"},
+    {spv::CapabilityRayTracingSpheresGeometryNV, "VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV::spheres"},
+    {spv::CapabilityRayTracingLinearSweptSpheresGeometryNV, "VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV::linearSweptSpheres"},
+    {spv::CapabilityRayTracingClusterAccelerationStructureNV, "VkPhysicalDeviceClusterAccelerationStructureFeaturesNV::clusterAccelerationStructure"},
+    {spv::CapabilityCooperativeVectorNV, "VkPhysicalDeviceCooperativeVectorFeaturesNV::cooperativeVector"},
+    {spv::CapabilityCooperativeVectorTrainingNV, "VkPhysicalDeviceCooperativeVectorFeaturesNV::cooperativeVectorTraining"},
     };
 
     // VUs before catch unknown capabilities
@@ -1117,6 +1150,9 @@ static inline std::string SpvExtensionRequirments(std::string_view extension) {
     {"SPV_KHR_relaxed_extended_instruction", {{vvl::Extension::_VK_KHR_shader_relaxed_extended_instruction}}},
     {"SPV_NV_cooperative_matrix2", {{vvl::Extension::_VK_NV_cooperative_matrix2}}},
     {"SPV_NV_tensor_addressing", {{vvl::Extension::_VK_NV_cooperative_matrix2}}},
+    {"SPV_NV_linear_swept_spheres", {{vvl::Extension::_VK_NV_ray_tracing_linear_swept_spheres}}},
+    {"SPV_NV_cluster_acceleration_structure", {{vvl::Extension::_VK_NV_cluster_acceleration_structure}}},
+    {"SPV_NV_cooperative_vector", {{vvl::Extension::_VK_NV_cooperative_vector}}},
     };
 
     // VUs before catch unknown extensions
@@ -1155,7 +1191,7 @@ bool CoreChecks::ValidateShaderCapabilitiesAndExtensions(const spirv::Instructio
             } else if (it->second.extension) {
                 // kEnabledByApiLevel is not valid as some extension are promoted with feature bits to be used.
                 // If the new Api Level gives support, it will be caught in the "it->second.version" check instead.
-                if (IsExtEnabledByCreateinfo(device_extensions.*(it->second.extension))) {
+                if (IsExtEnabledByCreateinfo(extensions.*(it->second.extension))) {
                     has_support = true;
                 }
             } else if (it->second.property) {
@@ -1231,7 +1267,7 @@ bool CoreChecks::ValidateShaderCapabilitiesAndExtensions(const spirv::Instructio
         }
 
         // Portability checks
-        if (IsExtEnabled(device_extensions.vk_khr_portability_subset)) {
+        if (IsExtEnabled(extensions.vk_khr_portability_subset)) {
             if ((VK_FALSE == enabled_features.shaderSampleRateInterpolationFunctions) &&
                 (spv::CapabilityInterpolationFunction == insn.Word(1))) {
                 skip |= LogError("VUID-RuntimeSpirv-shaderSampleRateInterpolationFunctions-06325", device, loc,
@@ -1277,7 +1313,7 @@ bool CoreChecks::ValidateShaderCapabilitiesAndExtensions(const spirv::Instructio
                     has_support = true;
                 }
             } else if (it->second.extension) {
-                if (IsExtEnabled(device_extensions.*(it->second.extension))) {
+                if (IsExtEnabled(extensions.*(it->second.extension))) {
                     has_support = true;
                 }
             }
@@ -1292,4 +1328,5 @@ bool CoreChecks::ValidateShaderCapabilitiesAndExtensions(const spirv::Instructio
     }  // spv::OpExtension
     return skip;
 }
+
 // NOLINTEND

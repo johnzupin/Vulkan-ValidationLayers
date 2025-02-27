@@ -31,7 +31,7 @@
 #include "state_tracker/render_pass_state.h"
 #include "drawdispatch/drawdispatch_vuids.h"
 
-bool VerifyAspectsPresent(VkImageAspectFlags aspect_mask, VkFormat format);
+bool IsValidAspectMaskForFormat(VkImageAspectFlags aspect_mask, VkFormat format);
 
 using LayoutRange = image_layout_map::ImageLayoutRegistry::RangeType;
 using LayoutEntry = image_layout_map::ImageLayoutRegistry::LayoutEntry;
@@ -143,7 +143,7 @@ bool CoreChecks::VerifyImageLayout(const vvl::CommandBuffer &cb_state, const vvl
 }
 
 void CoreChecks::TransitionFinalSubpassLayouts(vvl::CommandBuffer &cb_state) {
-    auto render_pass_state = cb_state.activeRenderPass.get();
+    auto render_pass_state = cb_state.active_render_pass.get();
     auto framebuffer_state = cb_state.activeFramebuffer.get();
     if (!render_pass_state || !framebuffer_state) {
         return;
@@ -248,7 +248,7 @@ bool CoreChecks::ValidateCmdBufImageLayouts(const Location &loc, const vvl::Comm
                 const bool matches = ImageLayoutMatches(aspect_mask, image_layout, initial_layout);
                 if (!matches) {
                     // We can report all the errors for the intersected range directly
-                    for (auto index : sparse_container::range_view<decltype(intersected_range)>(intersected_range)) {
+                    for (auto index : vvl::range_view<decltype(intersected_range)>(intersected_range)) {
                         const auto subresource = image_state->subresource_encoder.Decode(index);
                         const LogObjectList objlist(cb_state.Handle(), image_state->Handle());
                         // TODO - We need a way to map the action command to which caused this error
@@ -307,7 +307,7 @@ bool CoreChecks::ValidateLayoutVsAttachmentDescription(const VkImageLayout first
             skip |= LogError("VUID-VkRenderPassCreateInfo2-pAttachments-02522", device, layout_loc,
                              "(%s) is an invalid for pAttachments[%d] (first attachment to have LOAD_OP_CLEAR).",
                              string_VkImageLayout(first_layout), attachment);
-        } else if ((use_rp2 == false) && IsExtEnabled(device_extensions.vk_khr_maintenance2) &&
+        } else if ((use_rp2 == false) && IsExtEnabled(extensions.vk_khr_maintenance2) &&
                    (first_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL)) {
             skip |= LogError("VUID-VkRenderPassCreateInfo-pAttachments-01566", device, layout_loc,
                              "(%s) is an invalid for pAttachments[%d] (first attachment to have LOAD_OP_CLEAR).",
@@ -328,7 +328,7 @@ bool CoreChecks::ValidateLayoutVsAttachmentDescription(const VkImageLayout first
             skip |= LogError("VUID-VkRenderPassCreateInfo2-pAttachments-02523", device, layout_loc,
                              "(%s) is an invalid for pAttachments[%d] (first attachment to have LOAD_OP_CLEAR).",
                              string_VkImageLayout(first_layout), attachment);
-        } else if ((use_rp2 == false) && IsExtEnabled(device_extensions.vk_khr_maintenance2) &&
+        } else if ((use_rp2 == false) && IsExtEnabled(extensions.vk_khr_maintenance2) &&
                    (first_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL)) {
             skip |= LogError("VUID-VkRenderPassCreateInfo-pAttachments-01567", device, layout_loc,
                              "(%s) is an invalid for pAttachments[%d] (first attachment to have LOAD_OP_CLEAR).",
@@ -969,7 +969,7 @@ bool CoreChecks::IsCompliantSubresourceRange(const VkImageSubresourceRange &subr
     if ((subres_range.baseArrayLayer + subres_range.layerCount) > image_state.create_info.arrayLayers) {
         return false;
     }
-    if (!VerifyAspectsPresent(subres_range.aspectMask, image_state.create_info.format)) return false;
+    if (!IsValidAspectMaskForFormat(subres_range.aspectMask, image_state.create_info.format)) return false;
     if (((vkuFormatPlaneCount(image_state.create_info.format) < 3) && (subres_range.aspectMask & VK_IMAGE_ASPECT_PLANE_2_BIT)) ||
         ((vkuFormatPlaneCount(image_state.create_info.format) < 2) && (subres_range.aspectMask & VK_IMAGE_ASPECT_PLANE_1_BIT))) {
         return false;

@@ -18,8 +18,10 @@
  */
 
 #include <vulkan/vk_enum_string_helper.h>
+#include <vulkan/vulkan_core.h>
 #include "core_validation.h"
 #include "drawdispatch/drawdispatch_vuids.h"
+#include "generated/error_location_helper.h"
 #include "generated/vk_extension_helper.h"
 #include "generated/dispatch_functions.h"
 #include "state_tracker/image_state.h"
@@ -233,16 +235,16 @@ bool CoreChecks::ValidateDynamicStateIsSet(const LastBound& last_bound_state, co
 bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bound_state, const vvl::DrawDispatchVuid& vuid) const {
     bool skip = false;
     const vvl::CommandBuffer& cb_state = last_bound_state.cb_state;
+    const VkShaderStageFlags bound_stages = last_bound_state.GetAllActiveBoundStages();
     const bool has_pipeline = last_bound_state.pipeline_state != nullptr;
     const bool has_rasterization_pipeline = has_pipeline && !(last_bound_state.pipeline_state->active_shaders &
                                                               (VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT));
+    // TODO - Spec clarification and testing still to prove pipeline can just check active stages only
     const bool vertex_shader_bound = has_rasterization_pipeline || last_bound_state.IsValidShaderBound(ShaderObjectStage::VERTEX);
     const bool fragment_shader_bound = has_pipeline || last_bound_state.IsValidShaderBound(ShaderObjectStage::FRAGMENT);
-    const bool geom_shader_bound = has_rasterization_pipeline || last_bound_state.IsValidShaderBound(ShaderObjectStage::GEOMETRY);
-    const bool tesc_shader_bound =
-        has_rasterization_pipeline || last_bound_state.IsValidShaderBound(ShaderObjectStage::TESSELLATION_CONTROL);
-    const bool tese_shader_bound =
-        has_rasterization_pipeline || last_bound_state.IsValidShaderBound(ShaderObjectStage::TESSELLATION_EVALUATION);
+    const bool geom_shader_bound = (bound_stages & VK_SHADER_STAGE_GEOMETRY_BIT) != 0;
+    const bool tesc_shader_bound = (bound_stages & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT) != 0;
+    const bool tese_shader_bound = (bound_stages & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) != 0;
 
     // build the mask of what has been set in the Pipeline, but yet to be set in the Command Buffer,
     // for Shader Object, everything is dynamic don't need a mask
@@ -297,7 +299,7 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
             skip |= ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_FRONT_FACE, vuid);
         }
 
-        if (IsExtEnabled(device_extensions.vk_ext_sample_locations)) {
+        if (IsExtEnabled(extensions.vk_ext_sample_locations)) {
             skip |=
                 ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT, vuid);
             if (last_bound_state.IsSampleLocationsEnable()) {
@@ -326,7 +328,7 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
         }
         skip |= ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT, vuid);
 
-        if (IsExtEnabled(device_extensions.vk_ext_conservative_rasterization)) {
+        if (IsExtEnabled(extensions.vk_ext_conservative_rasterization)) {
             skip |= ValidateDynamicStateIsSet(last_bound_state, state_status_cb,
                                               CB_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT, vuid);
             if (last_bound_state.GetConservativeRasterizationMode() == VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT) {
@@ -335,7 +337,7 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
             }
         }
 
-        if (IsExtEnabled(device_extensions.vk_nv_fragment_coverage_to_color)) {
+        if (IsExtEnabled(extensions.vk_nv_fragment_coverage_to_color)) {
             skip |=
                 ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_COVERAGE_TO_COLOR_ENABLE_NV, vuid);
             if (last_bound_state.IsCoverageToColorEnabled()) {
@@ -371,7 +373,7 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
             skip |= ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_COVERAGE_REDUCTION_MODE_NV, vuid);
         }
 
-        if (IsExtEnabled(device_extensions.vk_nv_framebuffer_mixed_samples)) {
+        if (IsExtEnabled(extensions.vk_nv_framebuffer_mixed_samples)) {
             skip |=
                 ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_COVERAGE_MODULATION_MODE_NV, vuid);
             if (last_bound_state.GetCoverageModulationMode() != VK_COVERAGE_MODULATION_MODE_NONE_NV) {
@@ -384,12 +386,45 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
             }
         }
 
-        if (IsExtEnabled(device_extensions.vk_ext_discard_rectangles)) {
+        if (IsExtEnabled(extensions.vk_ext_discard_rectangles)) {
             skip |=
                 ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT, vuid);
             if (last_bound_state.IsDiscardRectangleEnable()) {
                 skip |=
                     ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_DISCARD_RECTANGLE_MODE_EXT, vuid);
+
+                if (has_dynamic_state(CB_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT)) {
+                    // For pipelines with VkPipelineDiscardRectangleStateCreateInfoEXT, we compare against discardRectangleCount,
+                    // but for Shader Objects we compare against maxDiscardRectangles (details in
+                    // https://gitlab.khronos.org/vulkan/vulkan/-/issues/3400)
+                    uint32_t rect_limit = phys_dev_ext_props.discard_rectangle_props.maxDiscardRectangles;
+                    bool use_max_limit = true;
+                    if (has_pipeline) {
+                        if (const auto* discard_rectangle_state =
+                                vku::FindStructInPNextChain<VkPipelineDiscardRectangleStateCreateInfoEXT>(
+                                    last_bound_state.pipeline_state->GetCreateInfoPNext())) {
+                            rect_limit = discard_rectangle_state->discardRectangleCount;
+                            use_max_limit = false;
+                        }
+                    }
+
+                    // vkCmdSetDiscardRectangleEXT needs to be set on each rectangle
+                    for (uint32_t i = 0; i < rect_limit; i++) {
+                        if (!cb_state.dynamic_state_value.discard_rectangles.test(i)) {
+                            const vvl::Field limit_name =
+                                use_max_limit ? vvl::Field::maxDiscardRectangles : vvl::Field::discardRectangleCount;
+                            const char* vuid2 =
+                                use_max_limit ? vuid.set_discard_rectangle_09236 : vuid.dynamic_discard_rectangle_07751;
+                            skip |= LogError(vuid2, cb_state.Handle(), vuid.loc(),
+                                             "vkCmdSetDiscardRectangleEXT was not set for discard rectangle index %" PRIu32
+                                             " for this command buffer. It needs to be set once for each rectangle in %s (%" PRIu32
+                                             ").%s",
+                                             i, String(limit_name), rect_limit,
+                                             cb_state.DescribeInvalidatedState(CB_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT).c_str());
+                            break;
+                        }
+                    }
+                }
             }
         }
 
@@ -401,7 +436,7 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
         }
 
         if (vertex_shader_bound) {
-            if (IsExtEnabled(device_extensions.vk_ext_provoking_vertex)) {
+            if (IsExtEnabled(extensions.vk_ext_provoking_vertex)) {
                 skip |=
                     ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_PROVOKING_VERTEX_MODE_EXT, vuid);
             }
@@ -474,7 +509,7 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
         }
     }
 
-    if (IsExtEnabled(device_extensions.vk_nv_clip_space_w_scaling)) {
+    if (IsExtEnabled(extensions.vk_nv_clip_space_w_scaling)) {
         skip |= ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_VIEWPORT_W_SCALING_ENABLE_NV, vuid);
 
         if (last_bound_state.IsViewportWScalingEnable() && has_dynamic_state(CB_DYNAMIC_STATE_VIEWPORT_WITH_COUNT) &&
@@ -491,7 +526,7 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
         }
     }
 
-    if (IsExtEnabled(device_extensions.vk_nv_viewport_swizzle)) {
+    if (IsExtEnabled(extensions.vk_nv_viewport_swizzle)) {
         skip |= ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_VIEWPORT_SWIZZLE_NV, vuid);
     }
 
@@ -550,14 +585,6 @@ bool CoreChecks::ValidateGraphicsDynamicStatePipelineSetStatus(const LastBound& 
                                           vuid.dynamic_line_stipple_enable_07638);
     }
 
-    // VK_EXT_discard_rectangles
-    {
-        if (last_bound_state.IsDiscardRectangleEnable()) {
-            skip |= ValidateDynamicStateIsSet(state_status_cb, CB_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT, cb_state, objlist, loc,
-                                              vuid.dynamic_discard_rectangle_07751);
-        }
-    }
-
     // VK_EXT_vertex_input_dynamic_state
     {
         if (!pipeline.IsDynamic(CB_DYNAMIC_STATE_VERTEX_INPUT_EXT) &&
@@ -597,21 +624,6 @@ bool CoreChecks::ValidateGraphicsDynamicStateValue(const LastBound& last_bound_s
     bool skip = false;
     const vvl::CommandBuffer& cb_state = last_bound_state.cb_state;
     const LogObjectList objlist(cb_state.Handle(), pipeline.Handle());
-
-    // vkCmdSetDiscardRectangleEXT needs to be set on each rectangle
-    const auto* discard_rectangle_state =
-        vku::FindStructInPNextChain<VkPipelineDiscardRectangleStateCreateInfoEXT>(pipeline.GetCreateInfoPNext());
-    if (discard_rectangle_state && pipeline.IsDynamic(CB_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT)) {
-        for (uint32_t i = 0; i < discard_rectangle_state->discardRectangleCount; i++) {
-            if (!cb_state.dynamic_state_value.discard_rectangles.test(i)) {
-                skip |= LogError(vuid.dynamic_discard_rectangle_07751, objlist, vuid.loc(),
-                                 "vkCmdSetDiscardRectangleEXT was not set for discard rectangle index %" PRIu32
-                                 " for this command buffer.%s",
-                                 i, cb_state.DescribeInvalidatedState(CB_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT).c_str());
-                break;
-            }
-        }
-    }
 
     // must set the state for all active color attachments in the current subpass
     for (const uint32_t& color_index : cb_state.active_color_attachments_index) {
@@ -706,8 +718,9 @@ bool CoreChecks::ValidateGraphicsDynamicStateValue(const LastBound& last_bound_s
         }
     }
 
+    const vvl::RenderPass* rp_state = cb_state.active_render_pass.get();
     if (pipeline.IsDynamic(CB_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT)) {
-        if (!enabled_features.variableMultisampleRate && cb_state.activeRenderPass->UsesNoAttachment(cb_state.GetActiveSubpass())) {
+        if (!enabled_features.variableMultisampleRate && rp_state && rp_state->UsesNoAttachment(cb_state.GetActiveSubpass())) {
             if (std::optional<VkSampleCountFlagBits> subpass_rasterization_samples =
                     cb_state.GetActiveSubpassRasterizationSampleCount();
                 subpass_rasterization_samples &&
@@ -829,9 +842,8 @@ bool CoreChecks::ValidateGraphicsDynamicStateValue(const LastBound& last_bound_s
     }
 
     if (pipeline.IsDynamic(CB_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT)) {
-        if (!IsExtEnabled(device_extensions.vk_amd_mixed_attachment_samples) &&
-            !IsExtEnabled(device_extensions.vk_nv_framebuffer_mixed_samples) &&
-            !enabled_features.multisampledRenderToSingleSampled) {
+        if (!IsExtEnabled(extensions.vk_amd_mixed_attachment_samples) &&
+            !IsExtEnabled(extensions.vk_nv_framebuffer_mixed_samples) && !enabled_features.multisampledRenderToSingleSampled) {
             for (uint32_t i = 0; i < cb_state.active_attachments.size(); ++i) {
                 const AttachmentInfo& attachment_info = cb_state.active_attachments[i];
                 const auto* attachment = attachment_info.image_view;
@@ -1172,10 +1184,11 @@ bool CoreChecks::ValidateDrawDynamicState(const LastBound& last_bound_state, con
         }
     }
 
+    const vvl::RenderPass* rp_state = cb_state.active_render_pass.get();
     if ((pipeline_state && pipeline_state->IsDynamic(CB_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT)) || fragment_shader_bound) {
         if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT) &&
             cb_state.dynamic_state_value.sample_locations_enable) {
-            if (cb_state.activeRenderPass->UsesDepthStencilAttachment(cb_state.GetActiveSubpass())) {
+            if (rp_state && rp_state->UsesDepthStencilAttachment(cb_state.GetActiveSubpass())) {
                 for (uint32_t i = 0; i < cb_state.active_attachments.size(); i++) {
                     const auto* attachment = cb_state.active_attachments[i].image_view;
                     if (attachment && attachment->create_info.subresourceRange.aspectMask &
@@ -1233,9 +1246,8 @@ bool CoreChecks::ValidateDrawDynamicState(const LastBound& last_bound_state, con
     }
 
     if ((!pipeline_state || pipeline_state->IsDynamic(CB_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT)) &&
-        cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT)) {
-        const VkMultisampledRenderToSingleSampledInfoEXT* msrtss_info =
-            cb_state.activeRenderPass->GetMSRTSSInfo(cb_state.GetActiveSubpass());
+        cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT) && rp_state) {
+        const VkMultisampledRenderToSingleSampledInfoEXT* msrtss_info = rp_state->GetMSRTSSInfo(cb_state.GetActiveSubpass());
         if (msrtss_info && msrtss_info->multisampledRenderToSingleSampledEnable) {
             if (msrtss_info->rasterizationSamples != cb_state.dynamic_state_value.rasterization_samples) {
                 LogObjectList objlist(cb_state.Handle(), frag_spirv_state->handle());
@@ -1249,8 +1261,8 @@ bool CoreChecks::ValidateDrawDynamicState(const LastBound& last_bound_state, con
         }
     }
 
-    if (pipeline_state && cb_state.activeRenderPass->UsesDynamicRendering() &&
-        (!IsExtEnabled(device_extensions.vk_ext_shader_object) || !last_bound_state.IsAnyGraphicsShaderBound())) {
+    if (pipeline_state && rp_state && rp_state->UsesDynamicRendering() &&
+        (!IsExtEnabled(extensions.vk_ext_shader_object) || !last_bound_state.IsAnyGraphicsShaderBound())) {
         skip |= ValidateDrawRenderingAttachmentLocation(cb_state, *pipeline_state, vuid);
         skip |= ValidateDrawRenderingInputAttachmentIndex(cb_state, *pipeline_state, vuid);
     }
@@ -1285,8 +1297,8 @@ bool CoreChecks::ValidateDrawRenderingAttachmentLocation(const vvl::CommandBuffe
             vku::FindStructInPNextChain<VkRenderingAttachmentLocationInfo>(pipeline_state.GetCreateInfoPNext())) {
         pipeline_color_count = pipeline_location_info->colorAttachmentCount;
         pipeline_color_locations = pipeline_location_info->pColorAttachmentLocations;
-    } else if (const auto* pipeline_rendering_create_info = pipeline_state.GetPipelineRenderingCreateInfo()) {
-        pipeline_color_count = pipeline_rendering_create_info->colorAttachmentCount;
+    } else if (pipeline_state.rendering_create_info) {
+        pipeline_color_count = pipeline_state.rendering_create_info->colorAttachmentCount;
     } else {
         return skip;  // hit dynamic rendering that is not using local read
     }
@@ -1333,8 +1345,8 @@ bool CoreChecks::ValidateDrawRenderingInputAttachmentIndex(const vvl::CommandBuf
         pipeline_color_indexes = pipeline_index_info->pColorAttachmentInputIndices;
         pipeline_depth_index = pipeline_index_info->pDepthInputAttachmentIndex;
         pipeline_stencil_index = pipeline_index_info->pStencilInputAttachmentIndex;
-    } else if (const auto* pipeline_rendering_create_info = pipeline_state.GetPipelineRenderingCreateInfo()) {
-        pipeline_color_count = pipeline_rendering_create_info->colorAttachmentCount;
+    } else if (pipeline_state.rendering_create_info) {
+        pipeline_color_count = pipeline_state.rendering_create_info->colorAttachmentCount;
     } else {
         return skip;  // hit dynamic rendering that is not using local read
     }
@@ -1443,8 +1455,8 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
                                  i, string_VkFormat(attachment->create_info.format), i);
             }
         }
-        if (!IsExtEnabled(device_extensions.vk_amd_mixed_attachment_samples) &&
-            !IsExtEnabled(device_extensions.vk_nv_framebuffer_mixed_samples) &&
+        if (!IsExtEnabled(extensions.vk_amd_mixed_attachment_samples) &&
+            !IsExtEnabled(extensions.vk_nv_framebuffer_mixed_samples) &&
             enabled_features.multisampledRenderToSingleSampled == VK_FALSE &&
             cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT)) {
             for (uint32_t i = 0; i < cb_state.active_attachments.size(); ++i) {
@@ -1513,11 +1525,11 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
         }
     }
 
+    const vvl::RenderPass* rp_state = cb_state.active_render_pass.get();
     if (fragment_shader_bound) {
         if (!cb_state.dynamic_state_value.rasterizer_discard_enable) {
             // TODO - Add test to understand when this would be a null render pass
-            const uint32_t attachment_count =
-                cb_state.activeRenderPass ? cb_state.activeRenderPass->GetDynamicRenderingColorAttachmentCount() : 0;
+            const uint32_t attachment_count = rp_state ? rp_state->GetDynamicRenderingColorAttachmentCount() : 0;
             if (attachment_count > 0) {
                 skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
                                                   cb_state, objlist, loc, vuid.set_color_blend_enable_08657);
@@ -1560,7 +1572,7 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
                                      DynamicStateToString(CB_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT), i);
                 }
             }
-            if (IsExtEnabled(device_extensions.vk_ext_blend_operation_advanced)) {
+            if (IsExtEnabled(extensions.vk_ext_blend_operation_advanced)) {
                 if (!cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT) &&
                     !cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT)) {
                     skip |= LogError(vuid.set_blend_operation_advance_09416, objlist, loc,
@@ -1569,7 +1581,7 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
                                      DynamicStateToString(CB_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT));
                 }
             }
-            if (IsExtEnabled(device_extensions.vk_nv_fragment_coverage_to_color)) {
+            if (IsExtEnabled(extensions.vk_nv_fragment_coverage_to_color)) {
                 if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_COVERAGE_TO_COLOR_ENABLE_NV) &&
                     cb_state.dynamic_state_value.coverage_to_color_enable) {
                     if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_COVERAGE_TO_COLOR_LOCATION_NV)) {
@@ -1607,7 +1619,7 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
         }
     }
 
-    if (IsExtEnabled(device_extensions.vk_nv_viewport_swizzle)) {
+    if (IsExtEnabled(extensions.vk_nv_viewport_swizzle)) {
         if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_VIEWPORT_SWIZZLE_NV)) {
             if (cb_state.dynamic_state_value.viewport_swizzle_count < cb_state.dynamic_state_value.viewport_count) {
                 skip |=
@@ -1618,13 +1630,7 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
             }
         }
     }
-    if (IsExtEnabled(device_extensions.vk_ext_discard_rectangles)) {
-        if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT) &&
-            cb_state.dynamic_state_value.discard_rectangle_enable) {
-            skip |= ValidateDynamicStateIsSet(cb_state.dynamic_state_status.cb, CB_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT, cb_state,
-                                              objlist, loc, vuid.set_discard_rectangle_09236);
-        }
-    }
+
     if (!phys_dev_ext_props.fragment_shading_rate_props.primitiveFragmentShadingRateWithMultipleViewports) {
         for (uint32_t stage = 0; stage < kShaderObjectStageCount; ++stage) {
             const auto shader_object = last_bound_state.GetShaderState(static_cast<ShaderObjectStage>(stage));
@@ -1658,28 +1664,27 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
     }
 
     // Resolve mode only for dynamic rendering
-    if (cb_state.activeRenderPass && cb_state.activeRenderPass->UsesDynamicRendering() &&
-        cb_state.HasExternalFormatResolveAttachment()) {
+    if (rp_state && rp_state->UsesDynamicRendering() && cb_state.HasExternalFormatResolveAttachment()) {
         if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT) &&
             cb_state.dynamic_state_value.color_blend_enable_attachments.test(0)) {
-            const LogObjectList rp_objlist(cb_state.Handle(), cb_state.activeRenderPass->Handle());
+            const LogObjectList rp_objlist(cb_state.Handle(), rp_state->Handle());
             skip |= LogError(vuid.external_format_resolve_09366, rp_objlist, loc,
                              "blend enable for attachment zero was set to VK_TRUE.");
         }
         if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT) &&
             cb_state.dynamic_state_value.rasterization_samples != VK_SAMPLE_COUNT_1_BIT) {
-            const LogObjectList rp_objlist(cb_state.Handle(), cb_state.activeRenderPass->Handle());
+            const LogObjectList rp_objlist(cb_state.Handle(), rp_state->Handle());
             skip |= LogError(vuid.external_format_resolve_09367, rp_objlist, loc, "rasterization samples set to %s.",
                              string_VkSampleCountFlagBits(cb_state.dynamic_state_value.rasterization_samples));
         }
         if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR)) {
             if (cb_state.dynamic_state_value.fragment_size.width != 1) {
-                const LogObjectList rp_objlist(cb_state.Handle(), cb_state.activeRenderPass->Handle());
+                const LogObjectList rp_objlist(cb_state.Handle(), rp_state->Handle());
                 skip |= LogError(vuid.external_format_resolve_09370, rp_objlist, loc, "fragment size width is %" PRIu32 ".",
                                  cb_state.dynamic_state_value.fragment_size.width);
             }
             if (cb_state.dynamic_state_value.fragment_size.height != 1) {
-                const LogObjectList rp_objlist(cb_state.Handle(), cb_state.activeRenderPass->Handle());
+                const LogObjectList rp_objlist(cb_state.Handle(), rp_state->Handle());
                 skip |= LogError(vuid.external_format_resolve_09371, rp_objlist, loc, "fragment size height is %" PRIu32 ".",
                                  cb_state.dynamic_state_value.fragment_size.height);
             }
@@ -1883,7 +1888,7 @@ bool CoreChecks::PreCallValidateCmdSetDepthBounds(VkCommandBuffer commandBuffer,
     bool skip = false;
     skip |= ValidateCmd(*cb_state, error_obj.location);
 
-    if (!IsExtEnabled(device_extensions.vk_ext_depth_range_unrestricted)) {
+    if (!IsExtEnabled(extensions.vk_ext_depth_range_unrestricted)) {
         if (!(minDepthBounds >= 0.0) || !(minDepthBounds <= 1.0)) {
             skip |= LogError(
                 "VUID-vkCmdSetDepthBounds-minDepthBounds-00600", commandBuffer, error_obj.location.dot(Field::minDepthBounds),
@@ -2306,7 +2311,7 @@ bool CoreChecks::PreCallValidateCmdSetPolygonModeEXT(VkCommandBuffer commandBuff
                          "is %s but the "
                          "fillModeNonSolid feature was not enabled.",
                          string_VkPolygonMode(polygonMode));
-    } else if (polygonMode == VK_POLYGON_MODE_FILL_RECTANGLE_NV && !IsExtEnabled(device_extensions.vk_nv_fill_rectangle)) {
+    } else if (polygonMode == VK_POLYGON_MODE_FILL_RECTANGLE_NV && !IsExtEnabled(extensions.vk_nv_fill_rectangle)) {
         skip |= LogError("VUID-vkCmdSetPolygonModeEXT-polygonMode-07425", commandBuffer, error_obj.location.dot(Field::polygonMode),
                          "is VK_POLYGON_MODE_FILL_RECTANGLE_NV but the VK_NV_fill_rectangle "
                          "extension was not enabled.");
@@ -2441,7 +2446,7 @@ bool CoreChecks::PreCallValidateCmdSetColorBlendEquationEXT(VkCommandBuffer comm
                          "(%s) and alphaBlendOp (%s) must not be an advanced blending operation.",
                          string_VkBlendOp(equation.colorBlendOp), string_VkBlendOp(equation.alphaBlendOp));
         }
-        if (IsExtEnabled(device_extensions.vk_khr_portability_subset) && !enabled_features.constantAlphaColorBlendFactors) {
+        if (IsExtEnabled(extensions.vk_khr_portability_subset) && !enabled_features.constantAlphaColorBlendFactors) {
             if (equation.srcColorBlendFactor == VK_BLEND_FACTOR_CONSTANT_ALPHA ||
                 equation.srcColorBlendFactor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA) {
                 skip |= LogError("VUID-VkColorBlendEquationEXT-constantAlphaColorBlendFactors-07362", commandBuffer,
@@ -2818,7 +2823,7 @@ bool CoreChecks::PreCallValidateCreateEvent(VkDevice device, const VkEventCreate
                                             const ErrorObject& error_obj) const {
     bool skip = false;
     skip |= ValidateDeviceQueueSupport(error_obj.location);
-    if (IsExtEnabled(device_extensions.vk_khr_portability_subset)) {
+    if (IsExtEnabled(extensions.vk_khr_portability_subset)) {
         if (VK_FALSE == enabled_features.events) {
             skip |= LogError("VUID-vkCreateEvent-events-04468", device, error_obj.location,
                              "events are not supported via VK_KHR_portability_subset");

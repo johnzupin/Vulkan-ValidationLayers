@@ -760,7 +760,7 @@ TEST_F(PositiveWsi, SwapchainPresentShared) {
     swapchain_create_info.minImageCount = 1;
     swapchain_create_info.imageFormat = m_surface_formats[0].format;
     swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = m_surface_capabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;  // implementations must support
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -831,7 +831,7 @@ TEST_F(PositiveWsi, CreateSwapchainFullscreenExclusive) {
     swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
     swapchain_create_info.imageFormat = m_surface_formats[0].format;
     swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = m_surface_capabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -876,7 +876,7 @@ TEST_F(PositiveWsi, CreateSwapchainFullscreenExclusive2) {
     swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
     swapchain_create_info.imageFormat = m_surface_formats[0].format;
     swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = m_surface_capabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -992,7 +992,7 @@ TEST_F(PositiveWsi, SwapchainExclusiveModeQueueFamilyPropertiesReferences) {
     swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
     swapchain_create_info.imageFormat = m_surface_formats[0].format;
     swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = m_surface_capabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = imageUsage;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1106,7 +1106,7 @@ TEST_F(PositiveWsi, ProtectedSwapchainImageColorAttachment) {
     swapchain_create_info.minImageCount = m_surface_capabilities.minImageCount;
     swapchain_create_info.imageFormat = m_surface_formats[0].format;
     swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = m_surface_capabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = imageUsage;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1191,8 +1191,11 @@ TEST_F(PositiveWsi, ProtectedSwapchainImageColorAttachment) {
 TEST_F(PositiveWsi, CreateSwapchainWithPresentModeInfo) {
     TEST_DESCRIPTION("Try destroying a swapchain which has multiple images");
 
+    SetTargetApiVersion(VK_API_VERSION_1_1);
     AddSurfaceExtension();
+    AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
     RETURN_IF_SKIP(InitSurface());
     InitSwapchainInfo();
@@ -1218,8 +1221,7 @@ TEST_F(PositiveWsi, CreateSwapchainWithPresentModeInfo) {
     swapchain_create_info.minImageCount = surface_caps.surfaceCapabilities.minImageCount;
     swapchain_create_info.imageFormat = m_surface_formats[0].format;
     swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {surface_caps.surfaceCapabilities.minImageExtent.width,
-                                         surface_caps.surfaceCapabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = surface_caps.surfaceCapabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;  // implementations must support
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1316,8 +1318,7 @@ TEST_F(PositiveWsi, AcquireImageBeforeGettingSwapchainImages) {
     swapchain_create_info.minImageCount = info.surface_capabilities.minImageCount;
     swapchain_create_info.imageFormat = info.surface_formats[0].format;
     swapchain_create_info.imageColorSpace = info.surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {info.surface_capabilities.minImageExtent.width,
-                                         info.surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = info.surface_capabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1348,9 +1349,11 @@ TEST_F(PositiveWsi, AcquireImageBeforeGettingSwapchainImages) {
 // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7025
 TEST_F(PositiveWsi, PresentFenceWaitsForSubmission) {
     TEST_DESCRIPTION("Use present fence to wait for submission");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
     RETURN_IF_SKIP(InitSwapchain());
 
@@ -1421,9 +1424,11 @@ TEST_F(PositiveWsi, PresentFenceRetiresPresentQueueOperation) {
     // to conceptually simple model of queues that process submissions one at a time
     // but with more complex synchronization and non-deterministic behavior.
     TEST_DESCRIPTION("Check that the wait on the present fence retires present queue operation");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
     RETURN_IF_SKIP(InitSwapchain());
 
@@ -1479,6 +1484,7 @@ TEST_F(PositiveWsi, QueueWaitsForPresentFence) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
     RETURN_IF_SKIP(InitSwapchain());
 
@@ -1514,6 +1520,7 @@ TEST_F(PositiveWsi, QueueWaitsForPresentFence2) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
     RETURN_IF_SKIP(InitSwapchain());
 
@@ -1564,6 +1571,7 @@ TEST_F(PositiveWsi, PresentFenceRetiresPresentSemaphores) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
     RETURN_IF_SKIP(InitSwapchain());
 
@@ -1644,6 +1652,7 @@ TEST_F(PositiveWsi, DifferentPerPresentModeImageCount) {
     AddRequiredExtensions(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
 
     WaylandContext wayland_ctx;
@@ -1687,8 +1696,7 @@ TEST_F(PositiveWsi, DifferentPerPresentModeImageCount) {
     swapchain_create_info.minImageCount = surface_caps.surfaceCapabilities.minImageCount;
     swapchain_create_info.imageFormat = info.surface_formats[0].format;
     swapchain_create_info.imageColorSpace = info.surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {surface_caps.surfaceCapabilities.minImageExtent.width,
-                                         surface_caps.surfaceCapabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = surface_caps.surfaceCapabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1711,6 +1719,7 @@ TEST_F(PositiveWsi, ReleaseSwapchainImages) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
 
     RETURN_IF_SKIP(InitSurface());
@@ -1734,8 +1743,7 @@ TEST_F(PositiveWsi, ReleaseSwapchainImages) {
     swapchain_create_info.minImageCount = info.surface_capabilities.maxImageCount;
     swapchain_create_info.imageFormat = info.surface_formats[0].format;
     swapchain_create_info.imageColorSpace = info.surface_formats[0].colorSpace;
-    swapchain_create_info.imageExtent = {info.surface_capabilities.minImageExtent.width,
-                                         info.surface_capabilities.minImageExtent.height};
+    swapchain_create_info.imageExtent = info.surface_capabilities.minImageExtent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1791,6 +1799,7 @@ TEST_F(PositiveWsi, ReleaseAndAcquireSwapchainImages) {
     AddSurfaceExtension();
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     RETURN_IF_SKIP(Init());
 
     RETURN_IF_SKIP(InitSwapchain());
@@ -1927,6 +1936,7 @@ TEST_F(PositiveWsi, MixKHRAndKHR2SurfaceCapsQueries) {
 
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     AddSurfaceExtension();
     RETURN_IF_SKIP(SupportSurfaceResize());
     RETURN_IF_SKIP(Init());
@@ -1970,6 +1980,7 @@ TEST_F(PositiveWsi, MixKHRAndKHR2SurfaceCapsQueries2) {
 
     AddRequiredExtensions(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     AddRequiredExtensions(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::swapchainMaintenance1);
     AddSurfaceExtension();
     RETURN_IF_SKIP(SupportSurfaceResize());
     RETURN_IF_SKIP(Init());

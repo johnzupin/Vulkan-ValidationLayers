@@ -1,7 +1,7 @@
 # ~~~
-# Copyright (c) 2014-2024 Valve Corporation
-# Copyright (c) 2014-2024 LunarG, Inc.
-# Copyright (c) 2023-2024 RasterGrid Kft.
+# Copyright (c) 2014-2025 Valve Corporation
+# Copyright (c) 2014-2025 LunarG, Inc.
+# Copyright (c) 2023-2025 RasterGrid Kft.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,6 +61,8 @@ target_sources(VkLayer_utils PRIVATE
     utils/vk_layer_extension_utils.h
     utils/ray_tracing_utils.cpp
     utils/ray_tracing_utils.h
+    utils/text_utils.cpp
+    utils/text_utils.h
     utils/vk_layer_utils.cpp
     utils/vk_layer_utils.h
     utils/vk_struct_compare.cpp
@@ -113,7 +115,7 @@ elseif(MSVC)
     )
 endif()
 
-add_subdirectory(gpu/spirv)
+add_subdirectory(gpuav/spirv)
 
 if(IOS)
     add_library(vvl SHARED)
@@ -145,7 +147,8 @@ target_sources(vvl PRIVATE
     chassis/chassis_manual.cpp
     chassis/dispatch_object_manual.cpp
     containers/qfo_transfer.h
-    containers/range_vector.h
+    containers/range.h
+    containers/range_map.h
     containers/subresource_adapter.cpp
     containers/subresource_adapter.h
     core_checks/cc_android.cpp
@@ -192,7 +195,8 @@ target_sources(vvl PRIVATE
     external/vma/vma.h
     external/vma/vma.cpp
     ${API_TYPE}/generated/best_practices.cpp
-    ${API_TYPE}/generated/best_practices.h
+    ${API_TYPE}/generated/best_practices_device_methods.h
+    ${API_TYPE}/generated/best_practices_instance_methods.h
     ${API_TYPE}/generated/chassis.cpp
     ${API_TYPE}/generated/valid_enum_values.cpp
     ${API_TYPE}/generated/valid_enum_values.h
@@ -205,74 +209,74 @@ target_sources(vvl PRIVATE
     ${API_TYPE}/generated/enum_flag_bits.h
     ${API_TYPE}/generated/dispatch_vector.cpp
     ${API_TYPE}/generated/dispatch_object.cpp
+    ${API_TYPE}/generated/validation_object_device_methods.h
+    ${API_TYPE}/generated/validation_object_instance_methods.h
     ${API_TYPE}/generated/validation_object.cpp
     ${API_TYPE}/generated/object_tracker.cpp
-    ${API_TYPE}/generated/object_tracker.h
+    ${API_TYPE}/generated/object_tracker_device_methods.h
+    ${API_TYPE}/generated/object_tracker_instance_methods.h
     ${API_TYPE}/generated/spirv_grammar_helper.cpp
     ${API_TYPE}/generated/spirv_validation_helper.cpp
+    ${API_TYPE}/generated/spirv_validation_helper.h
+    ${API_TYPE}/generated/stateless_device_methods.h
+    ${API_TYPE}/generated/stateless_instance_methods.h
     ${API_TYPE}/generated/stateless_validation_helper.cpp
-    ${API_TYPE}/generated/stateless_validation_helper.h
     ${API_TYPE}/generated/sync_validation_types.cpp
     ${API_TYPE}/generated/thread_safety.cpp
-    ${API_TYPE}/generated/thread_safety_commands.h
-    ${API_TYPE}/generated/thread_safety_counter_bodies.h
-    ${API_TYPE}/generated/thread_safety_counter_definitions.h
-    ${API_TYPE}/generated/thread_safety_counter_instances.h
-    ${API_TYPE}/generated/cmd_validation_copy_buffer_to_image_comp.h
-    ${API_TYPE}/generated/cmd_validation_copy_buffer_to_image_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_dispatch_comp.h
-    ${API_TYPE}/generated/cmd_validation_dispatch_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_count_buffer_comp.h
-    ${API_TYPE}/generated/cmd_validation_count_buffer_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_first_instance_comp.h
-    ${API_TYPE}/generated/cmd_validation_first_instance_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_draw_indexed_comp.h
-    ${API_TYPE}/generated/cmd_validation_draw_indexed_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_draw_indexed_indirect_index_buffer_comp.h
-    ${API_TYPE}/generated/cmd_validation_draw_indexed_indirect_index_buffer_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_draw_indexed_indirect_vertex_buffer_comp.h
-    ${API_TYPE}/generated/cmd_validation_draw_indexed_indirect_vertex_buffer_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_draw_mesh_indirect_comp.h
-    ${API_TYPE}/generated/cmd_validation_draw_mesh_indirect_comp.cpp
-    ${API_TYPE}/generated/cmd_validation_trace_rays_rgen.h
-    ${API_TYPE}/generated/cmd_validation_trace_rays_rgen.cpp
-    gpu/core/gpuav_settings.h
-    gpu/core/gpuav_constants.h
-    gpu/cmd_validation/gpuav_cmd_validation_common.h
-    gpu/cmd_validation/gpuav_cmd_validation_common.cpp
-    gpu/cmd_validation/gpuav_draw.h
-    gpu/cmd_validation/gpuav_draw.cpp
-    gpu/cmd_validation/gpuav_dispatch.h
-    gpu/cmd_validation/gpuav_dispatch.cpp
-    gpu/cmd_validation/gpuav_trace_rays.h
-    gpu/cmd_validation/gpuav_trace_rays.cpp
-    gpu/cmd_validation/gpuav_copy_buffer_to_image.h
-    gpu/cmd_validation/gpuav_copy_buffer_to_image.cpp
-    gpu/descriptor_validation/gpuav_descriptor_validation.h
-    gpu/descriptor_validation/gpuav_descriptor_validation.cpp
-    gpu/descriptor_validation/gpuav_descriptor_set.cpp
-    gpu/descriptor_validation/gpuav_descriptor_set.h
-    gpu/descriptor_validation/gpuav_image_layout.h
-    gpu/descriptor_validation/gpuav_image_layout.cpp
-    gpu/core/gpuav.h
-    gpu/core/gpuav_record.cpp
-    gpu/core/gpuav_setup.cpp
-    gpu/debug_printf/debug_printf.cpp
-    gpu/debug_printf/debug_printf.h
-    gpu/error_message/gpuav_vuids.cpp
-    gpu/error_message/gpuav_vuids.h
-    gpu/instrumentation/gpuav_shader_instrumentor.cpp
-    gpu/instrumentation/gpuav_shader_instrumentor.h
-    gpu/instrumentation/gpuav_instrumentation.h
-    gpu/instrumentation/gpuav_instrumentation.cpp
-    gpu/resources/gpuav_state_trackers.cpp
-    gpu/resources/gpuav_state_trackers.h
-    gpu/resources/gpuav_shader_resources.h
-    gpu/resources/gpuav_vulkan_objects.h
-    gpu/resources/gpuav_vulkan_objects.cpp
-    gpu/shaders/gpuav_error_codes.h
-    gpu/shaders/gpuav_error_header.h
-    gpu/shaders/gpuav_shaders_constants.h
+    ${API_TYPE}/generated/thread_safety_device_defs.h
+    ${API_TYPE}/generated/thread_safety_instance_defs.h
+    ${API_TYPE}/generated/validation_cmd_copy_buffer_to_image_comp.h
+    ${API_TYPE}/generated/validation_cmd_copy_buffer_to_image_comp.cpp
+    ${API_TYPE}/generated/validation_cmd_dispatch_comp.h
+    ${API_TYPE}/generated/validation_cmd_dispatch_comp.cpp
+    ${API_TYPE}/generated/validation_cmd_count_buffer_comp.h
+    ${API_TYPE}/generated/validation_cmd_count_buffer_comp.cpp
+    ${API_TYPE}/generated/validation_cmd_first_instance_comp.h
+    ${API_TYPE}/generated/validation_cmd_first_instance_comp.cpp
+    ${API_TYPE}/generated/validation_cmd_draw_indexed_indirect_index_buffer_comp.h
+    ${API_TYPE}/generated/validation_cmd_draw_indexed_indirect_index_buffer_comp.cpp
+    ${API_TYPE}/generated/validation_cmd_draw_mesh_indirect_comp.h
+    ${API_TYPE}/generated/validation_cmd_draw_mesh_indirect_comp.cpp
+    ${API_TYPE}/generated/validation_cmd_trace_rays_rgen.h
+    ${API_TYPE}/generated/validation_cmd_trace_rays_rgen.cpp
+    gpuav/core/gpuav_settings.h
+    gpuav/core/gpuav_constants.h
+    gpuav/validation_cmd/gpuav_validation_cmd_common.h
+    gpuav/validation_cmd/gpuav_validation_cmd_common.cpp
+    gpuav/validation_cmd/gpuav_draw.h
+    gpuav/validation_cmd/gpuav_draw.cpp
+    gpuav/validation_cmd/gpuav_dispatch.h
+    gpuav/validation_cmd/gpuav_dispatch.cpp
+    gpuav/validation_cmd/gpuav_trace_rays.h
+    gpuav/validation_cmd/gpuav_trace_rays.cpp
+    gpuav/validation_cmd/gpuav_copy_buffer_to_image.h
+    gpuav/validation_cmd/gpuav_copy_buffer_to_image.cpp
+    gpuav/descriptor_validation/gpuav_descriptor_validation.h
+    gpuav/descriptor_validation/gpuav_descriptor_validation.cpp
+    gpuav/descriptor_validation/gpuav_descriptor_set.cpp
+    gpuav/descriptor_validation/gpuav_descriptor_set.h
+    gpuav/descriptor_validation/gpuav_image_layout.h
+    gpuav/descriptor_validation/gpuav_image_layout.cpp
+    gpuav/core/gpuav.h
+    gpuav/core/gpuav_record.cpp
+    gpuav/core/gpuav_setup.cpp
+    gpuav/core/gpuav_features.cpp
+    gpuav/debug_printf/debug_printf.cpp
+    gpuav/debug_printf/debug_printf.h
+    gpuav/error_message/gpuav_vuids.cpp
+    gpuav/error_message/gpuav_vuids.h
+    gpuav/instrumentation/gpuav_shader_instrumentor.cpp
+    gpuav/instrumentation/gpuav_shader_instrumentor.h
+    gpuav/instrumentation/gpuav_instrumentation.h
+    gpuav/instrumentation/gpuav_instrumentation.cpp
+    gpuav/resources/gpuav_state_trackers.cpp
+    gpuav/resources/gpuav_state_trackers.h
+    gpuav/resources/gpuav_shader_resources.h
+    gpuav/resources/gpuav_vulkan_objects.h
+    gpuav/resources/gpuav_vulkan_objects.cpp
+    gpuav/shaders/gpuav_error_codes.h
+    gpuav/shaders/gpuav_error_header.h
+    gpuav/shaders/gpuav_shaders_constants.h
     object_tracker/object_lifetime_validation.h
     object_tracker/object_tracker_utils.cpp
     state_tracker/buffer_state.cpp
@@ -403,10 +407,10 @@ elseif(APPLE)
 # IOS and APPLE can both be true (FYI)
 if(IOS)
     set_target_properties(vvl PROPERTIES
-		FRAMEWORK			TRUE
-                MACOSX_FRAMEWORK_BUNDLE_VERSION "${VulkanHeaders_VERSION}"
-                MACOSX_FRAMEWORK_SHORT_VERSION_STRING "${VulkanHeaders_VERSION}"
-		MACOSX_FRAMEWORK_IDENTIFIER 	com.khronos.validation
+        FRAMEWORK TRUE
+        MACOSX_FRAMEWORK_BUNDLE_VERSION "${VulkanHeaders_VERSION}"
+        MACOSX_FRAMEWORK_SHORT_VERSION_STRING "${VulkanHeaders_VERSION}"
+        MACOSX_FRAMEWORK_IDENTIFIER com.khronos.validation
     )
 else()
     set_target_properties(vvl PROPERTIES SUFFIX ".dylib")
@@ -451,8 +455,8 @@ if (VVL_ENABLE_TRACY)
     include(FetchContent)
     FetchContent_Declare(
         tracy
-        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-        GIT_TAG v0.11.0
+        GIT_REPOSITORY https://github.com/arno-lunarg/tracy.git
+        GIT_TAG v0.11.1-arno
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 
@@ -468,13 +472,6 @@ endif()
 target_include_directories(vvl SYSTEM PRIVATE external)
 
 if (ANDROID)
-    # https://gitlab.kitware.com/cmake/cmake/issues/18787
-    # https://github.com/android-ndk/ndk/issues/463
-    # "Users should be able to reliably use the toolchain provided by the NDK r23 or later when using CMake 3.21 or later" - Professional CMake
-    if (CMAKE_VERSION VERSION_LESS "3.21")
-        message(FATAL_ERROR "Android build requires at least CMake 3.21!")
-    endif()
-
     # Required for __android_log_print. Marking as PUBLIC since the tests use __android_log_print as well.
     target_link_libraries(VkLayer_utils PUBLIC log)
 
