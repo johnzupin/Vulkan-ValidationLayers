@@ -1440,35 +1440,36 @@ TEST_F(NegativeSyncVal, RenderPassBeginTransitionHazard) {
 
 TEST_F(NegativeSyncVal, AttachmentLoadHazard) {
     TEST_DESCRIPTION("Copying to attachment creates hazard with attachment load operation");
-    RETURN_IF_SKIP(InitSyncValFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(InitSyncVal());
 
-    vkt::Image dst_image(*m_device, m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM,
-                         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    auto dst_image_view = dst_image.CreateView();
+    const uint32_t w = 64;
+    const uint32_t h = 64;
+    const VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+
+    vkt::Image src_image(*m_device, w, h, 1, format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    src_image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+
+    vkt::Image attachment_image(*m_device, w, h, 1, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    // Transition layout manually, so the render pass will start with LOAD_OP operation instead of layout transition.
+    attachment_image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+
+    vkt::ImageView attachment_view = attachment_image.CreateView();
 
     RenderPassSingleSubpass rp(*this);
     rp.AddAttachmentDescription(VK_FORMAT_R8G8B8A8_UNORM);
     rp.AddAttachmentReference({0, VK_IMAGE_LAYOUT_GENERAL});
     rp.AddColorAttachment(0);
     rp.CreateRenderPass();
-    vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &dst_image_view.handle());
-
-    // Transition layout manually, so the render pass will start with LOAD_OP operation instead of layout transition.
-    dst_image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
-
-    vkt::Image src_image(*m_device, m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    src_image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Framebuffer fb(*m_device, rp.Handle(), 1, &attachment_view.handle());
 
     VkImageCopy region = {};
     region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    region.extent = {m_width, m_height, 1};
+    region.extent = {w, h, 1};
 
     m_command_buffer.Begin();
-    // Initiate copy write
-    vk::CmdCopyImage(m_command_buffer, src_image.handle(), VK_IMAGE_LAYOUT_GENERAL, dst_image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1,
-                     &region);
+    // Write to attachment
+    vk::CmdCopyImage(m_command_buffer, src_image, VK_IMAGE_LAYOUT_GENERAL, attachment_image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
 
     // Execution barrier to ensure that copy and loadOp operations do not overlap.
     // This does not synchronize memory accesses though and WAW hazard remains.
@@ -1477,8 +1478,9 @@ TEST_F(NegativeSyncVal, AttachmentLoadHazard) {
 
     // Attachment load operation collides with copy
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-WRITE");
-    m_command_buffer.BeginRenderPass(rp.Handle(), fb.handle());
+    m_command_buffer.BeginRenderPass(rp.Handle(), fb);
     m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
 }
 
 TEST_F(NegativeSyncVal, AttachmentStoreHazard) {
@@ -4022,90 +4024,38 @@ TEST_F(NegativeSyncVal, DestroyedUnusedDescriptors) {
     m_command_buffer.End();
 }
 
-TEST_F(NegativeSyncVal, TestInvalidExternalSubpassDependency) {
-    TEST_DESCRIPTION("Test write after write hazard with invalid external subpass dependency");
+TEST_F(NegativeSyncVal, StoreOpAndLayoutTransitionHazard) {
+    TEST_DESCRIPTION("External subpass dependency causes hazard between storeOp and automatic layout transition");
+    RETURN_IF_SKIP(InitSyncVal());
 
-    RETURN_IF_SKIP(InitSyncValFramework());
-    RETURN_IF_SKIP(InitState());
-
-    VkSubpassDependency subpass_dependency = {};
+    VkSubpassDependency subpass_dependency{};
     subpass_dependency.srcSubpass = 0;
     subpass_dependency.dstSubpass = VK_SUBPASS_EXTERNAL;
     subpass_dependency.srcStageMask = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
     subpass_dependency.dstStageMask = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+    // In order to barrier storeOp access from subsequent automatic layout transition,
+    // srcAccessMask should be VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
     subpass_dependency.srcAccessMask = 0;
     subpass_dependency.dstAccessMask = 0;
     subpass_dependency.dependencyFlags = 0;
 
-    VkAttachmentReference attach_ref1 = {};
-    attach_ref1.attachment = 0;
-    attach_ref1.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    VkAttachmentReference attach_ref2 = {};
-    attach_ref2.attachment = 0;
-    attach_ref2.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    RenderPassSingleSubpass rp(*this);
+    rp.AddAttachmentDescription(VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+                                VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE);
+    rp.AddAttachmentReference({0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL});
+    rp.AddDepthStencilAttachment(0);
+    rp.AddSubpassDependency(subpass_dependency);
+    rp.CreateRenderPass();
 
-    VkSubpassDescription subpass_descriptions[2] = {};
-    subpass_descriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass_descriptions[0].pDepthStencilAttachment = &attach_ref1;
-    subpass_descriptions[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass_descriptions[1].pDepthStencilAttachment = &attach_ref2;
-
-    VkAttachmentDescription attachment_description = {};
-    attachment_description.format = VK_FORMAT_D32_SFLOAT;
-    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
-    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment_description.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    attachment_description.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkRenderPassCreateInfo rp_ci = vku::InitStructHelper();
-    rp_ci.subpassCount = 1;
-    rp_ci.pSubpasses = subpass_descriptions;
-    rp_ci.attachmentCount = 1;
-    rp_ci.pAttachments = &attachment_description;
-    rp_ci.dependencyCount = 1;
-    rp_ci.pDependencies = &subpass_dependency;
-
-    vkt::RenderPass render_pass(*m_device, rp_ci);
-
-    VkClearValue clear_value = {};
-    clear_value.color = {{0, 0, 0, 0}};
-
-    VkImageCreateInfo image_ci = vku::InitStructHelper();
-    image_ci.imageType = VK_IMAGE_TYPE_2D;
-    image_ci.format = VK_FORMAT_D32_SFLOAT;
-    image_ci.extent = {32, 32, 1};
-    image_ci.mipLevels = 1;
-    image_ci.arrayLayers = 1;
-    image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
-    image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    vkt::Image image1(*m_device, image_ci, vkt::set_layout);
-    vkt::ImageView image_view1 = image1.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
-    VkImageView framebuffer_attachments[1] = {image_view1.handle()};
-
-    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1, framebuffer_attachments);
-
-    VkPipelineDepthStencilStateCreateInfo ds_ci = vku::InitStructHelper();
-    ds_ci.depthTestEnable = VK_FALSE;
-    ds_ci.depthWriteEnable = VK_FALSE;
-    ds_ci.depthCompareOp = VK_COMPARE_OP_NEVER;
-
-    CreatePipelineHelper pipe(*this);
-    pipe.gp_ci_.renderPass = render_pass.handle();
-    pipe.gp_ci_.pDepthStencilState = &ds_ci;
-    pipe.CreateGraphicsPipeline();
-
-    m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-WRITE");
+    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    vkt::ImageView image_view = image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT);
+    vkt::Framebuffer framebuffer(*m_device, rp.Handle(), 1, &image_view.handle());
 
     m_command_buffer.Begin();
-    m_command_buffer.BeginRenderPass(render_pass.handle(), framebuffer.handle(), 32, 32, 1, &clear_value);
-    vk::CmdBindPipeline(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
+    m_command_buffer.BeginRenderPass(rp.Handle(), framebuffer, 32, 32);
+    m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-AFTER-WRITE");
     m_command_buffer.EndRenderPass();
-
     m_errorMonitor->VerifyFound();
 }
 
@@ -4917,9 +4867,9 @@ TEST_F(NegativeSyncVal, AvailabilityWithoutVisibilityForBuffer) {
 }
 
 TEST_F(NegativeSyncVal, ImageCopyHazardsLayoutTransition) {
-    TEST_DESCRIPTION("Copy to image and then start image layout transition without waiting for copy to end.");
-    RETURN_IF_SKIP(InitSyncValFramework());
-    RETURN_IF_SKIP(InitState());
+    TEST_DESCRIPTION("Copy to image and then start image layout transition without making copy accesses visible");
+    RETURN_IF_SKIP(InitSyncVal());
+
     vkt::Buffer buffer(*m_device, 64 * 64 * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
     const VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -5263,11 +5213,9 @@ TEST_F(NegativeSyncVal, UpdateBufferWrongBarrier) {
 
 TEST_F(NegativeSyncVal, QSWriteRacingWrite) {
     TEST_DESCRIPTION("Write to the same image from different queues");
-
     SetTargetApiVersion(VK_API_VERSION_1_3);
     AddRequiredFeature(vkt::Feature::synchronization2);
-    RETURN_IF_SKIP(InitSyncValFramework());
-    RETURN_IF_SKIP(InitState());
+    RETURN_IF_SKIP(InitSyncVal());
 
     vkt::Queue* transfer_queue = m_device->TransferOnlyQueue();
     if (!transfer_queue) {
@@ -5281,9 +5229,6 @@ TEST_F(NegativeSyncVal, QSWriteRacingWrite) {
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     region.imageExtent = {64, 64, 1};
 
-    // Submit from Graphics queue: perform image layout transition (WRITE access).
-    vkt::CommandBuffer cb0(*m_device, m_command_pool);
-    cb0.Begin();
     VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
     image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
     image_barrier.srcAccessMask = VK_ACCESS_2_NONE;
@@ -5293,23 +5238,25 @@ TEST_F(NegativeSyncVal, QSWriteRacingWrite) {
     image_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     image_barrier.image = image;
     image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
     VkDependencyInfo dep_info = vku::InitStructHelper();
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &image_barrier;
-    vk::CmdPipelineBarrier2(cb0, &dep_info);
-    cb0.End();
 
-    m_default_queue->Submit2(cb0);
+    // Submit from Graphics queue: perform image layout transition (WRITE access).
+    m_command_buffer.Begin();
+    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.End();
+    m_default_queue->Submit2(m_command_buffer);
 
     // Submit from Transfer queue: write image data (racing WRITE access)
     vkt::CommandPool transfer_pool(*m_device, transfer_queue->family_index);
-    vkt::CommandBuffer cb1(*m_device, transfer_pool);
-    cb1.Begin();
-    vk::CmdCopyBufferToImage(cb1, buffer, image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
-    cb1.End();
-
+    vkt::CommandBuffer transfer_cb(*m_device, transfer_pool);
+    transfer_cb.Begin();
+    vk::CmdCopyBufferToImage(transfer_cb, buffer, image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+    transfer_cb.End();
     m_errorMonitor->SetDesiredError("SYNC-HAZARD-WRITE-RACING-WRITE");
-    transfer_queue->Submit2(cb1);
+    transfer_queue->Submit2(transfer_cb);
     m_errorMonitor->VerifyFound();
 
     m_default_queue->Wait();
@@ -5532,7 +5479,7 @@ TEST_F(NegativeSyncVal, RenderPassStoreOpNone) {
     m_command_buffer.EndRenderPass();
 
     // SYNC-HAZARD-WRITE-AFTER-READ hazard: transition should synchronize with draw command
-    m_errorMonitor->SetDesiredError("SYNC_FRAGMENT_SHADER_INPUT_ATTACHMENT_READ");
+    m_errorMonitor->SetDesiredError("(VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT) at VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT");
     vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
     m_errorMonitor->VerifyFound();
     m_command_buffer.End();

@@ -46,6 +46,8 @@ struct AdditionalMessageInfo {
     // For example, "clears" for a clear operation might be more specific than a write
     std::string access_action;
 
+    std::string hazard_overview;
+    std::string brief_description_end_text;
     std::string pre_synchronization_text;
     std::string message_end_text;
 };
@@ -54,20 +56,21 @@ class ErrorMessages {
   public:
     explicit ErrorMessages(vvl::Device& validator);
 
-    std::string Error(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
-                      const std::string& resouce_description, const AdditionalMessageInfo& additional_info = {}) const;
+    std::string Error(const HazardResult& hazard, const CommandExecutionContext& context, vvl::Func command,
+                      const std::string& resouce_description, const char* message_type,
+                      const AdditionalMessageInfo& additional_info = {}) const;
 
     std::string BufferError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
                             const std::string& resource_description, const ResourceAccessRange range,
                             AdditionalMessageInfo additional_info = {}) const;
 
-    std::string BufferRegionError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, const vvl::Func command,
-                                  const std::string& resouce_description, uint32_t region_index,
-                                  ResourceAccessRange region_range) const;
+    std::string BufferCopyError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, const vvl::Func command,
+                                const std::string& resouce_description, uint32_t region_index, ResourceAccessRange range) const;
 
-    std::string ImageRegionError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
-                                 const std::string& resource_description, uint32_t region_index, const VkOffset3D& offset,
-                                 const VkExtent3D& extent, const VkImageSubresourceLayers& subresource) const;
+    std::string ImageCopyResolveBlitError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
+                                          vvl::Func command, const std::string& resource_description, uint32_t region_index,
+                                          const VkOffset3D& offset, const VkExtent3D& extent,
+                                          const VkImageSubresourceLayers& subresource) const;
 
     std::string ImageSubresourceRangeError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
                                            vvl::Func command, const std::string& resource_description,
@@ -90,73 +93,56 @@ class ErrorMessages {
                                      const std::string& resource_description, VkImageAspectFlagBits aspect,
                                      uint32_t clear_rect_index, const VkClearRect& clear_rect) const;
 
-    std::string BeginRenderingError(const HazardResult& hazard, const syncval_state::DynamicRenderingInfo::Attachment& attachment,
-                                    const CommandBufferAccessContext& cb_context, vvl::Func command) const;
+    std::string RenderPassAttachmentError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
+                                          vvl::Func command, const std::string& resource_description) const;
 
-    std::string EndRenderingResolveError(const HazardResult& hazard, const VulkanTypedHandle& image_view_handle,
-                                         VkResolveModeFlagBits resolve_mode, const CommandBufferAccessContext& cb_context,
-                                         vvl::Func command) const;
+    std::string BeginRenderingError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
+                                    const std::string& resource_description, VkAttachmentLoadOp load_op) const;
+    std::string EndRenderingResolveError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
+                                         vvl::Func command, const std::string& resource_description,
+                                         VkResolveModeFlagBits resolve_mode, bool resolve_write) const;
+    std::string EndRenderingStoreError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
+                                       const std::string& resource_description, VkAttachmentStoreOp store_op) const;
 
-    std::string EndRenderingStoreError(const HazardResult& hazard, const VulkanTypedHandle& image_view_handle,
-                                       VkAttachmentStoreOp store_op, const CommandBufferAccessContext& cb_context,
-                                       vvl::Func command) const;
+    std::string RenderPassLoadOpError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
+                                      const std::string& resource_description, uint32_t subpass, uint32_t attachment,
+                                      VkAttachmentLoadOp load_op, bool is_color) const;
+    std::string RenderPassLoadOpVsLayoutTransitionError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
+                                                        vvl::Func command, const std::string& resource_description,
+                                                        VkAttachmentLoadOp load_op, bool is_color) const;
+    std::string RenderPassResolveError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
+                                       const std::string& resource_description) const;
+    std::string RenderPassStoreOpError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
+                                       const std::string& resource_description, VkAttachmentStoreOp store_op) const;
 
-    std::string PipelineBarrierError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
-                                     uint32_t image_barrier_index, const vvl::Image& image, vvl::Func command) const;
-
-    std::string WaitEventsError(const HazardResult& hazard, const CommandExecutionContext& exec_context,
-                                uint32_t image_barrier_index, const vvl::Image& image, vvl::Func command) const;
-
-    std::string FirstUseError(const HazardResult& hazard, const CommandExecutionContext& exec_context,
-                              const CommandBufferAccessContext& recorded_context, uint32_t command_buffer_index,
-                              VkCommandBuffer recorded_handle, vvl::Func command) const;
-
-    std::string RenderPassResolveError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, uint32_t subpass,
-                                       const char* aspect_name, const char* attachment_name, uint32_t src_attachment,
-                                       uint32_t dst_attachment, vvl::Func command) const;
-
-    std::string RenderPassLayoutTransitionVsStoreOrResolveError(const HazardResult& hazard, uint32_t subpass, uint32_t attachment,
-                                                                VkImageLayout old_layout, VkImageLayout new_layout,
-                                                                uint32_t store_resolve_subpass, vvl::Func command) const;
 
     std::string RenderPassLayoutTransitionError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
-                                                uint32_t subpass, uint32_t attachment, VkImageLayout old_layout,
-                                                VkImageLayout new_layout, vvl::Func command) const;
-
-    std::string RenderPassLoadOpVsLayoutTransitionError(const HazardResult& hazard, uint32_t subpass, uint32_t attachment,
-                                                        const char* aspect_name, VkAttachmentLoadOp load_op,
-                                                        vvl::Func command) const;
-
-    std::string RenderPassLoadOpError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, uint32_t subpass,
-                                      uint32_t attachment, const char* aspect_name, VkAttachmentLoadOp load_op,
-                                      vvl::Func command) const;
-
-    std::string RenderPassStoreOpError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, uint32_t subpass,
-                                       uint32_t attachment, const char* aspect_name, const char* store_op_type_name,
-                                       VkAttachmentStoreOp store_op, vvl::Func command) const;
-
-    std::string RenderPassColorAttachmentError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
-                                               const vvl::ImageView& view, uint32_t attachment, vvl::Func command) const;
-
-    std::string RenderPassDepthStencilAttachmentError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
-                                                      const vvl::ImageView& view, bool is_depth, vvl::Func command) const;
-
-    std::string RenderPassFinalLayoutTransitionVsStoreOrResolveError(const HazardResult& hazard,
-                                                                     const CommandBufferAccessContext& cb_context, uint32_t subpass,
-                                                                     uint32_t attachment, VkImageLayout old_layout,
-                                                                     VkImageLayout new_layout, vvl::Func command) const;
-
+                                                vvl::Func command, const std::string& resource_description,
+                                                VkImageLayout old_layout, VkImageLayout new_layout) const;
+    std::string RenderPassLayoutTransitionVsStoreOrResolveError(const HazardResult& hazard,
+                                                                const CommandBufferAccessContext& cb_context, vvl::Func command,
+                                                                const std::string& resource_description, VkImageLayout old_layout,
+                                                                VkImageLayout new_layout, uint32_t store_resolve_subpass) const;
     std::string RenderPassFinalLayoutTransitionError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context,
-                                                     uint32_t subpass, uint32_t attachment, VkImageLayout old_layout,
-                                                     VkImageLayout new_layout, vvl::Func command) const;
+                                                     vvl::Func command, const std::string& resource_description,
+                                                     VkImageLayout old_layout, VkImageLayout new_layout) const;
+    std::string RenderPassFinalLayoutTransitionVsStoreOrResolveError(const HazardResult& hazard,
+                                                                     const CommandBufferAccessContext& cb_context,
+                                                                     vvl::Func command, const std::string& resource_description,
+                                                                     VkImageLayout old_layout, VkImageLayout new_layout,
+                                                                     uint32_t store_resolve_subpass) const;
 
-    std::string PresentError(const HazardResult& hazard, const QueueBatchContext& batch_context, uint32_t present_index,
-                             const VulkanTypedHandle& swapchain_handle, uint32_t image_index, const VulkanTypedHandle& image_handle,
-                             vvl::Func command) const;
+    std::string ImageBarrierError(const HazardResult& hazard, const CommandExecutionContext& context, vvl::Func command,
+                                  const std::string& resource_description, const SyncImageMemoryBarrier& barrier) const;
 
-  private:
-    void AddCbContextExtraProperties(const CommandBufferAccessContext& cb_context, ResourceUsageTag tag,
-                                     ReportKeyValues& key_values) const;
+    std::string FirstUseError(const HazardResult& hazard, const CommandExecutionContext& exec_context,
+                              const CommandBufferAccessContext& recorded_context, uint32_t command_buffer_index) const;
+
+    std::string PresentError(const HazardResult& hazard, const QueueBatchContext& batch_context, vvl::Func command,
+                             const std::string& resource_description, uint32_t swapchain_index) const;
+
+    std::string VideoError(const HazardResult& hazard, const CommandBufferAccessContext& cb_context, vvl::Func command,
+                           const std::string& resource_description) const;
 
   private:
     vvl::Device& validator_;

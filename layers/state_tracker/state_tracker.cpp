@@ -48,6 +48,21 @@
 namespace vvl {
 Device::~Device() { DestroyObjectMaps(); }
 
+VkDeviceAddress Device::GetBufferDeviceAddressHelper(VkBuffer buffer) const {
+    VkBufferDeviceAddressInfo address_info = vku::InitStructHelper();
+    address_info.buffer = buffer;
+
+    if (api_version >= VK_API_VERSION_1_2) {
+        return DispatchGetBufferDeviceAddress(device, &address_info);
+    } else {
+        if (IsExtEnabled(extensions.vk_khr_buffer_device_address)) {
+            return DispatchGetBufferDeviceAddressKHR(device, &address_info);
+        } else {
+            return 0;
+        }
+    }
+}
+
 // NOTE:  Beware the lifespan of the rp_begin when holding  the return.  If the rp_begin isn't a "safe" copy, "IMAGELESS"
 //        attachments won't persist past the API entry point exit.
 static std::pair<uint32_t, const VkImageView *> GetFramebufferAttachments(const VkRenderPassBeginInfo &rp_begin,
@@ -366,6 +381,21 @@ struct BufferAddressInfillUpdateOps {
 
 std::shared_ptr<Buffer> Device::CreateBufferState(VkBuffer handle, const VkBufferCreateInfo *create_info) {
     return std::make_shared<Buffer>(*this, handle, create_info);
+}
+
+void Device::PreCallRecordCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
+                                       const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer, const RecordObject &record_obj,
+                                       chassis::CreateBuffer &chassis_state) {
+    if (pCreateInfo->usage & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) {
+        // When it comes to validation acceleration memory overlaps, it is much faster to
+        // work on device address ranges directly, but for that to be possible,
+        // buffers used to back acceleration structures must have been created with the
+        // VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT usage flag
+        // => Enforce it.
+        // Doing so will not modify VVL state tracking, and if the application forgot to set
+        // this flag, it will still be detected.
+        chassis_state.modified_create_info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    }
 }
 
 void Device::PostCallRecordCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
@@ -1716,11 +1746,19 @@ bool Device::PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPipelineC
         if (pCreateInfos[i].renderPass != VK_NULL_HANDLE) {
             render_pass = Get<RenderPass>(create_info.renderPass);
         } else if (enabled_features.dynamicRendering) {
-            auto dynamic_rendering = vku::FindStructInPNextChain<VkPipelineRenderingCreateInfo>(create_info.pNext);
-            const bool rasterization_enabled = Pipeline::EnablesRasterizationStates(*this, create_info);
+            auto pipeline_rendering_ci = vku::FindStructInPNextChain<VkPipelineRenderingCreateInfo>(create_info.pNext);
             const bool has_fragment_output_state =
                 Pipeline::ContainsSubState(this, create_info, VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT);
-            render_pass = std::make_shared<RenderPass>(dynamic_rendering, rasterization_enabled && has_fragment_output_state);
+            const bool rasterization_enabled =
+                has_fragment_output_state && Pipeline::EnablesRasterizationStates(*this, create_info);
+            if (pipeline_rendering_ci && pipeline_rendering_ci->pColorAttachmentFormats && !rasterization_enabled) {
+                // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9527
+                // Null here for the user, this a garbage pointer and will blow up VUL.
+                // While it have a safe 'VkPipelineRenderingCreateInfo_default' this time, future copies of the
+                // safe_VkGraphicsPipelineCreateInfo will fail.
+                const_cast<VkPipelineRenderingCreateInfo *>(pipeline_rendering_ci)->pColorAttachmentFormats = nullptr;
+            }
+            render_pass = std::make_shared<RenderPass>(pipeline_rendering_ci, rasterization_enabled);
         } else {
             const bool is_graphics_lib = GetGraphicsLibType(create_info) != static_cast<VkGraphicsPipelineLibraryFlagsEXT>(0);
             const bool has_link_info = vku::FindStructInPNextChain<VkPipelineLibraryCreateInfoKHR>(create_info.pNext) != nullptr;
@@ -2227,7 +2265,19 @@ void Device::PostCallRecordCreateAccelerationStructureNV(VkDevice device, const 
 std::shared_ptr<AccelerationStructureKHR> Device::CreateAccelerationStructureState(
     VkAccelerationStructureKHR handle, const VkAccelerationStructureCreateInfoKHR *create_info,
     std::shared_ptr<Buffer> &&buf_state) {
-    return std::make_shared<AccelerationStructureKHR>(handle, create_info, std::move(buf_state));
+    // If the buffer's device address has not been queried,
+    // get it here. Since it is used for the purpose of
+    // validation, do not try to update buffer_state, since
+    // it only tracks application state.
+    VkDeviceAddress buffer_address = 0;
+    if (buf_state) {
+        if (buf_state->deviceAddress != 0) {
+            buffer_address = buf_state->deviceAddress;
+        } else if (buf_state->Binding()) {
+            buffer_address = GetBufferDeviceAddressHelper(buf_state->VkHandle());
+        }
+    }
+    return std::make_shared<AccelerationStructureKHR>(handle, create_info, std::move(buf_state), buffer_address);
 }
 
 void Device::PostCallRecordCreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR *pCreateInfo,
