@@ -1,3 +1,676 @@
+vulkan-validationlayers (1.4.309.0~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ spencer-lunarg ]
+  * tests: Add GetPipelinePropertiesEXT tests
+  * gpu: Remove isolated SPIR-V instrumentation test
+  * layers: Fix assert check on sample count image state
+
+  [ ziga-lunarg ]
+  * tests: Add missing barrier tests
+
+  [ Artem Kharytoniuk ]
+  * sync: Ignore aspect mask of depth-stencil attachment view
+  * layers: Use correct VUID for signaling signaled semaphore
+
+  [ spencer-lunarg ]
+  * layers: Rename shouty MEM_STATE
+
+  [ Arno ]
+  * gpuav: Rename gpu folder to gpuav
+
+  [ ziga-lunarg ]
+  * layers: Small render pass checks fixes
+  * tests: Update framebuffer tests
+  * layers: Fix checking if event is in use
+  * tests: Enable WaitEventThenSet test
+  * layers: Include values in wsi logs
+  * tests: Test invalid compositeAlpha
+  * tests: Add missing wsi tests
+
+  [ spencer-lunarg ]
+  * tests: Use RETURN_IF_SKIP
+  * tests: Add SSBO Length DebugPrintf tests
+  * vma: Update VMA to 1.4 version
+  * gpu: Move DeviceFeatures into spirv::Module
+  * gpu: Remove passthrough to run a Pass
+  * gpu: Fix post_process_descriptor_indexing_pass file name
+  * tests: Fix alignment for testICD
+  * layers: Add Extension Checks for Layer Extensions
+  * tests: Check PresentWithUnsupportedQueue
+  * tests: Fix LeakASwapchain
+  * tests: Use VkExtent2D copy
+  * layers: Add warning for using Pointer in shader interface
+  * tests: Remove separateDepthStencilLayouts from init
+  * layers: Combine vkCmdSetDiscardRectangleEXT check
+
+  [ ziga-lunarg ]
+  * layers: Fix crash when sub cb state doesn't have render pass
+  * tests: Add test for VUID 06024
+
+  [ Karen Webb ]
+  * layers: Add warning if allocated descriptors exceeds pool max
+  * tests: Add test for if allocated descriptors exceeds pool max
+
+  [ spencer-lunarg ]
+  * layers: Fix 09376 VU
+
+  [ Jeremy Gebben ]
+  * tests: Fix ASAN error in SwapchainMaintenance1ExtensionRelease
+
+  [ Artem Kharytoniuk ]
+  * layers: Add option to help compare error messages
+
+  [ spencer-lunarg ]
+  * tests: Use DefaultColorBlendAttachmentState
+
+  [ ziga-lunarg ]
+  * layers: Add missing swapchain maintenance validation
+  * tests: Test swapchain maintenance 1
+  * tests: Add AS copy tests
+
+  [ spencer-lunarg ]
+  * layers: Move maxMemoryAllocationSize check
+
+  [ Artem Kharytoniuk ]
+  * sync: Implement new formatting of syncval accesses
+  * tests: Test the compact form of syncval accesses is used
+
+  [ spencer-lunarg ]
+  * gpuav: Remove legacy Alias check
+  * tests: Add GPU-AV draw time warning test
+  * tests: Add VkBufferUsageFlags2CreateInfo test
+
+  [ Artem Kharytoniuk ]
+  * docs: Update syncval known limitations list
+
+  [ spencer-lunarg ]
+  * layers: VUID churn for 305 header
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.4.305
+
+  [ spencer-lunarg ]
+  * tests: Enabled disabled BDA tests
+
+  [ Artem Kharytoniuk ]
+  * sync: Detect accel build scratch buffer hazard
+  * tests: Test accel build scratch buffer hazard
+
+  [ spencer-lunarg ]
+  * layers: Replace rouge tab with spaces
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove size helper in favor of std::size
+
+  [ spencer-lunarg ]
+  * layers: Fix missing usage2 in VkDescriptorBufferBindingInfoEXT
+  * printf: Don't do work when there is no printf instruction
+  * layers: Add VK_KHR_maintenance8
+
+  [ Jeremy Gebben ]
+  * stateless: Refactor pNext, flag and enum checking utils
+  * layers: Simplify instance vs device extension handling
+  * tests: Fix various missing extension errors
+  * syncval: Split Device and Instance ValidationObjects
+
+  [ spencer-lunarg ]
+  * tests: Upgrade profiles to run 1.4
+  * tests: Add YCbCr test waiting on spec issue
+  * gpuav: Fix UseAllDescriptorSlotsPipelineLayout
+
+  [ arno-lunarg ]
+  * vvl: Add Tracy GPU profiling
+
+  [ ziga-lunarg ]
+  * tests: Test mesh draw without vertex shader bound
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup usage of ownership transfer flag
+
+  [ ziga-lunarg ]
+  * layers: Validate image copy queue flag support
+  * tests: Test missing queue support for image copy
+
+  [ spencer-lunarg ]
+  * layers: Remove vkuFormatElementIsTexel
+  * layesrs: Improve Shader Object stage bound message
+
+  [ Jeremy Gebben ]
+  * thread_safety: Split Device and Instance functionality
+
+  [ spencer-lunarg ]
+  * layers: Update how we do format size checks
+
+  [ Jeremy Gebben ]
+  * stateless: Add missing override specifier
+
+  [ arno-lunarg ]
+  * gpuav: Switch to device local allocations
+  * gpuav: Post process buffer device local alloc
+
+  [ spencer-lunarg ]
+  * layers: Improve BLOCK_TEXEL_VIEW_COMPATIBLE checks
+  * layers: Update SPIRV-Tools with VK_KHR_maintenance8
+  * ci: Remove Ubuntu 20.04 check
+
+  [ Artem Kharytoniuk ]
+  * layers: Update vvl::enumerate to return reference
+
+  [ Jeremy Gebben ]
+  * object_tracker: Split Device and Instance
+  * gpuav: Split Instance and Device
+
+  [ spencer-lunarg ]
+  * tests: Add test for copying destroyed descriptors
+  * layers: Mark OpArrayLength as static usage
+  * layers: More cleaup of format size compatiblity
+
+  [ Jeremy Gebben ]
+  * stateless: Split Instance and Device
+
+  [ spencer-lunarg ]
+  * layers: Improve Multi-planar format compare error message
+  * layers: Give better Valid AspectMask errors
+
+  [ Artem Kharytoniuk ]
+  * sync: Replace SyncOp factories with regular functions
+
+  [ spencer-lunarg ]
+  * tests: Add 1D Compressed Image tests
+
+  [ Jeremy Gebben ]
+  * stateless: Remove ValidatePnextPropertyStructContents()
+  * tests: Adjust test for relaxed properties pNext checking
+
+  [ Artem Kharytoniuk ]
+  * sync: Additional cleanup of SyncOp
+  * sync: Remove SyncOpBarriers helper class
+
+  [ arno-lunarg ]
+  * gpuav: Improve shader map management
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.4.306
+
+  [ Artem Kharytoniuk ]
+  * sync: Minor cleanup
+
+  [ spencer-lunarg ]
+  * layers: Relax tess/geom pipeline dynamic state
+  * layers: Fix Mesh Shader Object
+  * tests: Add CreateMinimalShaders for shader object tests
+
+  [ ziga-lunarg ]
+  * tests: Fix errors in shader object tests
+
+  [ spencer-lunarg ]
+  * docs: Cleanup GPU-AV docs
+
+  [ ziga-lunarg ]
+  * layers: Fix determining device api version
+
+  [ Daniel Rakos ]
+  * layers: Add support for VK_KHR_video_maintenance2
+
+  [ Jeremy Gebben ]
+  * core: Split Instance and Device
+
+  [ spencer-lunarg ]
+  * scripts: Fix struct alias codegen from command param
+  * layers: Fix DescriptorIndexing limit overflows
+
+  [ Artem Kharytoniuk ]
+  * sync: Report image handle in layout transition error
+  * tests: Test layout transition error contains image handle
+
+  [ spencer-lunarg ]
+  * ci: Only have Debug build and not re-run tests
+
+  [ beau-lunarg ]
+  * corechecks: Fix message for VkDescriptorBufferInfo-range-00342
+
+  [ ziga-lunarg ]
+  * bp: Fix check if vertex buffers are used
+  * tests: Test best practices with shader objects
+
+  [ spencer-lunarg ]
+  * layers: Fix crash in shader objects
+
+  [ Jeremy Gebben ]
+  * bp: Split Instance and Device
+
+  [ Artem Kharytoniuk ]
+  * tests: Move AMD buffer marker to a separate test
+  * tests: Split up syncval buffer copy test
+
+  [ Arno ]
+  * vvl: Standardize illegal features validation
+  * gpuav: Vertex attributes OOB
+
+  [ spencer-lunarg ]
+  * layers: Fix vertex input when unsued
+
+  [ Aitor Camacho ]
+  * layers: VK_EXT_external_memory_metal generated files
+  * layers: VK_EXT_external_memory_metal validation
+  * tests: VK_EXT_external_memory_metal tests
+
+  [ spencer-lunarg ]
+  * layers: Full cleanup how we do vvl::RenderPass
+
+  [ ziga-lunarg ]
+  * tests: Add tests for invalid device creation
+
+  [ Victor Hugo Vianna Silva ]
+  * build: Remove usage of deprecated std::aligned_storage/union
+
+  [ spencer-lunarg ]
+  * layers: Add Instance Implicit to unimplementable
+
+  [ ziga-lunarg ]
+  * tests: Add missing buffer and image copy tests
+
+  [ spencer-lunarg ]
+  * layers: Fix crash with invalid device creation
+
+  [ Jeremy Gebben ]
+  * state_tracker: Split Instance and Device
+
+  [ spencer-lunarg ]
+  * layers: Maintenance 8 layerCount fix
+  * layers: Add back 06750
+  * layers: Update new ANNOTATED_SPEC_LINK format
+
+  [ Artem Kharytoniuk ]
+  * sync: Add example of new style of syncval reporting
+  * layers: Move syncval format helper to shared utils
+
+  [ spencer-lunarg ]
+  * layers: Update unimplementable_validation.h
+  * gpuav: Add fix to allow instrumeting linked functions
+  * gpuav: Add dedicated DumpSpirvToFile helper
+  * gpuav: Plumb OpString out of debugprintf for debugging
+
+  [ Arno ]
+  * vvl: Unimplementable RT replay related VUs
+
+  [ spencer-lunarg ]
+  * layers: Remove duplicate DescriptorSetLayoutDef compare
+
+  [ ziga-lunarg ]
+  * tests: Add missing copy blit resolve tests
+
+  [ Jeremy Gebben ]
+  * chassis: Split ValidationObject into Instance and Device
+
+  [ spencer-lunarg ]
+  * tests: Fix tests failing on RADV ToT
+
+  [ ziga-lunarg ]
+  * layers: Validate 2d image blit with invalid z offsets
+  * tests: Test 2d image blit with invalid z offset
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.4.307
+
+  [ spencer-lunarg ]
+  * gpuav: Fix Post Processing failing on zero bindingCount
+
+  [ Victor Hugo Vianna Silva ]
+  * layers: Rewrite inplace_function default alignment
+
+  [ spencer-lunarg ]
+  * gpuav: Reserve Error Group
+
+  [ Artem Kharytoniuk ]
+  * sync: Convert NegativeSyncVal.BufferCopy errors to new style
+
+  [ spencer-lunarg ]
+  * scripts: Update SPIR-V Headers
+  * tests: Check if AS are supported for mutable
+
+  [ Artem Kharytoniuk ]
+  * sync: Add new report properties
+
+  [ Juan Ramos ]
+  * cmake: Remove outdated check
+  * ci: Remove hardcoded NDK version number
+
+  [ spencer-lunarg ]
+  * layers: Add Dedicated Buffer bind check
+
+  [ Juan Ramos ]
+  * layers: Fix -Werror=array-bounds error
+
+  [ Jeremy Gebben ]
+  * docs: Clean up section about how to generate code
+  * docs: Grammer -> Grammar
+
+  [ spencer-lunarg ]
+  * layers: Fix checking pointers 8/16 bit elements
+  * tests: Dedicated Shader Debug Info file
+
+  [ Jeff Bolz ]
+  * layers: Validate VK_NV_cooperative_vector
+
+  [ Artem Kharytoniuk ]
+  * sync: Handle remaining hazard types for buffer messages
+
+  [ spencer-lunarg ]
+  * ci: Update runners to use 24.04
+
+  [ Jeremy Gebben ]
+  * chassis: Move enabled_features to vvl::dispatch::Device
+  * scripts: Move Dispatch*Helper() functions
+
+  [ Artem Kharytoniuk ]
+  * sync: Add copy region info to buffer messages
+
+  [ ziga-lunarg ]
+  * layers: Add missing check for 02778
+  * tests: Create framebuffer with null view
+
+  [ Artem Kharytoniuk ]
+  * sync: Cleanup formatting code
+
+  [ spencer-lunarg ]
+  * layers: Fix and improve AHB to VK Mapping
+
+  [ Arno ]
+  * layers: Validate invalid ray gen SBT address
+
+  [ ziga-lunarg ]
+  * sync: Replace unsupported sparse assert with todo comment
+
+  [ spencer-lunarg ]
+  * gpuav: Do GPU-AV Post Processing with uint32_t only
+
+  [ Jeremy Gebben ]
+  * chassis: Move properties info to vvl::dispatch::Device
+
+  [ spencer-lunarg ]
+  * layers: Fix Sampler Object Tracking
+
+  [ ziga-lunarg ]
+  * layers: Validate required dedicated allocations
+  * tests: Test required dedicated allocations
+  * tests: Update tests hitting vuid 01444 and 01445
+
+  [ spencer-lunarg ]
+  * spirv: Change file name to match gcc/clang
+  * layers: Only create a ShaderModule object once
+
+  [ Jeremy Gebben ]
+  * chassis: Add vvl::base::FinishDeviceSetup()
+
+  [ ziga-lunarg ]
+  * layers: Validate render pass begin info flags
+  * tests: Test invalid render pass begin info flags
+
+  [ Artem Kharytoniuk ]
+  * sync: Minor formatting update
+  * sync: Extract common message code into FormatCommonMessage
+  * sync: Update video error messages
+
+  [ ziga-lunarg ]
+  * tests: Test invalid AS copies
+
+  [ Artem Kharytoniuk ]
+  * sync: Replace VideoReferencePictureError with general Error
+
+  [ spencer-lunarg ]
+  * gpuav: Delete old renamed files
+
+  [ Artem Kharytoniuk ]
+  * sync: Update buffer messages for non-copy operations
+
+  [ Jeremy Gebben ]
+  * state: Set android_external_format_resolve shortcut variable
+
+  [ ziga-lunarg ]
+  * tests: Test vkGetRayTracingShaderGroupHandlesKHR
+
+  [ Artem Kharytoniuk ]
+  * sync: Validate destination acceleration structure build
+  * sync: Test destination acceleration structure build
+  * layers: Move range outside of sparse namespace
+
+  [ Arno ]
+  * tests: Ray tracing framework renaming
+
+  [ ziga-lunarg ]
+  * tests: Fix shader object mutliple attachment test
+
+  [ Artem Kharytoniuk ]
+  * sync: Update ImageRegion error messages
+
+  [ Spencer Fricke ]
+  * docs: Improve how to turn on Sync Val
+  * docs: Add link to Layer Setting doc
+
+  [ Jeremy Gebben ]
+  * build: Update shader dependencies to latest
+
+  [ Artem Kharytoniuk ]
+  * sync: Update ImageSubresourceRange error messages
+
+  [ ziga-lunarg ]
+  * tests: Update shader object tests
+
+  [ Artem Kharytoniuk ]
+  * sync: Add AdditionalMessageInfo to customize messages
+  * sync: Validate source acceleration structure
+  * tests: Test source acceleration structure
+  * sync: Fix separator in access string
+
+  [ spencer-lunarg ]
+  * tests: Remove sync val errors in tests
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix event stage formatting
+
+  [ Yilong Li ]
+  * sync: Skip updating queue state if queue is invalid
+
+  [ spencer-lunarg ]
+  * layers: Better entry point error message
+
+  [ Yilong Li ]
+  * layers: Fix semaphore handling for Fuchsia
+  * gn: Remove unsupported files for Fuchsia
+  * state: Support VkSemaphores imported with Zircon handles
+
+  [ ziga-lunarg ]
+  * tests: Fix sync issues in core tests
+
+  [ spencer-lunarg ]
+  * layers: Add more deprecated VUIDs
+  * tests: Add Shader Inline bad entry point test
+
+  [ Artem Kharytoniuk ]
+  * tests: Split large draw/dispatch test
+
+  [ Arno ]
+  * vvl: Add last used device caching
+
+  [ spencer-lunarg ]
+  * scripts: Move CompatibleSpirvImageFormat out of core checks
+  * layers: Slight improvement of error messages
+
+  [ Artem Kharytoniuk ]
+  * sync: Update buffer/image descriptor error messages
+
+  [ spencer-lunarg ]
+  * layers: Small improvement to YCbCr error message
+  * layer: Combine 2 Instruction Classes
+  * layers: Save allocation by getting length first
+
+  [ Artem Kharytoniuk ]
+  * sync: Update vertex/index buffer messages
+
+  [ spencer-lunarg ]
+  * layers: Remove old NV Warnings
+  * layers: Remove Queue Transfer Ownership warnings
+  * printf: Fix using printf debugging GPUAV
+
+  [ Artem Kharytoniuk ]
+  * sync: Remove DrawAttachmentError in favor of generic Error
+  * sync: Refactor clear attachment code
+
+  [ spencer-lunarg ]
+  * glsl: Move common headers together
+  * gpuav: Make Module Setting fields not be repeated
+
+  [ Daniel Rakos ]
+  * tests: Verify decode output image layout corner-cases
+
+  [ spencer-lunarg ]
+  * tests: Add new stress test
+
+  [ ziga-lunarg ]
+  * tests: Test vkCmdTraceRaysKHR
+
+  [ Artem Kharytoniuk ]
+  * sync: Update clear attachment messages
+
+  [ ziga-lunarg ]
+  * tests: Test invalid pNext in pipeline barrier 2
+
+  [ spencer-lunarg ]
+  * tests: Use BufferView init helper
+
+  [ Jeremy Gebben ]
+  * bp: Remove simple derived state objects
+
+  [ spencer-lunarg ]
+  * layers: Remove VK_EXT_validation_features VU
+  * layers: Add warning for storage image formats
+  * layers: Cleanup extension name check
+
+  [ arno-lunarg ]
+  * vvl: Update Tracy GPU profiling
+
+  [ Arno ]
+  * profiling: Stats and Trace compare scripts
+  * vvl: Rename Tracy CPU zones for clarity
+
+  [ Jeremy Gebben ]
+  * layers: Remove Device arg from various submit-time callbacks
+
+  [ spencer-lunarg ]
+  * layers: Use normal skip in ValidateDescriptor
+  * gpuav: Cleanup how feature are forced on and checked
+  * settings: Make warnings on by default
+  * layers: Enhanced error message format
+  * layers: Add an message verbose setting
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.4.309
+
+  [ Arno ]
+  * tests: Add GPU-AV + Sync Val test
+  * vvl: Fix crash
+
+  [ spencer-lunarg ]
+  * scripts: Use the VulkanObject from headers
+
+  [ ziga-lunarg ]
+  * tests: Cleanup fragment density map offset tests
+
+  [ spencer-lunarg ]
+  * layers: Improve Fragment Density Map Offset messages
+
+  [ Artem Kharytoniuk ]
+  * sync: Add special case of non-expanded SHADER_READ access
+  * sync: Validate acceleration structure vertex/index buffers
+  * tests: Add ray tracing helper for non-indexed triangles
+  * tests: Test acceleration structure vertex/index buffers
+
+  [ spencer-lunarg ]
+  * layer: Cleanup logging code
+
+  [ ziga-lunarg ]
+  * tests: Buffer views atomics with mismatched formats
+
+  [ spencer-lunarg ]
+  * layers: Small followup from 9512
+  * layers: Reorder Parameter to match
+  * layers: Fix pNext chaining for DRM
+  * layers: Use LogMessage with std::string where possible
+  * layers: Fixup MultiView errors
+  * layers: Dont give warning with multiView
+  * tests: Add PositiveMultiView tests
+
+  [ Artem Kharytoniuk ]
+  * sync: Update begin/end dynamic rendering messages
+
+  [ Arno ]
+  * gpuav: Remove VMA pool
+  * vvl: Rework accel structs mem aliasing validation
+
+  [ spencer-lunarg ]
+  * printf: Extra testing and error message fix
+
+  [ Arno ]
+  * gpuav: Do not try to get address of unbound buffer
+
+  [ spencer-lunarg ]
+  * layers: Add initial JSON error message option
+  * gpuav: Support all atomics for BDA check
+  * layers: Handle yet-another ignored pointer
+
+  [ Artem Kharytoniuk ]
+  * sync: Update renderpass load/resolve/store messages
+
+  [ spencer-lunarg ]
+  * gpuav: Add support to check sampler with sampled image
+
+  [ Artem Kharytoniuk ]
+  * sync: Update renderpass loadop vs layout transition message
+
+  [ Arno ]
+  * tests: Fix RT tests sporadic failures
+
+  [ spencer-lunarg ]
+  * layers: Fix warning for Storage Image
+
+  [ Artem Kharytoniuk ]
+  * sync: Update renderpass layout transition messages
+  * sync: Update render pass attachment messages
+  * sync: Update barrier messages
+
+  [ Arno ]
+  * gpuav: Revert memflags for post process desc index
+
+  [ Artem Kharytoniuk ]
+  * sync: Reuse image barrier message for event validation
+
+  [ Ali Emre Gülcü ]
+  * docs: Fix a typo on vk_layer_settings for gpuav_image_layout
+
+  [ Artem Kharytoniuk ]
+  * settings: Simplify extra properties label
+  * sync: Update submit time message
+  * sync: Update swapchain present message
+  * sync: Restore message_type property
+  * sync: Fix prior vs current debug region property
+
+  [ spencer-lunarg ]
+  * build: Update shader toolchain
+  * layers: Ignore error with Mesh Multiview using GLSL
+  * layers: Make FDM Offset more Dynamic Rendering friendly
+
+  [ Artem Kharytoniuk ]
+  * sync: Misc formatting cleanup
+
+  [ Mike Schuchardt ]
+  * build: Sync shader toolchain with SDK versions
+
+  [ ziga-lunarg ]
+  * layers: Fix dynamic rendering crash
+
+ -- john <john@odin>  Tue, 04 Mar 2025 09:47:43 -0700
+
 vulkan-validationlayers (1.4.304.1~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ spencer-lunarg ]
