@@ -54,7 +54,19 @@ std::shared_ptr<vvl::Sampler> Validator::CreateSamplerState(VkSampler handle, co
 std::shared_ptr<vvl::AccelerationStructureKHR> Validator::CreateAccelerationStructureState(
     VkAccelerationStructureKHR handle, const VkAccelerationStructureCreateInfoKHR *create_info,
     std::shared_ptr<vvl::Buffer> &&buf_state) {
-    return std::make_shared<AccelerationStructureKHR>(handle, create_info, std::move(buf_state), *desc_heap_);
+    // If the buffer's device address has not been queried,
+    // get it here. Since it is used for the purpose of
+    // validation, do not try to update buffer_state, since
+    // it only tracks application state.
+    VkDeviceAddress buffer_address = 0;
+    if (buf_state) {
+        if (buf_state->deviceAddress != 0) {
+            buffer_address = buf_state->deviceAddress;
+        } else if (buf_state->Binding()) {
+            buffer_address = GetBufferDeviceAddressHelper(buf_state->VkHandle());
+        }
+    }
+    return std::make_shared<AccelerationStructureKHR>(handle, create_info, std::move(buf_state), buffer_address, *desc_heap_);
 }
 
 std::shared_ptr<vvl::DescriptorSet> Validator::CreateDescriptorSet(VkDescriptorSet handle, vvl::DescriptorPool *pool,
@@ -279,18 +291,6 @@ void Validator::FinishDeviceSetup(const VkDeviceCreateInfo *pCreateInfo, const L
             InternalVmaError(device, loc, "Unable to find memory type index.");
             return;
         }
-        VmaPoolCreateInfo vma_pool_ci = {};
-        vma_pool_ci.memoryTypeIndex = mem_type_index;
-        vma_pool_ci.blockSize = 0;
-        vma_pool_ci.maxBlockCount = 0;
-        if (gpuav_settings.vma_linear_output) {
-            vma_pool_ci.flags = VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT;
-        }
-        result = vmaCreatePool(vma_allocator_, &vma_pool_ci, &output_buffer_pool_);
-        if (result != VK_SUCCESS) {
-            InternalVmaError(device, loc, "Unable to create VMA memory pool.");
-            return;
-        }
     }
 
     // Create command indices buffer
@@ -300,8 +300,6 @@ void Validator::FinishDeviceSetup(const VkDeviceCreateInfo *pCreateInfo, const L
         buffer_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         buffer_info.size = cst::indices_count * indices_buffer_alignment_;
         VmaAllocationCreateInfo alloc_info = {};
-        assert(output_buffer_pool_);
-        alloc_info.pool = output_buffer_pool_;
         alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         alloc_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         const bool success = indices_buffer_.Create(loc, &buffer_info, &alloc_info);
@@ -420,17 +418,6 @@ void Validator::InternalVmaError(LogObjectList objlist, const Location &loc, con
     // This prevents need to check "if (aborted)" (which is awful when we easily forget to check somewhere and the user gets spammed
     // with errors making it hard to see the first error with the real source of the problem).
     dispatch_device_->ReleaseValidationObject(LayerObjectTypeGpuAssisted);
-}
-
-VkDeviceAddress Validator::GetBufferDeviceAddressHelper(VkBuffer buffer) const {
-    VkBufferDeviceAddressInfo address_info = vku::InitStructHelper();
-    address_info.buffer = buffer;
-
-    if (api_version >= VK_API_VERSION_1_2) {
-        return DispatchGetBufferDeviceAddress(device, &address_info);
-    } else {
-        return DispatchGetBufferDeviceAddressKHR(device, &address_info);
-    }
 }
 
 }  // namespace gpuav

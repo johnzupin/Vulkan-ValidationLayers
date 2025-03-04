@@ -91,8 +91,9 @@ void Sampler::NotifyInvalidate(const NodeList &invalid_nodes, bool unlink) {
 }
 
 AccelerationStructureKHR::AccelerationStructureKHR(VkAccelerationStructureKHR as, const VkAccelerationStructureCreateInfoKHR *ci,
-                                                   std::shared_ptr<vvl::Buffer> &&buf_state, DescriptorHeap &desc_heap_)
-    : vvl::AccelerationStructureKHR(as, ci, std::move(buf_state)),
+                                                   std::shared_ptr<vvl::Buffer> &&buf_state, VkDeviceAddress buffer_address,
+                                                   DescriptorHeap &desc_heap_)
+    : vvl::AccelerationStructureKHR(as, ci, std::move(buf_state), buffer_address),
       desc_heap(desc_heap_),
       id(desc_heap.NextId(VulkanTypedHandle(as, kVulkanObjectTypeAccelerationStructureKHR))) {}
 
@@ -142,7 +143,6 @@ static bool AllocateErrorLogsBuffer(Validator &gpuav, VkCommandBuffer command_bu
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     alloc_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    alloc_info.pool = gpuav.output_buffer_pool_;
     const bool success = error_output_buffer.Create(loc, &buffer_info, &alloc_info);
     if (!success) {
         return false;
@@ -191,7 +191,6 @@ void CommandBuffer::AllocateResources(const Location &loc) {
         VmaAllocationCreateInfo alloc_info = {};
         alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         alloc_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        alloc_info.pool = gpuav->output_buffer_pool_;
         const bool success = cmd_errors_counts_buffer_.Create(loc, &buffer_info, &alloc_info);
         if (!success) {
             return;

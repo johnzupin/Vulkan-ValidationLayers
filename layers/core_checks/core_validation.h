@@ -1689,9 +1689,9 @@ class CoreChecks : public vvl::Device {
     bool ValidateAccelerationStructuresMemoryAlisasing(const LogObjectList& objlist, uint32_t infoCount,
                                                        const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, uint32_t info_i,
                                                        const ErrorObject& error_obj) const;
-    bool ValidateAccelerationStructuresDeviceScratchBufferMemoryAlisasing(
-        const LogObjectList& objlist, uint32_t info_count, const VkAccelerationStructureBuildGeometryInfoKHR* p_infos,
-        uint32_t info_i, const VkAccelerationStructureBuildRangeInfoKHR* const* pp_range_infos, const ErrorObject& error_obj) const;
+    bool ValidateAccelerationStructuresDeviceScratchBufferMemoryAliasing(
+        VkCommandBuffer cmd_buffer, uint32_t info_count, const VkAccelerationStructureBuildGeometryInfoKHR* p_infos,
+        const VkAccelerationStructureBuildRangeInfoKHR* const* pp_range_infos, const Location& loc) const;
     bool PreCallValidateCmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t infoCount,
                                                           const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
                                                           const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos,
@@ -2001,7 +2001,7 @@ class CoreChecks : public vvl::Device {
                                          const RecordObject& record_obj) override;
     bool ValidateFragmentDensityMapOffsetEnd(const vvl::CommandBuffer& cb_state, const vvl::RenderPass& rp_state,
                                              const VkSubpassFragmentDensityMapOffsetEndInfoQCOM& fdm_offset_end_info,
-                                             const Location& subpass_end_loc) const;
+                                             const Location& end_info_loc) const;
 
     class ViewportScissorInheritanceTracker;
     bool PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBuffersCount,

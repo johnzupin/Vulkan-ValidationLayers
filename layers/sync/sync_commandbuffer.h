@@ -190,35 +190,20 @@ class CommandExecutionContext {
     CommandExecutionContext(const SyncValidator &sync_validator, VkQueueFlags queue_flags);
     virtual ~CommandExecutionContext() = default;
 
-    // Are imported command buffers Submitted (QueueBatchContext), or Executed (CommandBufferAccessContext)
-    enum ExecutionType : int {
-        kExecuted = 0,  // Recorded contexts are integrated into context during vkCmdExecuteCommands
-        kSubmitted = 1  // Recorded contexts are integrated into context during vkQueueSubmit (etc.)
-    };
-
-    virtual ExecutionType Type() const = 0;
-
-    const char *ExecutionTypeString() const {
-        const char *type_string[] = {"Executed", "Submitted"};
-        return type_string[Type()];
-    }
-    const char *ExecutionUsageString() const {
-        const char *usage_string[] = {"executed_usage", "submitted_usage"};
-        return usage_string[Type()];
-    }
-
     virtual AccessContext *GetCurrentAccessContext() = 0;
     virtual SyncEventsContext *GetCurrentEventsContext() = 0;
     virtual const AccessContext *GetCurrentAccessContext() const = 0;
     virtual const SyncEventsContext *GetCurrentEventsContext() const = 0;
     virtual QueueId GetQueueId() const = 0;
     virtual VulkanTypedHandle Handle() const = 0;
+    virtual ReportUsageInfo GetReportUsageInfo(ResourceUsageTagEx tag_ex) const = 0;
     virtual std::string FormatUsage(ResourceUsageTagEx tag_ex, ReportKeyValues &extra_properties) const = 0;
     virtual void AddUsageRecordExtraProperties(ResourceUsageTag tag, ReportKeyValues &extra_properties) const = 0;
 
     std::string FormatHazard(const HazardResult &hazard, ReportKeyValues &key_values) const;
     bool ValidForSyncOps() const;
     const SyncValidator &GetSyncState() const { return sync_state_; }
+    VkQueueFlags GetQueueFlags() const { return queue_flags_; }
 
   protected:
     const SyncValidator &sync_state_;
@@ -265,11 +250,9 @@ class CommandBufferAccessContext : public CommandExecutionContext, DebugNameProv
 
     void Reset();
 
-    ReportUsageInfo GetReportUsageInfo(ResourceUsageTagEx tag_ex) const;
+    ReportUsageInfo GetReportUsageInfo(ResourceUsageTagEx tag_ex) const override;
     std::string FormatUsage(ResourceUsageTagEx tag_ex, ReportKeyValues &extra_properties) const override;
     void AddUsageRecordExtraProperties(ResourceUsageTag tag, ReportKeyValues &extra_properties) const override;
-    std::string FormatUsage(const char *usage_string, const ResourceFirstAccess &access,
-                            ReportKeyValues &key_values) const;  //  Only command buffers have "first usage"
     AccessContext *GetCurrentAccessContext() override { return current_context_; }
     SyncEventsContext *GetCurrentEventsContext() override { return &events_context_; }
     const AccessContext *GetCurrentAccessContext() const override { return current_context_; }
@@ -306,10 +289,6 @@ class CommandBufferAccessContext : public CommandExecutionContext, DebugNameProv
     void RecordExecutedCommandBuffer(const CommandBufferAccessContext &recorded_context);
     void ResolveExecutedCommandBuffer(const AccessContext &recorded_context, ResourceUsageTag offset);
 
-    // TODO: what about using queue_flags directly from base class?
-    VkQueueFlags GetQueueFlags() const { return cb_state_ ? cb_state_->GetQueueFlags() : 0; }
-
-    ExecutionType Type() const override { return kExecuted; }
     size_t GetTagCount() const { return access_log_->size(); }
     VulkanTypedHandle Handle() const override {
         if (cb_state_) {

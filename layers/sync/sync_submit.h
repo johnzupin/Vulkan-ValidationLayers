@@ -295,6 +295,7 @@ class QueueBatchContext : public CommandExecutionContext, public std::enable_sha
     ~QueueBatchContext();
     void Trim();
 
+    ReportUsageInfo GetReportUsageInfo(ResourceUsageTagEx tag_ex) const override;
     std::string FormatUsage(ResourceUsageTagEx tag_ex, ReportKeyValues &extra_properties) const override;
     void AddUsageRecordExtraProperties(ResourceUsageTag tag, ReportKeyValues &extra_properties) const override;
     AccessContext *GetCurrentAccessContext() override { return current_access_context_; }
@@ -303,7 +304,6 @@ class QueueBatchContext : public CommandExecutionContext, public std::enable_sha
     const SyncEventsContext *GetCurrentEventsContext() const override { return &events_context_; }
     const QueueSyncState *GetQueueSyncState() { return queue_state_; }
     QueueId GetQueueId() const override;
-    ExecutionType Type() const override { return kSubmitted; }
     ResourceUsageRange GetTagRange() const { return tag_range_; }
 
     ResourceUsageTag SetupBatchTags(uint32_t tag_count);

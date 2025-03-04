@@ -3089,26 +3089,30 @@ bool CoreChecks::ValidateGraphicsPipelineDynamicRendering(const vvl::Pipeline &p
     }
 
     if (pipeline.OwnsSubState(pipeline.fragment_output_state)) {
-        for (uint32_t color_index = 0; color_index < rendering_struct->colorAttachmentCount; color_index++) {
-            const VkFormat color_format = rendering_struct->pColorAttachmentFormats[color_index];
-            if (color_format != VK_FORMAT_UNDEFINED) {
-                VkFormatFeatureFlags2KHR format_features = GetPotentialFormatFeatures(color_format);
-                if (((format_features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) == 0) &&
-                    (color_blend_state && (color_index < color_blend_state->attachmentCount) &&
-                     (color_blend_state->pAttachments[color_index].blendEnable != VK_FALSE))) {
-                    skip |= LogError(
-                        "VUID-VkGraphicsPipelineCreateInfo-renderPass-06062", device,
-                        create_info_loc.dot(Field::pColorBlendState).dot(Field::pAttachments, color_index).dot(Field::blendEnable),
-                        "is VK_TRUE.");
-                }
+        // Can remove this if when https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9248 is added
+        if (rendering_struct->pColorAttachmentFormats) {
+            for (uint32_t color_index = 0; color_index < rendering_struct->colorAttachmentCount; color_index++) {
+                const VkFormat color_format = rendering_struct->pColorAttachmentFormats[color_index];
+                if (color_format != VK_FORMAT_UNDEFINED) {
+                    VkFormatFeatureFlags2KHR format_features = GetPotentialFormatFeatures(color_format);
+                    if (((format_features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) == 0) &&
+                        (color_blend_state && (color_index < color_blend_state->attachmentCount) &&
+                         (color_blend_state->pAttachments[color_index].blendEnable != VK_FALSE))) {
+                        skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-06062", device,
+                                         create_info_loc.dot(Field::pColorBlendState)
+                                             .dot(Field::pAttachments, color_index)
+                                             .dot(Field::blendEnable),
+                                         "is VK_TRUE.");
+                    }
 
-                if ((format_features &
-                     (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_LINEAR_COLOR_ATTACHMENT_BIT_NV)) == 0) {
-                    skip |= LogError(
-                        "VUID-VkGraphicsPipelineCreateInfo-renderPass-06582", device,
-                        create_info_loc.pNext(Struct::VkPipelineRenderingCreateInfo, Field::pColorAttachmentFormats, color_index),
-                        "(%s) potential format features are %s.", string_VkFormat(color_format),
-                        string_VkFormatFeatureFlags2(format_features).c_str());
+                    if ((format_features &
+                         (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_LINEAR_COLOR_ATTACHMENT_BIT_NV)) == 0) {
+                        skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-06582", device,
+                                         create_info_loc.pNext(Struct::VkPipelineRenderingCreateInfo,
+                                                               Field::pColorAttachmentFormats, color_index),
+                                         "(%s) potential format features are %s.", string_VkFormat(color_format),
+                                         string_VkFormatFeatureFlags2(format_features).c_str());
+                    }
                 }
             }
         }
@@ -3158,7 +3162,7 @@ bool CoreChecks::ValidateGraphicsPipelineDynamicRendering(const vvl::Pipeline &p
         if ((enabled_features.multiview == VK_FALSE) && (rendering_struct->viewMask != 0)) {
             skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-multiview-06577", device,
                              create_info_loc.pNext(Struct::VkPipelineRenderingCreateInfo, Field::viewMask),
-                             "is %" PRIu32 ", but the multiview feature was not enabled.", rendering_struct->viewMask);
+                             "is 0x%" PRIx32 ", but the multiview feature was not enabled.", rendering_struct->viewMask);
         }
 
         if (MostSignificantBit(rendering_struct->viewMask) >= static_cast<int32_t>(phys_dev_props_core11.maxMultiviewViewCount)) {
@@ -3464,8 +3468,8 @@ bool CoreChecks::ValidateDrawPipelineDynamicRenderpass(const LastBound &last_bou
         if (pipeline_rendering_ci.viewMask != rendering_view_mask) {
             const LogObjectList objlist(cb_state.Handle(), pipeline.Handle());
             skip |= LogError(vuid.dynamic_rendering_view_mask_06178, objlist, vuid.loc(),
-                             "Currently bound pipeline %s viewMask ([%" PRIu32
-                             ") must be equal to VkRenderingInfo::viewMask ([%" PRIu32 ")",
+                             "Currently bound pipeline %s viewMask (0x%" PRIx32
+                             ") must be equal to VkRenderingInfo::viewMask (0x%" PRIx32 ")",
                              FormatHandle(pipeline).c_str(), pipeline_rendering_ci.viewMask, rendering_view_mask);
         }
         if (cb_state.IsPrimary() && (rendering_info.flags & VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT) != 0 &&
@@ -4068,8 +4072,8 @@ bool CoreChecks::ValidatePipelineLibraryFlags(const VkGraphicsPipelineLibraryFla
         uint32_t lib_view_mask = lib->rendering_create_info ? lib->rendering_create_info->viewMask : 0;
         if (view_mask != lib_view_mask) {
             skip |= LogError(vuid, device, loc,
-                             "pLibraries[%" PRIu32 "] is (flags = %s and viewMask = %" PRIu32 "), but pLibraries[%" PRIu32
-                             "] is (flags = %s and viewMask %" PRIu32 ").",
+                             "pLibraries[%" PRIu32 "] is (flags = %s and viewMask = 0x%" PRIx32 "), but pLibraries[%" PRIu32
+                             "] is (flags = %s and viewMask 0x%" PRIx32 ").",
                              lib_index, string_VkGraphicsPipelineLibraryFlagsEXT(lib_flags).c_str(), view_mask, i,
                              string_VkGraphicsPipelineLibraryFlagsEXT(lib->graphics_lib_type).c_str(), lib_view_mask);
         }
@@ -4119,7 +4123,7 @@ bool CoreChecks::ValidateMultiViewShaders(const vvl::Pipeline &pipeline, const L
         const char *vuid = dynamic_rendering ? "VUID-VkGraphicsPipelineCreateInfo-renderPass-06057"
                                              : "VUID-VkGraphicsPipelineCreateInfo-renderPass-06047";
         skip |= LogError(vuid, device, multiview_loc,
-                         "is %" PRIu32
+                         "is 0x%" PRIx32
                          " and pStages contains tessellation shaders, but the multiviewTessellationShader feature was not enabled.",
                          view_mask);
     }
@@ -4128,7 +4132,7 @@ bool CoreChecks::ValidateMultiViewShaders(const vvl::Pipeline &pipeline, const L
         const char *vuid = dynamic_rendering ? "VUID-VkGraphicsPipelineCreateInfo-renderPass-06058"
                                              : "VUID-VkGraphicsPipelineCreateInfo-renderPass-06048";
         skip |= LogError(vuid, device, multiview_loc,
-                         "is %" PRIu32
+                         "is 0x%" PRIx32
                          " and pStages contains geometry shader, but the multiviewGeometryShader feature was not enabled.",
                          view_mask);
     }
@@ -4137,7 +4141,7 @@ bool CoreChecks::ValidateMultiViewShaders(const vvl::Pipeline &pipeline, const L
         const char *vuid = dynamic_rendering ? "VUID-VkGraphicsPipelineCreateInfo-renderPass-07720"
                                              : "VUID-VkGraphicsPipelineCreateInfo-renderPass-07064";
         skip |= LogError(vuid, device, multiview_loc,
-                         "is %" PRIu32 " and pStages contains mesh shader, but the multiviewMeshShader feature was not enabled.",
+                         "is 0x%" PRIx32 " and pStages contains mesh shader, but the multiviewMeshShader feature was not enabled.",
                          view_mask);
     }
 
@@ -4145,10 +4149,14 @@ bool CoreChecks::ValidateMultiViewShaders(const vvl::Pipeline &pipeline, const L
         // Stage may not have SPIR-V data (e.g. due to the use of shader module identifier or in Vulkan SC)
         if (!stage.spirv_state) continue;
 
+        // This is being discussed in https://gitlab.khronos.org/vulkan/vulkan/-/issues/4194
+        // As a temporary solution, ignore this case to prevent false positives.
+        if (stage.GetStage() == VK_SHADER_STAGE_MESH_BIT_EXT) continue;
+
         if (stage.spirv_state->static_data_.has_builtin_layer) {
             const char *vuid = dynamic_rendering ? "VUID-VkGraphicsPipelineCreateInfo-renderPass-06059"
                                                  : "VUID-VkGraphicsPipelineCreateInfo-renderPass-06050";
-            skip |= LogError(vuid, device, multiview_loc, "is %" PRIu32 " but %s stage contains a Layer decorated OpVariable.",
+            skip |= LogError(vuid, device, multiview_loc, "is 0x%" PRIx32 " but %s stage contains a Layer decorated OpVariable.",
                              view_mask, string_VkShaderStageFlagBits(stage.GetStage()));
         }
     }
@@ -4185,6 +4193,12 @@ bool CoreChecks::ValidateDrawPipelineFramebuffer(const vvl::CommandBuffer &cb_st
         const VkShaderStageFlagBits stage = stage_state.GetStage();
         if (stage_state.entrypoint && stage_state.entrypoint->written_builtin_layer &&
             cb_state.activeFramebuffer->create_info.layers == 1) {
+            if (cb_state.active_render_pass && cb_state.active_render_pass->has_multiview_enabled) {
+                // If using MultiView, you should already have hit an error that Framebuffer Layer must be 1, but due to things like
+                // https://gitlab.khronos.org/vulkan/vulkan/-/issues/4194 we should check here and ignore if things are invalid
+                // already
+                break;
+            }
             LogObjectList objlist(cb_state.Handle(), pipeline.Handle());
             skip |= LogUndefinedValue("Undefined-Layer-Written", objlist, vuid.loc(),
                                       "Shader stage %s writes to Layer (gl_Layer) but the framebuffer was created with "

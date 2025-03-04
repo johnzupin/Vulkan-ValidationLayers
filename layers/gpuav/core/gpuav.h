@@ -106,7 +106,6 @@ class Validator : public GpuShaderInstrumentor {
     void FinishDeviceSetup(const VkDeviceCreateInfo* pCreateInfo, const Location& loc) final;
 
     void InternalVmaError(LogObjectList objlist, const Location& loc, const char* const specific_message) const;
-    VkDeviceAddress GetBufferDeviceAddressHelper(VkBuffer buffer) const;
 
   private:
     void InitSettings(const Location& loc);
@@ -444,7 +443,6 @@ class Validator : public GpuShaderInstrumentor {
     PFN_vkSetDeviceLoaderData vk_set_device_loader_data_;
 
     VmaAllocator vma_allocator_ = {};
-    VmaPool output_buffer_pool_ = VK_NULL_HANDLE;
     std::unique_ptr<vko::DescriptorSetManager> desc_set_manager_;
 
     vko::Buffer indices_buffer_;

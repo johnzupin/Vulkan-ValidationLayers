@@ -403,12 +403,13 @@ bool SyncOpPipelineBarrier::Validate(const CommandBufferAccessContext &cb_contex
                                                               image_barrier.barrier.src_access_scope,
                                                               image_barrier.subresource_range, AccessContext::kDetectAll);
         if (hazard.IsHazard()) {
-            // PHASE1 TODO -- add tag information to log msg when useful.
+            LogObjectList objlist(cb_context.GetCBState().Handle(), image_state.Handle());
             const Location loc(command_);
-            const auto &sync_state = cb_context.GetSyncState();
-            const auto error = sync_state.error_messages_.PipelineBarrierError(hazard, cb_context, image_barrier.barrier_index,
-                                                                               image_state, command_);
-            skip |= sync_state.SyncError(hazard.Hazard(), image_state.Handle(), loc, error);
+            const SyncValidator &sync_state = cb_context.GetSyncState();
+            const std::string resource_description = sync_state.FormatHandle(image_state.Handle());
+            const std::string error =
+                sync_state.error_messages_.ImageBarrierError(hazard, cb_context, command_, resource_description, image_barrier);
+            skip |= sync_state.SyncError(hazard.Hazard(), objlist, loc, error);
         }
     }
     return skip;
@@ -638,8 +639,10 @@ bool SyncOpWaitEvents::DoValidate(const CommandExecutionContext &exec_context, c
                     *image_state, subresource_range, sync_event->scope.exec_scope, src_access_scope, queue_id,
                     sync_event->FirstScope(), sync_event->first_scope_tag, AccessContext::DetectOptions::kDetectAll);
                 if (hazard.IsHazard()) {
-                    const auto error = sync_state.error_messages_.WaitEventsError(
-                        hazard, exec_context, image_memory_barrier.barrier_index, *image_state, command_);
+                    LogObjectList objlist(exec_context.Handle(), image_state->Handle());
+                    const std::string resource_description = sync_state.FormatHandle(image_state->Handle());
+                    const std::string error = sync_state.error_messages_.ImageBarrierError(
+                        hazard, exec_context, command_, resource_description, image_memory_barrier);
                     skip |= sync_state.SyncError(hazard.Hazard(), image_state->Handle(), loc, error);
                     break;
                 }
@@ -1051,8 +1054,8 @@ ResourceUsageTag SyncOpBeginRenderPass::Record(CommandBufferAccessContext *cb_co
 
 bool SyncOpBeginRenderPass::ReplayValidate(ReplayState &replay, ResourceUsageTag recorded_tag) const {
     CommandExecutionContext &exec_context = replay.GetExecutionContext();
-    // can't be kExecuted, this operation is not allowed in secondary command buffers
-    assert(exec_context.Type() == CommandExecutionContext::kSubmitted);
+    // this operation is not allowed in secondary command buffers
+    assert(exec_context.Handle().type == kVulkanObjectTypeQueue);
     auto &batch_context = static_cast<QueueBatchContext &>(exec_context);
     batch_context.BeginRenderPassReplaySetup(replay, *this);
 
@@ -1092,8 +1095,8 @@ ResourceUsageTag SyncOpNextSubpass::Record(CommandBufferAccessContext *cb_contex
 bool SyncOpNextSubpass::ReplayValidate(ReplayState &replay, ResourceUsageTag recorded_tag) const {
     // Any store/resolve operations happen before the NextSubpass tag so we can advance to the next subpass state
     CommandExecutionContext &exec_context = replay.GetExecutionContext();
-    // can't be kExecuted, this operation is not allowed in secondary command buffers
-    assert(exec_context.Type() == CommandExecutionContext::kSubmitted);
+    // this operation is not allowed in secondary command buffers
+    assert(exec_context.Handle().type == kVulkanObjectTypeQueue);
     auto &batch_context = static_cast<QueueBatchContext &>(exec_context);
     batch_context.NextSubpassReplaySetup(replay);
 
@@ -1135,8 +1138,8 @@ bool SyncOpEndRenderPass::ReplayValidate(ReplayState &replay, ResourceUsageTag r
 
     // We can cleanup here as the recorded tag represents the final layout transition (which is the last operation or the RP)
     CommandExecutionContext &exec_context = replay.GetExecutionContext();
-    // can't be kExecuted, this operation is not allowed in secondary command buffers
-    assert(exec_context.Type() == CommandExecutionContext::kSubmitted);
+    // this operation is not allowed in secondary command buffers
+    assert(exec_context.Handle().type == kVulkanObjectTypeQueue);
     auto &batch_context = static_cast<QueueBatchContext &>(exec_context);
     batch_context.EndRenderPassReplayCleanup(replay);
 
@@ -1170,17 +1173,15 @@ bool ReplayState::DetectFirstUseHazard(const ResourceUsageRange &first_use_range
     if (first_use_range.non_empty()) {
         // We're allowing for the Replay(Validate|Record) to modify the exec_context (e.g. for Renderpass operations), so
         // we need to fetch the current access context each time
-        const HazardResult hazard = GetRecordedAccessContext()->DetectFirstUseHazard(exec_context_.GetQueueId(), first_use_range,
-                                                                                     *exec_context_.GetCurrentAccessContext());
+        const AccessContext *access_context = GetRecordedAccessContext();
 
+        const HazardResult hazard = access_context->DetectFirstUseHazard(exec_context_.GetQueueId(), first_use_range,
+                                                                         *exec_context_.GetCurrentAccessContext());
         if (hazard.IsHazard()) {
             const SyncValidator &sync_state = exec_context_.GetSyncState();
-            const auto handle = exec_context_.Handle();
-            const VkCommandBuffer recorded_handle = recorded_context_.GetCBState().VkHandle();
-            // TODO: figure out the last parameter for vvl::Func
-            const auto error =
-                sync_state.error_messages_.FirstUseError(hazard, exec_context_, recorded_context_, index_, recorded_handle, vvl::Func::Empty);
-            skip |= sync_state.SyncError(hazard.Hazard(), handle, error_obj_.location, error);
+            LogObjectList objlist(exec_context_.Handle(), recorded_context_.Handle());
+            const std::string error = sync_state.error_messages_.FirstUseError(hazard, exec_context_, recorded_context_, index_);
+            skip |= sync_state.SyncError(hazard.Hazard(), objlist, error_obj_.location, error);
         }
     }
     return skip;
