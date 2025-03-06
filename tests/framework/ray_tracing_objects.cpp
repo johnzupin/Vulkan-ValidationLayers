@@ -84,10 +84,11 @@ GeometryKHR &GeometryKHR::SetStride(VkDeviceSize stride) {
 
 GeometryKHR &GeometryKHR::SetTrianglesDeviceVertexBuffer(vkt::Buffer &&vertex_buffer, uint32_t max_vertex,
                                                          VkFormat vertex_format /*= VK_FORMAT_R32G32B32_SFLOAT*/,
-                                                         VkDeviceSize stride /*= 3 * sizeof(float)*/) {
+                                                         VkDeviceSize stride /*= 3 * sizeof(float)*/,
+                                                         VkDeviceSize vertex_buffer_offset /* = 0*/) {
     triangles_.device_vertex_buffer = std::move(vertex_buffer);
     vk_obj_.geometry.triangles.vertexFormat = vertex_format;
-    vk_obj_.geometry.triangles.vertexData.deviceAddress = triangles_.device_vertex_buffer.Address();
+    vk_obj_.geometry.triangles.vertexData.deviceAddress = triangles_.device_vertex_buffer.Address() + vertex_buffer_offset;
     vk_obj_.geometry.triangles.maxVertex = max_vertex;
     vk_obj_.geometry.triangles.vertexStride = stride;
     return *this;
@@ -201,10 +202,11 @@ GeometryKHR &GeometryKHR::AddInstanceDeviceAccelStructRef(const vkt::Device &dev
 
     VkMemoryAllocateFlagsInfo alloc_flags = vku::InitStructHelper();
     alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-    vkt::Buffer instances_buffer(
-        device, instances_.vk_instances.size() * sizeof(VkAccelerationStructureInstanceKHR),
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-        kHostVisibleMemProps, &alloc_flags);
+    vkt::Buffer instances_buffer(device, instances_.vk_instances.size() * sizeof(VkAccelerationStructureInstanceKHR),
+                                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                                     VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+                                     VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                 kHostVisibleMemProps, &alloc_flags);
 
     auto instance_buffer_ptr = static_cast<VkAccelerationStructureInstanceKHR *>(instances_buffer.Memory().Map());
     for (size_t vk_instance_i = 0; vk_instance_i < instances_.vk_instances.size(); ++vk_instance_i) {
@@ -1088,7 +1090,7 @@ GeometryKHR GeometryCubeOnDeviceInfo(const vkt::Device &device) {
     return cube_geometry;
 }
 
-GeometryKHR GeometrySimpleOnDeviceAABBInfo(const vkt::Device &device) {
+GeometryKHR GeometrySimpleOnDeviceAABBInfo(const vkt::Device &device, VkBufferUsageFlags additional_geometry_buffer_flags) {
     GeometryKHR aabb_geometry;
 
     aabb_geometry.SetType(GeometryKHR::Type::AABB);
@@ -1102,7 +1104,7 @@ GeometryKHR GeometrySimpleOnDeviceAABBInfo(const vkt::Device &device) {
     alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
     const VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
                                             VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
-                                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+                                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | additional_geometry_buffer_flags;
 
     aabb_buffer.init(device, aabb_buffer_size, buffer_usage, kHostVisibleMemProps, &alloc_flags);
 

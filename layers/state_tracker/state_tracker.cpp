@@ -725,44 +725,6 @@ void Device::FinishDeviceSetup(const VkDeviceCreateInfo *pCreateInfo, const Loca
         physical_device_count = 1;
     }
 
-    {
-        uint32_t n_props = 0;
-        std::vector<VkExtensionProperties> props;
-        DispatchEnumerateDeviceExtensionProperties(physical_device, NULL, &n_props, NULL);
-        props.resize(n_props);
-        DispatchEnumerateDeviceExtensionProperties(physical_device, NULL, &n_props, props.data());
-
-        unordered_set<Extension> phys_dev_extensions;
-        for (const auto &ext_prop : props) {
-            phys_dev_extensions.insert(GetExtension(ext_prop.extensionName));
-        }
-
-        // Even if VK_KHR_format_feature_flags2 is available, we need to have
-        // a path to grab that information from the physical device. This
-        // requires to have VK_KHR_get_physical_device_properties2 enabled or
-        // Vulkan 1.1 (which made this core).
-        has_format_feature2 =
-            (api_version >= VK_API_VERSION_1_1 || IsExtEnabled(extensions.vk_khr_get_physical_device_properties2)) &&
-            phys_dev_extensions.find(Extension::_VK_KHR_format_feature_flags2) != phys_dev_extensions.end();
-
-        // feature is required if 1.3 or extension is supported
-        has_robust_image_access =
-            (api_version >= VK_API_VERSION_1_3 || IsExtEnabled(extensions.vk_khr_get_physical_device_properties2)) &&
-            phys_dev_extensions.find(Extension::_VK_EXT_image_robustness) != phys_dev_extensions.end();
-
-        if (IsExtEnabled(extensions.vk_khr_get_physical_device_properties2) &&
-            phys_dev_extensions.find(Extension::_VK_EXT_robustness2) != phys_dev_extensions.end()) {
-            VkPhysicalDeviceRobustness2FeaturesEXT robustness_2_features = vku::InitStructHelper();
-            VkPhysicalDeviceFeatures2 features2 = vku::InitStructHelper(&robustness_2_features);
-            DispatchGetPhysicalDeviceFeatures2Helper(api_version, physical_device, &features2);
-            has_robust_image_access2 = robustness_2_features.robustImageAccess2;
-            has_robust_buffer_access2 = robustness_2_features.robustBufferAccess2;
-        } else {
-            has_robust_image_access2 = false;
-            has_robust_buffer_access2 = false;
-        }
-    }
-
     // Store queue family data
     if (pCreateInfo->pQueueCreateInfos != nullptr) {
         uint32_t num_queue_families = 0;
@@ -1747,17 +1709,14 @@ bool Device::PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPipelineC
             render_pass = Get<RenderPass>(create_info.renderPass);
         } else if (enabled_features.dynamicRendering) {
             auto pipeline_rendering_ci = vku::FindStructInPNextChain<VkPipelineRenderingCreateInfo>(create_info.pNext);
+
+            // The rasterization_enabled is our way to hint to vvl::RenderPass to ignore a possible VkPipelineRenderingCreateInfo
+            // that contains bad pointers (when using GPL)
             const bool has_fragment_output_state =
                 Pipeline::ContainsSubState(this, create_info, VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT);
             const bool rasterization_enabled =
                 has_fragment_output_state && Pipeline::EnablesRasterizationStates(*this, create_info);
-            if (pipeline_rendering_ci && pipeline_rendering_ci->pColorAttachmentFormats && !rasterization_enabled) {
-                // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9527
-                // Null here for the user, this a garbage pointer and will blow up VUL.
-                // While it have a safe 'VkPipelineRenderingCreateInfo_default' this time, future copies of the
-                // safe_VkGraphicsPipelineCreateInfo will fail.
-                const_cast<VkPipelineRenderingCreateInfo *>(pipeline_rendering_ci)->pColorAttachmentFormats = nullptr;
-            }
+
             render_pass = std::make_shared<RenderPass>(pipeline_rendering_ci, rasterization_enabled);
         } else {
             const bool is_graphics_lib = GetGraphicsLibType(create_info) != static_cast<VkGraphicsPipelineLibraryFlagsEXT>(0);

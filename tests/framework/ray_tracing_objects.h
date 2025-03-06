@@ -70,7 +70,7 @@ class GeometryKHR {
     // Triangle
     GeometryKHR& SetTrianglesDeviceVertexBuffer(vkt::Buffer&& vertex_buffer, uint32_t max_vertex,
                                                 VkFormat vertex_format = VK_FORMAT_R32G32B32_SFLOAT,
-                                                VkDeviceSize stride = 3 * sizeof(float));
+                                                VkDeviceSize stride = 3 * sizeof(float), VkDeviceSize vertex_buffer_offset = 0);
     GeometryKHR& SetTrianglesHostVertexBuffer(std::unique_ptr<float[]>&& vertex_buffer, uint32_t max_vertex,
                                               VkDeviceSize stride = 3 * sizeof(float));
     GeometryKHR& SetTrianglesDeviceIndexBuffer(vkt::Buffer&& index_buffer, VkIndexType index_type = VK_INDEX_TYPE_UINT32);
@@ -265,7 +265,7 @@ GeometryKHR GeometrySimpleOnHostIndexedTriangleInfo();
 // Cube centered at position (0,0,0), 2.0f wide
 GeometryKHR GeometryCubeOnDeviceInfo(const vkt::Device& device);
 
-GeometryKHR GeometrySimpleOnDeviceAABBInfo(const vkt::Device& device);
+GeometryKHR GeometrySimpleOnDeviceAABBInfo(const vkt::Device& device, VkBufferUsageFlags additional_geometry_buffer_flags = 0);
 GeometryKHR GeometrySimpleOnHostAABBInfo();
 
 GeometryKHR GeometrySimpleDeviceInstance(const vkt::Device& device, VkAccelerationStructureKHR device_blas);
