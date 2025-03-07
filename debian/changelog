@@ -1,3 +1,96 @@
+vulkan-validationlayers (1.4.309.0~rc2-1lunarg22.04-1) jammy; urgency=medium
+
+  [ spencer-lunarg ]
+  * layers: Improve warning messages
+
+  [ Artem Kharytoniuk ]
+  * sync: Validate remaining acceleration structure input buffers
+  * tests: Test remaining acceleration structure input buffers
+
+  [ spencer-lunarg ]
+  * docs: Move settings to be SDK friendly
+  * layers: Add Descriptor Allocate Warning
+  * layers: Fix and cleanup vkCmdExecuteCommands
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix ray tracing vertex range computation
+
+  [ spencer-lunarg ]
+  * layers: Finally fix ignoring VkPipelineRenderingCreateInfo
+  * gpuav: Guard against invalid Aligned operands
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix too early exits in ray tracing validation
+
+  [ ziga-lunarg ]
+  * tests: Acquire resource without release
+
+  [ spencer-lunarg ]
+  * utils: Move math utils to dedicated file
+
+  [ Artem Kharytoniuk ]
+  * tests: Add missing test with non-zero vertex data offset
+  * layers: Improve ownership transfer error message
+
+  [ Daniel Rakos ]
+  * layers: Misc fixes for issues identified in the SC VVL
+
+  [ spencer-lunarg ]
+  * tests: Improve Simple Test creation helpers
+  * layers: Remove pNext Struct Extension check
+
+  [ Daniel Rakos ]
+  * layers: Split stateless SPIR-V validation into a new object
+
+  [ spencer-lunarg ]
+  * layers: Remove unused functions
+
+  [ Juan Ramos ]
+  * cmake: Use generator expression
+
+  [ Artem Kharytoniuk ]
+  * sync: Validate acceleration structure access via ray query
+  * sync: Test acceleration structure access via ray query
+  * docs: Update syncval error messages section
+
+  [ spencer-lunarg ]
+  * layers: Refresh of messages for callbacks
+
+  [ Daniel Rakos ]
+  * layers: Extract stateless device data initialization
+
+  [ spencer-lunarg ]
+  * layers: Warn if using VK_KHR_maintenance5 flags2
+  * layers: Fix Depth Stencil VK_KHR_maintenance8
+
+  [ Arno ]
+  * docs: Fix typo
+
+  [ spencer-lunarg ]
+  * layers: Remove Default Callback Object indent
+  * printf: Cleanup documention and logging format
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix getting SyncAccessFlags from VkAccessFlags2
+
+  [ spencer-lunarg ]
+  * layers: Account for Variable Descriptor Count
+
+  [ nrmu ]
+  * layers: Optimize small_vector constructor
+
+  [ Artem Kharytoniuk ]
+  * docs: Add link to syncval error docs
+
+  [ spencer-lunarg ]
+  * gpuav: Skip State Tracking Image Layout when off
+  * layers: Better ShaderInputNotProduced error message
+  * docs: Fix Debug Printf
+  * layer: Temp remove Undefined-Value-ShaderInputNotProduced
+  * layers: Show non swizzle suggestion for undefined storage images
+
+ -- john <john@odin>  Fri, 07 Mar 2025 08:49:49 -0700
+
 vulkan-validationlayers (1.4.309.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ spencer-lunarg ]
