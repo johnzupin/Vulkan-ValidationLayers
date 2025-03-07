@@ -516,16 +516,8 @@ bool CoreChecks::ValidateFsOutputsAgainstRenderPass(const spirv::Module &module_
         const VkAttachmentDescription2 *attachment = attachment_info.attachment;
         const spirv::StageInterfaceVariable *output = attachment_info.output;
         if (attachment && !output) {
-            const auto &attachment_states = pipeline.AttachmentStates();
-            if (location < attachment_states.size() && attachment_states[location].colorWriteMask != 0) {
-                skip |= LogUndefinedValue(
-                    "Undefined-Value-ShaderInputNotProduced", module_state.handle(), create_info_loc,
-                    "Inside the fragment shader, the output Locaiton %" PRIu32
-                    " was never written to. This means anything future VkSubpassDescription::pColorAttachments[%" PRIu32
-                    "] will have undefined values written to it.\nSpec information at "
-                    "https://docs.vulkan.org/spec/latest/chapters/interfaces.html#interfaces-fragmentoutput",
-                    location, location);
-            }
+            // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9616
+            // Need to understand when undefined or not
         } else if (!attachment && output) {
             // With alphaToCoverage, the write is not "discarded" as the alpha mask is still updated
             if (!alpha_to_coverage_enabled || location != 0) {
@@ -576,7 +568,8 @@ bool CoreChecks::ValidateDrawDynamicRenderingFsOutputs(const LastBound &last_bou
     };
     std::map<uint32_t, Attachment> location_map;
 
-    for (uint32_t i = 0; i < rp_state.dynamic_rendering_begin_rendering_info.colorAttachmentCount; ++i) {
+    const uint32_t color_attachment_count = rp_state.dynamic_rendering_begin_rendering_info.colorAttachmentCount;
+    for (uint32_t i = 0; i < color_attachment_count; ++i) {
         location_map[i].rendering_attachment_info = rp_state.dynamic_rendering_begin_rendering_info.pColorAttachments[i].ptr();
     }
 
@@ -602,18 +595,8 @@ bool CoreChecks::ValidateDrawDynamicRenderingFsOutputs(const LastBound &last_bou
         const spirv::StageInterfaceVariable *output = attachment_info.output;
 
         if (has_attachment && !output) {
-            const auto image_view_state = Get<vvl::ImageView>(attachment_info.rendering_attachment_info->imageView);
-            const VkColorComponentFlags color_write_mask = last_bound_state.GetColorWriteMask(location);
-            if (color_write_mask != 0) {
-                const LogObjectList objlist = last_bound_state.cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS);
-                skip |= LogUndefinedValue("Undefined-Value-ShaderInputNotProduced-DynamicRendering", objlist, loc,
-                                          "Inside the fragment shader, the output Locaiton %" PRIu32
-                                          " was never written to. This means the bound VkRenderingInfo::pColorAttachments[%" PRIu32
-                                          "].imageView (%s) will have undefined values written to it.\nSpec information at "
-                                          "https://docs.vulkan.org/spec/latest/chapters/interfaces.html#interfaces-fragmentoutput",
-                                          location, location,
-                                          FormatHandle(attachment_info.rendering_attachment_info->imageView).c_str());
-            }
+            // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9616
+            // Need to understand when undefined or not
         } else if (!has_attachment && output) {
             // With alphaToCoverage, the write is not "discarded" as the alpha mask is still updated
             if (!last_bound_state.IsAlphaToCoverage() || location != 0) {
