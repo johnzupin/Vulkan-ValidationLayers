@@ -1468,7 +1468,7 @@ bool SyncValidator::ValidateIndirectBuffer(const CommandBufferAccessContext &cb_
         auto hazard = context.DetectHazard(*buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range);
         if (hazard.IsHazard()) {
             const LogObjectList objlist(cb_context.GetCBState().Handle(), buf_state->Handle());
-            const std::string resource_description = "dispatch parameters " + FormatHandle(buffer);
+            const std::string resource_description = "indirect " + FormatHandle(buffer);
             const auto error = error_messages_.BufferError(hazard, cb_context, loc.function, resource_description, range);
             skip |= SyncError(hazard.Hazard(), objlist, loc, error);
         }
@@ -1478,7 +1478,7 @@ bool SyncValidator::ValidateIndirectBuffer(const CommandBufferAccessContext &cb_
             auto hazard = context.DetectHazard(*buf_state, SYNC_DRAW_INDIRECT_INDIRECT_COMMAND_READ, range);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(cb_context.GetCBState().Handle(), buf_state->Handle());
-                const std::string resource_description = "dispatch parameters " + FormatHandle(buffer);
+                const std::string resource_description = "indirect " + FormatHandle(buffer);
                 const auto error = error_messages_.BufferError(hazard, cb_context, loc.function, resource_description, range);
                 skip |= SyncError(hazard.Hazard(), objlist, loc, error);
                 break;
@@ -1908,8 +1908,8 @@ bool SyncValidator::PreCallValidateCmdClearColorImage(VkCommandBuffer commandBuf
             auto hazard = context->DetectHazard(*image_state, SYNC_CLEAR_TRANSFER_WRITE, range, false);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, image);
-                const auto error = error_messages_.ImageSubresourceRangeError(
-                    hazard, *cb_access_context, error_obj.location.function, FormatHandle(image), range_index, range);
+                const auto error = error_messages_.ImageClearError(hazard, *cb_access_context, error_obj.location.function,
+                                                                   FormatHandle(image), range_index, range);
                 skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
@@ -1962,8 +1962,8 @@ bool SyncValidator::PreCallValidateCmdClearDepthStencilImage(VkCommandBuffer com
             auto hazard = context->DetectHazard(*image_state, SYNC_CLEAR_TRANSFER_WRITE, range, false);
             if (hazard.IsHazard()) {
                 const LogObjectList objlist(commandBuffer, image);
-                const auto error = error_messages_.ImageSubresourceRangeError(
-                    hazard, *cb_access_context, error_obj.location.function, FormatHandle(image), range_index, range);
+                const auto error = error_messages_.ImageClearError(hazard, *cb_access_context, error_obj.location.function,
+                                                                   FormatHandle(image), range_index, range);
                 skip |= SyncError(hazard.Hazard(), objlist, error_obj.location, error);
             }
         }
@@ -3684,17 +3684,11 @@ static std::optional<AccelerationStructureGeometryInfo> GetValidGeometryInfo(
         const VkAccelerationStructureGeometryTrianglesDataKHR &triangles = geometry.geometry.triangles;
         AccelerationStructureGeometryInfo geometry_info;
 
-        const vvl::Buffer *p_vertex_data = nullptr;
-        // NOTE: Do not validate vertex data when positions interleave with other attributes.
-        // Under current design it's possible to create separate tracking ranges that will skip
-        // the gaps but it's not practical for real world scenarios with complex meshes.
-        // The general solution does not take into account regularity in the vertex data - all the
-        // gaps can be described by two numbers: vertex stride and positional attribute size.
-        // A practical solution is to implement dedicated tracking that exploits this compact representation.
-        const uint32_t vertex_position_size = vkuGetFormatInfo(triangles.vertexFormat).texel_block_size;
-        if (vertex_position_size == triangles.vertexStride) {
-            p_vertex_data = GetSingleBufferFromDeviceAddress(device, triangles.vertexData.deviceAddress);
-        }
+        // Assume that synchronization ranges cover the entire vertex struct,
+        // even if positional data is strided (i.e., interleaved with other attributes).
+        // That is, the application does not attempt to synchronize each position variable
+        // with a separate buffer barrier range.
+        const vvl::Buffer *p_vertex_data = GetSingleBufferFromDeviceAddress(device, triangles.vertexData.deviceAddress);
 
         if (triangles.indexType == VK_INDEX_TYPE_NONE_KHR) {
             // Vertex data
@@ -3733,21 +3727,15 @@ static std::optional<AccelerationStructureGeometryInfo> GetValidGeometryInfo(
         }
         return geometry_info;
     } else if (geometry.geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) {
+        // Make a similar assumption for strided aabb data as for vertex data - synchronization ranges themselves are not strided.
         const VkAccelerationStructureGeometryAabbsDataKHR &aabbs = geometry.geometry.aabbs;
-        // NOTE: Do not validate when there are gaps in the aabb data.
-        // If it turns out that strided aabbs is a common enough use case, then enable this
-        // validation unconditionally but provide a configuration option to disable the check
-        // for theoretical uses cases that can produce false-positives (and similar considerations
-        // for vertex data).
-        if (aabbs.stride == sizeof(VkAabbPositionsKHR)) {
-            if (const vvl::Buffer *p_aabbs = GetSingleBufferFromDeviceAddress(device, aabbs.data.deviceAddress)) {
-                AccelerationStructureGeometryInfo geometry_info;
-                geometry_info.aabb_data = p_aabbs;
-                const VkDeviceSize base_offset = aabbs.data.deviceAddress - p_aabbs->deviceAddress;
-                const VkDeviceSize aabb_data_size = range_info.primitiveCount * sizeof(VkAabbPositionsKHR);
-                geometry_info.aabb_range = MakeRange(base_offset + range_info.primitiveOffset, aabb_data_size);
-                return geometry_info;
-            }
+        if (const vvl::Buffer *p_aabbs = GetSingleBufferFromDeviceAddress(device, aabbs.data.deviceAddress)) {
+            AccelerationStructureGeometryInfo geometry_info;
+            geometry_info.aabb_data = p_aabbs;
+            const VkDeviceSize base_offset = aabbs.data.deviceAddress - p_aabbs->deviceAddress;
+            const VkDeviceSize aabb_data_size = range_info.primitiveCount * sizeof(VkAabbPositionsKHR);
+            geometry_info.aabb_range = MakeRange(base_offset + range_info.primitiveOffset, aabb_data_size);
+            return geometry_info;
         }
     } else if (geometry.geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
         const VkAccelerationStructureGeometryInstancesDataKHR &instances = geometry.geometry.instances;
