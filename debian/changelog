@@ -1,3 +1,27 @@
+vulkan-validationlayers (1.4.309.0~rc3-1lunarg24.04-1) noble; urgency=medium
+
+  [ spencer-lunarg ]
+  * layers: Skip warning for VK_KHR_dynamic_rendering_local_read
+  * layers: Add VK_EXT_shader_viewport_index_layer case
+  * layers: Fix VK_EXT_vertex_attribute_divisor case
+
+  [ Artem Kharytoniuk ]
+  * sync: Cleanup error messages
+
+  [ Arno ]
+  * layers: Fix vkGetRayTracingShaderGroupStackSizeKHR
+
+  [ ziga-lunarg ]
+  * layers: Fix checking queue family indices for swapchain images
+
+  [ Artem Kharytoniuk ]
+  * sync: Do not skip strided data in ray tracing validation
+
+  [ spencer-lunarg ]
+  * docs: Use SDK naming for sync docs
+
+ -- john <john@odin>  Mon, 10 Mar 2025 14:00:16 -0600
+
 vulkan-validationlayers (1.4.309.0~rc2-1lunarg24.04-1) noble; urgency=medium
 
   [ spencer-lunarg ]
