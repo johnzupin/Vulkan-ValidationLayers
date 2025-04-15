@@ -24,8 +24,9 @@
 
 #include "containers/range.h"
 #include "containers/subresource_adapter.h"
+#include "containers/small_vector.h"
+#include "containers/container_utils.h"
 #include "utils/vk_layer_utils.h"
-#include "vulkan/vulkan.h"
 #include "error_message/logging.h"
 
 namespace vvl {
@@ -56,18 +57,6 @@ class ImageLayoutRegistry {
   public:
     typedef std::function<bool(const VkImageSubresource&, VkImageLayout, VkImageLayout)> Callback;
 
-    struct SubresourceLayout {
-        VkImageSubresource subresource;
-        VkImageLayout current_layout;
-        VkImageLayout initial_layout;
-
-        bool operator==(const SubresourceLayout& rhs) const;
-        bool operator!=(const SubresourceLayout& rhs) const { return !(*this == rhs); }
-        SubresourceLayout(const VkImageSubresource& subresource_, VkImageLayout current_layout_, VkImageLayout initial_layout_)
-            : subresource(subresource_), current_layout(current_layout_), initial_layout(initial_layout_) {}
-        SubresourceLayout() = default;
-    };
-
     struct LayoutEntry {
         VkImageLayout initial_layout;
         VkImageLayout current_layout;
@@ -83,22 +72,8 @@ class ImageLayoutRegistry {
         bool CurrentWillChange(VkImageLayout new_layout) const {
             return new_layout != kInvalidLayout && current_layout != new_layout;
         }
-        bool Update(const LayoutEntry& src) {
-            bool updated_current = false;
-            // current_layout can be updated repeatedly.
-            if (CurrentWillChange(src.current_layout)) {
-                current_layout = src.current_layout;
-                updated_current = true;
-            }
-            // initial_layout and state cannot be updated once they have a valid value.
-            if (initial_layout == kInvalidLayout) {
-                initial_layout = src.initial_layout;
-            }
-            if (state == nullptr) {
-                state = src.state;
-            }
-            return updated_current;
-        }
+        bool Update(const LayoutEntry& src);
+
         // updater for splice()
         struct Updater {
             bool update(LayoutEntry& dst, const LayoutEntry& src) const { return dst.Update(src); }
@@ -173,7 +148,6 @@ class ImageLayoutRegistry {
 class GlobalImageLayoutRangeMap : public subresource_adapter::BothRangeMap<VkImageLayout, 16> {
   public:
     using RangeGenerator = image_layout_map::RangeGenerator;
-    using RangeType = key_type;
 
     GlobalImageLayoutRangeMap(index_type index) : BothRangeMap<VkImageLayout, 16>(index) {}
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock_); }
@@ -184,3 +158,10 @@ class GlobalImageLayoutRangeMap : public subresource_adapter::BothRangeMap<VkIma
   private:
     mutable std::shared_mutex lock_;
 };
+
+// TODO - Get to work with non-STL custom hashmap
+using GlobalImageLayoutMap = std::unordered_map<const vvl::Image*, std::optional<GlobalImageLayoutRangeMap>>;
+
+// Not declared in the CommandBuffer class to allow other files to forward reference this
+// (was slow to have ever file need to compile in the Image Layout map)
+using CommandBufferImageLayoutMap = vvl::unordered_map<VkImage, std::shared_ptr<image_layout_map::ImageLayoutRegistry>>;

@@ -4,7 +4,7 @@
         "name": "@JSON_LAYER_NAME@",
         "type": "GLOBAL",
         "library_path": "@JSON_LIBRARY_PATH@",
-        "api_version": "1.4.309",
+        "api_version": "1.4.312",
         "implementation_version": "1",
         "description": "Khronos Validation Layer",
         "introduction": "The main, comprehensive Khronos validation layer.\n\nVulkan is an Explicit API, enabling direct control over how GPUs actually work. By design, minimal error checking is done inside a Vulkan driver. Applications have full control and responsibility for correct operation. Any errors in how Vulkan is used can result in a crash. \n\nThe Khronos Validation Layer can be enabled to assist development by enabling developers to verify their applications correctly use the Vulkan API.",
@@ -567,6 +567,20 @@
                             "platforms": [ "WINDOWS", "LINUX" ],
                             "settings": [
                                 {
+                                    "key": "gpuav_safe_mode",
+                                    "label": "Safe Mode",
+                                    "description": "Will have GPU-AV try and prevent crashes, but will be much slower to validate. If using Safe Mode, consider using selective shader instrumentation, to only instrument the shaders/pipelines causing issues.",
+                                    "type": "BOOL",
+                                    "default": false,
+                                    "platforms": [ "WINDOWS", "LINUX" ],
+                                    "dependence": {
+                                        "mode": "ALL",
+                                        "settings": [
+                                            { "key": "gpuav_enable", "value": true }
+                                        ]
+                                    }
+                                },
+                                {
                                     "key": "gpuav_shader_instrumentation",
                                     "label": "Shader instrumentation",
                                     "description": "Instrument shaders to validate descriptors, descriptor indexing, buffer device addresses and ray queries. Warning: will considerably slow down shader executions.",
@@ -595,25 +609,7 @@
                                                     { "key": "gpuav_enable", "value": true },
                                                     { "key": "gpuav_shader_instrumentation", "value": true }
                                                 ]
-                                            },
-                                            "settings": [
-                                                {
-                                                    "key": "gpuav_warn_on_robust_oob",
-                                                    "label": "Generate warning on out of bounds accesses even if buffer robustness is enabled",
-                                                    "description": "Warn on out of bounds accesses even if robustness is enabled",
-                                                    "type": "BOOL",
-                                                    "default": true,
-                                                    "platforms": [ "WINDOWS", "LINUX" ],
-                                                    "dependence": {
-                                                        "mode": "ALL",
-                                                        "settings": [
-                                                            { "key": "gpuav_enable", "value": true },
-                                                            { "key": "gpuav_shader_instrumentation", "value": true },
-                                                            { "key": "gpuav_descriptor_checks", "value": true }
-                                                        ]
-                                                    }
-                                                }
-                                            ]
+                                            }
                                         },
                                         {
                                             "key": "gpuav_buffer_address_oob",
@@ -702,7 +698,7 @@
                                         {
                                             "key": "gpuav_select_instrumented_shaders",
                                             "label": "Enable instrumenting shaders selectively",
-                                            "description": "Select which shaders to instrument passing a VkValidationFeaturesEXT struct with GPU-AV enabled in the VkShaderModuleCreateInfo pNext",
+                                            "description": "Select which shaders to instrument by passing a VkValidationFeaturesEXT struct with GPU-AV enabled in the VkShaderModuleCreateInfo pNext or using a regex matching a shader/pipeline debug name",
                                             "type": "BOOL",
                                             "default": false,
                                             "platforms": [ "WINDOWS", "LINUX" ],
@@ -712,7 +708,25 @@
                                                     { "key": "gpuav_enable", "value": true },
                                                     { "key": "gpuav_shader_instrumentation", "value": true }
                                                 ]
-                                            }
+                                            },
+                                            "settings": [
+                                                {
+                                                    "key": "gpuav_shaders_to_instrument",
+                                                    "label": "Shader/pipeline name regexes",
+                                                    "description": "Any shader or pipeline library debug name (set with vkSetDebugUtilsObjectNameEXT) fully matching any listed regular expression will be instrumented when creating pipelines with those shaders or libraries. Regex grammar: Modified ECMAScript. No support for shader objects yet. Warning: instrumentation being performed at final pipeline creation time, if shaders modules have already been destroyed at this step (possible when using pipeline libraries), they won't be found by this regex selection system. In this case, consider naming pipeline libraries instead.",
+                                                    "type": "LIST",
+                                                    "default": [],
+                                                    "platforms": [ "WINDOWS", "LINUX" ],
+                                                    "dependence": {
+                                                        "mode": "ALL",
+                                                        "settings": [
+                                                            { "key": "gpuav_enable", "value": true },
+                                                            { "key": "gpuav_shader_instrumentation", "value": true },
+                                                            { "key": "gpuav_select_instrumented_shaders", "value": true }
+                                                        ]
+                                                    }
+                                                }
+                                            ]
                                         }
                                     ]
                                 },
@@ -811,6 +825,20 @@
                                     "key": "gpuav_image_layout",
                                     "label": "Image Layout",
                                     "description": "(Warning - still known to have false positives) Use GPU-AV to detect which descriptors where accessed. Then using post processing, check that the layout of each image subresource is correct whenever it is used by a command buffer.",
+                                    "type": "BOOL",
+                                    "default": false,
+                                    "platforms": [ "WINDOWS", "LINUX" ],
+                                    "dependence": {
+                                        "mode": "ALL",
+                                        "settings": [
+                                            { "key": "gpuav_enable", "value": true }
+                                        ]
+                                    }
+                                },
+                                {
+                                    "key": "gpuav_force_on_robustness",
+                                    "label": "Force robustness on behalf of the user",
+                                    "description": "When robustness is enabled, GPU-AV will skip checks already covered by robustness",
                                     "type": "BOOL",
                                     "default": false,
                                     "platforms": [ "WINDOWS", "LINUX" ],
@@ -1169,14 +1197,6 @@
                             "type": "BOOL",
                             "default": false,
                             "platforms": [ "WINDOWS", "LINUX", "MACOS", "ANDROID" ]
-                        },
-                        {
-                            "key": "debug_stable_messages",
-                            "label": "Stable messages",
-                            "view": "ADVANCED",
-                            "description": "Improves the reproducibility of error messages by removing fields that can vary between application runs (e.g., dispatchable handles) for comparison purposes.",
-                            "type": "BOOL",
-                            "default": false
                         }
                     ]
                 },

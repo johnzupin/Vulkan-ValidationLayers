@@ -558,7 +558,7 @@ void Validator::PreCallRecordCmdCopyBufferToImage(VkCommandBuffer commandBuffer,
     BaseClass::PreCallRecordCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions,
                                                  record_obj);
 
-    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
 
     if (auto dst_image_state = Get<vvl::Image>(dstImage)) {
         // Make sure that all image slices are record referenced layout
@@ -584,7 +584,7 @@ void Validator::PreCallRecordCmdCopyBufferToImage(VkCommandBuffer commandBuffer,
     copy_buffer_to_image_info.regionCount = regionCount;
     copy_buffer_to_image_info.pRegions = regions_2.data();
 
-    InsertCopyBufferToImageValidation(*this, record_obj.location, *cb_state, &copy_buffer_to_image_info);
+    InsertCopyBufferToImageValidation(*this, record_obj.location, SubState(*cb_state), &copy_buffer_to_image_info);
 }
 
 void Validator::PreCallRecordCmdCopyBufferToImage2KHR(VkCommandBuffer commandBuffer,
@@ -598,7 +598,7 @@ void Validator::PreCallRecordCmdCopyBufferToImage2(VkCommandBuffer commandBuffer
                                                    const RecordObject &record_obj) {
     BaseClass::PreCallRecordCmdCopyBufferToImage2(commandBuffer, pCopyBufferToImageInfo, record_obj);
 
-    auto cb_state = GetWrite<CommandBuffer>(commandBuffer);
+    auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
 
     if (auto dst_image_state = Get<vvl::Image>(pCopyBufferToImageInfo->dstImage)) {
         // Make sure that all image slices are record referenced layout
@@ -608,7 +608,7 @@ void Validator::PreCallRecordCmdCopyBufferToImage2(VkCommandBuffer commandBuffer
         }
     }
 
-    InsertCopyBufferToImageValidation(*this, record_obj.location, *cb_state, pCopyBufferToImageInfo);
+    InsertCopyBufferToImageValidation(*this, record_obj.location, SubState(*cb_state), pCopyBufferToImageInfo);
 }
 
 void Validator::PreCallRecordCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout,

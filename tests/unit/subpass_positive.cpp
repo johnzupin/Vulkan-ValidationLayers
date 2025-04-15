@@ -54,7 +54,7 @@ TEST_F(PositiveSubpass, SubpassImageBarrier) {
     rpci.dependencyCount = 1;
     rpci.pDependencies = &dependency;
     vkt::RenderPass render_pass(*m_device, rpci);
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM,
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM,
                      VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView image_view = image.CreateView();
     vkt::Framebuffer framebuffer(*m_device, render_pass, 1, &image_view.handle());
@@ -77,10 +77,6 @@ TEST_F(PositiveSubpass, SubpassImageBarrier) {
     // VkDependencyInfo with VkImageMemoryBarrier2
     const auto safe_barrier2 = ConvertVkImageMemoryBarrierToV2(barrier, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                                                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-    VkDependencyInfo dependency_info = vku::InitStructHelper();
-    dependency_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-    dependency_info.imageMemoryBarrierCount = 1;
-    dependency_info.pImageMemoryBarriers = safe_barrier2.ptr();
 
     // Test vkCmdPipelineBarrier subpass barrier
     m_command_buffer.Begin();
@@ -94,7 +90,7 @@ TEST_F(PositiveSubpass, SubpassImageBarrier) {
     // Test vkCmdPipelineBarrier2 subpass barrier
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass, framebuffer, 32, 32);
-    vk::CmdPipelineBarrier2(m_command_buffer, &dependency_info);
+    m_command_buffer.Barrier(*safe_barrier2.ptr(), VK_DEPENDENCY_BY_REGION_BIT);
     vk::CmdEndRenderPass(m_command_buffer);
     m_command_buffer.End();
 }
@@ -132,7 +128,7 @@ TEST_F(PositiveSubpass, SubpassWithEventWait) {
     rpci.dependencyCount = 1;
     rpci.pDependencies = &dependency;
     vkt::RenderPass render_pass(*m_device, rpci);
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM,
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM,
                      VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView image_view = image.CreateView();
     vkt::Framebuffer framebuffer(*m_device, render_pass, 1, &image_view.handle());
@@ -211,4 +207,45 @@ TEST_F(PositiveSubpass, DISABLED_InputAttachmentMissingSpecConstant) {
         helper.dsl_bindings_[0] = {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 2, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     };
     CreatePipelineHelper::OneshotTest(*this, set_info, kErrorBit);
+}
+
+TEST_F(PositiveSubpass, AccessFlags3) {
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::maintenance8);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkMemoryBarrierAccessFlags3KHR memory_barrier_access_flags = vku::InitStructHelper();
+    memory_barrier_access_flags.srcAccessMask3 = VK_ACCESS_3_NONE_KHR;
+    memory_barrier_access_flags.dstAccessMask3 = VK_ACCESS_3_NONE_KHR;
+
+    VkMemoryBarrier2 memory_barrier = vku::InitStructHelper(&memory_barrier_access_flags);
+
+    VkSubpassDependency2 subpass_dependency = vku::InitStructHelper(&memory_barrier);
+    subpass_dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    VkAttachmentDescription2 attach_desc = vku::InitStructHelper();
+    attach_desc.format = VK_FORMAT_R32_UINT;
+    attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
+    attach_desc.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attach_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkAttachmentReference2 reference = vku::InitStructHelper();
+    reference.attachment = 0;
+    reference.layout = VK_IMAGE_LAYOUT_GENERAL;
+    reference.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    VkSubpassDescription2 subpass = vku::InitStructHelper();
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.viewMask = 0;
+    subpass.inputAttachmentCount = 1;
+    subpass.pInputAttachments = &reference;
+
+    auto rpci2 =
+        vku::InitStruct<VkRenderPassCreateInfo2>(nullptr, 0u, 1u, &attach_desc, 1u, &subpass, 1u, &subpass_dependency, 0u, nullptr);
+
+    PositiveTestRenderPass2KHRCreate(*m_device, rpci2);
 }

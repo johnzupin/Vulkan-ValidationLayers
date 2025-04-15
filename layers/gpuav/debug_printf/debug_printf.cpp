@@ -69,10 +69,11 @@ struct Substring {
     bool needs_value = false;  // if value from buffer needed to print arguments
     NumericType type = NumericTypeUnknown;
     bool is_64_bit = false;
+    bool is_pointer = false;
 };
 
 static std::vector<Substring> ParseFormatString(const std::string &format_string) {
-    const char types[] = {'d', 'i', 'o', 'u', 'x', 'X', 'a', 'A', 'e', 'E', 'f', 'F', 'g', 'G', 'v', '\0'};
+    const char types[] = {'d', 'i', 'o', 'u', 'x', 'X', 'a', 'A', 'e', 'E', 'f', 'F', 'g', 'G', 'v', 'p', '\0'};
     std::vector<Substring> parsed_strings;
     size_t pos = 0;
     size_t begin = 0;
@@ -145,6 +146,11 @@ static std::vector<Substring> ParseFormatString(const std::string &format_string
                     substring.is_64_bit = true;
                     pos++;  // Save long size
                 }
+                if (format_string[pos] == 'p') {
+                    substring.is_64_bit = true;
+                    substring.is_pointer = true;
+                }
+
                 substring.string = format_string.substr(begin, pos - begin + 1);
                 substring.type = NumericTypeLookup(format_string[pos]);
                 parsed_strings.emplace_back(substring);
@@ -333,10 +339,13 @@ void AnalyzeAndGenerateMessage(Validator &gpuav, VkCommandBuffer command_buffer,
 
         const bool use_stdout = gpuav.gpuav_settings.debug_printf_to_stdout;
         if (gpuav.gpuav_settings.debug_printf_verbose) {
-            std::string debug_info_message = gpuav.GenerateDebugInfoMessage(
-                command_buffer, debug_record->stage_id, debug_record->stage_info_0, debug_record->stage_info_1,
-                debug_record->stage_info_2, debug_record->instruction_position, instrumented_shader, debug_record->shader_id,
-                buffer_info.pipeline_bind_point, buffer_info.action_command_index);
+            GpuShaderInstrumentor::ShaderMessageInfo shader_info{
+                debug_record->stage_id,     debug_record->stage_info_0,         debug_record->stage_info_1,
+                debug_record->stage_info_2, debug_record->instruction_position, debug_record->shader_id};
+
+            std::string debug_info_message =
+                gpuav.GenerateDebugInfoMessage(command_buffer, shader_info, instrumented_shader, buffer_info.pipeline_bind_point,
+                                               buffer_info.action_command_index);
             if (use_stdout) {
                 std::cout << "VVL-DEBUG-PRINTF " << shader_message.str() << '\n' << debug_info_message;
             } else {
@@ -373,7 +382,7 @@ void AnalyzeAndGenerateMessage(Validator &gpuav, VkCommandBuffer command_buffer,
 #pragma GCC diagnostic pop
 #endif
 
-bool UpdateInstrumentationDescSet(Validator &gpuav, CommandBuffer &cb_state, VkDescriptorSet instrumentation_desc_set,
+bool UpdateInstrumentationDescSet(Validator &gpuav, CommandBufferSubState &cb_state, VkDescriptorSet instrumentation_desc_set,
                                   VkPipelineBindPoint bind_point, const Location &loc) {
     gpuav::vko::Buffer debug_printf_output_buffer(gpuav);
 
@@ -390,9 +399,7 @@ bool UpdateInstrumentationDescSet(Validator &gpuav, CommandBuffer &cb_state, VkD
     }
 
     // Clear the output block to zeros so that only printf values from the gpu will be present
-    auto printf_output_ptr = (uint32_t *)debug_printf_output_buffer.MapMemory(loc);
-    memset(printf_output_ptr, 0, gpuav.gpuav_settings.debug_printf_buffer_size);
-    debug_printf_output_buffer.UnmapMemory();
+    debug_printf_output_buffer.Clear();
 
     VkDescriptorBufferInfo debug_printf_desc_buffer_info = {};
     debug_printf_desc_buffer_info.range = gpuav.gpuav_settings.debug_printf_buffer_size;

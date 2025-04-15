@@ -19,35 +19,43 @@
 
 #include <atomic>
 #include <mutex>
+#include <vector>
 #include "state_tracker/descriptor_sets.h"
 #include "gpuav/resources/gpuav_vulkan_objects.h"
 #include "gpuav/spirv/interface.h"
+#include "containers/custom_containers.h"
+#include "containers/limits.h"
 
 namespace gpuav {
+class DescriptorHeap;
 class Validator;
 
 // Information about how each descriptor was accessed
 struct DescriptorAccess {
-    uint32_t binding;      // binding number in the descriptor set
-    uint32_t index;        // index into descriptor array
-    uint32_t variable_id;  // OpVariable of descriptor accessed;
+    uint32_t binding = vvl::kU32Max;       // binding number in the descriptor set
+    uint32_t index = vvl::kU32Max;         // index into descriptor array
+    uint32_t variable_id = vvl::kU32Max;   // OpVariableID
+    uint32_t action_index = vvl::kU32Max;  // Index of action command access occured
 };
 
-class DescriptorSet : public vvl::DescriptorSet {
+// We create a map with the |unique_shader_id| as the key so we can only do the state object lookup once per
+// pipeline/shaderModule/shaderObject
+using DescriptorAccessMap = vvl::unordered_map<uint32_t, std::vector<DescriptorAccess>>;
+
+class DescriptorSetSubState : public vvl::DescriptorSetSubState {
   public:
-    DescriptorSet(const VkDescriptorSet set, vvl::DescriptorPool *pool,
-                  const std::shared_ptr<vvl::DescriptorSetLayout const> &layout, uint32_t variable_count, vvl::Device *state_data);
-    virtual ~DescriptorSet();
-    void PerformPushDescriptorsUpdate(uint32_t write_count, const VkWriteDescriptorSet *write_descs) override;
-    void PerformWriteUpdate(const VkWriteDescriptorSet &) override;
-    void PerformCopyUpdate(const VkCopyDescriptorSet &, const vvl::DescriptorSet &) override;
+    DescriptorSetSubState(const vvl::DescriptorSet &set, Validator &state_data);
+    virtual ~DescriptorSetSubState();
+
+    void NotifyUpdate() override;
 
     VkDeviceAddress GetTypeAddress(Validator &gpuav, const Location &loc);
     VkDeviceAddress GetPostProcessBuffer(Validator &gpuav, const Location &loc);
     bool HasPostProcessBuffer() const { return !post_process_buffer_.IsDestroyed(); }
     bool CanPostProcess() const;
+    void ClearPostProcess(const Location &loc) const;
 
-    std::vector<DescriptorAccess> GetDescriptorAccesses(const Location &loc, uint32_t shader_set) const;
+    DescriptorAccessMap GetDescriptorAccesses(const Location &loc) const;
 
   private:
     void BuildBindingLayouts();
@@ -67,11 +75,16 @@ class DescriptorSet : public vvl::DescriptorSet {
     mutable std::mutex state_lock_;
 };
 
+static inline DescriptorSetSubState &SubState(vvl::DescriptorSet &set) {
+    return static_cast<DescriptorSetSubState &>(*set.SubState(LayerObjectTypeGpuAssisted));
+}
+
 typedef uint32_t DescriptorId;
 class DescriptorHeap {
   public:
     DescriptorHeap(Validator &gpuav, uint32_t max_descriptors, const Location &loc);
     ~DescriptorHeap();
+
     DescriptorId NextId(const VulkanTypedHandle &handle);
     void DeleteId(DescriptorId id);
 

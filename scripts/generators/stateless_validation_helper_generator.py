@@ -157,6 +157,9 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
             'vkCmdSetScissorWithCount',
             'vkCmdBindVertexBuffers2',
             'vkCmdCopyBuffer2',
+            'vkCmdPipelineBarrier2',
+            'vkCmdSetEvent2',
+            'vkCmdWaitEvents2',
             'vkCmdBuildAccelerationStructuresKHR',
             'vkCmdBuildAccelerationStructuresIndirectKHR',
             'vkBuildAccelerationStructuresKHR',
@@ -281,6 +284,22 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
             'VkIndirectExecutionSetPipelineInfoEXT', # VkIndirectExecutionSetShaderInfoEXT is done manually
         ]
 
+        # These functions entrypoints we as VVL expose
+        self.layerExtensionFunctions = [
+            # VK_EXT_debug_utils
+            'vkCmdBeginDebugUtilsLabelEXT',
+            'vkCmdEndDebugUtilsLabelEXT',
+            'vkCmdInsertDebugUtilsLabelEXT',
+            'vkCreateDebugUtilsMessengerEXT',
+            'vkDestroyDebugUtilsMessengerEXT',
+            'vkQueueBeginDebugUtilsLabelEXT',
+            'vkQueueEndDebugUtilsLabelEXT',
+            'vkQueueInsertDebugUtilsLabelEXT',
+            'vkSetDebugUtilsObjectNameEXT',
+            'vkSetDebugUtilsObjectTagEXT',
+            'vkSubmitDebugUtilsMessageEXT',
+        ]
+
         # Map of structs type names to generated validation code for that struct type
         self.validatedStructs = dict()
         # Map of flags typenames
@@ -330,9 +349,7 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
         out.append('#pragma once\n')
 
         guard_helper = PlatformGuardHelper()
-        for command in [x for x in self.vk.commands.values() if x.name not in self.blacklist]:
-            if command.instance != want_instance:
-                continue
+        for command in [x for x in self.vk.commands.values() if x.name not in self.blacklist and x.instance == want_instance]:
             out.extend(guard_helper.add_guard(command.protect))
             prototype = command.cPrototype.split('VKAPI_CALL ')[1]
             prototype = f'bool PreCallValidate{prototype[2:]}'
@@ -360,7 +377,9 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
         structMemberBlacklist = {
             'VkWriteDescriptorSet' : ['dstSet'],
             'VkAccelerationStructureGeometryKHR' :['geometry'],
-            'VkDescriptorDataEXT' :['pSampler']
+            'VkDescriptorDataEXT' :['pSampler'],
+            # https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9887
+            'VkClusterAccelerationStructureInputInfoNV' :['opInput'],
         }
         for struct in [x for x in self.vk.structs.values() if x.name in structMemberBlacklist]:
             for member in [x for x in struct.members if x.name in structMemberBlacklist[struct.name]]:
@@ -396,7 +415,7 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
             for extension in extensions.findall('extension'):
                 extension_name = extension.get('name')
                 promoted_ext = extToPromotedExtDict[extension_name]
-                while promoted_ext is not None and not 'VK_VERSION' in promoted_ext:
+                while promoted_ext is not None and 'VK_VERSION' not in promoted_ext:
                     promoted_ext = extToPromotedExtDict[promoted_ext]
                 # TODO Issue 5103 - this is being used to remove false positive currently
                 promoted_to_core = promoted_ext is not None and 'VK_VERSION' in promoted_ext
@@ -523,7 +542,7 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
             out.append('    [[maybe_unused]] const Location loc = error_obj.location;\n')
 
             # Cannot validate extension dependencies for device extension APIs having a physical device as their dispatchable object
-            if command.extensions and (not any(x.device for x in command.extensions) or command.params[0].type != 'VkPhysicalDevice'):
+            if command.extensions and command.name not in self.layerExtensionFunctions and (not any(x.device for x in command.extensions) or command.params[0].type != 'VkPhysicalDevice'):
                 cExpression =  []
                 outExpression =  []
                 for extension in command.extensions:
@@ -1071,15 +1090,6 @@ class StatelessValidationHelperOutputGenerator(BaseGenerator):
                 pNextCheck += 'if (is_const_param) {\n'
 
             pNextCheck += f'[[maybe_unused]] const Location pNext_loc = loc.pNext(Struct::{struct.name});\n'
-
-            # Can have a struct from a device extension be extended by an instance extension struct
-            # https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7803
-            # This is true already for all Properties/Features so exclude them here
-            check_for_instance = False
-            if nonPropFeature and isDeviceStruct(struct):
-                for extend in struct.extends:
-                    if not isDeviceStruct(self.vk.structs[extend]):
-                        check_for_instance = True
 
             structValidationSource = f'{struct.name} *structure = ({struct.name} *) header;\n{structValidationSource}'
             structValidationSource += '}\n'

@@ -681,7 +681,7 @@ TEST_F(NegativeParent, UpdateDescriptorSetsImage) {
     auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
-    vkt::Image image(*m_second_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_second_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
     vkt::ImageView image_view = image.CreateView();
 
     OneOffDescriptorSet ds(m_device, {
@@ -701,7 +701,7 @@ TEST_F(NegativeParent, UpdateDescriptorSetsSampler) {
     auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
     vkt::ImageView image_view = image.CreateView();
     vkt::Sampler sampler(*m_second_device, SafeSaneSamplerCreateInfo());
 
@@ -718,14 +718,14 @@ TEST_F(NegativeParent, UpdateDescriptorSetsSampler) {
 TEST_F(NegativeParent, UpdateDescriptorSetsCombinedImageSampler) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
     vkt::ImageView image_view = image.CreateView();
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
     auto features = m_device->Physical().Features();
     m_second_device = new vkt::Device(gpu_, m_device_extension_names, &features, nullptr);
 
-    vkt::Image bad_image(*m_second_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image bad_image(*m_second_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
     vkt::ImageView bad_image_view = bad_image.CreateView();
     vkt::Sampler bad_sampler(*m_second_device, SafeSaneSamplerCreateInfo());
 
@@ -844,8 +844,7 @@ TEST_F(NegativeParent, CmdPipelineBarrier) {
     auto image_ci = vkt::Image::ImageCreateInfo2D(256, 256, 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::Image image(*m_second_device, image_ci, vkt::set_layout);
 
-    VkImageSubresource image_sub = vkt::Image::Subresource(VK_IMAGE_ASPECT_COLOR_BIT, 0, 0);
-    VkImageSubresourceRange image_sub_range = vkt::Image::SubresourceRange(image_sub);
+    VkImageSubresourceRange image_sub_range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     VkImageMemoryBarrier image_barriers[] = {image.ImageMemoryBarrier(0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                                                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image_sub_range)};
 
@@ -873,13 +872,9 @@ TEST_F(NegativeParent, CmdPipelineBarrier2) {
     buffer_barrier.buffer = buffer.handle();
     buffer_barrier.size = VK_WHOLE_SIZE;
 
-    VkDependencyInfo buffer_dependency = vku::InitStructHelper();
-    buffer_dependency.bufferMemoryBarrierCount = 1;
-    buffer_dependency.pBufferMemoryBarriers = &buffer_barrier;
-
     m_command_buffer.Begin();
     m_errorMonitor->SetDesiredError("UNASSIGNED-vkCmdPipelineBarrier2-commandBuffer-commonparent");
-    vk::CmdPipelineBarrier2(m_command_buffer.handle(), &buffer_dependency);
+    m_command_buffer.Barrier(buffer_barrier);
     m_errorMonitor->VerifyFound();
     m_command_buffer.End();
 }

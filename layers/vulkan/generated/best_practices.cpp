@@ -158,6 +158,8 @@ DeprecationData GetDeprecatedData(vvl::Extension extension_name) {
         {vvl::Extension::_VK_EXT_load_store_op_none, {DeprecationReason::Promoted, {vvl::Extension::_VK_KHR_load_store_op_none}}},
         {vvl::Extension::_VK_EXT_depth_clamp_zero_one,
          {DeprecationReason::Promoted, {vvl::Extension::_VK_KHR_depth_clamp_zero_one}}},
+        {vvl::Extension::_VK_QCOM_fragment_density_map_offset,
+         {DeprecationReason::Promoted, {vvl::Extension::_VK_EXT_fragment_density_map_offset}}},
         {vvl::Extension::_VK_EXT_pipeline_protected_access, {DeprecationReason::Promoted, {vvl::Version::_VK_VERSION_1_4}}},
     };
 
@@ -1567,10 +1569,9 @@ void BestPractices::PostCallRecordCreateRayTracingPipelinesNV(VkDevice device, V
                                                               uint32_t createInfoCount,
                                                               const VkRayTracingPipelineCreateInfoNV* pCreateInfos,
                                                               const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines,
-                                                              const RecordObject& record_obj, PipelineStates& pipeline_states,
-                                                              chassis::CreateRayTracingPipelinesNV& chassis_state) {
+                                                              const RecordObject& record_obj, PipelineStates& pipeline_states) {
     BaseClass::PostCallRecordCreateRayTracingPipelinesNV(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator,
-                                                         pPipelines, record_obj, pipeline_states, chassis_state);
+                                                         pPipelines, record_obj, pipeline_states);
     bp_state::LogResult(*this, device, record_obj);
 }
 
@@ -1820,6 +1821,7 @@ void BestPractices::PostCallRecordSetPrivateDataEXT(VkDevice device, VkObjectTyp
     PostCallRecordSetPrivateData(device, objectType, objectHandle, privateDataSlot, data, record_obj);
 }
 
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 void BestPractices::PostCallRecordCreateCudaModuleNV(VkDevice device, const VkCudaModuleCreateInfoNV* pCreateInfo,
                                                      const VkAllocationCallbacks* pAllocator, VkCudaModuleNV* pModule,
                                                      const RecordObject& record_obj) {
@@ -1839,6 +1841,7 @@ void BestPractices::PostCallRecordCreateCudaFunctionNV(VkDevice device, const Vk
     BaseClass::PostCallRecordCreateCudaFunctionNV(device, pCreateInfo, pAllocator, pFunction, record_obj);
     bp_state::LogResult(*this, device, record_obj);
 }
+#endif  // VK_ENABLE_BETA_EXTENSIONS
 
 void BestPractices::PostCallRecordGetBufferOpaqueCaptureDescriptorDataEXT(VkDevice device,
                                                                           const VkBufferCaptureDescriptorDataInfoEXT* pInfo,
@@ -2113,6 +2116,15 @@ void BestPractices::PostCallRecordGetScreenBufferPropertiesQNX(VkDevice device, 
     bp_state::LogResult(*this, device, record_obj);
 }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+
+void BestPractices::PostCallRecordCreateExternalComputeQueueNV(VkDevice device,
+                                                               const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                               const VkAllocationCallbacks* pAllocator,
+                                                               VkExternalComputeQueueNV* pExternalQueue,
+                                                               const RecordObject& record_obj) {
+    BaseClass::PostCallRecordCreateExternalComputeQueueNV(device, pCreateInfo, pAllocator, pExternalQueue, record_obj);
+    bp_state::LogResult(*this, device, record_obj);
+}
 
 void BestPractices::PostCallRecordCreateIndirectCommandsLayoutEXT(VkDevice device,
                                                                   const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo,

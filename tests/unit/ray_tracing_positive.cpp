@@ -212,8 +212,7 @@ TEST_F(PositiveRayTracing, BarrierAccessMaskAccelerationStructureRayQueryEnabled
     buffer_barrier.buffer = buffer.handle();
     buffer_barrier.size = 32;
 
-    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image(*m_device, 128, 128, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
     VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
     image_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
@@ -277,8 +276,7 @@ TEST_F(PositiveRayTracing, BarrierAccessMaskAccelerationStructureRayQueryEnabled
     buffer_barrier.buffer = buffer.handle();
     buffer_barrier.size = 32;
 
-    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image(*m_device, 128, 128, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
     VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
     image_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
@@ -1273,9 +1271,7 @@ TEST_F(PositiveRayTracing, BasicOpacityMicromapBuild) {
         }
 
         // Index information
-        data[IndexOffset/4] = 0;
-
-        micromapDataBuffer.Memory().Unmap();
+        data[IndexOffset / 4] = 0;
     }
 
     VkMicromapBuildInfoEXT mmBuildInfo = { VK_STRUCTURE_TYPE_MICROMAP_BUILD_INFO_EXT };
@@ -1331,15 +1327,13 @@ TEST_F(PositiveRayTracing, BasicOpacityMicromapBuild) {
         vk::CmdBuildMicromapsEXT(m_command_buffer.handle(), 1, &mmBuildInfo);
 
         {
-            VkMemoryBarrier2 memoryBarrier = { VK_STRUCTURE_TYPE_MEMORY_BARRIER_2, NULL,
-                VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT, VK_ACCESS_2_MICROMAP_WRITE_BIT_EXT,
-                VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_MICROMAP_READ_BIT_EXT };
-            VkDependencyInfo dependencyInfo = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
-
-            dependencyInfo.memoryBarrierCount = 1;
-            dependencyInfo.pMemoryBarriers = &memoryBarrier;
-
-            vk::CmdPipelineBarrier2KHR(m_command_buffer.handle(), &dependencyInfo);
+            VkMemoryBarrier2 memoryBarrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+                                              NULL,
+                                              VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT,
+                                              VK_ACCESS_2_MICROMAP_WRITE_BIT_EXT,
+                                              VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+                                              VK_ACCESS_2_MICROMAP_READ_BIT_EXT};
+            m_command_buffer.BarrierKHR(memoryBarrier);
         }
         m_command_buffer.End();
 
@@ -1464,9 +1458,7 @@ TEST_F(PositiveRayTracing, BasicOpacityMicromapBuild) {
 
         VkAccelerationStructureDeviceAddressInfoKHR asDeviceAddressInfo = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR };
         asDeviceAddressInfo.accelerationStructure = bottomAS;
-        instance[0].accelerationStructureReference =  vk::GetAccelerationStructureDeviceAddressKHR(device(), &asDeviceAddressInfo);
-
-        instanceBuffer.Memory().Unmap();
+        instance[0].accelerationStructureReference = vk::GetAccelerationStructureDeviceAddressKHR(device(), &asDeviceAddressInfo);
     }
 
     VkAccelerationStructureGeometryKHR topASGeometry = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
@@ -1734,4 +1726,162 @@ TEST_F(PositiveRayTracing, AccelerationStructuresAndScratchBuffersAddressSharing
             blas_vec.emplace_back(std::move(blas));
         }
     }
+}
+
+TEST_F(PositiveRayTracing, ZeroPrimitiveCount) {
+    TEST_DESCRIPTION("https://gitlab.khronos.org/vulkan/vulkan/-/issues/4203");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredFeature(vkt::Feature::accelerationStructure);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    RETURN_IF_SKIP(InitFrameworkForRayTracingTest());
+    RETURN_IF_SKIP(InitState());
+
+    auto blas =
+        std::make_shared<vkt::as::BuildGeometryInfoKHR>(vkt::as::blueprint::BuildGeometryInfoSimpleOnDeviceBottomLevel(*m_device));
+
+    m_command_buffer.Begin();
+    blas->SetupBuild(true);
+    const VkAccelerationStructureGeometryKHR* pGeometries = &blas->GetGeometries()[0].GetVkObj();
+
+    VkAccelerationStructureBuildGeometryInfoKHR build_geometry_info = vku::InitStructHelper();
+    build_geometry_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    build_geometry_info.dstAccelerationStructure = *blas->GetDstAS();
+    build_geometry_info.geometryCount = 1u;
+    build_geometry_info.ppGeometries = &pGeometries;
+    build_geometry_info.scratchData = blas->GetInfo().scratchData;
+
+    VkAccelerationStructureBuildRangeInfoKHR build_range_info;
+    build_range_info.primitiveCount = 0u;
+    build_range_info.primitiveOffset = 0u;
+    build_range_info.firstVertex = 0u;
+    build_range_info.transformOffset = 0u;
+    const VkAccelerationStructureBuildRangeInfoKHR* p_build_range_info = &build_range_info;
+    vk::CmdBuildAccelerationStructuresKHR(m_command_buffer.handle(), 1u, &build_geometry_info, &p_build_range_info);
+    m_command_buffer.End();
+
+    m_default_queue->Submit(m_command_buffer);
+    m_device->Wait();
+}
+
+TEST_F(PositiveRayTracing, ZeroPrimitiveCountIndirect) {
+    TEST_DESCRIPTION("https://gitlab.khronos.org/vulkan/vulkan/-/issues/4203");
+
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredFeature(vkt::Feature::accelerationStructure);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredFeature(vkt::Feature::accelerationStructureIndirectBuild);
+    RETURN_IF_SKIP(InitFrameworkForRayTracingTest());
+    RETURN_IF_SKIP(InitState());
+
+    auto blas =
+        std::make_shared<vkt::as::BuildGeometryInfoKHR>(vkt::as::blueprint::BuildGeometryInfoSimpleOnDeviceBottomLevel(*m_device));
+
+    m_command_buffer.Begin();
+    blas->SetupBuild(true);
+    VkMemoryAllocateFlagsInfo alloc_flags = vku::InitStructHelper();
+    alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+
+    vkt::Buffer indirect_buffer_(*m_device, sizeof(VkAccelerationStructureBuildRangeInfoKHR),
+                                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                 kHostVisibleMemProps, &alloc_flags);
+
+    auto* ranges_info = static_cast<VkAccelerationStructureBuildRangeInfoKHR*>(indirect_buffer_.Memory().Map());
+    const VkAccelerationStructureGeometryKHR* pGeometries;
+    pGeometries = &blas->GetGeometries()[0].GetVkObj();
+    *ranges_info = blas->GetGeometries()[0].GetFullBuildRange();
+
+    VkAccelerationStructureBuildGeometryInfoKHR build_geometry_info = blas->GetInfo();
+    build_geometry_info.geometryCount = 1u;
+    build_geometry_info.ppGeometries = &pGeometries;
+
+    const VkDeviceAddress indirect_address = indirect_buffer_.Address();
+    uint32_t stride = 0u;
+    uint32_t max_primitive_count = 1u;
+    const uint32_t* p_max_primitive_counts = &max_primitive_count;
+    vk::CmdBuildAccelerationStructuresIndirectKHR(m_command_buffer.handle(), 1u, &build_geometry_info, &indirect_address, &stride,
+                                                  &p_max_primitive_counts);
+    m_command_buffer.End();
+
+    m_default_queue->Submit(m_command_buffer);
+    m_device->Wait();
+}
+
+TEST_F(PositiveRayTracing, BuildIndirectWithoutIndexBuffer) {
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredFeature(vkt::Feature::accelerationStructure);
+    AddRequiredFeature(vkt::Feature::accelerationStructureIndirectBuild);
+    AddRequiredFeature(vkt::Feature::rayQuery);
+    RETURN_IF_SKIP(InitFrameworkForRayTracingTest());
+    RETURN_IF_SKIP(InitState());
+
+    vkt::as::GeometryKHR triangle_geometry;
+
+    triangle_geometry.SetType(vkt::as::GeometryKHR::Type::Triangle);
+
+    VkMemoryAllocateFlagsInfo alloc_flags = vku::InitStructHelper();
+    alloc_flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    const VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+                                            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+                                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
+    vkt::Buffer vertex_buffer(*m_device, 1024, buffer_usage, kHostVisibleMemProps, &alloc_flags);
+    vkt::Buffer transform_buffer(*m_device, sizeof(VkTransformMatrixKHR), buffer_usage, kHostVisibleMemProps, &alloc_flags);
+
+    triangle_geometry.SetPrimitiveCount(1);
+    constexpr std::array vertices = {10.0f, 10.0f, 0.0f, -10.0f, 10.0f, 0.0f, 0.0f, -10.0f, 0.0f};
+    auto vertex_buffer_ptr = static_cast<float*>(vertex_buffer.Memory().Map());
+    std::copy(vertices.begin(), vertices.end(), vertex_buffer_ptr);
+
+    VkTransformMatrixKHR transform_matrix = {{
+        {1.0f, 0.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f, 0.0f},
+    }};
+
+    auto transform_buffer_ptr = static_cast<VkTransformMatrixKHR*>(transform_buffer.Memory().Map());
+    std::memcpy(transform_buffer_ptr, &transform_matrix, sizeof(transform_matrix));
+
+    triangle_geometry.SetTrianglesDeviceVertexBuffer(std::move(vertex_buffer), uint32_t(vertices.size() / 3) - 1);
+    triangle_geometry.SetTrianglesIndexType(VK_INDEX_TYPE_UINT32);
+    triangle_geometry.SetTrianglesTransformBuffer(std::move(transform_buffer));
+    triangle_geometry.SetFlags(VK_GEOMETRY_OPAQUE_BIT_KHR);
+
+    vkt::as::BuildGeometryInfoKHR out_build_info(m_device);
+
+    out_build_info.SetType(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR);
+    out_build_info.SetBuildType(VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR);
+    out_build_info.SetMode(VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR);
+
+    std::vector<vkt::as::GeometryKHR> geometries;
+    geometries.emplace_back(std::move(triangle_geometry));
+    out_build_info.SetGeometries(std::move(geometries));
+    out_build_info.SetBuildRanges(out_build_info.GetBuildRangeInfosFromGeometries());
+
+    auto null_as = std::make_shared<vkt::as::AccelerationStructureKHR>(m_device);
+    null_as->SetNull(true);
+
+    out_build_info.SetSrcAS(null_as);
+    auto dstAsSize = out_build_info.GetSizeInfo().accelerationStructureSize;
+
+    auto as = std::make_shared<vkt::as::AccelerationStructureKHR>(m_device);
+    as->SetSize(dstAsSize);
+    as->SetType(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR);
+    as->SetDeviceBufferMemoryAllocateFlags(VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+    as->SetDeviceBufferMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    as->SetBufferUsageFlags(VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    as->SetDeviceBufferInitNoMem(false);
+
+    out_build_info.SetDstAS(as);
+    out_build_info.SetUpdateDstAccelStructSizeBeforeBuild(true);
+
+    out_build_info.SetInfoCount(1);
+    out_build_info.SetNullInfos(false);
+    out_build_info.SetNullBuildRangeInfos(false);
+
+    m_command_buffer.Begin();
+    out_build_info.BuildCmdBufferIndirect(m_command_buffer.handle());
+    m_command_buffer.End();
 }

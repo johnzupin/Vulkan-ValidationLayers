@@ -859,10 +859,6 @@ TEST_F(VkNvidiaBestPracticesLayerTest, BindPipelineZcullDirectionDepth) {
     discard_barrier2.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 1,
                                          VK_REMAINING_ARRAY_LAYERS};
 
-    VkDependencyInfo discard_dependency_info = vku::InitStructHelper();
-    discard_dependency_info.imageMemoryBarrierCount = 1;
-    discard_dependency_info.pImageMemoryBarriers = &discard_barrier2;
-
     auto set_desired_failure_msg = [this] {
         m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "BestPractices-NVIDIA-Zcull-LessGreaterRatio");
     };
@@ -936,7 +932,7 @@ TEST_F(VkNvidiaBestPracticesLayerTest, BindPipelineZcullDirectionDepth) {
 
         vk::CmdEndRendering(cmd);
 
-        vk::CmdPipelineBarrier2(cmd, &discard_dependency_info);
+        m_command_buffer.Barrier(discard_barrier2);
 
         vk::CmdBeginRendering(cmd, &begin_rendering_info);
 
@@ -962,7 +958,7 @@ TEST_F(VkNvidiaBestPracticesLayerTest, BindPipelineZcullDirectionDepth) {
         vk::CmdEndRendering(cmd);
 
         set_desired_failure_msg();
-        vk::CmdPipelineBarrier2(cmd, &discard_dependency_info);
+        m_command_buffer.Barrier(discard_barrier2);
         m_errorMonitor->VerifyFound();
     }
 
@@ -1151,8 +1147,7 @@ TEST_F(VkNvidiaBestPracticesLayerTest, ClearColor_NotCompressed) {
         m_errorMonitor->SetAllowedFailureMsg("BestPractices-DrawState-ClearCmdBeforeDraw");
     };
 
-    vkt::Image image(*m_device, m_width, m_height, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image(*m_device, m_width, m_height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView image_view = image.CreateView();
 
     VkRenderingAttachmentInfo color_attachment = vku::InitStructHelper();

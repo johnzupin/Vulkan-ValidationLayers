@@ -178,13 +178,7 @@ TEST_F(PositiveMemory, GetMemoryRequirements2) {
     vk::BindBufferMemory(device(), buffer.handle(), buffer_memory.handle(), 0);
 
     // Create a test image
-    auto image_ci = vkt::Image::CreateInfo();
-    image_ci.imageType = VK_IMAGE_TYPE_2D;
-    image_ci.extent.width = 32;
-    image_ci.extent.height = 32;
-    image_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     vkt::Image image(*m_device, image_ci, vkt::no_mem);
 
     // Use extension to get image memory requirements
@@ -204,7 +198,7 @@ TEST_F(PositiveMemory, GetMemoryRequirements2) {
     vk::CmdFillBuffer(m_command_buffer.handle(), buffer.handle(), 0, VK_WHOLE_SIZE, 0);
 
     // Transition and clear image
-    const auto subresource_range = image.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+    const VkImageSubresourceRange subresource_range = image.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
     const auto barrier = image.ImageMemoryBarrier(0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                                                   VK_IMAGE_LAYOUT_GENERAL, subresource_range);
     vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
@@ -214,8 +208,7 @@ TEST_F(PositiveMemory, GetMemoryRequirements2) {
 
     // Submit and verify no validation errors
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveMemory, BindMemory2) {
@@ -238,13 +231,7 @@ TEST_F(PositiveMemory, BindMemory2) {
     vk::BindBufferMemory2KHR(device(), 1, &buffer_bind_info);
 
     // Create a test image
-    auto image_ci = vkt::Image::CreateInfo();
-    image_ci.imageType = VK_IMAGE_TYPE_2D;
-    image_ci.extent.width = 32;
-    image_ci.extent.height = 32;
-    image_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     vkt::Image image(*m_device, image_ci, vkt::no_mem);
 
     // Allocate image memory
@@ -263,7 +250,7 @@ TEST_F(PositiveMemory, BindMemory2) {
     vk::CmdFillBuffer(m_command_buffer.handle(), buffer.handle(), 0, VK_WHOLE_SIZE, 0);
 
     // Transition and clear image
-    const auto subresource_range = image.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+    const VkImageSubresourceRange subresource_range = image.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
     const auto barrier = image.ImageMemoryBarrier(0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                                                   VK_IMAGE_LAYOUT_GENERAL, subresource_range);
     vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
@@ -273,8 +260,7 @@ TEST_F(PositiveMemory, BindMemory2) {
 
     // Submit and verify no validation errors
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveMemory, NonCoherentMapping) {
@@ -574,8 +560,10 @@ TEST_F(PositiveMemory, BindMemoryStatusBuffer) {
     vkt::Buffer buffer;
     buffer.InitNoMemory(*m_device, buffer_ci);
 
+    VkMemoryRequirements mem_reqs;
+    vk::GetBufferMemoryRequirements(device(), buffer, &mem_reqs);
     VkMemoryAllocateInfo alloc_info = vku::InitStructHelper();
-    alloc_info.allocationSize = 32u;
+    alloc_info.allocationSize = mem_reqs.size;
     vkt::DeviceMemory memory(*m_device, alloc_info);
 
     VkResult result = VK_RESULT_MAX_ENUM;

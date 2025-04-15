@@ -73,13 +73,9 @@ TEST_F(PositiveSyncValRayTracing, BuildAccelerationStructureThenBarrier) {
     barrier.offset = 0;
     barrier.size = 4;
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &barrier;
-
     m_command_buffer.Begin();
     blas.VkCmdBuildAccelerationStructuresKHR(m_command_buffer);
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(barrier);
     vk::CmdFillBuffer(m_command_buffer, accel_buffer, 0, 4, 0x80386);
     m_command_buffer.End();
 }
@@ -99,8 +95,7 @@ TEST_F(PositiveSyncValRayTracing, UseSourceAccelerationStructureThenBarrier) {
     m_command_buffer.Begin();
     blas.VkCmdBuildAccelerationStructuresKHR(m_command_buffer);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     // Create another acceleration structure to be built in update mode
     auto blas2 = vkt::as::blueprint::BuildGeometryInfoSimpleOnDeviceBottomLevel(*m_device);
@@ -118,14 +113,10 @@ TEST_F(PositiveSyncValRayTracing, UseSourceAccelerationStructureThenBarrier) {
     barrier.offset = 0;
     barrier.size = 4;
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &barrier;
-
     m_command_buffer.Begin();
     // Build in update mode READs source acceleration structure
     blas2.VkCmdBuildAccelerationStructuresKHR(m_command_buffer);
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(barrier);
     // WRITE to source acceleration structure
     vk::CmdFillBuffer(m_command_buffer, src_accel_buffer, 0, 4, 0x80486);
     m_command_buffer.End();
@@ -143,8 +134,7 @@ TEST_F(PositiveSyncValRayTracing, UpdateAccelerationStructureInPlace) {
     m_command_buffer.Begin();
     blas.VkCmdBuildAccelerationStructuresKHR(m_command_buffer);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     // Update acceleration structure in-place
     blas.SetMode(VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR);
@@ -195,7 +185,6 @@ TEST_F(PositiveSyncValRayTracing, WriteVertexDataDuringBuild) {
     vkt::Buffer vertex_buffer(*m_device, 1024, buffer_usage, kHostVisibleMemProps, &alloc_flags);
     auto vertex_buffer_ptr = static_cast<float*>(vertex_buffer.Memory().Map());
     std::copy(vertices.begin(), vertices.end(), vertex_buffer_ptr);
-    vertex_buffer.Memory().Unmap();
 
     // Specify offset (4 bytes) so vertex data does not start immediately from the beginning of the buffer.
     geometry.SetTrianglesDeviceVertexBuffer(std::move(vertex_buffer), uint32_t(vertices.size() / 3) - 1, VK_FORMAT_R32G32B32_SFLOAT,
@@ -278,8 +267,7 @@ TEST_F(PositiveSyncValRayTracing, ReadInstanceDataDuringBuild) {
     m_command_buffer.Begin();
     blas->VkCmdBuildAccelerationStructuresKHR(m_command_buffer);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     vkt::as::BuildGeometryInfoKHR tlas = vkt::as::blueprint::BuildGeometryInfoSimpleOnDeviceTopLevel(*m_device, blas);
     const auto& instance = tlas.GetGeometries()[0].GetInstance();
@@ -307,8 +295,7 @@ TEST_F(PositiveSyncValRayTracing, RayQueryAfterBuild) {
     m_command_buffer.Begin();
     blas->VkCmdBuildAccelerationStructuresKHR(m_command_buffer);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     // Create TLAS (but not build it yet)
     vkt::as::BuildGeometryInfoKHR tlas = vkt::as::blueprint::BuildGeometryInfoSimpleOnDeviceTopLevel(*m_device, blas);
@@ -343,10 +330,6 @@ TEST_F(PositiveSyncValRayTracing, RayQueryAfterBuild) {
     barrier.offset = 0;
     barrier.size = tlas.GetDstAS()->GetBuffer().CreateInfo().size;
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &barrier;
-
     m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline_layout_, 0, 1,
@@ -354,7 +337,7 @@ TEST_F(PositiveSyncValRayTracing, RayQueryAfterBuild) {
     // Build
     tlas.VkCmdBuildAccelerationStructuresKHR(m_command_buffer);
     // Wait
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(barrier);
     // Trace
     vk::CmdDispatch(m_command_buffer, 1, 1, 1);
     m_command_buffer.End();
@@ -383,13 +366,35 @@ TEST_F(PositiveSyncValRayTracing, WriteIndexDataThenBuild) {
     barrier.offset = 0;
     barrier.size = index_buffer.CreateInfo().size;
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &barrier;
-
     m_command_buffer.Begin();
     m_command_buffer.Copy(src_buffer, index_buffer);
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(barrier);
     blas.VkCmdBuildAccelerationStructuresKHR(m_command_buffer);
+    m_command_buffer.End();
+}
+
+TEST_F(PositiveSyncValRayTracing, InvalidMaxVertexValue) {
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9810
+    TEST_DESCRIPTION("Test invalid maxVertex does not break internal tracking");
+    RETURN_IF_SKIP(InitRayTracing());
+
+    vkt::as::BuildGeometryInfoKHR blas = vkt::as::blueprint::BuildGeometryInfoSimpleOnDeviceBottomLevel(*m_device);
+
+    // SyncVal operates with the assumption that API usage is valid according to core validation.
+    // For invalid input synval does basic checks to prevent crashes but usually does not do much above that.
+    // For out of bounds buffer access syncval does range clamp to avoid false positives but otherwise
+    // relies on the core checks to report such issues.
+    //
+    // Test that large maxVertex value does not cause invalid internal tracking when the range of AS geometry
+    // data overlaps with another resource tracked by syncval (in this case it's a regular buffer).
+    // In the case of regression it's possible to have false positive when access to one resource can be tracked
+    // as access to another resource (completed unrelated).
+    blas.GetGeometries()[0].SetTrianglesMaxVertex(vvl::kU32Max - 10000);
+
+    vkt::Buffer buffer(*m_device, 1024, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    m_command_buffer.Begin();
+    vk::CmdFillBuffer(m_command_buffer, buffer, 0, VK_WHOLE_SIZE, 0x314159);
+    blas.BuildCmdBuffer(m_command_buffer);
     m_command_buffer.End();
 }

@@ -20,32 +20,27 @@
 #include <memory>
 #include <vulkan/vulkan.h>
 
+#include "state_tracker/state_tracker.h"
 #include "sync/sync_common.h"
 #include "sync/sync_access_context.h"
 #include "sync/sync_commandbuffer.h"
 #include "sync/sync_error_messages.h"
 #include "sync/sync_stats.h"
 #include "sync/sync_submit.h"
+#include "containers/limits.h"
 
 namespace syncval {
 // sync validation has no instance-level functionality
-class Instance : public vvl::Instance {
+class Instance : public vvl::InstanceProxy {
   public:
-    Instance(vvl::dispatch::Instance *dispatch) : vvl::Instance(dispatch, LayerObjectTypeSyncValidation) {}
+    Instance(vvl::dispatch::Instance *dispatch) : vvl::InstanceProxy(dispatch, LayerObjectTypeSyncValidation) {}
 };
 }  // namespace syncval
 
-VALSTATETRACK_DERIVED_STATE_OBJECT(VkImage, syncval_state::ImageState, vvl::Image)
-VALSTATETRACK_DERIVED_STATE_OBJECT(VkImageView, syncval_state::ImageViewState, vvl::ImageView)
-VALSTATETRACK_DERIVED_STATE_OBJECT(VkCommandBuffer, syncval_state::CommandBuffer, vvl::CommandBuffer)
-VALSTATETRACK_DERIVED_STATE_OBJECT(VkSwapchainKHR, syncval_state::Swapchain, vvl::Swapchain)
-
-class SyncValidator : public vvl::Device, public SyncStageAccess {
-    using BaseClass = vvl::Device;
+class SyncValidator : public vvl::DeviceProxy, public SyncStageAccess {
+    using BaseClass = vvl::DeviceProxy;
 
   public:
-    using ImageState = syncval_state::ImageState;
-    using ImageViewState = syncval_state::ImageViewState;
     using Func = vvl::Func;
     using Struct = vvl::Struct;
     using Field = vvl::Field;
@@ -130,20 +125,12 @@ class SyncValidator : public vvl::Device, public SyncStageAccess {
     std::vector<QueueBatchContext::ConstPtr> GetLastPendingBatches(std::function<bool(const QueueBatchContext::ConstPtr &)> filter) const;
     void ClearPending() const;
 
-    std::shared_ptr<vvl::CommandBuffer> CreateCmdBufferState(VkCommandBuffer handle,
-                                                             const VkCommandBufferAllocateInfo *allocate_info,
-                                                             const vvl::CommandPool *cmd_pool) override;
-    std::shared_ptr<vvl::Swapchain> CreateSwapchainState(const VkSwapchainCreateInfoKHR *create_info,
-                                                         VkSwapchainKHR swapchain) final;
-    std::shared_ptr<vvl::Image> CreateImageState(VkImage handle, const VkImageCreateInfo *create_info,
-                                                 VkFormatFeatureFlags2 features) final;
+    void Created(vvl::CommandBuffer &cb_state) override;
+    void Created(vvl::Swapchain &swapchain_state) override;
+    void Created(vvl::Image &image_state) override;
 
-    std::shared_ptr<vvl::Image> CreateImageState(VkImage handle, const VkImageCreateInfo *create_info, VkSwapchainKHR swapchain,
-                                                 uint32_t swapchain_index, VkFormatFeatureFlags2 features) final;
-    std::shared_ptr<vvl::ImageView> CreateImageViewState(const std::shared_ptr<vvl::Image> &image_state, VkImageView handle,
-                                                         const VkImageViewCreateInfo *create_info,
-                                                         VkFormatFeatureFlags2 format_features,
-                                                         const VkFilterCubicImageViewImageFormatPropertiesEXT &cubic_props) final;
+    void DebugCapture() final;
+
     void PreCallRecordDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks *pAllocator,
                                     const RecordObject &record_obj) override;
     void PreCallRecordDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks *pAllocator,
@@ -157,6 +144,9 @@ class SyncValidator : public vvl::Device, public SyncStageAccess {
     bool SupressedBoundDescriptorWAW(const HazardResult &hazard) const;
 
     void FinishDeviceSetup(const VkDeviceCreateInfo *pCreateInfo, const Location &loc) override;
+
+    void PreCallRecordDestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator,
+                                    const RecordObject& record_obj) override;
 
     void PostCallRecordCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo *pCreateInfo,
                                        const VkAllocationCallbacks *pAllocator, VkSemaphore *pSemaphore,
@@ -234,9 +224,6 @@ class SyncValidator : public vvl::Device, public SyncStageAccess {
     void PreCallRecordCmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer, const VkDependencyInfoKHR *pDependencyInfo,
                                              const RecordObject &record_obj) override;
     void PreCallRecordCmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDependencyInfo *pDependencyInfo,
-                                          const RecordObject &record_obj) override;
-
-    void PostCallRecordBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo *pBeginInfo,
                                           const RecordObject &record_obj) override;
 
     void PostCallRecordCmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *pRenderPassBegin,
@@ -383,6 +370,19 @@ class SyncValidator : public vvl::Device, public SyncStageAccess {
     bool PreCallValidateCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
                                             const ErrorObject &error_obj) const override;
     void PreCallRecordCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                                          const RecordObject &record_obj) override;
+
+    bool PreCallValidateCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                        uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
+                                        const ErrorObject &error_obj) const override;
+    bool PreCallValidateCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                           uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
+                                           const ErrorObject &error_obj) const override;
+    void PostCallRecordCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY, uint32_t baseGroupZ,
+                                       uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
+                                       const RecordObject &record_obj) override;
+    void PostCallRecordCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                                          uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
                                           const RecordObject &record_obj) override;
 
     bool PreCallValidateCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex,

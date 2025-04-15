@@ -23,6 +23,9 @@
 
 // NOLINTBEGIN
 #include "vk_dispatch_table_helper.h"
+
+#include "vk_extension_helper.h"
+
 static VKAPI_ATTR VkResult VKAPI_CALL StubBindBufferMemory2(VkDevice, uint32_t, const VkBindBufferMemoryInfo*) {
     return VK_SUCCESS;
 }
@@ -1006,6 +1009,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL StubSetPrivateDataEXT(VkDevice, VkObjectTy
     return VK_SUCCESS;
 }
 static VKAPI_ATTR void VKAPI_CALL StubGetPrivateDataEXT(VkDevice, VkObjectType, uint64_t, VkPrivateDataSlot, uint64_t*) {}
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 static VKAPI_ATTR VkResult VKAPI_CALL StubCreateCudaModuleNV(VkDevice, const VkCudaModuleCreateInfoNV*,
                                                              const VkAllocationCallbacks*, VkCudaModuleNV*) {
     return VK_SUCCESS;
@@ -1018,6 +1022,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL StubCreateCudaFunctionNV(VkDevice, const V
 static VKAPI_ATTR void VKAPI_CALL StubDestroyCudaModuleNV(VkDevice, VkCudaModuleNV, const VkAllocationCallbacks*) {}
 static VKAPI_ATTR void VKAPI_CALL StubDestroyCudaFunctionNV(VkDevice, VkCudaFunctionNV, const VkAllocationCallbacks*) {}
 static VKAPI_ATTR void VKAPI_CALL StubCmdCudaLaunchKernelNV(VkCommandBuffer, const VkCudaLaunchInfoNV*) {}
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+static VKAPI_ATTR void VKAPI_CALL StubCmdDispatchTileQCOM(VkCommandBuffer) {}
+static VKAPI_ATTR void VKAPI_CALL StubCmdBeginPerTileExecutionQCOM(VkCommandBuffer, const VkPerTileBeginInfoQCOM*) {}
+static VKAPI_ATTR void VKAPI_CALL StubCmdEndPerTileExecutionQCOM(VkCommandBuffer, const VkPerTileEndInfoQCOM*) {}
 #ifdef VK_USE_PLATFORM_METAL_EXT
 static VKAPI_ATTR void VKAPI_CALL StubExportMetalObjectsEXT(VkDevice, VkExportMetalObjectsInfoEXT*) {}
 #endif  // VK_USE_PLATFORM_METAL_EXT
@@ -1296,6 +1304,14 @@ static VKAPI_ATTR VkResult VKAPI_CALL StubGetScreenBufferPropertiesQNX(VkDevice,
     return VK_SUCCESS;
 }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+static VKAPI_ATTR VkResult VKAPI_CALL StubCreateExternalComputeQueueNV(VkDevice, const VkExternalComputeQueueCreateInfoNV*,
+                                                                       const VkAllocationCallbacks*, VkExternalComputeQueueNV*) {
+    return VK_SUCCESS;
+}
+static VKAPI_ATTR void VKAPI_CALL StubDestroyExternalComputeQueueNV(VkDevice, VkExternalComputeQueueNV,
+                                                                    const VkAllocationCallbacks*) {}
+static VKAPI_ATTR void VKAPI_CALL StubGetExternalComputeQueueDataNV(VkExternalComputeQueueNV, VkExternalComputeQueueDataParamsNV*,
+                                                                    void*) {}
 static VKAPI_ATTR void VKAPI_CALL StubGetClusterAccelerationStructureBuildSizesNV(VkDevice,
                                                                                   const VkClusterAccelerationStructureInputInfoNV*,
                                                                                   VkAccelerationStructureBuildSizesInfoKHR*) {}
@@ -1342,6 +1358,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL StubGetMemoryMetalHandlePropertiesEXT(VkDe
     return VK_SUCCESS;
 }
 #endif  // VK_USE_PLATFORM_METAL_EXT
+static VKAPI_ATTR void VKAPI_CALL StubCmdEndRendering2EXT(VkCommandBuffer, const VkRenderingEndInfoEXT*) {}
 static VKAPI_ATTR VkResult VKAPI_CALL StubCreateAccelerationStructureKHR(VkDevice, const VkAccelerationStructureCreateInfoKHR*,
                                                                          const VkAllocationCallbacks*,
                                                                          VkAccelerationStructureKHR*) {
@@ -1771,6 +1788,9 @@ const auto& GetApiExtensionMap() {
         {"vkDestroyCudaModuleNV", {vvl::Extension::_VK_NV_cuda_kernel_launch}},
         {"vkDestroyCudaFunctionNV", {vvl::Extension::_VK_NV_cuda_kernel_launch}},
         {"vkCmdCudaLaunchKernelNV", {vvl::Extension::_VK_NV_cuda_kernel_launch}},
+        {"vkCmdDispatchTileQCOM", {vvl::Extension::_VK_QCOM_tile_shading}},
+        {"vkCmdBeginPerTileExecutionQCOM", {vvl::Extension::_VK_QCOM_tile_shading}},
+        {"vkCmdEndPerTileExecutionQCOM", {vvl::Extension::_VK_QCOM_tile_shading}},
         {"vkExportMetalObjectsEXT", {vvl::Extension::_VK_EXT_metal_objects}},
         {"vkGetDescriptorSetLayoutSizeEXT", {vvl::Extension::_VK_EXT_descriptor_buffer}},
         {"vkGetDescriptorSetLayoutBindingOffsetEXT", {vvl::Extension::_VK_EXT_descriptor_buffer}},
@@ -1909,6 +1929,9 @@ const auto& GetApiExtensionMap() {
         {"vkQueueNotifyOutOfBandNV", {vvl::Extension::_VK_NV_low_latency2}},
         {"vkCmdSetAttachmentFeedbackLoopEnableEXT", {vvl::Extension::_VK_EXT_attachment_feedback_loop_dynamic_state}},
         {"vkGetScreenBufferPropertiesQNX", {vvl::Extension::_VK_QNX_external_memory_screen_buffer}},
+        {"vkCreateExternalComputeQueueNV", {vvl::Extension::_VK_NV_external_compute_queue}},
+        {"vkDestroyExternalComputeQueueNV", {vvl::Extension::_VK_NV_external_compute_queue}},
+        {"vkGetExternalComputeQueueDataNV", {vvl::Extension::_VK_NV_external_compute_queue}},
         {"vkGetClusterAccelerationStructureBuildSizesNV", {vvl::Extension::_VK_NV_cluster_acceleration_structure}},
         {"vkCmdBuildClusterAccelerationStructureIndirectNV", {vvl::Extension::_VK_NV_cluster_acceleration_structure}},
         {"vkGetPartitionedAccelerationStructuresBuildSizesNV", {vvl::Extension::_VK_NV_partitioned_acceleration_structure}},
@@ -1924,6 +1947,7 @@ const auto& GetApiExtensionMap() {
         {"vkUpdateIndirectExecutionSetShaderEXT", {vvl::Extension::_VK_EXT_device_generated_commands}},
         {"vkGetMemoryMetalHandleEXT", {vvl::Extension::_VK_EXT_external_memory_metal}},
         {"vkGetMemoryMetalHandlePropertiesEXT", {vvl::Extension::_VK_EXT_external_memory_metal}},
+        {"vkCmdEndRendering2EXT", {vvl::Extension::_VK_EXT_fragment_density_map_offset}},
         {"vkCreateAccelerationStructureKHR", {vvl::Extension::_VK_KHR_acceleration_structure}},
         {"vkDestroyAccelerationStructureKHR", {vvl::Extension::_VK_KHR_acceleration_structure}},
         {"vkCmdBuildAccelerationStructuresKHR", {vvl::Extension::_VK_KHR_acceleration_structure}},
@@ -3580,6 +3604,7 @@ void layer_init_device_dispatch_table(VkDevice device, VkLayerDispatchTable* tab
     if (table->GetPrivateDataEXT == nullptr) {
         table->GetPrivateDataEXT = (PFN_vkGetPrivateDataEXT)StubGetPrivateDataEXT;
     }
+#ifdef VK_ENABLE_BETA_EXTENSIONS
     table->CreateCudaModuleNV = (PFN_vkCreateCudaModuleNV)gpa(device, "vkCreateCudaModuleNV");
     if (table->CreateCudaModuleNV == nullptr) {
         table->CreateCudaModuleNV = (PFN_vkCreateCudaModuleNV)StubCreateCudaModuleNV;
@@ -3603,6 +3628,19 @@ void layer_init_device_dispatch_table(VkDevice device, VkLayerDispatchTable* tab
     table->CmdCudaLaunchKernelNV = (PFN_vkCmdCudaLaunchKernelNV)gpa(device, "vkCmdCudaLaunchKernelNV");
     if (table->CmdCudaLaunchKernelNV == nullptr) {
         table->CmdCudaLaunchKernelNV = (PFN_vkCmdCudaLaunchKernelNV)StubCmdCudaLaunchKernelNV;
+    }
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+    table->CmdDispatchTileQCOM = (PFN_vkCmdDispatchTileQCOM)gpa(device, "vkCmdDispatchTileQCOM");
+    if (table->CmdDispatchTileQCOM == nullptr) {
+        table->CmdDispatchTileQCOM = (PFN_vkCmdDispatchTileQCOM)StubCmdDispatchTileQCOM;
+    }
+    table->CmdBeginPerTileExecutionQCOM = (PFN_vkCmdBeginPerTileExecutionQCOM)gpa(device, "vkCmdBeginPerTileExecutionQCOM");
+    if (table->CmdBeginPerTileExecutionQCOM == nullptr) {
+        table->CmdBeginPerTileExecutionQCOM = (PFN_vkCmdBeginPerTileExecutionQCOM)StubCmdBeginPerTileExecutionQCOM;
+    }
+    table->CmdEndPerTileExecutionQCOM = (PFN_vkCmdEndPerTileExecutionQCOM)gpa(device, "vkCmdEndPerTileExecutionQCOM");
+    if (table->CmdEndPerTileExecutionQCOM == nullptr) {
+        table->CmdEndPerTileExecutionQCOM = (PFN_vkCmdEndPerTileExecutionQCOM)StubCmdEndPerTileExecutionQCOM;
     }
 #ifdef VK_USE_PLATFORM_METAL_EXT
     table->ExportMetalObjectsEXT = (PFN_vkExportMetalObjectsEXT)gpa(device, "vkExportMetalObjectsEXT");
@@ -4145,6 +4183,18 @@ void layer_init_device_dispatch_table(VkDevice device, VkLayerDispatchTable* tab
         table->GetScreenBufferPropertiesQNX = (PFN_vkGetScreenBufferPropertiesQNX)StubGetScreenBufferPropertiesQNX;
     }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+    table->CreateExternalComputeQueueNV = (PFN_vkCreateExternalComputeQueueNV)gpa(device, "vkCreateExternalComputeQueueNV");
+    if (table->CreateExternalComputeQueueNV == nullptr) {
+        table->CreateExternalComputeQueueNV = (PFN_vkCreateExternalComputeQueueNV)StubCreateExternalComputeQueueNV;
+    }
+    table->DestroyExternalComputeQueueNV = (PFN_vkDestroyExternalComputeQueueNV)gpa(device, "vkDestroyExternalComputeQueueNV");
+    if (table->DestroyExternalComputeQueueNV == nullptr) {
+        table->DestroyExternalComputeQueueNV = (PFN_vkDestroyExternalComputeQueueNV)StubDestroyExternalComputeQueueNV;
+    }
+    table->GetExternalComputeQueueDataNV = (PFN_vkGetExternalComputeQueueDataNV)gpa(device, "vkGetExternalComputeQueueDataNV");
+    if (table->GetExternalComputeQueueDataNV == nullptr) {
+        table->GetExternalComputeQueueDataNV = (PFN_vkGetExternalComputeQueueDataNV)StubGetExternalComputeQueueDataNV;
+    }
     table->GetClusterAccelerationStructureBuildSizesNV =
         (PFN_vkGetClusterAccelerationStructureBuildSizesNV)gpa(device, "vkGetClusterAccelerationStructureBuildSizesNV");
     if (table->GetClusterAccelerationStructureBuildSizesNV == nullptr) {
@@ -4225,6 +4275,10 @@ void layer_init_device_dispatch_table(VkDevice device, VkLayerDispatchTable* tab
         table->GetMemoryMetalHandlePropertiesEXT = (PFN_vkGetMemoryMetalHandlePropertiesEXT)StubGetMemoryMetalHandlePropertiesEXT;
     }
 #endif  // VK_USE_PLATFORM_METAL_EXT
+    table->CmdEndRendering2EXT = (PFN_vkCmdEndRendering2EXT)gpa(device, "vkCmdEndRendering2EXT");
+    if (table->CmdEndRendering2EXT == nullptr) {
+        table->CmdEndRendering2EXT = (PFN_vkCmdEndRendering2EXT)StubCmdEndRendering2EXT;
+    }
     table->CreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)gpa(device, "vkCreateAccelerationStructureKHR");
     if (table->CreateAccelerationStructureKHR == nullptr) {
         table->CreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)StubCreateAccelerationStructureKHR;

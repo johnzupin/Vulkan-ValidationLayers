@@ -26,29 +26,16 @@
 #include <vulkan/vk_enum_string_helper.h>
 #include <vulkan/utility/vk_safe_struct.hpp>
 
-#include "containers/custom_containers.h"
 #include "error_message/logging.h"
-#include "utils/vk_layer_utils.h"
+#include "containers/custom_containers.h"
 #include "layer_options.h"
 #include "gpuav/core/gpuav_settings.h"
 #include "sync/sync_settings.h"
 #include "generated/device_features.h"
-#include "generated/dispatch_vector.h"
 #include "generated/vk_api_version.h"
 #include "generated/vk_extension_helper.h"
 #include "generated/vk_layer_dispatch_table.h"
-
-// Layer object type identifiers
-enum LayerObjectTypeId {
-    LayerObjectTypeThreading,            // Instance or device threading layer object
-    LayerObjectTypeParameterValidation,  // Instance or device parameter validation layer object
-    LayerObjectTypeObjectTracker,        // Instance or device object tracker layer object
-    LayerObjectTypeCoreValidation,       // Instance or device core validation layer object
-    LayerObjectTypeBestPractices,        // Instance or device best practices layer object
-    LayerObjectTypeGpuAssisted,          // Instance or device gpu assisted validation layer object
-    LayerObjectTypeSyncValidation,       // Instance or device synchronization validation layer object
-    LayerObjectTypeMaxEnum,              // Max enum count
-};
+#include "layer_object_id.h"
 
 // To avoid re-hashing unique ids on each use, we precompute the hash and store the
 // hash's LSBs in the high 24 bits.
@@ -129,9 +116,8 @@ class StatelessDeviceData {
 
     APIVersion api_version;
 
-    // Mutable, because the chassis will patch these after PreCallRecordCreateDevice
-    mutable DeviceExtensions extensions{};
-    mutable DeviceFeatures enabled_features{};
+    DeviceExtensions extensions{};
+    DeviceFeatures enabled_features{};
 
     VkPhysicalDeviceMemoryProperties phys_dev_mem_props{};
     VkPhysicalDeviceProperties phys_dev_props{};
@@ -170,6 +156,7 @@ void SetData(VkDevice dev, std::unique_ptr<Device>&&);
 Device* GetData(VkDevice);
 Device* GetData(VkQueue);
 Device* GetData(VkCommandBuffer);
+Device* GetData(VkExternalComputeQueueNV);
 void FreeData(void* key, VkDevice device);
 
 void FreeAllData();
@@ -319,9 +306,8 @@ class Device : public HandleWrapper {
 
     const APIVersion api_version;
 
-    // Non-const, because the chassis will patch these after PreCallRecordCreateDevice
-    DeviceExtensions& extensions;
-    DeviceFeatures& enabled_features;
+    const DeviceExtensions& extensions;
+    const DeviceFeatures& enabled_features;
 
     const VkPhysicalDeviceMemoryProperties& phys_dev_mem_props;
     const VkPhysicalDeviceProperties& phys_dev_props;

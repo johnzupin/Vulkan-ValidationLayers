@@ -442,7 +442,7 @@ struct DeviceFeatures {
     bool fragmentDensityMapDynamic;
     // VkPhysicalDeviceFragmentDensityMapFeaturesEXT
     bool fragmentDensityMapNonSubsampledImages;
-    // VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM
+    // VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT
     bool fragmentDensityMapOffset;
     // VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR
     bool fragmentShaderBarycentric;
@@ -792,6 +792,12 @@ struct DeviceFeatures {
     bool shaderBufferInt64Atomics;
     // VkPhysicalDeviceShaderAtomicInt64Features, VkPhysicalDeviceVulkan12Features
     bool shaderSharedInt64Atomics;
+    // VkPhysicalDeviceShaderBfloat16FeaturesKHR
+    bool shaderBFloat16CooperativeMatrix;
+    // VkPhysicalDeviceShaderBfloat16FeaturesKHR
+    bool shaderBFloat16DotProduct;
+    // VkPhysicalDeviceShaderBfloat16FeaturesKHR
+    bool shaderBFloat16Type;
     // VkPhysicalDeviceShaderClockFeaturesKHR
     bool shaderDeviceClock;
     // VkPhysicalDeviceShaderClockFeaturesKHR
@@ -878,6 +884,34 @@ struct DeviceFeatures {
     bool textureCompressionASTC_HDR;
     // VkPhysicalDeviceTilePropertiesFeaturesQCOM
     bool tileProperties;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShading;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingAnisotropicApron;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingApron;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingAtomicOps;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingColorAttachments;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingDepthAttachments;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingDispatchTile;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingFragmentStage;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingImageProcessing;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingInputAttachments;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingPerTileDispatch;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingPerTileDraw;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingSampledAttachments;
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    bool tileShadingStencilAttachments;
     // VkPhysicalDeviceTimelineSemaphoreFeatures, VkPhysicalDeviceVulkan12Features
     bool timelineSemaphore;
     // VkPhysicalDeviceTransformFeedbackFeaturesEXT

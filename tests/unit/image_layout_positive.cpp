@@ -37,13 +37,13 @@ TEST_F(PositiveImageLayout, BarriersAndImageUsage) {
     img_barrier.subresourceRange.levelCount = 1;
 
     {
-        vkt::Image img_color(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        vkt::Image img_ds1(*m_device, 128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-        vkt::Image img_ds2(*m_device, 128, 128, 1, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-        vkt::Image img_xfer_src(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        vkt::Image img_xfer_dst(*m_device, 128, 128, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-        vkt::Image img_sampled(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-        vkt::Image img_input(*m_device, 128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+        vkt::Image img_color(*m_device, 128, 128, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+        vkt::Image img_ds1(*m_device, 128, 128, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        vkt::Image img_ds2(*m_device, 128, 128, depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        vkt::Image img_xfer_src(*m_device, 128, 128, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        vkt::Image img_xfer_dst(*m_device, 128, 128, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        vkt::Image img_sampled(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+        vkt::Image img_input(*m_device, 128, 128, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
         const struct {
             vkt::Image &image_obj;
             VkImageLayout old_layout;
@@ -192,8 +192,7 @@ TEST_F(PositiveImageLayout, ImagelessTracking) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     m_default_queue->Present(m_swapchain, current_buffer, image_acquired);
     m_default_queue->Wait();
@@ -202,19 +201,12 @@ TEST_F(PositiveImageLayout, ImagelessTracking) {
 TEST_F(PositiveImageLayout, Subresource) {
     RETURN_IF_SKIP(Init());
 
-    auto image_ci = vkt::Image::CreateInfo();
-    image_ci.imageType = VK_IMAGE_TYPE_2D;
-    image_ci.extent.width = 64;
-    image_ci.extent.height = 64;
-    image_ci.mipLevels = 7;
-    image_ci.arrayLayers = 6;
-    image_ci.format = VK_FORMAT_R8_UINT;
-    image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    auto image_ci = vkt::Image::ImageCreateInfo2D(64, 64, 7, 6, VK_FORMAT_R8_UINT,
+                                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     vkt::Image image(*m_device, image_ci);
 
     m_command_buffer.Begin();
-    const auto subresource_range = image.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+    const VkImageSubresourceRange subresource_range = image.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
     auto barrier = image.ImageMemoryBarrier(0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, subresource_range);
     vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
@@ -235,8 +227,7 @@ TEST_F(PositiveImageLayout, Subresource) {
     vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
                            nullptr, 0, nullptr, 1, &barrier);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveImageLayout, DescriptorSubresource) {
@@ -316,8 +307,7 @@ TEST_F(PositiveImageLayout, DescriptorSubresource) {
         if (test_type == kExternal) {
             // The image layout is external to the command buffer we are recording to test.  Submit to push to instance scope.
             cmd_buf.End();
-            m_default_queue->Submit(cmd_buf);
-            m_default_queue->Wait();
+            m_default_queue->SubmitAndWait(cmd_buf);
             cmd_buf.Begin();
         }
 
@@ -332,8 +322,7 @@ TEST_F(PositiveImageLayout, DescriptorSubresource) {
         cmd_buf.End();
 
         // Submit cmd buffer
-        m_default_queue->Submit(cmd_buf);
-        m_default_queue->Wait();
+        m_default_queue->SubmitAndWait(cmd_buf);
     }
 }
 
@@ -370,7 +359,7 @@ TEST_F(PositiveImageLayout, Descriptor3D2DSubresource) {
     image_ci_3d.usage = usage;
     vkt::Image image_3d(*m_device, image_ci_3d, vkt::set_layout);
 
-    vkt::Image other_image(*m_device, kWidth, kHeight, 1, format, usage);
+    vkt::Image other_image(*m_device, kWidth, kHeight, format, usage);
 
     // The image view is a 2D slice of the 3D image at depth = 4, which we request by
     // asking for arrayLayer = 4
@@ -434,9 +423,7 @@ TEST_F(PositiveImageLayout, Descriptor3D2DSubresource) {
                                    &subpass,
                                    (uint32_t)deps.size(),
                                    deps.data()};
-    // Create Sampler
-    VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
-    vkt::Sampler sampler(*m_device, sampler_ci);
+    vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
     descriptor_set.WriteDescriptorImageInfo(0, other_view, sampler);
     descriptor_set.UpdateDescriptorSets();
@@ -481,8 +468,7 @@ TEST_F(PositiveImageLayout, Descriptor3D2DSubresource) {
         if (test_type == kExternal) {
             // The image layout is external to the command buffer we are recording to test.  Submit to push to instance scope.
             cmd_buf.End();
-            m_default_queue->Submit(cmd_buf);
-            m_default_queue->Wait();
+            m_default_queue->SubmitAndWait(cmd_buf);
             cmd_buf.Begin();
         }
 
@@ -500,8 +486,7 @@ TEST_F(PositiveImageLayout, Descriptor3D2DSubresource) {
         cmd_buf.End();
 
         // Submit cmd buffer
-        m_default_queue->Submit(cmd_buf);
-        m_default_queue->Wait();
+        m_default_queue->SubmitAndWait(cmd_buf);
     }
 }
 
@@ -526,8 +511,7 @@ TEST_F(PositiveImageLayout, ArrayLayers) {
     vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
                            nullptr, 0, nullptr, 1, &img_barrier);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     vkt::ImageView image_view = image.CreateView(VK_IMAGE_VIEW_TYPE_2D, 0, 1, 0, 1);
 
@@ -550,8 +534,7 @@ TEST_F(PositiveImageLayout, ArrayLayers) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveImageLayout, DescriptorArray) {
@@ -592,10 +575,9 @@ TEST_F(PositiveImageLayout, DescriptorArray) {
     vkt::Buffer in_buffer(*m_device, 32, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, kHostVisibleMemProps);
     uint32_t *in_buffer_ptr = (uint32_t *)in_buffer.Memory().Map();
     in_buffer_ptr[0] = 1;
-    in_buffer.Memory().Unmap();
 
-    vkt::Image bad_image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-    vkt::Image good_image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image bad_image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image good_image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
     good_image.SetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     vkt::ImageView bad_image_view = bad_image.CreateView(VK_IMAGE_ASPECT_COLOR_BIT);
@@ -618,6 +600,5 @@ TEST_F(PositiveImageLayout, DescriptorArray) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }

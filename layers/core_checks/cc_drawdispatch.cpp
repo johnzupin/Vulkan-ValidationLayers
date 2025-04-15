@@ -25,6 +25,8 @@
 #include "state_tracker/descriptor_sets.h"
 #include "state_tracker/render_pass_state.h"
 #include "state_tracker/shader_module.h"
+#include "state_tracker/cmd_buffer_state.h"
+#include "state_tracker/pipeline_state.h"
 
 using vvl::DrawDispatchVuid;
 using vvl::GetDrawDispatchVuid;
@@ -34,8 +36,9 @@ bool CoreChecks::ValidateGraphicsIndexedCmd(const vvl::CommandBuffer &cb_state, 
     const DrawDispatchVuid &vuid = GetDrawDispatchVuid(loc.function);
     const auto buffer_state = Get<vvl::Buffer>(cb_state.index_buffer_binding.buffer);
     if (!buffer_state && !enabled_features.maintenance6 && !enabled_features.nullDescriptor) {
-        skip |= LogError(vuid.index_binding_07312, cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), loc,
-                         "Index buffer object has not been bound to this command buffer.");
+        skip |=
+            LogError(vuid.index_binding_07312, cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS), loc,
+                     "no vkCmdBindIndexBuffer call has bound an index buffer to this command buffer prior to this indexed draw.");
     }
     return skip;
 }
@@ -44,7 +47,9 @@ bool CoreChecks::ValidateCmdDrawInstance(const vvl::CommandBuffer &cb_state, uin
                                          const Location &loc) const {
     bool skip = false;
     const DrawDispatchVuid &vuid = GetDrawDispatchVuid(loc.function);
-    const auto *pipeline_state = cb_state.GetCurrentPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS);
+    const auto lv_bind_point = ConvertToLvlBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS);
+    const auto &last_bound_state = cb_state.lastBound[lv_bind_point];
+    const auto *pipeline_state = last_bound_state.pipeline_state;
 
     // Verify maxMultiviewInstanceIndex
     if (cb_state.active_render_pass && cb_state.active_render_pass->has_multiview_enabled &&
@@ -80,7 +85,7 @@ bool CoreChecks::ValidateCmdDrawInstance(const vvl::CommandBuffer &cb_state, uin
             }
         }
 
-        if (!pipeline_state || pipeline_state->IsDynamic(CB_DYNAMIC_STATE_VERTEX_INPUT_EXT)) {
+        if (last_bound_state.IsDynamic(CB_DYNAMIC_STATE_VERTEX_INPUT_EXT)) {
             if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_VERTEX_INPUT_EXT) &&
                 phys_dev_props_core14.supportsNonZeroFirstInstance == VK_FALSE && firstInstance != 0u) {
                 for (const auto &binding_state : cb_state.dynamic_state_value.vertex_bindings) {
@@ -273,17 +278,24 @@ bool CoreChecks::PreCallValidateCmdDrawMultiIndexedEXT(VkCommandBuffer commandBu
     skip |= ValidateActionState(cb_state, VK_PIPELINE_BIND_POINT_GRAPHICS, error_obj.location);
     skip |= ValidateVTGShaderStages(cb_state, error_obj.location);
 
+    bool invalid_stride = false;
     if (drawCount > 1) {
-        skip |= ValidateCmdDrawStrideWithStruct(cb_state, "VUID-vkCmdDrawMultiIndexedEXT-drawCount-09629", stride,
-                                                Struct::VkMultiDrawIndexedInfoEXT, sizeof(VkMultiDrawIndexedInfoEXT),
-                                                error_obj.location);
+        invalid_stride = ValidateCmdDrawStrideWithStruct(cb_state, "VUID-vkCmdDrawMultiIndexedEXT-drawCount-09629", stride,
+                                                         Struct::VkMultiDrawIndexedInfoEXT, sizeof(VkMultiDrawIndexedInfoEXT),
+                                                         error_obj.location);
     }
+    skip |= invalid_stride;
 
     // only index into pIndexInfo if we know parameters are sane
     if (drawCount != 0 && !pIndexInfo) {
         skip |= LogError("VUID-vkCmdDrawMultiIndexedEXT-drawCount-04940", cb_state.GetObjectList(VK_PIPELINE_BIND_POINT_GRAPHICS),
                          error_obj.location.dot(Field::drawCount), "is %" PRIu32 " but pIndexInfo is NULL.", drawCount);
     } else {
+        // Continuing on from this point invokes undefined behavior due to invalid stride size.
+        if (invalid_stride) {
+            return skip;
+        }
+
         const auto info_bytes = reinterpret_cast<const char *>(pIndexInfo);
         for (uint32_t i = 0; i < drawCount; i++) {
             const auto info_ptr = reinterpret_cast<const VkMultiDrawIndexedInfoEXT *>(info_bytes + i * stride);
@@ -1265,11 +1277,6 @@ bool CoreChecks::ValidateActionState(const vvl::CommandBuffer &cb_state, const V
                         string_VkPipelineBindPoint(bind_point));
     }
 
-    if (!pipeline) {
-        skip |= ValidateShaderObjectBoundShader(last_bound_state, bind_point, vuid);
-        if (skip) return skip;  // if shaders are bound wrong, likely to give false positives after
-    }
-
     if (bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS) {
         skip |= ValidateDrawDynamicState(last_bound_state, vuid);
         skip |= ValidateDrawPrimitivesGeneratedQuery(last_bound_state, vuid);
@@ -1415,7 +1422,7 @@ bool CoreChecks::ValidateActionStateDescriptorsPipeline(const LastBound &last_bo
                 const bool need_validate =
                     NeedDrawStateValidated(cb_state, descriptor_set, ds_slot, disabled[image_layout_validation]);
                 if (need_validate) {
-                    skip |= ValidateDrawState(*descriptor_set, set_index, binding_req_map, cb_state, vuid.loc(), vuid);
+                    skip |= ValidateDrawState(*descriptor_set, set_index, binding_req_map, cb_state, vuid, pipeline.Handle());
                 }
             }
         }
@@ -1467,7 +1474,8 @@ bool CoreChecks::ValidateActionStateDescriptorsShaderObject(const LastBound &las
                     const bool need_validate =
                         NeedDrawStateValidated(cb_state, descriptor_set, ds_slot, disabled[image_layout_validation]);
                     if (need_validate) {
-                        skip |= ValidateDrawState(*descriptor_set, set_index, binding_req_map, cb_state, vuid.loc(), vuid);
+                        skip |=
+                            ValidateDrawState(*descriptor_set, set_index, binding_req_map, cb_state, vuid, shader_state->Handle());
                     }
                 }
             }
@@ -1694,8 +1702,8 @@ bool CoreChecks::ValidateDrawDualSourceBlend(const LastBound &last_bound_state, 
     if (max_fragment_location < phys_dev_props.limits.maxFragmentDualSrcAttachments) return skip;
 
     // If color blend is disabled, the blend equation doesn't matter
-    const bool dynamic_blend_enable = !pipeline || pipeline->IsDynamic(CB_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT);
-    const bool dynamic_blend_equation = !pipeline || pipeline->IsDynamic(CB_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT);
+    const bool dynamic_blend_enable = last_bound_state.IsDynamic(CB_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT);
+    const bool dynamic_blend_equation = last_bound_state.IsDynamic(CB_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT);
     const uint32_t attachment_count = pipeline ? pipeline->ColorBlendState()->attachmentCount
                                                : (uint32_t)cb_state.dynamic_state_value.color_blend_equations.size();
     for (uint32_t i = 0; i < attachment_count; ++i) {

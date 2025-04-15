@@ -24,13 +24,17 @@
 #include "state_tracker/state_object.h"
 #include "utils/hash_util.h"
 #include "utils/hash_vk_types.h"
+#include "containers/span.h"
 
 // Fwd declarations -- including descriptor_set.h creates an ugly include loop
 namespace vvl {
-class Device;
+class DeviceState;
 class DescriptorSetLayout;
 class DescriptorSetLayoutDef;
 }  // namespace vvl
+namespace spirv {
+struct ResourceInterfaceVariable;
+}  // namespace spirv
 
 // Canonical dictionary for the pipeline layout's layout of descriptorsetlayouts
 using DescriptorSetLayoutDef = vvl::DescriptorSetLayoutDef;
@@ -78,8 +82,10 @@ class PipelineLayout : public StateObject {
     // table of "compatible for set N" cannonical forms for trivial accept validation
     const std::vector<PipelineLayoutCompatId> set_compat_ids;
     VkPipelineLayoutCreateFlags create_flags;
+    // Way to quick prevent searching if we know there are no immutable samplers
+    bool has_immutable_samplers;
 
-    PipelineLayout(Device &dev_data, VkPipelineLayout handle, const VkPipelineLayoutCreateInfo *pCreateInfo);
+    PipelineLayout(DeviceState &dev_data, VkPipelineLayout handle, const VkPipelineLayoutCreateInfo *pCreateInfo);
     // Merge 2 or more non-overlapping layouts
     PipelineLayout(const vvl::span<const PipelineLayout *const> &layouts);
     template <typename Container>
@@ -88,6 +94,8 @@ class PipelineLayout : public StateObject {
     VkPipelineLayout VkHandle() const { return handle_.Cast<VkPipelineLayout>(); }
 
     VkPipelineLayoutCreateFlags CreateFlags() const { return create_flags; }
+
+    const VkDescriptorSetLayoutBinding *FindBinding(const spirv::ResourceInterfaceVariable &variable) const;
 };
 
 }  // namespace vvl

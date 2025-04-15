@@ -3362,6 +3362,7 @@ static inline void DispatchGetPrivateDataEXT(VkDevice device, VkObjectType objec
     auto dispatch = vvl::dispatch::GetData(device);
     dispatch->GetPrivateDataEXT(device, objectType, objectHandle, privateDataSlot, pData);
 }
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 static inline VkResult DispatchCreateCudaModuleNV(VkDevice device, const VkCudaModuleCreateInfoNV* pCreateInfo,
                                                   const VkAllocationCallbacks* pAllocator, VkCudaModuleNV* pModule) {
@@ -3394,6 +3395,23 @@ static inline void DispatchDestroyCudaFunctionNV(VkDevice device, VkCudaFunction
 static inline void DispatchCmdCudaLaunchKernelNV(VkCommandBuffer commandBuffer, const VkCudaLaunchInfoNV* pLaunchInfo) {
     auto dispatch = vvl::dispatch::GetData(commandBuffer);
     dispatch->CmdCudaLaunchKernelNV(commandBuffer, pLaunchInfo);
+}
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+
+static inline void DispatchCmdDispatchTileQCOM(VkCommandBuffer commandBuffer) {
+    auto dispatch = vvl::dispatch::GetData(commandBuffer);
+    dispatch->CmdDispatchTileQCOM(commandBuffer);
+}
+
+static inline void DispatchCmdBeginPerTileExecutionQCOM(VkCommandBuffer commandBuffer,
+                                                        const VkPerTileBeginInfoQCOM* pPerTileBeginInfo) {
+    auto dispatch = vvl::dispatch::GetData(commandBuffer);
+    dispatch->CmdBeginPerTileExecutionQCOM(commandBuffer, pPerTileBeginInfo);
+}
+
+static inline void DispatchCmdEndPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileEndInfoQCOM* pPerTileEndInfo) {
+    auto dispatch = vvl::dispatch::GetData(commandBuffer);
+    dispatch->CmdEndPerTileExecutionQCOM(commandBuffer, pPerTileEndInfo);
 }
 #ifdef VK_USE_PLATFORM_METAL_EXT
 
@@ -4156,6 +4174,25 @@ static inline VkResult DispatchGetScreenBufferPropertiesQNX(VkDevice device, con
 }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
 
+static inline VkResult DispatchCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                            const VkAllocationCallbacks* pAllocator,
+                                                            VkExternalComputeQueueNV* pExternalQueue) {
+    auto dispatch = vvl::dispatch::GetData(device);
+    return dispatch->CreateExternalComputeQueueNV(device, pCreateInfo, pAllocator, pExternalQueue);
+}
+
+static inline void DispatchDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                         const VkAllocationCallbacks* pAllocator) {
+    auto dispatch = vvl::dispatch::GetData(device);
+    dispatch->DestroyExternalComputeQueueNV(device, externalQueue, pAllocator);
+}
+
+static inline void DispatchGetExternalComputeQueueDataNV(VkExternalComputeQueueNV externalQueue,
+                                                         VkExternalComputeQueueDataParamsNV* params, void* pData) {
+    auto dispatch = vvl::dispatch::GetData(externalQueue);
+    dispatch->GetExternalComputeQueueDataNV(externalQueue, params, pData);
+}
+
 static inline void DispatchGetClusterAccelerationStructureBuildSizesNV(VkDevice device,
                                                                        const VkClusterAccelerationStructureInputInfoNV* pInfo,
                                                                        VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
@@ -4264,6 +4301,11 @@ static inline VkResult DispatchGetMemoryMetalHandlePropertiesEXT(VkDevice device
     return dispatch->GetMemoryMetalHandlePropertiesEXT(device, handleType, pHandle, pMemoryMetalHandleProperties);
 }
 #endif  // VK_USE_PLATFORM_METAL_EXT
+
+static inline void DispatchCmdEndRendering2EXT(VkCommandBuffer commandBuffer, const VkRenderingEndInfoEXT* pRenderingEndInfo) {
+    auto dispatch = vvl::dispatch::GetData(commandBuffer);
+    dispatch->CmdEndRendering2EXT(commandBuffer, pRenderingEndInfo);
+}
 
 static inline VkResult DispatchCreateAccelerationStructureKHR(VkDevice device,
                                                               const VkAccelerationStructureCreateInfoKHR* pCreateInfo,

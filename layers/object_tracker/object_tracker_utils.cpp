@@ -17,6 +17,7 @@
  */
 #include "object_lifetime_validation.h"
 #include "chassis/dispatch_object.h"
+#include "containers/small_vector.h"
 
 namespace object_lifetimes {
 
@@ -168,8 +169,9 @@ bool Device::ValidateCommandBuffer(VkCommandPool command_pool, VkCommandBuffer c
             const auto parent_pool = CastFromUint64<VkCommandPool>(node->parent_object);
             const LogObjectList objlist(command_buffer, parent_pool, command_pool);
             skip |= LogError("VUID-vkFreeCommandBuffers-pCommandBuffers-parent", objlist, loc,
-                             "attempting to free %s belonging to %s from %s.", FormatHandle(command_buffer).c_str(),
-                             FormatHandle(parent_pool).c_str(), FormatHandle(command_pool).c_str());
+                             "attempting to use %s to free %s, but the command buffer belongs to %s.",
+                             FormatHandle(command_pool).c_str(), FormatHandle(command_buffer).c_str(),
+                             FormatHandle(parent_pool).c_str());
         }
     } else {
         skip |= LogError("VUID-vkFreeCommandBuffers-pCommandBuffers-00048", command_buffer, loc, "Invalid %s.",
@@ -395,7 +397,20 @@ bool Instance::ReportLeakedObjects(VulkanObjectType object_type, const std::stri
                                            const Location &loc) const {
     bool skip = false;
 
-    auto snapshot = tracker.object_map[object_type].snapshot();
+    // The state tracker also tracks implicit images created for swapchains and reports them as leak.
+    // This is entirely incorrect and unfortunately the machinery does not allow distinguishing between
+    // implicitly and explicitly created swapchain images, so the best we can do is to ignore any leaked
+    // images that have swapchain parents.
+    auto snapshot =
+        (object_type == kVulkanObjectTypeImage)
+            ? tracker.object_map[object_type].snapshot(
+                  [swapchain_snapshot =
+                       tracker.object_map[kVulkanObjectTypeSwapchainKHR].snapshot()](const std::shared_ptr<ObjTrackState> &pNode) {
+                      return std::find_if(swapchain_snapshot.begin(), swapchain_snapshot.end(), [&](const auto &swapchain_item) {
+                                 return pNode->parent_object == swapchain_item.second->handle;
+                             }) == swapchain_snapshot.end();
+                  })
+            : tracker.object_map[object_type].snapshot();
     for (const auto &item : snapshot) {
         const auto object_info = item.second;
         const LogObjectList objlist(instance, ObjTrackStateTypedHandle(*object_info));

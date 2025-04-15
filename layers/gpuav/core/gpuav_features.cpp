@@ -16,6 +16,7 @@
  */
 
 #include "gpuav/core/gpuav.h"
+#include "generated/dispatch_functions.h"
 
 namespace gpuav {
 
@@ -52,7 +53,8 @@ static bool IsExtensionAvailable(const char *extension_name, const std::vector<V
 void Instance::AddFeatures(VkPhysicalDevice physical_device, vku::safe_VkDeviceCreateInfo *modified_create_info,
                            const Location &loc) {
     // Query things here to make sure we don't attempt to add a feature this is just not supported
-    VkPhysicalDevice8BitStorageFeatures supported_8bit_feature = vku::InitStructHelper();
+    VkPhysicalDeviceRobustness2FeaturesEXT supported_robustness2_feature = vku::InitStructHelper();
+    VkPhysicalDevice8BitStorageFeatures supported_8bit_feature = vku::InitStructHelper(&supported_robustness2_feature);
     VkPhysicalDeviceBufferDeviceAddressFeatures supported_bda_feature = vku::InitStructHelper(&supported_8bit_feature);
     VkPhysicalDeviceVulkanMemoryModelFeatures supported_memory_model_feature = vku::InitStructHelper(&supported_bda_feature);
     VkPhysicalDeviceTimelineSemaphoreFeatures supported_timeline_feature = vku::InitStructHelper(&supported_memory_model_feature);
@@ -63,31 +65,37 @@ void Instance::AddFeatures(VkPhysicalDevice physical_device, vku::safe_VkDeviceC
     {
         const VkPhysicalDeviceFeatures &supported_features = features_2.features;
 
-        VkPhysicalDeviceFeatures *enabled_features = const_cast<VkPhysicalDeviceFeatures *>(modified_create_info->pEnabledFeatures);
-        if (!enabled_features) {
-            if (auto *enabled_features_2 = const_cast<VkPhysicalDeviceFeatures2 *>(
+        VkPhysicalDeviceFeatures *modified_features =
+            const_cast<VkPhysicalDeviceFeatures *>(modified_create_info->pEnabledFeatures);
+        if (!modified_features) {
+            if (auto *modified_features_2 = const_cast<VkPhysicalDeviceFeatures2 *>(
                     vku::FindStructInPNextChain<VkPhysicalDeviceFeatures2>(modified_create_info->pNext))) {
-                enabled_features = &enabled_features_2->features;
+                modified_features = &modified_features_2->features;
             } else {
                 // The user has no VkPhysicalDeviceFeatures, so we are adding it for them
-                enabled_features = new VkPhysicalDeviceFeatures;
-                memset(enabled_features, 0, sizeof(VkPhysicalDeviceFeatures));
-                modified_create_info->pEnabledFeatures = enabled_features;
+                modified_features = new VkPhysicalDeviceFeatures;
+                memset(modified_features, 0, sizeof(VkPhysicalDeviceFeatures));
+                modified_create_info->pEnabledFeatures = modified_features;
             }
         }
 
-        if (enabled_features) {
-            if (supported_features.fragmentStoresAndAtomics && !enabled_features->fragmentStoresAndAtomics) {
+        if (modified_features) {
+            if (supported_features.fragmentStoresAndAtomics && !modified_features->fragmentStoresAndAtomics) {
                 InternalWarning(instance, loc, "Forcing fragmentStoresAndAtomics to VK_TRUE");
-                enabled_features->fragmentStoresAndAtomics = VK_TRUE;
+                modified_features->fragmentStoresAndAtomics = VK_TRUE;
             }
-            if (supported_features.vertexPipelineStoresAndAtomics && !enabled_features->vertexPipelineStoresAndAtomics) {
+            if (supported_features.vertexPipelineStoresAndAtomics && !modified_features->vertexPipelineStoresAndAtomics) {
                 InternalWarning(instance, loc, "Forcing vertexPipelineStoresAndAtomics to VK_TRUE");
-                enabled_features->vertexPipelineStoresAndAtomics = VK_TRUE;
+                modified_features->vertexPipelineStoresAndAtomics = VK_TRUE;
             }
-            if (supported_features.shaderInt64 && !enabled_features->shaderInt64) {
+            if (supported_features.shaderInt64 && !modified_features->shaderInt64) {
                 InternalWarning(instance, loc, "Forcing shaderInt64 to VK_TRUE");
-                enabled_features->shaderInt64 = VK_TRUE;
+                modified_features->shaderInt64 = VK_TRUE;
+            }
+            if (gpuav_settings.force_on_robustness && supported_features.robustBufferAccess &&
+                !modified_features->robustBufferAccess) {
+                InternalWarning(instance, loc, "Forcing robustBufferAccess to VK_TRUE");
+                modified_features->robustBufferAccess = VK_TRUE;
             }
         }
     }
@@ -251,6 +259,52 @@ void Instance::AddFeatures(VkPhysicalDevice physical_device, vku::safe_VkDeviceC
             // Only adds if not found already
             vku::AddExtension(*modified_create_info, VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
             add_8bit_access();
+        }
+    }
+
+    if (gpuav_settings.debug_printf_enabled) {
+        if (!IsExtensionAvailable(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, available_extensions)) {
+            InternalWarning(instance, loc,
+                            "VK_KHR_shader_non_semantic_info is not available on selected device, Debug Printf may produce SPIR-V "
+                            "that could fail to compile the shader.");
+        } else {
+            vku::AddExtension(*modified_create_info, VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
+        }
+    }
+
+    if (gpuav_settings.force_on_robustness &&
+        (supported_robustness2_feature.robustBufferAccess2 || supported_robustness2_feature.robustImageAccess2)) {
+        if (IsExtensionAvailable(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME, available_extensions)) {
+            // Only adds if not found already
+            vku::AddExtension(*modified_create_info, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+
+            if (auto *robust_buffer_2_feature = const_cast<VkPhysicalDeviceRobustness2FeaturesEXT *>(
+                    vku::FindStructInPNextChain<VkPhysicalDeviceRobustness2FeaturesEXT>(modified_create_info))) {
+                if (!robust_buffer_2_feature->robustBufferAccess2 && supported_robustness2_feature.robustBufferAccess2) {
+                    InternalWarning(instance, loc,
+                                    "Forcing VkPhysicalDeviceRobustness2FeaturesEXT::robustBufferAccess2 to VK_TRUE");
+                    robust_buffer_2_feature->robustBufferAccess2 = VK_TRUE;
+                }
+                if (!robust_buffer_2_feature->robustImageAccess2 && supported_robustness2_feature.robustImageAccess2) {
+                    InternalWarning(instance, loc, "Forcing VkPhysicalDeviceRobustness2FeaturesEXT::robustImageAccess2 to VK_TRUE");
+                    robust_buffer_2_feature->robustImageAccess2 = VK_TRUE;
+                }
+            } else {
+                VkPhysicalDeviceRobustness2FeaturesEXT new_robust_buffer_2_feature = vku::InitStructHelper();
+                if (supported_robustness2_feature.robustBufferAccess2) {
+                    InternalWarning(
+                        instance, loc,
+                        "Adding a VkPhysicalDeviceRobustness2FeaturesEXT to pNext with robustBufferAccess2 set to VK_TRUE");
+                    new_robust_buffer_2_feature.robustBufferAccess2 = VK_TRUE;
+                }
+                if (supported_robustness2_feature.robustImageAccess2) {
+                    InternalWarning(
+                        instance, loc,
+                        "Adding a VkPhysicalDeviceRobustness2FeaturesEXT to pNext with robustImageAccess2 set to VK_TRUE");
+                    new_robust_buffer_2_feature.robustImageAccess2 = VK_TRUE;
+                }
+                vku::AddToPnext(*modified_create_info, new_robust_buffer_2_feature);
+            }
         }
     }
 }

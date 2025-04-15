@@ -119,7 +119,7 @@ TEST_F(PositiveDescriptors, IgnoreUnrelatedDescriptor) {
 
     // Image Case
     {
-        vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+        vkt::Image image(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
         vkt::ImageView view = image.CreateView();
 
         OneOffDescriptorSet descriptor_set(m_device, {
@@ -694,7 +694,7 @@ TEST_F(PositiveDescriptors, UpdateImageDescriptorSetThatHasImageViewUsage) {
     RETURN_IF_SKIP(Init());
     InitRenderTarget();
 
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     VkImageViewUsageCreateInfo image_view_usage_ci = vku::InitStructHelper();
     image_view_usage_ci.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -716,8 +716,8 @@ TEST_F(PositiveDescriptors, MultipleThreadsUsingHostOnlyDescriptorSet) {
     AddRequiredFeature(vkt::Feature::mutableDescriptorType);
     RETURN_IF_SKIP(Init());
 
-    vkt::Image image1(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-    vkt::Image image2(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image1(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image2(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     vkt::ImageView view1 = image1.CreateView();
     vkt::ImageView view2 = image2.CreateView();
@@ -789,8 +789,7 @@ TEST_F(PositiveDescriptors, DrawingWithUnboundUnusedSetWithInputAttachments) {
     const VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
     const VkImageUsageFlags usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
-    vkt::Image image_input(*m_device, width, height, 1, format, usage);
-    image_input.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image_input(*m_device, width, height, format, usage);
     vkt::ImageView view_input = image_input.CreateView();
 
     // Create render pass with a subpass that has input attachment.
@@ -997,7 +996,7 @@ TEST_F(PositiveDescriptors, AttachmentFeedbackLoopLayout) {
 
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
     vkt::Image image(
-        *m_device, 32, 32, 1, format,
+        *m_device, 32, 32, format,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT);
 
     vkt::ImageView image_view = image.CreateView();
@@ -1402,12 +1401,10 @@ TEST_F(PositiveDescriptors, CopyDestroyedMutableDescriptors) {
     VkDescriptorSet descriptor_sets[2];
     vk::AllocateDescriptorSets(device(), &allocate_info, descriptor_sets);
 
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
     vkt::ImageView view = image.CreateView();
 
-    VkSamplerCreateInfo sampler_ci = SafeSaneSamplerCreateInfo();
-    VkSampler sampler;
-    vk::CreateSampler(device(), &sampler_ci, nullptr, &sampler);
+    vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
 
     VkDescriptorImageInfo image_info = {};
     image_info.imageView = view;
@@ -1430,7 +1427,6 @@ TEST_F(PositiveDescriptors, CopyDestroyedMutableDescriptors) {
     copy_set.dstBinding = 0;
     copy_set.descriptorCount = 1;
 
-    vk::DestroySampler(device(), sampler, nullptr);
     vk::UpdateDescriptorSets(device(), 0, nullptr, 1, &copy_set);
 }
 
@@ -1576,4 +1572,33 @@ TEST_F(PositiveDescriptors, AllocateOverDescriptorCountVariableAllocate2) {
 
     VkDescriptorSet ds = VK_NULL_HANDLE;
     vk::AllocateDescriptorSets(device(), &ds_alloc_info, &ds);
+}
+
+TEST_F(PositiveDescriptors, DescriptorSetLayoutBinding0Count) {
+    TEST_DESCRIPTION("With maintenance1, allocate descriptor with type not in pool");
+    SetTargetApiVersion(VK_API_VERSION_1_1);  // Needed VK_KHR_maintenance1
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    // Create Pool with 2 Sampler descriptors, but try to alloc an Uniform Buffer
+    VkDescriptorPoolSize ds_type_count = {VK_DESCRIPTOR_TYPE_SAMPLER, 2};
+
+    VkDescriptorPoolCreateInfo ds_pool_ci = vku::InitStructHelper();
+    ds_pool_ci.maxSets = 2;
+    ds_pool_ci.poolSizeCount = 1;
+    ds_pool_ci.pPoolSizes = &ds_type_count;
+
+    vkt::DescriptorPool ds_pool(*m_device, ds_pool_ci);
+
+    VkDescriptorSetLayoutBinding dsl_binding_sampler = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr};
+    VkDescriptorSetLayoutBinding dsl_binding_uniform = {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, VK_SHADER_STAGE_ALL, nullptr};
+    const vkt::DescriptorSetLayout ds_layout(*m_device, {dsl_binding_sampler, dsl_binding_uniform});
+
+    VkDescriptorSet descriptor_set;
+    VkDescriptorSetAllocateInfo alloc_info = vku::InitStructHelper();
+    alloc_info.descriptorSetCount = 1;
+    alloc_info.descriptorPool = ds_pool;
+    alloc_info.pSetLayouts = &ds_layout.handle();
+    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
+    vk::AllocateDescriptorSets(device(), &alloc_info, &descriptor_set);
 }

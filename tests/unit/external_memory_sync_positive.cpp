@@ -237,7 +237,6 @@ TEST_F(PositiveExternalMemorySync, ExternalMemory) {
     for (uint32_t i = 0; i < buffer_size; i++) {
         input_mem[i] = (i & 0xFF);
     }
-    buffer_input.Memory().Unmap();
     vkt::Buffer buffer_output(*m_device, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                               VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
@@ -252,8 +251,7 @@ TEST_F(PositiveExternalMemorySync, ExternalMemory) {
                            &mem_barrier, 0, nullptr, 0, nullptr);
     vk::CmdCopyBuffer(m_command_buffer.handle(), buffer_import.handle(), buffer_output.handle(), 1, &copy_info);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveExternalMemorySync, BufferDedicatedAllocation) {

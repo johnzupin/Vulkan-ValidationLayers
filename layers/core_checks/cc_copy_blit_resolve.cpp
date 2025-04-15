@@ -30,6 +30,7 @@
 #include "state_tracker/image_state.h"
 #include "state_tracker/buffer_state.h"
 #include "state_tracker/device_state.h"
+#include "state_tracker/cmd_buffer_state.h"
 #include "generated/dispatch_functions.h"
 #include "utils/math_utils.h"
 
@@ -1274,16 +1275,16 @@ static constexpr uint32_t kZBit = 4;
 static uint32_t ExceedsBounds(const VkOffset3D *offset, const VkExtent3D *extent, const VkExtent3D *image_extent) {
     uint32_t result = 0;
     // Extents/depths cannot be negative but checks left in for clarity
-    if ((offset->z + extent->depth > image_extent->depth) || (offset->z < 0) ||
-        ((offset->z + static_cast<int32_t>(extent->depth)) < 0)) {
+    if ((static_cast<uint64_t>(offset->z) + static_cast<uint64_t>(extent->depth) > static_cast<uint64_t>(image_extent->depth)) ||
+        (offset->z < 0) || ((offset->z + static_cast<int32_t>(extent->depth)) < 0)) {
         result |= kZBit;
     }
-    if ((offset->y + extent->height > image_extent->height) || (offset->y < 0) ||
-        ((offset->y + static_cast<int32_t>(extent->height)) < 0)) {
+    if ((static_cast<uint64_t>(offset->y) + static_cast<uint64_t>(extent->height) > static_cast<uint64_t>(image_extent->height)) ||
+        (offset->y < 0) || ((offset->y + static_cast<int32_t>(extent->height)) < 0)) {
         result |= kYBit;
     }
-    if ((offset->x + extent->width > image_extent->width) || (offset->x < 0) ||
-        ((offset->x + static_cast<int32_t>(extent->width)) < 0)) {
+    if ((static_cast<uint64_t>(offset->x) + static_cast<uint64_t>(extent->width) > static_cast<uint64_t>(image_extent->width)) ||
+        (offset->x < 0) || ((offset->x + static_cast<int32_t>(extent->width)) < 0)) {
         result |= kXBit;
     }
     return result;
@@ -1570,7 +1571,7 @@ bool CoreChecks::ValidateCmdCopyImage(VkCommandBuffer commandBuffer, VkImage src
                                              dst_slices, src_image_state->create_info.arrayLayers, src_subresource.baseArrayLayer);
                         }
                     }
-                } else if (src_slices != dst_slices) {
+                } else if (src_image_type == dst_image_type && src_slices != dst_slices) {
                     vuid = is_2 ? "VUID-VkCopyImageInfo2-srcImage-08793" : "VUID-vkCmdCopyImage-srcImage-08793";
                     skip |= LogError(vuid, all_objlist, region_loc, "%s (%" PRIu32 ") is different from %s (%" PRIu32 ").",
                                      src_is_3d ? "extent.depth" : "srcSubresource.layerCount", src_slices,
@@ -1819,12 +1820,16 @@ bool CoreChecks::ValidateCmdCopyImage(VkCommandBuffer commandBuffer, VkImage src
         skip |= VerifyImageLayoutSubresource(cb_state, *dst_image_state, dst_subresource, dstImageLayout, dst_image_loc, vuid);
         skip |= ValidateCopyImageTransferGranularityRequirements(cb_state, *src_image_state, *dst_image_state, region, region_loc);
         skip |= ValidateCopyImageRegionCommon(commandBuffer, *src_image_state, *dst_image_state, region, region_loc);
-        vuid = is_2 ? "VUID-vkCmdCopyImage2-commandBuffer-10217" : "VUID-vkCmdCopyImage-commandBuffer-10217";
-        skip |= ValidateQueueFamilySupport(cb_state, *physical_device_state, src_aspect, *src_image_state,
-                                           region_loc.dot(Field::srcSubresource).dot(Field::aspectMask), vuid);
-        vuid = is_2 ? "VUID-vkCmdCopyImage2-commandBuffer-10218" : "VUID-vkCmdCopyImage-commandBuffer-10218";
-        skip |= ValidateQueueFamilySupport(cb_state, *physical_device_state, dst_aspect, *dst_image_state,
-                                           region_loc.dot(Field::dstSubresource).dot(Field::aspectMask), vuid);
+        if (src_aspect == VK_IMAGE_ASPECT_COLOR_BIT) {
+            vuid = is_2 ? "VUID-vkCmdCopyImage2-commandBuffer-10217" : "VUID-vkCmdCopyImage-commandBuffer-10217";
+            skip |= ValidateQueueFamilySupport(cb_state, *physical_device_state, dst_aspect, *src_image_state,
+                                               region_loc.dot(Field::srcSubresource).dot(Field::aspectMask), vuid);
+        }
+        if (dst_aspect == VK_IMAGE_ASPECT_COLOR_BIT) {
+            vuid = is_2 ? "VUID-vkCmdCopyImage2-commandBuffer-10218" : "VUID-vkCmdCopyImage-commandBuffer-10218";
+            skip |= ValidateQueueFamilySupport(cb_state, *physical_device_state, src_aspect, *dst_image_state,
+                                               region_loc.dot(Field::dstSubresource).dot(Field::aspectMask), vuid);
+        }
     }
 
     if (vkuFormatIsCompressed(src_format) && vkuFormatIsCompressed(dst_format)) {
@@ -3166,9 +3171,13 @@ bool CoreChecks::ValidateCmdBlitImage(VkCommandBuffer commandBuffer, VkImage src
         const VkImageSubresourceLayers &src_subresource = region.srcSubresource;
         const VkImageSubresourceLayers &dst_subresource = region.dstSubresource;
 
+        // Will resolve VK_REMAINING_ARRAY_LAYERS to actual value (some VUs just want the value)
+        const uint32_t normalized_src_layer_count = src_image_state->NormalizeLayerCount(src_subresource);
+        const uint32_t normalized_dst_layer_count = dst_image_state->NormalizeLayerCount(dst_subresource);
+
         const bool same_subresource = (same_image && (src_subresource.mipLevel == dst_subresource.mipLevel) &&
-                                       RangesIntersect(src_subresource.baseArrayLayer, src_subresource.layerCount,
-                                                       dst_subresource.baseArrayLayer, dst_subresource.layerCount));
+                                       RangesIntersect(src_subresource.baseArrayLayer, normalized_src_layer_count,
+                                                       dst_subresource.baseArrayLayer, normalized_dst_layer_count));
         if (same_subresource) {
             if (!IsValueIn(srcImageLayout, {VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR, VK_IMAGE_LAYOUT_GENERAL}) ||
                 !IsValueIn(dstImageLayout, {VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR, VK_IMAGE_LAYOUT_GENERAL})) {
@@ -3177,8 +3186,8 @@ bool CoreChecks::ValidateCmdBlitImage(VkCommandBuffer commandBuffer, VkImage src
                                  "blitting to same same VkImage (miplevel = %u, srcLayer[%u,%u), dstLayer[%u,%u)), but "
                                  "srcImageLayout is %s and dstImageLayout is %s",
                                  src_subresource.mipLevel, src_subresource.baseArrayLayer,
-                                 src_subresource.baseArrayLayer + src_subresource.layerCount, dst_subresource.baseArrayLayer,
-                                 dst_subresource.baseArrayLayer + dst_subresource.layerCount, string_VkImageLayout(srcImageLayout),
+                                 src_subresource.baseArrayLayer + normalized_src_layer_count, dst_subresource.baseArrayLayer,
+                                 dst_subresource.baseArrayLayer + normalized_dst_layer_count, string_VkImageLayout(srcImageLayout),
                                  string_VkImageLayout(dstImageLayout));
             }
         }
@@ -3355,50 +3364,67 @@ bool CoreChecks::ValidateCmdBlitImage(VkCommandBuffer commandBuffer, VkImage src
 
         // pre-maintenance8 both src/dst had to both match, after we only validate them independently
         if (!enabled_features.maintenance8 && (src_type == VK_IMAGE_TYPE_3D || dst_type == VK_IMAGE_TYPE_3D)) {
-            if ((src_subresource.baseArrayLayer != 0) || (src_subresource.layerCount != 1) ||
-                (dst_subresource.baseArrayLayer != 0) || (dst_subresource.layerCount != 1)) {
+            if ((src_subresource.baseArrayLayer != 0) || (normalized_src_layer_count != 1) ||
+                (dst_subresource.baseArrayLayer != 0) || (normalized_dst_layer_count != 1)) {
                 vuid = is_2 ? "VUID-VkBlitImageInfo2-srcImage-00240" : "VUID-vkCmdBlitImage-srcImage-00240";
                 skip |= LogError(vuid, all_objlist, region_loc,
+                                 "Using 3D image so only the first layer may be used\n"
                                  "srcImage %s\n"
                                  "dstImage %s\n"
-                                 "srcSubresource (baseArrayLayer = %" PRIu32 ", layerCount = %" PRIu32
-                                 ")\n"
-                                 "dstSubresource (baseArrayLayer = %" PRIu32 ", layerCount = %" PRIu32 ")\n",
+                                 "srcSubresource (baseArrayLayer = %" PRIu32
+                                 ", layerCount = %s)\n"
+                                 "dstSubresource (baseArrayLayer = %" PRIu32 ", layerCount = %s)\n",
                                  string_VkImageType(src_type), string_VkImageType(dst_type), src_subresource.baseArrayLayer,
-                                 src_subresource.layerCount, dst_subresource.baseArrayLayer, dst_subresource.layerCount);
+                                 string_LayerCount(src_image_state->create_info, src_subresource).c_str(),
+                                 dst_subresource.baseArrayLayer,
+                                 string_LayerCount(dst_image_state->create_info, dst_subresource).c_str());
             }
         } else if (enabled_features.maintenance8) {
             if (src_type == VK_IMAGE_TYPE_3D) {
-                if (src_subresource.baseArrayLayer != 0 || src_subresource.layerCount != 1 || dst_subresource.layerCount != 1) {
+                if (src_subresource.baseArrayLayer != 0 || normalized_src_layer_count != 1 || normalized_dst_layer_count != 1) {
                     vuid = is_2 ? "VUID-VkBlitImageInfo2-maintenance8-10207" : "VUID-vkCmdBlitImage-maintenance8-10207";
-                    skip |= LogError(vuid, all_objlist, src_subresource_loc,
-                                     "(src baseArrayLayer = %" PRIu32 ",  src layerCount = %" PRIu32 ", dst layerCount = %" PRIu32
-                                     ") but srcImage is VK_IMAGE_TYPE_3D",
-                                     src_subresource.baseArrayLayer, src_subresource.layerCount, dst_subresource.layerCount);
+                    skip |= LogError(vuid, all_objlist, region_loc,
+                                     "the srcImage is VK_IMAGE_TYPE_3D so only can use its first layer\n"
+                                     "srcSubresource (baseArrayLayer = %" PRIu32
+                                     ", layerCount = %s)\n"
+                                     "dstSubresource.layerCount = %s\n",
+                                     src_subresource.baseArrayLayer,
+                                     string_LayerCount(src_image_state->create_info, src_subresource).c_str(),
+                                     string_LayerCount(dst_image_state->create_info, dst_subresource).c_str());
                 }
-            } else if (uint32_t diff = static_cast<uint32_t>(abs(region.dstOffsets[0].z - region.dstOffsets[1].z));
-                       diff != src_subresource.layerCount) {
-                vuid = is_2 ? "VUID-VkBlitImageInfo2-maintenance8-10579" : "VUID-vkCmdBlitImage-maintenance8-10579";
-                skip |= LogError(vuid, all_objlist, region_loc,
-                                 "has the absolute difference of dstOffsets[0].z (%" PRIu32 ") and dstOffsets[1].z (%" PRIu32
-                                 ") = %" PRIu32 ", which is not equal to srcSubresource.layerCount (%" PRIu32 ")",
-                                 region.dstOffsets[0].z, region.dstOffsets[1].z, diff, src_subresource.layerCount);
+            } else if (dst_type == VK_IMAGE_TYPE_3D) {
+                const uint32_t abs_diff = static_cast<uint32_t>(abs(region.dstOffsets[0].z - region.dstOffsets[1].z));
+                if (abs_diff != normalized_src_layer_count) {
+                    vuid = is_2 ? "VUID-VkBlitImageInfo2-maintenance8-10579" : "VUID-vkCmdBlitImage-maintenance8-10579";
+                    skip |= LogError(vuid, all_objlist, region_loc,
+                                     "has the absolute difference of %" PRIu32 " between dstOffsets[0].z (%" PRIu32
+                                     ") and dstOffsets[1].z (%" PRIu32 "), which is not equal to srcSubresource.layerCount (%s)",
+                                     abs_diff, region.dstOffsets[0].z, region.dstOffsets[1].z,
+                                     string_LayerCount(src_image_state->create_info, src_subresource).c_str());
+                }
             }
+
             if (dst_type == VK_IMAGE_TYPE_3D) {
-                if (dst_subresource.baseArrayLayer != 0 || dst_subresource.layerCount != 1 || src_subresource.layerCount != 1) {
+                if (dst_subresource.baseArrayLayer != 0 || normalized_dst_layer_count != 1 || normalized_src_layer_count != 1) {
                     vuid = is_2 ? "VUID-VkBlitImageInfo2-maintenance8-10208" : "VUID-vkCmdBlitImage-maintenance8-10208";
-                    skip |= LogError(vuid, all_objlist, dst_subresource_loc,
-                                     "(dst baseArrayLayer = %" PRIu32 ", dst layerCount = %" PRIu32 ", src layerCount = %" PRIu32
-                                     ") but dstImage is VK_IMAGE_TYPE_3D",
-                                     dst_subresource.baseArrayLayer, dst_subresource.layerCount, src_subresource.layerCount);
+                    skip |= LogError(vuid, all_objlist, region_loc,
+                                     "the dstImage is VK_IMAGE_TYPE_3D so only can use its first layer\n"
+                                     "srcSubresource.layerCount = %s\n"
+                                     "dstSubresource (baseArrayLayer = %" PRIu32 ", layerCount = %s)\n",
+                                     string_LayerCount(src_image_state->create_info, src_subresource).c_str(),
+                                     dst_subresource.baseArrayLayer,
+                                     string_LayerCount(dst_image_state->create_info, dst_subresource).c_str());
                 }
-            } else if (uint32_t diff = static_cast<uint32_t>(abs(region.srcOffsets[0].z - region.srcOffsets[1].z));
-                       diff != dst_subresource.layerCount) {
-                vuid = is_2 ? "VUID-VkBlitImageInfo2-maintenance8-10580" : "VUID-vkCmdBlitImage-maintenance8-10580";
-                skip |= LogError(vuid, all_objlist, region_loc,
-                                 "has the absolute difference of srcOffsets[0].z (%" PRIu32 ") and srcOffsets[1].z (%" PRIu32
-                                 ") = %" PRIu32 ", which is not equal to dstSubresource.layerCount (%" PRIu32 ")",
-                                 region.srcOffsets[0].z, region.srcOffsets[1].z, diff, dst_subresource.layerCount);
+            } else if (src_type == VK_IMAGE_TYPE_3D) {
+                const uint32_t abs_diff = static_cast<uint32_t>(abs(region.srcOffsets[0].z - region.srcOffsets[1].z));
+                if (abs_diff != normalized_dst_layer_count) {
+                    vuid = is_2 ? "VUID-VkBlitImageInfo2-maintenance8-10580" : "VUID-vkCmdBlitImage-maintenance8-10580";
+                    skip |= LogError(vuid, all_objlist, region_loc,
+                                     "has the absolute difference of %" PRIu32 " between srcOffsets[0].z (%" PRIu32
+                                     ") and srcOffsets[1].z (%" PRIu32 "), which is not equal to dstSubresource.layerCount (%s)",
+                                     abs_diff, region.srcOffsets[0].z, region.srcOffsets[1].z,
+                                     string_LayerCount(dst_image_state->create_info, dst_subresource).c_str());
+                }
             }
         }
 
@@ -3569,7 +3595,7 @@ bool CoreChecks::ValidateCmdResolveImage(VkCommandBuffer commandBuffer, VkImage 
 
         if (dst_image_state->create_info.samples != VK_SAMPLE_COUNT_1_BIT) {
             vuid = is_2 ? "VUID-VkResolveImageInfo2-dstImage-00259" : "VUID-vkCmdResolveImage-dstImage-00259";
-            skip |= LogError(vuid, dst_objlist, dst_image_loc, "was created with sample count (%s) (not VK_SAMPLE_COUNT_1_BIT).",
+            skip |= LogError(vuid, dst_objlist, dst_image_loc, "was created with %s (not VK_SAMPLE_COUNT_1_BIT).",
                              string_VkSampleCountFlagBits(dst_image_state->create_info.samples));
         }
     }
@@ -3635,16 +3661,22 @@ bool CoreChecks::ValidateCmdResolveImage(VkCommandBuffer commandBuffer, VkImage 
         const VkImageType dst_image_type = dst_image_state->create_info.imageType;
 
         if (VK_IMAGE_TYPE_3D == dst_image_type) {
-            if (src_subresource.layerCount != 1) {
+            // Will resolve VK_REMAINING_ARRAY_LAYERS to actual value (some VUs just want the value)
+            const uint32_t normalized_src_layer_count = src_image_state->NormalizeLayerCount(src_subresource);
+            const uint32_t normalized_dst_layer_count = dst_image_state->NormalizeLayerCount(dst_subresource);
+
+            if (normalized_src_layer_count != 1) {
                 vuid = is_2 ? "VUID-VkResolveImageInfo2-srcImage-04446" : "VUID-vkCmdResolveImage-srcImage-04446";
                 skip |= LogError(vuid, src_objlist, src_subresource_loc.dot(Field::layerCount),
-                                 "is %" PRIu32 " but dstImage is 3D.", src_subresource.layerCount);
+                                 "is %s but dstImage is VK_IMAGE_TYPE_3D.",
+                                 string_LayerCount(src_image_state->create_info, src_subresource).c_str());
             }
-            if ((dst_subresource.baseArrayLayer != 0) || (dst_subresource.layerCount != 1)) {
+            if ((dst_subresource.baseArrayLayer != 0) || (normalized_dst_layer_count != 1)) {
                 vuid = is_2 ? "VUID-VkResolveImageInfo2-srcImage-04447" : "VUID-vkCmdResolveImage-srcImage-04447";
                 skip |= LogError(vuid, dst_objlist, dst_subresource_loc.dot(Field::baseArrayLayer),
-                                 "is %" PRIu32 " and layerCount is %" PRIu32 " but dstImage 3D.", dst_subresource.baseArrayLayer,
-                                 dst_subresource.layerCount);
+                                 "is %" PRIu32 " and layerCount is %s but dstImage is VK_IMAGE_TYPE_3D.",
+                                 dst_subresource.baseArrayLayer,
+                                 string_LayerCount(dst_image_state->create_info, dst_subresource).c_str());
             }
         }
 

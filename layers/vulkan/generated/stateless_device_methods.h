@@ -1127,6 +1127,7 @@ bool PreCallValidateSetPrivateDataEXT(VkDevice device, VkObjectType objectType, 
 bool PreCallValidateGetPrivateDataEXT(VkDevice device, VkObjectType objectType, uint64_t objectHandle,
                                       VkPrivateDataSlot privateDataSlot, uint64_t* pData,
                                       const ErrorObject& error_obj) const override;
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 bool PreCallValidateCreateCudaModuleNV(VkDevice device, const VkCudaModuleCreateInfoNV* pCreateInfo,
                                        const VkAllocationCallbacks* pAllocator, VkCudaModuleNV* pModule,
                                        const ErrorObject& error_obj) const override;
@@ -1141,6 +1142,12 @@ bool PreCallValidateDestroyCudaFunctionNV(VkDevice device, VkCudaFunctionNV func
                                           const ErrorObject& error_obj) const override;
 bool PreCallValidateCmdCudaLaunchKernelNV(VkCommandBuffer commandBuffer, const VkCudaLaunchInfoNV* pLaunchInfo,
                                           const ErrorObject& error_obj) const override;
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+bool PreCallValidateCmdDispatchTileQCOM(VkCommandBuffer commandBuffer, const ErrorObject& error_obj) const override;
+bool PreCallValidateCmdBeginPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileBeginInfoQCOM* pPerTileBeginInfo,
+                                                 const ErrorObject& error_obj) const override;
+bool PreCallValidateCmdEndPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileEndInfoQCOM* pPerTileEndInfo,
+                                               const ErrorObject& error_obj) const override;
 #ifdef VK_USE_PLATFORM_METAL_EXT
 bool PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportMetalObjectsInfoEXT* pMetalObjectsInfo,
                                           const ErrorObject& error_obj) const override;
@@ -1435,6 +1442,15 @@ bool PreCallValidateGetScreenBufferPropertiesQNX(VkDevice device, const struct _
                                                  VkScreenBufferPropertiesQNX* pProperties,
                                                  const ErrorObject& error_obj) const override;
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+bool PreCallValidateCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                 const VkAllocationCallbacks* pAllocator, VkExternalComputeQueueNV* pExternalQueue,
+                                                 const ErrorObject& error_obj) const override;
+bool PreCallValidateDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                  const VkAllocationCallbacks* pAllocator,
+                                                  const ErrorObject& error_obj) const override;
+bool PreCallValidateGetExternalComputeQueueDataNV(VkExternalComputeQueueNV externalQueue,
+                                                  VkExternalComputeQueueDataParamsNV* params, void* pData,
+                                                  const ErrorObject& error_obj) const override;
 bool PreCallValidateGetClusterAccelerationStructureBuildSizesNV(VkDevice device,
                                                                 const VkClusterAccelerationStructureInputInfoNV* pInfo,
                                                                 VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo,
@@ -1489,6 +1505,8 @@ bool PreCallValidateGetMemoryMetalHandlePropertiesEXT(VkDevice device, VkExterna
                                                       VkMemoryMetalHandlePropertiesEXT* pMemoryMetalHandleProperties,
                                                       const ErrorObject& error_obj) const override;
 #endif  // VK_USE_PLATFORM_METAL_EXT
+bool PreCallValidateCmdEndRendering2EXT(VkCommandBuffer commandBuffer, const VkRenderingEndInfoEXT* pRenderingEndInfo,
+                                        const ErrorObject& error_obj) const override;
 bool PreCallValidateCreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                                    const VkAllocationCallbacks* pAllocator,
                                                    VkAccelerationStructureKHR* pAccelerationStructure,

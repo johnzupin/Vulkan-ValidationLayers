@@ -27,6 +27,9 @@
 #include "state_tracker/render_pass_state.h"
 #include "state_tracker/shader_object_state.h"
 #include "state_tracker/shader_module.h"
+#include "state_tracker/cmd_buffer_state.h"
+#include "state_tracker/pipeline_state.h"
+#include "containers/limits.h"
 #include "cc_buffer_address.h"
 
 static inline bool IsActionCommand(VkIndirectCommandsTokenTypeEXT type) {
@@ -168,8 +171,9 @@ bool CoreChecks::PreCallValidateCreateIndirectCommandsLayoutEXT(VkDevice device,
                 } else if (!dynamic_layout_create) {
                     skip |= LogError("VUID-VkIndirectCommandsLayoutCreateInfoEXT-pTokens-11102", device, token_loc.dot(Field::type),
                                      "is %s, pipelineLayout is VK_NULL_HANDLE, but no "
-                                     "there is no VkPipelineLayoutCreateInfo structure attached to the pNext chain.",
-                                     string_VkIndirectCommandsTokenTypeEXT(token.type));
+                                     "there is no VkPipelineLayoutCreateInfo structure attached to the pNext chain.\n%s",
+                                     string_VkIndirectCommandsTokenTypeEXT(token.type),
+                                     PrintPNextChain(Struct::VkIndirectCommandsLayoutCreateInfoEXT, pCreateInfo->pNext).c_str());
                 }
             }
 
@@ -408,7 +412,8 @@ bool CoreChecks::ValidateGeneratedCommandsInfo(const vvl::CommandBuffer& cb_stat
                 "VUID-VkGeneratedCommandsInfoEXT-indirectExecutionSet-11080", cb_state.Handle(),
                 info_loc.dot(Field::indirectExecutionSet),
                 "is VK_NULL_HANDLE but the pNext chain does not contain an instance of VkGeneratedCommandsPipelineInfoEXT or "
-                "VkGeneratedCommandsShaderInfoEXT.");
+                "VkGeneratedCommandsShaderInfoEXT.\n%s",
+                PrintPNextChain(Struct::VkGeneratedCommandsInfoEXT, generated_commands_info.pNext).c_str());
             valid_dispatch = false;
         } else if (indirect_commands_layout.has_execution_set_token) {
             skip |= LogError("VUID-VkGeneratedCommandsInfoEXT-indirectCommandsLayout-11083", indirect_commands_layout.Handle(),

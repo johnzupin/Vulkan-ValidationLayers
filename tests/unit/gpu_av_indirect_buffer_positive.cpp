@@ -140,12 +140,11 @@ TEST_F(PositiveGpuAVIndirectBuffer, Mesh) {
     for (uint32_t i = 0; i < mesh_commands * 4; ++i) {
         draw_ptr[i] = 1;
     }
-    draw_buffer.Memory().Unmap();
 
     vkt::Buffer count_buffer(*m_device, sizeof(uint32_t), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, kHostVisibleMemProps);
     uint32_t *count_ptr = static_cast<uint32_t *>(count_buffer.Memory().Map());
     *count_ptr = 3;
-    count_buffer.Memory().Unmap();
+
     char const *mesh_shader_source = R"glsl(
         #version 450
         #extension GL_EXT_mesh_shader : require
@@ -173,8 +172,7 @@ TEST_F(PositiveGpuAVIndirectBuffer, Mesh) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveGpuAVIndirectBuffer, MeshSingleCommand) {
@@ -205,12 +203,10 @@ TEST_F(PositiveGpuAVIndirectBuffer, MeshSingleCommand) {
     for (uint32_t i = 0; i < mesh_commands * 4; ++i) {
         draw_ptr[i] = 1;
     }
-    draw_buffer.Memory().Unmap();
 
     vkt::Buffer count_buffer(*m_device, sizeof(uint32_t), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, kHostVisibleMemProps);
     uint32_t *count_ptr = static_cast<uint32_t *>(count_buffer.Memory().Map());
     *count_ptr = 3;
-    count_buffer.Memory().Unmap();
     char const *mesh_shader_source = R"glsl(
         #version 450
         #extension GL_EXT_mesh_shader : require
@@ -237,8 +233,7 @@ TEST_F(PositiveGpuAVIndirectBuffer, MeshSingleCommand) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveGpuAVIndirectBuffer, FirstInstanceSingleDrawIndirectCommand) {
@@ -271,6 +266,5 @@ TEST_F(PositiveGpuAVIndirectBuffer, FirstInstanceSingleDrawIndirectCommand) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }

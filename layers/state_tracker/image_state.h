@@ -22,26 +22,26 @@
 #include <variant>
 
 #include "state_tracker/device_memory_state.h"
-#include "state_tracker/fence_state.h"
+#include "state_tracker/submission_reference.h"
 #include "state_tracker/image_layout_map.h"
 #include "utils/vk_layer_utils.h"
+#include "containers/span.h"
 
 namespace vvl {
-class Device;
+class DeviceState;
 class Fence;
+class ImageSubState;
+class ImageViewSubState;
 class Semaphore;
 class Surface;
 class Swapchain;
+class SwapchainSubState;
 class VideoProfileDesc;
 }  // namespace vvl
 
 static inline bool operator==(const VkImageSubresource &lhs, const VkImageSubresource &rhs) {
     return (lhs.aspectMask == rhs.aspectMask) && (lhs.mipLevel == rhs.mipLevel) && (lhs.arrayLayer == rhs.arrayLayer);
 }
-
-VkImageSubresourceRange NormalizeSubresourceRange(const VkImageCreateInfo &image_create_info, const VkImageSubresourceRange &range);
-VkImageSubresourceRange NormalizeSubresourceRange(const VkImageCreateInfo &image_create_info,
-                                                  const VkImageViewCreateInfo &view_create_info);
 
 // Transfer VkImageSubresourceRange into VkImageSubresourceLayers struct
 static inline VkImageSubresourceLayers LayersFromRange(const VkImageSubresourceRange &subresource_range) {
@@ -84,7 +84,7 @@ namespace vvl {
 //    Note that the images for *every* image_index will show up as parents of the swapchain,
 //    so swapchain_image_index values must be compared.
 //
-class Image : public Bindable {
+class Image : public Bindable, public SubStateManager<ImageSubState> {
   public:
     const vku::safe_VkImageCreateInfo safe_create_info;
     const VkImageCreateInfo &create_info;
@@ -97,7 +97,7 @@ class Image : public Bindable {
     std::shared_ptr<vvl::Swapchain> bind_swapchain;
     uint32_t swapchain_image_index;
     const VkFormatFeatureFlags2KHR format_features;
-    // Need to memory requirments for each plane if image is disjoint
+    // Need to memory requirements for each plane if image is disjoint
     const bool disjoint;  // True if image was created with VK_IMAGE_CREATE_DISJOINT_BIT
     static constexpr int kMaxPlanes = 3;
     using MemoryReqs = std::array<VkMemoryRequirements, kMaxPlanes>;
@@ -118,15 +118,18 @@ class Image : public Bindable {
 #endif  // VK_USE_PLATFORM_METAL
 
     const image_layout_map::Encoder subresource_encoder;                             // Subresource resolution encoder
-    std::unique_ptr<const subresource_adapter::ImageRangeEncoder> fragment_encoder;  // Fragment resolution encoder
     const VkDevice store_device_as_workaround;                                       // TODO REMOVE WHEN encoder can be const
 
+    // This map is used to validate/update image layouts during submit time processing.
+    // Record time validation can't use this. At the beginning of the command buffer
+    // the global image layout can't be determined because it depends on the previously
+    // submitted command buffers.
     std::shared_ptr<GlobalImageLayoutRangeMap> layout_range_map;
 
     vvl::unordered_set<std::shared_ptr<const vvl::VideoProfileDesc>> supported_video_profiles;
 
-    Image(const Device &dev_data, VkImage handle, const VkImageCreateInfo *pCreateInfo, VkFormatFeatureFlags2KHR features);
-    Image(const Device &dev_data, VkImage handle, const VkImageCreateInfo *pCreateInfo, VkSwapchainKHR swapchain,
+    Image(const DeviceState &dev_data, VkImage handle, const VkImageCreateInfo *pCreateInfo, VkFormatFeatureFlags2KHR features);
+    Image(const DeviceState &dev_data, VkImage handle, const VkImageCreateInfo *pCreateInfo, VkSwapchainKHR swapchain,
           uint32_t swapchain_index, VkFormatFeatureFlags2KHR features);
     Image(Image const &rh_obj) = delete;
     std::shared_ptr<const Image> shared_from_this() const { return SharedFromThisImpl(this); }
@@ -213,18 +216,14 @@ class Image : public Bindable {
         return GetEffectiveExtent(create_info, range.aspectMask, range.baseMipLevel);
     }
 
-    VkImageSubresourceRange NormalizeSubresourceRange(const VkImageSubresourceRange &range) const {
-        return ::NormalizeSubresourceRange(create_info, range);
-    }
+    VkImageSubresourceRange NormalizeSubresourceRange(const VkImageSubresourceRange &range) const;
+    uint32_t NormalizeLayerCount(const VkImageSubresourceLayers &resource) const;
 
     void SetInitialLayoutMap();
     void SetImageLayout(const VkImageSubresourceRange &range, VkImageLayout layout);
 
     // This function is only used for comparing Imported External Dedicated Memory
     bool CompareCreateInfo(const Image &other) const;
-
-  protected:
-    void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) override;
 
     template <typename UnaryPredicate>
     bool AnyAliasBindingOf(const StateObject::NodeMap &bindings, const UnaryPredicate &pred) const {
@@ -254,20 +253,44 @@ class Image : public Bindable {
         return false;
     }
 
+  protected:
+    void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) override;
+
   private:
+    VkImageSubresourceRange MakeImageFullRange();
+
     std::variant<std::monostate, BindableNoMemoryTracker, BindableLinearMemoryTracker, BindableSparseMemoryTracker,
                  BindableMultiplanarMemoryTracker>
         tracker_;
 };
 
+class ImageSubState {
+  public:
+    explicit ImageSubState(Image &img) : base(img) {}
+    ImageSubState(const ImageSubState &) = delete;
+    ImageSubState &operator=(const ImageSubState &) = delete;
+    virtual ~ImageSubState() {}
+    virtual void Destroy() {}
+    virtual void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) {}
+
+    Image &base;
+};
+
 // State for VkImageView objects.
 // Parent -> child relationships in the object usage tree:
 //    ImageView [N] -> [1] vv::Image
-class ImageView : public StateObject {
+class ImageView : public StateObject, public SubStateManager<ImageViewSubState> {
   public:
     const vku::safe_VkImageViewCreateInfo safe_create_info;
     const VkImageViewCreateInfo &create_info;
 
+    std::shared_ptr<vvl::Image> image_state;
+
+#ifdef VK_USE_PLATFORM_METAL_EXT
+    const bool metal_imageview_export;
+#endif  // VK_USE_PLATFORM_METAL_EXT
+
+    const bool is_depth_sliced;
     const VkImageSubresourceRange normalized_subresource_range;
     const image_layout_map::RangeGenerator range_generator;
     const VkSampleCountFlagBits samples;
@@ -276,11 +299,6 @@ class ImageView : public StateObject {
     const float min_lod;
     const VkFormatFeatureFlags2KHR format_features;
     const VkImageUsageFlags inherited_usage;  // from spec #resources-image-inherited-usage
-#ifdef VK_USE_PLATFORM_METAL_EXT
-    const bool metal_imageview_export;
-#endif  // VK_USE_PLATFORM_METAL_EXT
-    std::shared_ptr<vvl::Image> image_state;
-    const bool is_depth_sliced;
 
     ImageView(const std::shared_ptr<vvl::Image> &image_state, VkImageView handle, const VkImageViewCreateInfo *ci,
               VkFormatFeatureFlags2KHR ff, const VkFilterCubicImageViewImageFormatPropertiesEXT &cubic_props);
@@ -301,31 +319,51 @@ class ImageView : public StateObject {
     bool OverlapSubresource(const ImageView &compare_view) const;
 
     void Destroy() override;
-
-    bool IsDepthSliced() const { return is_depth_sliced; }
+    void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) override;
 
     uint32_t GetAttachmentLayerCount() const;
 
     bool Invalid() const override { return Destroyed() || !image_state || image_state->Invalid(); }
+
+  private:
+    VkImageSubresourceRange NormalizeSubresourceRange() const;
+    bool IsDepthSliced();
+};
+
+class ImageViewSubState {
+  public:
+    explicit ImageViewSubState(ImageView &view) : base(view) {}
+    ImageViewSubState(const ImageSubState &) = delete;
+    ImageViewSubState &operator=(const ImageSubState &) = delete;
+    virtual ~ImageViewSubState() {}
+    virtual void Destroy() {}
+    virtual void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) {}
+
+    ImageView &base;
 };
 
 struct SwapchainImage {
     vvl::Image *image_state = nullptr;
+
+    // Acquire state
     bool acquired = false;
     std::shared_ptr<vvl::Semaphore> acquire_semaphore;
     std::shared_ptr<vvl::Fence> acquire_fence;
 
-    // Each swapchain image keeps information about submissions associated with current present.
-    // When the image is re-acquired later this information can be used to synchronize with
-    // these submissions by using acquire fence.
-    AcquireFenceSync acquire_fence_sync;
+    // Queue location (seq) for present operation that presented this image.
+    // When this image is reacquired, the acquire fence can synchronize with this location.
+    std::optional<SubmissionReference> present_submission_ref;
+
+    // Wait semaphores from the presentation request
+    small_vector<std::shared_ptr<vvl::Semaphore>, 1> present_wait_semaphores;
+    void ResetPresentWaitSemaphores();
 };
 
 // State for VkSwapchainKHR objects.
 // Parent -> child relationships in the object usage tree:
 //    vvl::Swapchain [N] -> [1] vvl::Surface
 //    However, only 1 swapchain for each surface can be !retired.
-class Swapchain : public StateObject {
+class Swapchain : public StateObject, public SubStateManager<SwapchainSubState> {
   public:
     const vku::safe_VkSwapchainCreateInfoKHR safe_create_info;
     const VkSwapchainCreateInfoKHR &create_info;
@@ -339,10 +377,15 @@ class Swapchain : public StateObject {
     const vku::safe_VkImageCreateInfo image_create_info;
 
     std::shared_ptr<vvl::Surface> surface;
-    Device &dev_data;
+    DeviceState &dev_data;
     uint32_t acquired_images = 0;
 
-    Swapchain(Device &dev_data, const VkSwapchainCreateInfoKHR *pCreateInfo, VkSwapchainKHR handle);
+    // Image acquire history
+    static constexpr uint32_t acquire_history_max_length = 16;
+    std::array<uint32_t, acquire_history_max_length> acquire_history;  // ring buffer contanis the last acquired images
+    uint32_t acquire_count = 0;                                        // total number of image acquire requests
+
+    Swapchain(DeviceState &dev_data, const VkSwapchainCreateInfoKHR *pCreateInfo, VkSwapchainKHR handle);
 
     ~Swapchain() {
         if (!Destroyed()) {
@@ -352,7 +395,8 @@ class Swapchain : public StateObject {
 
     VkSwapchainKHR VkHandle() const { return handle_.Cast<VkSwapchainKHR>(); }
 
-    void PresentImage(uint32_t image_index, uint64_t present_id, const AcquireFenceSync &acquire_fence_sync);
+    void PresentImage(uint32_t image_index, uint64_t present_id, const SubmissionReference &present_submission_ref,
+                      vvl::span<std::shared_ptr<vvl::Semaphore>> present_wait_semaphores);
 
     void ReleaseImage(uint32_t image_index);
 
@@ -365,8 +409,25 @@ class Swapchain : public StateObject {
 
     std::shared_ptr<const vvl::Image> GetSwapChainImageShared(uint32_t index) const;
 
+    uint32_t GetAcquireHistoryLength() const;
+    uint32_t GetAcquiredImageIndexFromHistory(uint32_t acquire_history_index) const;
+
+    std::shared_ptr<const Swapchain> shared_from_this() const { return SharedFromThisImpl(this); }
+    std::shared_ptr<Swapchain> shared_from_this() { return SharedFromThisImpl(this); }
+
   protected:
     void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) override;
+};
+
+class SwapchainSubState {
+  public:
+    explicit SwapchainSubState(Swapchain &sc) : base(sc) {}
+    SwapchainSubState(const SwapchainSubState &) = delete;
+    SwapchainSubState &operator=(const SwapchainSubState &) = delete;
+    virtual ~SwapchainSubState() {}
+    virtual void Destroy() {}
+
+    Swapchain &base;
 };
 
 }  // namespace vvl

@@ -22,6 +22,7 @@
 #include "core_validation.h"
 #include "state_tracker/image_state.h"
 #include "state_tracker/sampler_state.h"
+#include "state_tracker/cmd_buffer_state.h"
 #include "generated/dispatch_functions.h"
 #include "error_message/error_strings.h"
 
@@ -375,8 +376,10 @@ bool CoreChecks::ValidateAllocateMemoryANDROID(const VkMemoryAllocateInfo &alloc
                                      "is %s but allocationSize is 0.", FormatHandle(mem_ded_alloc_info->buffer).c_str());
                 }
             } else if (0 == allocate_info.allocationSize) {
-                skip |= LogError("VUID-VkMemoryAllocateInfo-pNext-07900", device, allocate_info_loc.dot(Field::pNext),
-                                 "chain does not contain an instance of VkMemoryDedicatedAllocateInfo, but allocationSize is 0.");
+                skip |=
+                    LogError("VUID-VkMemoryAllocateInfo-pNext-07900", device, allocate_info_loc.dot(Field::pNext),
+                             "chain does not contain an instance of VkMemoryDedicatedAllocateInfo, but allocationSize is 0.\n%s",
+                             PrintPNextChain(Struct::VkMemoryAllocateInfo, allocate_info.pNext).c_str());
             }
         }
     }
@@ -494,7 +497,7 @@ bool CoreChecks::ValidateCreateImageANDROID(const VkImageCreateInfo &create_info
                              "(%" PRIu64 ") is non-zero, but layout is %s.", ext_fmt_android->externalFormat,
                              string_VkImageTiling(create_info.tiling));
         }
-        if (ahb_ext_formats_map.find(ext_fmt_android->externalFormat) == ahb_ext_formats_map.end()) {
+        if (device_state->ahb_ext_formats_map.find(ext_fmt_android->externalFormat) == device_state->ahb_ext_formats_map.end()) {
             skip |= LogError("VUID-VkExternalFormatANDROID-externalFormat-01894", device,
                              create_info_loc.pNext(Struct::VkExternalFormatANDROID, Field::externalFormat),
                              "(%" PRIu64 ") has not been previously retrieved by vkGetAndroidHardwareBufferPropertiesANDROID().",

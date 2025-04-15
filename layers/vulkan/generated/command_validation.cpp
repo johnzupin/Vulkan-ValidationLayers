@@ -23,6 +23,7 @@
 
 #include "error_message/logging.h"
 #include "core_checks/core_validation.h"
+#include "state_tracker/cmd_buffer_state.h"
 
 enum CMD_SCOPE_TYPE { CMD_SCOPE_INSIDE, CMD_SCOPE_OUTSIDE, CMD_SCOPE_BOTH };
 
@@ -167,14 +168,14 @@ static const vvl::unordered_map<Func, CommandValidationInfo> kCommandValidationT
     "VUID-vkCmdDispatch-commandBuffer-recording",
     nullptr,
     VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDispatch-commandBuffer-cmdpool",
-    CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatch-renderpass",
+    CMD_SCOPE_BOTH, "kVUIDUndefined",
     CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatch-videocoding",
 }},
 {Func::vkCmdDispatchIndirect, {
     "VUID-vkCmdDispatchIndirect-commandBuffer-recording",
     nullptr,
     VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDispatchIndirect-commandBuffer-cmdpool",
-    CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatchIndirect-renderpass",
+    CMD_SCOPE_BOTH, "kVUIDUndefined",
     CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatchIndirect-videocoding",
 }},
 {Func::vkCmdCopyBuffer, {
@@ -363,7 +364,7 @@ static const vvl::unordered_map<Func, CommandValidationInfo> kCommandValidationT
     "VUID-vkCmdDispatchBase-commandBuffer-recording",
     nullptr,
     VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDispatchBase-commandBuffer-cmdpool",
-    CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatchBase-renderpass",
+    CMD_SCOPE_BOTH, "kVUIDUndefined",
     CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatchBase-videocoding",
 }},
 {Func::vkCmdDrawIndirectCount, {
@@ -720,7 +721,7 @@ static const vvl::unordered_map<Func, CommandValidationInfo> kCommandValidationT
     "VUID-vkCmdDispatchBase-commandBuffer-recording",
     nullptr,
     VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDispatchBase-commandBuffer-cmdpool",
-    CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatchBase-renderpass",
+    CMD_SCOPE_BOTH, "kVUIDUndefined",
     CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatchBase-videocoding",
 }},
 {Func::vkCmdPushDescriptorSetKHR, {
@@ -1374,6 +1375,27 @@ static const vvl::unordered_map<Func, CommandValidationInfo> kCommandValidationT
     CMD_SCOPE_BOTH, "kVUIDUndefined",
     CMD_SCOPE_OUTSIDE, "VUID-vkCmdCudaLaunchKernelNV-videocoding",
 }},
+{Func::vkCmdDispatchTileQCOM, {
+    "VUID-vkCmdDispatchTileQCOM-commandBuffer-recording",
+    nullptr,
+    VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdDispatchTileQCOM-commandBuffer-cmdpool",
+    CMD_SCOPE_INSIDE, "VUID-vkCmdDispatchTileQCOM-renderpass",
+    CMD_SCOPE_OUTSIDE, "VUID-vkCmdDispatchTileQCOM-videocoding",
+}},
+{Func::vkCmdBeginPerTileExecutionQCOM, {
+    "VUID-vkCmdBeginPerTileExecutionQCOM-commandBuffer-recording",
+    nullptr,
+    VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdBeginPerTileExecutionQCOM-commandBuffer-cmdpool",
+    CMD_SCOPE_INSIDE, "VUID-vkCmdBeginPerTileExecutionQCOM-renderpass",
+    CMD_SCOPE_OUTSIDE, "VUID-vkCmdBeginPerTileExecutionQCOM-videocoding",
+}},
+{Func::vkCmdEndPerTileExecutionQCOM, {
+    "VUID-vkCmdEndPerTileExecutionQCOM-commandBuffer-recording",
+    nullptr,
+    VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdEndPerTileExecutionQCOM-commandBuffer-cmdpool",
+    CMD_SCOPE_INSIDE, "VUID-vkCmdEndPerTileExecutionQCOM-renderpass",
+    CMD_SCOPE_OUTSIDE, "VUID-vkCmdEndPerTileExecutionQCOM-videocoding",
+}},
 {Func::vkCmdBindDescriptorBuffersEXT, {
     "VUID-vkCmdBindDescriptorBuffersEXT-commandBuffer-recording",
     nullptr,
@@ -1842,6 +1864,13 @@ static const vvl::unordered_map<Func, CommandValidationInfo> kCommandValidationT
     VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, "VUID-vkCmdExecuteGeneratedCommandsEXT-commandBuffer-cmdpool",
     CMD_SCOPE_BOTH, "kVUIDUndefined",
     CMD_SCOPE_OUTSIDE, "VUID-vkCmdExecuteGeneratedCommandsEXT-videocoding",
+}},
+{Func::vkCmdEndRendering2EXT, {
+    "VUID-vkCmdEndRendering2EXT-commandBuffer-recording",
+    nullptr,
+    VK_QUEUE_GRAPHICS_BIT, "VUID-vkCmdEndRendering2EXT-commandBuffer-cmdpool",
+    CMD_SCOPE_INSIDE, "VUID-vkCmdEndRendering2EXT-renderpass",
+    CMD_SCOPE_OUTSIDE, "VUID-vkCmdEndRendering2EXT-videocoding",
 }},
 {Func::vkCmdBuildAccelerationStructuresKHR, {
     "VUID-vkCmdBuildAccelerationStructuresKHR-commandBuffer-recording",

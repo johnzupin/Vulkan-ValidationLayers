@@ -198,7 +198,7 @@ void NegativeRayTracingNV::OOBRayTracingShadersTestBodyNV(bool gpu_assisted) {
     ray_tracing_queue->Submit(ray_tracing_command_buffer);
     ray_tracing_queue->Wait();
 
-    vkt::Image image(*m_device, 16, 16, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    vkt::Image image(*m_device, 16, 16, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
     image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView imageView = image.CreateView();
     vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
@@ -1071,19 +1071,15 @@ TEST_F(NegativeRayTracingNV, ValidateGeometry) {
 
     uint8_t *mapped_vbo_buffer_data = (uint8_t *)vbo.Memory().Map();
     std::memcpy(mapped_vbo_buffer_data, (uint8_t *)vertices.data(), sizeof(float) * vertices.size());
-    vbo.Memory().Unmap();
 
     uint8_t *mapped_ibo_buffer_data = (uint8_t *)ibo.Memory().Map();
     std::memcpy(mapped_ibo_buffer_data, (uint8_t *)indicies.data(), sizeof(uint32_t) * indicies.size());
-    ibo.Memory().Unmap();
 
     uint8_t *mapped_tbo_buffer_data = (uint8_t *)tbo.Memory().Map();
     std::memcpy(mapped_tbo_buffer_data, (uint8_t *)transforms.data(), sizeof(float) * transforms.size());
-    tbo.Memory().Unmap();
 
     uint8_t *mapped_aabbbo_buffer_data = (uint8_t *)aabbbo.Memory().Map();
     std::memcpy(mapped_aabbbo_buffer_data, (uint8_t *)aabbs.data(), sizeof(float) * aabbs.size());
-    aabbbo.Memory().Unmap();
 
     VkGeometryNV valid_geometry_triangles = vku::InitStructHelper();
     valid_geometry_triangles.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_NV;
@@ -1808,8 +1804,7 @@ TEST_F(NegativeRayTracingNV, ValidateCmdCopyAccelerationStructure) {
     vk::CmdBuildAccelerationStructureNV(m_command_buffer.handle(), &bot_level_as_create_info.info, VK_NULL_HANDLE, 0, VK_FALSE,
                                         src_as.handle(), VK_NULL_HANDLE, bot_level_as_scratch.handle(), 0);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     // Command buffer must be in recording state
     m_errorMonitor->SetDesiredError("VUID-vkCmdCopyAccelerationStructureNV-commandBuffer-recording");

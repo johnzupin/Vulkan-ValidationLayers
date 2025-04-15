@@ -36,8 +36,7 @@
 #endif
 
 #include "binding.h"
-#include "containers/custom_containers.h"
-#include "generated/vk_extension_helper.h"
+#include "containers/limits.h"
 #include "render.h"
 
 #include <cmath>
@@ -45,6 +44,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <array> // Required for Windows in many tests
 
 // MSVC and GCC define __SANITIZE_ADDRESS__ when compiling with address sanitization
 // However, clang doesn't. Instead you have to use __has_feature to check.
@@ -76,9 +76,11 @@
 
 #define OBJECT_LAYER_NAME "VK_LAYER_KHRONOS_validation"
 
+[[maybe_unused]] static const VkBool32 kVkFalse = VK_FALSE;
+[[maybe_unused]] static const VkBool32 kVkTrue = VK_TRUE;
+
 // This is only for tests where you have a good reason to have more than the default (10) duplicate message limit.
 // It is highly suggested you first try to breakup your test up into smaller tests if you are trying to use this.
-static VkBool32 kVkFalse = VK_FALSE;
 static const VkLayerSettingEXT kDisableMessageLimitSetting = {OBJECT_LAYER_NAME, "enable_message_limit",
                                                               VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &kVkFalse};
 [[maybe_unused]] static VkLayerSettingsCreateInfoEXT kDisableMessageLimit = {VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
@@ -117,7 +119,7 @@ bool ImageFormatIsSupported(const VkInstance inst, const VkPhysicalDevice phy, c
 bool BufferFormatAndFeaturesSupported(VkPhysicalDevice phy, VkFormat format, VkFormatFeatureFlags features);
 
 // Simple sane SamplerCreateInfo boilerplate
-VkSamplerCreateInfo SafeSaneSamplerCreateInfo();
+VkSamplerCreateInfo SafeSaneSamplerCreateInfo(void *p_next = nullptr);
 
 // Dependent "false" type for the static assert, as GCC will evaluate
 // non-dependent static_asserts even for non-instantiated templates
@@ -243,29 +245,30 @@ class VkBestPracticesLayerTest : public VkLayerTest {
 
 class GpuAVTest : public virtual VkLayerTest {
   public:
-    void InitGpuAvFramework(void *p_next = nullptr);
+    void InitGpuAvFramework(std::vector<VkLayerSettingEXT> layer_settings = {}, bool safe_mode = true);
 
     VkValidationFeaturesEXT GetGpuAvValidationFeatures();
 };
 
 class GpuAVBufferDeviceAddressTest : public GpuAVTest {
   public:
-    void InitGpuVUBufferDeviceAddress(void *p_next = nullptr);
+    void InitGpuVUBufferDeviceAddress(bool safe_mode = true);
 };
 
 class GpuAVDescriptorIndexingTest : public GpuAVTest {
   public:
-    void InitGpuVUDescriptorIndexing();
+    void InitGpuVUDescriptorIndexing(bool safe_mode = true);
 };
 
 class GpuAVDescriptorClassGeneralBuffer : public GpuAVTest {
   public:
-    void ComputeStorageBufferTest(const char *shader, bool is_glsl, VkDeviceSize buffer_size, const char *expected_error = nullptr);
+    void ComputeStorageBufferTest(const char *shader, bool is_glsl, VkDeviceSize buffer_size, const char *expected_error = nullptr,
+                                  uint32_t error_count = 1);
 };
 
 class GpuAVRayQueryTest : public GpuAVTest {
   public:
-    void InitGpuAVRayQuery();
+    void InitGpuAVRayQuery(std::vector<VkLayerSettingEXT> layer_settings = {});
 };
 
 class GpuAVImageLayout : public GpuAVTest {

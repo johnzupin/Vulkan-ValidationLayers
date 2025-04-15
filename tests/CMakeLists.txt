@@ -46,8 +46,8 @@ target_sources(vk_layer_validation_tests PRIVATE
     framework/ray_tracing_helper_nv.cpp
     framework/external_memory_sync.h
     framework/external_memory_sync.cpp
-    framework/barrier_queue_family.h
-    framework/barrier_queue_family.cpp
+    framework/sync_helper.h
+    framework/sync_helper.cpp
     framework/descriptor_helper.h
     framework/descriptor_helper.cpp
     framework/thread_helper.h
@@ -209,6 +209,7 @@ target_sources(vk_layer_validation_tests PRIVATE
     unit/shader_limits.cpp
     unit/shader_limits_positive.cpp
     unit/shader_mesh.cpp
+    unit/shader_mesh_positive.cpp
     unit/shader_object.cpp
     unit/shader_object_positive.cpp
     unit/shader_push_constants.cpp
@@ -338,7 +339,10 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/config_$<CONFIG>.h" INPUT "${C
 target_compile_definitions(vk_layer_validation_tests PRIVATE CONFIG_HEADER_FILE="config_$<CONFIG>.h")
 
 target_sources(vk_layer_validation_tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/config_$<CONFIG>.h)
-target_include_directories(vk_layer_validation_tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(vk_layer_validation_tests PRIVATE 
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${VVL_SOURCE_DIR}/layers/external
+)
 
 # More details in tests/android/mock/README.md
 option(VVL_MOCK_ANDROID "Enable building for Android on desktop for testing with MockICD setup")

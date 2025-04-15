@@ -315,9 +315,7 @@ class ObjectTrackerOutputGenerator(BaseGenerator):
     def generateHeader(self, want_instance):
         out = []
         guard_helper = PlatformGuardHelper()
-        for command in self.vk.commands.values():
-            if command.instance != want_instance:
-                continue
+        for command in [x for x in self.vk.commands.values() if x.instance == want_instance]:
             out.extend(guard_helper.add_guard(command.protect))
             (pre_call_validate, pre_call_record, post_call_record) = self.generateFunctionBody(command)
 
@@ -800,9 +798,9 @@ bool Device::ReportUndestroyedObjects(const Location& loc) const {
         if structName == 'VkVideoEncodeQuantizationMapInfoKHR' and memberName == 'quantizationMap':
             return '"UNASSIGNED-VkVideoEncodeQuantizationMapInfoKHR-quantizationMap-parent"'
         if structName == 'VkPipelineInfoKHR' and memberName == 'pipeline':
-            return '"VUID-VkPipelineInfoKHR-pipeline-parent"'
+            return '"UNASSIGNED-VkPipelineInfoKHR-pipeline-parent"'
         if structName == 'VkMemoryGetMetalHandleInfoEXT' and memberName == 'memory':
-            return '"VUID-VkMemoryGetMetalHandleInfoEXT-memory-parent"'
+            return '"UNASSIGNED-VkMemoryGetMetalHandleInfoEXT-memory-parent"'
 
         # Common parents because the structs have more then one handle that needs to be check
         if (structName == 'VkBufferMemoryBarrier' and memberName == 'buffer') or (structName == 'VkImageMemoryBarrier' and memberName == 'image'):

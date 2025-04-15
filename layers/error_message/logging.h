@@ -23,11 +23,13 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <memory>
 
 #include <vulkan/utility/vk_struct_helper.hpp>
 #include <vulkan/vk_enum_string_helper.h>
 
 #include "containers/custom_containers.h"
+#include "containers/small_vector.h"
 #include "generated/vk_object_types.h"
 #include "error_message/log_message_type.h"
 
@@ -200,7 +202,6 @@ class DebugReport {
     bool force_default_log_callback{false};
     uint32_t device_created = 0;
     MessageFormatSettings message_format_settings;
-    bool debug_stable_messages{false};
 
     void SetUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT *pNameInfo);
     void SetMarkerObjectName(const VkDebugMarkerObjectNameInfoEXT *pNameInfo);
