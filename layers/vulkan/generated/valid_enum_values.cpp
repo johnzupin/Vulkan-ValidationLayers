@@ -177,6 +177,8 @@ ValidValue stateless::Context::IsValidEnumValue(VkObjectType value) const {
             return IsExtEnabled(extensions.vk_ext_shader_object) ? ValidValue::Valid : ValidValue::NoExtension;
         case VK_OBJECT_TYPE_PIPELINE_BINARY_KHR:
             return IsExtEnabled(extensions.vk_khr_pipeline_binary) ? ValidValue::Valid : ValidValue::NoExtension;
+        case VK_OBJECT_TYPE_EXTERNAL_COMPUTE_QUEUE_NV:
+            return IsExtEnabled(extensions.vk_nv_external_compute_queue) ? ValidValue::Valid : ValidValue::NoExtension;
         case VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_EXT:
         case VK_OBJECT_TYPE_INDIRECT_EXECUTION_SET_EXT:
             return IsExtEnabled(extensions.vk_ext_device_generated_commands) ? ValidValue::Valid : ValidValue::NoExtension;
@@ -1280,6 +1282,8 @@ ValidValue stateless::Context::IsValidEnumValue(VkComponentTypeKHR value) const 
         case VK_COMPONENT_TYPE_FLOAT_E4M3_NV:
         case VK_COMPONENT_TYPE_FLOAT_E5M2_NV:
             return ValidValue::Valid;
+        case VK_COMPONENT_TYPE_BFLOAT16_KHR:
+            return IsExtEnabled(extensions.vk_khr_shader_bfloat16) ? ValidValue::Valid : ValidValue::NoExtension;
         default:
             return ValidValue::NotFound;
     };
@@ -2329,6 +2333,8 @@ vvl::Extensions stateless::Context::GetEnumExtensions(VkObjectType value) const 
             return {vvl::Extension::_VK_EXT_shader_object};
         case VK_OBJECT_TYPE_PIPELINE_BINARY_KHR:
             return {vvl::Extension::_VK_KHR_pipeline_binary};
+        case VK_OBJECT_TYPE_EXTERNAL_COMPUTE_QUEUE_NV:
+            return {vvl::Extension::_VK_NV_external_compute_queue};
         case VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_EXT:
         case VK_OBJECT_TYPE_INDIRECT_EXECUTION_SET_EXT:
             return {vvl::Extension::_VK_EXT_device_generated_commands};
@@ -3077,11 +3083,16 @@ const char* stateless::Context::DescribeEnum(VkVideoEncodeTuningModeKHR value) c
 
 template <>
 vvl::Extensions stateless::Context::GetEnumExtensions(VkComponentTypeKHR value) const {
-    return {};
+    switch (value) {
+        case VK_COMPONENT_TYPE_BFLOAT16_KHR:
+            return {vvl::Extension::_VK_KHR_shader_bfloat16};
+        default:
+            return {};
+    };
 }
 template <>
 const char* stateless::Context::DescribeEnum(VkComponentTypeKHR value) const {
-    return nullptr;
+    return string_VkComponentTypeKHR(value);
 }
 
 template <>

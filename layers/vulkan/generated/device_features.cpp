@@ -568,6 +568,14 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->performanceCounterMultipleQueryPools |= enabled->performanceCounterMultipleQueryPools == VK_TRUE;
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_BFLOAT16_FEATURES_KHR: {
+                const VkPhysicalDeviceShaderBfloat16FeaturesKHR *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceShaderBfloat16FeaturesKHR *>(pNext);
+                features->shaderBFloat16Type |= enabled->shaderBFloat16Type == VK_TRUE;
+                features->shaderBFloat16DotProduct |= enabled->shaderBFloat16DotProduct == VK_TRUE;
+                features->shaderBFloat16CooperativeMatrix |= enabled->shaderBFloat16CooperativeMatrix == VK_TRUE;
+                break;
+            }
 #ifdef VK_ENABLE_BETA_EXTENSIONS
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR: {
                 const VkPhysicalDevicePortabilitySubsetFeaturesKHR *enabled =
@@ -1026,10 +1034,31 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->diagnosticsConfig |= enabled->diagnosticsConfig == VK_TRUE;
                 break;
             }
+#ifdef VK_ENABLE_BETA_EXTENSIONS
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_FEATURES_NV: {
                 const VkPhysicalDeviceCudaKernelLaunchFeaturesNV *enabled =
                     reinterpret_cast<const VkPhysicalDeviceCudaKernelLaunchFeaturesNV *>(pNext);
                 features->cudaKernelLaunchFeatures |= enabled->cudaKernelLaunchFeatures == VK_TRUE;
+                break;
+            }
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_SHADING_FEATURES_QCOM: {
+                const VkPhysicalDeviceTileShadingFeaturesQCOM *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceTileShadingFeaturesQCOM *>(pNext);
+                features->tileShading |= enabled->tileShading == VK_TRUE;
+                features->tileShadingFragmentStage |= enabled->tileShadingFragmentStage == VK_TRUE;
+                features->tileShadingColorAttachments |= enabled->tileShadingColorAttachments == VK_TRUE;
+                features->tileShadingDepthAttachments |= enabled->tileShadingDepthAttachments == VK_TRUE;
+                features->tileShadingStencilAttachments |= enabled->tileShadingStencilAttachments == VK_TRUE;
+                features->tileShadingInputAttachments |= enabled->tileShadingInputAttachments == VK_TRUE;
+                features->tileShadingSampledAttachments |= enabled->tileShadingSampledAttachments == VK_TRUE;
+                features->tileShadingPerTileDraw |= enabled->tileShadingPerTileDraw == VK_TRUE;
+                features->tileShadingPerTileDispatch |= enabled->tileShadingPerTileDispatch == VK_TRUE;
+                features->tileShadingDispatchTile |= enabled->tileShadingDispatchTile == VK_TRUE;
+                features->tileShadingApron |= enabled->tileShadingApron == VK_TRUE;
+                features->tileShadingAnisotropicApron |= enabled->tileShadingAnisotropicApron == VK_TRUE;
+                features->tileShadingAtomicOps |= enabled->tileShadingAtomicOps == VK_TRUE;
+                features->tileShadingImageProcessing |= enabled->tileShadingImageProcessing == VK_TRUE;
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT: {
@@ -1317,9 +1346,9 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->renderPassStriped |= enabled->renderPassStriped == VK_TRUE;
                 break;
             }
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_QCOM: {
-                const VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM *enabled =
-                    reinterpret_cast<const VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM *>(pNext);
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_EXT: {
+                const VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT *enabled =
+                    reinterpret_cast<const VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT *>(pNext);
                 features->fragmentDensityMapOffset |= enabled->fragmentDensityMapOffset == VK_TRUE;
                 break;
             }
@@ -1684,12 +1713,14 @@ void GetEnabledDeviceFeatures(const VkDeviceCreateInfo *pCreateInfo, DeviceFeatu
                 features->vertexAttributeRobustness |= enabled->vertexAttributeRobustness == VK_TRUE;
                 break;
             }
+#ifdef VK_ENABLE_BETA_EXTENSIONS
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_METERING_FEATURES_NV: {
                 const VkPhysicalDevicePresentMeteringFeaturesNV *enabled =
                     reinterpret_cast<const VkPhysicalDevicePresentMeteringFeaturesNV *>(pNext);
                 features->presentMetering |= enabled->presentMetering == VK_TRUE;
                 break;
             }
+#endif  // VK_ENABLE_BETA_EXTENSIONS
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR: {
                 const VkPhysicalDeviceAccelerationStructureFeaturesKHR *enabled =
                     reinterpret_cast<const VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(pNext);

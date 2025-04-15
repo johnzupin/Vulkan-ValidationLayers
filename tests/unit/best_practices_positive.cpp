@@ -444,16 +444,14 @@ TEST_F(VkPositiveBestPracticesLayerTest, ResetCommandPool) {
         m_command_buffer.Begin();
         event1.CmdSet(m_command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
         m_command_buffer.End();
-        m_default_queue->Submit(m_command_buffer);
-        m_default_queue->Wait();
+        m_default_queue->SubmitAndWait(m_command_buffer);
     }
 
     vkt::Event event2(*m_device);
     m_command_buffer.Begin();
     event2.CmdSet(m_command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(VkPositiveBestPracticesLayerTest, ShaderObjectDraw) {
@@ -474,19 +472,10 @@ TEST_F(VkPositiveBestPracticesLayerTest, ShaderObjectDraw) {
     )glsl";
 
     std::vector<uint32_t> vert_spirv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexGlsl);
-    VkShaderCreateInfoEXT create_info = vku::InitStructHelper();
-    create_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    create_info.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
-    create_info.codeSize = vert_spirv.size() * sizeof(uint32_t);
-    create_info.pCode = vert_spirv.data();
-    create_info.pName = "main";
-    vkt::Shader vert_shader(*m_device, create_info);
+    vkt::Shader vert_shader(*m_device, VK_SHADER_STAGE_VERTEX_BIT, vert_spirv);
 
     std::vector<uint32_t> frag_spirv = GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl);
-    create_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    create_info.codeSize = frag_spirv.size() * sizeof(uint32_t);
-    create_info.pCode = frag_spirv.data();
-    vkt::Shader frag_shader(*m_device, create_info);
+    vkt::Shader frag_shader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_spirv);
 
     m_vertex_buffer = new vkt::Buffer(*m_device, sizeof(float) * 12u, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
@@ -513,4 +502,50 @@ TEST_F(VkPositiveBestPracticesLayerTest, ShaderObjectDraw) {
     vk::CmdDraw(m_command_buffer.handle(), 3u, 1u, 0u, 0u);
     m_command_buffer.EndRendering();
     m_command_buffer.End();
+}
+
+TEST_F(VkPositiveBestPracticesLayerTest, CreateDeviceWithFeatures) {
+    RETURN_IF_SKIP(InitBestPracticesFramework());
+    const vkt::PhysicalDevice phys_device_obj(gpu_);
+
+    // Now get information correctly
+    vkt::QueueCreateInfoArray queue_info(phys_device_obj.queue_properties_, true);
+    // Only request creation with queuefamilies that have at least one queue
+    std::vector<VkDeviceQueueCreateInfo> create_queue_infos;
+    auto qci = queue_info.Data();
+    for (uint32_t j = 0; j < queue_info.Size(); ++j) {
+        if (qci[j].queueCount) {
+            create_queue_infos.push_back(qci[j]);
+        }
+    }
+
+    VkPhysicalDeviceFeatures features;
+    vk::GetPhysicalDeviceFeatures(gpu_, &features);
+
+    const char *portability_extension = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
+
+    VkDeviceCreateInfo device_ci = vku::InitStructHelper();
+    device_ci.queueCreateInfoCount = create_queue_infos.size();
+    device_ci.pQueueCreateInfos = create_queue_infos.data();
+    device_ci.enabledLayerCount = 0;
+    device_ci.ppEnabledLayerNames = nullptr;
+    device_ci.enabledExtensionCount = 0u;
+    device_ci.ppEnabledExtensionNames = nullptr;
+    device_ci.pEnabledFeatures = &features;
+
+    uint32_t extension_count;
+    vk::EnumerateDeviceExtensionProperties(gpu_, nullptr, &extension_count, nullptr);
+    std::vector<VkExtensionProperties> extensions(extension_count);
+    vk::EnumerateDeviceExtensionProperties(gpu_, nullptr, &extension_count, extensions.data());
+
+    for (uint32_t i = 0; i < extension_count; ++i) {
+        if (strcmp(extensions[i].extensionName, portability_extension) == 0) {
+            device_ci.enabledExtensionCount = 1u;
+            device_ci.ppEnabledExtensionNames = &portability_extension;
+            break;
+        }
+    }
+
+    m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit | kPerformanceWarningBit);
+    vkt::Device device(phys_device_obj.handle(), device_ci);
 }

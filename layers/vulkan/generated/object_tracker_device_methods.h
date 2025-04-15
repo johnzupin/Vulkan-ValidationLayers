@@ -1021,6 +1021,7 @@ bool PreCallValidateSetPrivateDataEXT(VkDevice device, VkObjectType objectType, 
 bool PreCallValidateGetPrivateDataEXT(VkDevice device, VkObjectType objectType, uint64_t objectHandle,
                                       VkPrivateDataSlot privateDataSlot, uint64_t* pData,
                                       const ErrorObject& error_obj) const override;
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 void PostCallRecordCreateCudaModuleNV(VkDevice device, const VkCudaModuleCreateInfoNV* pCreateInfo,
                                       const VkAllocationCallbacks* pAllocator, VkCudaModuleNV* pModule,
                                       const RecordObject& record_obj) override;
@@ -1042,6 +1043,7 @@ void PreCallRecordDestroyCudaFunctionNV(VkDevice device, VkCudaFunctionNV functi
                                         const RecordObject& record_obj) override;
 bool PreCallValidateCmdCudaLaunchKernelNV(VkCommandBuffer commandBuffer, const VkCudaLaunchInfoNV* pLaunchInfo,
                                           const ErrorObject& error_obj) const override;
+#endif  // VK_ENABLE_BETA_EXTENSIONS
 #ifdef VK_USE_PLATFORM_METAL_EXT
 bool PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportMetalObjectsInfoEXT* pMetalObjectsInfo,
                                           const ErrorObject& error_obj) const override;
@@ -1219,6 +1221,17 @@ bool PreCallValidateGetLatencyTimingsNV(VkDevice device, VkSwapchainKHR swapchai
                                         const ErrorObject& error_obj) const override;
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+bool PreCallValidateCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                 const VkAllocationCallbacks* pAllocator, VkExternalComputeQueueNV* pExternalQueue,
+                                                 const ErrorObject& error_obj) const override;
+void PostCallRecordCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                const VkAllocationCallbacks* pAllocator, VkExternalComputeQueueNV* pExternalQueue,
+                                                const RecordObject& record_obj) override;
+bool PreCallValidateDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                  const VkAllocationCallbacks* pAllocator,
+                                                  const ErrorObject& error_obj) const override;
+void PreCallRecordDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                const VkAllocationCallbacks* pAllocator, const RecordObject& record_obj) override;
 bool PreCallValidateGetGeneratedCommandsMemoryRequirementsEXT(VkDevice device,
                                                               const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo,
                                                               VkMemoryRequirements2* pMemoryRequirements,

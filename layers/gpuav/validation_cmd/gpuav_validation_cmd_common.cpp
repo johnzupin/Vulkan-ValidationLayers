@@ -24,11 +24,12 @@
 
 #include "state_tracker/descriptor_sets.h"
 #include "state_tracker/render_pass_state.h"
+#include "state_tracker/pipeline_state.h"
 #include "state_tracker/shader_object_state.h"
 
 namespace gpuav {
 
-void BindErrorLoggingDescSet(Validator &gpuav, CommandBuffer &cb_state, VkPipelineBindPoint bind_point,
+void BindErrorLoggingDescSet(Validator &gpuav, CommandBufferSubState &cb_state, VkPipelineBindPoint bind_point,
                              VkPipelineLayout pipeline_layout, uint32_t cmd_index, uint32_t error_logger_index) {
     assert(cmd_index < cst::indices_count);
     assert(error_logger_index < cst::indices_count);
@@ -40,11 +41,11 @@ void BindErrorLoggingDescSet(Validator &gpuav, CommandBuffer &cb_state, VkPipeli
                                   dynamic_offsets.data());
 }
 
-void RestorablePipelineState::Create(CommandBuffer &cb_state, VkPipelineBindPoint bind_point) {
+void RestorablePipelineState::Create(CommandBufferSubState &cb_state, VkPipelineBindPoint bind_point) {
     pipeline_bind_point_ = bind_point;
     const auto lv_bind_point = ConvertToLvlBindPoint(bind_point);
 
-    LastBound &last_bound = cb_state.lastBound[lv_bind_point];
+    LastBound &last_bound = cb_state.base.lastBound[lv_bind_point];
     if (last_bound.pipeline_state) {
         pipeline_ = last_bound.pipeline_state->VkHandle();
 
@@ -62,7 +63,7 @@ void RestorablePipelineState::Create(CommandBuffer &cb_state, VkPipelineBindPoin
 
     desc_set_pipeline_layout_ = last_bound.desc_set_pipeline_layout;
 
-    push_constants_data_ = cb_state.push_constant_data_chunks;
+    push_constants_data_ = cb_state.base.push_constant_data_chunks;
 
     descriptor_sets_.reserve(last_bound.ds_slots.size());
     for (std::size_t set_i = 0; set_i < last_bound.ds_slots.size(); set_i++) {
@@ -81,9 +82,9 @@ void RestorablePipelineState::Create(CommandBuffer &cb_state, VkPipelineBindPoin
     }
 
     // Do not handle cb_state.active_render_pass->use_dynamic_rendering_inherited for now
-    if (bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS && cb_state.active_render_pass &&
-        cb_state.active_render_pass->use_dynamic_rendering) {
-        rendering_info_ = &cb_state.active_render_pass->dynamic_rendering_begin_rendering_info;
+    if (bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS && cb_state.base.active_render_pass &&
+        cb_state.base.active_render_pass->use_dynamic_rendering) {
+        rendering_info_ = &cb_state.base.active_render_pass->dynamic_rendering_begin_rendering_info;
         DispatchCmdEndRendering(cb_state.VkHandle());
 
         VkRenderingInfo rendering_info = vku::InitStructHelper();

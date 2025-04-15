@@ -4252,6 +4252,7 @@ virtual void PreCallRecordGetPrivateDataEXT(VkDevice device, VkObjectType object
                                             VkPrivateDataSlot privateDataSlot, uint64_t* pData, const RecordObject& record_obj) {}
 virtual void PostCallRecordGetPrivateDataEXT(VkDevice device, VkObjectType objectType, uint64_t objectHandle,
                                              VkPrivateDataSlot privateDataSlot, uint64_t* pData, const RecordObject& record_obj) {}
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 virtual bool PreCallValidateCreateCudaModuleNV(VkDevice device, const VkCudaModuleCreateInfoNV* pCreateInfo,
                                                const VkAllocationCallbacks* pAllocator, VkCudaModuleNV* pModule,
                                                const ErrorObject& error_obj) const {
@@ -4306,6 +4307,29 @@ virtual void PreCallRecordCmdCudaLaunchKernelNV(VkCommandBuffer commandBuffer, c
                                                 const RecordObject& record_obj) {}
 virtual void PostCallRecordCmdCudaLaunchKernelNV(VkCommandBuffer commandBuffer, const VkCudaLaunchInfoNV* pLaunchInfo,
                                                  const RecordObject& record_obj) {}
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+virtual bool PreCallValidateCmdDispatchTileQCOM(VkCommandBuffer commandBuffer, const ErrorObject& error_obj) const { return false; }
+virtual void PreCallRecordCmdDispatchTileQCOM(VkCommandBuffer commandBuffer, const RecordObject& record_obj) {}
+virtual void PostCallRecordCmdDispatchTileQCOM(VkCommandBuffer commandBuffer, const RecordObject& record_obj) {}
+virtual bool PreCallValidateCmdBeginPerTileExecutionQCOM(VkCommandBuffer commandBuffer,
+                                                         const VkPerTileBeginInfoQCOM* pPerTileBeginInfo,
+                                                         const ErrorObject& error_obj) const {
+    return false;
+}
+virtual void PreCallRecordCmdBeginPerTileExecutionQCOM(VkCommandBuffer commandBuffer,
+                                                       const VkPerTileBeginInfoQCOM* pPerTileBeginInfo,
+                                                       const RecordObject& record_obj) {}
+virtual void PostCallRecordCmdBeginPerTileExecutionQCOM(VkCommandBuffer commandBuffer,
+                                                        const VkPerTileBeginInfoQCOM* pPerTileBeginInfo,
+                                                        const RecordObject& record_obj) {}
+virtual bool PreCallValidateCmdEndPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileEndInfoQCOM* pPerTileEndInfo,
+                                                       const ErrorObject& error_obj) const {
+    return false;
+}
+virtual void PreCallRecordCmdEndPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileEndInfoQCOM* pPerTileEndInfo,
+                                                     const RecordObject& record_obj) {}
+virtual void PostCallRecordCmdEndPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileEndInfoQCOM* pPerTileEndInfo,
+                                                      const RecordObject& record_obj) {}
 #ifdef VK_USE_PLATFORM_METAL_EXT
 virtual bool PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportMetalObjectsInfoEXT* pMetalObjectsInfo,
                                                   const ErrorObject& error_obj) const {
@@ -5434,6 +5458,38 @@ virtual void PreCallRecordGetScreenBufferPropertiesQNX(VkDevice device, const st
 virtual void PostCallRecordGetScreenBufferPropertiesQNX(VkDevice device, const struct _screen_buffer* buffer,
                                                         VkScreenBufferPropertiesQNX* pProperties, const RecordObject& record_obj) {}
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+virtual bool PreCallValidateCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                         const VkAllocationCallbacks* pAllocator,
+                                                         VkExternalComputeQueueNV* pExternalQueue,
+                                                         const ErrorObject& error_obj) const {
+    return false;
+}
+virtual void PreCallRecordCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                       const VkAllocationCallbacks* pAllocator,
+                                                       VkExternalComputeQueueNV* pExternalQueue, const RecordObject& record_obj) {}
+virtual void PostCallRecordCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                        const VkAllocationCallbacks* pAllocator,
+                                                        VkExternalComputeQueueNV* pExternalQueue, const RecordObject& record_obj) {}
+virtual bool PreCallValidateDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                          const VkAllocationCallbacks* pAllocator,
+                                                          const ErrorObject& error_obj) const {
+    return false;
+}
+virtual void PreCallRecordDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                        const VkAllocationCallbacks* pAllocator, const RecordObject& record_obj) {}
+virtual void PostCallRecordDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                         const VkAllocationCallbacks* pAllocator, const RecordObject& record_obj) {}
+virtual bool PreCallValidateGetExternalComputeQueueDataNV(VkExternalComputeQueueNV externalQueue,
+                                                          VkExternalComputeQueueDataParamsNV* params, void* pData,
+                                                          const ErrorObject& error_obj) const {
+    return false;
+}
+virtual void PreCallRecordGetExternalComputeQueueDataNV(VkExternalComputeQueueNV externalQueue,
+                                                        VkExternalComputeQueueDataParamsNV* params, void* pData,
+                                                        const RecordObject& record_obj) {}
+virtual void PostCallRecordGetExternalComputeQueueDataNV(VkExternalComputeQueueNV externalQueue,
+                                                         VkExternalComputeQueueDataParamsNV* params, void* pData,
+                                                         const RecordObject& record_obj) {}
 virtual bool PreCallValidateGetClusterAccelerationStructureBuildSizesNV(VkDevice device,
                                                                         const VkClusterAccelerationStructureInputInfoNV* pInfo,
                                                                         VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo,
@@ -5621,6 +5677,14 @@ virtual void PostCallRecordGetMemoryMetalHandlePropertiesEXT(VkDevice device, Vk
                                                              VkMemoryMetalHandlePropertiesEXT* pMemoryMetalHandleProperties,
                                                              const RecordObject& record_obj) {}
 #endif  // VK_USE_PLATFORM_METAL_EXT
+virtual bool PreCallValidateCmdEndRendering2EXT(VkCommandBuffer commandBuffer, const VkRenderingEndInfoEXT* pRenderingEndInfo,
+                                                const ErrorObject& error_obj) const {
+    return false;
+}
+virtual void PreCallRecordCmdEndRendering2EXT(VkCommandBuffer commandBuffer, const VkRenderingEndInfoEXT* pRenderingEndInfo,
+                                              const RecordObject& record_obj) {}
+virtual void PostCallRecordCmdEndRendering2EXT(VkCommandBuffer commandBuffer, const VkRenderingEndInfoEXT* pRenderingEndInfo,
+                                               const RecordObject& record_obj) {}
 virtual bool PreCallValidateCreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                                            const VkAllocationCallbacks* pAllocator,
                                                            VkAccelerationStructureKHR* pAccelerationStructure,

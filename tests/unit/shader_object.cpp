@@ -458,14 +458,14 @@ TEST_F(NegativeShaderObject, CreateShadersWithoutEnabledFeatures) {
     {
         m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-stage-08419");
         const auto spv = GLSLToSPV(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, kTessellationControlMinimalGlsl);
-        vkt::Shader shader(*m_device, ShaderCreateInfo(spv, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT));
+        vkt::Shader shader(*m_device, ShaderCreateInfoNoNextStage(spv, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT));
         m_errorMonitor->VerifyFound();
     }
 
     {
         m_errorMonitor->SetDesiredError("VUID-VkShaderCreateInfoEXT-stage-08420");
         const auto spv = GLSLToSPV(VK_SHADER_STAGE_GEOMETRY_BIT, kGeometryMinimalGlsl);
-        vkt::Shader shader(*m_device, ShaderCreateInfo(spv, VK_SHADER_STAGE_GEOMETRY_BIT));
+        vkt::Shader shader(*m_device, ShaderCreateInfoNoNextStage(spv, VK_SHADER_STAGE_GEOMETRY_BIT));
         m_errorMonitor->VerifyFound();
     }
 }
@@ -655,8 +655,7 @@ TEST_F(NegativeShaderObject, DrawWithNoShadersBound) {
 
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
-
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
+    SetDefaultDynamicStatesExclude();
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08684");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08688");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
@@ -680,7 +679,6 @@ TEST_F(NegativeShaderObject, DrawWithMissingShaders) {
     SetDefaultDynamicStatesExclude();
     m_command_buffer.BindShaders(m_vert_shader, m_frag_shader);
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08687");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_command_buffer.EndRendering();
@@ -702,7 +700,6 @@ TEST_F(NegativeShaderObject, DrawWithoutBindingMeshShadersWhenEnabled) {
     SetDefaultDynamicStatesExclude();
     m_command_buffer.BindShaders(m_vert_shader, m_frag_shader);
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08689");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08690");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
@@ -1038,8 +1035,7 @@ TEST_F(NegativeShaderObject, DrawWithShadersInNonDynamicRenderPass) {
     rp.AddColorAttachment(0);
     rp.CreateRenderPass();
 
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView image_view = image.CreateView();
     vkt::Framebuffer framebuffer(*m_device, rp.Handle(), 1, &image_view.handle());
 
@@ -1431,9 +1427,9 @@ TEST_F(NegativeShaderObject, ColorWriteEnableAttachmentCount) {
     AddRequiredFeature(vkt::Feature::colorWriteEnable);
     RETURN_IF_SKIP(InitBasicShaderObject());
 
-    vkt::Image img1(*m_device, m_width, m_height, 1, m_render_target_fmt,
+    vkt::Image img1(*m_device, m_width, m_height, m_render_target_fmt,
                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    vkt::Image img2(*m_device, m_width, m_height, 1, m_render_target_fmt,
+    vkt::Image img2(*m_device, m_width, m_height, m_render_target_fmt,
                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     vkt::ImageView view1 = img1.CreateView();
@@ -2528,7 +2524,6 @@ TEST_F(NegativeShaderObject, MissingVertexShaderBind) {
     const VkShaderStageFlagBits stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     vk::CmdBindShadersEXT(m_command_buffer.handle(), 1u, &stage, &frag_shader.handle());
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08684");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_errorMonitor->VerifyFound();
@@ -2557,7 +2552,6 @@ TEST_F(NegativeShaderObject, MissingTessellationControlBind) {
     const VkShaderEXT shaders[] = {m_vert_shader.handle(), VK_NULL_HANDLE, m_frag_shader.handle()};
     vk::CmdBindShadersEXT(m_command_buffer.handle(), 3u, stages, shaders);
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08685");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_errorMonitor->VerifyFound();
@@ -2586,7 +2580,6 @@ TEST_F(NegativeShaderObject, MissingTessellationEvaluationBind) {
     const VkShaderEXT shaders[] = {m_vert_shader.handle(), VK_NULL_HANDLE, m_frag_shader.handle()};
     vk::CmdBindShadersEXT(m_command_buffer.handle(), 3u, stages, shaders);
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08686");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_errorMonitor->VerifyFound();
@@ -2612,7 +2605,6 @@ TEST_F(NegativeShaderObject, MissingGeometryBind) {
     SetDefaultDynamicStatesExclude();
     m_command_buffer.BindShaders(m_vert_shader, m_frag_shader);
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08687");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_errorMonitor->VerifyFound();
@@ -2634,7 +2626,6 @@ TEST_F(NegativeShaderObject, MissingFragmentShaderBind) {
     const VkShaderStageFlagBits stage = VK_SHADER_STAGE_VERTEX_BIT;
     vk::CmdBindShadersEXT(m_command_buffer.handle(), 1u, &stage, &vert_shader.handle());
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08688");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_errorMonitor->VerifyFound();
@@ -2660,7 +2651,6 @@ TEST_F(NegativeShaderObject, MissingTaskShaderBind) {
         vk::CmdBindShadersEXT(m_command_buffer.handle(), 1u, &meshStage, &nullShader);
     }
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08689");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_errorMonitor->VerifyFound();
@@ -2682,7 +2672,7 @@ TEST_F(NegativeShaderObject, MissingMeshShaderBind) {
     m_command_buffer.BindShaders(m_vert_shader, m_frag_shader);
     m_command_buffer.BindMeshShaders({}, m_frag_shader);
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08693");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_errorMonitor->VerifyFound();
 
@@ -2830,18 +2820,13 @@ TEST_F(NegativeShaderObject, BindShaderBetweenLinkedShaders) {
     m_command_buffer.End();
 }
 
-TEST_F(NegativeShaderObject, DifferentShaderPushConstantRanges) {
+TEST_F(NegativeShaderObject, DifferentShaderPushConstantRangesSizee) {
     TEST_DESCRIPTION("Draw with shaders that have different push constant ranges.");
-
     RETURN_IF_SKIP(InitBasicShaderObject());
     InitDynamicRenderTarget();
 
-    VkPushConstantRange pushConstRange;
-    pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    pushConstRange.offset = 0u;
-    pushConstRange.size = sizeof(uint32_t);
-
-    const vkt::Shader vert_shader(*m_device, VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl, nullptr, &pushConstRange);
+    VkPushConstantRange ranges = {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4};
+    const vkt::Shader vert_shader(*m_device, VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl, nullptr, &ranges);
     const vkt::Shader frag_shader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl);
 
     m_command_buffer.Begin();
@@ -2857,9 +2842,32 @@ TEST_F(NegativeShaderObject, DifferentShaderPushConstantRanges) {
     m_command_buffer.End();
 }
 
-TEST_F(NegativeShaderObject, DifferentShaderDescriptorLayouts) {
-    TEST_DESCRIPTION("Draw with shaders that have different descriptor layouts.");
+TEST_F(NegativeShaderObject, DifferentShaderPushConstantRanges) {
+    TEST_DESCRIPTION("Draw with shaders that have different push constant ranges.");
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitDynamicRenderTarget();
 
+    VkPushConstantRange ranges_frag = {VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4};
+    VkPushConstantRange ranges_vert = {VK_SHADER_STAGE_VERTEX_BIT, 0, 4};
+
+    const vkt::Shader vert_shader(*m_device, VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl, nullptr, &ranges_vert);
+    const vkt::Shader frag_shader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl, nullptr, &ranges_frag);
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
+    SetDefaultDynamicStatesExclude();
+    m_command_buffer.BindShaders(vert_shader, frag_shader);
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08878");
+    vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeShaderObject, DifferentShaderDescriptorLayoutsSize) {
+    TEST_DESCRIPTION("Draw with shaders that have different descriptor layouts.");
     RETURN_IF_SKIP(InitBasicShaderObject());
     InitDynamicRenderTarget();
 
@@ -2877,6 +2885,40 @@ TEST_F(NegativeShaderObject, DifferentShaderDescriptorLayouts) {
     m_command_buffer.BindShaders(vert_shader, frag_shader);
     vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0u, 1u,
                               &descriptor_set.set_, 0u, nullptr);
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08879");
+    vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeShaderObject, DifferentShaderDescriptorLayouts) {
+    TEST_DESCRIPTION("Draw with shaders that have different descriptor layouts.");
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitDynamicRenderTarget();
+
+    OneOffDescriptorSet descriptor_set_frag(m_device,
+                                            {
+                                                {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                            });
+    OneOffDescriptorSet descriptor_set_vert(m_device,
+                                            {
+                                                {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr},
+                                            });
+    vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set_frag.layout_});
+
+    const vkt::Shader vert_shader(*m_device, VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl, &descriptor_set_frag.layout_.handle());
+    const vkt::Shader frag_shader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl,
+                                  &descriptor_set_vert.layout_.handle());
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
+    SetDefaultDynamicStatesExclude();
+    m_command_buffer.BindShaders(vert_shader, frag_shader);
+    vk::CmdBindDescriptorSets(m_command_buffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.handle(), 0u, 1u,
+                              &descriptor_set_frag.set_, 0u, nullptr);
 
     m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08879");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
@@ -3970,13 +4012,11 @@ TEST_F(NegativeShaderObject, SpirvExtensionRequirementsNotMet) {
 
     const char* cs_src = R"(
                    OpCapability Shader
-                   OpExtension "SPV_KHR_non_semantic_info"
-   %non_semantic = OpExtInstImport "NonSemantic.Validation.Test"
+                   OpExtension "SPV_EXT_shader_image_int64"
                    OpMemoryModel Logical GLSL450
                    OpEntryPoint GLCompute %main "main"
                    OpExecutionMode %main LocalSize 1 1 1
            %void = OpTypeVoid
-              %1 = OpExtInst %void %non_semantic 55 %void
            %func = OpTypeFunction %void
            %main = OpFunction %void None %func
               %2 = OpLabel
@@ -4858,8 +4898,7 @@ TEST_F(NegativeShaderObject, InvalidColorWriteMask) {
         GTEST_SKIP() << "image format not supported as color attachment.";
     }
 
-    vkt::Image image(*m_device, 256, 256, 1, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image(*m_device, 256, 256, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView image_view = image.CreateView();
 
     m_command_buffer.Begin();
@@ -5375,8 +5414,7 @@ TEST_F(NegativeShaderObject, MissingImageFilterLinearBit) {
 
     const vkt::Shader frag_shader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_src, &descriptor_set.layout_.handle());
 
-    vkt::Image image(*m_device, 32, 32, 1, format, VK_IMAGE_USAGE_SAMPLED_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image(*m_device, 32, 32, format, VK_IMAGE_USAGE_SAMPLED_BIT);
     vkt::ImageView image_view = image.CreateView();
 
     VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
@@ -5414,7 +5452,7 @@ TEST_F(NegativeShaderObject, MaxMultiviewInstanceIndex) {
     VkPhysicalDeviceMultiviewProperties multiview_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(multiview_properties);
 
-    vkt::Image img(*m_device, m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image img(*m_device, m_width, m_height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView view = img.CreateView();
 
     VkRenderingAttachmentInfo color_attachment = vku::InitStructHelper();
@@ -5468,9 +5506,9 @@ TEST_F(NegativeShaderObject, MaxFragmentDualSrcAttachmentsDynamicBlendEnable) {
     const vkt::Shader vert_shader(*m_device, VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
     const vkt::Shader frag_shader(*m_device, VK_SHADER_STAGE_FRAGMENT_BIT, fs_src);
 
-    vkt::Image img1(*m_device, m_width, m_height, 1, m_render_target_fmt,
+    vkt::Image img1(*m_device, m_width, m_height, m_render_target_fmt,
                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    vkt::Image img2(*m_device, m_width, m_height, 1, m_render_target_fmt,
+    vkt::Image img2(*m_device, m_width, m_height, m_render_target_fmt,
                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     vkt::ImageView view1 = img1.CreateView();
@@ -5593,7 +5631,7 @@ TEST_F(NegativeShaderObject, CooperativeMatrix) {
         }
     )glsl";
 
-    const auto spv = GLSLToSPV(VK_SHADER_STAGE_COMPUTE_BIT, comp_src);
+    const auto spv = GLSLToSPV(VK_SHADER_STAGE_COMPUTE_BIT, comp_src, SPV_ENV_VULKAN_1_3);
     VkShaderCreateInfoEXT create_info = ShaderCreateInfo(spv, VK_SHADER_STAGE_COMPUTE_BIT);
 
     VkShaderEXT shader;
@@ -6515,6 +6553,42 @@ TEST_F(NegativeShaderObject, SetPrimitiveTopologyNonPatch) {
     m_command_buffer.End();
 }
 
+TEST_F(NegativeShaderObject, SetPrimitiveTopologyPatch) {
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitDynamicRenderTarget();
+    CreateMinimalShaders();
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
+    SetDefaultDynamicStatesExclude();
+    m_command_buffer.BindShaders(m_vert_shader, m_frag_shader);
+    vk::CmdSetPrimitiveTopologyEXT(m_command_buffer.handle(), VK_PRIMITIVE_TOPOLOGY_PATCH_LIST);
+    m_errorMonitor->SetDesiredError("UNASSIGNED-Draw-topology-patch");
+    vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeShaderObject, SetPointTopologyNoWrite) {
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitDynamicRenderTarget();
+    CreateMinimalShaders();
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
+    SetDefaultDynamicStatesExclude();
+    m_command_buffer.BindShaders(m_vert_shader, m_frag_shader);
+    vk::CmdSetPrimitiveTopologyEXT(m_command_buffer.handle(), VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
+    m_errorMonitor->SetDesiredError("UNASSIGNED-Draw-topology-pointsize");
+    vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
 TEST_F(NegativeShaderObject, DescriptorWrongStage) {
     RETURN_IF_SKIP(InitBasicShaderObject());
 
@@ -6802,9 +6876,8 @@ TEST_F(NegativeShaderObject, TaskMeshShadersDrawWithoutBindingVertex) {
 
     VkShaderEXT shaders[3] = {task_shader.handle(), mesh_shader.handle(), frag_shader.handle()};
 
-    vkt::Image image(*m_device, m_width, m_height, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+    vkt::Image image(*m_device, m_width, m_height, VK_FORMAT_R32G32B32A32_SFLOAT,
                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     vkt::ImageView view = image.CreateView();
 
     VkRenderingAttachmentInfo color_attachment = vku::InitStructHelper();
@@ -6826,9 +6899,7 @@ TEST_F(NegativeShaderObject, TaskMeshShadersDrawWithoutBindingVertex) {
     vk::CmdBeginRenderingKHR(m_command_buffer.handle(), &begin_rendering_info);
     vk::CmdBindShadersEXT(m_command_buffer.handle(), 3u, shader_stages, shaders);
     SetDefaultDynamicStatesExclude();
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDrawMeshTasksEXT-None-08607");
-    // Todo: should be VUID-vkCmdDrawMeshTasksEXT-None-08684 when it is added into the spec
-    m_errorMonitor->SetDesiredError("VUID_Undefined");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDrawMeshTasksEXT-None-08684");
     vk::CmdDrawMeshTasksEXT(m_command_buffer.handle(), 1, 1, 1);
     vk::CmdEndRenderingKHR(m_command_buffer.handle());
     m_errorMonitor->VerifyFound();
@@ -6841,7 +6912,7 @@ TEST_F(NegativeShaderObject, DrawMeshTasksWithoutMeshShader) {
     RETURN_IF_SKIP(InitBasicMeshShaderObject(VK_API_VERSION_1_3));
     CreateMinimalShaders();
 
-    vkt::Image image(*m_device, m_width, m_height, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+    vkt::Image image(*m_device, m_width, m_height, VK_FORMAT_R32G32B32A32_SFLOAT,
                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     image.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     vkt::ImageView view = image.CreateView();
@@ -6871,14 +6942,13 @@ TEST_F(NegativeShaderObject, DrawMeshTasksWithoutMeshShader) {
 
     m_command_buffer.BindShaders(m_vert_shader, m_frag_shader);
     SetDefaultDynamicStatesExclude();
-    m_errorMonitor->SetDesiredError("UNASSIGNED-vkCmdDrawMeshTasks-pre-raster-stages");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDrawMeshTasksEXT-pStages-10680");
     vk::CmdDrawMeshTasksEXT(m_command_buffer.handle(), 1, 1, 1);
     m_errorMonitor->VerifyFound();
     vk::CmdEndRenderingKHR(m_command_buffer.handle());
 
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(NegativeShaderObject, VertAndMeshShaderBothNotBound) {
@@ -6902,13 +6972,123 @@ TEST_F(NegativeShaderObject, VertAndMeshShaderBothNotBound) {
     const VkShaderEXT shaders[] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE,      VK_NULL_HANDLE,
                                    VK_NULL_HANDLE, VK_NULL_HANDLE, frag_shader.handle()};
     vk::CmdBindShadersEXT(m_command_buffer.handle(), 7u, stages, shaders);
-    // TODO - Should be 08693
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08607");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08693");
     vk::CmdDraw(m_command_buffer.handle(), 4, 1, 0, 0);
     m_errorMonitor->VerifyFound();
 
-    m_errorMonitor->SetDesiredError("VUID-vkCmdDrawMeshTasksEXT-None-08607");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDrawMeshTasksEXT-None-08693");
     vk::CmdDrawMeshTasksEXT(m_command_buffer.handle(), 1, 1, 1);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeShaderObject, LineRasterization) {
+    AddRequiredExtensions(VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::smoothLines);
+    AddRequiredFeature(vkt::Feature::alphaToOne);
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitRenderTarget();
+    CreateMinimalShaders();
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
+    SetDefaultDynamicStatesExclude({VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT, VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_EXT});
+    m_command_buffer.BindShaders(m_vert_shader, m_frag_shader);
+    vk::CmdSetAlphaToOneEnableEXT(m_command_buffer.handle(), VK_TRUE);
+    vk::CmdSetLineRasterizationModeEXT(m_command_buffer.handle(), VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH);
+    vk::CmdSetPrimitiveTopologyEXT(m_command_buffer.handle(), VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-10608");
+    vk::CmdDraw(m_command_buffer.handle(), 4u, 1u, 0u, 0u);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeShaderObject, MeshShaderPayloadMemoryOverLimit) {
+    TEST_DESCRIPTION("Validate Mesh shader shared memory limit");
+
+    RETURN_IF_SKIP(InitBasicMeshShaderObject(VK_API_VERSION_1_3));
+    InitRenderTarget();
+
+    VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(mesh_shader_properties);
+
+    const uint32_t max_mesh_payload_and_shared_memory_size = mesh_shader_properties.maxMeshPayloadAndSharedMemorySize;
+    const uint32_t max_mesh_payload_and_shared_ints = max_mesh_payload_and_shared_memory_size / 4;
+
+    std::stringstream mesh_source;
+    mesh_source << R"glsl(
+            #version 460
+            #extension GL_EXT_mesh_shader : require
+            layout(max_vertices = 3, max_primitives=1) out;
+            layout(triangles) out;
+            struct Task {
+                uint baseID[)glsl";
+    mesh_source << (max_mesh_payload_and_shared_ints / 2 + 1);
+    mesh_source << R"glsl(];
+            };
+            taskPayloadSharedEXT Task IN;
+            shared int a[)glsl";
+    mesh_source << (max_mesh_payload_and_shared_ints / 2 + 1);
+    mesh_source << R"glsl(];
+            void main(){}
+        )glsl";
+
+    const auto mesh_spv = GLSLToSPV(VK_SHADER_STAGE_MESH_BIT_EXT, mesh_source.str().c_str(), SPV_ENV_VULKAN_1_3);
+    m_errorMonitor->SetDesiredError("VUID-RuntimeSpirv-maxMeshPayloadAndSharedMemorySize-08755");
+    vkt::Shader mesh_shader(*m_device, ShaderCreateInfo(mesh_spv, VK_SHADER_STAGE_MESH_BIT_EXT));
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeShaderObject, DrawMissingNextStage) {
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitDynamicRenderTarget();
+
+    const auto vs_spv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
+    const vkt::Shader vert_shader(*m_device, ShaderCreateInfoNoNextStage(vs_spv, VK_SHADER_STAGE_VERTEX_BIT));
+
+    const auto fs_spv = GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl);
+    const vkt::Shader frag_shader(*m_device, ShaderCreateInfoNoNextStage(fs_spv, VK_SHADER_STAGE_FRAGMENT_BIT));
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
+    SetDefaultDynamicStatesExclude();
+
+    m_errorMonitor->SetDesiredError("UNASSIGNED-draw-missing-next-shader");
+    m_command_buffer.BindShaders(vert_shader, frag_shader);
+    vk::CmdDraw(m_command_buffer.handle(), 3u, 1u, 0u, 0u);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRendering();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeShaderObject, DrawWrongNextStage) {
+    AddRequiredFeature(vkt::Feature::tessellationShader);
+    RETURN_IF_SKIP(InitBasicShaderObject());
+    InitDynamicRenderTarget();
+
+    const auto vs_spv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
+    auto vs_shader_ci = ShaderCreateInfoNoNextStage(vs_spv, VK_SHADER_STAGE_VERTEX_BIT);
+    vs_shader_ci.nextStage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+    const vkt::Shader vert_shader(*m_device, vs_shader_ci);
+
+    const auto fs_spv = GLSLToSPV(VK_SHADER_STAGE_FRAGMENT_BIT, kFragmentMinimalGlsl);
+    const vkt::Shader frag_shader(*m_device, ShaderCreateInfoNoNextStage(fs_spv, VK_SHADER_STAGE_FRAGMENT_BIT));
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
+    SetDefaultDynamicStatesExclude();
+
+    m_errorMonitor->SetDesiredError("UNASSIGNED-draw-missing-next-shader");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08685");
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-None-08686");
+    m_command_buffer.BindShaders(vert_shader, frag_shader);
+    vk::CmdDraw(m_command_buffer.handle(), 3u, 1u, 0u, 0u);
     m_errorMonitor->VerifyFound();
 
     m_command_buffer.EndRendering();

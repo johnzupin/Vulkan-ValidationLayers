@@ -432,7 +432,7 @@ enum class Feature {
     fragmentDensityMapDynamic,
     // VkPhysicalDeviceFragmentDensityMapFeaturesEXT
     fragmentDensityMapNonSubsampledImages,
-    // VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM
+    // VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT
     fragmentDensityMapOffset,
     // VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR
     fragmentShaderBarycentric,
@@ -782,6 +782,12 @@ enum class Feature {
     shaderBufferInt64Atomics,
     // VkPhysicalDeviceShaderAtomicInt64Features, VkPhysicalDeviceVulkan12Features
     shaderSharedInt64Atomics,
+    // VkPhysicalDeviceShaderBfloat16FeaturesKHR
+    shaderBFloat16CooperativeMatrix,
+    // VkPhysicalDeviceShaderBfloat16FeaturesKHR
+    shaderBFloat16DotProduct,
+    // VkPhysicalDeviceShaderBfloat16FeaturesKHR
+    shaderBFloat16Type,
     // VkPhysicalDeviceShaderClockFeaturesKHR
     shaderDeviceClock,
     // VkPhysicalDeviceShaderClockFeaturesKHR
@@ -868,6 +874,34 @@ enum class Feature {
     textureCompressionASTC_HDR,
     // VkPhysicalDeviceTilePropertiesFeaturesQCOM
     tileProperties,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShading,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingAnisotropicApron,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingApron,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingAtomicOps,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingColorAttachments,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingDepthAttachments,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingDispatchTile,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingFragmentStage,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingImageProcessing,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingInputAttachments,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingPerTileDispatch,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingPerTileDraw,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingSampledAttachments,
+    // VkPhysicalDeviceTileShadingFeaturesQCOM
+    tileShadingStencilAttachments,
     // VkPhysicalDeviceTimelineSemaphoreFeatures, VkPhysicalDeviceVulkan12Features
     timelineSemaphore,
     // VkPhysicalDeviceTransformFeedbackFeaturesEXT

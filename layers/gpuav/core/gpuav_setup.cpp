@@ -30,63 +30,33 @@
 #include "gpuav/shaders/gpuav_shaders_constants.h"
 namespace gpuav {
 
-std::shared_ptr<vvl::Buffer> Validator::CreateBufferState(VkBuffer handle, const VkBufferCreateInfo *create_info) {
-    return std::make_shared<Buffer>(*this, handle, create_info, *desc_heap_);
+// Location to add per-queue submit debug info if built with -D DEBUG_CAPTURE_KEYBOARD=ON
+void Validator::DebugCapture() {}
+
+void Validator::Created(vvl::DescriptorSet &set) {
+    set.SetSubState(container_type, std::make_unique<DescriptorSetSubState>(set, *this));
 }
 
-std::shared_ptr<vvl::BufferView> Validator::CreateBufferViewState(const std::shared_ptr<vvl::Buffer> &buffer, VkBufferView handle,
-                                                                  const VkBufferViewCreateInfo *create_info,
-                                                                  VkFormatFeatureFlags2 format_features) {
-    return std::make_shared<BufferView>(buffer, handle, create_info, format_features, *desc_heap_);
+void Validator::Created(vvl::CommandBuffer &cb_state) {
+    cb_state.SetSubState(container_type, std::make_unique<CommandBufferSubState>(*this, cb_state));
 }
 
-std::shared_ptr<vvl::ImageView> Validator::CreateImageViewState(const std::shared_ptr<vvl::Image> &image_state, VkImageView handle,
-                                                                const VkImageViewCreateInfo *create_info,
-                                                                VkFormatFeatureFlags2 format_features,
-                                                                const VkFilterCubicImageViewImageFormatPropertiesEXT &cubic_props) {
-    return std::make_shared<ImageView>(image_state, handle, create_info, format_features, cubic_props, *desc_heap_);
-}
+void Validator::Created(vvl::Queue &queue) { queue.SetSubState(container_type, std::make_unique<QueueSubState>(*this, queue)); }
 
-std::shared_ptr<vvl::Sampler> Validator::CreateSamplerState(VkSampler handle, const VkSamplerCreateInfo *create_info) {
-    return std::make_shared<Sampler>(handle, create_info, *desc_heap_);
+void Validator::Created(vvl::Image &obj) { obj.SetSubState(container_type, std::make_unique<ImageSubState>(obj, *desc_heap_)); }
+void Validator::Created(vvl::ImageView &obj) {
+    obj.SetSubState(container_type, std::make_unique<ImageViewSubState>(obj, *desc_heap_));
 }
-
-std::shared_ptr<vvl::AccelerationStructureKHR> Validator::CreateAccelerationStructureState(
-    VkAccelerationStructureKHR handle, const VkAccelerationStructureCreateInfoKHR *create_info,
-    std::shared_ptr<vvl::Buffer> &&buf_state) {
-    // If the buffer's device address has not been queried,
-    // get it here. Since it is used for the purpose of
-    // validation, do not try to update buffer_state, since
-    // it only tracks application state.
-    VkDeviceAddress buffer_address = 0;
-    if (buf_state) {
-        if (buf_state->deviceAddress != 0) {
-            buffer_address = buf_state->deviceAddress;
-        } else if (buf_state->Binding()) {
-            buffer_address = GetBufferDeviceAddressHelper(buf_state->VkHandle());
-        }
-    }
-    return std::make_shared<AccelerationStructureKHR>(handle, create_info, std::move(buf_state), buffer_address, *desc_heap_);
+void Validator::Created(vvl::Buffer &obj) { obj.SetSubState(container_type, std::make_unique<BufferSubState>(obj, *desc_heap_)); }
+void Validator::Created(vvl::BufferView &obj) {
+    obj.SetSubState(container_type, std::make_unique<BufferViewSubState>(obj, *desc_heap_));
 }
-
-std::shared_ptr<vvl::DescriptorSet> Validator::CreateDescriptorSet(VkDescriptorSet handle, vvl::DescriptorPool *pool,
-                                                                   const std::shared_ptr<vvl::DescriptorSetLayout const> &layout,
-                                                                   uint32_t variable_count) {
-    return std::static_pointer_cast<vvl::DescriptorSet>(
-        std::make_shared<DescriptorSet>(handle, pool, layout, variable_count, this));
+void Validator::Created(vvl::Sampler &obj) { obj.SetSubState(container_type, std::make_unique<SamplerSubState>(obj, *desc_heap_)); }
+void Validator::Created(vvl::AccelerationStructureNV &obj) {
+    obj.SetSubState(container_type, std::make_unique<AccelerationStructureNVSubState>(obj, *desc_heap_));
 }
-
-std::shared_ptr<vvl::CommandBuffer> Validator::CreateCmdBufferState(VkCommandBuffer handle,
-                                                                    const VkCommandBufferAllocateInfo *allocate_info,
-                                                                    const vvl::CommandPool *pool) {
-    return std::static_pointer_cast<vvl::CommandBuffer>(std::make_shared<CommandBuffer>(*this, handle, allocate_info, pool));
-}
-
-std::shared_ptr<vvl::Queue> Validator::CreateQueue(VkQueue handle, uint32_t family_index, uint32_t queue_index,
-                                                   VkDeviceQueueCreateFlags flags,
-                                                   const VkQueueFamilyProperties &queueFamilyProperties) {
-    return std::static_pointer_cast<vvl::Queue>(
-        std::make_shared<Queue>(*this, handle, family_index, queue_index, flags, queueFamilyProperties, timeline_khr_));
+void Validator::Created(vvl::AccelerationStructureKHR &obj) {
+    obj.SetSubState(container_type, std::make_unique<AccelerationStructureKHRSubState>(obj, *desc_heap_));
 }
 
 // Trampolines to make VMA call Dispatch for Vulkan calls
@@ -307,13 +277,11 @@ void Validator::FinishDeviceSetup(const VkDeviceCreateInfo *pCreateInfo, const L
             return;
         }
 
-        auto indices_ptr = (uint32_t *)indices_buffer_.MapMemory(loc);
+        auto indices_ptr = (uint32_t *)indices_buffer_.GetMappedPtr();
 
         for (uint32_t i = 0; i < buffer_info.size / sizeof(uint32_t); ++i) {
             indices_ptr[i] = i / (indices_buffer_alignment_ / sizeof(uint32_t));
         }
-
-        indices_buffer_.UnmapMemory();
     }
 }
 
@@ -377,7 +345,7 @@ void Validator::InitSettings(const Location &loc) {
     std::array<setting::Setting *, 4> all_settings = {&buffer_device_address, &ray_query, &buffer_copies, &buffer_content};
 
     for (auto &setting_object : all_settings) {
-        if (setting_object->IsEnabled(gpuav_settings) && !setting_object->HasRequiredFeatures(enabled_features)) {
+        if (setting_object->IsEnabled(gpuav_settings) && !setting_object->HasRequiredFeatures(modified_features)) {
             setting_object->Disable(gpuav_settings);
             InternalWarning(device, loc, setting_object->DisableMessage().c_str());
         }

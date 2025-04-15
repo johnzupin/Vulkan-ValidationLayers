@@ -61,8 +61,7 @@ TEST_F(PositiveMultiview, RenderPassQueries) {
     vk::CmdCopyQueryPoolResults(m_command_buffer.handle(), query_pool, 0, 2, buffer, 0, 4, 0);
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveMultiview, BasicRenderPass) {
@@ -114,8 +113,7 @@ TEST_F(PositiveMultiview, PushDescriptor) {
     vkt::RenderPass render_pass(*m_device, render_pass_ci);
 
     // A compatible framebuffer.
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView view = image.CreateView();
     vkt::Framebuffer fb(*m_device, render_pass, 1, &view.handle());
 
@@ -175,6 +173,15 @@ TEST_F(PositiveMultiview, MeshShader) {
         layout(max_vertices=81) out;
         layout(max_primitives=32) out;
         layout(triangles) out;
+
+        // Leave out the Layer builtin
+        perprimitiveEXT out gl_MeshPerPrimitiveEXT {
+            int  gl_PrimitiveID;
+            int  gl_ViewportIndex;
+            bool gl_CullPrimitiveEXT;
+            int  gl_PrimitiveShadingRateEXT;
+        } gl_MeshPrimitivesEXT[];
+
         void main() {
             SetMeshOutputsEXT(81, 32);
             gl_MeshPrimitivesEXT[0].gl_CullPrimitiveEXT = true;

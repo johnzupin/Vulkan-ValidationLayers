@@ -658,12 +658,12 @@ TEST_F(NegativeSyncValReporting, ReportImageResource_SubmitTime) {
     vkt::Buffer buffer(*m_device, 64 * 64 * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     buffer.SetName("BufferA");
 
-    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_B8G8R8A8_UNORM,
+    vkt::Image image(*m_device, 64, 64, VK_FORMAT_B8G8R8A8_UNORM,
                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     image.SetName("ImageB");
     image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
-    vkt::Image image2(*m_device, 64, 64, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image image2(*m_device, 64, 64, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     image2.SetName("ImageC");
     image2.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
@@ -898,7 +898,7 @@ TEST_F(NegativeSyncValReporting, ReportDescriptorImage_SubmitTime) {
     vkt::Buffer buffer(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     buffer.SetName("BufferA");
 
-    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT);
+    vkt::Image image(*m_device, 64, 64, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT);
     image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     image.SetName("ImageB");
 
@@ -996,6 +996,81 @@ TEST_F(NegativeSyncValReporting, DebugLabelRegionsFromSecondaryCommandBuffers) {
     m_default_queue->Wait();
 }
 
+TEST_F(NegativeSyncValReporting, ExpandedMetaStage) {
+    TEST_DESCRIPTION("Check barrier is printed in compact form");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkMemoryBarrier2 barrier = vku::InitStructHelper();
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;  // Read access mask does not protect subsequent copy writes
+
+    m_command_buffer.Begin();
+    m_command_buffer.Copy(buffer_a, buffer_b);
+    m_command_buffer.Barrier(barrier);
+    m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-WRITE-AFTER-WRITE",
+                                         "VK_ACCESS_2_SHADER_READ_BIT accesses at VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT");
+    m_command_buffer.Copy(buffer_a, buffer_b);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeSyncValReporting, ExpandedMetaStage2) {
+    TEST_DESCRIPTION("Check barrier is printed in compact form");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkMemoryBarrier2 barrier = vku::InitStructHelper();
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;  // Read access mask does not protect subsequent copy writes
+
+    m_command_buffer.Begin();
+    m_command_buffer.Copy(buffer_a, buffer_b);
+    m_command_buffer.Barrier(barrier);
+    m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-WRITE-AFTER-WRITE",
+                                         "VK_ACCESS_2_MEMORY_READ_BIT accesses at VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT");
+    m_command_buffer.Copy(buffer_a, buffer_b);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeSyncValReporting, ExpandedMetaStage3) {
+    TEST_DESCRIPTION("Check barrier is printed in compact form");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer_a(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    vkt::Buffer buffer_b(*m_device, 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    VkMemoryBarrier2 barrier = vku::InitStructHelper();
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;  // Shader write access mask does not protect subsequent copy writes
+
+    m_command_buffer.Begin();
+    m_command_buffer.Copy(buffer_a, buffer_b);
+    m_command_buffer.Barrier(barrier);
+    m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-WRITE-AFTER-WRITE",
+                                         "VK_ACCESS_2_SHADER_WRITE_BIT accesses at VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT");
+    m_command_buffer.Copy(buffer_a, buffer_b);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
+}
+
 TEST_F(NegativeSyncValReporting, ReportAllTransferMetaStage) {
     TEST_DESCRIPTION("Check that error message reports accesses on all transfer stages in compact form (uses meta stage)");
     SetTargetApiVersion(VK_API_VERSION_1_3);
@@ -1033,10 +1108,6 @@ TEST_F(NegativeSyncValReporting, ReportAllTransferMetaStage) {
     barrier.buffer = buffer_b;
     barrier.size = 128;
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &barrier;
-
     m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1, &descriptor_set.set_,
@@ -1044,7 +1115,7 @@ TEST_F(NegativeSyncValReporting, ReportAllTransferMetaStage) {
 
     m_command_buffer.Copy(buffer_a, buffer_b);
     // This barrier makes copy accesses visible to the transfer stage but not to the compute stage
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(barrier);
 
     // Check that error reporting merged internal representation of transfer stage accesses into a compact form
     m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-WRITE-AFTER-WRITE",
@@ -1095,10 +1166,6 @@ TEST_F(NegativeSyncValReporting, DoNotReportUnsupportedStage) {
     barrier.buffer = buffer_b;
     barrier.size = 128;
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &barrier;
-
     m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1, &descriptor_set.set_,
@@ -1106,12 +1173,135 @@ TEST_F(NegativeSyncValReporting, DoNotReportUnsupportedStage) {
 
     m_command_buffer.Copy(buffer_a, buffer_b);
     // This barrier makes previous writes visible to COPY stage but not to the following COMPUTE stage
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(barrier);
 
     // If error reporting does not skip unsupported ACCELERATION_STRUCTURE_COPY_BIT_KHR then the following error message won't
     // be able to use short form (TRANSFER_WRITE+TRANSFER_READ != "all accesses" in that case)
     m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-WRITE-AFTER-WRITE", "all accesses at VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT");
 
+    vk::CmdDispatch(m_command_buffer, 1, 1, 1);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeSyncValReporting, ReportShaderReadMetaAccess) {
+    // There was a regression with 1.4.312 headers when SHADER_READ was not detected properly
+    // and was replaced with an expansion that included SHADER_TILE_ATTACHMENT_READ access.
+    TEST_DESCRIPTION("Test that SHADER_READ is reported and does not leak sub-accesses that are enabled by extensions");
+
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    // This test does not enable extensions that add SHADER_READ sub-accesses.
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer_a(*m_device, 128,
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer_b(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer_c(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    OneOffDescriptorSet descriptor_set(m_device,
+                                       {
+                                           {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                           {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                       });
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer_a, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.WriteDescriptorBufferInfo(1, buffer_b, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+    const char* cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0) buffer buf_a { uint values_a[]; };
+        layout(set=0, binding=1) buffer buf_b { uint values_b[]; };
+        void main(){
+            values_b[0] = values_a[0];
+        }
+    )glsl";
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    pipe.CreateComputePipeline();
+
+    VkMemoryBarrier2 barrier = vku::InitStructHelper();
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_TRANSFER_READ_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+
+    m_command_buffer.Begin();
+    m_command_buffer.Copy(buffer_c, buffer_a);
+
+    // This barrier makes previous writes visible to VERTEX stage but not to the COMPUTE stage
+    m_command_buffer.Barrier(barrier);
+
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1, &descriptor_set.set_,
+                              0, nullptr);
+
+    // Test that destination stage mask from the barrier (VK_ACCESS_2_SHADER_READ_BIT) is reported in the original form.
+    // The variables in play here:
+    //  * VERTEX_SHADER stage does not support SHADER_TILE_ATTACHMENT_READ accesses
+    //  * tile shading extension is also not enabled
+    m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-READ-AFTER-WRITE",
+                                         "VK_ACCESS_2_SHADER_READ_BIT accesses at VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT");
+    vk::CmdDispatch(m_command_buffer, 1, 1, 1);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeSyncValReporting, ReportShaderReadMetaAccess2) {
+    TEST_DESCRIPTION("Test that SHADER_READ is reported and does not leak sub-accesses that are enabled by extensions");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    // This test enables extension that adds sub-access (SHADER_TILE_ATTACHMENT_READ) to SHADER_READ
+    AddRequiredExtensions(VK_QCOM_TILE_SHADING_EXTENSION_NAME);
+
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Buffer buffer_a(*m_device, 128,
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer_b(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer_c(*m_device, 128, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    OneOffDescriptorSet descriptor_set(m_device,
+                                       {
+                                           {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                           {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                       });
+    descriptor_set.WriteDescriptorBufferInfo(0, buffer_a, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.WriteDescriptorBufferInfo(1, buffer_b, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set.UpdateDescriptorSets();
+    const char* cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0) buffer buf_a { uint values_a[]; };
+        layout(set=0, binding=1) buffer buf_b { uint values_b[]; };
+        void main(){
+            values_b[0] = values_a[0];
+        }
+    )glsl";
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.pipeline_layout_ = vkt::PipelineLayout(*m_device, {&descriptor_set.layout_});
+    pipe.CreateComputePipeline();
+
+    VkMemoryBarrier2 barrier = vku::InitStructHelper();
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_TRANSFER_READ_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+
+    m_command_buffer.Begin();
+    m_command_buffer.Copy(buffer_c, buffer_a);
+
+    // This barrier makes previous writes visible to VERTEX stage but not to the COMPUTE stage
+    m_command_buffer.Barrier(barrier);
+
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1, &descriptor_set.set_,
+                              0, nullptr);
+
+    // Test that destination stage mask from the barrier (VK_ACCESS_2_SHADER_READ_BIT) is reported in the original form.
+    // The variables in play here:
+    //  * VERTEX_SHADER stage does not support SHADER_TILE_ATTACHMENT_READ accesses
+    //  * but we also enable tile shading extension that adds sub-accesses to SHADER_READ (for fragment and compute stages)
+    m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-READ-AFTER-WRITE",
+                                         "VK_ACCESS_2_SHADER_READ_BIT accesses at VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT");
     vk::CmdDispatch(m_command_buffer, 1, 1, 1);
     m_errorMonitor->VerifyFound();
     m_command_buffer.End();
@@ -1157,10 +1347,6 @@ TEST_F(NegativeSyncValReporting, ReportAccelerationStructureCopyAccesses) {
     barrier.buffer = buffer_b;
     barrier.size = 128;
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &barrier;
-
     m_command_buffer.Begin();
     vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
     vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1, &descriptor_set.set_,
@@ -1168,7 +1354,7 @@ TEST_F(NegativeSyncValReporting, ReportAccelerationStructureCopyAccesses) {
 
     m_command_buffer.Copy(buffer_a, buffer_b);
     // This barrier makes previous writes visible to COPY stage but not to the following COMPUTE stage
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(barrier);
 
     // ACCELERATION_STRUCTURE_COPY_BIT_KHR supports more accesses than TRANSFER_READ+WRITE,
     // so the latter combination can't be replaced with "all accesses"
@@ -1187,10 +1373,9 @@ TEST_F(NegativeSyncValReporting, DoNotUseShortcutForSimpleAccessMask) {
     AddRequiredFeature(vkt::Feature::dynamicRendering);
     RETURN_IF_SKIP(InitSyncVal());
 
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM,
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM,
                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     vkt::Buffer buffer(*m_device, 32 * 32 * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView image_view = image.CreateView();
 
     VkRenderingAttachmentInfo attachment = vku::InitStructHelper();
@@ -1217,17 +1402,13 @@ TEST_F(NegativeSyncValReporting, DoNotUseShortcutForSimpleAccessMask) {
     barrier.image = image;
     barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.imageMemoryBarrierCount = 1;
-    dep_info.pImageMemoryBarriers = &barrier;
-
     m_command_buffer.Begin();
     // Generate accesses on COLOR_ATTACHMENT_OUTPUT stage that the barrier will connect with
     m_command_buffer.BeginRendering(rendering_info);
     m_command_buffer.EndRendering();
 
     // This barrier does not protect writes on the transfer stage. The following copy generates WAW
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(barrier);
 
     // Test that access mask is printed directly and is not replaced with "all accesses" shortcut
     m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-WRITE-AFTER-WRITE",
@@ -1248,7 +1429,7 @@ TEST_F(NegativeSyncValReporting, LayoutTrasitionErrorHasImageHandle) {
         GTEST_SKIP() << "Two queues are needed";
     }
 
-    vkt::Image image(*m_device, 64, 64, 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image image(*m_device, 64, 64, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     image.SetName("ImageA");
 
     VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
@@ -1257,16 +1438,12 @@ TEST_F(NegativeSyncValReporting, LayoutTrasitionErrorHasImageHandle) {
     image_barrier.image = image;
     image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-    VkDependencyInfo dep_info = vku::InitStructHelper();
-    dep_info.imageMemoryBarrierCount = 1;
-    dep_info.pImageMemoryBarriers = &image_barrier;
-
     m_command_buffer.Begin();
-    vk::CmdPipelineBarrier2(m_command_buffer, &dep_info);
+    m_command_buffer.Barrier(image_barrier);
     m_command_buffer.End();
 
     m_second_command_buffer.Begin();
-    vk::CmdPipelineBarrier2(m_second_command_buffer, &dep_info);
+    m_second_command_buffer.Barrier(image_barrier);
     m_second_command_buffer.End();
 
     m_default_queue->Submit2(m_command_buffer);
@@ -1275,5 +1452,58 @@ TEST_F(NegativeSyncValReporting, LayoutTrasitionErrorHasImageHandle) {
     m_second_queue->Submit2(m_second_command_buffer);
     m_errorMonitor->VerifyFound();
 
+    m_default_queue->Wait();
+}
+
+TEST_F(NegativeSyncValReporting, CommandBufferMatchesQueue) {
+    TEST_DESCRIPTION("Submit command buffers to different queues. Check that message correctly pairs command buffer and queue");
+    SetTargetApiVersion(VK_API_VERSION_1_3);
+    AddRequiredFeature(vkt::Feature::synchronization2);
+    AddRequiredExtensions(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitSyncVal());
+
+    vkt::Queue* transfer_queue = m_device->TransferOnlyQueue();
+    if (!transfer_queue) {
+        GTEST_SKIP() << "Transfer-only queue is not present";
+    }
+
+    vkt::Image image(*m_device, 64, 64, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Buffer buffer(*m_device, 64 * 64, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+    VkBufferImageCopy region = {};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageExtent = {64, 64, 1};
+
+    VkImageMemoryBarrier2 image_barrier = vku::InitStructHelper();
+    image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    image_barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    image_barrier.dstAccessMask = VK_ACCESS_2_NONE;
+    image_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    image_barrier.image = image;
+    image_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    m_default_queue->SetName(*m_device, "GraphicsQueue");
+    m_command_buffer.SetName(*m_device, "GraphicsCB");
+
+    vkt::CommandPool transfer_pool(*m_device, transfer_queue->family_index);
+    vkt::CommandBuffer transfer_cb(*m_device, transfer_pool);
+    transfer_queue->SetName(*m_device, "TransferQueue");
+    transfer_cb.SetName(*m_device, "TransferCB");
+
+    m_command_buffer.Begin();
+    m_command_buffer.Barrier(image_barrier);
+    m_command_buffer.End();
+    m_default_queue->Submit2(m_command_buffer);
+
+    transfer_cb.Begin();
+    vk::CmdCopyBufferToImage(transfer_cb, buffer, image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+    transfer_cb.End();
+    // Transfer command buffer should be paired with transfer queue (and the same for grapics).
+    const char* transfer_cb_then_q_graphics_cb_then_q = ".*TransferCB.*TransferQueue.*GraphicsCB.*GraphicsQueue.*";
+    m_errorMonitor->SetDesiredErrorRegex("SYNC-HAZARD-WRITE-RACING-WRITE", transfer_cb_then_q_graphics_cb_then_q);
+    transfer_queue->Submit2(transfer_cb);
+    m_errorMonitor->VerifyFound();
     m_default_queue->Wait();
 }

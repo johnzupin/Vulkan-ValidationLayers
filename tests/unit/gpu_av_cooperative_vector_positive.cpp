@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2020-2024 The Khronos Group Inc.
- * Copyright (c) 2020-2024 Valve Corporation
- * Copyright (c) 2020-2024 LunarG, Inc.
+ * Copyright (c) 2020-2025 The Khronos Group Inc.
+ * Copyright (c) 2020-2025 Valve Corporation
+ * Copyright (c) 2020-2025 LunarG, Inc.
  * Copyright (c) 2020-2024 Google, Inc.
  * Copyright (c) 2023-2025 NVIDIA Corporation
  *
@@ -33,6 +33,7 @@ TEST_F(PositiveGpuAVCooperativeVector, CooperativeVector) {
     AddRequiredFeature(vkt::Feature::shaderReplicatedComposites);
     AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
     AddRequiredFeature(vkt::Feature::cooperativeVector);
+    AddRequiredFeature(vkt::Feature::vulkanMemoryModel);
     RETURN_IF_SKIP(InitState());
 
     vkt::Buffer buffer(*m_device, 4096, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, vkt::device_address);
@@ -74,6 +75,5 @@ TEST_F(PositiveGpuAVCooperativeVector, CooperativeVector) {
     vk::CmdDispatch(m_command_buffer, 1, 1, 1);
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }

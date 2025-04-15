@@ -29,11 +29,13 @@
 #include "generated/enum_flag_bits.h"
 #include "generated/dispatch_functions.h"
 #include "drawdispatch/drawdispatch_vuids.h"
+#include "chassis/chassis_modification_state.h"
 #include "state_tracker/image_state.h"
 #include "state_tracker/buffer_state.h"
-#include "chassis/chassis_modification_state.h"
 #include "state_tracker/descriptor_sets.h"
 #include "state_tracker/render_pass_state.h"
+#include "state_tracker/cmd_buffer_state.h"
+#include "state_tracker/pipeline_state.h"
 #include "error_message/error_strings.h"
 
 bool CoreChecks::PreCallValidateCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
@@ -695,13 +697,17 @@ bool CoreChecks::ValidateGraphicsPipelineLibrary(const vvl::Pipeline &pipeline, 
             frag_shader_info.flags =
                 (pipeline.FragmentShaderPipelineLayoutState()) ? pipeline.FragmentShaderPipelineLayoutState()->CreateFlags() : 0;
             frag_shader_info.layout = pipeline.FragmentShaderPipelineLayoutState().get();
-            frag_shader_info.ms_state = pipeline.fragment_shader_state->ms_state.get()->ptr();
+            if (pipeline.fragment_shader_state->ms_state) {
+                frag_shader_info.ms_state = pipeline.fragment_shader_state->ms_state.get()->ptr();
+            }
             frag_shader_info.shading_rate_state =
                 vku::FindStructInPNextChain<VkPipelineFragmentShadingRateStateCreateInfoKHR>(pipeline_ci.pNext);
         }
         if (gpl_info->flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) {
             frag_output_info.init = GPLInitType::gpl_flags;
-            frag_output_info.ms_state = pipeline.fragment_output_state->ms_state.get()->ptr();
+            if (pipeline.fragment_output_state->ms_state) {
+                frag_output_info.ms_state = pipeline.fragment_output_state->ms_state.get()->ptr();
+            }
         }
     }
 
@@ -730,13 +736,17 @@ bool CoreChecks::ValidateGraphicsPipelineLibrary(const vvl::Pipeline &pipeline, 
                     frag_shader_info.flags = layout_state->CreateFlags();
                     frag_shader_info.layout = layout_state.get();
                 }
-                frag_shader_info.ms_state = lib->fragment_shader_state->ms_state.get()->ptr();
+                if (lib->fragment_shader_state->ms_state) {
+                    frag_shader_info.ms_state = lib->fragment_shader_state->ms_state.get()->ptr();
+                }
                 frag_shader_info.shading_rate_state =
                     vku::FindStructInPNextChain<VkPipelineFragmentShadingRateStateCreateInfoKHR>(lib_ci.pNext);
             }
             if (lib->graphics_lib_type & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) {
                 frag_output_info.init = GPLInitType::link_libraries;
-                frag_output_info.ms_state = lib->fragment_output_state->ms_state.get()->ptr();
+                if (lib->fragment_output_state->ms_state) {
+                    frag_output_info.ms_state = lib->fragment_output_state->ms_state.get()->ptr();
+                }
             }
         }
     }
@@ -1930,7 +1940,8 @@ bool CoreChecks::ValidateGraphicsPipelineRasterizationState(const vvl::Pipeline 
             skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pDynamicState-09639", device, raster_loc.dot(Field::pNext),
                              "is missing VkPipelineRasterizationConservativeStateCreateInfoEXT which it needs because this "
                              "pipeline has VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT but not "
-                             "VK_DYNAMIC_STATE_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE_EXT.");
+                             "VK_DYNAMIC_STATE_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE_EXT.\n%s",
+                             PrintPNextChain(Struct::VkPipelineRasterizationStateCreateInfo, raster_state->pNext).c_str());
         }
     }
 
@@ -3459,7 +3470,7 @@ bool CoreChecks::ValidateDrawPipelineDynamicRenderpass(const LastBound &last_bou
     skip |=
         ValidateDrawPipelineDynamicRenderpassDepthStencil(last_bound_state, pipeline, rendering_info, pipeline_rendering_ci, vuid);
 
-    if (cb_state.active_render_pass) {
+    if (cb_state.active_render_pass && cb_state.IsPrimary()) {
         const auto rendering_view_mask = cb_state.active_render_pass->GetDynamicRenderingViewMask();
         if (pipeline_rendering_ci.viewMask != rendering_view_mask) {
             const LogObjectList objlist(cb_state.Handle(), pipeline.Handle());
@@ -3468,7 +3479,7 @@ bool CoreChecks::ValidateDrawPipelineDynamicRenderpass(const LastBound &last_bou
                              ") must be equal to VkRenderingInfo::viewMask (0x%" PRIx32 ")",
                              FormatHandle(pipeline).c_str(), pipeline_rendering_ci.viewMask, rendering_view_mask);
         }
-        if (cb_state.IsPrimary() && (rendering_info.flags & VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT) != 0 &&
+        if ((rendering_info.flags & VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT) != 0 &&
             (rendering_info.flags & VK_RENDERING_CONTENTS_INLINE_BIT_KHR) == 0) {
             skip |= LogError(vuid.rendering_contents_10582, cb_state.Handle(), vuid.loc(),
                              "Render pass was begun with VkRenderingInfo::flags %s",
@@ -4146,15 +4157,16 @@ bool CoreChecks::ValidateMultiViewShaders(const vvl::Pipeline &pipeline, const L
         // Stage may not have SPIR-V data (e.g. due to the use of shader module identifier or in Vulkan SC)
         if (!stage.spirv_state) continue;
 
-        // This is being discussed in https://gitlab.khronos.org/vulkan/vulkan/-/issues/4194
-        // As a temporary solution, ignore this case to prevent false positives.
-        if (stage.GetStage() == VK_SHADER_STAGE_MESH_BIT_EXT) continue;
-
         if (stage.spirv_state->static_data_.has_builtin_layer) {
+            // Special case for GLSL and Mesh Shading discussed in https://gitlab.khronos.org/vulkan/vulkan/-/issues/4194
             const char *vuid = dynamic_rendering ? "VUID-VkGraphicsPipelineCreateInfo-renderPass-06059"
                                                  : "VUID-VkGraphicsPipelineCreateInfo-renderPass-06050";
-            skip |= LogError(vuid, device, multiview_loc, "is 0x%" PRIx32 " but %s stage contains a Layer decorated OpVariable.",
-                             view_mask, string_VkShaderStageFlagBits(stage.GetStage()));
+            skip |= LogError(vuid, device, multiview_loc, "is 0x%" PRIx32 " but %s stage contains a Layer decorated OpVariable.%s",
+                             view_mask, string_VkShaderStageFlagBits(stage.GetStage()),
+                             stage.GetStage() == VK_SHADER_STAGE_MESH_BIT_EXT
+                                 ? "(If hitting this with Mesh Shading using GLSL you can explicitly leave out Layer, see "
+                                   "https://godbolt.org/z/av9zsxT8G as an example)"
+                                 : "");
         }
     }
 

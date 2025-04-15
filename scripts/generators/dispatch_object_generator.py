@@ -60,6 +60,19 @@ class APISpecific:
                         'enabled': '!settings.disabled[object_tracking]'
                     },
                     {
+                        'include': 'state_tracker/state_tracker.h',
+                        'device': 'vvl::DeviceState',
+                        'instance': 'vvl::InstanceState',
+                        'type': 'LayerObjectTypeStateTracker',
+                        'enabled': '''
+                            !settings.disabled[core_checks] ||
+                            settings.enabled[best_practices] ||
+                            settings.enabled[gpu_validation] ||
+                            settings.enabled[debug_printf_validation] ||
+                            settings.enabled[sync_validation]
+                        '''
+                    },
+                    {
                         'include': 'core_checks/core_validation.h',
                         'device': 'CoreChecks',
                         'instance': 'core::Instance',
@@ -320,7 +333,7 @@ class DispatchObjectGenerator(BaseGenerator):
             out.extend(guard_helper.add_guard(command.protect))
             out.append(f'\n{prototype}\n')
             out.append(f'auto dispatch = vvl::dispatch::GetData({command.params[0].name});\n')
-            returnResult = f'return ' if (command.returnType != 'void') else ''
+            returnResult = 'return ' if (command.returnType != 'void') else ''
             paramsList = ', '.join([param.name for param in command.params])
             out.append(f'{returnResult}{command.name.replace("vk", "dispatch->")}({paramsList}{call_extra});\n')
             out.append('}\n')

@@ -363,7 +363,8 @@ bool CoreChecks::ValidateCreateSwapchain(const VkSwapchainCreateInfoKHR &create_
                 if (LogError("VUID-VkSwapchainCreateInfoKHR-pNext-02679", objlist, create_info_loc.dot(Field::pNext),
                              "chain contains "
                              "VkSurfaceFullScreenExclusiveInfoEXT, but does not contain "
-                             "VkSurfaceFullScreenExclusiveWin32InfoEXT.")) {
+                             "VkSurfaceFullScreenExclusiveWin32InfoEXT.\n%s",
+                             PrintPNextChain(Struct::VkSwapchainCreateInfoKHR, create_info.pNext).c_str())) {
                     return true;
                 }
             } else {
@@ -403,8 +404,8 @@ bool CoreChecks::ValidateCreateSwapchain(const VkSwapchainCreateInfoKHR &create_
     // Shared Present Mode must have a minImageCount of 1
     if ((create_info.minImageCount < surface_caps.minImageCount) && !shared_present_mode) {
         if (LogError("VUID-VkSwapchainCreateInfoKHR-presentMode-02839", device, create_info_loc.dot(Field::minImageCount),
-                     "%" PRIu32 ", which is outside the bounds returned by "
-                     "vkGetPhysicalDeviceSurfaceCapabilitiesKHR() (i.e. minImageCount = %d, maxImageCount = %d).",
+                     "%" PRIu32 ", is outside the bounds (minImageCount = %d, maxImageCount = %d) returned by "
+                                "vkGetPhysicalDeviceSurfaceCapabilitiesKHR().",
                      create_info.minImageCount, surface_caps.minImageCount, surface_caps.maxImageCount)) {
             return true;
         }
@@ -412,8 +413,8 @@ bool CoreChecks::ValidateCreateSwapchain(const VkSwapchainCreateInfoKHR &create_
 
     if ((surface_caps.maxImageCount > 0) && (create_info.minImageCount > surface_caps.maxImageCount)) {
         if (LogError("VUID-VkSwapchainCreateInfoKHR-minImageCount-01272", device, create_info_loc.dot(Field::minImageCount),
-                     "%" PRIu32 ", which is outside the bounds returned by "
-                     "vkGetPhysicalDeviceSurfaceCapabilitiesKHR() (i.e. minImageCount = %d, maxImageCount = %d).",
+                     "%" PRIu32 ", is outside the bounds (minImageCount = %d, maxImageCount = %d) returned by "
+                                "vkGetPhysicalDeviceSurfaceCapabilitiesKHR().",
                      create_info.minImageCount, surface_caps.minImageCount, surface_caps.maxImageCount)) {
             return true;
         }
@@ -654,7 +655,7 @@ bool CoreChecks::ValidateCreateSwapchain(const VkSwapchainCreateInfoKHR &create_
         }
     }
 
-    if ((create_info.flags & VK_SWAPCHAIN_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT_KHR) && physical_device_count == 1) {
+    if ((create_info.flags & VK_SWAPCHAIN_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT_KHR) && device_state->physical_device_count == 1) {
         if (LogError("VUID-VkSwapchainCreateInfoKHR-physicalDeviceCount-01429", device, create_info_loc.dot(Field::flags),
                      "containing VK_SWAPCHAIN_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT_KHR"
                      "but logical device was created with VkDeviceGroupDeviceCreateInfo::physicalDeviceCount equal to 1."
@@ -669,7 +670,8 @@ bool CoreChecks::ValidateCreateSwapchain(const VkSwapchainCreateInfoKHR &create_
     const auto image_compression_control = vku::FindStructInPNextChain<VkImageCompressionControlEXT>(create_info.pNext);
     if (image_compression_control && !enabled_features.imageCompressionControlSwapchain) {
         skip |= LogError("VUID-VkSwapchainCreateInfoKHR-pNext-06752", device, create_info_loc.dot(Field::pNext),
-                         "contains VkImageCompressionControlEXT, but imageCompressionControlSwapchain is not enabled");
+                         "contains VkImageCompressionControlEXT, but imageCompressionControlSwapchain is not enabled\n%s",
+                         PrintPNextChain(Struct::VkSwapchainCreateInfoKHR, create_info.pNext).c_str());
     }
 
     const auto *swapchain_counter = vku::FindStructInPNextChain<VkSwapchainCounterCreateInfoEXT>(create_info.pNext);
@@ -1471,15 +1473,15 @@ bool CoreChecks::PreCallValidateGetDeviceGroupSurfacePresentModes2EXT(VkDevice d
                                                                       const ErrorObject &error_obj) const {
     bool skip = false;
 
-    const auto *core_instance = reinterpret_cast<core::Instance *>(instance_state);
-    if (physical_device_count == 1) {
+    const auto *core_instance = reinterpret_cast<core::Instance *>(instance_proxy);
+    if (device_state->physical_device_count == 1) {
         skip |= core_instance->ValidatePhysicalDeviceSurfaceSupport(
             physical_device, pSurfaceInfo->surface, "VUID-vkGetDeviceGroupSurfacePresentModes2EXT-pSurfaceInfo-06213",
             error_obj.location);
     } else {
-        for (uint32_t i = 0; i < physical_device_count; ++i) {
+        for (uint32_t i = 0; i < device_state->physical_device_count; ++i) {
             skip |= core_instance->ValidatePhysicalDeviceSurfaceSupport(
-                device_group_create_info.pPhysicalDevices[i], pSurfaceInfo->surface,
+                device_state->device_group_create_info.pPhysicalDevices[i], pSurfaceInfo->surface,
                 "VUID-vkGetDeviceGroupSurfacePresentModes2EXT-pSurfaceInfo-06213", error_obj.location);
         }
     }
@@ -1507,15 +1509,15 @@ bool CoreChecks::PreCallValidateGetDeviceGroupSurfacePresentModesKHR(VkDevice de
                                                                      VkDeviceGroupPresentModeFlagsKHR *pModes,
                                                                      const ErrorObject &error_obj) const {
     bool skip = false;
-    const auto *core_instance = reinterpret_cast<core::Instance *>(instance_state);
-    if (physical_device_count == 1) {
+    const auto *core_instance = static_cast<core::Instance *>(instance_proxy);
+    if (device_state->physical_device_count == 1) {
         skip |= core_instance->ValidatePhysicalDeviceSurfaceSupport(
             physical_device, surface, "VUID-vkGetDeviceGroupSurfacePresentModesKHR-surface-06212", error_obj.location);
     } else {
-        for (uint32_t i = 0; i < physical_device_count; ++i) {
-            skip |= core_instance->ValidatePhysicalDeviceSurfaceSupport(device_group_create_info.pPhysicalDevices[i], surface,
-                                                                        "VUID-vkGetDeviceGroupSurfacePresentModesKHR-surface-06212",
-                                                                        error_obj.location);
+        for (uint32_t i = 0; i < device_state->physical_device_count; ++i) {
+            skip |= core_instance->ValidatePhysicalDeviceSurfaceSupport(
+                device_state->device_group_create_info.pPhysicalDevices[i], surface,
+                "VUID-vkGetDeviceGroupSurfacePresentModesKHR-surface-06212", error_obj.location);
         }
     }
 

@@ -6325,6 +6325,7 @@ bool Device::PreCallValidateGetPrivateDataEXT(VkDevice device, VkObjectType obje
                                               const ErrorObject& error_obj) const {
     return PreCallValidateGetPrivateData(device, objectType, objectHandle, privateDataSlot, pData, error_obj);
 }
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 // vkCreateCudaModuleNV:
 // Checked by chassis: device: "VUID-vkCreateCudaModuleNV-device-parameter"
@@ -6415,6 +6416,17 @@ bool Device::PreCallValidateCmdCudaLaunchKernelNV(VkCommandBuffer commandBuffer,
 
     return skip;
 }
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+
+// vkCmdDispatchTileQCOM:
+// Checked by chassis: commandBuffer: "VUID-vkCmdDispatchTileQCOM-commandBuffer-parameter"
+
+// vkCmdBeginPerTileExecutionQCOM:
+// Checked by chassis: commandBuffer: "VUID-vkCmdBeginPerTileExecutionQCOM-commandBuffer-parameter"
+
+// vkCmdEndPerTileExecutionQCOM:
+// Checked by chassis: commandBuffer: "VUID-vkCmdEndPerTileExecutionQCOM-commandBuffer-parameter"
+
 #ifdef VK_USE_PLATFORM_METAL_EXT
 #endif  // VK_USE_PLATFORM_METAL_EXT
 
@@ -6793,7 +6805,7 @@ bool Device::PreCallValidateGetPipelinePropertiesEXT(VkDevice device, const VkPi
         [[maybe_unused]] const Location pPipelineInfo_loc = error_obj.location.dot(Field::pPipelineInfo);
         skip |=
             ValidateObject(pPipelineInfo->pipeline, kVulkanObjectTypePipeline, false, "VUID-VkPipelineInfoKHR-pipeline-parameter",
-                           "VUID-VkPipelineInfoKHR-pipeline-parent", pPipelineInfo_loc.dot(Field::pipeline));
+                           "UNASSIGNED-VkPipelineInfoKHR-pipeline-parent", pPipelineInfo_loc.dot(Field::pipeline));
     }
 
     return skip;
@@ -7637,6 +7649,52 @@ bool Device::PreCallValidateGetLatencyTimingsNV(VkDevice device, VkSwapchainKHR 
 
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
 
+bool Device::PreCallValidateCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                         const VkAllocationCallbacks* pAllocator,
+                                                         VkExternalComputeQueueNV* pExternalQueue,
+                                                         const ErrorObject& error_obj) const {
+    bool skip = false;
+    // Checked by chassis: device: "VUID-vkCreateExternalComputeQueueNV-device-parameter"
+    if (pCreateInfo) {
+        [[maybe_unused]] const Location pCreateInfo_loc = error_obj.location.dot(Field::pCreateInfo);
+        skip |= ValidateObject(pCreateInfo->preferredQueue, kVulkanObjectTypeQueue, false,
+                               "VUID-VkExternalComputeQueueCreateInfoNV-preferredQueue-parameter",
+                               "UNASSIGNED-VkExternalComputeQueueCreateInfoNV-preferredQueue-parent",
+                               pCreateInfo_loc.dot(Field::preferredQueue));
+    }
+
+    return skip;
+}
+
+void Device::PostCallRecordCreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                                        const VkAllocationCallbacks* pAllocator,
+                                                        VkExternalComputeQueueNV* pExternalQueue, const RecordObject& record_obj) {
+    if (record_obj.result < VK_SUCCESS) return;
+    tracker.CreateObject(*pExternalQueue, kVulkanObjectTypeExternalComputeQueueNV, pAllocator, record_obj.location, device);
+}
+
+bool Device::PreCallValidateDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                          const VkAllocationCallbacks* pAllocator,
+                                                          const ErrorObject& error_obj) const {
+    bool skip = false;
+    // Checked by chassis: device: "VUID-vkDestroyExternalComputeQueueNV-device-parameter"
+    skip |= ValidateObject(externalQueue, kVulkanObjectTypeExternalComputeQueueNV, false,
+                           "VUID-vkDestroyExternalComputeQueueNV-externalQueue-parameter", kVUIDUndefined,
+                           error_obj.location.dot(Field::externalQueue));
+    skip |= ValidateDestroyObject(externalQueue, kVulkanObjectTypeExternalComputeQueueNV, pAllocator, kVUIDUndefined,
+                                  kVUIDUndefined, error_obj.location);
+
+    return skip;
+}
+
+void Device::PreCallRecordDestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                                        const VkAllocationCallbacks* pAllocator, const RecordObject& record_obj) {
+    RecordDestroyObject(externalQueue, kVulkanObjectTypeExternalComputeQueueNV, record_obj.location);
+}
+
+// vkGetExternalComputeQueueDataNV:
+// Checked by chassis: externalQueue: "VUID-vkGetExternalComputeQueueDataNV-externalQueue-parameter"
+
 // vkGetClusterAccelerationStructureBuildSizesNV:
 // Checked by chassis: device: "VUID-vkGetClusterAccelerationStructureBuildSizesNV-device-parameter"
 
@@ -7923,9 +7981,10 @@ bool Device::PreCallValidateGetMemoryMetalHandleEXT(VkDevice device, const VkMem
     // Checked by chassis: device: "VUID-vkGetMemoryMetalHandleEXT-device-parameter"
     if (pGetMetalHandleInfo) {
         [[maybe_unused]] const Location pGetMetalHandleInfo_loc = error_obj.location.dot(Field::pGetMetalHandleInfo);
-        skip |= ValidateObject(pGetMetalHandleInfo->memory, kVulkanObjectTypeDeviceMemory, false,
-                               "VUID-VkMemoryGetMetalHandleInfoEXT-memory-parameter",
-                               "VUID-VkMemoryGetMetalHandleInfoEXT-memory-parent", pGetMetalHandleInfo_loc.dot(Field::memory));
+        skip |=
+            ValidateObject(pGetMetalHandleInfo->memory, kVulkanObjectTypeDeviceMemory, false,
+                           "VUID-VkMemoryGetMetalHandleInfoEXT-memory-parameter",
+                           "UNASSIGNED-VkMemoryGetMetalHandleInfoEXT-memory-parent", pGetMetalHandleInfo_loc.dot(Field::memory));
     }
 
     return skip;
@@ -7935,6 +7994,9 @@ bool Device::PreCallValidateGetMemoryMetalHandleEXT(VkDevice device, const VkMem
 // Checked by chassis: device: "VUID-vkGetMemoryMetalHandlePropertiesEXT-device-parameter"
 
 #endif  // VK_USE_PLATFORM_METAL_EXT
+
+// vkCmdEndRendering2EXT:
+// Checked by chassis: commandBuffer: "VUID-vkCmdEndRendering2EXT-commandBuffer-parameter"
 
 bool Device::PreCallValidateCreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                                            const VkAllocationCallbacks* pAllocator,

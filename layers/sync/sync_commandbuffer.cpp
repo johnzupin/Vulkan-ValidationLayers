@@ -26,6 +26,7 @@
 #include "state_tracker/ray_tracing_state.h"
 #include "state_tracker/render_pass_state.h"
 #include "state_tracker/shader_module.h"
+#include "state_tracker/pipeline_state.h"
 #include "utils/text_utils.h"
 
 SyncAccessIndex GetSyncStageAccessIndexsByDescriptorSet(VkDescriptorType descriptor_type,
@@ -80,7 +81,6 @@ CommandBufferAccessContext::CommandBufferAccessContext(const SyncValidator &sync
       access_log_(std::make_shared<AccessLog>()),
       cbs_referenced_(std::make_shared<CommandBufferSet>()),
       command_number_(0),
-      subcommand_number_(0),
       reset_count_(0),
       cb_access_context_(),
       current_context_(&cb_access_context_),
@@ -102,7 +102,6 @@ CommandBufferAccessContext::CommandBufferAccessContext(const CommandBufferAccess
     cb_state_ = from.cb_state_;
     access_log_ = std::make_shared<AccessLog>(*from.access_log_);  // potentially large, but no choice given tagging lookup.
     command_number_ = from.command_number_;
-    subcommand_number_ = from.subcommand_number_;
     reset_count_ = from.reset_count_;
 
     handles_ = from.handles_;
@@ -135,7 +134,6 @@ void CommandBufferAccessContext::Reset() {
     }
     sync_ops_.clear();
     command_number_ = 0;
-    subcommand_number_ = 0;
     reset_count_++;
 
     sync_state_.stats.RemoveHandleRecord((uint32_t)handles_.size());
@@ -377,11 +375,10 @@ bool CommandBufferAccessContext::ValidateDispatchDrawDescriptorSet(VkPipelineBin
 
                         // NOTE: ImageSamplerDescriptor inherits from ImageDescriptor, so this cast works for both types.
                         const auto *image_descriptor = static_cast<const ImageDescriptor *>(descriptor);
-                        const auto *img_view_state =
-                            static_cast<const syncval_state::ImageViewState *>(image_descriptor->GetImageViewState());
+                        const auto *img_view_state = image_descriptor->GetImageViewState();
                         VkImageLayout image_layout = image_descriptor->GetImageLayout();
 
-                        if (img_view_state->IsDepthSliced()) {
+                        if (img_view_state->is_depth_sliced) {
                             // NOTE: 2D ImageViews of VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT Images are not allowed in
                             // Descriptors, unless VK_EXT_image_2d_view_of_3d is supported, which it isn't at the moment.
                             // See: VUID 00343
@@ -539,15 +536,14 @@ void CommandBufferAccessContext::RecordDispatchDrawDescriptorSet(VkPipelineBindP
                         if (image_descriptor->Invalid()) {
                             continue;
                         }
-                        const auto *img_view_state =
-                            static_cast<const syncval_state::ImageViewState *>(image_descriptor->GetImageViewState());
-                        if (img_view_state->IsDepthSliced()) {
+                        const auto *img_view_state = image_descriptor->GetImageViewState();
+                        if (img_view_state->is_depth_sliced) {
                             // NOTE: 2D ImageViews of VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT Images are not allowed in
                             // Descriptors, unless VK_EXT_image_2d_view_of_3d is supported, which it isn't at the moment.
                             // See: VUID 00343
                             continue;
                         }
-                        const ResourceUsageTagEx tag_ex = AddCommandHandle(tag, img_view_state->GetImageState()->Handle());
+                        const ResourceUsageTagEx tag_ex = AddCommandHandle(tag, img_view_state->image_state->Handle());
                         if (sync_index == SYNC_FRAGMENT_SHADER_INPUT_ATTACHMENT_READ) {
                             const VkExtent3D extent = CastTo3D(cb_state_->render_area.extent);
                             const VkOffset3D offset = CastTo3D(cb_state_->render_area.offset);
@@ -847,8 +843,7 @@ void CommandBufferAccessContext::RecordDrawDynamicRenderingAttachment(ResourceUs
     }
 }
 
-static VkImageAspectFlags GetAspectsToClear(VkImageAspectFlags clear_aspect_mask,
-                                            const syncval_state::ImageViewState &attachment_view) {
+static VkImageAspectFlags GetAspectsToClear(VkImageAspectFlags clear_aspect_mask, const vvl::ImageView &attachment_view) {
     // Check if clear request is valid.
     const bool clear_color = (clear_aspect_mask & VK_IMAGE_ASPECT_COLOR_BIT) != 0;
     const bool clear_depth = (clear_aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
@@ -901,7 +896,7 @@ static std::optional<VkImageSubresourceRange> RestrictSubresourceRange(const VkI
 
 std::optional<CommandBufferAccessContext::ClearAttachmentInfo> CommandBufferAccessContext::GetClearAttachmentInfo(
     const VkClearAttachment &clear_attachment, const VkClearRect &rect) const {
-    const syncval_state::ImageViewState *attachment_view = nullptr;
+    const vvl::ImageView *attachment_view = nullptr;
     if (current_renderpass_context_) {
         attachment_view = current_renderpass_context_->GetClearAttachmentView(clear_attachment);
     } else if (dynamic_rendering_info_) {
@@ -943,7 +938,7 @@ bool CommandBufferAccessContext::ValidateClearAttachment(const Location &loc, co
         subresource_range.aspectMask = aspect;
 
         HazardResult hazard = current_context_->DetectHazard(
-            *info.attachment_view.GetImageState(), subresource_range, offset, extent, info.attachment_view.IsDepthSliced(),
+            *info.attachment_view.image_state, subresource_range, offset, extent, info.attachment_view.is_depth_sliced,
             SYNC_COLOR_ATTACHMENT_OUTPUT_COLOR_ATTACHMENT_WRITE, SyncOrdering::kColorAttachment);
         if (hazard.IsHazard()) {
             std::stringstream ss;
@@ -970,7 +965,7 @@ bool CommandBufferAccessContext::ValidateClearAttachment(const Location &loc, co
             // vkCmdClearAttachments depth/stencil writes are executed by the EARLY_FRAGMENT_TESTS_BIT and LATE_FRAGMENT_TESTS_BIT
             // stages. The implementation tracks the most recent access, which happens in the LATE_FRAGMENT_TESTS_BIT stage.
             HazardResult hazard = current_context_->DetectHazard(
-                *info.attachment_view.GetImageState(), info.subresource_range, offset, extent, info.attachment_view.IsDepthSliced(),
+                *info.attachment_view.image_state, info.subresource_range, offset, extent, info.attachment_view.is_depth_sliced,
                 SYNC_LATE_FRAGMENT_TESTS_DEPTH_STENCIL_ATTACHMENT_WRITE, SyncOrdering::kDepthStencilAttachment);
 
             if (hazard.IsHazard()) {
@@ -1009,22 +1004,22 @@ void CommandBufferAccessContext::RecordClearAttachment(ResourceUsageTag tag, con
 
     if (info.aspects_to_clear & kColorAspects) {
         assert((info.aspects_to_clear & kDepthStencilAspects) == 0);
-        current_context_->UpdateAccessState(*info.attachment_view.GetImageState(),
-                                            SYNC_COLOR_ATTACHMENT_OUTPUT_COLOR_ATTACHMENT_WRITE, SyncOrdering::kColorAttachment,
-                                            subresource_range, offset, extent, ResourceUsageTagEx{tag});
+        current_context_->UpdateAccessState(*info.attachment_view.image_state, SYNC_COLOR_ATTACHMENT_OUTPUT_COLOR_ATTACHMENT_WRITE,
+                                            SyncOrdering::kColorAttachment, subresource_range, offset, extent,
+                                            ResourceUsageTagEx{tag});
     } else {
         assert((info.aspects_to_clear & kColorAspects) == 0);
         current_context_->UpdateAccessState(
-            *info.attachment_view.GetImageState(), SYNC_LATE_FRAGMENT_TESTS_DEPTH_STENCIL_ATTACHMENT_WRITE,
+            *info.attachment_view.image_state, SYNC_LATE_FRAGMENT_TESTS_DEPTH_STENCIL_ATTACHMENT_WRITE,
             SyncOrdering::kDepthStencilAttachment, subresource_range, offset, extent, ResourceUsageTagEx{tag});
     }
 }
 
 QueueId CommandBufferAccessContext::GetQueueId() const { return kQueueIdInvalid; }
 
-ResourceUsageTag CommandBufferAccessContext::RecordBeginRenderPass(
-    vvl::Func command, const vvl::RenderPass &rp_state, const VkRect2D &render_area,
-    const std::vector<const syncval_state::ImageViewState *> &attachment_views) {
+ResourceUsageTag CommandBufferAccessContext::RecordBeginRenderPass(vvl::Func command, const vvl::RenderPass &rp_state,
+                                                                   const VkRect2D &render_area,
+                                                                   const std::vector<const vvl::ImageView *> &attachment_views) {
     // Create an access context the current renderpass.
     const auto barrier_tag = NextCommandTag(command, ResourceUsageRecord::SubcommandType::kSubpassTransition);
     AddCommandHandle(barrier_tag, rp_state.Handle());
@@ -1111,10 +1106,9 @@ void CommandBufferAccessContext::ImportRecordedAccessLog(const CommandBufferAcce
 
 ResourceUsageTag CommandBufferAccessContext::NextCommandTag(vvl::Func command, ResourceUsageRecord::SubcommandType subcommand) {
     command_number_++;
-    subcommand_number_ = 0;
     current_command_tag_ = access_log_->size();
 
-    auto &record = access_log_->emplace_back(command, command_number_, subcommand, subcommand_number_, cb_state_, reset_count_);
+    ResourceUsageRecord &record = access_log_->emplace_back(command, command_number_, subcommand, cb_state_, reset_count_);
 
     if (!cb_state_->GetLabelCommands().empty()) {
         record.label_command_index = static_cast<uint32_t>(cb_state_->GetLabelCommands().size() - 1);
@@ -1124,10 +1118,8 @@ ResourceUsageTag CommandBufferAccessContext::NextCommandTag(vvl::Func command, R
 }
 
 ResourceUsageTag CommandBufferAccessContext::NextSubcommandTag(vvl::Func command, ResourceUsageRecord::SubcommandType subcommand) {
-    subcommand_number_++;
-
     const ResourceUsageTag tag = access_log_->size();
-    auto &record = access_log_->emplace_back(command, command_number_, subcommand, subcommand_number_, cb_state_, reset_count_);
+    ResourceUsageRecord &record = access_log_->emplace_back(command, command_number_, subcommand, cb_state_, reset_count_);
 
     // By default copy handle range from the main command, but can be overwritten with AddSubcommandHandle.
     const auto &main_command_record = (*access_log_)[current_command_tag_];
@@ -1147,8 +1139,12 @@ uint32_t CommandBufferAccessContext::AddHandle(const VulkanTypedHandle &typed_ha
     return handle_index;
 }
 
-ResourceUsageTagEx CommandBufferAccessContext::AddCommandHandle(ResourceUsageTag tag, const VulkanTypedHandle &typed_handle,
-                                                                uint32_t index) {
+ResourceUsageTagEx CommandBufferAccessContext::AddCommandHandle(ResourceUsageTag tag, const VulkanTypedHandle &typed_handle) {
+    return AddCommandHandleIndexed(tag, typed_handle, vvl::kNoIndex32);
+}
+
+ResourceUsageTagEx CommandBufferAccessContext::AddCommandHandleIndexed(ResourceUsageTag tag, const VulkanTypedHandle &typed_handle,
+                                                                       uint32_t index) {
     assert(tag < access_log_->size());
     const uint32_t handle_index = AddHandle(typed_handle, index);
     // TODO: the following range check is not needed. Test and remove.
@@ -1166,7 +1162,8 @@ ResourceUsageTagEx CommandBufferAccessContext::AddCommandHandle(ResourceUsageTag
     return {tag, handle_index};
 }
 
-void CommandBufferAccessContext::AddSubcommandHandle(ResourceUsageTag tag, const VulkanTypedHandle &typed_handle, uint32_t index) {
+void CommandBufferAccessContext::AddSubcommandHandleIndexed(ResourceUsageTag tag, const VulkanTypedHandle &typed_handle,
+                                                            uint32_t index) {
     assert(tag < access_log_->size());
     const uint32_t handle_index = AddHandle(typed_handle, index);
     // TODO: the following range check is not needed. Test and remove.
@@ -1231,21 +1228,18 @@ void CommandBufferAccessContext::CheckCommandTagDebugCheckpoint() {
     }
 }
 
-syncval_state::CommandBuffer::CommandBuffer(SyncValidator &dev, VkCommandBuffer handle,
-                                            const VkCommandBufferAllocateInfo *allocate_info, const vvl::CommandPool *pool)
-    : vvl::CommandBuffer(dev, handle, allocate_info, pool), access_context(dev, this) {}
+syncval_state::CommandBufferSubState::CommandBufferSubState(SyncValidator &dev, vvl::CommandBuffer &cb)
+    : vvl::CommandBufferSubState(cb), access_context(dev, &cb) {
+    access_context.SetSelfReference();
+}
 
-void syncval_state::CommandBuffer::Destroy() {
+void syncval_state::CommandBufferSubState::Destroy() {
     access_context.Destroy();  // must be first to clean up self references correctly.
-    vvl::CommandBuffer::Destroy();
 }
 
-void syncval_state::CommandBuffer::Reset(const Location &loc) {
-    vvl::CommandBuffer::Reset(loc);
-    access_context.Reset();
-}
+void syncval_state::CommandBufferSubState::Reset(const Location &loc) { access_context.Reset(); }
 
-void syncval_state::CommandBuffer::NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) {
+void syncval_state::CommandBufferSubState::NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) {
     for (auto &obj : invalid_nodes) {
         switch (obj->Type()) {
             case kVulkanObjectTypeEvent:
@@ -1254,6 +1248,5 @@ void syncval_state::CommandBuffer::NotifyInvalidate(const vvl::StateObject::Node
             default:
                 break;
         }
-        vvl::CommandBuffer::NotifyInvalidate(invalid_nodes, unlink);
     }
 }

@@ -38,7 +38,7 @@ void vvl::Semaphore::TimePoint::Notify() const {
     signal_submit->queue->Notify(signal_submit->seq);
 }
 
-vvl::Semaphore::Semaphore(Device &dev, VkSemaphore handle, const VkSemaphoreTypeCreateInfo *type_create_info,
+vvl::Semaphore::Semaphore(DeviceState &dev, VkSemaphore handle, const VkSemaphoreTypeCreateInfo *type_create_info,
                           const VkSemaphoreCreateInfo *pCreateInfo)
     : RefcountedStateObject(handle, kVulkanObjectTypeSemaphore),
       type(type_create_info ? type_create_info->semaphoreType : VK_SEMAPHORE_TYPE_BINARY),
@@ -183,22 +183,6 @@ std::optional<vvl::Semaphore::SemOp> vvl::Semaphore::LastOp(const std::function<
         result.emplace(completed_);
     }
     return result;
-}
-
-std::optional<vvl::SubmissionReference> vvl::Semaphore::GetPendingBinarySignalSubmission() const {
-    assert(type == VK_SEMAPHORE_TYPE_BINARY);
-    auto guard = ReadLock();
-    if (timeline_.empty()) {
-        return {};
-    }
-    const auto &timepoint = timeline_.rbegin()->second;
-    const auto &signal_submit = timepoint.signal_submit;
-
-    // Skip signals that are not associated with a queue
-    if (signal_submit.has_value() && signal_submit->queue == nullptr) {
-        return {};
-    }
-    return signal_submit;
 }
 
 std::optional<vvl::SubmissionReference> vvl::Semaphore::GetPendingBinaryWaitSubmission() const {
@@ -475,6 +459,22 @@ void vvl::Semaphore::WaitTimePoint(std::shared_future<void> &&waiter, uint64_t p
                            "likely a validation bug). completed_.payload=%" PRIu64 " wait_payload=%" PRIu64,
                            completed_.payload, payload);
     }
+}
+
+void vvl::Semaphore::SetSwapchainWaitInfo(const SwapchainWaitInfo &info) {
+    auto guard = WriteLock();
+    swapchain_wait_info_.emplace(info);
+}
+
+void vvl::Semaphore::ClearSwapchainWaitInfo() {
+    auto guard = WriteLock();
+    swapchain_wait_info_.reset();
+}
+
+std::optional<vvl::Semaphore::SwapchainWaitInfo> vvl::Semaphore::GetSwapchainWaitInfo() const {
+    auto guard = ReadLock();
+    // Return by value due to locking (not safe to access reference when unlocked)
+    return swapchain_wait_info_;
 }
 
 void vvl::Semaphore::Import(VkExternalSemaphoreHandleTypeFlagBits handle_type, VkSemaphoreImportFlags flags) {

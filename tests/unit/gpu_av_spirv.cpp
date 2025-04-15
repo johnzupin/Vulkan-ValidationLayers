@@ -101,7 +101,6 @@ TEST_F(NegativeGpuAVSpirv, DISABLED_LoopHeaderPhi) {
     data[1] = 32;  // data[1]
     data[2] = 32;  // data[2]
     data[3] = 32;  // data[3]
-    buffer.Memory().Unmap();
 
     pipe.descriptor_set_->WriteDescriptorBufferInfo(0, buffer.handle(), 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
     pipe.descriptor_set_->UpdateDescriptorSets();
@@ -113,6 +112,5 @@ TEST_F(NegativeGpuAVSpirv, DISABLED_LoopHeaderPhi) {
     vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }

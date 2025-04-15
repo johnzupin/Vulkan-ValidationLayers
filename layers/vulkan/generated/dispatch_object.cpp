@@ -31,6 +31,7 @@
 #include "thread_tracker/thread_safety_validation.h"
 #include "stateless/stateless_validation.h"
 #include "object_tracker/object_lifetime_validation.h"
+#include "state_tracker/state_tracker.h"
 #include "core_checks/core_validation.h"
 #include "best_practices/best_practices_validation.h"
 #include "gpuav/core/gpuav.h"
@@ -52,6 +53,10 @@ void Instance::InitValidationObjects() {
     }
     if (!settings.disabled[object_tracking]) {
         object_dispatch.emplace_back(new object_lifetimes::Instance(this));
+    }
+    if (!settings.disabled[core_checks] || settings.enabled[best_practices] || settings.enabled[gpu_validation] ||
+        settings.enabled[debug_printf_validation] || settings.enabled[sync_validation]) {
+        object_dispatch.emplace_back(new vvl::InstanceState(this));
     }
     if (!settings.disabled[core_checks]) {
         object_dispatch.emplace_back(new core::Instance(this));
@@ -81,6 +86,11 @@ void Device::InitValidationObjects() {
     if (!settings.disabled[object_tracking]) {
         object_dispatch.emplace_back(new object_lifetimes::Device(
             this, static_cast<object_lifetimes::Instance*>(dispatch_instance->GetValidationObject(LayerObjectTypeObjectTracker))));
+    }
+    if (!settings.disabled[core_checks] || settings.enabled[best_practices] || settings.enabled[gpu_validation] ||
+        settings.enabled[debug_printf_validation] || settings.enabled[sync_validation]) {
+        object_dispatch.emplace_back(new vvl::DeviceState(
+            this, static_cast<vvl::InstanceState*>(dispatch_instance->GetValidationObject(LayerObjectTypeStateTracker))));
     }
     if (!settings.disabled[core_checks]) {
         object_dispatch.emplace_back(new CoreChecks(
@@ -530,6 +540,7 @@ void HandleWrapper::UnwrapPnextChainHandles(const void* pNext) {
         case VK_OBJECT_TYPE_DEVICE:
         case VK_OBJECT_TYPE_QUEUE:
         case VK_OBJECT_TYPE_COMMAND_BUFFER:
+        case VK_OBJECT_TYPE_EXTERNAL_COMPUTE_QUEUE_NV:
             return false;
         default:
             return true;
@@ -6753,6 +6764,7 @@ void Device::GetPrivateDataEXT(VkDevice device, VkObjectType objectType, uint64_
     }
     device_dispatch_table.GetPrivateDataEXT(device, objectType, objectHandle, privateDataSlot, pData);
 }
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 
 VkResult Device::CreateCudaModuleNV(VkDevice device, const VkCudaModuleCreateInfoNV* pCreateInfo,
                                     const VkAllocationCallbacks* pAllocator, VkCudaModuleNV* pModule) {
@@ -6823,6 +6835,17 @@ void Device::CmdCudaLaunchKernelNV(VkCommandBuffer commandBuffer, const VkCudaLa
         }
     }
     device_dispatch_table.CmdCudaLaunchKernelNV(commandBuffer, (const VkCudaLaunchInfoNV*)local_pLaunchInfo);
+}
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+
+void Device::CmdDispatchTileQCOM(VkCommandBuffer commandBuffer) { device_dispatch_table.CmdDispatchTileQCOM(commandBuffer); }
+
+void Device::CmdBeginPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileBeginInfoQCOM* pPerTileBeginInfo) {
+    device_dispatch_table.CmdBeginPerTileExecutionQCOM(commandBuffer, pPerTileBeginInfo);
+}
+
+void Device::CmdEndPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileEndInfoQCOM* pPerTileEndInfo) {
+    device_dispatch_table.CmdEndPerTileExecutionQCOM(commandBuffer, pPerTileEndInfo);
 }
 
 void Device::GetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout, VkDeviceSize* pLayoutSizeInBytes) {
@@ -8109,6 +8132,23 @@ VkResult Device::GetScreenBufferPropertiesQNX(VkDevice device, const struct _scr
 }
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
 
+VkResult Device::CreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                              const VkAllocationCallbacks* pAllocator, VkExternalComputeQueueNV* pExternalQueue) {
+    VkResult result = device_dispatch_table.CreateExternalComputeQueueNV(device, pCreateInfo, pAllocator, pExternalQueue);
+
+    return result;
+}
+
+void Device::DestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                           const VkAllocationCallbacks* pAllocator) {
+    device_dispatch_table.DestroyExternalComputeQueueNV(device, externalQueue, pAllocator);
+}
+
+void Device::GetExternalComputeQueueDataNV(VkExternalComputeQueueNV externalQueue, VkExternalComputeQueueDataParamsNV* params,
+                                           void* pData) {
+    device_dispatch_table.GetExternalComputeQueueDataNV(externalQueue, params, pData);
+}
+
 void Device::GetClusterAccelerationStructureBuildSizesNV(VkDevice device, const VkClusterAccelerationStructureInputInfoNV* pInfo,
                                                          VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
     device_dispatch_table.GetClusterAccelerationStructureBuildSizesNV(device, pInfo, pSizeInfo);
@@ -8335,6 +8375,10 @@ VkResult Device::GetMemoryMetalHandlePropertiesEXT(VkDevice device, VkExternalMe
     return result;
 }
 #endif  // VK_USE_PLATFORM_METAL_EXT
+
+void Device::CmdEndRendering2EXT(VkCommandBuffer commandBuffer, const VkRenderingEndInfoEXT* pRenderingEndInfo) {
+    device_dispatch_table.CmdEndRendering2EXT(commandBuffer, pRenderingEndInfo);
+}
 
 VkResult Device::CreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                                 const VkAllocationCallbacks* pAllocator,

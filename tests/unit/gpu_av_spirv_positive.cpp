@@ -32,7 +32,6 @@ TEST_F(PositiveGpuAVSpirv, LoopPhi) {
 
     uint32_t *data = (uint32_t *)buffer_uniform.Memory().Map();
     data[0] = 4;  // Scene.lightCount
-    buffer_uniform.Memory().Unmap();
 
     OneOffDescriptorSet descriptor_set(m_device, {
                                                      {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
@@ -166,8 +165,7 @@ TEST_F(PositiveGpuAVSpirv, LoopPhi) {
     vk::CmdEndRenderPass(m_command_buffer.handle());
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveGpuAVSpirv, LoopHeaderPhi) {
@@ -243,7 +241,6 @@ TEST_F(PositiveGpuAVSpirv, LoopHeaderPhi) {
     data[1] = 2;  // data[1]
     data[2] = 3;  // data[2]
     data[3] = 0;  // data[3]
-    buffer.Memory().Unmap();
 
     pipe.descriptor_set_->WriteDescriptorBufferInfo(0, buffer.handle(), 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
     pipe.descriptor_set_->UpdateDescriptorSets();
@@ -255,12 +252,8 @@ TEST_F(PositiveGpuAVSpirv, LoopHeaderPhi) {
     vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
-
-    data = (uint32_t *)buffer.Memory().Map();
+    m_default_queue->SubmitAndWait(m_command_buffer);
     ASSERT_EQ(4u, data[0]);
-    buffer.Memory().Unmap();
 }
 
 TEST_F(PositiveGpuAVSpirv, VulkanMemoryModelDeviceScope) {
@@ -277,7 +270,6 @@ TEST_F(PositiveGpuAVSpirv, VulkanMemoryModelDeviceScope) {
 
     uint32_t *data = (uint32_t *)buffer.Memory().Map();
     data[0] = 1;
-    buffer.Memory().Unmap();
 
     OneOffDescriptorSet descriptor_set(m_device, {
                                                      {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
@@ -345,8 +337,7 @@ TEST_F(PositiveGpuAVSpirv, VulkanMemoryModelDeviceScope) {
     vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }
 
 TEST_F(PositiveGpuAVSpirv, FindMultipleStores) {
@@ -386,6 +377,5 @@ TEST_F(PositiveGpuAVSpirv, FindMultipleStores) {
     vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }

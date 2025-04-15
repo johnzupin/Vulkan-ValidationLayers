@@ -20,70 +20,9 @@
 #include "state_tracker/image_state.h"
 #include "state_tracker/pipeline_state.h"
 #include "state_tracker/descriptor_sets.h"
-#include "state_tracker/shader_module.h"
+#include "state_tracker/semaphore_state.h"
+#include "state_tracker/fence_state.h"
 #include "generated/dispatch_functions.h"
-
-static VkImageSubresourceRange MakeImageFullRange(const VkImageCreateInfo &create_info) {
-    const auto format = create_info.format;
-    VkImageSubresourceRange init_range{0, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
-
-    if (vkuFormatIsColor(format) || vkuFormatIsMultiplane(format) || GetExternalFormat(create_info.pNext) != 0) {
-        init_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;  // Normalization will expand this for multiplane
-    } else {
-        init_range.aspectMask = (vkuFormatHasDepth(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : 0) |
-                                (vkuFormatHasStencil(format) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0);
-    }
-    return NormalizeSubresourceRange(create_info, init_range);
-}
-
-VkImageSubresourceRange NormalizeSubresourceRange(const VkImageCreateInfo &image_create_info,
-                                                  const VkImageSubresourceRange &range) {
-    VkImageSubresourceRange norm = range;
-    norm.levelCount =
-        (range.levelCount == VK_REMAINING_MIP_LEVELS) ? (image_create_info.mipLevels - range.baseMipLevel) : range.levelCount;
-    norm.layerCount =
-        (range.layerCount == VK_REMAINING_ARRAY_LAYERS) ? (image_create_info.arrayLayers - range.baseArrayLayer) : range.layerCount;
-
-    // For multiplanar formats, IMAGE_ASPECT_COLOR is equivalent to adding the aspect of the individual planes
-    if (vkuFormatIsMultiplane(image_create_info.format)) {
-        if (norm.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) {
-            norm.aspectMask &= ~VK_IMAGE_ASPECT_COLOR_BIT;
-            norm.aspectMask |= (VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT);
-            if (vkuFormatPlaneCount(image_create_info.format) > 2) {
-                norm.aspectMask |= VK_IMAGE_ASPECT_PLANE_2_BIT;
-            }
-        }
-    }
-    return norm;
-}
-
-static bool IsDepthSliced(const VkImageCreateInfo &image_create_info, const VkImageViewCreateInfo &create_info) {
-    auto depth_slice_flag = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT | VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT;
-    return ((image_create_info.flags & depth_slice_flag) != 0) &&
-           (create_info.viewType == VK_IMAGE_VIEW_TYPE_2D || create_info.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);
-}
-
-VkImageSubresourceRange NormalizeSubresourceRange(const VkImageCreateInfo &image_create_info,
-                                                  const VkImageViewCreateInfo &create_info) {
-    auto subres_range = create_info.subresourceRange;
-
-    // if we're mapping a 3D image to a 2d image view, convert the view's subresource range to be compatible with the
-    // image's understanding of the world. From the VkImageSubresourceRange section of the Vulkan spec:
-    //
-    //     When the VkImageSubresourceRange structure is used to select a subset of the slices of a 3D image’s mip level in
-    //     order to create a 2D or 2D array image view of a 3D image created with VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT,
-    //     baseArrayLayer and layerCount specify the first slice index and the number of slices to include in the created
-    //     image view. Such an image view can be used as a framebuffer attachment that refers only to the specified range
-    //     of slices of the selected mip level. However, any layout transitions performed on such an attachment view during
-    //     a render pass instance still apply to the entire subresource referenced which includes all the slices of the
-    //     selected mip level.
-    //
-    if (IsDepthSliced(image_create_info, create_info)) {
-        subres_range.baseArrayLayer = 0;
-        subres_range.layerCount = 1;
-    }
-    return NormalizeSubresourceRange(image_create_info, subres_range);
-}
 
 static VkExternalMemoryHandleTypeFlags GetExternalHandleTypes(const VkImageCreateInfo *pCreateInfo) {
     const auto *external_memory_info = vku::FindStructInPNextChain<VkExternalMemoryImageCreateInfo>(pCreateInfo->pNext);
@@ -95,8 +34,8 @@ static VkSwapchainKHR GetSwapchain(const VkImageCreateInfo *pCreateInfo) {
     return swapchain_info ? swapchain_info->swapchain : VK_NULL_HANDLE;
 }
 
-static vvl::Image::MemoryReqs GetMemoryRequirements(const vvl::Device &dev_data, VkImage img, const VkImageCreateInfo *create_info,
-                                                    bool disjoint, bool is_external_ahb) {
+static vvl::Image::MemoryReqs GetMemoryRequirements(const vvl::DeviceState &dev_data, VkImage img,
+                                                    const VkImageCreateInfo *create_info, bool disjoint, bool is_external_ahb) {
     vvl::Image::MemoryReqs result{};
     // Record the memory requirements in case they won't be queried
     // External AHB memory can't be queried until after memory is bound
@@ -135,7 +74,7 @@ static vvl::Image::MemoryReqs GetMemoryRequirements(const vvl::Device &dev_data,
     return result;
 }
 
-static vvl::Image::SparseReqs GetSparseRequirements(const vvl::Device &dev_data, VkImage img, bool sparse_residency) {
+static vvl::Image::SparseReqs GetSparseRequirements(const vvl::DeviceState &dev_data, VkImage img, bool sparse_residency) {
     vvl::Image::SparseReqs result;
     if (sparse_residency) {
         uint32_t count = 0;
@@ -173,7 +112,7 @@ static bool GetMetalExport(const VkImageCreateInfo *info, VkExportMetalObjectTyp
 
 namespace vvl {
 
-Image::Image(const vvl::Device &dev_data, VkImage img, const VkImageCreateInfo *pCreateInfo, VkFormatFeatureFlags2KHR ff)
+Image::Image(const vvl::DeviceState &dev_data, VkImage img, const VkImageCreateInfo *pCreateInfo, VkFormatFeatureFlags2KHR ff)
     : Bindable(img, kVulkanObjectTypeImage, (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) != 0,
                (pCreateInfo->flags & VK_IMAGE_CREATE_PROTECTED_BIT) == 0, GetExternalHandleTypes(pCreateInfo)),
       safe_create_info(pCreateInfo),
@@ -181,7 +120,7 @@ Image::Image(const vvl::Device &dev_data, VkImage img, const VkImageCreateInfo *
       shared_presentable(false),
       layout_locked(false),
       ahb_format(GetExternalFormat(pCreateInfo->pNext)),
-      full_range{MakeImageFullRange(*pCreateInfo)},
+      full_range{MakeImageFullRange()},
       create_from_swapchain(GetSwapchain(pCreateInfo)),
       owned_by_swapchain(false),
       swapchain_image_index(0),
@@ -198,7 +137,6 @@ Image::Image(const vvl::Device &dev_data, VkImage img, const VkImageCreateInfo *
       metal_io_surface_export(GetMetalExport(pCreateInfo, VK_EXPORT_METAL_OBJECT_TYPE_METAL_IOSURFACE_BIT_EXT)),
 #endif  // VK_USE_PLATFORM_METAL_EXT
       subresource_encoder(full_range),
-      fragment_encoder(nullptr),
       store_device_as_workaround(dev_data.device),  // TODO REMOVE WHEN encoder can be const
       supported_video_profiles(dev_data.video_profile_cache_.Get(
           dev_data.physical_device, vku::FindStructInPNextChain<VkVideoProfileListInfoKHR>(pCreateInfo->pNext))) {
@@ -215,7 +153,7 @@ Image::Image(const vvl::Device &dev_data, VkImage img, const VkImageCreateInfo *
     }
 }
 
-Image::Image(const vvl::Device &dev_data, VkImage img, const VkImageCreateInfo *pCreateInfo, VkSwapchainKHR swapchain,
+Image::Image(const vvl::DeviceState &dev_data, VkImage img, const VkImageCreateInfo *pCreateInfo, VkSwapchainKHR swapchain,
              uint32_t swapchain_index, VkFormatFeatureFlags2KHR ff)
     : Bindable(img, kVulkanObjectTypeImage, (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) != 0,
                (pCreateInfo->flags & VK_IMAGE_CREATE_PROTECTED_BIT) == 0, GetExternalHandleTypes(pCreateInfo)),
@@ -224,7 +162,7 @@ Image::Image(const vvl::Device &dev_data, VkImage img, const VkImageCreateInfo *
       shared_presentable(false),
       layout_locked(false),
       ahb_format(GetExternalFormat(pCreateInfo->pNext)),
-      full_range{MakeImageFullRange(*pCreateInfo)},
+      full_range{MakeImageFullRange()},
       create_from_swapchain(swapchain),
       owned_by_swapchain(true),
       swapchain_image_index(swapchain_index),
@@ -241,25 +179,23 @@ Image::Image(const vvl::Device &dev_data, VkImage img, const VkImageCreateInfo *
       metal_io_surface_export(GetMetalExport(pCreateInfo, VK_EXPORT_METAL_OBJECT_TYPE_METAL_IOSURFACE_BIT_EXT)),
 #endif  // VK_USE_PLATFORM_METAL_EXT
       subresource_encoder(full_range),
-      fragment_encoder(nullptr),
       store_device_as_workaround(dev_data.device),  // TODO REMOVE WHEN encoder can be const
       supported_video_profiles(dev_data.video_profile_cache_.Get(
           dev_data.physical_device, vku::FindStructInPNextChain<VkVideoProfileListInfoKHR>(pCreateInfo->pNext))) {
-    fragment_encoder =
-        std::unique_ptr<const subresource_adapter::ImageRangeEncoder>(new subresource_adapter::ImageRangeEncoder(*this));
 
     tracker_.emplace<BindableNoMemoryTracker>(requirements.data());
     SetMemoryTracker(&std::get<BindableNoMemoryTracker>(tracker_));
 }
 
 void Image::Destroy() {
+    for (auto &item : sub_states_) {
+        item.second->Destroy();
+    }
     // NOTE: due to corner cases in aliased images, the layout_range_map MUST not be cleaned up here.
     // If it is, bad local entries could be created by vvl::CommandBuffer::GetOrCreateImageLayoutRegistry()
     // If an aliasing image was being destroyed (and layout_range_map was reset()), a nullptr keyed
     // entry could get put into vvl::CommandBuffer::aliased_image_layout_map.
     //
-    // NOTE: the fragment_encoder should not be cleaned-up in case a semaphore to an acquired image is being processed
-    //       after the swapchain is waited, and the range generation needs an intact encoder.
     if (bind_swapchain) {
         bind_swapchain->RemoveParent(this);
         bind_swapchain = nullptr;
@@ -268,6 +204,9 @@ void Image::Destroy() {
 }
 
 void Image::NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) {
+    for (auto &item : sub_states_) {
+        item.second->NotifyInvalidate(invalid_nodes, unlink);
+    }
     Bindable::NotifyInvalidate(invalid_nodes, unlink);
     if (unlink) {
         bind_swapchain = nullptr;
@@ -320,6 +259,44 @@ bool Image::IsCompatibleAliasing(const Image *other_image_state) const {
         return true;
     }
     return false;
+}
+
+VkImageSubresourceRange Image::NormalizeSubresourceRange(const VkImageSubresourceRange &range) const {
+    VkImageSubresourceRange norm = range;
+    norm.levelCount =
+        (range.levelCount == VK_REMAINING_MIP_LEVELS) ? (create_info.mipLevels - range.baseMipLevel) : range.levelCount;
+    norm.layerCount =
+        (range.layerCount == VK_REMAINING_ARRAY_LAYERS) ? (create_info.arrayLayers - range.baseArrayLayer) : range.layerCount;
+
+    // For multiplanar formats, IMAGE_ASPECT_COLOR is equivalent to adding the aspect of the individual planes
+    if (vkuFormatIsMultiplane(create_info.format)) {
+        if (norm.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) {
+            norm.aspectMask &= ~VK_IMAGE_ASPECT_COLOR_BIT;
+            norm.aspectMask |= (VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT);
+            if (vkuFormatPlaneCount(create_info.format) > 2) {
+                norm.aspectMask |= VK_IMAGE_ASPECT_PLANE_2_BIT;
+            }
+        }
+    }
+    return norm;
+}
+
+uint32_t Image::NormalizeLayerCount(const VkImageSubresourceLayers &resource) const {
+    return (resource.layerCount == VK_REMAINING_ARRAY_LAYERS) ? (create_info.arrayLayers - resource.baseArrayLayer)
+                                                              : resource.layerCount;
+}
+
+VkImageSubresourceRange Image::MakeImageFullRange() {
+    const auto format = create_info.format;
+    VkImageSubresourceRange init_range{0, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
+
+    if (vkuFormatIsColor(format) || vkuFormatIsMultiplane(format) || GetExternalFormat(create_info.pNext) != 0) {
+        init_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;  // Normalization will expand this for multiplane
+    } else {
+        init_range.aspectMask = (vkuFormatHasDepth(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : 0) |
+                                (vkuFormatHasStencil(format) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0);
+    }
+    return NormalizeSubresourceRange(init_range);
 }
 
 void Image::SetInitialLayoutMap() {
@@ -434,27 +411,37 @@ static bool GetMetalExport(const VkImageViewCreateInfo *info) {
 
 namespace vvl {
 
-ImageView::ImageView(const std::shared_ptr<vvl::Image> &im, VkImageView handle, const VkImageViewCreateInfo *ci,
+ImageView::ImageView(const std::shared_ptr<vvl::Image> &image_state, VkImageView handle, const VkImageViewCreateInfo *ci,
                      VkFormatFeatureFlags2KHR ff, const VkFilterCubicImageViewImageFormatPropertiesEXT &cubic_props)
     : StateObject(handle, kVulkanObjectTypeImageView),
       safe_create_info(ci),
       create_info(*safe_create_info.ptr()),
-      normalized_subresource_range(::NormalizeSubresourceRange(im->create_info, *ci)),
-      range_generator(im->subresource_encoder, normalized_subresource_range),
-      samples(im->create_info.samples),
+      image_state(image_state),
+#ifdef VK_USE_PLATFORM_METAL_EXT
+      metal_imageview_export(GetMetalExport(ci)),
+#endif
+      is_depth_sliced(IsDepthSliced()),
+      normalized_subresource_range(NormalizeSubresourceRange()),
+      range_generator(image_state->subresource_encoder, normalized_subresource_range),
+      samples(image_state->create_info.samples),
       samplerConversion(GetSamplerConversion(ci)),
       filter_cubic_props(cubic_props),
       min_lod(GetImageViewMinLod(ci)),
       format_features(ff),
-      inherited_usage(GetInheritedUsage(ci, *im)),
-#ifdef VK_USE_PLATFORM_METAL_EXT
-      metal_imageview_export(GetMetalExport(ci)),
-#endif
-      image_state(im),
-      is_depth_sliced(::IsDepthSliced(im->create_info, *ci)) {
+      inherited_usage(GetInheritedUsage(ci, *image_state)) {
+}
+
+void ImageView::NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) {
+    for (auto &item : sub_states_) {
+        item.second->NotifyInvalidate(invalid_nodes, unlink);
+    }
+    StateObject::NotifyInvalidate(invalid_nodes, unlink);
 }
 
 void ImageView::Destroy() {
+    for (auto &item : sub_states_) {
+        item.second->Destroy();
+    }
     if (image_state) {
         image_state->RemoveParent(this);
         image_state = nullptr;
@@ -462,8 +449,35 @@ void ImageView::Destroy() {
     StateObject::Destroy();
 }
 
+bool ImageView::IsDepthSliced() {
+    auto depth_slice_flag = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT | VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT;
+    return ((image_state->create_info.flags & depth_slice_flag) != 0) &&
+           (create_info.viewType == VK_IMAGE_VIEW_TYPE_2D || create_info.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);
+}
+
+VkImageSubresourceRange ImageView::NormalizeSubresourceRange() const {
+    auto subres_range = create_info.subresourceRange;
+
+    // if we're mapping a 3D image to a 2d image view, convert the view's subresource range to be compatible with the
+    // image's understanding of the world. From the VkImageSubresourceRange section of the Vulkan spec:
+    //
+    //     When the VkImageSubresourceRange structure is used to select a subset of the slices of a 3D image’s mip level in
+    //     order to create a 2D or 2D array image view of a 3D image created with VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT,
+    //     baseArrayLayer and layerCount specify the first slice index and the number of slices to include in the created
+    //     image view. Such an image view can be used as a framebuffer attachment that refers only to the specified range
+    //     of slices of the selected mip level. However, any layout transitions performed on such an attachment view during
+    //     a render pass instance still apply to the entire subresource referenced which includes all the slices of the
+    //     selected mip level.
+    //
+    if (is_depth_sliced) {
+        subres_range.baseArrayLayer = 0;
+        subres_range.layerCount = 1;
+    }
+    return image_state->NormalizeSubresourceRange(subres_range);
+}
+
 uint32_t ImageView::GetAttachmentLayerCount() const {
-    if (create_info.subresourceRange.layerCount == VK_REMAINING_ARRAY_LAYERS && !IsDepthSliced()) {
+    if (create_info.subresourceRange.layerCount == VK_REMAINING_ARRAY_LAYERS && !is_depth_sliced) {
         return image_state->create_info.arrayLayers;
     }
     return create_info.subresourceRange.layerCount;
@@ -553,7 +567,14 @@ static vku::safe_VkImageCreateInfo GetImageCreateInfo(const VkSwapchainCreateInf
 
 namespace vvl {
 
-Swapchain::Swapchain(vvl::Device &dev_data_, const VkSwapchainCreateInfoKHR *pCreateInfo, VkSwapchainKHR handle)
+void SwapchainImage::ResetPresentWaitSemaphores() {
+    for (auto &semaphore : present_wait_semaphores) {
+        semaphore->ClearSwapchainWaitInfo();
+    }
+    present_wait_semaphores.clear();
+}
+
+Swapchain::Swapchain(vvl::DeviceState &dev_data_, const VkSwapchainCreateInfoKHR *pCreateInfo, VkSwapchainKHR handle)
     : StateObject(handle, kVulkanObjectTypeSwapchainKHR),
       safe_create_info(pCreateInfo),
       create_info(*safe_create_info.ptr()),
@@ -562,9 +583,15 @@ Swapchain::Swapchain(vvl::Device &dev_data_, const VkSwapchainCreateInfoKHR *pCr
       shared_presentable(VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR == pCreateInfo->presentMode ||
                          VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR == pCreateInfo->presentMode),
       image_create_info(GetImageCreateInfo(pCreateInfo)),
-      dev_data(dev_data_) {}
+      dev_data(dev_data_) {
 
-void Swapchain::PresentImage(uint32_t image_index, uint64_t present_id, const AcquireFenceSync &acquire_fence_sync) {
+    // Initialize with visible values for debugging purposes.
+    // This helps to show used slots during the first few frames.
+    acquire_history.fill(vvl::kU32Max);
+}
+
+void Swapchain::PresentImage(uint32_t image_index, uint64_t present_id, const SubmissionReference &present_submission_ref,
+                             vvl::span<std::shared_ptr<vvl::Semaphore>> present_wait_semaphores) {
     if (image_index >= images.size()) return;
     assert(acquired_images > 0);
     if (!shared_presentable) {
@@ -575,7 +602,13 @@ void Swapchain::PresentImage(uint32_t image_index, uint64_t present_id, const Ac
     } else {
         images[image_index].image_state->layout_locked = true;
     }
-    images[image_index].acquire_fence_sync = acquire_fence_sync;
+    images[image_index].present_submission_ref = present_submission_ref;
+
+    images[image_index].present_wait_semaphores.clear();
+    for (const auto &semaphore : present_wait_semaphores) {
+        images[image_index].present_wait_semaphores.emplace_back(semaphore);
+    }
+
     if (present_id > max_present_id) {
         max_present_id = present_id;
     }
@@ -588,6 +621,7 @@ void Swapchain::ReleaseImage(uint32_t image_index) {
     images[image_index].acquired = false;
     images[image_index].acquire_semaphore.reset();
     images[image_index].acquire_fence.reset();
+    images[image_index].ResetPresentWaitSemaphores();
 }
 
 void Swapchain::AcquireImage(uint32_t image_index, const std::shared_ptr<vvl::Semaphore> &semaphore_state,
@@ -596,17 +630,22 @@ void Swapchain::AcquireImage(uint32_t image_index, const std::shared_ptr<vvl::Se
     images[image_index].acquired = true;
     images[image_index].acquire_semaphore = semaphore_state;
     images[image_index].acquire_fence = fence_state;
-    if (fence_state) {
-        fence_state->SetAcquireFenceSync(images[image_index].acquire_fence_sync);
-        images[image_index].acquire_fence_sync = {};
+    if (fence_state && images[image_index].present_submission_ref.has_value()) {
+        fence_state->SetPresentSubmissionRef(*images[image_index].present_submission_ref);
+        images[image_index].present_submission_ref.reset();
     }
     if (shared_presentable) {
         images[image_index].image_state->shared_presentable = shared_presentable;
     }
+    images[image_index].ResetPresentWaitSemaphores();
+
+    acquire_history[acquire_count % acquire_history_max_length] = image_index;
+    acquire_count++;
 }
 
 void Swapchain::Destroy() {
     for (auto &swapchain_image : images) {
+        swapchain_image.ResetPresentWaitSemaphores();
         RemoveParent(swapchain_image.image_state);
         dev_data.Destroy<vvl::Image>(swapchain_image.image_state->VkHandle());
         // NOTE: We don't have access to dev_data.fake_memory.Free() here, but it is currently a no-op
@@ -639,6 +678,23 @@ std::shared_ptr<const vvl::Image> Swapchain::GetSwapChainImageShared(uint32_t in
         return swapchain_image.image_state->shared_from_this();
     }
     return std::shared_ptr<const vvl::Image>();
+}
+
+uint32_t Swapchain::GetAcquireHistoryLength() const {
+    return (acquire_count >= acquire_history_max_length) ? acquire_history_max_length : acquire_count;
+}
+
+uint32_t Swapchain::GetAcquiredImageIndexFromHistory(uint32_t acquire_history_index) const {
+    const uint32_t history_length = GetAcquireHistoryLength();
+    assert(acquire_history_index < history_length);
+
+    const uint32_t global_start_index = acquire_count - history_length;
+    const uint32_t global_index = global_start_index + acquire_history_index;
+    const uint32_t ring_buffer_index = global_index % acquire_history_max_length;
+
+    const uint32_t acquire_image_index = acquire_history[ring_buffer_index];
+    assert(acquire_image_index != vvl::kU32Max);
+    return acquire_image_index;
 }
 
 void Surface::Destroy() {

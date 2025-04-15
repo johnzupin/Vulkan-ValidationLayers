@@ -21,7 +21,7 @@ TEST_F(NegativeHostImageCopy, ImageLayout) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -62,7 +62,7 @@ TEST_F(NegativeHostImageCopy, TransferUsageFlag) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     // Missing transfer usage
     image_ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -109,7 +109,7 @@ TEST_F(NegativeHostImageCopy, ImageOffset) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -160,7 +160,7 @@ TEST_F(NegativeHostImageCopy, AspectMask) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -202,7 +202,7 @@ TEST_F(NegativeHostImageCopy, CopyImageToFromMemoryNoMemory) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -245,7 +245,7 @@ TEST_F(NegativeHostImageCopy, ImageSubresource) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -340,7 +340,7 @@ TEST_F(NegativeHostImageCopy, ImageExtent) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -418,7 +418,7 @@ TEST_F(NegativeHostImageCopy, Image1D) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -448,7 +448,7 @@ TEST_F(NegativeHostImageCopy, Image1D) {
     // imageOffset.y must be 0 and imageExtent.height must be 1
     image_ci.imageType = VK_IMAGE_TYPE_1D;
     image_ci.extent.height = 1;
-    vkt::Image image_1d(*m_device, image_ci, vkt::set_layout);
+    vkt::Image image_1d(*m_device, image_ci);
     image_1d.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     image_ci.imageType = VK_IMAGE_TYPE_2D;
     image_ci.extent.height = height;
@@ -498,7 +498,7 @@ TEST_F(NegativeHostImageCopy, Image1DMultiSampled) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     image_ci.samples = VK_SAMPLE_COUNT_2_BIT;
     vkt::Image image_samplecount(*m_device, image_ci);
@@ -554,7 +554,7 @@ TEST_F(NegativeHostImageCopy, CompressedFormat) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -582,7 +582,7 @@ TEST_F(NegativeHostImageCopy, CompressedFormat) {
 
     image_ci.format = VK_FORMAT_BC3_SRGB_BLOCK;
     image_ci.mipLevels = 6;
-    vkt::Image image_compressed(*m_device, image_ci, vkt::set_layout);
+    vkt::Image image_compressed(*m_device, image_ci);
     image_compressed.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
     // imageOffset not a multiple of block size
@@ -683,7 +683,7 @@ TEST_F(NegativeHostImageCopy, DepthStencil) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -711,9 +711,8 @@ TEST_F(NegativeHostImageCopy, DepthStencil) {
 
     image_ci.format = stencil_format;
     image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    vkt::Image image_stencil(*m_device, image_ci, vkt::set_layout);
-    image_stencil.SetLayout((VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT),
-                            VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    vkt::Image image_stencil(*m_device, image_ci);
+    image_stencil.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
 
     // Stencil, no VK_IMAGE_USAGE_HOST_TRANSFER_BIT
     region_to_image.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -732,9 +731,8 @@ TEST_F(NegativeHostImageCopy, DepthStencil) {
     VkImageStencilUsageCreateInfo stencil_usage_ci = vku::InitStructHelper();
     stencil_usage_ci.stencilUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     image_ci.pNext = &stencil_usage_ci;
-    vkt::Image image_separate_stencil(*m_device, image_ci, vkt::set_layout);
-    image_separate_stencil.SetLayout((VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT),
-                                     VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    vkt::Image image_separate_stencil(*m_device, image_ci);
+    image_separate_stencil.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
 
     // Seperate stencil, no VK_IMAGE_USAGE_HOST_TRANSFER_BIT
     region_to_image.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -757,9 +755,8 @@ TEST_F(NegativeHostImageCopy, DepthStencil) {
         image_ci.format = stencil_format;
         image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_HOST_TRANSFER_BIT;
         image_ci.pNext = nullptr;
-        vkt::Image image_stencil2(*m_device, image_ci, vkt::set_layout);
-        image_stencil2.SetLayout((VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT),
-                                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+        vkt::Image image_stencil2(*m_device, image_ci);
+        image_stencil2.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
         copy_to_image.dstImage = image_stencil2;
         region_to_image.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
         m_errorMonitor->SetDesiredError("VUID-VkMemoryToImageCopy-aspectMask-09103");
@@ -778,7 +775,7 @@ TEST_F(NegativeHostImageCopy, MultiPlanar) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -810,9 +807,9 @@ TEST_F(NegativeHostImageCopy, MultiPlanar) {
                           VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_HOST_TRANSFER_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 0,
                           &img_prop)) {
         // imageSubresource.aspectMask must be VK_IMAGE_ASPECT_PLANE_0_BIT or VK_IMAGE_ASPECT_PLANE_1_BIT
-        vkt::Image image_multi_planar2(*m_device, 128, 128, 1, VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+        vkt::Image image_multi_planar2(*m_device, 128, 128, VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
                                        VK_IMAGE_USAGE_HOST_TRANSFER_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        image_multi_planar2.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+        image_multi_planar2.SetLayout(layout);
         region_to_image.imageSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_2_BIT;
         copy_to_image.dstImage = image_multi_planar2;
         m_errorMonitor->SetDesiredError("VUID-VkCopyMemoryToImageInfo-dstImage-07981");
@@ -831,9 +828,9 @@ TEST_F(NegativeHostImageCopy, MultiPlanar) {
                           &img_prop)) {
         // imageSubresource.aspectMask must be VK_IMAGE_ASPECT_PLANE_0_BIT, VK_IMAGE_ASPECT_PLANE_1_BIT, or
         // VK_IMAGE_ASPECT_PLANE_2_BIT
-        vkt::Image image_multi_planar3(*m_device, 128, 128, 1, VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
+        vkt::Image image_multi_planar3(*m_device, 128, 128, VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
                                        VK_IMAGE_USAGE_HOST_TRANSFER_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        image_multi_planar3.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+        image_multi_planar3.SetLayout(layout);
         region_to_image.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         copy_to_image.dstImage = image_multi_planar3;
         m_errorMonitor->SetDesiredError("VUID-VkCopyMemoryToImageInfo-dstImage-07981");
@@ -856,7 +853,7 @@ TEST_F(NegativeHostImageCopy, NonSupportedLayout) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -883,7 +880,7 @@ TEST_F(NegativeHostImageCopy, NonSupportedLayout) {
     copy_from_image.pRegions = &region_from_image;
 
     // layout must be one of the image layouts returned in VkPhysicalDeviceHostImageCopyPropertiesEXT::pCopySrcLayouts
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    image.TransitionLayout(layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     copy_to_image.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     m_errorMonitor->SetDesiredError("VUID-VkCopyMemoryToImageInfo-dstImageLayout-09060");
     vk::CopyMemoryToImageEXT(*m_device, &copy_to_image);
@@ -894,7 +891,7 @@ TEST_F(NegativeHostImageCopy, NonSupportedLayout) {
     m_errorMonitor->VerifyFound();
     copy_to_image.dstImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     copy_from_image.srcImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    image.TransitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 }
 
 TEST_F(NegativeHostImageCopy, ImageExtent2) {
@@ -902,7 +899,7 @@ TEST_F(NegativeHostImageCopy, ImageExtent2) {
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     vkt::Image image(*m_device, image_ci);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -1057,12 +1054,10 @@ TEST_F(NegativeHostImageCopy, CopyImageToImageUsageFlagsStencil) {
     auto stencil_format = FindSupportedDepthStencilFormat(Gpu());
     image_ci.format = stencil_format;
     image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    vkt::Image image_stencil1(*m_device, image_ci, vkt::set_layout);
-    image_stencil1.SetLayout((VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT),
-                             VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
-    vkt::Image image_stencil2(*m_device, image_ci, vkt::set_layout);
-    image_stencil2.SetLayout((VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT),
-                             VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    vkt::Image image_stencil1(*m_device, image_ci);
+    image_stencil1.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    vkt::Image image_stencil2(*m_device, image_ci);
+    image_stencil2.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
 
     // Stencil, no VK_IMAGE_USAGE_HOST_TRANSFER_BIT
     image_copy_2.srcSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -1081,12 +1076,10 @@ TEST_F(NegativeHostImageCopy, CopyImageToImageUsageFlagsStencil) {
     stencil_usage_ci.stencilUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     image_ci.pNext = &stencil_usage_ci;
 
-    vkt::Image image_separate_stencil1(*m_device, image_ci, vkt::set_layout);
-    image_separate_stencil1.SetLayout((VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT),
-                                      VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
-    vkt::Image image_separate_stencil2(*m_device, image_ci, vkt::set_layout);
-    image_separate_stencil2.SetLayout((VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT),
-                                      VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    vkt::Image image_separate_stencil1(*m_device, image_ci);
+    image_separate_stencil1.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    vkt::Image image_separate_stencil2(*m_device, image_ci);
+    image_separate_stencil2.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
 
     image_copy_2.dstSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
     copy_image_to_image.dstImage = image_separate_stencil1;
@@ -1103,8 +1096,8 @@ TEST_F(NegativeHostImageCopy, CopyImageToImageUsageFlagsNonStencil) {
 
     auto image_ci_no_transfer = vkt::Image::ImageCreateInfo2D(width, height, 1, 1, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     // Missing transfer usage
-    vkt::Image image1(*m_device, image_ci_no_transfer, vkt::set_layout);
-    vkt::Image image2(*m_device, image_ci_no_transfer, vkt::set_layout);
+    vkt::Image image1(*m_device, image_ci_no_transfer);
+    vkt::Image image2(*m_device, image_ci_no_transfer);
     image1.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     image2.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
@@ -1564,12 +1557,12 @@ TEST_F(NegativeHostImageCopy, CopyImageToImagePlanar) {
                           VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_HOST_TRANSFER_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 0,
                           &img_prop)) {
         // imageSubresource.aspectMask must be VK_IMAGE_ASPECT_PLANE_0_BIT or VK_IMAGE_ASPECT_PLANE_1_BIT
-        vkt::Image image_multi_twoplane1(*m_device, 128, 128, 1, VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+        vkt::Image image_multi_twoplane1(*m_device, 128, 128, VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
                                          VK_IMAGE_USAGE_HOST_TRANSFER_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        vkt::Image image_multi_twoplane2(*m_device, 128, 128, 1, VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+        vkt::Image image_multi_twoplane2(*m_device, 128, 128, VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
                                          VK_IMAGE_USAGE_HOST_TRANSFER_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        image_multi_twoplane1.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
-        image_multi_twoplane2.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+        image_multi_twoplane1.SetLayout(layout);
+        image_multi_twoplane2.SetLayout(layout);
         image_copy_2.srcSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_2_BIT;
         image_copy_2.dstSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_2_BIT;
         copy_image_to_image.dstImage = image_multi_twoplane1;
@@ -1586,12 +1579,12 @@ TEST_F(NegativeHostImageCopy, CopyImageToImagePlanar) {
                           &img_prop)) {
         // imageSubresource.aspectMask must be VK_IMAGE_ASPECT_PLANE_0_BIT, VK_IMAGE_ASPECT_PLANE_1_BIT, or
         // VK_IMAGE_ASPECT_PLANE_2_BIT
-        vkt::Image image_multi_threeplane1(*m_device, 128, 128, 1, VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
+        vkt::Image image_multi_threeplane1(*m_device, 128, 128, VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
                                            VK_IMAGE_USAGE_HOST_TRANSFER_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        vkt::Image image_multi_threeplane2(*m_device, 128, 128, 1, VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
+        vkt::Image image_multi_threeplane2(*m_device, 128, 128, VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
                                            VK_IMAGE_USAGE_HOST_TRANSFER_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        image_multi_threeplane1.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
-        image_multi_threeplane2.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+        image_multi_threeplane1.SetLayout(layout);
+        image_multi_threeplane2.SetLayout(layout);
         image_copy_2.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         image_copy_2.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         copy_image_to_image.dstImage = image_multi_threeplane1;
@@ -1632,11 +1625,11 @@ TEST_F(NegativeHostImageCopy, CopyImageToImageProperties) {
         GTEST_SKIP() << "Properties supported";
     }
 
-    vkt::Image image1(*m_device, image_ci, vkt::set_layout);
-    vkt::Image image2(*m_device, image_ci, vkt::set_layout);
+    vkt::Image image1(*m_device, image_ci);
+    vkt::Image image2(*m_device, image_ci);
     // layout must be one of the image layouts returned in VkPhysicalDeviceHostImageCopyPropertiesEXT::pCopySrcLayouts
-    image1.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-    image2.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    image1.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    image2.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     VkImageCopy2 image_copy_2 = vku::InitStructHelper();
     image_copy_2.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -1719,8 +1712,8 @@ TEST_F(NegativeHostImageCopy, CopyImageToImageCompressed) {
 
     image_ci.format = VK_FORMAT_BC3_SRGB_BLOCK;
     image_ci.mipLevels = 6;
-    vkt::Image image_compressed1(*m_device, image_ci, vkt::set_layout);
-    vkt::Image image_compressed2(*m_device, image_ci, vkt::set_layout);
+    vkt::Image image_compressed1(*m_device, image_ci);
+    vkt::Image image_compressed2(*m_device, image_ci);
     image_compressed1.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     image_compressed2.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
@@ -1772,8 +1765,8 @@ TEST_F(NegativeHostImageCopy, CopyImageToFromMemorySubsampled) {
     RETURN_IF_SKIP(InitHostImageCopyTest());
 
     VkImageLayout layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    vkt::Image image(*m_device, image_ci, vkt::set_layout);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    vkt::Image image(*m_device, image_ci);
+    image.SetLayout(layout);
 
     std::vector<uint8_t> pixels(width * height * 4);
 
@@ -1800,7 +1793,7 @@ TEST_F(NegativeHostImageCopy, CopyImageToFromMemorySubsampled) {
     copy_from_image.pRegions = &region_from_image;
 
     image_ci.flags = VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT;
-    vkt::Image image_subsampled(*m_device, image_ci, vkt::set_layout);
+    vkt::Image image_subsampled(*m_device, image_ci);
     image_subsampled.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     copy_to_image.dstImage = image_subsampled;
     m_errorMonitor->SetDesiredError("VUID-VkCopyMemoryToImageInfo-dstImage-07969");
@@ -1826,8 +1819,8 @@ TEST_F(NegativeHostImageCopy, CopyImageToImageSubsampled) {
 
     image_ci.flags = VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT;
 
-    vkt::Image image_subsampled1(*m_device, image_ci, vkt::set_layout);
-    vkt::Image image_subsampled2(*m_device, image_ci, vkt::set_layout);
+    vkt::Image image_subsampled1(*m_device, image_ci);
+    vkt::Image image_subsampled2(*m_device, image_ci);
     image_subsampled1.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     image_subsampled2.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
@@ -1930,7 +1923,7 @@ TEST_F(NegativeHostImageCopy, TransitionImageLayoutUsage) {
 
     auto image_ci_no_transfer = vkt::Image::ImageCreateInfo2D(width, height, 1, 1, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     // Missing transfer usage
-    vkt::Image image_no_transfer(*m_device, image_ci_no_transfer, vkt::set_layout);
+    vkt::Image image_no_transfer(*m_device, image_ci_no_transfer);
     image_no_transfer.SetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     transition_info.image = image_no_transfer;
     m_errorMonitor->SetDesiredError("VUID-VkHostImageLayoutTransitionInfo-image-09055");
@@ -2027,17 +2020,17 @@ TEST_F(NegativeHostImageCopy, TransitionImageLayoutNotSupported) {
     transition_info.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     transition_info.subresourceRange = range;
 
-    vkt::Image image(*m_device, image_ci, vkt::set_layout);
+    vkt::Image image(*m_device, image_ci);
     transition_info.image = image;
 
     // layout must be one of the image layouts returned in VkPhysicalDeviceHostImageCopyPropertiesEXT::pCopySrcLayouts
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     transition_info.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     m_errorMonitor->SetDesiredError("VUID-VkHostImageLayoutTransitionInfo-oldLayout-09230");
     vk::TransitionImageLayoutEXT(*m_device, 1, &transition_info);
     m_errorMonitor->VerifyFound();
     transition_info.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    image.TransitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
     // layout must be one of the image layouts returned in VkPhysicalDeviceHostImageCopyPropertiesEXT::pCopyDstLayouts
     transition_info.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -2080,9 +2073,8 @@ TEST_F(NegativeHostImageCopy, TransitionImageLayoutDepthStencil) {
 
     image_ci.format = stencil_format;
     image_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_HOST_TRANSFER_BIT;
-    vkt::Image image_stencil(*m_device, image_ci, vkt::set_layout);
-    image_stencil.SetLayout((VK_IMAGE_ASPECT_STENCIL_BIT | VK_IMAGE_ASPECT_DEPTH_BIT),
-                            VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    vkt::Image image_stencil(*m_device, image_ci);
+    image_stencil.SetLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
     transition_info.image = image_stencil;
     transition_info.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
@@ -2132,7 +2124,7 @@ TEST_F(NegativeHostImageCopy, ImageMemoryOverlap) {
     image_ci.mipLevels = 4;
     VkImageLayout layout = VK_IMAGE_LAYOUT_GENERAL;
     vkt::Image image(*m_device, image_ci, kHostVisibleMemProps);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     VkDeviceAddress *data = (VkDeviceAddress *)image.Memory().Map();
 
@@ -2186,8 +2178,6 @@ TEST_F(NegativeHostImageCopy, ImageMemoryOverlap) {
     m_errorMonitor->SetDesiredError("VUID-VkMemoryToImageCopy-pRegions-09062");
     vk::CopyMemoryToImageEXT(*m_device, &copy_memory_to_image);
     m_errorMonitor->VerifyFound();
-
-    image.Memory().Unmap();
 }
 
 // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8946
@@ -2205,7 +2195,7 @@ TEST_F(NegativeHostImageCopy, DISABLED_ImageMemoryOverlapCompressed) {
     image_ci.extent = {4, 4, 1};
     VkImageLayout layout = VK_IMAGE_LAYOUT_GENERAL;
     vkt::Image image(*m_device, image_ci, kHostVisibleMemProps);
-    image.SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, layout);
+    image.SetLayout(layout);
 
     VkDeviceAddress *data = (VkDeviceAddress *)image.Memory().Map();
 
@@ -2226,8 +2216,6 @@ TEST_F(NegativeHostImageCopy, DISABLED_ImageMemoryOverlapCompressed) {
     m_errorMonitor->SetDesiredError("VUID-VkMemoryToImageCopy-pRegions-09062");
     vk::CopyMemoryToImageEXT(*m_device, &copy_memory_to_image);
     m_errorMonitor->VerifyFound();
-
-    image.Memory().Unmap();
 }
 
 TEST_F(NegativeHostImageCopy, ImageMemorySparseUnbound) {
@@ -2311,5 +2299,93 @@ TEST_F(NegativeHostImageCopy, ImageMemorySparseUnbound) {
     m_errorMonitor->SetUnexpectedError("VUID-VkCopyImageToImageInfo-dstImageLayout-09071");
     m_errorMonitor->SetDesiredError("VUID-VkCopyImageToImageInfo-dstImage-09109");
     vk::CopyImageToImageEXT(*m_device, &copy_image_to_image);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeHostImageCopy, TransitionImageLayoutDepthWrongAspect) {
+    RETURN_IF_SKIP(InitHostImageCopyTest());
+
+    VkImageCreateInfo depth_image_ci = vku::InitStructHelper();
+    depth_image_ci.imageType = VK_IMAGE_TYPE_2D;
+    depth_image_ci.format = VK_FORMAT_D32_SFLOAT;
+    depth_image_ci.extent = {32u, 32u, 1u};
+    depth_image_ci.mipLevels = 1u;
+    depth_image_ci.arrayLayers = 1u;
+    depth_image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth_image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    depth_image_ci.usage = VK_IMAGE_USAGE_HOST_TRANSFER_BIT;
+    depth_image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkPhysicalDeviceImageFormatInfo2 image_format_info = vku::InitStructHelper();
+    image_format_info.format = depth_image_ci.format;
+    image_format_info.type = depth_image_ci.imageType;
+    image_format_info.tiling = depth_image_ci.tiling;
+    image_format_info.usage = depth_image_ci.usage;
+    image_format_info.flags = depth_image_ci.flags;
+
+    VkImageFormatProperties2 image_format_properties = vku::InitStructHelper();
+    VkResult res =
+        vk::GetPhysicalDeviceImageFormatProperties2(m_device->physical_device_, &image_format_info, &image_format_properties);
+    if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
+        GTEST_SKIP() << "Required format not supported";
+    }
+    if (!(m_device->FormatFeaturesOptimal(depth_image_ci.format) & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT)) {
+        GTEST_SKIP() << "Device does not support host image on depth format";
+    }
+
+    vkt::Image image(*m_device, depth_image_ci, vkt::set_layout);
+
+    VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
+    VkHostImageLayoutTransitionInfo transition_info = vku::InitStructHelper();
+    transition_info.image = image;
+    transition_info.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    transition_info.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    transition_info.subresourceRange = range;
+    m_errorMonitor->SetDesiredError("UNASSIGNED-VkHostImageLayoutTransitionInfo-image-00001");
+    vk::TransitionImageLayoutEXT(*m_device, 1, &transition_info);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeHostImageCopy, TransitionImageLayoutStencilWrongAspect) {
+    RETURN_IF_SKIP(InitHostImageCopyTest());
+
+    VkImageCreateInfo stencil_image_ci = vku::InitStructHelper();
+    stencil_image_ci.imageType = VK_IMAGE_TYPE_2D;
+    stencil_image_ci.format = VK_FORMAT_S8_UINT;
+    stencil_image_ci.extent = {32u, 32u, 1u};
+    stencil_image_ci.mipLevels = 1u;
+    stencil_image_ci.arrayLayers = 1u;
+    stencil_image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    stencil_image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    stencil_image_ci.usage = VK_IMAGE_USAGE_HOST_TRANSFER_BIT;
+    stencil_image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkPhysicalDeviceImageFormatInfo2 image_format_info = vku::InitStructHelper();
+    image_format_info.format = stencil_image_ci.format;
+    image_format_info.type = stencil_image_ci.imageType;
+    image_format_info.tiling = stencil_image_ci.tiling;
+    image_format_info.usage = stencil_image_ci.usage;
+    image_format_info.flags = stencil_image_ci.flags;
+
+    VkImageFormatProperties2 image_format_properties = vku::InitStructHelper();
+    VkResult res =
+        vk::GetPhysicalDeviceImageFormatProperties2(m_device->physical_device_, &image_format_info, &image_format_properties);
+    if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
+        GTEST_SKIP() << "Required format not supported";
+    }
+    if (!(m_device->FormatFeaturesOptimal(stencil_image_ci.format) & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT)) {
+        GTEST_SKIP() << "Device does not support host image on depth format";
+    }
+
+    vkt::Image image(*m_device, stencil_image_ci, vkt::set_layout);
+
+    VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
+    VkHostImageLayoutTransitionInfo transition_info = vku::InitStructHelper();
+    transition_info.image = image;
+    transition_info.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    transition_info.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    transition_info.subresourceRange = range;
+    m_errorMonitor->SetDesiredError("UNASSIGNED-VkHostImageLayoutTransitionInfo-image-00002");
+    vk::TransitionImageLayoutEXT(*m_device, 1, &transition_info);
     m_errorMonitor->VerifyFound();
 }

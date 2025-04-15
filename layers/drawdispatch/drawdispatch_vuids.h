@@ -31,7 +31,6 @@ struct DrawDispatchVuid {
     Location loc() const { return Location(function); }
 
     const char* pipeline_bound_08606 = kVUIDUndefined;
-    const char* pipeline_or_shaders_bound_08607 = kVUIDUndefined;
     const char* index_binding_07312 = kVUIDUndefined;
     const char* vertex_binding_04007 = kVUIDUndefined;
     const char* vertex_binding_null_04008 = kVUIDUndefined;
@@ -202,8 +201,6 @@ struct DrawDispatchVuid {
     const char* descriptor_buffer_bit_set_08114 = kVUIDUndefined;
     const char* descriptor_buffer_bit_not_set_08115 = kVUIDUndefined;
     const char* descriptor_buffer_set_offset_missing_08117 = kVUIDUndefined;
-    const char* image_ycbcr_sampled_06550 = kVUIDUndefined;
-    const char* image_ycbcr_offset_06551 = kVUIDUndefined;
     const char* image_view_dim_07752 = kVUIDUndefined;
     const char* image_view_numeric_format_07753 = kVUIDUndefined;
     const char* stippled_rectangular_lines_07495 = kVUIDUndefined;
@@ -249,6 +246,7 @@ struct DrawDispatchVuid {
     const char* task_mesh_shader_08694 = kVUIDUndefined;
     const char* task_mesh_shader_08695 = kVUIDUndefined;
     const char* vert_task_mesh_shader_08696 = kVUIDUndefined;
+    const char* bound_non_mesh_10680 = kVUIDUndefined;
     const char* linked_shaders_08698 = kVUIDUndefined;
     const char* linked_shaders_08699 = kVUIDUndefined;
     const char* shaders_push_constants_08878 = kVUIDUndefined;
@@ -309,6 +307,7 @@ struct DrawDispatchVuid {
     const char* color_blend_advanced_07635 = kVUIDUndefined;
     const char* image_layout_09600 = kVUIDUndefined;
     const char* rendering_contents_10582 = kVUIDUndefined;
+    const char* line_rasterization_10608 = kVUIDUndefined;
     // Ray tracing
     const char* ray_tracing_pipeline_stack_size_09458 = kVUIDUndefined;
 };

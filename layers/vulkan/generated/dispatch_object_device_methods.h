@@ -722,6 +722,7 @@ VkResult SetPrivateDataEXT(VkDevice device, VkObjectType objectType, uint64_t ob
                            uint64_t data);
 void GetPrivateDataEXT(VkDevice device, VkObjectType objectType, uint64_t objectHandle, VkPrivateDataSlot privateDataSlot,
                        uint64_t* pData);
+#ifdef VK_ENABLE_BETA_EXTENSIONS
 VkResult CreateCudaModuleNV(VkDevice device, const VkCudaModuleCreateInfoNV* pCreateInfo, const VkAllocationCallbacks* pAllocator,
                             VkCudaModuleNV* pModule);
 VkResult GetCudaModuleCacheNV(VkDevice device, VkCudaModuleNV module, size_t* pCacheSize, void* pCacheData);
@@ -730,6 +731,10 @@ VkResult CreateCudaFunctionNV(VkDevice device, const VkCudaFunctionCreateInfoNV*
 void DestroyCudaModuleNV(VkDevice device, VkCudaModuleNV module, const VkAllocationCallbacks* pAllocator);
 void DestroyCudaFunctionNV(VkDevice device, VkCudaFunctionNV function, const VkAllocationCallbacks* pAllocator);
 void CmdCudaLaunchKernelNV(VkCommandBuffer commandBuffer, const VkCudaLaunchInfoNV* pLaunchInfo);
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+void CmdDispatchTileQCOM(VkCommandBuffer commandBuffer);
+void CmdBeginPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileBeginInfoQCOM* pPerTileBeginInfo);
+void CmdEndPerTileExecutionQCOM(VkCommandBuffer commandBuffer, const VkPerTileEndInfoQCOM* pPerTileEndInfo);
 #ifdef VK_USE_PLATFORM_METAL_EXT
 void ExportMetalObjectsEXT(VkDevice device, VkExportMetalObjectsInfoEXT* pMetalObjectsInfo);
 #endif  // VK_USE_PLATFORM_METAL_EXT
@@ -908,6 +913,11 @@ void CmdSetAttachmentFeedbackLoopEnableEXT(VkCommandBuffer commandBuffer, VkImag
 VkResult GetScreenBufferPropertiesQNX(VkDevice device, const struct _screen_buffer* buffer,
                                       VkScreenBufferPropertiesQNX* pProperties);
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+VkResult CreateExternalComputeQueueNV(VkDevice device, const VkExternalComputeQueueCreateInfoNV* pCreateInfo,
+                                      const VkAllocationCallbacks* pAllocator, VkExternalComputeQueueNV* pExternalQueue);
+void DestroyExternalComputeQueueNV(VkDevice device, VkExternalComputeQueueNV externalQueue,
+                                   const VkAllocationCallbacks* pAllocator);
+void GetExternalComputeQueueDataNV(VkExternalComputeQueueNV externalQueue, VkExternalComputeQueueDataParamsNV* params, void* pData);
 void GetClusterAccelerationStructureBuildSizesNV(VkDevice device, const VkClusterAccelerationStructureInputInfoNV* pInfo,
                                                  VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo);
 void CmdBuildClusterAccelerationStructureIndirectNV(VkCommandBuffer commandBuffer,
@@ -943,6 +953,7 @@ VkResult GetMemoryMetalHandleEXT(VkDevice device, const VkMemoryGetMetalHandleIn
 VkResult GetMemoryMetalHandlePropertiesEXT(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, const void* pHandle,
                                            VkMemoryMetalHandlePropertiesEXT* pMemoryMetalHandleProperties);
 #endif  // VK_USE_PLATFORM_METAL_EXT
+void CmdEndRendering2EXT(VkCommandBuffer commandBuffer, const VkRenderingEndInfoEXT* pRenderingEndInfo);
 VkResult CreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                         const VkAllocationCallbacks* pAllocator,
                                         VkAccelerationStructureKHR* pAccelerationStructure);

@@ -20,20 +20,22 @@
 #pragma once
 #include "state_tracker/state_object.h"
 #include "state_tracker/image_layout_map.h"
-#include "state_tracker/pipeline_state.h"
+#include "state_tracker/pipeline_sub_state.h"
+#include "state_tracker/video_session_state.h"
+#include "state_tracker/last_bound_state.h"
 #include "state_tracker/query_state.h"
 #include "state_tracker/vertex_index_buffer_state.h"
+#include "state_tracker/event_map.h"
 #include "containers/qfo_transfer.h"
-#include "containers/custom_containers.h"
 #include "generated/dynamic_state_helper.h"
-
-class CoreChecks;
 
 namespace vvl {
 class Bindable;
 class Buffer;
-class Device;
+class CommandBufferSubState;
+class DeviceState;
 class Framebuffer;
+class Queue;
 class RenderPass;
 class VideoSession;
 class VideoSessionParameters;
@@ -42,12 +44,6 @@ class VideoSessionParameters;
 // Only CoreChecks uses this, but the state tracker stores it.
 constexpr static auto kInvalidLayout = image_layout_map::kInvalidLayout;
 using ImageLayoutRegistry = image_layout_map::ImageLayoutRegistry;
-
-struct EventInfo {
-    VkPipelineStageFlags2 src_stage_mask = VK_PIPELINE_STAGE_2_NONE;
-    bool signal = false;  // signal (SetEvent) or unsignal (ResetEvent)
-};
-using EventMap = vvl::unordered_map<VkEvent, EventInfo>;
 
 enum class CbState {
     New,                // Newly created CB w/o any cmds
@@ -137,7 +133,7 @@ class Event : public StateObject {
 // Track command pools and their command buffers
 class CommandPool : public StateObject {
   public:
-    Device &dev_data;
+    DeviceState &dev_data;
     const VkCommandPoolCreateFlags createFlags;
     const uint32_t queueFamilyIndex;
     const VkQueueFlags queue_flags;
@@ -145,7 +141,7 @@ class CommandPool : public StateObject {
     // Cmd buffers allocated from this pool
     vvl::unordered_map<VkCommandBuffer, CommandBuffer *> commandBuffers;
 
-    CommandPool(Device &dev, VkCommandPool handle, const VkCommandPoolCreateInfo *create_info, VkQueueFlags flags);
+    CommandPool(DeviceState &dev, VkCommandPool handle, const VkCommandPoolCreateInfo *create_info, VkQueueFlags flags);
     virtual ~CommandPool() { Destroy(); }
 
     VkCommandPool VkHandle() const { return handle_.Cast<VkCommandPool>(); }
@@ -163,10 +159,17 @@ struct LabelCommand {
     std::string label_name;  // used when begin == true
 };
 
-class CommandBuffer : public RefcountedStateObject {
+struct PushConstantData {
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkShaderStageFlags stage_flags = 0;
+    uint32_t offset = 0;
+    std::vector<std::byte> values{};
+};
+
+class CommandBuffer : public RefcountedStateObject, public SubStateManager<CommandBufferSubState> {
     using Func = vvl::Func;
+
   public:
-    using ImageLayoutMap = vvl::unordered_map<VkImage, std::shared_ptr<ImageLayoutRegistry>>;
     using AliasedLayoutMap = vvl::unordered_map<const GlobalImageLayoutRangeMap *, std::shared_ptr<ImageLayoutRegistry>>;
 
     VkCommandBufferAllocateInfo allocate_info;
@@ -174,7 +177,7 @@ class CommandBuffer : public RefcountedStateObject {
     VkCommandBufferInheritanceInfo inheritanceInfo;
     // since command buffers can only be destroyed by their command pool, this does not need to be a shared_ptr
     const vvl::CommandPool *command_pool;
-    Device &dev_data;
+    DeviceState &dev_data;
     bool unprotected;  // can't be used for protected memory
     bool hasRenderPassInstance;
     bool suspendsRenderPassInstance;
@@ -217,80 +220,82 @@ class CommandBuffer : public RefcountedStateObject {
     // These are values that are being set with vkCmdSet* tied to a command buffer
     struct DynamicStateValue {
         // VK_DYNAMIC_STATE_STENCIL_WRITE_MASK
-        uint32_t write_mask_front;
-        uint32_t write_mask_back;
+        uint32_t write_mask_front{};
+        uint32_t write_mask_back{};
         // VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE
-        bool depth_write_enable;
+        bool depth_write_enable{};
         // VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE
-        bool depth_test_enable;
+        bool depth_test_enable{};
         // VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE
-        bool depth_bounds_test_enable;
+        bool depth_bounds_test_enable{};
         // VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE
-        bool stencil_test_enable;
+        bool stencil_test_enable{};
         // VK_DYNAMIC_STATE_STENCIL_OP
-        VkStencilOp fail_op_front;
-        VkStencilOp pass_op_front;
-        VkStencilOp depth_fail_op_front;
-        VkStencilOp fail_op_back;
-        VkStencilOp pass_op_back;
-        VkStencilOp depth_fail_op_back;
+        VkStencilOp fail_op_front{};
+        VkStencilOp pass_op_front{};
+        VkStencilOp depth_fail_op_front{};
+        VkStencilOp fail_op_back{};
+        VkStencilOp pass_op_back{};
+        VkStencilOp depth_fail_op_back{};
         // VK_DYNAMIC_STATE_CULL_MODE
-        VkCullModeFlags cull_mode;
+        VkCullModeFlags cull_mode{};
         // VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY
-        VkPrimitiveTopology primitive_topology;
+        VkPrimitiveTopology primitive_topology{};
         // VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT
-        VkSampleLocationsInfoEXT sample_locations_info;
+        VkSampleLocationsInfoEXT sample_locations_info{};
         // VK_DYNAMIC_STATE_DISCARD_RECTANGLE_ENABLE_EXT
-        bool discard_rectangle_enable;
+        bool discard_rectangle_enable{};
         // VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT
         // maxDiscardRectangles is at max 8 on all known implementations currently
-        std::bitset<32> discard_rectangles;
+        std::bitset<32> discard_rectangles{};
         // VK_DYNAMIC_STATE_POLYGON_MODE_EXT
-        VkPolygonMode polygon_mode;
+        VkPolygonMode polygon_mode{};
         // VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT
-        VkSampleCountFlagBits rasterization_samples;
+        VkSampleCountFlagBits rasterization_samples{};
         // VK_DYNAMIC_STATE_RASTERIZATION_STREAM_EXT
-        uint32_t rasterization_stream;
+        uint32_t rasterization_stream{};
         // VK_DYNAMIC_STATE_SAMPLE_MASK_EXT
-        VkSampleCountFlagBits samples_mask_samples;
+        VkSampleCountFlagBits samples_mask_samples{};
         // VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_KHR
-        VkLineRasterizationMode line_rasterization_mode;
+        VkLineRasterizationMode line_rasterization_mode{};
         // VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT
-        bool stippled_line_enable;
+        bool stippled_line_enable{};
         // VK_DYNAMIC_STATE_COVERAGE_TO_COLOR_ENABLE_NV
-        bool coverage_to_color_enable;
+        bool coverage_to_color_enable{};
         // VK_DYNAMIC_STATE_COVERAGE_TO_COLOR_LOCATION_NV
-        uint32_t coverage_to_color_location;
+        uint32_t coverage_to_color_location{};
         // VK_DYNAMIC_STATE_COVERAGE_MODULATION_MODE_NV
-        VkCoverageModulationModeNV coverage_modulation_mode;
+        VkCoverageModulationModeNV coverage_modulation_mode{};
         // VK_DYNAMIC_STATE_COVERAGE_MODULATION_TABLE_ENABLE_NV
-        bool coverage_modulation_table_enable;
+        bool coverage_modulation_table_enable{};
         // VK_DYNAMIC_STATE_SHADING_RATE_IMAGE_ENABLE_NV
-        bool shading_rate_image_enable;
+        bool shading_rate_image_enable{};
         // VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE
-        bool rasterizer_discard_enable;
+        bool rasterizer_discard_enable{};
         // VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE
-        bool depth_bias_enable = false;
+        bool depth_bias_enable{};
         // VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT
-        bool depth_clamp_enable = false;
+        bool depth_clamp_enable{};
         // VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT
-        bool alpha_to_coverage_enable;
+        bool alpha_to_coverage_enable{};
+        // VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT
+        bool alpha_to_one_enable{};
         // VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT
-        bool logic_op_enable;
+        bool logic_op_enable{};
         // VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR
-        VkExtent2D fragment_size;
+        VkExtent2D fragment_size{};
         // VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE
-        bool primitive_restart_enable;
+        bool primitive_restart_enable{};
 
-        uint32_t color_write_enable_attachment_count;
+        uint32_t color_write_enable_attachment_count{};
 
         // maxColorAttachments is at max 8 on all known implementations currently
-        std::bitset<32> color_blend_enable_attachments;              // VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT
-        std::bitset<32> color_blend_enabled;                         // VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT
-        std::bitset<32> color_blend_equation_attachments;            // VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT
-        std::bitset<32> color_write_mask_attachments;                // VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT
-        std::bitset<32> color_blend_advanced_attachments;            // VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT
-        std::bitset<32> color_write_enabled;                         // VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT
+        std::bitset<32> color_blend_enable_attachments{};            // VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT
+        std::bitset<32> color_blend_enabled{};                       // VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT
+        std::bitset<32> color_blend_equation_attachments{};          // VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT
+        std::bitset<32> color_write_mask_attachments{};              // VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT
+        std::bitset<32> color_blend_advanced_attachments{};          // VK_DYNAMIC_STATE_COLOR_BLEND_ADVANCED_EXT
+        std::bitset<32> color_write_enabled{};                       // VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT
         std::vector<VkColorBlendEquationEXT> color_blend_equations;  // VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT
         std::vector<VkColorComponentFlags> color_write_masks;        // VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT
 
@@ -298,35 +303,35 @@ class CommandBuffer : public RefcountedStateObject {
         vvl::unordered_map<uint32_t, VertexBindingState> vertex_bindings;
 
         // VK_DYNAMIC_STATE_CONSERVATIVE_RASTERIZATION_MODE_EXT
-        VkConservativeRasterizationModeEXT conservative_rasterization_mode;
+        VkConservativeRasterizationModeEXT conservative_rasterization_mode{};
         // VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT
-        bool sample_locations_enable;
+        bool sample_locations_enable{};
         // VK_DYNAMIC_STATE_ATTACHMENT_FEEDBACK_LOOP_ENABLE_EXT
-        VkImageAspectFlags attachment_feedback_loop_enable;
+        VkImageAspectFlags attachment_feedback_loop_enable{};
 
         // VK_DYNAMIC_STATE_VIEWPORT
         std::vector<VkViewport> viewports;
         // and VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT
-        uint32_t viewport_count;
+        uint32_t viewport_count{};
         // VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT
-        uint32_t scissor_count;
+        uint32_t scissor_count{};
         // VK_DYNAMIC_STATE_VIEWPORT_W_SCALING_NV
         std::vector<VkViewportWScalingNV> viewport_w_scalings;
-        uint32_t viewport_w_scaling_first;
-        uint32_t viewport_w_scaling_count;
+        uint32_t viewport_w_scaling_first{};
+        uint32_t viewport_w_scaling_count{};
         // VK_DYNAMIC_STATE_VIEWPORT_W_SCALING_ENABLE
-        bool viewport_w_scaling_enable;
+        bool viewport_w_scaling_enable{};
         // VK_DYNAMIC_STATE_VIEWPORT_SWIZZLE_NV
-        uint32_t viewport_swizzle_count;
+        uint32_t viewport_swizzle_count{};
         // VK_DYNAMIC_STATE_VIEWPORT_SHADING_RATE_PALETTE_NV
-        uint32_t shading_rate_palette_count;
+        uint32_t shading_rate_palette_count{};
         // VK_DYNAMIC_STATE_EXCLUSIVE_SCISSOR_ENABLE_NV
-        uint32_t exclusive_scissor_enable_first;
-        uint32_t exclusive_scissor_enable_count;
-        std::vector<VkBool32> exclusive_scissor_enables;
+        uint32_t exclusive_scissor_enable_first{};
+        uint32_t exclusive_scissor_enable_count{};
+        std::vector<VkBool32> exclusive_scissor_enables{};
         // VK_DYNAMIC_STATE_EXCLUSIVE_SCISSOR_NV
-        uint32_t exclusive_scissor_first;
-        uint32_t exclusive_scissor_count;
+        uint32_t exclusive_scissor_first{};
+        uint32_t exclusive_scissor_count{};
         std::vector<VkRect2D> exclusive_scissors;
 
         // When the Command Buffer resets, the value most things in this struct don't matter because if they are read without
@@ -494,7 +499,7 @@ class CommandBuffer : public RefcountedStateObject {
     vvl::unordered_set<QueryObject> startedQueries;
     vvl::unordered_set<QueryObject> updatedQueries;
     vvl::unordered_set<QueryObject> renderPassQueries;
-    ImageLayoutMap image_layout_map;
+    CommandBufferImageLayoutMap image_layout_map;
     AliasedLayoutMap aliased_image_layout_map;  // storage for potentially aliased images
 
     vvl::unordered_map<uint32_t, vvl::VertexBufferBinding> current_vertex_buffer_binding_info;
@@ -526,12 +531,6 @@ class CommandBuffer : public RefcountedStateObject {
     // Cache of current insert label...
     LoggingLabel debug_label;
 
-    struct PushConstantData {
-        VkPipelineLayout layout = VK_NULL_HANDLE;
-        VkShaderStageFlags stage_flags = 0;
-        uint32_t offset = 0;
-        std::vector<std::byte> values{};
-    };
     std::vector<PushConstantData> push_constant_data_chunks;
     std::array<VkPipelineLayout, BindPoint_Count> push_constant_latest_used_layout{};
     PushConstantRangesId push_constant_ranges_layout;
@@ -559,7 +558,7 @@ class CommandBuffer : public RefcountedStateObject {
     ReadLockGuard ReadLock() const { return ReadLockGuard(lock); }
     WriteLockGuard WriteLock() { return WriteLockGuard(lock); }
 
-    CommandBuffer(Device &dev, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *allocate_info,
+    CommandBuffer(DeviceState &dev, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *allocate_info,
                   const vvl::CommandPool *cmd_pool);
 
     virtual ~CommandBuffer() { Destroy(); }
@@ -585,7 +584,7 @@ class CommandBuffer : public RefcountedStateObject {
         RemoveChild(base);
     }
 
-    virtual void Reset(const Location &loc);
+    void Reset(const Location &loc);
 
     void IncrementResources();
 
@@ -593,7 +592,7 @@ class CommandBuffer : public RefcountedStateObject {
 
     std::shared_ptr<const ImageLayoutRegistry> GetImageLayoutRegistry(VkImage image) const;
     std::shared_ptr<ImageLayoutRegistry> GetOrCreateImageLayoutRegistry(const vvl::Image &image_state);
-    const ImageLayoutMap &GetImageLayoutMap() const;
+    const CommandBufferImageLayoutMap &GetImageLayoutMap() const;
 
     const QFOTransferBarrierSets<QFOImageTransferBarrier> &GetQFOBarrierSets(const QFOImageTransferBarrier &type_tag) const {
         return qfo_transfer_image_barriers;
@@ -664,14 +663,13 @@ class CommandBuffer : public RefcountedStateObject {
     void UpdateTraceRayCmd(Func command);
     void UpdatePipelineState(Func command, const VkPipelineBindPoint bind_point);
 
-    virtual void RecordCmd(Func command);
+    void RecordCmd(Func command);
     void RecordStateCmd(Func command, CBDynamicState dynamic_state);
     void RecordDynamicState(CBDynamicState dynamic_state);
     void RecordTransferCmd(Func command, std::shared_ptr<Bindable> &&buf1, std::shared_ptr<Bindable> &&buf2 = nullptr);
     void RecordSetEvent(Func command, VkEvent event, VkPipelineStageFlags2KHR stageMask);
     void RecordResetEvent(Func command, VkEvent event, VkPipelineStageFlags2KHR stageMask);
-    virtual void RecordWaitEvents(Func command, uint32_t eventCount, const VkEvent *pEvents,
-                                  VkPipelineStageFlags2KHR src_stage_mask);
+    void RecordWaitEvents(Func command, uint32_t eventCount, const VkEvent *pEvents, VkPipelineStageFlags2KHR src_stage_mask);
     void RecordWriteTimestamp(Func command, VkPipelineStageFlags2KHR pipelineStage, VkQueryPool queryPool, uint32_t slot);
 
     void RecordBarriers(uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers, uint32_t bufferMemoryBarrierCount,
@@ -690,7 +688,7 @@ class CommandBuffer : public RefcountedStateObject {
     void SetImageInitialLayout(const vvl::Image &image_state, const VkImageSubresourceRange &range, VkImageLayout layout);
     void SetImageInitialLayout(const vvl::Image &image_state, const VkImageSubresourceLayers &layers, VkImageLayout layout);
 
-    void Submit(VkQueue queue, uint32_t perf_submit_pass, const Location &loc);
+    void Submit(Queue &queue_state, uint32_t perf_submit_pass, const Location &loc);
     void Retire(uint32_t perf_submit_pass, const std::function<bool(const QueryObject &)> &is_query_updated_after);
 
     uint32_t GetDynamicColorAttachmentCount() const;
@@ -745,6 +743,26 @@ class CommandBuffer : public RefcountedStateObject {
     void UpdateAttachmentsView(const VkRenderPassBeginInfo *pRenderPassBegin);
     void EnqueueUpdateVideoInlineQueries(const VkVideoInlineQueryInfoKHR &query_info);
     void UnbindResources();
+};
+
+class CommandBufferSubState {
+  public:
+    explicit CommandBufferSubState(CommandBuffer &cb) : base(cb) {}
+    CommandBufferSubState(const CommandBufferSubState &) = delete;
+    CommandBufferSubState &operator=(const CommandBufferSubState &) = delete;
+    virtual ~CommandBufferSubState() {}
+    virtual void Destroy() {}
+
+    virtual void Reset(const Location &loc) {}
+    virtual void RecordCmd(Func command) {}
+    virtual void RecordWaitEvents(Func command, uint32_t eventCount, const VkEvent *pEvents,
+                                  VkPipelineStageFlags2KHR src_stage_mask) {}
+    virtual void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) {}
+
+    VulkanTypedHandle Handle() const;
+    VkCommandBuffer VkHandle() const;
+
+    CommandBuffer &base;
 };
 
 }  // namespace vvl

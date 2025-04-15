@@ -15,7 +15,7 @@
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
 #include "../framework/render_pass_helper.h"
-#include "../framework/barrier_queue_family.h"
+#include "../framework/sync_helper.h"
 
 #include "utils/vk_layer_utils.h"
 
@@ -52,12 +52,13 @@ TEST_F(PositiveImage, OwnershipTranfersImage) {
 
     // Create an "exclusive" image owned by the graphics queue.
     VkFlags image_use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_B8G8R8A8_UNORM, image_use);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
-    auto image_subres = image.SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
-    auto image_barrier = image.ImageMemoryBarrier(0, 0, image.Layout(), image.Layout(), image_subres);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_B8G8R8A8_UNORM, image_use);
+    auto image_subres = VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    auto image_barrier = image.ImageMemoryBarrier(0, 0, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, image_subres);
     image_barrier.srcQueueFamilyIndex = m_device->graphics_queue_node_index_;
     image_barrier.dstQueueFamilyIndex = no_gfx_queue->family_index;
+
+    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
 
     ValidOwnershipTransfer(m_errorMonitor, m_default_queue, m_command_buffer, no_gfx_queue, no_gfx_cb,
                            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, nullptr, &image_barrier);
@@ -65,7 +66,7 @@ TEST_F(PositiveImage, OwnershipTranfersImage) {
     // Change layouts while changing ownership
     image_barrier.srcQueueFamilyIndex = no_gfx_queue->family_index;
     image_barrier.dstQueueFamilyIndex = m_device->graphics_queue_node_index_;
-    image_barrier.oldLayout = image.Layout();
+    image_barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
     // Make sure the new layout is different from the old
     if (image_barrier.oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
         image_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -143,7 +144,7 @@ TEST_F(PositiveImage, CreateImageViewFollowsParameterCompatibilityRequirements) 
 TEST_F(PositiveImage, BasicUsage) {
     TEST_DESCRIPTION("Verify that we can create a view with usage INPUT_ATTACHMENT");
     RETURN_IF_SKIP(Init());
-    vkt::Image image(*m_device, 128, 128, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 128, 128, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
     vkt::ImageView view = image.CreateView();
 }
 
@@ -321,11 +322,8 @@ TEST_F(PositiveImage, ImageCompressionControl) {
 
     vk::GetPhysicalDeviceImageFormatProperties2(Gpu(), &image_format_info, &image_format_properties);
 
-    auto image_ci = vkt::Image::CreateInfo();
-    image_ci.imageType = VK_IMAGE_TYPE_2D;
-    image_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image_ci.tiling = VK_IMAGE_TILING_LINEAR;
-    image_ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    auto image_ci = vkt::Image::ImageCreateInfo2D(1, 1, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                                  VK_IMAGE_TILING_LINEAR);
 
     // Create with disabled image compression
     {
@@ -529,7 +527,7 @@ TEST_F(PositiveImage, BlitRemainingArrayLayers) {
     ci.samples = VK_SAMPLE_COUNT_1_BIT;
     ci.tiling = VK_IMAGE_TILING_OPTIMAL;
     ci.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    vkt::Image image(*m_device, ci, vkt::set_layout);
+    vkt::Image image(*m_device, ci);
 
     VkImageBlit blitRegion = {};
     blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 2, VK_REMAINING_ARRAY_LAYERS};
@@ -541,12 +539,12 @@ TEST_F(PositiveImage, BlitRemainingArrayLayers) {
 
     m_command_buffer.Begin();
 
-    vk::CmdBlitImage(m_command_buffer.handle(), image.handle(), image.Layout(), image.handle(), image.Layout(), 1, &blitRegion,
-                     VK_FILTER_NEAREST);
+    vk::CmdBlitImage(m_command_buffer.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1,
+                     &blitRegion, VK_FILTER_NEAREST);
     m_command_buffer.FullMemoryBarrier();
     blitRegion.dstSubresource.layerCount = 2;  // same as VK_REMAINING_ARRAY_LAYERS
-    vk::CmdBlitImage(m_command_buffer.handle(), image.handle(), image.Layout(), image.handle(), image.Layout(), 1, &blitRegion,
-                     VK_FILTER_NEAREST);
+    vk::CmdBlitImage(m_command_buffer.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1,
+                     &blitRegion, VK_FILTER_NEAREST);
 }
 
 TEST_F(PositiveImage, BlockTexelViewCompatibleMultipleLayers) {
@@ -740,12 +738,12 @@ TEST_F(PositiveImage, BlitMaintenance8) {
     ci.samples = VK_SAMPLE_COUNT_1_BIT;
     ci.tiling = VK_IMAGE_TILING_OPTIMAL;
     ci.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    vkt::Image image_3d(*m_device, ci, vkt::set_layout);
+    vkt::Image image_3d(*m_device, ci);
 
     ci.imageType = VK_IMAGE_TYPE_2D;
     ci.extent.depth = 1;
     ci.arrayLayers = 4;
-    vkt::Image image_2d(*m_device, ci, vkt::set_layout);
+    vkt::Image image_2d(*m_device, ci);
 
     // src is 2D with multiple layers
     VkImageBlit blit_region = {};
@@ -757,8 +755,8 @@ TEST_F(PositiveImage, BlitMaintenance8) {
     blit_region.dstOffsets[1] = {64, 64, 1};
 
     m_command_buffer.Begin();
-    vk::CmdBlitImage(m_command_buffer.handle(), image_2d, image_2d.Layout(), image_3d, image_3d.Layout(), 1, &blit_region,
-                     VK_FILTER_NEAREST);
+    vk::CmdBlitImage(m_command_buffer.handle(), image_2d, VK_IMAGE_LAYOUT_GENERAL, image_3d, VK_IMAGE_LAYOUT_GENERAL, 1,
+                     &blit_region, VK_FILTER_NEAREST);
     m_command_buffer.End();
 }
 

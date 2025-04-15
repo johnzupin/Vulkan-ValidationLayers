@@ -769,7 +769,7 @@ TEST_F(NegativeFragmentShadingRate, FramebufferUsage) {
     rp.AddFragmentShadingRateAttachment(0, fsr_properties.minFragmentShadingRateAttachmentTexelSize);
     rp.CreateRenderPass();
 
-    vkt::Image image(*m_device, 1, 1, 1, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 1, 1, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
 
     m_errorMonitor->SetDesiredError("VUID-VkFramebufferCreateInfo-flags-04548");
@@ -1057,7 +1057,7 @@ TEST_F(NegativeFragmentShadingRate, IncompatibleFragmentRateShadingAttachmentInE
     rp_fsr_2.AddFragmentShadingRateAttachment(0, texel_size_2);
     rp_fsr_2.CreateRenderPass();
 
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
 
     // Create a frame buffer with a render pass with FSR attachment
@@ -1189,8 +1189,7 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateUsage) {
         GTEST_SKIP() << "Format not supported";
     }
     // Initialize image with transfer source usage
-    vkt::Image image(*m_device, 128, 128, 1, format, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+    vkt::Image image(*m_device, 128, 128, format, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
 
     VkImageViewCreateInfo createinfo = vku::InitStructHelper();
     createinfo.image = image.handle();
@@ -1591,11 +1590,11 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapAttachmentCount) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMissingFeature) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
-    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
     vkt::ImageView image_view = image.CreateView();
 
     VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
@@ -1626,24 +1625,24 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMissingFeature) {
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass, framebuffer);
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
     int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
     VkOffset2D offset = {width, height};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapOffsets-06503");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-fragmentDensityMapOffsets-06503");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
     // Same error even if offsets are zero
     offset = {0, 0};
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapOffsets-06503");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-fragmentDensityMapOffsets-06503");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -1653,13 +1652,76 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMissingFeature) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetAttachment) {
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMap);
+    AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Image image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::ImageView image_view = image.CreateView();
+
+    VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
+    fragment_density_map_ci.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = VK_FORMAT_R8G8_UNORM;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+
+    VkSubpassDescription subpass_description = {};
+
+    VkRenderPassCreateInfo render_pass_ci = vku::InitStructHelper(&fragment_density_map_ci);
+    render_pass_ci.attachmentCount = 1u;
+    render_pass_ci.pAttachments = &attachment_description;
+    render_pass_ci.subpassCount = 1u;
+    render_pass_ci.pSubpasses = &subpass_description;
+    vkt::RenderPass render_pass(*m_device, render_pass_ci);
+
+    vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1u, &image_view.handle());
+
+    m_command_buffer.Begin();
+    m_command_buffer.BeginRenderPass(render_pass, framebuffer);
+
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
+    GetPhysicalDeviceProperties2(fdm_offset_properties);
+
+    int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
+    int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
+    VkOffset2D offset = {width, height};
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
+    fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
+    fdm_offset_end_info.pFragmentDensityOffsets = &offset;
+    VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
+
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-fragmentDensityMapAttachment-06504");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    // Same error even if offsets are zero
+    offset = {0, 0};
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-fragmentDensityMapAttachment-06504");
+    vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
+    m_errorMonitor->VerifyFound();
+
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.End();
+}
+
+TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetAttachmentQCOM) {
     AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
-    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
     vkt::ImageView image_view = image.CreateView();
 
     VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
@@ -1700,13 +1762,13 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetAttachment) {
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapAttachment-06504");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-fragmentDensityMapAttachment-06504");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
     // Same error even if offsets are zero
     offset = {0, 0};
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityMapAttachment-06504");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-fragmentDensityMapAttachment-06504");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -1716,15 +1778,15 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetAttachment) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetDepthAttachment) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
-    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
     vkt::ImageView image_view = image.CreateView();
-    vkt::Image ds_image(*m_device, 32u, 32u, 1u, VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    vkt::Image ds_image(*m_device, 32u, 32u, VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
     vkt::ImageView ds_image_view = ds_image.CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
     VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
@@ -1771,18 +1833,18 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetDepthAttachment) {
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass, framebuffer);
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
     int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
     VkOffset2D offset = {width, height};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pDepthStencilAttachment-06505");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-pDepthStencilAttachment-06505");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -1792,15 +1854,15 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetDepthAttachment) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetInputAttachment) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
-    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
     vkt::ImageView image_view = image.CreateView();
-    vkt::Image input_image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+    vkt::Image input_image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
     vkt::ImageView input_image_view = input_image.CreateView();
 
     VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
@@ -1848,18 +1910,18 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetInputAttachment) {
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass, framebuffer);
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
     int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
     VkOffset2D offset = {width, height};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pInputAttachments-06506");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-pInputAttachments-06506");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -1869,15 +1931,15 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetInputAttachment) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetColorAttachment) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
-    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
     vkt::ImageView image_view = image.CreateView();
-    vkt::Image color_image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image color_image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView color_image_view = color_image.CreateView();
 
     VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
@@ -1925,18 +1987,18 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetColorAttachment) {
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass, framebuffer);
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
     int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
     VkOffset2D offset = {width, height};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pColorAttachments-06507");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-pColorAttachments-06507");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -1946,17 +2008,17 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetColorAttachment) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetResolveAttachment) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
-    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
     vkt::ImageView image_view = image.CreateView();
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_EXT;
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8_UNORM;
     image_create_info.extent = {32u, 32u, 1u};
@@ -1968,7 +2030,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetResolveAttachment) {
     image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     vkt::Image color_image(*m_device, image_create_info);
     vkt::ImageView color_image_view = color_image.CreateView();
-    vkt::Image resolve_image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image resolve_image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView resolve_image_view = resolve_image.CreateView();
 
     VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
@@ -2030,18 +2092,18 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetResolveAttachment) {
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass, framebuffer);
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
     int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
     VkOffset2D offset = {width, height};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pResolveAttachments-06508");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-pResolveAttachments-06508");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -2051,15 +2113,15 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetResolveAttachment) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetPreserveAttachment) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
-    vkt::Image image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
     vkt::ImageView image_view = image.CreateView();
-    vkt::Image color_image(*m_device, 32u, 32u, 1u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image color_image(*m_device, 32u, 32u, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView color_image_view = color_image.CreateView();
 
     VkRenderPassFragmentDensityMapCreateInfoEXT fragment_density_map_ci = vku::InitStructHelper();
@@ -2104,18 +2166,18 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetPreserveAttachment) 
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass, framebuffer);
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
     int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
     VkOffset2D offset = {width, height};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-pPreserveAttachments-06509");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-pPreserveAttachments-06509");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -2125,7 +2187,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetPreserveAttachment) 
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMultiview) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_MULTIVIEW_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
@@ -2134,7 +2196,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMultiview) {
     RETURN_IF_SKIP(Init());
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_EXT;
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8_UNORM;
     image_create_info.extent = {32u, 32u, 1u};
@@ -2175,18 +2237,18 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMultiview) {
     m_command_buffer.Begin();
     m_command_buffer.BeginRenderPass(render_pass, framebuffer);
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
     int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
     VkOffset2D offset = {width, height};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityOffsetCount-06510");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-fragmentDensityOffsetCount-06510");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -2196,14 +2258,14 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetMultiview) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetInvalidCount) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_EXT;
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8_UNORM;
     image_create_info.extent = {32u, 32u, 1u};
@@ -2244,12 +2306,12 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetInvalidCount) {
     m_command_buffer.BeginRenderPass(render_pass, framebuffer);
 
     VkOffset2D offsets[2] = {{0, 0}, {0, 0}};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 2u;
     fdm_offset_end_info.pFragmentDensityOffsets = offsets;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-fragmentDensityOffsetCount-06511");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-fragmentDensityOffsetCount-06511");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -2259,13 +2321,13 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetInvalidCount) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetWidthGranularity) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     if (fdm_offset_properties.fragmentDensityOffsetGranularity.width == 1u) {
@@ -2273,7 +2335,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetWidthGranularity) {
     }
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_EXT;
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8_UNORM;
     image_create_info.extent = {32u, 32u, 1u};
@@ -2315,12 +2377,12 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetWidthGranularity) {
 
     int32_t width = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.width);
     VkOffset2D offset = {width + 1, 0};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-x-06512");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-x-06512");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -2330,13 +2392,13 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetWidthGranularity) {
 }
 
 TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetHeightGranularity) {
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     AddRequiredExtensions(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::fragmentDensityMap);
     AddRequiredFeature(vkt::Feature::fragmentDensityMapOffset);
     RETURN_IF_SKIP(Init());
 
-    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM fdm_offset_properties = vku::InitStructHelper();
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT fdm_offset_properties = vku::InitStructHelper();
     GetPhysicalDeviceProperties2(fdm_offset_properties);
 
     if (fdm_offset_properties.fragmentDensityOffsetGranularity.height == 1u) {
@@ -2344,7 +2406,7 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetHeightGranularity) {
     }
 
     VkImageCreateInfo image_create_info = vku::InitStructHelper();
-    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
+    image_create_info.flags = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_EXT;
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.format = VK_FORMAT_R8G8_UNORM;
     image_create_info.extent = {32u, 32u, 1u};
@@ -2386,12 +2448,12 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapOffsetHeightGranularity) {
 
     int32_t height = static_cast<int32_t>(fdm_offset_properties.fragmentDensityOffsetGranularity.height);
     VkOffset2D offset = {0, height + 1};
-    VkSubpassFragmentDensityMapOffsetEndInfoQCOM fdm_offset_end_info = vku::InitStructHelper();
+    VkRenderPassFragmentDensityMapOffsetEndInfoEXT fdm_offset_end_info = vku::InitStructHelper();
     fdm_offset_end_info.fragmentDensityOffsetCount = 1u;
     fdm_offset_end_info.pFragmentDensityOffsets = &offset;
     VkSubpassEndInfo subpass_end_info = vku::InitStructHelper(&fdm_offset_end_info);
 
-    m_errorMonitor->SetDesiredError("VUID-VkSubpassFragmentDensityMapOffsetEndInfoQCOM-y-06513");
+    m_errorMonitor->SetDesiredError("VUID-VkRenderPassFragmentDensityMapOffsetEndInfoEXT-y-06513");
     vk::CmdEndRenderPass2KHR(m_command_buffer.handle(), &subpass_end_info);
     m_errorMonitor->VerifyFound();
 
@@ -2522,7 +2584,7 @@ TEST_F(NegativeFragmentShadingRate, ShadingRateImageNV) {
     }
 
     // Create an image without the SRI bit
-    vkt::Image nonSRIimage(*m_device, 256, 256, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image nonSRIimage(*m_device, 256, 256, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView nonSRIview = nonSRIimage.CreateView();
 
     // Test SRI layout on non-SRI image
@@ -2754,9 +2816,9 @@ TEST_F(NegativeFragmentShadingRate, StageUsageNV) {
     m_errorMonitor->VerifyFound();
     m_command_buffer.End();
 }
-TEST_F(NegativeFragmentShadingRate, ImageMaxLimitsQCOM) {
-    TEST_DESCRIPTION("Tests physical device limits for VK_QCOM_fragment_density_map_offset.");
-    AddRequiredExtensions(VK_QCOM_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
+TEST_F(NegativeFragmentShadingRate, ImageMaxLimitsEXT) {
+    TEST_DESCRIPTION("Tests physical device limits for VK_EXT_fragment_density_map_offset.");
+    AddRequiredExtensions(VK_EXT_FRAGMENT_DENSITY_MAP_OFFSET_EXTENSION_NAME);
     RETURN_IF_SKIP(Init());
 
     const VkPhysicalDeviceLimits &dev_limits = m_device->Physical().limits_;
@@ -2821,7 +2883,7 @@ TEST_F(NegativeFragmentShadingRate, Framebuffer) {
     render_pass_ci.pSubpasses = &subpass_description;
     vkt::RenderPass render_pass(*m_device, render_pass_ci);
 
-    vkt::Image image2(*m_device, 32u, 32u, 1u, format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image2(*m_device, 32u, 32u, format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
 
     VkImageViewCreateInfo image_view_ci = vku::InitStructHelper();
     image_view_ci.image = image2.handle();
@@ -2896,8 +2958,8 @@ TEST_F(NegativeFragmentShadingRate, FragmentDensityMapNonSubsampledImages) {
     vkt::RenderPass rp(*m_device, rpci);
 
     // Don't use the VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT flag at the color attachment image creation
-    vkt::Image image(*m_device, frame_size, frame_size, 1, attachment_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    vkt::Image image_fdm(*m_device, frame_size, frame_size, 1, attachment_format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
+    vkt::Image image(*m_device, frame_size, frame_size, attachment_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image_fdm(*m_device, frame_size, frame_size, attachment_format, VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT);
 
     VkImageViewCreateInfo ivci = vku::InitStructHelper();
     ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;

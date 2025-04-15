@@ -443,7 +443,7 @@ TEST_F(NegativeSubpass, DrawWithPipelineIncompatibleWithSubpass) {
                                VK_DEPENDENCY_BY_REGION_BIT};
     auto rpci = vku::InitStruct<VkRenderPassCreateInfo>(nullptr, 0u, 1u, attach, 2u, subpasses, 1u, &dep);
     vkt::RenderPass rp(*m_device, rpci);
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
     vkt::Framebuffer fb(*m_device, rp.handle(), 1u, &imageView.handle());
 
@@ -506,9 +506,9 @@ TEST_F(NegativeSubpass, ImageBarrierSubpassConflict) {
     auto rpci = vku::InitStruct<VkRenderPassCreateInfo>(nullptr, 0u, 2u, attach, 1u, subpasses, 1u, &dep);
     vkt::RenderPass rp(*m_device, rpci);
 
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
-    vkt::Image image2(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image2(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView2 = image2.CreateView();
     // re-use imageView from start of test
     VkImageView iv_array[2] = {imageView, imageView2};
@@ -546,8 +546,7 @@ TEST_F(NegativeSubpass, SubpassInputNotBoundDescriptorSet) {
         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
     auto image_ci = vkt::Image::ImageCreateInfo2D(64, 64, 1, 1, format, usage_input);
-    vkt::Image image_input(*m_device, image_ci, vkt::set_layout);
-    image_input.SetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    vkt::Image image_input(*m_device, image_ci);
     vkt::ImageView view_input = image_input.CreateView();
 
     const VkAttachmentDescription inputAttachment = {
@@ -629,7 +628,7 @@ TEST_F(NegativeSubpass, SubpassInputNotBoundDescriptorSet) {
 
         m_command_buffer.Begin();
 
-        image_input.SetLayout(m_command_buffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        image_input.SetLayout(m_command_buffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         m_renderPassBeginInfo.renderArea = {{0, 0}, {64, 64}};
         m_renderPassBeginInfo.renderPass = rp.handle();
@@ -730,7 +729,7 @@ TEST_F(NegativeSubpass, PipelineSubpassIndex) {
     render_pass_ci.pAttachments = &attach_desc;
 
     vkt::RenderPass render_pass(*m_device, render_pass_ci);
-    vkt::Image image(*m_device, 32, 32, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::Image image(*m_device, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     vkt::ImageView imageView = image.CreateView();
     vkt::Framebuffer framebuffer(*m_device, render_pass.handle(), 1, &imageView.handle());
 

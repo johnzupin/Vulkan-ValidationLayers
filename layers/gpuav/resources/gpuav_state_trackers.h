@@ -36,7 +36,6 @@ namespace gpuav {
 
 class Validator;
 struct DescriptorCommandBinding;
-struct ActionCommandSnapshot;
 
 struct DebugPrintfBufferInfo {
     vko::Buffer output_mem_buffer;
@@ -48,7 +47,7 @@ struct DebugPrintfBufferInfo {
           action_command_index(action_command_index){};
 };
 
-class CommandBuffer : public vvl::CommandBuffer {
+class CommandBufferSubState : public vvl::CommandBufferSubState {
   public:
     // One item per vkCmdBindDescriptorSet() called
     // We really need this information at the draw/dispatch/action, but assume most apps will either
@@ -58,27 +57,28 @@ class CommandBuffer : public vvl::CommandBuffer {
     // Note: If the app calls vkCmdBindDescriptorSet 10 times to set descriptor set [0, 9] one at a time instead of setting [0, 9]
     // in a single vkCmdBindDescriptorSet call then this will allocate a lot of redundant memory
     std::vector<DescriptorCommandBinding> descriptor_command_bindings;
-    // Information that requires information about the SPIR-V requires pipeline/shaderObject info. This means we need to track
-    // things at an action level (draw call) granularity
-    std::vector<ActionCommandSnapshot> action_command_snapshots;
 
     // Buffer to be bound every draw/dispatch/action
     VkBuffer descriptor_indexing_buffer = VK_NULL_HANDLE;
     VkBuffer post_process_buffer_lut = VK_NULL_HANDLE;
 
     // Used to track which spot in the command buffer the error came from
+    bool max_actions_cmd_validation_reached_ = false;
     uint32_t draw_index = 0;
     uint32_t compute_index = 0;
     uint32_t trace_rays_index = 0;
     uint32_t action_command_count = 0;
 
-    CommandBuffer(Validator &gpuav, VkCommandBuffer handle, const VkCommandBufferAllocateInfo *pCreateInfo,
-                  const vvl::CommandPool *pool);
-    ~CommandBuffer();
+    CommandBufferSubState(Validator &gpuav, vvl::CommandBuffer &cb);
+    ~CommandBufferSubState();
 
     bool PreProcess(const Location &loc);
     void PostProcess(VkQueue queue, const std::vector<std::string> &initial_label_stack, const Location &loc);
-    [[nodiscard]] bool ValidateBindlessDescriptorSets(const Location &loc);
+    struct LabelLogging {
+        const std::vector<std::string> &initial_label_stack;
+        const vvl::unordered_map<uint32_t, uint32_t> &action_cmd_i_to_label_cmd_i_map;
+    };
+    [[nodiscard]] bool ValidateBindlessDescriptorSets(const Location &loc, const LabelLogging &label_logging);
 
     const VkDescriptorSetLayout &GetInstrumentationDescriptorSetLayout() const {
         assert(instrumentation_desc_set_layout_ != VK_NULL_HANDLE);
@@ -112,8 +112,7 @@ class CommandBuffer : public vvl::CommandBuffer {
 
     const vko::Buffer &GetBdaRangesSnapshot() const { return bda_ranges_snapshot_; }
 
-    void ClearCmdErrorsCountsBuffer(const Location &loc) const;
-    void IncrementCommandCount(VkPipelineBindPoint bind_point);
+    void IncrementCommandCount(Validator &gpuav, VkPipelineBindPoint bind_point, const Location &loc);
 
     std::string GetDebugLabelRegion(uint32_t label_command_i, const std::vector<std::string> &initial_label_stack) const;
 
@@ -123,12 +122,13 @@ class CommandBuffer : public vvl::CommandBuffer {
     vko::GpuResourcesManager gpu_resources_manager;
     // Using stdext::inplace_function over std::function to allocate memory in place
     using ErrorLoggerFunc =
-        stdext::inplace_function<bool(Validator &gpuav, const CommandBuffer &cb_state, const uint32_t *error_record,
+        stdext::inplace_function<bool(Validator &gpuav, const CommandBufferSubState &cb_state, const uint32_t *error_record,
                                       const LogObjectList &objlist, const std::vector<std::string> &initial_label_stack),
-                                 256 /*lambda storage size (bytes), large enough to storest biggest error lambda*/>;
+                                 280 /*lambda storage size (bytes), large enough to store biggest error lambda*/>;
     std::vector<ErrorLoggerFunc> per_command_error_loggers;
+    vvl::unordered_map<uint32_t, uint32_t> action_cmd_i_to_label_cmd_i_map;
 
-    using ValidationCommandFunc = stdext::inplace_function<void(Validator &gpuav, CommandBuffer &cb_state), 192>;
+    using ValidationCommandFunc = stdext::inplace_function<void(Validator &gpuav, CommandBufferSubState &cb_state), 192>;
 
     std::vector<ValidationCommandFunc> per_render_pass_validation_commands;
 
@@ -136,14 +136,13 @@ class CommandBuffer : public vvl::CommandBuffer {
 
   private:
     void AllocateResources(const Location &loc);
-    void ResetCBState();
+    void ResetCBState(bool should_destroy);
     bool NeedsPostProcess();
 
     VkDeviceSize GetBdaRangesBufferByteSize() const;
     [[nodiscard]] bool UpdateBdaRangesBuffer(const Location &loc);
 
     Validator &state_;
-
     VkDescriptorSetLayout instrumentation_desc_set_layout_ = VK_NULL_HANDLE;
 
     VkDescriptorSetLayout error_logging_desc_set_layout_ = VK_NULL_HANDLE;
@@ -160,17 +159,21 @@ class CommandBuffer : public vvl::CommandBuffer {
     uint32_t bda_ranges_snapshot_version_ = 0;
 };
 
-class Queue : public vvl::Queue {
+static inline CommandBufferSubState &SubState(vvl::CommandBuffer &cb) {
+    return *static_cast<CommandBufferSubState *>(cb.SubState(LayerObjectTypeGpuAssisted));
+}
+
+class QueueSubState : public vvl::QueueSubState {
   public:
-    Queue(Validator &gpuav, VkQueue q, uint32_t family_index, uint32_t queue_index, VkDeviceQueueCreateFlags flags,
-          const VkQueueFamilyProperties &queueFamilyProperties, bool timeline_khr);
-    virtual ~Queue();
+    QueueSubState(Validator &gpuav, vvl::Queue &q);
+    virtual ~QueueSubState();
+
+    void PreSubmit(std::vector<vvl::QueueSubmission> &submissions) override;
+    void PostSubmit(vvl::QueueSubmission &) override;
+    void Retire(vvl::QueueSubmission &) override;
 
   protected:
-    vvl::PreSubmitResult PreSubmit(std::vector<vvl::QueueSubmission> &&submissions) override;
-    void PostSubmit(vvl::QueueSubmission &) override;
     void SubmitBarrier(const Location &loc, uint64_t seq);
-    void Retire(vvl::QueueSubmission &) override;
 
     Validator &state_;
     VkCommandPool barrier_command_pool_{VK_NULL_HANDLE};
@@ -180,75 +183,131 @@ class Queue : public vvl::Queue {
     const bool timeline_khr_;
 };
 
-class Buffer : public vvl::Buffer {
+// Descriptor Ids are used on the GPU to identify if a given descriptor is valid.
+// In some applications there are very large bindless descriptor arrays where it isn't feasible to track validity
+// via the StateObject::parent_nodes_ map as usual. Instead, these ids are stored in a giant GPU accessible bitmap
+// so that the instrumentation can decide if a descriptor is actually valid when it is used in a shader.
+class DescriptorIdTracker {
   public:
-    Buffer(vvl::Device &dev_data, VkBuffer buff, const VkBufferCreateInfo *pCreateInfo, DescriptorHeap &desc_heap_);
+    DescriptorIdTracker(DescriptorHeap &heap_, VulkanTypedHandle handle) : heap(heap_), id(heap_.NextId(handle)) {}
 
-    void Destroy() final;
-    void NotifyInvalidate(const NodeList &invalid_nodes, bool unlink) final;
+    DescriptorIdTracker(const DescriptorIdTracker &) = delete;
+    DescriptorIdTracker &operator=(const DescriptorIdTracker &) = delete;
 
-    DescriptorHeap &desc_heap;
-    const DescriptorId id;
+    ~DescriptorIdTracker() { heap.DeleteId(id); }
+
+    DescriptorHeap &heap;
+    const DescriptorId id{};
 };
 
-class BufferView : public vvl::BufferView {
+class ImageSubState : public vvl::ImageSubState {
   public:
-    BufferView(const std::shared_ptr<vvl::Buffer> &bf, VkBufferView bv, const VkBufferViewCreateInfo *ci,
-               VkFormatFeatureFlags2KHR buf_ff, DescriptorHeap &desc_heap_);
+    ImageSubState(vvl::Image &obj, DescriptorHeap &heap);
+    void Destroy() override;
+    void NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) override;
 
-    void Destroy() final;
-    void NotifyInvalidate(const NodeList &invalid_nodes, bool unlink) final;
-
-    DescriptorHeap &desc_heap;
-    const DescriptorId id;
+    DescriptorId Id() const { return id_tracker ? id_tracker->id : 0; }
+    std::optional<DescriptorIdTracker> id_tracker;
 };
+static inline ImageSubState &SubState(vvl::Image &obj) {
+    return *static_cast<ImageSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
+static inline const ImageSubState &SubState(const vvl::Image &obj) {
+    return *static_cast<const ImageSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
 
-class ImageView : public vvl::ImageView {
+class ImageViewSubState : public vvl::ImageViewSubState {
   public:
-    ImageView(const std::shared_ptr<vvl::Image> &image_state, VkImageView iv, const VkImageViewCreateInfo *ci,
-              VkFormatFeatureFlags2KHR ff, const VkFilterCubicImageViewImageFormatPropertiesEXT &cubic_props,
-              DescriptorHeap &desc_heap_);
+    ImageViewSubState(vvl::ImageView &obj, DescriptorHeap &heap);
+    void Destroy() override;
+    void NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) override;
 
-    void Destroy() final;
-    void NotifyInvalidate(const NodeList &invalid_nodes, bool unlink) final;
-
-    DescriptorHeap &desc_heap;
-    const DescriptorId id;
+    DescriptorId Id() const { return id_tracker ? id_tracker->id : 0; }
+    std::optional<DescriptorIdTracker> id_tracker;
 };
+static inline ImageViewSubState &SubState(vvl::ImageView &obj) {
+    return *static_cast<ImageViewSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
+static inline const ImageViewSubState &SubState(const vvl::ImageView &obj) {
+    return *static_cast<const ImageViewSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
 
-class Sampler : public vvl::Sampler {
+class BufferSubState : public vvl::BufferSubState {
   public:
-    Sampler(const VkSampler s, const VkSamplerCreateInfo *pci, DescriptorHeap &desc_heap_);
+    BufferSubState(vvl::Buffer &obj, DescriptorHeap &heap);
+    void Destroy() override;
+    void NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) override;
 
-    void Destroy() final;
-    void NotifyInvalidate(const NodeList &invalid_nodes, bool unlink) final;
-
-    DescriptorHeap &desc_heap;
-    const DescriptorId id;
+    DescriptorId Id() const { return id_tracker ? id_tracker->id : 0; }
+    std::optional<DescriptorIdTracker> id_tracker;
 };
+static inline BufferSubState &SubState(vvl::Buffer &obj) {
+    return *static_cast<BufferSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
+static inline const BufferSubState &SubState(const vvl::Buffer &obj) {
+    return *static_cast<const BufferSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
 
-class AccelerationStructureKHR : public vvl::AccelerationStructureKHR {
+class BufferViewSubState : public vvl::BufferViewSubState {
   public:
-    AccelerationStructureKHR(VkAccelerationStructureKHR as, const VkAccelerationStructureCreateInfoKHR *ci,
-                             std::shared_ptr<vvl::Buffer> &&buf_state, VkDeviceAddress buffer_address, DescriptorHeap &desc_heap_);
+    BufferViewSubState(vvl::BufferView &obj, DescriptorHeap &heap);
+    void Destroy() override;
+    void NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) override;
 
-    void Destroy() final;
-    void NotifyInvalidate(const NodeList &invalid_nodes, bool unlink) final;
-
-    DescriptorHeap &desc_heap;
-    const DescriptorId id;
+    DescriptorId Id() const { return id_tracker ? id_tracker->id : 0; }
+    std::optional<DescriptorIdTracker> id_tracker;
 };
+static inline BufferViewSubState &SubState(vvl::BufferView &obj) {
+    return *static_cast<BufferViewSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
+static inline const BufferViewSubState &SubState(const vvl::BufferView &obj) {
+    return *static_cast<const BufferViewSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
 
-class AccelerationStructureNV : public vvl::AccelerationStructureNV {
+class SamplerSubState : public vvl::SamplerSubState {
   public:
-    AccelerationStructureNV(VkDevice device, VkAccelerationStructureNV as, const VkAccelerationStructureCreateInfoNV *ci,
-                            DescriptorHeap &desc_heap_);
+    SamplerSubState(vvl::Sampler &obj, DescriptorHeap &heap);
+    void Destroy() override;
+    void NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) override;
 
-    void Destroy() final;
-    void NotifyInvalidate(const NodeList &invalid_nodes, bool unlink) final;
-
-    DescriptorHeap &desc_heap;
-    const DescriptorId id;
+    DescriptorId Id() const { return id_tracker ? id_tracker->id : 0; }
+    std::optional<DescriptorIdTracker> id_tracker;
 };
+static inline SamplerSubState &SubState(vvl::Sampler &obj) {
+    return *static_cast<SamplerSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
+static inline const SamplerSubState &SubState(const vvl::Sampler &obj) {
+    return *static_cast<const SamplerSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
 
+class AccelerationStructureNVSubState : public vvl::AccelerationStructureNVSubState {
+  public:
+    AccelerationStructureNVSubState(vvl::AccelerationStructureNV &obj, DescriptorHeap &heap);
+    void Destroy() override;
+    void NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) override;
+
+    DescriptorId Id() const { return id_tracker ? id_tracker->id : 0; }
+    std::optional<DescriptorIdTracker> id_tracker;
+};
+static inline AccelerationStructureNVSubState &SubState(vvl::AccelerationStructureNV &obj) {
+    return *static_cast<AccelerationStructureNVSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
+static inline const AccelerationStructureNVSubState &SubState(const vvl::AccelerationStructureNV &obj) {
+    return *static_cast<const AccelerationStructureNVSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
+class AccelerationStructureKHRSubState : public vvl::AccelerationStructureKHRSubState {
+  public:
+    AccelerationStructureKHRSubState(vvl::AccelerationStructureKHR &obj, DescriptorHeap &heap);
+    void Destroy() override;
+    void NotifyInvalidate(const vvl::StateObject::NodeList &invalid_nodes, bool unlink) override;
+
+    DescriptorId Id() const { return id_tracker ? id_tracker->id : 0; }
+    std::optional<DescriptorIdTracker> id_tracker;
+};
+static inline AccelerationStructureKHRSubState &SubState(vvl::AccelerationStructureKHR &obj) {
+    return *static_cast<AccelerationStructureKHRSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
+static inline const AccelerationStructureKHRSubState &SubState(const vvl::AccelerationStructureKHR &obj) {
+    return *static_cast<const AccelerationStructureKHRSubState *>(obj.SubState(LayerObjectTypeGpuAssisted));
+}
 }  // namespace gpuav

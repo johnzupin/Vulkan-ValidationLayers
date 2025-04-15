@@ -585,6 +585,16 @@ class Device : public vvl::base::Device {
     bool manual_PreCallValidateCreateBufferView(VkDevice device, const VkBufferViewCreateInfo *pCreateInfo,
                                                 const VkAllocationCallbacks *pAllocator, VkBufferView *pBufferView,
                                                 const Context &context) const;
+    bool ValidateCreateBufferFlags(const VkBufferCreateFlags flags, const Location &flag_loc) const;
+    bool ValidateCreateBufferBufferDeviceAddress(const VkBufferCreateInfo &create_info, const Location &create_info_loc) const;
+
+    bool ValidateDependencyInfo(const Context &context, const VkDependencyInfo &dep_info, const Location &loc) const;
+    bool manual_PreCallValidateCmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDependencyInfo *pDependencyInfo,
+                                                   const Context &context) const;
+    bool manual_PreCallValidateCmdSetEvent2(VkCommandBuffer commandBuffer, VkEvent event, const VkDependencyInfo *pDependencyInfo,
+                                            const Context &context) const;
+    bool manual_PreCallValidateCmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent *pEvents,
+                                              const VkDependencyInfo *pDependencyInfos, const Context &context) const;
 
 #ifdef VK_USE_PLATFORM_METAL_EXT
     bool ExportMetalObjectsPNextUtil(VkExportMetalObjectTypeFlagBitsEXT bit, const char *vuid, const Location &loc,

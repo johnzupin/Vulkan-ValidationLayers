@@ -60,7 +60,7 @@ VkFramebuffer VkArmBestPracticesLayerTest::CreateFramebuffer(const uint32_t widt
 std::unique_ptr<vkt::Image> VkArmBestPracticesLayerTest::CreateImage(VkFormat format, const uint32_t width, const uint32_t height,
                                                                      VkImageUsageFlags attachment_usage) {
     auto img = std::unique_ptr<vkt::Image>(new vkt::Image(
-        *m_device, width, height, 1, format,
+        *m_device, width, height, format,
         VK_IMAGE_USAGE_SAMPLED_BIT | attachment_usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     img->SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     return img;
@@ -230,9 +230,8 @@ TEST_F(VkArmBestPracticesLayerTest, AttachmentNeedsReadback) {
     RETURN_IF_SKIP(InitBestPracticesFramework(kEnableArmValidation));
     RETURN_IF_SKIP(InitState());
 
-    vkt::Image image(*m_device, m_width, m_height, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
-    auto image_view = image.CreateView();
+    vkt::Image image(*m_device, m_width, m_height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkt::ImageView image_view = image.CreateView();
 
     RenderPassSingleSubpass rp(*this);
     rp.AddAttachmentDescription(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -658,7 +657,6 @@ TEST_F(VkArmBestPracticesLayerTest, DepthPrePassUsage) {
     m_depth_stencil_fmt = FindSupportedDepthStencilFormat(Gpu());
 
     m_depthStencil->Init(*m_device, m_width, m_height, 1, m_depth_stencil_fmt, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-    m_depthStencil->SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView depth_image_view = m_depthStencil->CreateView(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
     InitRenderTarget(&depth_image_view.handle());
 
@@ -922,8 +920,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantRenderPassStore) {
 
     m_errorMonitor->SetAllowedFailureMsg("BestPractices-vkBindImageMemory-non-lazy-transient-image");
     auto img = std::unique_ptr<vkt::Image>(new vkt::Image(
-        *m_device, WIDTH, HEIGHT, 1, FMT, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
-    img->SetLayout(VK_IMAGE_LAYOUT_GENERAL);
+        *m_device, WIDTH, HEIGHT, FMT, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
 
     auto image1 = std::move(img);
     vkt::ImageView view1 = image1->CreateView();
@@ -961,8 +958,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantRenderPassStore) {
 
         m_command_buffer.End();
 
-        m_default_queue->Submit(m_command_buffer);
-        m_default_queue->Wait();
+        m_default_queue->SubmitAndWait(m_command_buffer);
     };
 
     const auto start_and_end_renderpass = [&](vkt::CommandBuffer& command_buffer) {
@@ -1022,7 +1018,6 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantRenderPassClear) {
     const uint32_t WIDTH = 512, HEIGHT = 512;
 
     auto image0 = CreateImage(FMT, WIDTH, HEIGHT);
-    image0->SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView view0 = image0->CreateView();
 
     std::vector<VkRenderPass> renderpasses;
@@ -1069,8 +1064,7 @@ TEST_F(VkArmBestPracticesLayerTest, RedundantRenderPassClear) {
     m_command_buffer.EndRenderPass();
 
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     m_errorMonitor->VerifyFound();
 
@@ -1121,7 +1115,6 @@ TEST_F(VkArmBestPracticesLayerTest, InefficientRenderPassClear) {
     vkt::RenderPass rp(*m_device, rpinf);
 
     std::unique_ptr<vkt::Image> image = CreateImage(FMT, WIDTH, HEIGHT);
-    image->SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
     vkt::ImageView view = image->CreateView();
     VkFramebuffer fb = CreateFramebuffer(WIDTH, HEIGHT, view, rp.handle());
 
@@ -1163,8 +1156,7 @@ TEST_F(VkArmBestPracticesLayerTest, InefficientRenderPassClear) {
     m_command_buffer.EndRenderPass();
 
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     m_errorMonitor->VerifyFound();
 
@@ -1209,11 +1201,9 @@ TEST_F(VkArmBestPracticesLayerTest, DescriptorTracking) {
     vkt::RenderPass rp(*m_device, rpinf);
 
     auto image0 = CreateImage(FMT, WIDTH, HEIGHT);
-    image0->SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
     auto view0 = image0->CreateView();
 
     auto image1 = CreateImage(FMT, WIDTH, HEIGHT);
-    image1->SetLayout(VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
     auto view1 = image1->CreateView();
 
     std::vector<VkFramebuffer> framebuffers;
@@ -1318,8 +1308,7 @@ TEST_F(VkArmBestPracticesLayerTest, DescriptorTracking) {
     m_command_buffer.EndRenderPass();
 
     m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 
     for (auto fb : framebuffers) {
         vk::DestroyFramebuffer(device(), fb, nullptr);
@@ -1430,9 +1419,7 @@ TEST_F(VkArmBestPracticesLayerTest, BlitImageLoadOpLoad) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 
-    m_default_queue->Submit(m_command_buffer);
-    m_default_queue->Wait();
-
+    m_default_queue->SubmitAndWait(m_command_buffer);
     m_errorMonitor->VerifyFound();
 }
 

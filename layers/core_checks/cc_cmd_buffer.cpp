@@ -26,6 +26,8 @@
 #include "state_tracker/buffer_state.h"
 #include "state_tracker/render_pass_state.h"
 #include "state_tracker/shader_module.h"
+#include "state_tracker/cmd_buffer_state.h"
+#include "state_tracker/pipeline_state.h"
 #include "core_validation.h"
 #include "generated/enum_flag_bits.h"
 
@@ -38,7 +40,7 @@ bool CoreChecks::ReportInvalidCommandBuffer(const vvl::CommandBuffer &cb_state, 
                                                                                : "";
         auto objlist = entry.second;  // intentional copy
         objlist.add(cb_state.Handle());
-        skip |= LogError(vuid, objlist, loc, "was called in %s which is invalid because bound %s was destroyed%s.",
+        skip |= LogError(vuid, objlist, loc, "was called in %s which is invalid because the bound %s was destroyed%s.",
                          FormatHandle(cb_state).c_str(), FormatHandle(obj).c_str(), cause_str);
     }
     return skip;
@@ -118,7 +120,8 @@ bool CoreChecks::PreCallValidateBeginCommandBuffer(VkCommandBuffer commandBuffer
                     if (!p_inherited_rendering_info) {
                         skip |=
                             LogError("VUID-VkCommandBufferBeginInfo-flags-06002", commandBuffer, inheritance_loc.dot(Field::pNext),
-                                     "chain must include a VkCommandBufferInheritanceRenderingInfo structure.");
+                                     "chain must include a VkCommandBufferInheritanceRenderingInfo structure.\n%s",
+                                     PrintPNextChain(Struct::VkCommandBufferInheritanceInfo, info->pNext).c_str());
                     }
                 }
             }
@@ -395,13 +398,14 @@ bool CoreChecks::ValidateCmdBindIndexBuffer(const vvl::CommandBuffer &cb_state, 
     const VkDeviceSize offset_align = static_cast<VkDeviceSize>(GetIndexAlignment(indexType));
     if (!IsIntegerMultipleOf(offset, offset_align)) {
         vuid = is_2 ? "VUID-vkCmdBindIndexBuffer2-offset-08783" : "VUID-vkCmdBindIndexBuffer-offset-08783";
-        skip |= LogError(vuid, objlist, loc.dot(Field::offset), "(%" PRIu64 ") does not fall on alignment (%s) boundary.", offset,
+        skip |= LogError(vuid, objlist, loc.dot(Field::offset),
+                         "(%" PRIu64 ") is not a multiple of %" PRIu64 " (the alignment for %s).", offset, offset_align,
                          string_VkIndexType(indexType));
     }
     if (offset >= buffer_state->create_info.size) {
         vuid = is_2 ? "VUID-vkCmdBindIndexBuffer2-offset-08782" : "VUID-vkCmdBindIndexBuffer-offset-08782";
-        skip |= LogError(vuid, objlist, loc.dot(Field::offset), "(%" PRIu64 ") is not less than the size (%" PRIu64 ").", offset,
-                         buffer_state->create_info.size);
+        skip |= LogError(vuid, objlist, loc.dot(Field::offset), "(%" PRIu64 ") is not less than the VkBuffer size (%" PRIu64 ").",
+                         offset, buffer_state->create_info.size);
     }
 
     return skip;
@@ -700,7 +704,7 @@ class CoreChecks::ViewportScissorInheritanceTracker {
     static_assert(4 == sizeof(vvl::CommandBuffer::viewportMask), "Adjust max_viewports to match viewportMask bit width");
     static constexpr uint32_t kMaxViewports = 32, kNotTrashed = uint32_t(-2), kTrashedByPrimary = uint32_t(-1);
 
-    const vvl::Device &validation_;
+    const Logger &log_;
     const vvl::CommandBuffer *primary_state_ = nullptr;
     uint32_t viewport_mask_;
     uint32_t scissor_mask_;
@@ -713,7 +717,7 @@ class CoreChecks::ViewportScissorInheritanceTracker {
     uint32_t scissor_count_trashed_by_;
 
   public:
-    ViewportScissorInheritanceTracker(const vvl::Device &validation) : validation_(validation) {}
+    ViewportScissorInheritanceTracker(const Logger &log) : log_(log) {}
 
     bool VisitPrimary(const vvl::CommandBuffer &primary_state) {
         assert(!primary_state_);
@@ -810,15 +814,15 @@ class CoreChecks::ViewportScissorInheritanceTracker {
                 assert(inherited_viewport != nullptr && expected_viewport_depth != nullptr);
                 if (inherited_viewport->minDepth != expected_viewport_depth->minDepth ||
                     inherited_viewport->maxDepth != expected_viewport_depth->maxDepth) {
-                    return validation_.LogError("VUID-vkCmdDraw-None-07850", primary_state_->Handle(), cb_loc,
-                                                "(%s) consume inherited viewport %" PRIu32
-                                                " %s"
-                                                "but this state was not inherited as its depth range [%f, %f] does not match "
-                                                "pViewportDepths[%" PRIu32 "] = [%f, %f]",
-                                                validation_.FormatHandle(secondary_state.Handle()).c_str(), unsigned(index),
-                                                index >= static_use_count ? "(with count) " : "", inherited_viewport->minDepth,
-                                                inherited_viewport->maxDepth, unsigned(cmd_buffer_idx),
-                                                expected_viewport_depth->minDepth, expected_viewport_depth->maxDepth);
+                    return log_.LogError("VUID-vkCmdDraw-None-07850", primary_state_->Handle(), cb_loc,
+                                         "(%s) consume inherited viewport %" PRIu32
+                                         " %s"
+                                         "but this state was not inherited as its depth range [%f, %f] does not match "
+                                         "pViewportDepths[%" PRIu32 "] = [%f, %f]",
+                                         log_.FormatHandle(secondary_state.Handle()).c_str(), unsigned(index),
+                                         index >= static_use_count ? "(with count) " : "", inherited_viewport->minDepth,
+                                         inherited_viewport->maxDepth, unsigned(cmd_buffer_idx), expected_viewport_depth->minDepth,
+                                         expected_viewport_depth->maxDepth);
                     // akeley98 note: This VUID is not ideal; however, there isn't a more relevant VUID as
                     // it isn't illegal in itself to have mismatched inherited viewport depths.
                     // The error only occurs upon attempting to consume the viewport.
@@ -852,7 +856,7 @@ class CoreChecks::ViewportScissorInheritanceTracker {
             }
 
             std::stringstream ss;
-            ss << "(" << validation_.FormatHandle(secondary_state.Handle()).c_str() << ") consume inherited " << state_name << " ";
+            ss << "(" << log_.FormatHandle(secondary_state.Handle()).c_str() << ") consume inherited " << state_name << " ";
             if (format_index) {
                 if (index >= static_use_count) {
                     ss << "(with count) ";
@@ -869,7 +873,7 @@ class CoreChecks::ViewportScissorInheritanceTracker {
                 ss << "was left undefined after vkCmdBindPipeline (with non-dynamic state) in pCommandBuffers[" << trashed_by
                    << "].";
             }
-            return validation_.LogError("VUID-vkCmdDraw-None-07850", primary_state_->Handle(), cb_loc, "%s", ss.str().c_str());
+            return log_.LogError("VUID-vkCmdDraw-None-07850", primary_state_->Handle(), cb_loc, "%s", ss.str().c_str());
         };
 
         // Check if secondary command buffer uses viewport/scissor-with-count state, and validate this state if so.
@@ -898,12 +902,12 @@ class CoreChecks::ViewportScissorInheritanceTracker {
 
         if (secondary_state.usedDynamicViewportCount &&
             viewport_count_to_inherit_ > secondary_state.inheritedViewportDepths.size()) {
-            skip |= validation_.LogError(
-                "VUID-vkCmdDraw-None-07850", primary_state_->Handle(), cb_loc,
-                "(%s) consume inherited dynamic viewport with count state "
-                "but the dynamic viewport count (%" PRIu32 ") exceeds the inheritance limit (viewportDepthCount=%" PRIu32 ").",
-                validation_.FormatHandle(secondary_state.Handle()).c_str(), unsigned(viewport_count_to_inherit_),
-                unsigned(secondary_state.inheritedViewportDepths.size()));
+            skip |= log_.LogError("VUID-vkCmdDraw-None-07850", primary_state_->Handle(), cb_loc,
+                                  "(%s) consume inherited dynamic viewport with count state "
+                                  "but the dynamic viewport count (%" PRIu32
+                                  ") exceeds the inheritance limit (viewportDepthCount=%" PRIu32 ").",
+                                  log_.FormatHandle(secondary_state.Handle()).c_str(), unsigned(viewport_count_to_inherit_),
+                                  unsigned(secondary_state.inheritedViewportDepths.size()));
         }
 
         for (uint32_t n = 0; n < check_viewport_count; ++n) {
@@ -929,7 +933,7 @@ bool CoreChecks::PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuffer
     const auto &cb_state = *GetRead<vvl::CommandBuffer>(commandBuffer);
     bool skip = false;
     vvl::unordered_set<const vvl::CommandBuffer *> linked_command_buffers;
-    ViewportScissorInheritanceTracker viewport_scissor_inheritance{*this};
+    ViewportScissorInheritanceTracker viewport_scissor_inheritance{*device_state};
 
     if (enabled_features.inheritedViewportScissor2D) {
         skip |= viewport_scissor_inheritance.VisitPrimary(cb_state);
@@ -1099,7 +1103,7 @@ bool CoreChecks::ValidateCmdExecuteCommandsDynamicRenderingSecondary(const vvl::
                     location_info->pColorAttachmentLocations[idx] != cb_state.rendering_attachments.color_locations[idx]) {
                     skip |= LogError(
                         "VUID-vkCmdExecuteCommands-pCommandBuffers-09504", objlist,
-                        cb_loc.pNext(Struct::VkRenderingAttachmentLocationInfo, Field::pColorAttachmentInputIndices, idx),
+                        cb_loc.pNext(Struct::VkRenderingAttachmentLocationInfo, Field::pColorAttachmentLocations, idx),
                         "(%" PRIu32 ") does not match the implicit or explicit state in the primary command buffer (%" PRIu32 ").",
                         location_info->pColorAttachmentLocations[idx], cb_state.rendering_attachments.color_locations[idx]);
                 }
@@ -1771,7 +1775,8 @@ bool CoreChecks::PreCallValidateCmdBeginConditionalRenderingEXT(
                 const LogObjectList objlist(commandBuffer, buffer_state->Handle());
                 skip |=
                     LogError("VUID-VkConditionalRenderingBeginInfoEXT-buffer-01982", objlist, conditional_loc.dot(Field::buffer),
-                             "(%s) was created with %s.", FormatHandle(pConditionalRenderingBegin->buffer).c_str(),
+                             "(%s) was created with %s (missing CONDITIONAL_RENDERING_BIT).",
+                             FormatHandle(pConditionalRenderingBegin->buffer).c_str(),
                              string_VkBufferUsageFlags2(buffer_state->usage).c_str());
             }
             if (pConditionalRenderingBegin->offset + 4 > buffer_state->create_info.size) {
@@ -1908,8 +1913,8 @@ bool CoreChecks::ValidateVkConvertCooperativeVectorMatrixInfoNV(const LogObjectL
         if (component_type == VK_COMPONENT_TYPE_FLOAT32_KHR) {
             return true;
         }
-        for (size_t i = 0; i < cooperative_vector_properties_nv.size(); ++i) {
-            if (cooperative_vector_properties_nv[i].matrixInterpretation == component_type) {
+        for (size_t i = 0; i < device_state->cooperative_vector_properties_nv.size(); ++i) {
+            if (device_state->cooperative_vector_properties_nv[i].matrixInterpretation == component_type) {
                 return true;
             }
         }

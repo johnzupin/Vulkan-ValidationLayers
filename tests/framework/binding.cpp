@@ -26,6 +26,8 @@
 #include <vulkan/utility/vk_struct_helper.hpp>
 
 #include "shader_helper.h"
+#include "sync_helper.h"
+#include "shader_object_helper.h"
 
 #define NON_DISPATCHABLE_HANDLE_INIT(create_func, dev, ...)                                                \
     do {                                                                                                   \
@@ -257,7 +259,9 @@ void Device::init(std::vector<const char *> &extensions, VkPhysicalDeviceFeature
     // Let VkPhysicalDeviceFeatures2 take priority over VkPhysicalDeviceFeatures,
     // since it supports extensions
 
-    if (!(vku::FindStructInPNextChain<VkPhysicalDeviceFeatures2>(dev_info.pNext))) {
+    if (auto features2 = vku::FindStructInPNextChain<VkPhysicalDeviceFeatures2>(dev_info.pNext)) {
+        features_ = features2->features;
+    } else {
         if (features) {
             dev_info.pEnabledFeatures = features;
         } else {
@@ -265,6 +269,7 @@ void Device::init(std::vector<const char *> &extensions, VkPhysicalDeviceFeature
             all_features = Physical().Features();
             dev_info.pEnabledFeatures = &all_features;
         }
+        features_ = *dev_info.pEnabledFeatures;
     }
 
     init(dev_info);
@@ -1168,26 +1173,19 @@ void BufferView::init(const Device &dev, const VkBufferViewCreateInfo &info) {
 
 NON_DISPATCHABLE_HANDLE_DTOR(Image, vk::DestroyImage)
 
-Image::Image(const Device &dev, const VkImageCreateInfo &info) : device_(&dev) { init(dev, info, 0); }
-
 Image::Image(const Device &dev, const VkImageCreateInfo &info, VkMemoryPropertyFlags mem_props, void *alloc_info_pnext)
     : device_(&dev) {
-    init(dev, info, mem_props, alloc_info_pnext);
+    Init(dev, info, mem_props, alloc_info_pnext);
 }
 
-Image::Image(const Device &dev, uint32_t const width, uint32_t const height, uint32_t const mip_levels, VkFormat const format,
-             VkFlags const usage)
-    : device_(&dev) {
-    Init(dev, width, height, mip_levels, format, usage);
+Image::Image(const Device &dev, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage) : device_(&dev) {
+    Init(dev, width, height, 1, format, usage);
 }
 
 Image::Image(const Device &dev, const VkImageCreateInfo &info, NoMemT) : device_(&dev) { InitNoMemory(dev, info); }
 
-// If you find yourself wanting to expand this or making another overload, then you might really just want to call
-//     SetLayout(VK_IMAGE_LAYOUT_GENERAL);
-// after you init the image manually
 Image::Image(const Device &dev, const VkImageCreateInfo &info, SetLayoutT) : device_(&dev) {
-    init(*device_, info, 0);
+    Init(*device_, info);
 
     VkImageLayout newLayout;
     const auto usage = info.usage;
@@ -1199,8 +1197,7 @@ Image::Image(const Device &dev, const VkImageCreateInfo &info, SetLayoutT) : dev
         newLayout = VK_IMAGE_LAYOUT_GENERAL;
     }
 
-    VkImageAspectFlags image_aspect = AspectMask(info.format);
-    SetLayout(image_aspect, newLayout);
+    SetLayout(newLayout);
 }
 
 Image::Image(Image &&rhs) noexcept : NonDispHandle(std::move(rhs)) {
@@ -1211,9 +1208,6 @@ Image::Image(Image &&rhs) noexcept : NonDispHandle(std::move(rhs)) {
     rhs.create_info_ = vku::InitStructHelper();
 
     internal_mem_ = std::move(rhs.internal_mem_);
-
-    image_layout_ = std::move(rhs.image_layout_);
-    rhs.image_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
 Image &Image::operator=(Image &&rhs) noexcept {
@@ -1231,13 +1225,10 @@ Image &Image::operator=(Image &&rhs) noexcept {
     rhs.create_info_ = vku::InitStructHelper();
 
     internal_mem_ = std::move(rhs.internal_mem_);
-
-    image_layout_ = std::move(rhs.image_layout_);
-    rhs.image_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
     return *this;
 }
 
-void Image::init(const Device &dev, const VkImageCreateInfo &info, VkMemoryPropertyFlags mem_props, void *alloc_info_pnext) {
+void Image::Init(const Device &dev, const VkImageCreateInfo &info, VkMemoryPropertyFlags mem_props, void *alloc_info_pnext) {
     InitNoMemory(dev, info);
 
     if (initialized()) {
@@ -1247,10 +1238,10 @@ void Image::init(const Device &dev, const VkImageCreateInfo &info, VkMemoryPrope
     }
 }
 
-void Image::Init(const Device &dev, uint32_t const width, uint32_t const height, uint32_t const mip_levels, VkFormat const format,
-                 VkFlags const usage) {
+void Image::Init(const Device &dev, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format,
+                 VkImageUsageFlags usage) {
     const VkImageCreateInfo info = ImageCreateInfo2D(width, height, mip_levels, 1, format, usage, VK_IMAGE_TILING_OPTIMAL);
-    init(dev, info, 0);
+    Init(dev, info);
 }
 
 // Currently all init call here, so can set things for all path
@@ -1260,7 +1251,6 @@ void Image::InitNoMemory(const Device &dev, const VkImageCreateInfo &info) {
     }
     NON_DISPATCHABLE_HANDLE_INIT(vk::CreateImage, dev, &info);
     create_info_ = info;
-    image_layout_ = info.initialLayout;
 }
 
 bool Image::IsCompatible(const Device &dev, const VkImageUsageFlags usages, const VkFormatFeatureFlags2 features) {
@@ -1309,27 +1299,27 @@ bool Image::IsCompatible(const Device &dev, const VkImageUsageFlags usages, cons
     return true;
 }
 
-VkImageCreateInfo Image::ImageCreateInfo2D(uint32_t const width, uint32_t const height, uint32_t const mip_levels,
-                                           uint32_t const layers, VkFormat const format, VkFlags const usage,
-                                           VkImageTiling const requested_tiling, const vvl::span<uint32_t> &queue_families) {
-    VkImageCreateInfo imageCreateInfo = CreateInfo();
-    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format = format;
-    imageCreateInfo.extent.width = width;
-    imageCreateInfo.extent.height = height;
-    imageCreateInfo.mipLevels = mip_levels;
-    imageCreateInfo.arrayLayers = layers;
-    imageCreateInfo.tiling = requested_tiling;  // This will be touched up below...
-    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    // Automatically set sharing mode etc. based on queue family information
+VkImageCreateInfo Image::ImageCreateInfo2D(uint32_t width, uint32_t height, uint32_t mip_levels, uint32_t layers, VkFormat format,
+                                           VkImageUsageFlags usage, VkImageTiling requested_tiling,
+                                           const vvl::span<uint32_t> &queue_families) {
+    VkImageCreateInfo create_info = vku::InitStructHelper();
+    create_info.imageType = VK_IMAGE_TYPE_2D;
+    create_info.format = format;
+    create_info.extent.width = width;
+    create_info.extent.height = height;
+    create_info.extent.depth = 1;
+    create_info.mipLevels = mip_levels;
+    create_info.arrayLayers = layers;
+    create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    create_info.tiling = requested_tiling;
+    create_info.usage = usage;
     if (queue_families.size() > 1) {
-        imageCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
-        imageCreateInfo.queueFamilyIndexCount = static_cast<uint32_t>(queue_families.size());
-        imageCreateInfo.pQueueFamilyIndices = queue_families.data();
+        create_info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+        create_info.queueFamilyIndexCount = static_cast<uint32_t>(queue_families.size());
+        create_info.pQueueFamilyIndices = queue_families.data();
     }
-    imageCreateInfo.usage = usage;
-    return imageCreateInfo;
+    create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    return create_info;
 }
 
 VkMemoryRequirements Image::MemoryRequirements() const {
@@ -1367,22 +1357,20 @@ VkImageAspectFlags Image::AspectMask(VkFormat format) {
     return image_aspect;
 }
 
-void Image::ImageMemoryBarrier(CommandBuffer &cmd_buf, VkImageAspectFlags aspect, VkFlags output_mask, VkFlags input_mask,
-                               VkImageLayout image_layout, VkPipelineStageFlags src_stages, VkPipelineStageFlags dest_stages) {
-    // clang-format on
-    const VkImageSubresourceRange subresourceRange =
-        SubresourceRange(aspect, 0, create_info_.mipLevels, 0, create_info_.arrayLayers);
-    VkImageMemoryBarrier barrier;
-    barrier = ImageMemoryBarrier(output_mask, input_mask, image_layout_, image_layout, subresourceRange);
-
-    VkImageMemoryBarrier *pmemory_barrier = &barrier;
-
-    // write barrier to the command buffer
-    vk::CmdPipelineBarrier(cmd_buf.handle(), src_stages, dest_stages, VK_DEPENDENCY_BY_REGION_BIT, 0, NULL, 0, NULL, 1,
-                           pmemory_barrier);
+void Image::ImageMemoryBarrier(CommandBuffer &cmd_buf, VkAccessFlags src_access, VkAccessFlags dst_access, VkImageLayout old_layout,
+                               VkImageLayout new_layout, VkPipelineStageFlags src_stages, VkPipelineStageFlags dst_stages) {
+    VkImageSubresourceRange subresource_range = SubresourceRange(AspectMask(Format()));
+    VkImageMemoryBarrier barrier = ImageMemoryBarrier(src_access, dst_access, old_layout, new_layout, subresource_range);
+    vk::CmdPipelineBarrier(cmd_buf, src_stages, dst_stages, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &barrier);
 }
 
-void Image::SetLayout(CommandBuffer &cmd_buf, VkImageAspectFlags aspect, VkImageLayout image_layout) {
+void Image::SetLayout(CommandBuffer &cmd_buf, VkImageLayout image_layout) {
+    TransitionLayout(cmd_buf, create_info_.initialLayout, image_layout);
+}
+
+void Image::SetLayout(VkImageLayout image_layout) { TransitionLayout(create_info_.initialLayout, image_layout); }
+
+void Image::TransitionLayout(CommandBuffer &cmd_buf, VkImageLayout old_layout, VkImageLayout new_layout) {
     VkFlags src_mask, dst_mask;
     const VkFlags all_cache_outputs = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1393,12 +1381,8 @@ void Image::SetLayout(CommandBuffer &cmd_buf, VkImageAspectFlags aspect, VkImage
 
     const VkFlags shader_read_inputs = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT;
 
-    if (image_layout == image_layout_) {
-        return;
-    }
-
     // Attempt to narrow the src_mask, by what the image could have validly been used for in it's current layout
-    switch (image_layout_) {
+    switch (old_layout) {
         case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
             src_mask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             break;
@@ -1419,7 +1403,7 @@ void Image::SetLayout(CommandBuffer &cmd_buf, VkImageAspectFlags aspect, VkImage
     }
 
     // Narrow the dst mask by the valid accesss for the new layout
-    switch (image_layout) {
+    switch (new_layout) {
         case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
             // NOTE: not sure why shader read is here...
             dst_mask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
@@ -1447,21 +1431,15 @@ void Image::SetLayout(CommandBuffer &cmd_buf, VkImageAspectFlags aspect, VkImage
             break;
     }
 
-    ImageMemoryBarrier(cmd_buf, aspect, src_mask, dst_mask, image_layout);
-    image_layout_ = image_layout;
+    ImageMemoryBarrier(cmd_buf, src_mask, dst_mask, old_layout, new_layout);
 }
 
-void Image::SetLayout(VkImageAspectFlags aspect, VkImageLayout image_layout) {
-    if (image_layout == image_layout_) {
-        return;
-    }
-
+void Image::TransitionLayout(VkImageLayout old_layout, VkImageLayout new_layout) {
     CommandPool pool(*device_, device_->graphics_queue_node_index_);
     CommandBuffer cmd_buf(*device_, pool);
 
-    /* Build command buffer to set image layout in the driver */
     cmd_buf.Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-    SetLayout(cmd_buf, aspect, image_layout);
+    TransitionLayout(cmd_buf, old_layout, new_layout);
     cmd_buf.End();
 
     auto graphics_queue = device_->QueuesWithGraphicsCapability()[0];
@@ -1632,6 +1610,7 @@ Shader::Shader(const Device &dev, const VkShaderStageFlagBits stage, const std::
                const VkDescriptorSetLayout *descriptorSetLayout, const VkPushConstantRange *pushConstRange) {
     VkShaderCreateInfoEXT createInfo = vku::InitStructHelper();
     createInfo.stage = stage;
+    SetNextStage(createInfo, dev.GetFeatures().tessellationShader, dev.GetFeatures().geometryShader);
     createInfo.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
     createInfo.codeSize = spv.size() * sizeof(spv[0]);
     createInfo.pCode = spv.data();
@@ -1659,6 +1638,7 @@ Shader::Shader(const Device &dev, const VkShaderStageFlagBits stage, const char 
 
     VkShaderCreateInfoEXT createInfo = vku::InitStructHelper();
     createInfo.stage = stage;
+    SetNextStage(createInfo, dev.GetFeatures().tessellationShader, dev.GetFeatures().geometryShader);
     createInfo.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
     createInfo.codeSize = spv.size() * sizeof(spv[0]);
     createInfo.pCode = spv.data();
@@ -1678,6 +1658,7 @@ Shader::Shader(const Device &dev, const VkShaderStageFlagBits stage, const std::
                const VkDescriptorSetLayout *descriptorSetLayout, const VkPushConstantRange *pushConstRange) {
     VkShaderCreateInfoEXT createInfo = vku::InitStructHelper();
     createInfo.stage = stage;
+    SetNextStage(createInfo, dev.GetFeatures().tessellationShader, dev.GetFeatures().geometryShader);
     createInfo.codeType = VK_SHADER_CODE_TYPE_BINARY_EXT;
     createInfo.codeSize = binary.size();
     createInfo.pCode = binary.data();
@@ -2065,6 +2046,41 @@ void CommandBuffer::Copy(const Buffer &src, const Buffer &dst) {
 }
 
 void CommandBuffer::ExecuteCommands(const CommandBuffer &secondary) { vk::CmdExecuteCommands(handle(), 1, &secondary.handle()); }
+
+void CommandBuffer::Barrier(const VkMemoryBarrier2 &barrier, VkDependencyFlags dependency_flags) {
+    VkDependencyInfo dep_info = DependencyInfo(barrier, dependency_flags);
+    vk::CmdPipelineBarrier2(handle(), &dep_info);
+}
+
+void CommandBuffer::Barrier(const VkBufferMemoryBarrier2 &buffer_barrier, VkDependencyFlags dependency_flags) {
+    VkDependencyInfo dep_info = DependencyInfo(buffer_barrier, dependency_flags);
+    dep_info.dependencyFlags = dependency_flags;
+    vk::CmdPipelineBarrier2(handle(), &dep_info);
+}
+
+void CommandBuffer::Barrier(const VkImageMemoryBarrier2 &image_barrier, VkDependencyFlags dependency_flags) {
+    VkDependencyInfo dep_info = DependencyInfo(image_barrier, dependency_flags);
+    vk::CmdPipelineBarrier2(handle(), &dep_info);
+}
+
+void CommandBuffer::Barrier(const VkDependencyInfo &dep_info) { vk::CmdPipelineBarrier2(handle(), &dep_info); }
+
+void CommandBuffer::BarrierKHR(const VkMemoryBarrier2 &barrier, VkDependencyFlags dependency_flags) {
+    VkDependencyInfo dep_info = DependencyInfo(barrier, dependency_flags);
+    vk::CmdPipelineBarrier2KHR(handle(), &dep_info);
+}
+
+void CommandBuffer::BarrierKHR(const VkBufferMemoryBarrier2 &buffer_barrier, VkDependencyFlags dependency_flags) {
+    VkDependencyInfo dep_info = DependencyInfo(buffer_barrier, dependency_flags);
+    vk::CmdPipelineBarrier2KHR(handle(), &dep_info);
+}
+
+void CommandBuffer::BarrierKHR(const VkImageMemoryBarrier2 &image_barrier, VkDependencyFlags dependency_flags) {
+    VkDependencyInfo dep_info = DependencyInfo(image_barrier, dependency_flags);
+    vk::CmdPipelineBarrier2KHR(handle(), &dep_info);
+}
+
+void CommandBuffer::BarrierKHR(const VkDependencyInfo &dep_info) { vk::CmdPipelineBarrier2KHR(handle(), &dep_info); }
 
 // For positive tests, if you run with sync val, ideally want no errors.
 // Many tests need a simple quick way to sync multiple commands

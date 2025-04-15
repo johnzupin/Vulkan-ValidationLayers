@@ -31,13 +31,18 @@
 #include "generated/spirv_grammar_helper.h"
 #include "generated/spirv_validation_helper.h"
 #include "state_tracker/shader_instruction.h"
+#include "state_tracker/shader_module.h"
 #include "state_tracker/shader_stage_state.h"
+#include "state_tracker/pipeline_state.h"
+#include "utils/shader_utils.h"
 #include "utils/hash_util.h"
 #include "chassis/chassis_modification_state.h"
 #include "state_tracker/descriptor_sets.h"
 #include "state_tracker/render_pass_state.h"
 #include "spirv-tools/optimizer.hpp"
+#include "containers/limits.h"
 #include "utils/math_utils.h"
+#include "utils/vk_layer_utils.h"
 
 // Validate use of input attachments against subpass structure
 bool CoreChecks::ValidateShaderInputAttachment(const spirv::Module &module_state, const vvl::Pipeline &pipeline,
@@ -200,7 +205,7 @@ static void TypeToDescriptorTypeSet(const spirv::Module &module_state, uint32_t 
     switch (type->Opcode()) {
         case spv::OpTypeStruct: {
             for (const spirv::Instruction *insn : module_state.static_data_.decoration_inst) {
-                if (insn->Word(1) == type->Word(1)) {
+                if (insn->Word(1) == type->ResultId()) {
                     if (insn->Word(2) == spv::DecorationBlock) {
                         if (is_storage_buffer) {
                             descriptor_type_set.insert(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
@@ -337,6 +342,12 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
     bool skip = false;
     const auto workgroup_size = local_size_x * local_size_y * local_size_z;
 
+    uint32_t effective_subgroup_size = phys_dev_props_core11.subgroupSize;
+    if (const auto *required_subgroup_size_ci =
+            vku::FindStructInPNextChain<VkPipelineShaderStageRequiredSubgroupSizeCreateInfo>(stage_state.GetPNext())) {
+        effective_subgroup_size = required_subgroup_size_ci->requiredSubgroupSize;
+    }
+
     const auto &IsSignedIntType = [&module_state](const uint32_t type_id) {
         const spirv::Instruction *type = module_state.FindDef(type_id);
         if (type->Opcode() == spv::OpTypeCooperativeMatrixKHR || type->Opcode() == spv::OpTypeCooperativeMatrixNV) {
@@ -424,8 +435,8 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
 
     auto print_properties = [this]() {
         std::ostringstream ss;
-        for (uint32_t i = 0; i < cooperative_matrix_properties_khr.size(); ++i) {
-            const auto &prop = cooperative_matrix_properties_khr[i];
+        for (uint32_t i = 0; i < device_state->cooperative_matrix_properties_khr.size(); ++i) {
+            const auto &prop = device_state->cooperative_matrix_properties_khr[i];
             ss << "[" << i << "] MSize = " << prop.MSize << " | NSize = " << prop.NSize << " | KSize = " << prop.KSize
                << " | AType = " << string_VkComponentTypeKHR(prop.AType) << " | BType = " << string_VkComponentTypeKHR(prop.BType)
                << " | CType = " << string_VkComponentTypeKHR(prop.CType)
@@ -437,8 +448,8 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
 
     auto print_flexible_properties = [this]() {
         std::ostringstream ss;
-        for (uint32_t i = 0; i < cooperative_matrix_flexible_dimensions_properties.size(); ++i) {
-            const auto &prop = cooperative_matrix_flexible_dimensions_properties[i];
+        for (uint32_t i = 0; i < device_state->cooperative_matrix_flexible_dimensions_properties.size(); ++i) {
+            const auto &prop = device_state->cooperative_matrix_flexible_dimensions_properties[i];
             ss << "[" << i << "] MGranularity = " << prop.MGranularity << " | NGranularity = " << prop.NGranularity
                << " | KGranularity = " << prop.KGranularity << " | AType = " << string_VkComponentTypeKHR(prop.AType)
                << " | BType = " << string_VkComponentTypeKHR(prop.BType) << " | CType = " << string_VkComponentTypeKHR(prop.CType)
@@ -452,17 +463,17 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
         const spirv::Instruction &insn = *cooperative_matrix_inst;
         switch (insn.Opcode()) {
             case spv::OpTypeCooperativeMatrixKHR: {
-                CoopMatType m(insn.Word(1), module_state, stage_state, IsSignedIntType(insn.Word(2)));
+                CoopMatType m(insn.ResultId(), module_state, stage_state, IsSignedIntType(insn.Word(2)));
 
                 if ((entrypoint.stage & VK_SHADER_STAGE_COMPUTE_BIT) != 0) {
-                    if (SafeModulo(local_size_x, phys_dev_props_core11.subgroupSize) != 0) {
+                    if (SafeModulo(local_size_x, effective_subgroup_size) != 0) {
                         const auto vuid_string = m.scope == VK_SCOPE_SUBGROUP_KHR
                                                      ? "VUID-VkPipelineShaderStageCreateInfo-module-08987"
                                                      : "VUID-VkPipelineShaderStageCreateInfo-module-10169";
                         skip |= LogError(vuid_string, module_state.handle(), loc,
                                          "SPIR-V (compute stage) Local workgroup size in the X dimension (%" PRIu32
                                          ") is not a multiple of subgroupSize (%" PRIu32 ").",
-                                         local_size_x, phys_dev_props_core11.subgroupSize);
+                                         local_size_x, effective_subgroup_size);
                     }
                     if (m.scope == VK_SCOPE_WORKGROUP_KHR) {
                         if (workgroup_size >
@@ -490,8 +501,8 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
                 // Validate that the type parameters are all supported for one of the
                 // operands of a cooperative matrix khr property.
                 bool valid = false;
-                for (uint32_t i = 0; i < cooperative_matrix_properties_khr.size(); ++i) {
-                    const auto &property = cooperative_matrix_properties_khr[i];
+                for (uint32_t i = 0; i < device_state->cooperative_matrix_properties_khr.size(); ++i) {
+                    const auto &property = device_state->cooperative_matrix_properties_khr[i];
                     if (property.AType == m.component_type && property.MSize == m.rows && property.KSize == m.cols &&
                         property.scope == m.scope && m.use == spv::CooperativeMatrixUseMatrixAKHR) {
                         valid = true;
@@ -514,8 +525,8 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
                     }
                 }
                 if (enabled_features.cooperativeMatrixFlexibleDimensions) {
-                    for (uint32_t i = 0; i < cooperative_matrix_flexible_dimensions_properties.size(); ++i) {
-                        const auto &property = cooperative_matrix_flexible_dimensions_properties[i];
+                    for (uint32_t i = 0; i < device_state->cooperative_matrix_flexible_dimensions_properties.size(); ++i) {
+                        const auto &property = device_state->cooperative_matrix_flexible_dimensions_properties[i];
 
                         if (property.scope == VK_SCOPE_WORKGROUP_KHR && workgroup_size != property.workgroupInvocations) {
                             continue;
@@ -589,8 +600,8 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
                     // Validate that the type parameters are all supported for the same
                     // cooperative matrix property.
                     bool found_matching_prop = false;
-                    for (uint32_t i = 0; i < cooperative_matrix_properties_khr.size(); ++i) {
-                        const auto &property = cooperative_matrix_properties_khr[i];
+                    for (uint32_t i = 0; i < device_state->cooperative_matrix_properties_khr.size(); ++i) {
+                        const auto &property = device_state->cooperative_matrix_properties_khr[i];
 
                         bool valid = true;
                         valid &= property.AType == a.component_type && property.MSize == a.rows && property.KSize == a.cols &&
@@ -621,8 +632,8 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
                     }
                     bool found_matching_flexible_prop = false;
                     if (enabled_features.cooperativeMatrixFlexibleDimensions) {
-                        for (uint32_t i = 0; i < cooperative_matrix_flexible_dimensions_properties.size(); ++i) {
-                            const auto &property = cooperative_matrix_flexible_dimensions_properties[i];
+                        for (uint32_t i = 0; i < device_state->cooperative_matrix_flexible_dimensions_properties.size(); ++i) {
+                            const auto &property = device_state->cooperative_matrix_flexible_dimensions_properties[i];
 
                             bool valid = true;
                             valid &= property.AType == a.component_type && SafeModulo(a.rows, property.MGranularity) == 0 &&
@@ -681,7 +692,7 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
                 break;
             }
             case spv::OpTypeCooperativeMatrixNV: {
-                CoopMatType m(insn.Word(1), module_state, stage_state, IsSignedIntType(insn.Word(2)));
+                CoopMatType m(insn.ResultId(), module_state, stage_state, IsSignedIntType(insn.Word(2)));
 
                 if (!m.all_constant) {
                     break;
@@ -689,8 +700,8 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
                 // Validate that the type parameters are all supported for one of the
                 // operands of a cooperative matrix property.
                 bool valid = false;
-                for (uint32_t i = 0; i < cooperative_matrix_properties_nv.size(); ++i) {
-                    const auto &property = cooperative_matrix_properties_nv[i];
+                for (uint32_t i = 0; i < device_state->cooperative_matrix_properties_nv.size(); ++i) {
+                    const auto &property = device_state->cooperative_matrix_properties_nv[i];
                     if (property.AType == m.component_type && property.MSize == m.rows && property.KSize == m.cols &&
                         property.scope == m.scope) {
                         valid = true;
@@ -733,8 +744,8 @@ bool CoreChecks::ValidateCooperativeMatrix(const spirv::Module &module_state, co
                     bool valid_b = false;
                     bool valid_c = false;
                     bool valid_d = false;
-                    for (uint32_t i = 0; i < cooperative_matrix_properties_nv.size(); ++i) {
-                        const auto &property = cooperative_matrix_properties_nv[i];
+                    for (uint32_t i = 0; i < device_state->cooperative_matrix_properties_nv.size(); ++i) {
+                        const auto &property = device_state->cooperative_matrix_properties_nv[i];
                         valid_a |= property.AType == a.component_type && property.MSize == a.rows && property.KSize == a.cols &&
                                    property.scope == a.scope;
                         valid_b |= property.BType == b.component_type && property.KSize == b.rows && property.NSize == b.cols &&
@@ -849,8 +860,8 @@ bool CoreChecks::ValidateCooperativeVector(const spirv::Module &module_state, co
                 }
 
                 bool found = false;
-                for (uint32_t i = 0; i < cooperative_vector_properties_nv.size(); ++i) {
-                    const auto &property = cooperative_vector_properties_nv[i];
+                for (uint32_t i = 0; i < device_state->cooperative_vector_properties_nv.size(); ++i) {
+                    const auto &property = device_state->cooperative_vector_properties_nv[i];
                     if (m.component_type == property.inputType || m.component_type == property.resultType) {
                         found = true;
                         break;
@@ -906,8 +917,8 @@ bool CoreChecks::ValidateCooperativeVector(const spirv::Module &module_state, co
                 }
 
                 bool found = false;
-                for (uint32_t i = 0; i < cooperative_vector_properties_nv.size(); ++i) {
-                    const auto &property = cooperative_vector_properties_nv[i];
+                for (uint32_t i = 0; i < device_state->cooperative_vector_properties_nv.size(); ++i) {
+                    const auto &property = device_state->cooperative_vector_properties_nv[i];
                     if (property.inputType == input_type && property.inputInterpretation == input_interpretation &&
                         property.matrixInterpretation == matrix_interpretation &&
                         (insn.Opcode() == spv::OpCooperativeVectorMatrixMulNV ||
@@ -1240,11 +1251,6 @@ bool CoreChecks::ValidateWorkgroupSharedMemory(const spirv::Module &module_state
                                                uint32_t total_workgroup_shared_memory, const Location &loc) const {
     bool skip = false;
 
-    // If not found before with spec constants, find here
-    if (total_workgroup_shared_memory == 0) {
-        total_workgroup_shared_memory = module_state.CalculateWorkgroupSharedMemory();
-    }
-
     switch (stage) {
         case VK_SHADER_STAGE_COMPUTE_BIT: {
             if (total_workgroup_shared_memory > phys_dev_props.limits.maxComputeSharedMemorySize) {
@@ -1365,7 +1371,8 @@ bool CoreChecks::ValidateShaderInterfaceVariable(const spirv::Module &module_sta
     return skip;
 }
 
-bool CoreChecks::ValidateShaderInterfaceVariablePipeline(const spirv::Module &module_state, const vvl::Pipeline &pipeline,
+bool CoreChecks::ValidateShaderInterfaceVariablePipeline(const spirv::Module &module_state, const spirv::EntryPoint &entrypoint,
+                                                         const vvl::Pipeline &pipeline,
                                                          const spirv::ResourceInterfaceVariable &variable,
                                                          vvl::unordered_set<uint32_t> &descriptor_type_set,
                                                          const Location &loc) const {
@@ -1376,13 +1383,9 @@ bool CoreChecks::ValidateShaderInterfaceVariablePipeline(const spirv::Module &mo
     const VkDescriptorSetLayoutBinding *binding = nullptr;
     // For given pipelineLayout verify that the set_layout_node at slot.first has the requested binding at slot.second and return
     // ptr to that binding
-    {
-        const vvl::PipelineLayout *pipeline_layout_state = pipeline.PipelineLayoutState().get();
-        const uint32_t set = variable.decorations.set;
-        if (pipeline_layout_state && set < pipeline_layout_state->set_layouts.size()) {
-            binding =
-                pipeline_layout_state->set_layouts[set]->GetDescriptorSetLayoutBindingPtrFromBinding(variable.decorations.binding);
-        }
+    const vvl::PipelineLayout *pipeline_layout_state = pipeline.PipelineLayoutState().get();
+    if (pipeline_layout_state) {
+        binding = pipeline_layout_state->FindBinding(variable);
     }
 
     if (!binding) {
@@ -1427,6 +1430,79 @@ bool CoreChecks::ValidateShaderInterfaceVariablePipeline(const spirv::Module &mo
         skip |= ValidateShaderInputAttachment(module_state, pipeline, variable, loc);
     }
 
+    // TODO - Need to add Shader Object variation of these checks
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9893
+    const bool possible_ycbcr = (pipeline_layout_state && pipeline_layout_state->has_immutable_samplers) &&
+                                // IsAccessed() will prevent things like textureSize() from be marked as a false positive
+                                (variable.IsImage() && variable.IsImageAccessed()) &&
+                                // Quick check to prevent doing tons of sampler state lookup
+                                (variable.info.is_sampler_offset || !variable.info.is_sampler_sampled);
+    if (binding && possible_ycbcr) {
+        if (variable.is_type_sampled_image) {
+            // simple case if using combined image sampler
+            ValidateShaderYcbcrSamplerAccess(*binding, variable, nullptr, objlist, loc);
+        } else if (pipeline_layout_state) {
+            // otherwise we need to search for each sampler variable used with this image access
+            for (uint32_t variable_id : variable.sampled_image_sampler_variable_ids) {
+                const spirv::ResourceInterfaceVariable *sampler_variable =
+                    entrypoint.resource_interface_variable_map.at(variable_id);
+                ASSERT_AND_CONTINUE(sampler_variable);
+                const VkDescriptorSetLayoutBinding *sampler_binding = pipeline_layout_state->FindBinding(*sampler_variable);
+                ASSERT_AND_CONTINUE(sampler_binding);
+                ValidateShaderYcbcrSamplerAccess(*sampler_binding, variable, sampler_variable, objlist, loc);
+            }
+        }
+    }
+
+    return skip;
+}
+
+bool CoreChecks::ValidateShaderYcbcrSamplerAccess(const VkDescriptorSetLayoutBinding &binding,
+                                                  const spirv::ResourceInterfaceVariable &image_variable,
+                                                  const spirv::ResourceInterfaceVariable *sampler_variable,
+                                                  const LogObjectList &objlist, const Location &loc) const {
+    bool skip = false;
+    if (!binding.pImmutableSamplers) {
+        return skip;
+    }
+
+    auto print_access_info = [&image_variable, &sampler_variable]() {
+        std::stringstream ss;
+        ss << image_variable.DescribeDescriptor();
+        if (sampler_variable) {
+            ss << " (sampled with " << sampler_variable->DescribeDescriptor() << ")";
+        } else {
+            ss << " (a combined image sampler)";
+        }
+        return ss.str();
+    };
+
+    for (uint32_t i = 0; i < binding.descriptorCount; i++) {
+        auto sampler_state = Get<vvl::Sampler>(binding.pImmutableSamplers[i]);
+        ASSERT_AND_CONTINUE(sampler_state);
+
+        // It is possible to use pImmutableSamplers for embedded sampler that don't use YCbCr as well.
+        if (!sampler_state->samplerConversion) {
+            continue;
+        }
+
+        if (!image_variable.info.is_sampler_sampled) {
+            skip |= LogError("VUID-RuntimeSpirv-None-10716", objlist, loc,
+                             "%s points to pImmutableSamplers[%" PRIu32
+                             "] (%s) that was created with a VkSamplerYcbcrConversion, but was accessed in the SPIR-V "
+                             "with a non OpImage*Sample* instruction.\nNon-sampled operations (like texelFetch) can't be used used "
+                             "because it doesn't contain the sampler YCbCr conversion information for the driver.",
+                             print_access_info().c_str(), i, FormatHandle(sampler_state->Handle()).c_str());
+            break;  // only need to report a single descriptor
+        } else if (image_variable.info.is_sampler_offset) {
+            skip |= LogError("VUID-RuntimeSpirv-ConstOffset-10718", objlist, loc,
+                             "%s points to pImmutableSamplers[%" PRIu32
+                             "] (%s) that was created with a VkSamplerYcbcrConversion, but was accessed in the SPIR-V "
+                             "with ConstOffset/Offset image operands.",
+                             print_access_info().c_str(), i, FormatHandle(sampler_state->Handle()).c_str());
+            break;  // only need to report a single descriptor
+        }
+    }
     return skip;
 }
 
@@ -1565,13 +1641,8 @@ static const std::string GetShaderTileImageCapabilitiesString(const spirv::Modul
 }
 
 bool CoreChecks::ValidateShaderTileImage(const spirv::Module &module_state, const spirv::EntryPoint &entrypoint,
-                                         const vvl::Pipeline *pipeline, const VkShaderStageFlagBits stage,
-                                         const Location &loc) const {
+                                         const vvl::Pipeline &pipeline, const Location &loc) const {
     bool skip = false;
-
-    if ((stage != VK_SHADER_STAGE_FRAGMENT_BIT) || !IsExtEnabled(extensions.vk_ext_shader_tile_image)) {
-        return skip;
-    }
 
     const bool using_tile_image_capability = module_state.HasCapability(spv::CapabilityTileImageColorReadAccessEXT) ||
                                              module_state.HasCapability(spv::CapabilityTileImageDepthReadAccessEXT) ||
@@ -1582,47 +1653,46 @@ bool CoreChecks::ValidateShaderTileImage(const spirv::Module &module_state, cons
         return skip;
     }
 
-    if (pipeline) {
-        auto rp = pipeline->GraphicsCreateInfo().renderPass;
-        if (rp != VK_NULL_HANDLE) {
-            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-08710", module_state.handle(), loc,
-                             "SPIR-V (Fragment stage) is using capabilities (%s), but renderpass (%s) is not VK_NULL_HANDLE.",
-                             GetShaderTileImageCapabilitiesString(module_state).c_str(), FormatHandle(rp).c_str());
-        }
+    auto rp = pipeline.GraphicsCreateInfo().renderPass;
+    if (rp != VK_NULL_HANDLE) {
+        skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-08710", module_state.handle(), loc,
+                         "SPIR-V (Fragment stage) is using capabilities (%s), but renderpass (%s) is not VK_NULL_HANDLE.",
+                         GetShaderTileImageCapabilitiesString(module_state).c_str(), FormatHandle(rp).c_str());
+    }
 
-        const bool mode_early_fragment_test = entrypoint.execution_mode.Has(spirv::ExecutionModeSet::early_fragment_test_bit);
-        if (module_state.static_data_.has_shader_tile_image_depth_read) {
-            const auto *ds_state = pipeline->DepthStencilState();
-            const bool write_enabled =
-                !pipeline->IsDynamic(CB_DYNAMIC_STATE_DEPTH_WRITE_ENABLE) && (ds_state && ds_state->depthWriteEnable);
-            if (mode_early_fragment_test && write_enabled) {
-                skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pStages-08711", module_state.handle(), loc,
-                                 "SPIR-V (Fragment stage) contains OpDepthAttachmentReadEXT, and depthWriteEnable is not false.");
-            }
-        }
-
-        if (module_state.static_data_.has_shader_tile_image_stencil_read) {
-            const auto *ds_state = pipeline->DepthStencilState();
-            const bool is_write_mask_set = !pipeline->IsDynamic(CB_DYNAMIC_STATE_STENCIL_WRITE_MASK) &&
-                                           (ds_state && (ds_state->front.writeMask != 0 || ds_state->back.writeMask != 0));
-            if (mode_early_fragment_test && is_write_mask_set) {
-                skip |= LogError(
-                    "VUID-VkGraphicsPipelineCreateInfo-pStages-08712", module_state.handle(), loc,
-                    "SPIR-V (Fragment stage) contains OpStencilAttachmentReadEXT, and stencil write mask is not equal to 0 for "
-                    "both front(%" PRIu32 ") and back (%" PRIu32 ").",
-                    ds_state->front.writeMask, ds_state->back.writeMask);
-            }
-        }
-
-        bool using_tile_image_op = module_state.static_data_.has_shader_tile_image_depth_read ||
-                                   module_state.static_data_.has_shader_tile_image_stencil_read ||
-                                   module_state.static_data_.has_shader_tile_image_color_read;
-        const auto *ms_state = pipeline->MultisampleState();
-        if (using_tile_image_op && ms_state && ms_state->sampleShadingEnable && (ms_state->minSampleShading != 1.0)) {
-            skip |= LogError("VUID-RuntimeSpirv-minSampleShading-08732", module_state.handle(), loc,
-                             "minSampleShading (%f) is not equal to 1.0.", ms_state->minSampleShading);
+    const bool mode_early_fragment_test = entrypoint.execution_mode.Has(spirv::ExecutionModeSet::early_fragment_test_bit);
+    if (module_state.static_data_.has_shader_tile_image_depth_read) {
+        const auto *ds_state = pipeline.DepthStencilState();
+        const bool write_enabled =
+            !pipeline.IsDynamic(CB_DYNAMIC_STATE_DEPTH_WRITE_ENABLE) && (ds_state && ds_state->depthWriteEnable);
+        if (mode_early_fragment_test && write_enabled) {
+            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pStages-08711", module_state.handle(), loc,
+                             "SPIR-V (Fragment stage) contains OpDepthAttachmentReadEXT, and depthWriteEnable is not false.");
         }
     }
+
+    if (module_state.static_data_.has_shader_tile_image_stencil_read) {
+        const auto *ds_state = pipeline.DepthStencilState();
+        const bool is_write_mask_set = !pipeline.IsDynamic(CB_DYNAMIC_STATE_STENCIL_WRITE_MASK) &&
+                                       (ds_state && (ds_state->front.writeMask != 0 || ds_state->back.writeMask != 0));
+        if (mode_early_fragment_test && is_write_mask_set) {
+            skip |= LogError(
+                "VUID-VkGraphicsPipelineCreateInfo-pStages-08712", module_state.handle(), loc,
+                "SPIR-V (Fragment stage) contains OpStencilAttachmentReadEXT, and stencil write mask is not equal to 0 for "
+                "both front(%" PRIu32 ") and back (%" PRIu32 ").",
+                ds_state->front.writeMask, ds_state->back.writeMask);
+        }
+    }
+
+    bool using_tile_image_op = module_state.static_data_.has_shader_tile_image_depth_read ||
+                               module_state.static_data_.has_shader_tile_image_stencil_read ||
+                               module_state.static_data_.has_shader_tile_image_color_read;
+    const auto *ms_state = pipeline.MultisampleState();
+    if (using_tile_image_op && ms_state && ms_state->sampleShadingEnable && (ms_state->minSampleShading != 1.0)) {
+        skip |= LogError("VUID-RuntimeSpirv-minSampleShading-08732", module_state.handle(), loc,
+                         "minSampleShading (%f) is not equal to 1.0.", ms_state->minSampleShading);
+    }
+
     return skip;
 }
 
@@ -1678,6 +1748,7 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
     uint32_t local_size_y = 0;
     uint32_t local_size_z = 0;
     uint32_t total_workgroup_shared_memory = 0;
+    uint32_t total_task_payload_memory = 0;
 
     // If specialization-constant instructions are present in the shader, the specializations should be applied.
     if (module_state.static_data_.has_specialization_constants) {
@@ -1820,6 +1891,10 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
 
             total_workgroup_shared_memory = spec_mod.CalculateWorkgroupSharedMemory();
 
+            if ((stage == VK_SHADER_STAGE_TASK_BIT_EXT || stage == VK_SHADER_STAGE_MESH_BIT_EXT)) {
+                total_task_payload_memory = spec_mod.CalculateTaskPayloadMemory();
+            }
+
             spvDiagnosticDestroy(diag);
             spvContextDestroy(ctx);
         } else {
@@ -1836,9 +1911,14 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
         }
     } else {
         module_state.FindLocalSize(entrypoint, local_size_x, local_size_y, local_size_z);
+
+        total_workgroup_shared_memory = module_state.CalculateWorkgroupSharedMemory();
+
+        if ((stage == VK_SHADER_STAGE_TASK_BIT_EXT || stage == VK_SHADER_STAGE_MESH_BIT_EXT)) {
+            total_task_payload_memory = module_state.CalculateTaskPayloadMemory();
+        }
     }
 
-    skip |= ValidateShaderTileImage(module_state, entrypoint, pipeline, stage, loc);
     skip |= ValidateImageWrite(module_state, loc);
     skip |= ValidateShaderExecutionModes(module_state, entrypoint, stage, pipeline, loc);
     skip |= ValidateBuiltinLimits(module_state, entrypoint, pipeline, loc);
@@ -1863,11 +1943,18 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
         skip |= ValidatePointSizeShaderState(module_state, entrypoint, *pipeline, stage, loc);
         skip |= ValidatePrimitiveTopology(module_state, entrypoint, *pipeline, loc);
 
-        if (stage == VK_SHADER_STAGE_FRAGMENT_BIT && pipeline->GraphicsCreateInfo().renderPass == VK_NULL_HANDLE &&
-            module_state.HasCapability(spv::CapabilityInputAttachment) && !enabled_features.dynamicRenderingLocalRead) {
-            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-06061", device, loc,
-                             "is being created with fragment shader state and renderPass = VK_NULL_HANDLE, but fragment "
-                             "shader includes InputAttachment capability.");
+        if (stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+            if (IsExtEnabled(extensions.vk_ext_shader_tile_image)) {
+                skip |= ValidateShaderTileImage(module_state, entrypoint, *pipeline, loc);
+            }
+
+            if (pipeline->GraphicsCreateInfo().renderPass == VK_NULL_HANDLE &&
+                module_state.HasCapability(spv::CapabilityInputAttachment) && !enabled_features.dynamicRenderingLocalRead) {
+                skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-renderPass-06061", device, loc,
+                                 "is being created with fragment shader with InputAttachment capability, but renderPass is "
+                                 "VK_NULL_HANDLE. (It is only possbile to use input attachments with dynamic rendering if the "
+                                 "dynamicRenderingLocalRead feature is enabled)");
+            }
         }
     }
 
@@ -1891,7 +1978,7 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
 
         if (fail && stage == VK_SHADER_STAGE_COMPUTE_BIT) {
             skip |= LogError("VUID-RuntimeSpirv-x-06432", module_state.handle(), loc,
-                             "SPIR-V LocalSiz (%" PRIu32 ", %" PRIu32 ", %" PRIu32
+                             "SPIR-V LocalSize (%" PRIu32 ", %" PRIu32 ", %" PRIu32
                              ") exceeds device limit maxComputeWorkGroupInvocations (%" PRIu32 ").",
                              local_size_x, local_size_y, local_size_z, phys_dev_props.limits.maxComputeWorkGroupInvocations);
         }
@@ -1905,7 +1992,8 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
         TypeToDescriptorTypeSet(module_state, variable.type_id, descriptor_type_set);
         skip |= ValidateShaderInterfaceVariable(module_state, variable, descriptor_type_set, loc);
         if (pipeline) {
-            skip |= ValidateShaderInterfaceVariablePipeline(module_state, *pipeline, variable, descriptor_type_set, loc);
+            skip |=
+                ValidateShaderInterfaceVariablePipeline(module_state, entrypoint, *pipeline, variable, descriptor_type_set, loc);
         } else if (stage_state.shader_object_create_info) {
             skip |= ValidateShaderInterfaceVariableShaderObject(*stage_state.shader_object_create_info->ptr(), variable,
                                                                 descriptor_type_set, loc);
@@ -1918,6 +2006,8 @@ bool CoreChecks::ValidateShaderStage(const ShaderStageState &stage_state, const 
         skip |= ValidateTaskMeshWorkGroupSizes(module_state, entrypoint, local_size_x, local_size_y, local_size_z, loc);
         if (stage == VK_SHADER_STAGE_TASK_BIT_EXT) {
             skip |= ValidateEmitMeshTasksSize(module_state, entrypoint, stage_state, loc);
+        } else if (stage == VK_SHADER_STAGE_MESH_BIT_EXT) {
+            skip |= ValidateMeshMemorySize(module_state, total_workgroup_shared_memory, total_task_payload_memory, loc);
         }
     }
 
@@ -2006,7 +2096,7 @@ bool CoreChecks::RunSpirvValidation(spv_const_binary_t &binary, const Location &
 
     uint32_t hash = 0;
     if (cache) {
-        hash = hash_util::ShaderHash((void *)binary.code, binary.wordCount * sizeof(uint32_t));
+        hash = hash_util::Hash32((void *)binary.code, binary.wordCount * sizeof(uint32_t));
         if (cache->Contains(hash)) {
             return skip;
         }
@@ -2019,16 +2109,40 @@ bool CoreChecks::RunSpirvValidation(spv_const_binary_t &binary, const Location &
     spv_diagnostic diag = nullptr;
     const spv_result_t spv_valid = spvValidateWithOptions(ctx, spirv_val_options, &binary, &diag);
     if (spv_valid != SPV_SUCCESS) {
-        // VkShaderModuleCreateInfo can come from many functions
+        const char *error_message = diag && diag->error ? diag->error : "(no error text)";
+
+        // Umbrella VUID if we can't find one in spirv-val
         const char *vuid = loc.function == Func::vkCreateShadersEXT ? "VUID-VkShaderCreateInfoEXT-pCode-08737"
                                                                     : "VUID-VkShaderModuleCreateInfo-pCode-08737";
 
+        // We want to search inside the spirv-val error message to see if there is VUID in it as it allows people to silence just
+        // that VUID and not the whole spirv-val check
+        char *spirv_val_vuid = nullptr;
+        if (diag && diag->error) {
+            // Note: Will always start with "[VUID-xxx-00000]" if there is one
+            if (std::strncmp(error_message, "[VUID", 5) == 0) {
+                const char *bracket_end = std::strchr(error_message, ']');
+                if (bracket_end) {
+                    const size_t vuid_len = bracket_end - error_message - 1;
+                    spirv_val_vuid = new char[vuid_len + 1];  // +1 for null-terminator
+                    std::strncpy(spirv_val_vuid, error_message + 1, vuid_len);
+                    spirv_val_vuid[vuid_len] = '\0';
+
+                    // Remove VUID from error message now
+                    error_message = bracket_end + 2;
+                }
+                vuid = spirv_val_vuid;
+            }
+        }
+
         if (spv_valid == SPV_WARNING) {
-            skip |= LogWarning(vuid, device, loc.dot(Field::pCode), "(spirv-val produced a warning):\n%s",
-                               diag && diag->error ? diag->error : "(no error text)");
+            skip |= LogWarning(vuid, device, loc.dot(Field::pCode), "(spirv-val produced a warning):\n%s", error_message);
         } else {
-            skip |= LogError(vuid, device, loc.dot(Field::pCode), "(spirv-val produced an error):\n%s",
-                             diag && diag->error ? diag->error : "(no error text)");
+            skip |= LogError(vuid, device, loc.dot(Field::pCode), "(spirv-val produced an error):\n%s", error_message);
+        }
+
+        if (spirv_val_vuid) {
+            delete[] spirv_val_vuid;
         }
     } else if (cache) {
         // No point to cache anything that is not valid, or it will get supressed on the next run
@@ -2394,6 +2508,27 @@ bool CoreChecks::ValidateEmitMeshTasksSize(const spirv::Module &module_state, co
                                  phys_dev_ext_props.mesh_shader_props_ext.maxMeshWorkGroupTotalCount);
                 }
             }
+        }
+    }
+
+    return skip;
+}
+
+bool CoreChecks::ValidateMeshMemorySize(const spirv::Module &module_state, uint32_t total_workgroup_shared_memory,
+                                        uint32_t total_task_payload_memory, const Location &loc) const {
+    bool skip = false;
+
+    if (total_task_payload_memory + total_workgroup_shared_memory >
+        phys_dev_ext_props.mesh_shader_props_ext.maxMeshPayloadAndSharedMemorySize) {
+        // If task payload memory size is 0 and only shared memory is already over the limit then the more appropriate VUID 08754
+        // was already reported
+        if (total_task_payload_memory > 0) {
+            skip |= LogError(
+                "VUID-RuntimeSpirv-maxMeshPayloadAndSharedMemorySize-08755", module_state.handle(), loc,
+                "SPIR-V uses %" PRIu32 " bytes of task payload memory and %" PRIu32 " bytes of shared memory (combined %" PRIu32
+                " bytes), which is more than maxMeshPayloadAndSharedMemorySize (%" PRIu32 ").",
+                total_task_payload_memory, total_workgroup_shared_memory, total_task_payload_memory + total_workgroup_shared_memory,
+                phys_dev_ext_props.mesh_shader_props_ext.maxMeshPayloadAndSharedMemorySize);
         }
     }
 

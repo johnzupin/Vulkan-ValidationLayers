@@ -22,7 +22,13 @@ set(LAYER_NAME "VkLayer_khronos_validation")
 
 add_library(VkLayer_utils STATIC)
 target_sources(VkLayer_utils PRIVATE
+    containers/container_utils.h
     containers/custom_containers.h
+    containers/limits.h
+    containers/small_container.h
+    containers/small_vector.h
+    containers/span.h
+    containers/tls_guard.h
     error_message/logging.h
     error_message/logging.cpp
     error_message/error_location.cpp
@@ -60,6 +66,8 @@ target_sources(VkLayer_utils PRIVATE
     utils/math_utils.h
     utils/vk_layer_extension_utils.cpp
     utils/vk_layer_extension_utils.h
+    utils/keyboard.cpp
+    utils/keyboard.h
     utils/ray_tracing_utils.cpp
     utils/ray_tracing_utils.h
     utils/text_utils.cpp
@@ -82,11 +90,18 @@ target_link_libraries(VkLayer_utils PUBLIC
 target_include_directories(VkLayer_utils SYSTEM PRIVATE external)
 target_include_directories(VkLayer_utils PUBLIC . ${API_TYPE})
 
-find_package(robin_hood CONFIG)
-option(USE_ROBIN_HOOD_HASHING "robin_hood provides faster versions of std::unordered_map and std::unordered_set" ${robin_hood_FOUND})
-if (USE_ROBIN_HOOD_HASHING)
-    target_link_libraries(VkLayer_utils PUBLIC robin_hood::robin_hood)
-    target_compile_definitions(VkLayer_utils PUBLIC USE_ROBIN_HOOD_HASHING)
+option(USE_CUSTOM_HASH_MAP "Use a custom hashing library that is faster than std::unordered_map and std::unordered_set (default: ON)" ON)
+
+if(DEFINED USE_ROBIN_HOOD_HASHING)
+    message(DEPRECATION "USE_ROBIN_HOOD_HASHING has been deprecated. Please use USE_CUSTOM_HASH_MAP option instead.")
+    set(USE_CUSTOM_HASH_MAP ${USE_ROBIN_HOOD_HASHING})
+endif()
+
+if (USE_CUSTOM_HASH_MAP)
+    message(STATUS "Using parallel_hashmap as custom hash maps")
+    target_compile_definitions(VkLayer_utils PUBLIC USE_CUSTOM_HASH_MAP)
+else()
+    message(STATUS "Using STL maps instead of custom hash maps")
 endif()
 
 # Using mimalloc on non-Windows OSes currently results in unit test instability with some
@@ -114,6 +129,18 @@ elseif(MSVC)
         /wd4702 # unreachable code
         /wd4389 # signed/unsigned mismatch
     )
+endif()
+
+option(DEBUG_CAPTURE_KEYBOARD "Every QueueSubmit if F1 is pressed, a DebugCapture function will be called and a custom action can be done (default: OFF)" OFF)
+if (DEBUG_CAPTURE_KEYBOARD)
+    target_compile_definitions(VkLayer_utils PUBLIC DEBUG_CAPTURE_KEYBOARD)
+    if(WIN32)
+    else()
+        # needed for XQueryKeymap
+        find_package(X11 REQUIRED)
+        target_link_libraries(VkLayer_utils PRIVATE ${X11_LIBRARIES})
+        target_include_directories(VkLayer_utils PRIVATE ${X11_INCLUDE_DIR})
+    endif()
 endif()
 
 add_subdirectory(gpuav/spirv)
@@ -148,6 +175,7 @@ target_sources(vvl PRIVATE
     chassis/chassis_manual.cpp
     chassis/dispatch_object_manual.cpp
     containers/qfo_transfer.h
+    containers/qfo_transfer.cpp
     containers/range.h
     containers/range_map.h
     containers/subresource_adapter.cpp
@@ -195,6 +223,15 @@ target_sources(vvl PRIVATE
     error_message/spirv_logging.cpp
     external/vma/vma.h
     external/vma/vma.cpp
+    external/parallel_hashmap/btree.h
+    external/parallel_hashmap/meminfo.h
+    external/parallel_hashmap/phmap_base.h
+    external/parallel_hashmap/phmap_bits.h
+    external/parallel_hashmap/phmap_config.h
+    external/parallel_hashmap/phmap_dump.h
+    external/parallel_hashmap/phmap_fwd_decl.h
+    external/parallel_hashmap/phmap_utils.h
+    external/parallel_hashmap/phmap.h
     ${API_TYPE}/generated/best_practices.cpp
     ${API_TYPE}/generated/best_practices_device_methods.h
     ${API_TYPE}/generated/best_practices_instance_methods.h
@@ -236,11 +273,14 @@ target_sources(vvl PRIVATE
     ${API_TYPE}/generated/validation_cmd_first_instance_comp.cpp
     ${API_TYPE}/generated/validation_cmd_draw_indexed_indirect_index_buffer_comp.h
     ${API_TYPE}/generated/validation_cmd_draw_indexed_indirect_index_buffer_comp.cpp
+    ${API_TYPE}/generated/validation_cmd_setup_draw_indexed_indirect_index_buffer_comp.h
+    ${API_TYPE}/generated/validation_cmd_setup_draw_indexed_indirect_index_buffer_comp.cpp
     ${API_TYPE}/generated/validation_cmd_draw_mesh_indirect_comp.h
     ${API_TYPE}/generated/validation_cmd_draw_mesh_indirect_comp.cpp
     ${API_TYPE}/generated/validation_cmd_trace_rays_rgen.h
     ${API_TYPE}/generated/validation_cmd_trace_rays_rgen.cpp
     gpuav/core/gpuav_settings.h
+    gpuav/core/gpuav_settings.cpp
     gpuav/core/gpuav_constants.h
     gpuav/validation_cmd/gpuav_validation_cmd_common.h
     gpuav/validation_cmd/gpuav_validation_cmd_common.cpp
@@ -292,12 +332,15 @@ target_sources(vvl PRIVATE
     state_tracker/device_memory_state.h
     state_tracker/device_state.cpp
     state_tracker/device_state.h
+    state_tracker/event_map.h
     state_tracker/fence_state.cpp
     state_tracker/fence_state.h
     state_tracker/image_layout_map.cpp
     state_tracker/image_layout_map.h
     state_tracker/image_state.cpp
     state_tracker/image_state.h
+    state_tracker/last_bound_state.cpp
+    state_tracker/last_bound_state.h
     state_tracker/pipeline_layout_state.cpp
     state_tracker/pipeline_layout_state.h
     state_tracker/pipeline_state.cpp
@@ -361,6 +404,7 @@ target_sources(vvl PRIVATE
     sync/sync_common.h
     sync/sync_error_messages.cpp
     sync/sync_error_messages.h
+    sync/sync_image.cpp
     sync/sync_image.h
     sync/sync_op.cpp
     sync/sync_op.h
@@ -401,6 +445,9 @@ set_target_properties(vvl PROPERTIES OUTPUT_NAME ${LAYER_NAME})
 if(MSVC)
     target_link_options(vvl PRIVATE /DEF:${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}.def)
     target_compile_options(vvl PRIVATE /bigobj)
+
+    set(NATVIS_FILES "${CMAKE_CURRENT_SOURCE_DIR}/types.natvis" "${CMAKE_CURRENT_SOURCE_DIR}/external/parallel_hashmap/natvis/phmap.natvis")
+    target_sources(vvl PRIVATE ${NATVIS_FILES})
 elseif(MINGW)
     target_sources(vvl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}.def)
     target_compile_options(vvl PRIVATE -Wa,-mbig-obj)
@@ -421,6 +468,13 @@ endif()
     # Both Apple and IOS
     target_link_options(vvl PRIVATE -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}.exp)
 elseif(ANDROID)
+    # Need 16k pages in Android 15
+    # When we bump our NDK requirement to r28 we can remove
+    # https://developer.android.com/guide/practices/page-sizes#compile-r28
+    # https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9703
+    # https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9170
+    target_link_options(vvl PRIVATE "-Wl,-z,max-page-size=16384")
+
     target_link_options(vvl PRIVATE LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}-android.map)
 else()
     target_link_options(vvl PRIVATE LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${LAYER_NAME}.map)
