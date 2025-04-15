@@ -1,3 +1,570 @@
+vulkan-validationlayers (1.4.312.0~rc1-1lunarg24.04-1) noble; urgency=medium
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.4.310
+
+  [ ziga-lunarg ]
+  * layers: Add vuid 10608
+  * tests: Test dynamic line rasterization mode
+
+  [ Juan Ramos ]
+  * layers: Fix undefined behavior for DynamicStateValue
+  * layers: Use dynamic_cast to fix undefined behavior
+  * layers: Fix undefined bitshit
+  * layers: Calling a member function on a nullptr
+  * layers: Iterating over nullptr fix
+  * tests: Fix illegal bit shift
+  * layers: Fix misaligned pointer arithmetic
+  * ci: Add UBSAN to ci
+
+  [ Arno ]
+  * layers: Fix vkGetRayTracingShaderGroupStackSizeKHR
+
+  [ Hyunjun Ko ]
+  * tests: Adds a testcase with RateControl disabled
+
+  [ ziga-lunarg ]
+  * layers: Fix checking queue family indices for swapchain images
+  * tests: Create images from swapchain with exclusive sharing
+
+  [ Artem Kharytoniuk ]
+  * sync: Do not skip strided data in ray tracing validation
+
+  [ spencer-lunarg ]
+  * docs: Use SDK naming for sync docs
+
+  [ Artem Kharytoniuk ]
+  * sync: Remove old formating code
+
+  [ Jeremy Gebben ]
+  * gpuav: Store modified extensions and features locally
+  * tests: Fix validation errors in GPU-AV tests
+
+  [ spencer-lunarg ]
+  * gpuav: Introduce unsafe mode
+  * gpuav: Add unsafe to general buffer
+  * gpuav: Move descriptor indexing unsafe to block
+  * gpuav: Cleanup unsafe code and comment
+
+  [ Arno ]
+  * gpuav: Add simple buffer caching
+  * gpuav: Add simple desc set caching
+  * gpuav: Persistenly mapped buffer
+  * gpuav: No std::vector to store descriptor writes
+  * gpuav: Use a small_vector instead of a map
+  * gpuav: Rework desc set caching
+  * vvl: Use a raw pointer instead of a unique_ptr
+  * gpuav: Add Tracy zones where relevant
+  * vvl: Set Queue ThreadFunc name for profiling
+  * gpuav: Remove UnmapMemory, Rename MapMemory
+
+  [ Artem Kharytoniuk ]
+  * sync: Cleanup error reporting code
+
+  [ Juan Ramos ]
+  * ci: Reduce unneccessary builds
+  * ci: Remove linux-debug
+
+  [ spencer-lunarg ]
+  * scripts: Ignore VK_EXT_debug_util function check
+  * layers: Cleanup for deferring to GPU-AV
+  * printf: Add support for printing pointers
+  * layers: Improve VU message for BDa
+  * gpuav: Don't do work if Robustness is on
+
+  [ ziga-lunarg ]
+  * layers: Validate memory barrier 2 pNext
+  * tests: Test using access flags 3
+
+  [ spencer-lunarg ]
+  * gpuav: Add more Post Processing tests
+  * gpuav: Dont check combined image sampler when possible
+
+  [ ziga-lunarg ]
+  * tests: Create swapchain with oldSwapchain
+
+  [ Artem Kharytoniuk ]
+  * sync: Update error message properties naming
+  * sync: Move shared message helpers to sync_reporting
+
+  [ spencer-lunarg ]
+  * layers: Fix typo enabling wrong feature
+
+  [ Artem Kharytoniuk ]
+  * sync: Add comments and cleanup interfaces of reporting code
+  * sync: Reoder reporting implementation to match header order
+
+  [ ziga-lunarg ]
+  * layers: Remove viewMask check for secondary cmd buffers
+  * tests: Draw in secondary cmd buffer with wrong viewMask
+
+  [ spencer-lunarg ]
+  * gpuav: Remove unused InjectFunctionPass
+  * gpuav: Create InstructionMeta object
+  * gpuav: Remove more pass member variables
+  * gpuav: Remove reset from Meta
+  * tests: Fix broken test on RADV
+  * gpuav: Fix not reseting dummy object
+
+  [ Spencer Fricke ]
+  * layers: Fix image typo
+
+  [ Artem Kharytoniuk ]
+  * sync: Cleanup ResourceUsageRecord and corresponding properties
+
+  [ ziga-lunarg ]
+  * tests: Test using swapchain after destroy
+
+  [ spencer-lunarg ]
+  * layers: Remove Marco so tracy compiles with Clang19
+  * layers: Add comment why we use small_vector
+  * layers: Pass down Handles down to descriptor validator
+  * gpuav: Fix not tracking OpFunctionParameter
+
+  [ ziga-lunarg ]
+  * tests: Test as build range info with primitiveCount 0
+
+  [ spencer-lunarg ]
+  * gpuav: Hash Post Processing once per block
+  * gpuav: Fix crash when Binding LUT is null
+  * gpuav: Remove do-while from glsl shaders
+  * gpuav: Fix unsafe mode for Descriptor Indexing
+
+  [ Jeremy Gebben ]
+  * tests: Add missing feature to GPU-AV CooperativeVector
+  * layers: Use Logger in class DescriptorValidator
+
+  [ ziga-lunarg ]
+  * layers: Fix bounds checks with uint32 overflow
+  * tests: Image copies with uint32 bounds overflow
+  * layers: Fix typo
+
+  [ spencer-lunarg ]
+  * scripts: Update SPIRV-Tools
+  * layer: Improve YCbCr error messages
+
+  [ Arno ]
+  * vvl: Handle null desc set layout
+  * vvl: Circumvent safe accel struct issues
+  * vvl: Cleanup desc set layout size caching
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix present semaphore in use after acquire fence wait
+  * tests: Test present semaphore not in use
+
+  [ spencer-lunarg ]
+  * layers: Multiview with Mesh Shader in GLSL
+  * layers: Clarify vkCmdSetColorWriteEnableEXT VU
+  * layers: Make Descriptor Type warning in precall
+  * layers: Cleanup of error messages
+  * gpuav: Remove Loc from Mapped Ptr
+  * gpuav: Use EntryPoint to map shader to post process
+  * gpuav: Add a Clear to vbo::Buffer
+  * gpuav: Retry Pipeline if failed with modification
+
+  [ ziga-lunarg ]
+  * layers: Fix image copy queue support check
+  * tests: Test copying between ds images
+
+  [ Artem Kharytoniuk ]
+  * layers: Remove assert from fence tracker
+
+  [ Daniel Rakos ]
+  * layers: Readd removed state creation abstractions
+
+  [ Arno ]
+  * gpuav: No OOB vertex validation when robustness on
+  * gpuav: VUID-vkCmdDrawMultiIndexedEXT-None-02721
+
+  [ spencer-lunarg ]
+  * layers: Remove Robinhood for spirv parsing
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove unnecessary layout transitions
+
+  [ Arno ]
+  * printf: No error if non semantic info ext not seen
+
+  [ spencer-lunarg ]
+  * gpuav: Skip TexelBuffer OOB if robustness
+
+  [ Spencer Fricke ]
+  * build: Use 16k pages in Android
+  * build: Use vvl instead of CMAKE_PROJECT_NAME
+  * build: Link to Android Doc
+
+  [ spencer-lunarg ]
+  * gpuav: Force on Robustness 2 as well
+  * layers: Fix BDA being viewed as 1 byte
+  * tests: Add BDA Stress test
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove layout state from vkt::Image
+  * tests: Fix image CreateInfo incorrect use
+  * tests: More image cleanup
+
+  [ spencer-lunarg ]
+  * gpuav: Nit cleanup for validation cmd
+
+  [ Arno ]
+  * gpuav: Handle instance rate divisor
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove unused Image::image_layout_ member
+
+  [ spencer-lunarg ]
+  * layers: Split up custom_containers.h
+
+  [ ziga-lunarg ]
+  * layers: Fix checking blit with remaining array layers
+  * tests: Test blitting with remaining array layers
+
+  [ spencer-lunarg ]
+  * gpuav: Remove NV RTX for KHR RTX
+
+  [ Artem Kharytoniuk ]
+  * tests: Remove mip_levels parameter from Image constructor
+
+  [ spencer-lunarg ]
+  * gpuav: Add an EarlySkip option in the pass
+  * build: Use Custom hash build name
+  * layers: VUID Churn 311
+
+  [ Jeremy Gebben ]
+  * layers: Remove state object inheritance
+
+  [ spencer-lunarg ]
+  * layers: Move logic into Image/ImageView state
+  * layers: Fix VK_REMAINING_ARRAY_LAYERS cases
+  * gpuav: Rework of Post Processing
+
+  [ Artem Kharytoniuk ]
+  * tests: Replace DefaultCreateInfo with ImageCreateInfo2D
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.4.311
+
+  [ Daniel Rakos ]
+  * tests: Fix TestICD freeing for aligned_alloc
+
+  [ Trent Shailer ]
+  * layers: Fix pCode typo
+
+  [ spencer-lunarg ]
+  * layers: Improve Shader Object error messages
+
+  [ ziga-lunarg ]
+  * layers: Validate mesh shader memory size
+  * tests: Mesh shader memory limit
+  * layers: Fix vuid 08793 check
+  * tests: Test invalid image to image copies
+
+  [ spencer-lunarg ]
+  * gpuav: Use API Prefix for naming
+  * gpuav: Create common Pre/Post Action spot
+  * gpuav: Remove unnecessary link id member variable
+  * layers: Create a Variable Pointer helper
+  * gpuav: Initalize Private Variable
+
+  [ ziga-lunarg ]
+  * tests: Move fragment density map offset tests to EXT
+
+  [ spencer-lunarg ]
+  * gpauv: Remove substate where not needed
+
+  [ Arno ]
+  * gpuav: Improve perf for draw indexed indirect val
+
+  [ spencer-lunarg ]
+  * tests: Add Stress test for GPU loops
+
+  [ Artem Kharytoniuk ]
+  * tests: Add helper for sync2 barriers
+
+  [ spencer-lunarg ]
+  * gpuav: Use List instead of Vector Block Iter
+  * gpuav: Remoe InjectConditionalFunctionPass
+  * gpuav: Cleanup common code for all Passes
+  * gpuav: Dont conditional inject if unsafe mode
+  * gpuav: Fix Loop Heeader logic
+  * gpuav: Add debug way to disable loops
+
+  [ Artem Kharytoniuk ]
+  * layers: Remove unused SubresourceLayout struct
+  * msvc: Add natvis file for custom vvl types
+
+  [ ziga-lunarg ]
+  * layers: Fix printing uint values in render area checks
+  * tests: Remove invalid test
+
+  [ spencer-lunarg ]
+  * layers: More buffer to stateless
+
+  [ Daniel Rakos ]
+  * layers: Fix false swapchain image leak error
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup BothRangeMap
+
+  [ spencer-lunarg ]
+  * gpuav: Compress error output messages
+  * tests: Fix BindMemoryStatusBuffer
+
+  [ Jeremy Gebben ]
+  * state_tracker: Restore VALSTATETRACK_DERIVED_STATE_OBJECT
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup image barrier validation
+
+  [ ziga-lunarg ]
+  * layers: Fix getting vertex attrib divisor properties
+  * tests: Vertex attrib divisor with both ext and khr
+
+  [ spencer-lunarg ]
+  * gpuav: Fix bug not casting compute builtin
+  * layers: Split up image validation mega function
+
+  [ ziga-lunarg ]
+  * layers: Fix indirect as build crash
+  * tests: Build indirect as without index buffer
+
+  [ spencer-lunarg ]
+  * layers: Use Parallel Hashmap
+
+  [ Artem Kharytoniuk ]
+  * layers: Move dynamic rendering barrier validation
+  * layers: Fix image barrier layout validation
+  * tests: Test image barrier layout validation
+
+  [ spencer-lunarg ]
+  * gpuav: Fix and better test BDA pass
+  * gpuav: Validate struct acceses with BDA
+  * gpuav: Fix BDA clampping payload and share instead
+  * layers: Move old STL to new custom hash
+  * layers: Remove unused includes
+
+  [ Takuto Ikuta ]
+  * layers: Fix missing includes for small_vector.h
+
+  [ spencer-lunarg ]
+  * gpuav: Seperated generated link info from dynamic
+  * ci: Use cmake 3 until jsoncpp is fixed
+  * scripts: Tool to inspect instrumented spirv
+
+  [ Artem Kharytoniuk ]
+  * layers: Rename ShaderTileImage VUIDs to DynamicRenderingBarrier
+
+  [ spencer-lunarg ]
+  * gpuav: Fix checking for variables out of function
+
+  [ Jeremy Gebben ]
+  * build: Update shader dependencies to latest
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix crash when using not enabled feature
+  * tests: Test using not enabled feature
+
+  [ Arno ]
+  * gpuav: Auto dump invalid spirv
+
+  [ SRSaunders ]
+  * layers: Remove SPIR-V non-semantic info if portability enabled
+
+  [ Artem Kharytoniuk ]
+  * sync: Clamp invalid ranges in ray tracing validation
+  * tests: Test invalid maxVertex when building AS
+
+  [ Juan Ramos ]
+  * ci: Fix jsoncpp issue
+
+  [ Jeremy Gebben ]
+  * state: Rename vvl::Device to vvl::DeviceState
+  * chassis: Shared state tracking
+
+  [ spencer-lunarg ]
+  * layers: Small cleanup of SPIR-V helpers
+  * scripts: Multi-thread generate_spirv.py
+
+  [ Arno ]
+  * gpuav: Fix draw buffer offset update
+  * gpuav: Add debug labels to post processing
+
+  [ spencer-lunarg ]
+  * gpuav: Swap in Private Variable at Linking
+  * gpuav: Combined Linked functions to a single file
+  * gpuav: Handle OpInBoundsAccessChain
+  * layers: Fix maintenance8 VU for 2D
+  * scripts: Fix generate_spirv to report errors
+  * layers: Fix Tessellation interface bug
+
+  [ ziga-lunarg ]
+  * tests: Fix coop matrix tests
+
+  [ spencer-lunarg ]
+  * layers: Get VUID from spirv-val
+
+  [ Artem Kharytoniuk ]
+  * docs: Revert "docs: Use SDK naming for sync docs"
+  * layers: Track semaphore is in use by swapchain
+  * tests: Test semaphore is in use by swapchain
+
+  [ Jeremy Gebben ]
+  * state_tracker: Use ! instead of not in HasSubState template
+
+  [ ziga-lunarg ]
+  * layers: Validate shader object nextStage
+  * tests: Fix shader object nextStage
+
+  [ spencer-lunarg ]
+  * layers: Fix CoopMat for subgroup size
+
+  [ Jeremy Gebben ]
+  * docs: Add chassis and shared state tracking documentation
+
+  [ ziga-lunarg ]
+  * layers: Fix descriptor allocation warning with 0 count
+  * tests: Allocate descriptor with binding that has 0 count
+  * tests: Add missing unordered map include
+
+  [ spencer-lunarg ]
+  * gpuav: Use the Global Descriptor Index to find binding
+  * gpuav: Create a single LogError for passes
+  * gpuav: Break BDA up into 2 functions
+  * gpuav: Use LogError pass on BDA
+  * gpuav: Create cached struct size map
+  * layers: VUID for Pipeline Robustness and Descriptor Index
+  * gpuav: Fix crash with GPL
+  * scripts: Warning and misc cleanup
+
+  [ Jeremy Gebben ]
+  * scripts: Set all copies of vvl::base::Device::is_device_lost
+
+  [ spencer-lunarg ]
+  * gpuav: Move pre pass out of RequiresInstrumentation
+
+  [ Jeremy Gebben ]
+  * corechecks: Fix bad instance cast
+
+  [ Artem Kharytoniuk ]
+  * layers: Update semaphore in use by swapchain error message
+
+  [ ziga-lunarg ]
+  * layers: Fix vuid 09517 message
+  * layers: Fix reading from input indices nullptr
+  * tests: Null color attachment input indices
+
+  [ Spencer Fricke ]
+  * layers: Fix pColorAttachmentLocations loc
+
+  [ ziga-lunarg ]
+  * layers: Add missing validation for HIC layout transition
+  * tests: HIC layout transition with depth or stencil only formats
+
+  [ Artem Kharytoniuk ]
+  * sync: Validate vkCmdDispatchBase entrypoint
+  * tests: Test vkCmdDispatchBase entrypoint
+
+  [ Jeremy Gebben ]
+  * chassis: Fix Device and Instance destroy order
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.4.312
+
+  [ Jeremy Gebben ]
+  * build: Update shader dependencies to latest
+
+  [ Arno ]
+  * gpuav: Warn on reaching max actions cmd validation
+
+  [ spencer-lunarg ]
+  * gpuav: Safe Mode off by default
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix validation no layout transition during rendering
+  * tests: Test no layout transition during rendering
+
+  [ spencer-lunarg ]
+  * gpuav: Reduce duplicate indexing into descriptor array
+  * gpuav: Reduce BDA when statically can detect range
+
+  [ Artem Kharytoniuk ]
+  * layers: Add phmap natvis file
+
+  [ Arno ]
+  * gpuav: Upgrade selective shader instrumentation
+
+  [ spencer-lunarg ]
+  * layers: Update shader object VUID for 1.4.312
+  * layers: Add handle to shader object spirv state
+  * tests: Fix test on lavapipe
+  * layers: Fix checking for Line Topology
+  * layers: Add runtime topology VU checks
+
+  [ arno-lunarg ]
+  * scripts: Add stats to inspect_gpuav_spirv
+
+  [ Steven Perron ]
+  * docs: Update LICENSE.txt
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix SHADER_READ meta access detection for 1.4.312
+  * tests: Test SHADER_READ meta access detection
+  * settings: Remove stable messages option
+  * layers: Check layout mismatch for dynamic rendering barrier
+  * tests: Test layout mismatch for dynamic rendering barrier
+
+  [ spencer-lunarg ]
+  * scripts: Ignore NV RTX Union of pointers
+  * layers: Move YCbCr check from drawtime to pipeline
+  * layers: Organize dynamic state functions
+  * layers: Add IsDynamic to LastBoundState
+
+  [ Jeremy Gebben ]
+  * state_tracker: Fix bindless descriptor performance regression
+
+  [ ziga-lunarg ]
+  * bp: Fix checking if vkGetPhysicalDeviceFeatures has been called
+  * tests: Create device with VkPhysicalDeviceFeatures
+
+  [ ntsh-oni ]
+  * scripts: Fix typo in requirements
+  * tests: Fix typo in requirements
+  * layers: Fix typo in requirements
+
+  [ Artem Kharytoniuk ]
+  * sync: Fix reported command buffer and queue mismatch
+  * tests: Test reported command buffer matches queue
+
+  [ spencer-lunarg ]
+  * tests: Remove unmap where not needed
+
+  [ Artem Kharytoniuk ]
+  * layers: Fix waiting on present fence did not have effect
+  * layers: Implement strict rules for DeviceWait with maintenance1
+  * tests: Test reusing present semaphore after queue wait
+  * layers: Update message formatting
+
+  [ jpr42 ]
+  * ci: Utilize pre-installed Ninja
+
+  [ spencer-lunarg ]
+  * scripts: Update SPIR-V Deps
+  * tests: Combine simple Submit and Wait together
+  * layers: Move ValidateShaderTileImage
+
+  [ Takuto Ikuta ]
+  * layers: Add a missing include
+
+  [ spencer-lunarg ]
+  * layers: Remove unused includes
+  * layers: Print out pNext Chain when useful
+  * layers: Add Debug Capture option
+
+  [ Arno ]
+  * layers: Remove <regex> and <filesystem> from .h
+
+ -- john <john@odin>  Tue, 15 Apr 2025 15:01:20 -0600
+
 vulkan-validationlayers (1.4.309.0~rc3-1lunarg24.04-1) noble; urgency=medium
 
   [ spencer-lunarg ]
