@@ -57,9 +57,7 @@ void PostProcessDescriptorIndexingPass::CreateFunctionCall(BasicBlock& block, In
 }
 
 bool PostProcessDescriptorIndexingPass::RequiresInstrumentation(const Function& function, const Instruction& inst,
-                                                                InstructionMeta& meta,
-                                                                vvl::unordered_set<uint32_t>& found_in_block_set,
-                                                                const DescriptroIndexPushConstantAccess& pc_access) {
+                                                                InstructionMeta& meta) {
     const uint32_t opcode = inst.Opcode();
 
     const Instruction* var_inst = nullptr;
@@ -158,15 +156,6 @@ bool PostProcessDescriptorIndexingPass::RequiresInstrumentation(const Function& 
         return false;
     }
 
-    const uint32_t hash_descriptor_index_id =
-        pc_access.next_alias_id == meta.descriptor_index_id ? pc_access.descriptor_index_id : meta.descriptor_index_id;
-    uint32_t hash_content[4] = {meta.descriptor_set, meta.descriptor_binding, hash_descriptor_index_id, meta.variable_id};
-    const uint32_t hash = hash_util::Hash32(hash_content, sizeof(uint32_t) * 4);
-    if (found_in_block_set.find(hash) != found_in_block_set.end()) {
-        return false;  // duplicate detected
-    }
-    found_in_block_set.insert(hash);
-
     meta.target_instruction = &inst;
 
     return true;
@@ -179,6 +168,9 @@ bool PostProcessDescriptorIndexingPass::Instrument() {
 
     for (const auto& function : module_.functions_) {
         if (function->instrumentation_added_) continue;
+
+        FunctionDuplicateTracker function_duplicate_tracker;
+
         for (auto block_it = function->blocks_.begin(); block_it != function->blocks_.end(); ++block_it) {
             BasicBlock& current_block = **block_it;
 
@@ -188,14 +180,24 @@ bool PostProcessDescriptorIndexingPass::Instrument() {
             auto& block_instructions = current_block.instructions_;
 
             // We only need to instrument the set/binding/index/variable combo once per block
-            vvl::unordered_set<uint32_t> found_in_block_set;
+            BlockDuplicateTracker& block_duplicate_tracker = function_duplicate_tracker.GetAndUpdate(current_block);
             DescriptroIndexPushConstantAccess pc_access;
+
             for (auto inst_it = block_instructions.begin(); inst_it != block_instructions.end(); ++inst_it) {
                 pc_access.Update(module_, inst_it);
 
                 InstructionMeta meta;
-                if (!RequiresInstrumentation(*function, *(inst_it->get()), meta, found_in_block_set, pc_access)) {
+                if (!RequiresInstrumentation(*function, *(inst_it->get()), meta)) {
                     continue;
+                }
+
+                const uint32_t hash_descriptor_index_id =
+                    pc_access.next_alias_id == meta.descriptor_index_id ? pc_access.descriptor_index_id : meta.descriptor_index_id;
+                uint32_t hash_content[4] = {meta.descriptor_set, meta.descriptor_binding, hash_descriptor_index_id,
+                                            meta.variable_id};
+                const uint32_t hash = hash_util::Hash32(hash_content, sizeof(uint32_t) * 4);
+                if (function_duplicate_tracker.FindAndUpdate(block_duplicate_tracker, hash)) {
+                    continue;  // duplicate detected
                 }
 
                 if (IsMaxInstrumentationsCount()) continue;

@@ -2068,8 +2068,6 @@ void CoreChecks::PreCallRecordCreateShaderModule(VkDevice device, const VkShader
                                                  const RecordObject &record_obj, chassis::CreateShaderModule &chassis_state) {
     // Normally would validate in PreCallValidate, but need a non-const function to update chassis_state
     // This is on the stack, we don't have to worry about threading hazards and this could be moved and used const_cast
-    BaseClass::PreCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, record_obj,
-                                                            chassis_state);
     chassis_state.skip |=
         stateless_spirv_validator.Validate(*chassis_state.module_state, chassis_state.stateless_data, record_obj.location);
 }
@@ -2077,9 +2075,8 @@ void CoreChecks::PreCallRecordCreateShaderModule(VkDevice device, const VkShader
 void CoreChecks::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
                                                const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
                                                const RecordObject &record_obj, chassis::ShaderObject &chassis_state) {
-    BaseClass::PreCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj,
-                                                          chassis_state);
     for (uint32_t i = 0; i < createInfoCount; ++i) {
+        // Will be empty if not VK_SHADER_CODE_TYPE_SPIRV_EXT
         if (chassis_state.module_states[i]) {
             chassis_state.skip |= stateless_spirv_validator.Validate(
                 *chassis_state.module_states[i], chassis_state.stateless_data[i], record_obj.location.dot(Field::pCreateInfos, i));
@@ -2145,7 +2142,7 @@ bool CoreChecks::RunSpirvValidation(spv_const_binary_t &binary, const Location &
             delete[] spirv_val_vuid;
         }
     } else if (cache) {
-        // No point to cache anything that is not valid, or it will get supressed on the next run
+        // No point to cache anything that is not valid, or it will get suppressed on the next run
         cache->Insert(hash);
     }
 
@@ -2161,18 +2158,27 @@ bool CoreChecks::ValidateShaderModuleCreateInfo(const VkShaderModuleCreateInfo &
 
     if (disabled[shader_validation]) {
         return skip; // VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT
+    } else if (!create_info.pCode) {
+        return skip;  // will be caught elsewhere
     }
 
-    if (!create_info.pCode) {
-        return skip;  // will be caught elsewhere
-    } else if (create_info.pCode[0] != spv::MagicNumber) {
-        if (!IsExtEnabled(extensions.vk_nv_glsl_shader)) {
-            skip |= LogError("VUID-VkShaderModuleCreateInfo-pCode-07912", device, create_info_loc.dot(Field::pCode),
-                             "doesn't point to a SPIR-V module (The first dword is not the SPIR-V MagicNumber 0x07230203).");
+    // This extension is ment for tooling, but still valid to be used, if used, we need to detect if GLSL
+    if (IsExtEnabled(extensions.vk_nv_glsl_shader)) {
+        if (strncmp((char *)create_info.pCode, "#version", 8) == 0) {
+            return skip;  // incoming GLSL
         }
-    } else if (SafeModulo(create_info.codeSize, 4) != 0) {
-        skip |= LogError("VUID-VkShaderModuleCreateInfo-codeSize-08735", device, create_info_loc.dot(Field::codeSize),
-                         "(%zu) must be a multiple of 4.", create_info.codeSize);
+    }
+
+    const uint32_t first_dword = create_info.pCode[0];
+    if (SafeModulo(create_info.codeSize, 4) != 0) {
+        skip |=
+            LogError("VUID-VkShaderModuleCreateInfo-codeSize-08735", device, create_info_loc.dot(Field::codeSize),
+                     "(%zu) must be a multiple of 4. You might have forget to multiply by sizeof(uint32_t).", create_info.codeSize);
+    } else if (first_dword != spv::MagicNumber) {
+        skip |= LogError("VUID-VkShaderModuleCreateInfo-pCode-08738", device, create_info_loc.dot(Field::pCode),
+                         "doesn't point to a SPIR-V module. The first dword (0x%" PRIx32
+                         ") is not the SPIR-V MagicNumber (0x07230203).",
+                         first_dword);
     } else {
         // if pCode is garbage, don't pass along to spirv-val
 

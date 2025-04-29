@@ -19,6 +19,7 @@
 
 #include "best_practices/best_practices_validation.h"
 #include "best_practices/bp_state.h"
+#include "state_tracker/device_state.h"
 
 void BestPractices::Created(vvl::CommandBuffer& cb_state) {
     cb_state.SetSubState(container_type, std::make_unique<bp_state::CommandBufferSubState>(cb_state));
@@ -63,8 +64,6 @@ bool BestPractices::PreCallValidateAllocateCommandBuffers(VkDevice device, const
 
 void BestPractices::PreCallRecordBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo,
                                                     const RecordObject& record_obj) {
-    BaseClass::PreCallRecordBeginCommandBuffer(commandBuffer, pBeginInfo, record_obj);
-
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto& sub_state = bp_state::SubState(*cb_state);
     // reset
@@ -167,8 +166,6 @@ bool BestPractices::PreCallValidateGetQueryPoolResults(VkDevice device, VkQueryP
 
 void BestPractices::PostCallRecordCmdSetDepthCompareOp(VkCommandBuffer commandBuffer, VkCompareOp depthCompareOp,
                                                        const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdSetDepthCompareOp(commandBuffer, depthCompareOp, record_obj);
-
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto& sub_state = bp_state::SubState(*cb_state);
 
@@ -184,8 +181,6 @@ void BestPractices::PostCallRecordCmdSetDepthCompareOpEXT(VkCommandBuffer comman
 
 void BestPractices::PostCallRecordCmdSetDepthTestEnable(VkCommandBuffer commandBuffer, VkBool32 depthTestEnable,
                                                         const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdSetDepthTestEnable(commandBuffer, depthTestEnable, record_obj);
-
     if (VendorCheckEnabled(kBPVendorNVIDIA)) {
         auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
         auto& sub_state = bp_state::SubState(*cb_state);
@@ -258,8 +253,8 @@ bool BestPractices::PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuf
             }
         }
 
-        if (!(secondary_cb->beginInfo.flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
-            if (primary->beginInfo.flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) {
+        if (!(secondary_cb->begin_info_flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
+            if (primary->begin_info_flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) {
                 // Warn that non-simultaneous secondary cmd buffer renders primary non-simultaneous
                 const LogObjectList objlist(commandBuffer, pCommandBuffers[i]);
                 skip |= LogWarning("BestPractices-vkCmdExecuteCommands-CommandBufferSimultaneousUse", objlist, cb_loc,
@@ -283,10 +278,8 @@ bool BestPractices::PreCallValidateCmdExecuteCommands(VkCommandBuffer commandBuf
     return skip;
 }
 
-void BestPractices::PreCallRecordCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount,
-                                                    const VkCommandBuffer* pCommandBuffers, const RecordObject& record_obj) {
-    BaseClass::PreCallRecordCmdExecuteCommands(commandBuffer, commandBufferCount, pCommandBuffers, record_obj);
-
+void BestPractices::PostCallRecordCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount,
+                                                     const VkCommandBuffer* pCommandBuffers, const RecordObject& record_obj) {
     auto primary = GetWrite<vvl::CommandBuffer>(commandBuffer);
     if (!primary) {
         return;

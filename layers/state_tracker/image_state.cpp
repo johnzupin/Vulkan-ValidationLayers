@@ -74,8 +74,9 @@ static vvl::Image::MemoryReqs GetMemoryRequirements(const vvl::DeviceState &dev_
     return result;
 }
 
-static vvl::Image::SparseReqs GetSparseRequirements(const vvl::DeviceState &dev_data, VkImage img, bool sparse_residency) {
-    vvl::Image::SparseReqs result;
+static std::vector<VkSparseImageMemoryRequirements> GetSparseRequirements(const vvl::DeviceState &dev_data, VkImage img,
+                                                                          bool sparse_residency) {
+    std::vector<VkSparseImageMemoryRequirements> result;
     if (sparse_residency) {
         uint32_t count = 0;
         DispatchGetImageSparseMemoryRequirements(dev_data.device, img, &count, nullptr);
@@ -85,16 +86,6 @@ static vvl::Image::SparseReqs GetSparseRequirements(const vvl::DeviceState &dev_
     return result;
 }
 
-static bool SparseMetaDataRequired(const vvl::Image::SparseReqs &sparse_reqs) {
-    bool result = false;
-    for (const auto &req : sparse_reqs) {
-        if (req.formatProperties.aspectMask & VK_IMAGE_ASPECT_METADATA_BIT) {
-            result = true;
-            break;
-        }
-    }
-    return result;
-}
 #ifdef VK_USE_PLATFORM_METAL_EXT
 static bool GetMetalExport(const VkImageCreateInfo *info, VkExportMetalObjectTypeFlagBitsEXT object_type_required) {
     bool retval = false;
@@ -129,9 +120,6 @@ Image::Image(const vvl::DeviceState &dev_data, VkImage img, const VkImageCreateI
       requirements(GetMemoryRequirements(dev_data, img, pCreateInfo, disjoint, IsExternalBuffer())),
       sparse_residency((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) != 0),
       sparse_requirements(GetSparseRequirements(dev_data, img, sparse_residency)),
-      sparse_metadata_required(SparseMetaDataRequired(sparse_requirements)),
-      get_sparse_reqs_called(false),
-      sparse_metadata_bound(false),
 #ifdef VK_USE_PLATFORM_METAL_EXT
       metal_image_export(GetMetalExport(pCreateInfo, VK_EXPORT_METAL_OBJECT_TYPE_METAL_TEXTURE_BIT_EXT)),
       metal_io_surface_export(GetMetalExport(pCreateInfo, VK_EXPORT_METAL_OBJECT_TYPE_METAL_IOSURFACE_BIT_EXT)),
@@ -171,9 +159,6 @@ Image::Image(const vvl::DeviceState &dev_data, VkImage img, const VkImageCreateI
       requirements{},
       sparse_residency(false),
       sparse_requirements{},
-      sparse_metadata_required(false),
-      get_sparse_reqs_called(false),
-      sparse_metadata_bound(false),
 #ifdef VK_USE_PLATFORM_METAL_EXT
       metal_image_export(GetMetalExport(pCreateInfo, VK_EXPORT_METAL_OBJECT_TYPE_METAL_TEXTURE_BIT_EXT)),
       metal_io_surface_export(GetMetalExport(pCreateInfo, VK_EXPORT_METAL_OBJECT_TYPE_METAL_IOSURFACE_BIT_EXT)),
@@ -304,7 +289,7 @@ void Image::SetInitialLayoutMap() {
         return;
     }
 
-    std::shared_ptr<GlobalImageLayoutRangeMap> layout_map;
+    std::shared_ptr<ImageLayoutRangeMap> layout_map;
     auto get_layout_map = [&layout_map](const Image &other_image) {
         layout_map = other_image.layout_range_map;
         return true;
@@ -322,7 +307,8 @@ void Image::SetInitialLayoutMap() {
     if (!layout_map) {
         // otherwise set up a new map.
         // set up the new map completely before making it available
-        layout_map = std::make_shared<GlobalImageLayoutRangeMap>(subresource_encoder.SubresourceCount());
+        layout_map = std::make_shared<ImageLayoutRangeMap>(subresource_encoder.SubresourceCount());
+        layout_map->lock = &layout_range_map_lock;
         auto range_gen = subresource_adapter::RangeGenerator(subresource_encoder);
         for (; range_gen->non_empty(); ++range_gen) {
             layout_map->insert(layout_map->end(), std::make_pair(*range_gen, create_info.initialLayout));
@@ -335,7 +321,7 @@ void Image::SetInitialLayoutMap() {
 void Image::SetImageLayout(const VkImageSubresourceRange &range, VkImageLayout layout) {
     using sparse_container::update_range_value;
     using sparse_container::value_precedence;
-    GlobalImageLayoutRangeMap::RangeGenerator range_gen(subresource_encoder, NormalizeSubresourceRange(range));
+    ImageLayoutRangeMap::RangeGenerator range_gen(subresource_encoder, NormalizeSubresourceRange(range));
     auto guard = layout_range_map->WriteLock();
     for (; range_gen->non_empty(); ++range_gen) {
         update_range_value(*layout_range_map, *range_gen, layout, value_precedence::prefer_source);
@@ -952,8 +938,8 @@ std::vector<VkPresentModeKHR> Surface::GetCompatibleModes(VkPhysicalDevice phys_
 
 }  // namespace vvl
 
-bool GlobalImageLayoutRangeMap::AnyInRange(RangeGenerator &gen,
-                                           std::function<bool(const key_type &range, const mapped_type &state)> &&func) const {
+bool ImageLayoutRangeMap::AnyInRange(RangeGenerator &gen,
+                                     std::function<bool(const key_type &range, const mapped_type &state)> &&func) const {
     for (; gen->non_empty(); ++gen) {
         for (auto pos = lower_bound(*gen); (pos != end()) && (gen->intersects(pos->first)); ++pos) {
             if (func(pos->first, pos->second)) {

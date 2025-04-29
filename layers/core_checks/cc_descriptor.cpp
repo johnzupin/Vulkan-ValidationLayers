@@ -110,6 +110,10 @@ bool CoreChecks::VerifySetLayoutCompatibility(const vvl::DescriptorSetLayout &la
                       << " from pipeline layout has a descriptorCount of " << layout_binding.descriptorCount << " but binding "
                       << layout_binding.binding << " for " << FormatHandle(bound_dsl_handle)
                       << ", which is bound, has a descriptorCount of " << bound_binding->descriptorCount;
+            if (bound_binding->descriptorCount == 0 || layout_binding.descriptorCount == 0) {
+                error_str << " (descriptorCount value of zero likely means there is descriptor for binding "
+                          << layout_binding.binding << ")";
+            }
             error_msg = error_str.str();
             return false;
         } else if (layout_binding.descriptorType != bound_binding->descriptorType) {
@@ -190,8 +194,8 @@ bool CoreChecks::VerifySetLayoutCompatibility(const vvl::DescriptorSet &descript
     }
 }
 
-bool CoreChecks::VerifySetLayoutCompatibility(const vvl::PipelineLayout &layout_a, const vvl::PipelineLayout &layout_b,
-                                              std::string &error_msg) const {
+bool CoreChecks::VerifyPipelineLayoutCompatibility(const vvl::PipelineLayout &layout_a, const vvl::PipelineLayout &layout_b,
+                                                   std::string &error_msg) const {
     const uint32_t num_sets = static_cast<uint32_t>(std::min(layout_a.set_layouts.size(), layout_b.set_layouts.size()));
     for (uint32_t i = 0; i < num_sets; ++i) {
         const auto ds_a = layout_a.set_layouts[i];
@@ -205,8 +209,9 @@ bool CoreChecks::VerifySetLayoutCompatibility(const vvl::PipelineLayout &layout_
     return true;
 }
 
-bool CoreChecks::VerifySetLayoutCompatibilityUnion(const vvl::PipelineLayout &layout, const vvl::PipelineLayout &pre_raster_layout,
-                                                   const vvl::PipelineLayout &fs_layout, std::string &error_msg) const {
+bool CoreChecks::VerifyPipeleinLayoutCompatibilityUnion(const vvl::PipelineLayout &layout,
+                                                        const vvl::PipelineLayout &pre_raster_layout,
+                                                        const vvl::PipelineLayout &fs_layout, std::string &error_msg) const {
     // When dealing with Graphics Pipeline Library, we need to get the union of pipeline states.
     // Currently this just means the VkDescriptorSetLayout may be VK_NULL_HANDLE.
     uint32_t num_sets = static_cast<uint32_t>(std::min(pre_raster_layout.set_layouts.size(), fs_layout.set_layouts.size()));
@@ -830,7 +835,7 @@ bool CoreChecks::ValidateDrawState(const vvl::DescriptorSet &descriptor_set, uin
                                    const vvl::DrawDispatchVuid &vuids, const VulkanTypedHandle &shader_handle) const {
     bool result = false;
     const Location &loc = vuids.loc();
-    const VkFramebuffer framebuffer = cb_state.activeFramebuffer ? cb_state.activeFramebuffer->VkHandle() : VK_NULL_HANDLE;
+    const VkFramebuffer framebuffer = cb_state.active_framebuffer ? cb_state.active_framebuffer->VkHandle() : VK_NULL_HANDLE;
     // NOTE: GPU-AV needs non-const state objects to do lazy updates of descriptor state of only the dynamically used
     // descriptors, via the non-const version of ValidateBindingDynamic(), this code uses the const path only even it gives up
     // non-const versions of its state objects here.
@@ -3329,8 +3334,6 @@ bool CoreChecks::PreCallValidateDestroyDescriptorPool(VkDevice device, VkDescrip
 bool CoreChecks::PreCallValidateAllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo,
                                                        VkDescriptorSet *pDescriptorSets, const ErrorObject &error_obj,
                                                        vvl::AllocateDescriptorSetsData &ds_data) const {
-    BaseClass::PreCallValidateAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets, error_obj, ds_data);
-
     bool skip = false;
     auto ds_pool_state = Get<vvl::DescriptorPool>(pAllocateInfo->descriptorPool);
     ASSERT_AND_RETURN_SKIP(ds_pool_state);
@@ -3449,9 +3452,11 @@ bool CoreChecks::PreCallValidateAllocateDescriptorSets(VkDevice device, const Vk
                         "WARNING-VkDescriptorSetAllocateInfo-descriptorCount", ds_pool_state->Handle(), error_obj.location,
                         "Trying to allocate %" PRIu32 " of %s descriptors from %s, but this pool only has a total of %" PRIu32
                         " descriptors for this type so you will likely get VK_ERROR_OUT_OF_POOL_MEMORY_KHR. While this might "
-                        "succeed on some implementations, it will fail on others.",
+                        "succeed on some implementations, it will fail on others.\n%s",
                         attempt_allocate, string_VkDescriptorType(VkDescriptorType(it->first)),
-                        FormatHandle(*ds_pool_state).c_str(), max_available_count);
+                        FormatHandle(*ds_pool_state).c_str(), max_available_count,
+                        device_state->PrintDescriptorAllocation(*pAllocateInfo, *ds_pool_state, VkDescriptorType(it->first))
+                            .c_str());
                 }
             }
         }

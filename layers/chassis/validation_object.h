@@ -50,6 +50,7 @@ struct CreateRayTracingPipelinesNV;
 struct CreateRayTracingPipelinesKHR;
 struct CreateShaderModule;
 struct ShaderObject;
+struct ShaderBinaryData;
 struct CreatePipelineLayout;
 struct CreateBuffer;
 }  // namespace chassis
@@ -117,7 +118,9 @@ class Instance : public Logger {
     VkInstance VkHandle() const { return instance; }
 
 #if defined(DEBUG_CAPTURE_KEYBOARD)
-    void* wsi_display = nullptr;
+    // keep thing as void pointer to simplify including headers
+    void* xlib_display = nullptr;
+    void* xcb_connection = nullptr;
 #endif
 
 #include "generated/validation_object_instance_methods.h"
@@ -376,6 +379,12 @@ class Device : public Logger {
                                                 VkShaderEXT* pShaders, const RecordObject& record_obj,
                                                 chassis::ShaderObject& chassis_state) {
         PostCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj);
+    }
+
+    // Allow modification of a down-chain parameter for CreatePipelineLayout
+    virtual void PreCallRecordGetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t* pDataSize, void* pData,
+                                                     const RecordObject& record_obj, chassis::ShaderBinaryData& chassis_state) {
+        PreCallRecordGetShaderBinaryDataEXT(device, shader, pDataSize, pData, record_obj);
     }
 
     // Allow AllocateDescriptorSets to use some local stack storage for performance purposes

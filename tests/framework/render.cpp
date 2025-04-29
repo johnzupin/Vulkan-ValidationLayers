@@ -57,11 +57,26 @@ VkRenderFramework::VkRenderFramework()
     m_clear_color.float32[1] = 0.25f;
     m_clear_color.float32[2] = 0.25f;
     m_clear_color.float32[3] = 0.0f;
+
+    // While it seems very undeal to have to allocate these on the heap, the alternative is to include vk_extension_helper.h (which
+    // contains custom_container.h) in the header which will add a measured 150ms second per test file to compile. This is the only
+    // code that requires custom hash maps
+    m_instance_extensions = new InstanceExtensions();
+    m_device_extensions = new DeviceExtensions();
 }
 
 VkRenderFramework::~VkRenderFramework() {
     ShutdownFramework();
     m_errorMonitor->Finish();
+
+    if (m_device_extensions) {
+        delete m_device_extensions;
+        m_device_extensions = nullptr;
+    }
+    if (m_instance_extensions) {
+        delete m_instance_extensions;
+        m_instance_extensions = nullptr;
+    }
 }
 
 VkPhysicalDevice VkRenderFramework::Gpu() const {
@@ -371,10 +386,10 @@ bool VkRenderFramework::AddRequestedInstanceExtensions(const char *ext_name) {
         return true;
     }
 
-    const auto &instance_exts_map = InstanceExtensions::GetInfoMap();
     bool is_instance_ext = false;
     vvl::Extension extension = GetExtension(ext_name);
-    if (instance_exts_map.find(extension) != instance_exts_map.cend()) {
+    const auto &instance_info = m_instance_extensions->GetInfo(extension);
+    if (instance_info.state) {
         if (!InstanceExtensionSupported(ext_name)) {
             return false;
         } else {
@@ -385,8 +400,7 @@ bool VkRenderFramework::AddRequestedInstanceExtensions(const char *ext_name) {
     // Different tables need to be used for extension dependency lookup depending on whether `ext_name` refers to a device or
     // instance extension
     if (is_instance_ext) {
-        const auto &info = InstanceExtensions::GetInfo(extension);
-        for (const auto &req : info.requirements) {
+        for (const auto &req : instance_info.requirements) {
             if (0 == strncmp(req.name, "VK_VERSION", 10)) {
                 continue;
             }
@@ -396,7 +410,7 @@ bool VkRenderFramework::AddRequestedInstanceExtensions(const char *ext_name) {
         }
         m_instance_extension_names.push_back(ext_name);
     } else {
-        const auto &info = DeviceExtensions::GetInfo(extension);
+        const auto &info = m_device_extensions->GetInfo(extension);
         for (const auto &req : info.requirements) {
             if (!AddRequestedInstanceExtensions(req.name)) {
                 return false;
@@ -442,9 +456,9 @@ bool VkRenderFramework::AddRequestedDeviceExtensions(const char *dev_ext_name) {
 
     // If this is an instance extension, just return true under the assumption instance extensions do not depend on any device
     // extensions.
-    const auto &instance_exts_map = InstanceExtensions::GetInfoMap();
     vvl::Extension extension = GetExtension(dev_ext_name);
-    if (instance_exts_map.find(extension) != instance_exts_map.cend()) {
+    const auto &instance_info = m_instance_extensions->GetInfo(extension);
+    if (instance_info.state) {
         return true;
     }
 
@@ -453,7 +467,7 @@ bool VkRenderFramework::AddRequestedDeviceExtensions(const char *dev_ext_name) {
     }
     m_device_extension_names.push_back(dev_ext_name);
 
-    const auto &info = DeviceExtensions::GetInfo(extension);
+    const auto &info = m_device_extensions->GetInfo(extension);
     for (const auto &req : info.requirements) {
         if (!AddRequestedDeviceExtensions(req.name)) {
             return false;
@@ -1100,7 +1114,12 @@ void VkRenderFramework::DestroyRenderTarget() {
 void VkRenderFramework::SetDefaultDynamicStatesExclude(const std::vector<VkDynamicState> &exclude, bool tessellation,
                                                        VkCommandBuffer commandBuffer) {
     const auto excluded = [&exclude](VkDynamicState state) {
-        return std::find(exclude.begin(), exclude.end(), state) != exclude.end();
+        for (const auto &check_state : exclude) {
+            if (check_state == state) {
+                return true;
+            }
+        }
+        return false;
     };
     if (!m_vertex_buffer) {
         m_vertex_buffer = new vkt::Buffer(*m_device, 32u, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);

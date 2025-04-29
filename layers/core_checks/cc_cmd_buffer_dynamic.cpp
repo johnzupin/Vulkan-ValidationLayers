@@ -452,7 +452,7 @@ bool CoreChecks::ValidateGraphicsDynamicStateSetStatus(const LastBound& last_bou
         }
     }  // !IsRasterizationDisabled()
 
-    if (cb_state.inheritedViewportDepths.empty()) {
+    if (cb_state.viewport.inherited_depths.empty()) {
         skip |= ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_VIEWPORT_WITH_COUNT, vuid);
         skip |= ValidateDynamicStateIsSet(last_bound_state, state_status_cb, CB_DYNAMIC_STATE_SCISSOR_WITH_COUNT, vuid);
     }
@@ -871,7 +871,7 @@ bool CoreChecks::ValidateDrawDynamicStatePipelineValue(const LastBound& last_bou
     if (pipeline.IsDynamic(CB_DYNAMIC_STATE_RASTERIZATION_STREAM_EXT) &&
         !enabled_features.primitivesGeneratedQueryWithNonZeroStreams && cb_state.dynamic_state_value.rasterization_stream != 0) {
         bool pgq_active = false;
-        for (const auto& active_query : cb_state.activeQueries) {
+        for (const auto& active_query : cb_state.active_queries) {
             auto query_pool_state = Get<vvl::QueryPool>(active_query.pool);
             if (query_pool_state && query_pool_state->create_info.queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT) {
                 pgq_active = true;
@@ -1002,7 +1002,7 @@ bool CoreChecks::ValidateDrawDynamicStatePipelineViewportScissor(const LastBound
     // Skip check if rasterization is disabled, if there is no viewport, or if viewport/scissors are being inherited.
     const bool dyn_viewport = pipeline.IsDynamic(CB_DYNAMIC_STATE_VIEWPORT);
     const auto* viewport_state = pipeline.ViewportState();
-    if (!pipeline.RasterizationDisabled() && viewport_state && (cb_state.inheritedViewportDepths.empty())) {
+    if (!pipeline.RasterizationDisabled() && viewport_state && (cb_state.viewport.inherited_depths.empty())) {
         const bool dyn_scissor = pipeline.IsDynamic(CB_DYNAMIC_STATE_SCISSOR);
 
         // NB (akeley98): Current validation layers do not detect the error where vkCmdSetViewport (or scissor) was called, but
@@ -1011,7 +1011,7 @@ bool CoreChecks::ValidateDrawDynamicStatePipelineViewportScissor(const LastBound
         // nonzero in the range of bits needed by the pipeline.
         if (dyn_viewport) {
             const auto required_viewports_mask = (1 << viewport_state->viewportCount) - 1;
-            const auto missing_viewport_mask = ~cb_state.viewportMask & required_viewports_mask;
+            const auto missing_viewport_mask = ~cb_state.viewport.mask & required_viewports_mask;
             if (missing_viewport_mask) {
                 skip |= LogError(vuid.dynamic_viewport_07831, objlist, vuid.loc(),
                                  "Dynamic viewport(s) (0x%x) are used by pipeline state object, but were not provided via calls "
@@ -1022,7 +1022,7 @@ bool CoreChecks::ValidateDrawDynamicStatePipelineViewportScissor(const LastBound
 
         if (dyn_scissor) {
             const auto required_scissor_mask = (1 << viewport_state->scissorCount) - 1;
-            const auto missing_scissor_mask = ~cb_state.scissorMask & required_scissor_mask;
+            const auto missing_scissor_mask = ~cb_state.scissor.mask & required_scissor_mask;
             if (missing_scissor_mask) {
                 skip |= LogError(vuid.dynamic_scissor_07832, objlist, vuid.loc(),
                                  "Dynamic scissor(s) (0x%x) are used by pipeline state object, but were not provided via calls "
@@ -1033,9 +1033,9 @@ bool CoreChecks::ValidateDrawDynamicStatePipelineViewportScissor(const LastBound
     }
 
     // If inheriting viewports, verify that not using more than inherited.
-    if (cb_state.inheritedViewportDepths.size() != 0 && dyn_viewport) {
+    if (cb_state.viewport.inherited_depths.size() != 0 && dyn_viewport) {
         const uint32_t viewport_count = viewport_state->viewportCount;
-        const uint32_t max_inherited = uint32_t(cb_state.inheritedViewportDepths.size());
+        const uint32_t max_inherited = uint32_t(cb_state.viewport.inherited_depths.size());
         if (viewport_count > max_inherited) {
             skip |= LogError(vuid.dynamic_state_inherited_07850, objlist, vuid.loc(),
                              "Pipeline requires more viewports (%" PRIu32 ".) than inherited (viewportDepthCount = %" PRIu32 ".).",
@@ -1200,8 +1200,7 @@ bool CoreChecks::ValidateDrawDynamicStateVertex(const LastBound& last_bound_stat
         if (((bound_stages & (VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT)) == 0) &&
             topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST) {
             if (!vert_entrypoint->written_builtin_point_size && !enabled_features.maintenance5) {
-                // VUID being created in https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/7281
-                skip |= LogError("UNASSIGNED-Draw-topology-pointsize", cb_state.Handle(), vuid.loc(),
+                skip |= LogError(vuid.primitive_topology_point_size_10748, cb_state.Handle(), vuid.loc(),
                                  "The bound vertex shader (%s) has a PointSize that is not written to, but the bound topology "
                                  "is set to VK_PRIMITIVE_TOPOLOGY_POINT_LIST.",
                                  FormatHandle(vert_spirv_state->handle()).c_str());
@@ -1216,8 +1215,7 @@ bool CoreChecks::ValidateDrawDynamicStateVertex(const LastBound& last_bound_stat
                 "Tessellation shaders were bound, but the last call to vkCmdSetPrimitiveTopology set primitiveTopology to %s.",
                 string_VkPrimitiveTopology(topology));
         } else if (!tess_shader_bound && patch_topology) {
-            // VUID being created in https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/7281
-            skip |= LogError("UNASSIGNED-Draw-topology-patch", cb_state.Handle(), vuid.loc(),
+            skip |= LogError(vuid.primitive_topology_patch_list_10747, cb_state.Handle(), vuid.loc(),
                              "Tessellation shaders were not bound, but the last call to vkCmdSetPrimitiveTopology set "
                              "primitiveTopology to VK_PRIMITIVE_TOPOLOGY_PATCH_LIST.");
         }
@@ -1677,12 +1675,13 @@ bool CoreChecks::ValidateDrawDynamicStateShaderObject(const LastBound& last_boun
                     }
                 }
                 if (cb_state.IsDynamicStateSet(CB_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT) &&
-                    cb_state.dynamic_state_value.color_write_enable_attachment_count < cb_state.GetDynamicColorAttachmentCount()) {
+                    cb_state.dynamic_state_value.color_write_enable_attachment_count <
+                        cb_state.GetDynamicRenderingColorAttachmentCount()) {
                     skip |= LogError(vuid.set_color_write_enable_08647, cb_state.Handle(), loc,
                                      "vkCmdSetColorWriteEnableEXT() was called with attachmentCount %" PRIu32
                                      ", but current render pass attachmnet count is %" PRIu32 ".",
                                      cb_state.dynamic_state_value.color_write_enable_attachment_count,
-                                     cb_state.GetDynamicColorAttachmentCount());
+                                     cb_state.GetDynamicRenderingColorAttachmentCount());
                 }
             }
         }
@@ -1790,7 +1789,7 @@ bool CoreChecks::ValidateTraceRaysDynamicStateSetStatus(const LastBound& last_bo
 
 bool CoreChecks::ForbidInheritedViewportScissor(const vvl::CommandBuffer& cb_state, const char* vuid, const Location& loc) const {
     bool skip = false;
-    if (cb_state.inheritedViewportDepths.size() != 0) {
+    if (cb_state.viewport.inherited_depths.size() != 0) {
         skip |= LogError(vuid, cb_state.Handle(), loc,
                          "commandBuffer must not have VkCommandBufferInheritanceViewportScissorInfoNV::viewportScissor2D enabled.");
     }

@@ -28,8 +28,7 @@ bool CoreChecks::PreCallValidateCreateComputePipelines(VkDevice device, VkPipeli
                                                        const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
                                                        const ErrorObject &error_obj, PipelineStates &pipeline_states,
                                                        chassis::CreateComputePipelines &chassis_state) const {
-    bool skip = BaseClass::PreCallValidateCreateComputePipelines(device, pipelineCache, count, pCreateInfos, pAllocator, pPipelines,
-                                                                 error_obj, pipeline_states, chassis_state);
+    bool skip = false;
 
     skip |= ValidateDeviceQueueSupport(error_obj.location);
     for (uint32_t i = 0; i < count; i++) {
@@ -45,9 +44,10 @@ bool CoreChecks::PreCallValidateCreateComputePipelines(VkDevice device, VkPipeli
         }
 
         skip |= ValidateComputePipelineDerivatives(pipeline_states, i, create_info_loc);
-        skip |= ValidatePipelineCacheControlFlags(pipeline->create_flags, create_info_loc.dot(Field::flags),
+        const Location flags_loc = pipeline->GetCreateFlagsLoc(create_info_loc);
+        skip |= ValidatePipelineCacheControlFlags(pipeline->create_flags, flags_loc,
                                                   "VUID-VkComputePipelineCreateInfo-pipelineCreationCacheControl-02875");
-        skip |= ValidatePipelineIndirectBindableFlags(pipeline->create_flags, create_info_loc.dot(Field::flags),
+        skip |= ValidatePipelineIndirectBindableFlags(pipeline->create_flags, flags_loc,
                                                       "VUID-VkComputePipelineCreateInfo-flags-09007");
 
         if (const auto *pipeline_robustness_info =

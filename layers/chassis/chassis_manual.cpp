@@ -416,16 +416,17 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
         }
         vo->PreCallValidateDestroyDevice(device, pAllocator, error_obj);
     }
-    vvl::base::Device* state_tracker = nullptr;
     RecordObject record_obj(vvl::Func::vkDestroyDevice);
+
+    // Even though layer object types reference the base device state tracker,
+    // it needs to be destroyed first: it stores the various object maps,
+    // those need to be destroyed by the time layer objects destroy their
+    // own device state.
     for (auto& vo : device_dispatch->object_dispatch) {
         if (!vo) {
             continue;
         }
-        if (vo->container_type == LayerObjectTypeStateTracker) {
-            state_tracker = vo.get(); 
-            continue;
-        }
+
         vo->PreCallRecordDestroyDevice(device, pAllocator, record_obj);
     }
     // Before device is destroyed, allow aborted objects to clean up
@@ -435,10 +436,6 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
         }
         vo->PreCallRecordDestroyDevice(device, pAllocator, record_obj);
     }
-    if (state_tracker) {
-        state_tracker->PreCallRecordDestroyDevice(device, pAllocator, record_obj);
-    }
-
 
 #if defined(VVL_TRACY_GPU)
     CleanupTracyVk(device);
@@ -446,11 +443,13 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
 
     device_dispatch->DestroyDevice(device, pAllocator);
 
+    vvl::base::Device* state_tracker = nullptr;
     for (auto& vo : device_dispatch->object_dispatch) {
         if (!vo) {
             continue;
         }
         if (vo->container_type == LayerObjectTypeStateTracker) {
+            state_tracker = vo.get();
             continue;
         }
         vo->PostCallRecordDestroyDevice(device, pAllocator, record_obj);
@@ -778,6 +777,56 @@ VKAPI_ATTR VkResult VKAPI_CALL CreatePipelineLayout(VkDevice device, const VkPip
     return result;
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL GetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t* pDataSize, void* pData) {
+    VVL_ZoneScoped;
+
+    auto device_dispatch = vvl::dispatch::GetData(device);
+    bool skip = false;
+    ErrorObject error_obj(vvl::Func::vkGetShaderBinaryDataEXT, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
+    {
+        VVL_ZoneScopedN("PreCallValidate_vkGetShaderBinaryDataEXT");
+        for (const auto& vo : device_dispatch->intercept_vectors[InterceptIdPreCallValidateGetShaderBinaryDataEXT]) {
+            if (!vo) {
+                continue;
+            }
+            auto lock = vo->ReadLock();
+            skip |= vo->PreCallValidateGetShaderBinaryDataEXT(device, shader, pDataSize, pData, error_obj);
+            if (skip) return VK_ERROR_VALIDATION_FAILED_EXT;
+        }
+    }
+
+    chassis::ShaderBinaryData chassis_state{shader};
+
+    RecordObject record_obj(vvl::Func::vkGetShaderBinaryDataEXT);
+    {
+        VVL_ZoneScopedN("PreCallRecord_vkGetShaderBinaryDataEXT");
+        for (auto& vo : device_dispatch->object_dispatch) {
+            if (!vo) {
+                continue;
+            }
+            auto lock = vo->WriteLock();
+            vo->PreCallRecordGetShaderBinaryDataEXT(device, shader, pDataSize, pData, record_obj, chassis_state);
+        }
+    }
+    VkResult result;
+    {
+        VVL_ZoneScopedN("Dispatch_vkGetShaderBinaryDataEXT");
+        result = device_dispatch->GetShaderBinaryDataEXT(device, chassis_state.modified_shader_handle, pDataSize, pData);
+    }
+    record_obj.result = result;
+    {
+        VVL_ZoneScopedN("PostCallRecord_vkGetShaderBinaryDataEXT");
+        for (auto& vo : device_dispatch->intercept_vectors[InterceptIdPostCallRecordGetShaderBinaryDataEXT]) {
+            if (!vo) {
+                continue;
+            }
+            auto lock = vo->WriteLock();
+            vo->PostCallRecordGetShaderBinaryDataEXT(device, shader, pDataSize, pData, record_obj);
+        }
+    }
+    return result;
+}
+
 // This API needs some local stack data for performance reasons and also may modify a parameter
 VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo,
                                                   const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule) {
@@ -908,6 +957,9 @@ VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, const VkD
     bool skip = false;
     ErrorObject error_obj(vvl::Func::vkAllocateDescriptorSets, VulkanTypedHandle(device, kVulkanObjectTypeDevice));
 
+    // Because this is a high frequency function call and want to save time and populate this struct once.
+    // Both CoreCheck and Best Practice need this information during PreCallValidate time.
+    // During State Tracker PreCallValidate (instead of PreCallRecord), we populate this so that everyone else can use it.
     vvl::AllocateDescriptorSetsData ads_state;
 
     {
@@ -916,7 +968,6 @@ VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, const VkD
             if (!vo) {
                 continue;
             }
-            ads_state.Init(pAllocateInfo->descriptorSetCount);
             auto lock = vo->ReadLock();
             skip |= vo->PreCallValidateAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets, error_obj, ads_state);
             if (skip) return VK_ERROR_VALIDATION_FAILED_EXT;

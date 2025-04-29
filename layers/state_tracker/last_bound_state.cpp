@@ -42,7 +42,7 @@ bool LastBound::IsDynamic(const CBDynamicState state) const { return !pipeline_s
 
 void LastBound::Reset() {
     pipeline_state = nullptr;
-    desc_set_pipeline_layout = VK_NULL_HANDLE;
+    desc_set_pipeline_layout.reset();
     if (push_descriptor_set) {
         cb_state.RemoveChild(push_descriptor_set);
         push_descriptor_set->Destroy();
@@ -627,19 +627,4 @@ const spirv::EntryPoint *LastBound::GetFragmentEntryPoint() const {
         return shader_object->entrypoint.get();
     }
     return nullptr;
-}
-
-bool LastBound::WasInstrumented() const {
-    if (pipeline_state) {
-        return pipeline_state->instrumentation_data.was_instrumented;
-    }
-    for (uint32_t i = 0; i < kShaderObjectStageCount; ++i) {
-        const auto stage = static_cast<ShaderObjectStage>(i);
-        if (!IsValidShaderBound(stage)) continue;
-        const vvl::ShaderObject *shader = GetShaderState(stage);
-        if (shader && shader->instrumentation_data.was_instrumented) {
-            return true;
-        }
-    }
-    return false;
 }

@@ -44,44 +44,45 @@ bool CoreChecks::IsBeforeCtsVersion(uint32_t major, uint32_t minor, uint32_t sub
     return phys_dev_props_core12.conformanceVersion.subminor < subminor;
 }
 
-bool CoreChecks::ValidatePipelineCacheControlFlags(VkPipelineCreateFlags2KHR flags, const Location &loc, const char *vuid) const {
+bool CoreChecks::ValidatePipelineCacheControlFlags(VkPipelineCreateFlags2 flags, const Location &flags_loc,
+                                                   const char *vuid) const {
     bool skip = false;
     if (enabled_features.pipelineCreationCacheControl == VK_FALSE) {
         const VkPipelineCreateFlags invalid_flags =
             VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT | VK_PIPELINE_CREATE_2_EARLY_RETURN_ON_FAILURE_BIT;
         if ((flags & invalid_flags) != 0) {
-            skip |= LogError(vuid, device, loc, "is %s but pipelineCreationCacheControl feature was not enabled.",
+            skip |= LogError(vuid, device, flags_loc, "is %s but pipelineCreationCacheControl feature was not enabled.",
                              string_VkPipelineCreateFlags2(flags).c_str());
         }
     }
     return skip;
 }
 
-bool CoreChecks::ValidatePipelineIndirectBindableFlags(VkPipelineCreateFlags2KHR flags, const Location &loc,
+bool CoreChecks::ValidatePipelineIndirectBindableFlags(VkPipelineCreateFlags2 flags, const Location &flags_loc,
                                                        const char *vuid) const {
     bool skip = false;
     if (enabled_features.deviceGeneratedComputePipelines == VK_FALSE) {
         if ((flags & VK_PIPELINE_CREATE_2_INDIRECT_BINDABLE_BIT_NV) != 0) {
-            skip |= LogError(vuid, device, loc, "is %s but deviceGeneratedComputePipelines feature was not enabled.",
+            skip |= LogError(vuid, device, flags_loc, "is %s but deviceGeneratedComputePipelines feature was not enabled.",
                              string_VkPipelineCreateFlags2(flags).c_str());
         }
     }
     return skip;
 }
 
-bool CoreChecks::ValidatePipelineProtectedAccessFlags(VkPipelineCreateFlags2KHR flags, const Location &loc) const {
+bool CoreChecks::ValidatePipelineProtectedAccessFlags(VkPipelineCreateFlags2 flags, const Location &flags_loc) const {
     bool skip = false;
     if (enabled_features.pipelineProtectedAccess == VK_FALSE) {
         const VkPipelineCreateFlags invalid_flags =
             VK_PIPELINE_CREATE_2_NO_PROTECTED_ACCESS_BIT | VK_PIPELINE_CREATE_2_PROTECTED_ACCESS_ONLY_BIT;
         if ((flags & invalid_flags) != 0) {
-            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pipelineProtectedAccess-07368", device, loc,
+            skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-pipelineProtectedAccess-07368", device, flags_loc,
                              "is %s, but pipelineProtectedAccess feature was not enabled.",
                              string_VkPipelineCreateFlags2(flags).c_str());
         }
     }
     if ((flags & VK_PIPELINE_CREATE_2_NO_PROTECTED_ACCESS_BIT) && (flags & VK_PIPELINE_CREATE_2_PROTECTED_ACCESS_ONLY_BIT)) {
-        skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-flags-07369", device, loc,
+        skip |= LogError("VUID-VkGraphicsPipelineCreateInfo-flags-07369", device, flags_loc,
                          "is %s (contains both NO_PROTECTED_ACCESS_BIT and PROTECTED_ACCESS_ONLY_BIT).",
                          string_VkPipelineCreateFlags2(flags).c_str());
     }
@@ -122,15 +123,15 @@ bool CoreChecks::ValidatePipelineRobustnessCreateInfo(const vvl::Pipeline &pipel
     }
 
     // These validation depend if the features are exposed (not just enabled)
-    if (!device_state->has_robust_image_access &&
+    if (!device_state->special_supported.robust_image_access &&
         pipeline_robustness_info.images == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS) {
         skip |= LogError("VUID-VkPipelineRobustnessCreateInfo-robustImageAccess-06930", device,
                          loc.pNext(Struct::VkPipelineRobustnessCreateInfo, Field::images),
                          "is VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS "
-                         "but robustImageAccess2 is not supported.");
+                         "but robustImageAccess is not supported.");
     }
 
-    if (!device_state->has_robust_buffer_access2) {
+    if (!device_state->special_supported.robust_buffer_access2) {
         if (pipeline_robustness_info.storageBuffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2) {
             skip |= LogError(
                 "VUID-VkPipelineRobustnessCreateInfo-robustBufferAccess2-06931", device,
@@ -151,7 +152,7 @@ bool CoreChecks::ValidatePipelineRobustnessCreateInfo(const vvl::Pipeline &pipel
         }
     }
 
-    if (!device_state->has_robust_image_access2) {
+    if (!device_state->special_supported.robust_image_access2) {
         if (pipeline_robustness_info.images == VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2) {
             skip |= LogError(
                 "VUID-VkPipelineRobustnessCreateInfo-robustImageAccess2-06934", device,
@@ -403,7 +404,7 @@ bool CoreChecks::PreCallValidateCmdBindPipeline(VkCommandBuffer commandBuffer, V
             }
 
             if (cb_state->GetCurrentPipeline(pipelineBindPoint) &&
-                pipeline == cb_state->GetCurrentPipeline(pipelineBindPoint)->VkHandle() && cb_state->dirtyStaticState &&
+                pipeline == cb_state->GetCurrentPipeline(pipelineBindPoint)->VkHandle() && cb_state->dirty_static_state &&
                 IsBeforeCtsVersion(1, 3, 8)) {
                 const LogObjectList objlist(commandBuffer, pipeline);
                 // This catches a bug in some drivers with conformance version lower than 1.3.8
@@ -809,12 +810,11 @@ bool CoreChecks::PreCallValidateReleaseCapturedPipelineDataKHR(VkDevice device, 
 void CoreChecks::PostCallRecordReleaseCapturedPipelineDataKHR(VkDevice device, const VkReleaseCapturedPipelineDataInfoKHR *pInfo,
                                                               const VkAllocationCallbacks *pAllocator,
                                                               const RecordObject &record_obj) {
-    if (VK_SUCCESS != record_obj.result) return;
+    if (record_obj.result != VK_SUCCESS) {
+        return;
+    }
 
-    BaseClass::PostCallRecordReleaseCapturedPipelineDataKHR(device, pInfo, pAllocator, record_obj);
-
-    auto pipeline_state = Get<vvl::Pipeline>(pInfo->pipeline);
-    if (pipeline_state) {
+    if (auto pipeline_state = Get<vvl::Pipeline>(pInfo->pipeline)) {
         pipeline_state->binary_data_released = true;
     }
 }

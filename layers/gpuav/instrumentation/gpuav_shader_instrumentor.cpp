@@ -17,24 +17,27 @@
 
 #include "gpuav/instrumentation/gpuav_shader_instrumentor.h"
 #include <vulkan/vulkan_core.h>
-#include <spirv/unified1/NonSemanticShaderDebugInfo100.h>
-#include <spirv/unified1/spirv.hpp>
+#include <cstdint>
 
 #include "error_message/error_location.h"
 #include "generated/vk_extension_helper.h"
 #include "generated/dispatch_functions.h"
-#include "gpuav/shaders/gpuav_shaders_constants.h"
 #include "chassis/chassis_modification_state.h"
-#include "gpuav/shaders/gpuav_error_codes.h"
-#include "gpuav/spirv/log_error_pass.h"
 #include "utils/vk_layer_utils.h"
 #include "utils/shader_utils.h"
 #include "sync/sync_utils.h"
-#include "state_tracker/pipeline_state.h"
+
+#include "gpuav/shaders/gpuav_shaders_constants.h"
+#include "gpuav/shaders/gpuav_error_codes.h"
+#include "gpuav/spirv/log_error_pass.h"
 #include "error_message/spirv_logging.h"
-#include "state_tracker/cmd_buffer_state.h"
+#include <spirv/unified1/NonSemanticShaderDebugInfo100.h>
+#include <spirv/unified1/spirv.hpp>
+
+#include "state_tracker/pipeline_state.h"
 #include "state_tracker/descriptor_sets.h"
 #include "state_tracker/shader_object_state.h"
+#include "gpuav/resources/gpuav_state_trackers.h"
 
 #include "gpuav/spirv/module.h"
 #include "gpuav/spirv/descriptor_indexing_oob_pass.h"
@@ -256,24 +259,15 @@ void GpuShaderInstrumentor::PreCallRecordCreatePipelineLayout(VkDevice device, c
             chassis_state.modified_create_info.setLayoutCount = instrumentation_desc_set_bind_index_ + 1;
         }
     }
-    BaseClass::PreCallRecordCreatePipelineLayout(device, pCreateInfo, pAllocator, pPipelineLayout, record_obj, chassis_state);
-}
-
-void GpuShaderInstrumentor::PostCallRecordCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo,
-                                                               const VkAllocationCallbacks *pAllocator,
-                                                               VkPipelineLayout *pPipelineLayout, const RecordObject &record_obj) {
-    if (record_obj.result != VK_SUCCESS) {
-        InternalError(device, record_obj.location, "Unable to create pipeline layout.");
-        return;
-    }
-    BaseClass::PostCallRecordCreatePipelineLayout(device, pCreateInfo, pAllocator, pPipelineLayout, record_obj);
 }
 
 void GpuShaderInstrumentor::PostCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo,
                                                              const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule,
                                                              const RecordObject &record_obj,
                                                              chassis::CreateShaderModule &chassis_state) {
-    BaseClass::PostCallRecordCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule, record_obj, chassis_state);
+    if (record_obj.result != VK_SUCCESS) {
+        return;
+    }
 
     // By default, we instrument everything, but if the setting is enabled, we only will instrument the shaders the app picks
     if (gpuav_settings.select_instrumented_shaders && IsSelectiveInstrumentationEnabled(pCreateInfo->pNext)) {
@@ -283,46 +277,93 @@ void GpuShaderInstrumentor::PostCallRecordCreateShaderModule(VkDevice device, co
     };
 }
 
-void GpuShaderInstrumentor::PreCallRecordShaderObjectInstrumentation(
-    VkShaderCreateInfoEXT &create_info, const Location &create_info_loc,
-    chassis::ShaderObjectInstrumentationData &instrumentation_data) {
-    if (gpuav_settings.select_instrumented_shaders && !IsSelectiveInstrumentationEnabled(create_info.pNext)) {
+// We on the spot create a VkShaderEXT without instrumentation to return to the user
+// We assume people are not trying to use GPU-AV while calling vkGetShaderBinaryDataEXT
+// But this is needed for things like CTS that are using this to mock a fake Binary Shader Object
+void GpuShaderInstrumentor::PreCallRecordGetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t *pDataSize, void *pData,
+                                                                const RecordObject &record_obj,
+                                                                chassis::ShaderBinaryData &chassis_state) {
+    const auto &shader_object_state = Get<vvl::ShaderObject>(shader);
+    ASSERT_AND_RETURN(shader_object_state);
+    auto &sub_state = SubState(*shader_object_state);
+
+    VkShaderEXT original_handle = VK_NULL_HANDLE;
+
+    auto it = instrumented_shaders_map_.find(sub_state.unique_shader_id);
+    if (it == instrumented_shaders_map_.end() || it->second.original_spirv.empty()) {
+        // This will occur if the shader was so simple we didn't even instrument anything
         return;
+    }
+
+    // The original pCode might be gone, so need to make a shallow copy and put original SPIR-V inside
+    VkShaderCreateInfoEXT create_info_copy = *sub_state.original_create_info.ptr();
+    // The pCode doesn't live in the safe struct, we need to grab it from our other map
+    const gpuav::InstrumentedShader *instrumented_shader = &it->second;
+    create_info_copy.pCode = instrumented_shader->original_spirv.data();
+    create_info_copy.codeSize = instrumented_shader->original_spirv.size() * sizeof(uint32_t);
+
+    // Only warn on the first call to query the size
+    if (pData == nullptr) {
+        LogWarning("WARNING-vkGetShaderBinaryDataEXT-GPU-AV", shader, record_obj.location,
+                   "GPU-AV instruments all shaders at vkCreateShadersEXT time, this means there are embedded descriptors bound "
+                   "that we can't detect if needed or not later.\nWe will be calling vkCreateShadersEXT again now to create the "
+                   "original shader to pass down to the drivere.");
+    }
+
+    // vkGetShaderBinaryDataEXT will be called twice, only need to re-created once
+    if (sub_state.original_handle == VK_NULL_HANDLE) {
+        DispatchCreateShadersEXT(device, 1, &create_info_copy, nullptr, &original_handle);
+        sub_state.original_handle = original_handle;  // will be destroyed later
+    }
+
+    chassis_state.modified_shader_handle = sub_state.original_handle;
+}
+
+bool GpuShaderInstrumentor::PreCallRecordShaderObjectInstrumentation(
+    vku::safe_VkShaderCreateInfoEXT &modified_create_info, const Location &create_info_loc,
+    chassis::ShaderObjectInstrumentationData &instrumentation_data) {
+    if (gpuav_settings.select_instrumented_shaders && !IsSelectiveInstrumentationEnabled(modified_create_info.pNext)) {
+        return false;
     }
 
     std::vector<uint32_t> &instrumented_spirv = instrumentation_data.instrumented_spirv;
     InstrumentationDescriptorSetLayouts instrumentation_dsl;
-    BuildDescriptorSetLayoutInfo(create_info, instrumentation_dsl);
+    BuildDescriptorSetLayoutInfo(modified_create_info, instrumentation_dsl);
 
     const uint32_t unique_shader_id = unique_shader_module_id_++;
-    const bool is_shader_instrumented =
-        InstrumentShader(vvl::make_span(static_cast<const uint32_t *>(create_info.pCode), create_info.codeSize / sizeof(uint32_t)),
-                         unique_shader_id, instrumentation_dsl, create_info_loc, instrumented_spirv);
+    const bool is_shader_instrumented = InstrumentShader(
+        vvl::make_span(static_cast<const uint32_t *>(modified_create_info.pCode), modified_create_info.codeSize / sizeof(uint32_t)),
+        unique_shader_id, instrumentation_dsl, create_info_loc, instrumented_spirv);
 
     if (is_shader_instrumented) {
         instrumentation_data.unique_shader_id = unique_shader_id;
-        create_info.pCode = instrumented_spirv.data();
-        create_info.codeSize = instrumented_spirv.size() * sizeof(uint32_t);
+        modified_create_info.pCode = instrumented_spirv.data();
+        modified_create_info.codeSize = instrumented_spirv.size() * sizeof(uint32_t);
     }
+    return is_shader_instrumented;
 }
 
 void GpuShaderInstrumentor::PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount,
                                                           const VkShaderCreateInfoEXT *pCreateInfos,
                                                           const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
                                                           const RecordObject &record_obj, chassis::ShaderObject &chassis_state) {
-    BaseClass::PreCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj,
-                                             chassis_state);
     if (!gpuav_settings.IsSpirvModified()) return;
-
-    chassis_state.modified_create_infos.reserve(createInfoCount);
 
     // Resize here so if using just CoreCheck we don't waste time allocating this
     chassis_state.instrumentations_data.resize(createInfoCount);
+    chassis_state.modified_create_infos.resize(createInfoCount);
 
     for (uint32_t i = 0; i < createInfoCount; ++i) {
-        VkShaderCreateInfoEXT new_create_info = pCreateInfos[i];
+        // Need deep copy as there might be pNext items
+        vku::safe_VkShaderCreateInfoEXT &new_create_info = chassis_state.modified_create_infos[i];
+        new_create_info.initialize(&pCreateInfos[i]);
+
         const Location &create_info_loc = record_obj.location.dot(vvl::Field::pCreateInfos, i);
         auto &instrumentation_data = chassis_state.instrumentations_data[i];
+
+        if (new_create_info.codeType != VK_SHADER_CODE_TYPE_SPIRV_EXT) {
+            continue;
+        }
 
         // See pipeline version for explanation
         if (new_create_info.flags & VK_SHADER_CREATE_INDIRECT_BINDABLE_BIT_EXT) {
@@ -345,23 +386,28 @@ void GpuShaderInstrumentor::PreCallRecordCreateShadersEXT(VkDevice device, uint3
             // 1. Copying the caller's descriptor set desc_layouts
             // 2. Fill in dummy descriptor layouts up to the max binding
             // 3. Fill in with the debug descriptor layout at the max binding slot
-            instrumentation_data.new_layouts.reserve(instrumentation_desc_set_bind_index_ + 1);
-            instrumentation_data.new_layouts.insert(instrumentation_data.new_layouts.end(), pCreateInfos[i].pSetLayouts,
-                                                    &pCreateInfos[i].pSetLayouts[pCreateInfos[i].setLayoutCount]);
-            for (uint32_t j = pCreateInfos[i].setLayoutCount; j < instrumentation_desc_set_bind_index_; ++j) {
-                instrumentation_data.new_layouts.push_back(dummy_desc_layout_);
+            const VkShaderCreateInfoEXT &original_create_info = pCreateInfos[i];
+
+            // We need to remove the old layouts we copied in safe_VkShaderCreateInfoEXT::initialize
+            if (new_create_info.pSetLayouts) {
+                delete[] new_create_info.pSetLayouts;
             }
-            instrumentation_data.new_layouts.push_back(instrumentation_desc_layout_);
-            new_create_info.pSetLayouts = instrumentation_data.new_layouts.data();
+
             new_create_info.setLayoutCount = instrumentation_desc_set_bind_index_ + 1;
+            new_create_info.pSetLayouts = new VkDescriptorSetLayout[new_create_info.setLayoutCount];
+            for (uint32_t k = 0; k < original_create_info.setLayoutCount; ++k) {
+                new_create_info.pSetLayouts[k] = original_create_info.pSetLayouts[k];
+            }
+            for (uint32_t k = original_create_info.setLayoutCount; k < instrumentation_desc_set_bind_index_; ++k) {
+                new_create_info.pSetLayouts[k] = dummy_desc_layout_;
+            }
+            new_create_info.pSetLayouts[instrumentation_desc_set_bind_index_] = instrumentation_desc_layout_;
         }
 
-        PreCallRecordShaderObjectInstrumentation(new_create_info, create_info_loc, instrumentation_data);
-
-        chassis_state.modified_create_infos.emplace_back(std::move(new_create_info));
+        chassis_state.is_modified |=
+            PreCallRecordShaderObjectInstrumentation(new_create_info, create_info_loc, instrumentation_data);
     }
 
-    chassis_state.is_modified = true;
     chassis_state.pCreateInfos = reinterpret_cast<VkShaderCreateInfoEXT *>(chassis_state.modified_create_infos.data());
 }
 
@@ -369,34 +415,58 @@ void GpuShaderInstrumentor::PostCallRecordCreateShadersEXT(VkDevice device, uint
                                                            const VkShaderCreateInfoEXT *pCreateInfos,
                                                            const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
                                                            const RecordObject &record_obj, chassis::ShaderObject &chassis_state) {
-    BaseClass::PostCallRecordCreateShadersEXT(device, createInfoCount, pCreateInfos, pAllocator, pShaders, record_obj,
-                                              chassis_state);
-    if (!gpuav_settings.IsSpirvModified()) return;
+    if (!gpuav_settings.IsSpirvModified()) {
+        return;
+    }
     // This can occur if the driver failed to compile the instrumented shader or if a PreCall step failed
-    if (!chassis_state.is_modified) return;
+    if (!chassis_state.is_modified) {
+        return;
+    }
     for (uint32_t i = 0; i < createInfoCount; ++i) {
+        // If there are multiple shaders being created, and one is bad, will return a non VK_SUCCESS but we need to check if the
+        // VkShaderEXT was null or not to actually know if it was created
+        const VkShaderEXT shader_handle = pShaders[i];
+        if (shader_handle == VK_NULL_HANDLE) {
+            continue;
+        }
+
         auto &instrumentation_data = chassis_state.instrumentations_data[i];
 
         // if the shader for some reason was not instrumented, there is nothing to save
+        // (like not using VK_SHADER_CODE_TYPE_SPIRV_EXT)
         if (!instrumentation_data.IsInstrumented()) {
             continue;
         }
-        if (const auto &shader_object_state = Get<vvl::ShaderObject>(pShaders[i])) {
-            shader_object_state->instrumentation_data.was_instrumented = true;
-            shader_object_state->instrumentation_data.unique_shader_id = instrumentation_data.unique_shader_id;
+        const auto &shader_object_state = Get<vvl::ShaderObject>(shader_handle);
+        ASSERT_AND_CONTINUE(shader_object_state);
+        auto &sub_state = SubState(*shader_object_state);
+
+        sub_state.was_instrumented = true;
+        sub_state.unique_shader_id = instrumentation_data.unique_shader_id;
+        // Note - this doesn't make a deep copy of the pCode, but does of the DescriptorSetLayout which we
+        sub_state.original_create_info.initialize(&pCreateInfos[i]);
+
+        // We currently need to store a copy of the original, non-instrumented shader so if there is debug information.
+        std::vector<uint32_t> code;
+        if (shader_object_state->spirv) {
+            code = shader_object_state->spirv->words_;
         }
 
         instrumented_shaders_map_.insert_or_assign(instrumentation_data.unique_shader_id, VK_NULL_HANDLE, VK_NULL_HANDLE,
-                                                   pShaders[i], instrumentation_data.instrumented_spirv);
+                                                   shader_handle, std::move(code));
     }
 }
 
 void GpuShaderInstrumentor::PreCallRecordDestroyShaderEXT(VkDevice device, VkShaderEXT shader,
                                                           const VkAllocationCallbacks *pAllocator, const RecordObject &record_obj) {
     if (auto shader_object_state = Get<vvl::ShaderObject>(shader)) {
-        instrumented_shaders_map_.pop(shader_object_state->instrumentation_data.unique_shader_id);
+        auto &sub_state = SubState(*shader_object_state);
+        instrumented_shaders_map_.pop(sub_state.unique_shader_id);
+
+        if (sub_state.original_handle != VK_NULL_HANDLE) {
+            DispatchDestroyShaderEXT(device, sub_state.original_handle, nullptr);
+        }
     }
-    BaseClass::PreCallRecordDestroyShaderEXT(device, shader, pAllocator, record_obj);
 }
 
 void GpuShaderInstrumentor::PreCallRecordCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t count,
@@ -404,8 +474,6 @@ void GpuShaderInstrumentor::PreCallRecordCreateGraphicsPipelines(VkDevice device
                                                                  const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
                                                                  const RecordObject &record_obj, PipelineStates &pipeline_states,
                                                                  chassis::CreateGraphicsPipelines &chassis_state) {
-    BaseClass::PreCallRecordCreateGraphicsPipelines(device, pipelineCache, count, pCreateInfos, pAllocator, pPipelines, record_obj,
-                                                    pipeline_states, chassis_state);
     if (!gpuav_settings.IsSpirvModified()) return;
 
     chassis_state.shader_instrumentations_metadata.resize(count);
@@ -447,8 +515,6 @@ void GpuShaderInstrumentor::PreCallRecordCreateComputePipelines(VkDevice device,
                                                                 const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
                                                                 const RecordObject &record_obj, PipelineStates &pipeline_states,
                                                                 chassis::CreateComputePipelines &chassis_state) {
-    BaseClass::PreCallRecordCreateComputePipelines(device, pipelineCache, count, pCreateInfos, pAllocator, pPipelines, record_obj,
-                                                   pipeline_states, chassis_state);
     if (!gpuav_settings.IsSpirvModified()) return;
 
     chassis_state.shader_instrumentations_metadata.resize(count);
@@ -483,8 +549,6 @@ void GpuShaderInstrumentor::PreCallRecordCreateRayTracingPipelinesKHR(
     VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t count,
     const VkRayTracingPipelineCreateInfoKHR *pCreateInfos, const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
     const RecordObject &record_obj, PipelineStates &pipeline_states, chassis::CreateRayTracingPipelinesKHR &chassis_state) {
-    BaseClass::PreCallRecordCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, count, pCreateInfos, pAllocator,
-                                                         pPipelines, record_obj, pipeline_states, chassis_state);
     if (!gpuav_settings.IsSpirvModified()) return;
 
     chassis_state.shader_instrumentations_metadata.resize(count);
@@ -532,8 +596,6 @@ void GpuShaderInstrumentor::PostCallRecordCreateGraphicsPipelines(VkDevice devic
                                                                   const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
                                                                   const RecordObject &record_obj, PipelineStates &pipeline_states,
                                                                   chassis::CreateGraphicsPipelines &chassis_state) {
-    BaseClass::PostCallRecordCreateGraphicsPipelines(device, pipelineCache, count, pCreateInfos, pAllocator, pPipelines, record_obj,
-                                                     pipeline_states, chassis_state);
     if (!gpuav_settings.IsSpirvModified()) return;
     // VK_PIPELINE_COMPILE_REQUIRED means that the current pipeline creation call was used to poke the driver cache,
     // no pipeline is created in this case
@@ -542,9 +604,13 @@ void GpuShaderInstrumentor::PostCallRecordCreateGraphicsPipelines(VkDevice devic
     if (!chassis_state.is_modified) return;
 
     for (uint32_t i = 0; i < count; ++i) {
-        UtilCopyCreatePipelineFeedbackData(pCreateInfos[i], chassis_state.modified_create_infos[i]);
+        const VkPipeline pipeline_handle = pPipelines[i];
+        if (pipeline_handle == VK_NULL_HANDLE) {
+            continue;  // vkspec.html#pipelines-multiple
+        }
 
-        auto pipeline_state = Get<vvl::Pipeline>(pPipelines[i]);
+        UtilCopyCreatePipelineFeedbackData(pCreateInfos[i], chassis_state.modified_create_infos[i]);
+        auto pipeline_state = Get<vvl::Pipeline>(pipeline_handle);
         ASSERT_AND_CONTINUE(pipeline_state);
 
         // Move all instrumentation until the final linking time
@@ -564,8 +630,6 @@ void GpuShaderInstrumentor::PostCallRecordCreateComputePipelines(VkDevice device
                                                                  const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
                                                                  const RecordObject &record_obj, PipelineStates &pipeline_states,
                                                                  chassis::CreateComputePipelines &chassis_state) {
-    BaseClass::PostCallRecordCreateComputePipelines(device, pipelineCache, count, pCreateInfos, pAllocator, pPipelines, record_obj,
-                                                    pipeline_states, chassis_state);
     if (!gpuav_settings.IsSpirvModified()) return;
     // VK_PIPELINE_COMPILE_REQUIRED means that the current pipeline creation call was used to poke the driver cache,
     // no pipeline is created in this case
@@ -574,9 +638,14 @@ void GpuShaderInstrumentor::PostCallRecordCreateComputePipelines(VkDevice device
     if (!chassis_state.is_modified) return;
 
     for (uint32_t i = 0; i < count; ++i) {
+        const VkPipeline pipeline_handle = pPipelines[i];
+        if (pipeline_handle == VK_NULL_HANDLE) {
+            continue;  // vkspec.html#pipelines-multiple
+        }
+
         UtilCopyCreatePipelineFeedbackData(pCreateInfos[i], chassis_state.modified_create_infos[i]);
 
-        auto pipeline_state = Get<vvl::Pipeline>(pPipelines[i]);
+        auto pipeline_state = Get<vvl::Pipeline>(pipeline_handle);
         ASSERT_AND_CONTINUE(pipeline_state);
         auto &shader_instrumentation_metadata = chassis_state.shader_instrumentations_metadata[i];
         PostCallRecordPipelineCreationShaderInstrumentation(*pipeline_state, shader_instrumentation_metadata);
@@ -588,8 +657,6 @@ void GpuShaderInstrumentor::PostCallRecordCreateRayTracingPipelinesKHR(
     const VkRayTracingPipelineCreateInfoKHR *pCreateInfos, const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines,
     const RecordObject &record_obj, PipelineStates &pipeline_states,
     std::shared_ptr<chassis::CreateRayTracingPipelinesKHR> chassis_state) {
-    BaseClass::PostCallRecordCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, count, pCreateInfos, pAllocator,
-                                                          pPipelines, record_obj, pipeline_states, chassis_state);
     // This can occur if the driver failed to compile the instrumented shader or if a PreCall step failed
     if (!chassis_state->is_modified) return;
 
@@ -638,9 +705,14 @@ void GpuShaderInstrumentor::PostCallRecordCreateRayTracingPipelinesKHR(
         dispatch_device_->deferred_operation_post_check.insert(deferredOperation, std::move(deferred_op_post_checks));
     } else {
         for (uint32_t i = 0; i < count; ++i) {
+            const VkPipeline pipeline_handle = pPipelines[i];
+            if (pipeline_handle == VK_NULL_HANDLE) {
+                continue;  // vkspec.html#pipelines-multiple
+            }
+
             UtilCopyCreatePipelineFeedbackData(pCreateInfos[i], chassis_state->modified_create_infos[i]);
 
-            auto pipeline_state = Get<vvl::Pipeline>(pPipelines[i]);
+            auto pipeline_state = Get<vvl::Pipeline>(pipeline_handle);
 
             auto &shader_instrumentation_metadata = chassis_state->shader_instrumentations_metadata[i];
             PostCallRecordPipelineCreationShaderInstrumentation(*pipeline_state, shader_instrumentation_metadata);
@@ -663,8 +735,6 @@ void GpuShaderInstrumentor::PreCallRecordDestroyPipeline(VkDevice device, VkPipe
             DispatchDestroyPipeline(device, pipeline_state->instrumentation_data.frag_out_lib, pAllocator);
         }
     }
-
-    BaseClass::PreCallRecordDestroyPipeline(device, pipeline, pAllocator, record_obj);
 }
 
 template <typename CreateInfo>
@@ -774,10 +844,11 @@ void GpuShaderInstrumentor::BuildDescriptorSetLayoutInfo(const vvl::Pipeline &pi
     }
 }
 
-void GpuShaderInstrumentor::BuildDescriptorSetLayoutInfo(const VkShaderCreateInfoEXT &create_info,
+void GpuShaderInstrumentor::BuildDescriptorSetLayoutInfo(const vku::safe_VkShaderCreateInfoEXT &modified_create_info,
                                                          InstrumentationDescriptorSetLayouts &out_instrumentation_dsl) {
-    out_instrumentation_dsl.set_index_to_bindings_layout_lut.resize(create_info.setLayoutCount);
-    for (const auto [set_layout_index, set_layout] : vvl::enumerate(create_info.pSetLayouts, create_info.setLayoutCount)) {
+    out_instrumentation_dsl.set_index_to_bindings_layout_lut.resize(modified_create_info.setLayoutCount);
+    for (const auto [set_layout_index, set_layout] :
+         vvl::enumerate(modified_create_info.pSetLayouts, modified_create_info.setLayoutCount)) {
         if (auto set_layout_state = Get<vvl::DescriptorSetLayout>(set_layout)) {
             BuildDescriptorSetLayoutInfo(*set_layout_state, set_layout_index, out_instrumentation_dsl);
         }
@@ -1375,11 +1446,11 @@ static std::string LookupDebugUtilsNameNoLock(const DebugReport *debug_report, c
 
 // Generate the stage-specific part of the message.
 static void GenerateStageMessage(std::ostringstream &ss, const GpuShaderInstrumentor::ShaderMessageInfo &shader_info,
-                                 const std::vector<uint32_t> &instrumented_spirv) {
+                                 const std::vector<uint32_t> &instructions) {
     switch (shader_info.stage_id) {
         case glsl::kExecutionModelMultiEntryPoint: {
             ss << "Stage has multiple OpEntryPoint (";
-            ::spirv::GetExecutionModelNames(instrumented_spirv, ss);
+            ::spirv::GetExecutionModelNames(instructions, ss);
             ss << ") and could not detect stage. ";
         } break;
         case glsl::kExecutionModelVertex: {
@@ -1461,15 +1532,15 @@ static void GenerateStageMessage(std::ostringstream &ss, const GpuShaderInstrume
 // There are 2 ways to inject source into a shader:
 // 1. The "old" way using OpLine/OpSource
 // 2. The "new" way using NonSemantic Shader DebugInfo
-static std::string FindShaderSource(std::ostringstream &ss, const std::vector<uint32_t> &instrumented_spirv,
+static std::string FindShaderSource(std::ostringstream &ss, const std::vector<uint32_t> &instructions,
                                     uint32_t instruction_position, bool debug_printf_only) {
     ss << "SPIR-V Instruction Index = " << instruction_position << '\n';
 
-    const uint32_t last_line_inst_offset = ::spirv::GetDebugLineOffset(instrumented_spirv, instruction_position);
+    const uint32_t last_line_inst_offset = ::spirv::GetDebugLineOffset(instructions, instruction_position);
     if (last_line_inst_offset != 0) {
-        Instruction last_line_inst(instrumented_spirv.data() + last_line_inst_offset);
+        Instruction last_line_inst(instructions.data() + last_line_inst_offset);
         ss << (debug_printf_only ? "Debug shader printf message generated at " : "Shader validation error occurred at ");
-        GetShaderSourceInfo(ss, instrumented_spirv, last_line_inst);
+        GetShaderSourceInfo(ss, instructions, last_line_inst);
     } else {
         ss << "Unable to source. Build shader with debug info to get source information.\n";
     }
@@ -1483,12 +1554,12 @@ std::string GpuShaderInstrumentor::GenerateDebugInfoMessage(VkCommandBuffer comm
                                                             VkPipelineBindPoint pipeline_bind_point,
                                                             uint32_t operation_index) const {
     std::ostringstream ss;
-    if (!instrumented_shader || instrumented_shader->instrumented_spirv.empty()) {
+    if (!instrumented_shader || instrumented_shader->original_spirv.empty()) {
         ss << "[Internal Error] - Can't get instructions from shader_map\n";
         return ss.str();
     }
 
-    GenerateStageMessage(ss, shader_info, instrumented_shader->instrumented_spirv);
+    GenerateStageMessage(ss, shader_info, instrumented_shader->original_spirv);
 
     ss << std::hex << std::showbase;
     if (instrumented_shader->shader_module == VK_NULL_HANDLE && instrumented_shader->shader_object == VK_NULL_HANDLE) {
@@ -1534,8 +1605,7 @@ std::string GpuShaderInstrumentor::GenerateDebugInfoMessage(VkCommandBuffer comm
     }
     ss << std::dec << std::noshowbase;
 
-    FindShaderSource(ss, instrumented_shader->instrumented_spirv, shader_info.instruction_position,
-                     gpuav_settings.debug_printf_only);
+    FindShaderSource(ss, instrumented_shader->original_spirv, shader_info.instruction_position, gpuav_settings.debug_printf_only);
 
     return ss.str();
 }

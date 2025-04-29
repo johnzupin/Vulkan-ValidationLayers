@@ -102,14 +102,9 @@ class Image : public Bindable, public SubStateManager<ImageSubState> {
     static constexpr int kMaxPlanes = 3;
     using MemoryReqs = std::array<VkMemoryRequirements, kMaxPlanes>;
     const MemoryReqs requirements;
-    std::array<bool, kMaxPlanes> memory_requirements_checked = {};
 
     const bool sparse_residency;
-    using SparseReqs = std::vector<VkSparseImageMemoryRequirements>;
-    const SparseReqs sparse_requirements;
-    const bool sparse_metadata_required;  // Track if sparse metadata aspect is required for this image
-    bool get_sparse_reqs_called;          // Track if GetImageSparseMemoryRequirements() has been called for this image
-    bool sparse_metadata_bound;           // Track if sparse metadata aspect is bound to this image
+    const std::vector<VkSparseImageMemoryRequirements> sparse_requirements;
 
     VkImageFormatProperties image_format_properties = {};
 #ifdef VK_USE_PLATFORM_METAL_EXT
@@ -121,10 +116,14 @@ class Image : public Bindable, public SubStateManager<ImageSubState> {
     const VkDevice store_device_as_workaround;                                       // TODO REMOVE WHEN encoder can be const
 
     // This map is used to validate/update image layouts during submit time processing.
-    // Record time validation can't use this. At the beginning of the command buffer
-    // the global image layout can't be determined because it depends on the previously
-    // submitted command buffers.
-    std::shared_ptr<GlobalImageLayoutRangeMap> layout_range_map;
+    // Record time validation can't use this, because global image layout is undefined
+    // at record time (depends on the previous submissions, which are unknown at record time).
+    std::shared_ptr<ImageLayoutRangeMap> layout_range_map;
+
+    // If there is no aliasing this mutex protects this->layout_range_map.
+    // With aliasing one of the images shares a mutex with other aliases,
+    // so for some aliased images this mutex can be unused.
+    mutable std::shared_mutex layout_range_map_lock;
 
     vvl::unordered_set<std::shared_ptr<const vvl::VideoProfileDesc>> supported_video_profiles;
 
@@ -333,8 +332,8 @@ class ImageView : public StateObject, public SubStateManager<ImageViewSubState> 
 class ImageViewSubState {
   public:
     explicit ImageViewSubState(ImageView &view) : base(view) {}
-    ImageViewSubState(const ImageSubState &) = delete;
-    ImageViewSubState &operator=(const ImageSubState &) = delete;
+    ImageViewSubState(const ImageViewSubState &) = delete;
+    ImageViewSubState &operator=(const ImageViewSubState &) = delete;
     virtual ~ImageViewSubState() {}
     virtual void Destroy() {}
     virtual void NotifyInvalidate(const StateObject::NodeList &invalid_nodes, bool unlink) {}

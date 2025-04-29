@@ -31,28 +31,19 @@
 #include "state_tracker/ray_tracing_state.h"
 #include "state_tracker/shader_module.h"
 #include "drawdispatch/drawdispatch_vuids.h"
+#include "utils/action_command_utils.h"
 #include "utils/vk_layer_utils.h"
 
 namespace vvl {
 
 // This seems like it could be useful elsewhere, but until find another spot, just keep here.
 static const char *GetActionType(Func command) {
-    switch (command) {
-        case Func::vkCmdDispatch:
-        case Func::vkCmdDispatchIndirect:
-        case Func::vkCmdDispatchBase:
-        case Func::vkCmdDispatchBaseKHR:
-        case Func::vkCmdDispatchGraphAMDX:
-        case Func::vkCmdDispatchGraphIndirectAMDX:
-        case Func::vkCmdDispatchGraphIndirectCountAMDX:
-            return "dispatch";
-        case Func::vkCmdTraceRaysNV:
-        case Func::vkCmdTraceRaysKHR:
-        case Func::vkCmdTraceRaysIndirectKHR:
-        case Func::vkCmdTraceRaysIndirect2KHR:
-            return "trace rays";
-        default:
-            return "draw";
+    if (IsCommandDispatch(command)) {
+        return "dispatch";
+    } else if (IsCommandTraceRays(command)) {
+        return "trace rays";
+    } else {
+        return "draw";
     }
 }
 
@@ -516,7 +507,7 @@ bool DescriptorValidator::ValidateDescriptor(const spirv::ResourceInterfaceVaria
     // When KHR_format_feature_flags2 is supported, the read/write without
     // format support is reported per format rather than a single physical
     // device feature.
-    if (dev_proxy.device_state->has_format_feature2) {
+    if (dev_proxy.device_state->special_supported.vk_khr_format_feature_flags2) {
         const VkFormatFeatureFlags2 format_features = image_view_state->format_features;
 
         if (descriptor_type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
@@ -1015,7 +1006,7 @@ bool DescriptorValidator::ValidateDescriptor(const spirv::ResourceInterfaceVaria
     // When KHR_format_feature_flags2 is supported, the read/write without
     // format support is reported per format rather than a single physical
     // device feature.
-    if (dev_proxy.device_state->has_format_feature2) {
+    if (dev_proxy.device_state->special_supported.vk_khr_format_feature_flags2) {
         if (descriptor_type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER) {
             if ((resource_variable.info.is_read_without_format) &&
                 !(buffer_format_features & VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT_KHR)) {

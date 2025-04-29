@@ -870,14 +870,6 @@ static void ProcessDebugReportSettings(ConfigAndEnvSettings *settings_data, VkuL
                 "will not be seen.");
             report_flags |= kInformationBit;
         }
-        // If any non-stdout DebugPrintf is being used, just turn off duplicate_message_limit, it will prevent people thinking
-        // DebugPrintf is broken because nothing is printing.
-        if (!settings_data->gpuav_settings->debug_printf_to_stdout && debug_report->duplicate_message_limit != 0) {
-            debug_report->duplicate_message_limit = 0;
-            setting_warnings.emplace_back("DebugPrintf logs can possibly print many times, but duplicate_message_limit is set to " +
-                                          std::to_string(debug_report->duplicate_message_limit) +
-                                          ", setting enable_message_limit to false so all logs are printed.");
-        }
     }
 
     // Flag as default if these settings are not from a vk_layer_settings.txt file
@@ -1299,9 +1291,6 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
     // In this case, we want to emulate supporting only for DebugPrintf with GPU-AV disabled
     if (settings_data->enables[debug_printf_validation]) {
         gpuav_settings.debug_printf_enabled = true;
-        if (!settings_data->enables[gpu_validation]) {
-            gpuav_settings.SetOnlyDebugPrintf();
-        }
     } else if (gpuav_settings.debug_printf_enabled) {
         // enabled the new way, but chassis uses this to create Validation Object
         settings_data->enables[debug_printf_validation] = true;
@@ -1342,6 +1331,11 @@ void ProcessConfigAndEnvSettings(ConfigAndEnvSettings *settings_data) {
             // enabled the new way, but chassis uses this to create Validation Object
             settings_data->enables[gpu_validation] = true;
         }
+    }
+
+    // After checking the various ways to enable both DebugPrintf and GPU-AV, disable non-DebugPrintf portion if not used
+    if (settings_data->enables[debug_printf_validation] && !settings_data->enables[gpu_validation]) {
+        gpuav_settings.SetOnlyDebugPrintf();
     }
 
     // if app is setting VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT, we can use this to disable it for debugging

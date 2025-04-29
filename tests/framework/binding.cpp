@@ -20,6 +20,8 @@
 
 #include <string.h>  // memset(), memcmp()
 #include <cassert>
+#include <algorithm>
+#include <iterator>
 #include <spirv-tools/libspirv.hpp>
 
 #include <vulkan/utility/vk_format_utils.h>
@@ -442,7 +444,11 @@ VkFormatFeatureFlags2 Device::FormatFeaturesBuffer(VkFormat format) const {
 void Device::Wait() const { ASSERT_EQ(VK_SUCCESS, vk::DeviceWaitIdle(handle())); }
 
 VkResult Device::Wait(const std::vector<const Fence *> &fences, bool wait_all, uint64_t timeout) {
-    const std::vector<VkFence> fence_handles = MakeVkHandles<VkFence>(fences);
+    std::vector<VkFence> fence_handles;
+    fence_handles.reserve(fences.size());
+    std::transform(fences.begin(), fences.end(), std::back_inserter(fence_handles),
+                   [](const Fence *o) { return (o) ? o->handle() : VK_NULL_HANDLE; });
+
     VkResult err =
         vk::WaitForFences(handle(), static_cast<uint32_t>(fence_handles.size()), fence_handles.data(), wait_all, timeout);
     EXPECT_TRUE(err == VK_SUCCESS || err == VK_TIMEOUT);
@@ -458,11 +464,10 @@ VkResult Queue::Submit(const CommandBuffer &cmd, const Fence &fence) {
     return result;
 }
 
-VkResult Queue::Submit(const vvl::span<CommandBuffer *> &cmds, const Fence &fence) {
-    const std::vector<VkCommandBuffer> cmd_handles = MakeVkHandles<VkCommandBuffer>(cmds);
+VkResult Queue::Submit(const std::vector<VkCommandBuffer> &cmds, const Fence &fence) {
     VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.commandBufferCount = static_cast<uint32_t>(cmd_handles.size());
-    submit_info.pCommandBuffers = cmd_handles.data();
+    submit_info.commandBufferCount = static_cast<uint32_t>(cmds.size());
+    submit_info.pCommandBuffers = cmds.data();
     VkResult result = vk::QueueSubmit(handle(), 1, &submit_info, fence.handle());
     return result;
 }
@@ -584,12 +589,12 @@ VkResult Queue::Submit2(const CommandBuffer &cmd, const Fence &fence, bool use_k
     return result;
 }
 
-VkResult Queue::Submit2(const vvl::span<const CommandBuffer> &cmds, const Fence &fence, bool use_khr) {
+VkResult Queue::Submit2(const std::vector<VkCommandBuffer> &cmds, const Fence &fence, bool use_khr) {
     std::vector<VkCommandBufferSubmitInfo> cmd_submit_infos;
     cmd_submit_infos.reserve(cmds.size());
     for (size_t i = 0; i < cmds.size(); i++) {
         VkCommandBufferSubmitInfo cmd_submit_info = vku::InitStructHelper();
-        cmd_submit_info.commandBuffer = cmds[i].handle();
+        cmd_submit_info.commandBuffer = cmds[i];
         cmd_submit_infos.push_back(cmd_submit_info);
     }
     VkSubmitInfo2 submit = vku::InitStructHelper();
@@ -1737,7 +1742,11 @@ NON_DISPATCHABLE_HANDLE_DTOR(PipelineLayout, vk::DestroyPipelineLayout)
 
 void PipelineLayout::init(const Device &dev, VkPipelineLayoutCreateInfo &info,
                           const std::vector<const DescriptorSetLayout *> &layouts) {
-    const std::vector<VkDescriptorSetLayout> layout_handles = MakeVkHandles<VkDescriptorSetLayout>(layouts);
+    std::vector<VkDescriptorSetLayout> layout_handles;
+    layout_handles.reserve(layouts.size());
+    std::transform(layouts.begin(), layouts.end(), std::back_inserter(layout_handles),
+                   [](const DescriptorSetLayout *o) { return (o) ? o->handle() : VK_NULL_HANDLE; });
+
     info.setLayoutCount = static_cast<uint32_t>(layout_handles.size());
     info.pSetLayouts = layout_handles.data();
 
@@ -1771,7 +1780,10 @@ void DescriptorPool::Reset() { ASSERT_EQ(VK_SUCCESS, vk::ResetDescriptorPool(dev
 
 std::vector<DescriptorSet *> DescriptorPool::AllocateSets(const Device &dev,
                                                           const std::vector<const DescriptorSetLayout *> &layouts) {
-    const std::vector<VkDescriptorSetLayout> layout_handles = MakeVkHandles<VkDescriptorSetLayout>(layouts);
+    std::vector<VkDescriptorSetLayout> layout_handles;
+    layout_handles.reserve(layouts.size());
+    std::transform(layouts.begin(), layouts.end(), std::back_inserter(layout_handles),
+                   [](const DescriptorSetLayout *o) { return (o) ? o->handle() : VK_NULL_HANDLE; });
 
     std::vector<VkDescriptorSet> set_handles;
     set_handles.resize(layout_handles.size());
@@ -1924,7 +1936,7 @@ void CommandBuffer::BeginRenderPass(const VkRenderPassBeginInfo &info, VkSubpass
 }
 
 void CommandBuffer::BeginRenderPass(VkRenderPass rp, VkFramebuffer fb, uint32_t render_area_width, uint32_t render_area_height,
-                                    uint32_t clear_count, VkClearValue *clear_values) {
+                                    uint32_t clear_count, const VkClearValue *clear_values) {
     VkRenderPassBeginInfo render_pass_begin_info = vku::InitStructHelper();
     render_pass_begin_info.renderPass = rp;
     render_pass_begin_info.framebuffer = fb;

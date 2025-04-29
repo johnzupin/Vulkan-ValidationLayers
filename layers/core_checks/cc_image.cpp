@@ -70,7 +70,7 @@ bool CoreChecks::ValidateImageFormatFeatures(const VkImageCreateInfo &create_inf
             }
         }
 
-        if (device_state->has_format_feature2) {
+        if (device_state->special_supported.vk_khr_format_feature_flags2) {
             VkDrmFormatModifierPropertiesList2EXT fmt_drm_props = vku::InitStructHelper();
             VkFormatProperties2 fmt_props_2 = vku::InitStructHelper(&fmt_drm_props);
             DispatchGetPhysicalDeviceFormatProperties2Helper(api_version, physical_device, image_format, &fmt_props_2);
@@ -848,9 +848,10 @@ bool CoreChecks::PreCallValidateCreateImage(VkDevice device, const VkImageCreate
 void CoreChecks::PostCallRecordCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                                            const VkAllocationCallbacks *pAllocator, VkImage *pImage,
                                            const RecordObject &record_obj) {
-    if (VK_SUCCESS != record_obj.result) return;
+    if (record_obj.result != VK_SUCCESS) {
+        return;
+    }
 
-    BaseClass::PostCallRecordCreateImage(device, pCreateInfo, pAllocator, pImage, record_obj);
     if ((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) != 0) {
         // non-sparse images set up their layout maps when memory is bound
         if (auto image_state = Get<vvl::Image>(*pImage)) {
@@ -878,8 +879,6 @@ void CoreChecks::PreCallRecordDestroyImage(VkDevice device, VkImage image, const
                                            const RecordObject &record_obj) {
     // Clean up validation specific data
     qfo_release_image_barrier_map.erase(image);
-    // Clean up generic image state
-    BaseClass::PreCallRecordDestroyImage(device, image, pAllocator, record_obj);
 }
 
 bool CoreChecks::ValidateClearImageSubresourceRange(const LogObjectList &objlist, const VkImageSubresourceRange &range,
@@ -955,13 +954,11 @@ bool CoreChecks::PreCallValidateCmdClearColorImage(VkCommandBuffer commandBuffer
 void CoreChecks::PostCallRecordCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout,
                                                   const VkClearColorValue *pColor, uint32_t rangeCount,
                                                   const VkImageSubresourceRange *pRanges, const RecordObject &record_obj) {
-    BaseClass::PostCallRecordCmdClearColorImage(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges, record_obj);
-
     auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto image_state = Get<vvl::Image>(image);
     if (cb_state_ptr && image_state) {
         for (uint32_t i = 0; i < rangeCount; ++i) {
-            cb_state_ptr->SetImageInitialLayout(image, pRanges[i], imageLayout);
+            cb_state_ptr->SetImageInitialLayout(*image_state, pRanges[i], imageLayout);
         }
     }
 }
@@ -1075,15 +1072,12 @@ bool CoreChecks::PreCallValidateCmdClearDepthStencilImage(VkCommandBuffer comman
 void CoreChecks::PostCallRecordCmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout,
                                                          const VkClearDepthStencilValue *pDepthStencil, uint32_t rangeCount,
                                                          const VkImageSubresourceRange *pRanges, const RecordObject &record_obj) {
-    BaseClass::PostCallRecordCmdClearDepthStencilImage(commandBuffer, image, imageLayout, pDepthStencil, rangeCount, pRanges,
-                                                          record_obj);
-
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto image_state = Get<vvl::Image>(image);
     ASSERT_AND_RETURN(image_state);
 
     for (uint32_t i = 0; i < rangeCount; ++i) {
-        cb_state->SetImageInitialLayout(image, pRanges[i], imageLayout);
+        cb_state->SetImageInitialLayout(*image_state, pRanges[i], imageLayout);
     }
 }
 
@@ -1147,7 +1141,7 @@ bool CoreChecks::PreCallValidateCmdClearAttachments(VkCommandBuffer commandBuffe
         if (rp_state->UsesDynamicRendering()) {
             layer_count = rp_state->dynamic_rendering_begin_rendering_info.layerCount;
         } else {
-            layer_count = cb_state.activeFramebuffer.get()->create_info.layers;
+            layer_count = cb_state.active_framebuffer.get()->create_info.layers;
         }
         skip |= ValidateClearAttachmentExtent(cb_state, cb_state.render_area, layer_count, rectCount, pRects, error_obj.location);
     }
@@ -1181,18 +1175,21 @@ bool CoreChecks::PreCallValidateCmdClearAttachments(VkCommandBuffer commandBuffe
                                  colorAttachment);
             }
 
-            color_view_state = cb_state.GetActiveAttachmentImageViewState(cb_state.GetDynamicColorAttachmentImageIndex(colorAttachment));
-            color_attachment_count = cb_state.GetDynamicColorAttachmentCount();
+            color_view_state =
+                cb_state.GetActiveAttachmentImageViewState(cb_state.GetDynamicRenderingColorAttachmentIndex(colorAttachment));
+            color_attachment_count = cb_state.GetDynamicRenderingColorAttachmentCount();
 
-            depth_view_state = cb_state.GetActiveAttachmentImageViewState(cb_state.GetDynamicDepthAttachmentImageIndex());
-            stencil_view_state = cb_state.GetActiveAttachmentImageViewState(cb_state.GetDynamicStencilAttachmentImageIndex());
+            depth_view_state = cb_state.GetActiveAttachmentImageViewState(
+                cb_state.GetDynamicRenderingAttachmentIndex(AttachmentInfo::Type::Depth));
+            stencil_view_state = cb_state.GetActiveAttachmentImageViewState(
+                cb_state.GetDynamicRenderingAttachmentIndex(AttachmentInfo::Type::Stencil));
 
             view_mask = rp_state->dynamic_rendering_begin_rendering_info.viewMask;
             external_format_resolve = cb_state.HasExternalFormatResolveAttachment();
         } else {
             const auto *renderpass_create_info = rp_state->create_info.ptr();
             const auto *subpass_desc = &renderpass_create_info->pSubpasses[cb_state.GetActiveSubpass()];
-            const auto *framebuffer = cb_state.activeFramebuffer.get();
+            const auto *framebuffer = cb_state.active_framebuffer.get();
 
             if (subpass_desc) {
                 if (framebuffer && (clear_desc->colorAttachment != VK_ATTACHMENT_UNUSED) &&
@@ -1342,8 +1339,6 @@ bool CoreChecks::PreCallValidateCmdClearAttachments(VkCommandBuffer commandBuffe
 void CoreChecks::PostCallRecordCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
                                                    const VkClearAttachment *pAttachments, uint32_t rectCount,
                                                    const VkClearRect *pRects, const RecordObject &record_obj) {
-    BaseClass::PostCallRecordCmdClearAttachments(commandBuffer, attachmentCount, pAttachments, rectCount, pRects, record_obj);
-
     auto cb_state_ptr = GetWrite<vvl::CommandBuffer>(commandBuffer);
     ASSERT_AND_RETURN(cb_state_ptr);
     const vvl::CommandBuffer &cb_state = *cb_state_ptr;
@@ -1358,11 +1353,11 @@ void CoreChecks::PostCallRecordCmdClearAttachments(VkCommandBuffer commandBuffer
             auto colorAttachmentCount = rp_state->inheritance_rendering_info.colorAttachmentCount;
             int image_index = -1;
             if ((clear_desc->aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) && (clear_desc->colorAttachment < colorAttachmentCount)) {
-                image_index = cb_state.GetDynamicColorAttachmentImageIndex(clear_desc->colorAttachment);
+                image_index = cb_state.GetDynamicRenderingColorAttachmentIndex(clear_desc->colorAttachment);
             } else if (clear_desc->aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT)) {
-                image_index = cb_state.GetDynamicDepthAttachmentImageIndex();
+                image_index = cb_state.GetDynamicRenderingAttachmentIndex(AttachmentInfo::Type::Depth);
             } else if (clear_desc->aspectMask & (VK_IMAGE_ASPECT_STENCIL_BIT)) {
-                image_index = cb_state.GetDynamicStencilAttachmentImageIndex();
+                image_index = cb_state.GetDynamicRenderingAttachmentIndex(AttachmentInfo::Type::Stencil);
             }
 
             if (image_index != -1) {
@@ -1682,7 +1677,7 @@ bool CoreChecks::ValidateImageViewFormatFeatures(const vvl::Image &image_state, 
         VkImageDrmFormatModifierPropertiesEXT drm_format_properties = vku::InitStructHelper();
         DispatchGetImageDrmFormatModifierPropertiesEXT(device, image_state.VkHandle(), &drm_format_properties);
 
-        if (device_state->has_format_feature2) {
+        if (device_state->special_supported.vk_khr_format_feature_flags2) {
             VkDrmFormatModifierPropertiesList2EXT fmt_drm_props = vku::InitStructHelper();
             VkFormatProperties2 fmt_props_2 = vku::InitStructHelper(&fmt_drm_props);
             DispatchGetPhysicalDeviceFormatProperties2Helper(api_version, physical_device, view_format, &fmt_props_2);
@@ -2721,18 +2716,16 @@ bool CoreChecks::PreCallValidateTransitionImageLayout(VkDevice device, uint32_t 
             }
         } else if (vkuFormatIsDepthOnly(image_format)) {
             if ((aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) != VK_IMAGE_ASPECT_DEPTH_BIT) {
-                // Being discussed in https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/7274
                 const LogObjectList objlist(device, image_state->Handle());
-                skip |= LogError("UNASSIGNED-VkHostImageLayoutTransitionInfo-image-00001", objlist,
+                skip |= LogError("VUID-VkHostImageLayoutTransitionInfo-image-10749", objlist,
                                  transition_loc.dot(Field::subresourceRange).dot(Field::aspectMask),
                                  "is %s and image was created with format %s.", string_VkImageAspectFlags(aspect_mask).c_str(),
                                  string_VkFormat(image_format));
             }
         } else if (vkuFormatIsStencilOnly(image_format)) {
             if ((aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT) != VK_IMAGE_ASPECT_STENCIL_BIT) {
-                // Being discussed in https://gitlab.khronos.org/vulkan/vulkan/-/merge_requests/7274
                 const LogObjectList objlist(device, image_state->Handle());
-                skip |= LogError("UNASSIGNED-VkHostImageLayoutTransitionInfo-image-00002", objlist,
+                skip |= LogError("VUID-VkHostImageLayoutTransitionInfo-image-10750", objlist,
                                  transition_loc.dot(Field::subresourceRange).dot(Field::aspectMask),
                                  "is %s and image was created with format %s.", string_VkImageAspectFlags(aspect_mask).c_str(),
                                  string_VkFormat(image_format));
@@ -2795,9 +2788,9 @@ bool CoreChecks::PreCallValidateTransitionImageLayoutEXT(VkDevice device, uint32
 void CoreChecks::PostCallRecordTransitionImageLayout(VkDevice device, uint32_t transitionCount,
                                                      const VkHostImageLayoutTransitionInfo *pTransitions,
                                                      const RecordObject &record_obj) {
-    BaseClass::PostCallRecordTransitionImageLayout(device, transitionCount, pTransitions, record_obj);
-
-    if (VK_SUCCESS != record_obj.result) return;
+    if (record_obj.result != VK_SUCCESS) {
+        return;
+    }
 
     for (uint32_t i = 0; i < transitionCount; ++i) {
         auto &transition = pTransitions[i];

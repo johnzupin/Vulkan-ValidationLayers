@@ -30,7 +30,8 @@
 
 #include <vector>
 
-using vkt::MakeVkHandles;
+struct InstanceExtensions;
+struct DeviceExtensions;
 
 static constexpr uint64_t kWaitTimeout{10000000000};  // 10 seconds in ns
 static constexpr VkDeviceSize kZeroDeviceSize{0};
@@ -268,6 +269,9 @@ class VkRenderFramework : public VkTestFramework {
     vkt::Framebuffer *m_framebuffer;
     std::vector<vkt::ImageView> m_render_target_views;   // color attachments but not depth
     std::vector<VkImageView> m_framebuffer_attachments;  // all attachments, can be consumed directly by the API
+
+    InstanceExtensions *m_instance_extensions = nullptr;
+    DeviceExtensions *m_device_extensions = nullptr;
 
     // Add ext_name, the names of all instance extensions required by ext_name, and return true if ext_name is supported. If the
     // extension is not supported, no extension names are added for instance creation. `ext_name` can refer to a device or instance
