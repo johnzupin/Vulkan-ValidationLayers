@@ -1,3 +1,204 @@
+vulkan-validationlayers (1.4.313.0~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ spencer-lunarg ]
+  * gpuav: Check if known descriptor class is not found
+
+  [ Arno ]
+  * gpuav: Fix sync issue
+  * tests: Remove <regex> from header
+
+  [ spencer-lunarg ]
+  * scripts: Move Extension Helper static map to source
+  * layers: Check created samplers for VK_SUCCESS
+  * tests: Remove more include headers
+  * tests: Move extension helper to source file
+  * tests: Remove MakeVkHandles
+  * gpuav: ShaderObject missing keeping old spirv
+  * gpuav: Handle Binary Shader Objects
+
+  [ Artem Kharytoniuk ]
+  * layers: RenderPass cleanup
+
+  [ spencer-lunarg ]
+  * layer: Add 'prefix' in layer manifest, used by doc generation
+  * layers: Fix missing VkResult state tracking
+  * layers: Flip VK_SUCCESS check variable order
+  * layers: Fix ShaderObject handle wrapping
+  * layers: Add VU if no compute shader object is bound
+  * layers: Improve invalid spirv error messages
+
+  [ Arno ]
+  * gpuav: Refacto dispatch validation commands
+
+  [ Artem Kharytoniuk ]
+  * layers: Allow to use ALL_COMMANDS in subpass dependency
+  * tests: Test ALL_COMMANDS in subpass dependency
+
+  [ spencer-lunarg ]
+  * layers: Add Linking INDEPENDENT_SETS check
+  * layers: Add better GPL Layout messages
+  * layers: Add SpecialSupported struct
+  * tests: Dedicated GPUAV Copies test
+  * layers: Fix ImageViewSubState helpers
+  * gpuav: Make a ShaderObjectSubState
+
+  [ Artem Kharytoniuk ]
+  * tests: Test external dependency syncs layout transition
+
+  [ spencer-lunarg ]
+  * layers: Warn when hitting the duplicate message limit
+  * layers: Fix threading bug with PhyscialDevice
+  * gpuav: Handle external fences
+  * tests: Add extra restore pipeline test
+  * layers: Rename secondary command buffer state
+  * layers: Cleanup VkCommandBufferInheritanceInfo
+
+  [ Mike Schuchardt ]
+  * build: Update to header 1.4.313
+
+  [ spencer-lunarg ]
+  * bp: Move bp only state to bp
+  * layers: First step to moving cb state to core only
+  * layers: Rename cleanup of vvl::CommandBuffer
+  * layers: VUID churn 1.4.313
+  * tests: More GPL test GPUAV
+  * layers: More VUID Churn 1.4.313
+  * layers: Fix Push Descriptor Immutable Sampler
+  * layers: Fix ObjectTracker not printing device handle
+
+  [ Arno ]
+  * gpuav: Return on failure, remove dead code
+
+  [ spencer-lunarg ]
+  * layers: Fix BDA VU churn 1.4.313
+  * printf: Turn off GPU-AV when using new printf layer setting
+
+  [ Artem Kharytoniuk ]
+  * layers: Rename image layout map types
+
+  [ Arno ]
+  * gpuav: Fix cmd binding bound desc sets tracking
+
+  [ spencer-lunarg ]
+  * debug: Add xcb support for keyboard detection
+  * gpuav: Simplify LogInstrumentationError
+  * tests: Add ShaderObject vertex test
+  * tests: Moving Vertex Attribute Fetch OOB
+  * gpuav: Skip GetVertexAttributeFetchLimits on normal draws
+  * gpuav: Use single global buffer to non-index draws
+
+  [ Artem Kharytoniuk ]
+  * layer: Use vvl hashmap for SubmissionImageLayoutMap
+
+  [ ziga-lunarg ]
+  * layers: Add validation for vkCmdEndRendering2EXT
+  * tests: Test vkCmdEndRendering2EXT
+
+  [ spencer-lunarg ]
+  * layers: Get VK_EXT_fragment_density_map_offset working
+  * layers: Fix over validating INDEPENDENT_SET linking
+
+  [ Arno ]
+  * gpuav: Rework buffer caching
+
+  [ Artem Kharytoniuk ]
+  * layers: Remove unused label state
+
+  [ spencer-lunarg ]
+  * layers: Move has_draw_cmd to BP
+  * gpuav: Move VertexAttributeFetchOff to shared resource
+  * deps: Update SPIR-V Deps
+  * layers: Make desc_set_pipeline_layout shared pointer
+  * layers: First wave of moving vkCmd calls to being PostCallRecord
+  * layers: Combine Pre and Post records in core
+
+  [ Artem Kharytoniuk ]
+  * layers: Flatten set subresource layout methods
+  * layers: Remove SetImageInitialLayout overloads
+  * layers: Remove unused cb_state parameter
+
+  [ spencer-lunarg ]
+  * layers: Fix GPL
+  * layers: Move Pre to Post for begin render pass
+  * gpuav: Split up CmdCopyBufferToImage Pre and Post
+
+  [ Artem Kharytoniuk ]
+  * tests: Demo potential issue with layout tracking
+
+  [ Arno ]
+  * gpuav: Fix English
+  * gpuav: Misc changes
+
+  [ spencer-lunarg ]
+  * layers: Remove BaseClass::PreCallRecord
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup ImageLayoutRegistry::LayoutEntry
+
+  [ spencer-lunarg ]
+  * layers: Remove BaseClass:PreCallRecord
+
+  [ ziga-lunarg ]
+  * tests: Fix testing 02722
+
+  [ spencer-lunarg ]
+  * layers: Remove PreCallValidate Pipeline BaseClass calls
+  * layers: Combine vvl::AllocateDescriptorSetsData
+  * gpuav: Don't DontInline
+  * scripts: Update SPIR-V Deps for SDK
+  * sync: Remove unused BaseClass calls
+
+  [ Artem Kharytoniuk ]
+  * layers: Add top/bottom  to the list of graphics meta stages
+  * tests: Test top/bottom stages in subpass dependency
+
+  [ Arno ]
+  * gpuav: Update SharedResourcesCache interface
+
+  [ spencer-lunarg ]
+  * layers: Fix maintenance8 flags check
+
+  [ ziga-lunarg ]
+  * layers: Fix 02628 message
+  * tests: Fix external memory test
+
+  [ Arno ]
+  * layers: Workaround state destruction order
+
+  [ spencer-lunarg ]
+  * layers: Print better error message for allocation warning
+  * layers: Note PreCallRecord for EndRenderPass
+  * layers: Move draws to post call record
+
+  [ Artem Kharytoniuk ]
+  * layers: Improve swapchain semaphore in-use messages
+
+  [ spencer-lunarg ]
+  * layers: Combine PostCallRecordCmdBindShadersEXT
+  * bp: Handle VK_KHR_maintenance5
+  * gpuav: Fix bda range being backwards
+  * gpuav: Reduce post-dominated instructions for PostProcessing
+  * layers: Fix Suppress typo
+
+  [ changhwipark-arm ]
+  * layers: Validate flags for VK_ARM_pipeline_opacity_micromap
+  * tests: Test validating VK_ARM_pipeline_opacity_micromap flags
+
+  [ spencer-lunarg ]
+  * tests: Add more crazy GPU-AV tests
+  * gpuav: Add BlockDuplicateTracker at Pass level
+  * layers: Add exceptions for duplicate VUID check
+
+  [ Artem Kharytoniuk ]
+  * layers: Cleanup and document LayoutEntry
+
+  [ spencer-lunarg ]
+  * gpuva: Remove Object Type spam on warnings
+  * layers: Reorganize pipeline RTX checks
+  * layers: Print better VkPipelineCreateFlags2CreateInfo message
+
+ -- john <john@odin>  Tue, 29 Apr 2025 10:09:25 -0600
+
 vulkan-validationlayers (1.4.312.0~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ Mike Schuchardt ]
