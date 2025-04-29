@@ -630,7 +630,6 @@ TEST_F(NegativeGpuAVIndirectBuffer, FirstInstanceIndexed) {
     AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     AddRequiredFeature(vkt::Feature::multiDrawIndirect);
     RETURN_IF_SKIP(InitGpuAvFramework());
-
     RETURN_IF_SKIP(InitState());
     InitRenderTarget();
 
@@ -758,6 +757,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, DispatchWorkgroupSize) {
 TEST_F(NegativeGpuAVIndirectBuffer, DispatchWorkgroupSizeShaderObjects) {
     TEST_DESCRIPTION("GPU validation: Validate VkDispatchIndirectCommand");
     AddRequiredExtensions(VK_EXT_SHADER_OBJECT_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::shaderObject);
     RETURN_IF_SKIP(InitGpuAvFramework());
 
     PFN_vkSetPhysicalDeviceLimitsEXT fpvkSetPhysicalDeviceLimitsEXT = nullptr;
@@ -828,6 +828,7 @@ TEST_F(NegativeGpuAVIndirectBuffer, DispatchWorkgroupSizeShaderObjects) {
 
     m_command_buffer.End();
     m_default_queue->SubmitAndWait(m_command_buffer);
+    m_errorMonitor->VerifyFound();
 
     // Check again in a 2nd submitted command buffer
     m_command_buffer.Reset();

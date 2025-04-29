@@ -473,7 +473,7 @@ TEST_F(NegativeGpuAV, UseAllDescriptorSlotsPipelineReserved) {
 }
 
 TEST_F(NegativeGpuAV, ForceUniformAndStorageBuffer8BitAccess) {
-    TEST_DESCRIPTION("Make sure that GPU-AV enabled uniformAndStorageBuffer8BitAccess on behalf of app");
+    TEST_DESCRIPTION("Make sure that GPU-AV enabled storageBuffer8BitAccess on behalf of app");
 
     SetTargetApiVersion(VK_API_VERSION_1_1);
     AddRequiredFeature(vkt::Feature::fragmentStoresAndAtomics);
@@ -488,12 +488,12 @@ TEST_F(NegativeGpuAV, ForceUniformAndStorageBuffer8BitAccess) {
     VkPhysicalDevice8BitStorageFeaturesKHR eight_bit_storage_features = vku::InitStructHelper();
     VkPhysicalDeviceFeatures2 features_2 = vku::InitStructHelper(&eight_bit_storage_features);
     vk::GetPhysicalDeviceFeatures2(Gpu(), &features_2);
-    if (!eight_bit_storage_features.uniformAndStorageBuffer8BitAccess) {
-        GTEST_SKIP() << "Required feature uniformAndStorageBuffer8BitAccess is not supported, skipping test";
+    if (!eight_bit_storage_features.storageBuffer8BitAccess) {
+        GTEST_SKIP() << "Required feature storageBuffer8BitAccess is not supported, skipping test";
     }
 
     m_errorMonitor->SetDesiredWarning(
-        "Adding a VkPhysicalDevice8BitStorageFeatures to pNext with uniformAndStorageBuffer8BitAccess set to VK_TRUE");
+        "Adding a VkPhysicalDevice8BitStorageFeatures to pNext with storageBuffer8BitAccess set to VK_TRUE");
 
     // noise
     m_errorMonitor->SetAllowedFailureMsg("Adding a VkPhysicalDevice8BitStorageFeatures to pNext with shaderInt64 set to VK_TRUE");
@@ -512,210 +512,6 @@ TEST_F(NegativeGpuAV, ForceUniformAndStorageBuffer8BitAccess) {
         "vkGetDeviceProcAddr(): pName is trying to grab vkGetPhysicalDeviceCalibrateableTimeDomainsKHR which is an instance level "
         "function");
     RETURN_IF_SKIP(InitState());
-    m_errorMonitor->VerifyFound();
-}
-
-TEST_F(NegativeGpuAV, CopyBufferToImageD32) {
-    TEST_DESCRIPTION(
-        "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
-        "VK_FORMAT_D32_SFLOAT.");
-
-    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
-
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
-
-    vkt::Buffer copy_src_buffer(*m_device, sizeof(float) * 64 * 64,
-                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, kHostVisibleMemProps);
-
-    float *ptr = static_cast<float *>(copy_src_buffer.Memory().Map());
-    for (size_t i = 0; i < 64 * 64; ++i) {
-        ptr[i] = 0.1f;
-    }
-    ptr[4094] = 42.0f;
-
-    vkt::Image copy_dst_image(*m_device, 64, 64, VK_FORMAT_D32_SFLOAT,
-                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    m_command_buffer.Begin();
-
-    VkBufferImageCopy buffer_image_copy_1;
-    buffer_image_copy_1.bufferOffset = 0;
-    buffer_image_copy_1.bufferRowLength = 0;
-    buffer_image_copy_1.bufferImageHeight = 0;
-    buffer_image_copy_1.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
-    buffer_image_copy_1.imageOffset = {0, 0, 0};
-    buffer_image_copy_1.imageExtent = {64, 64, 1};
-
-    vk::CmdCopyBufferToImage(m_command_buffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                             &buffer_image_copy_1);
-
-    VkBufferImageCopy buffer_image_copy_2 = buffer_image_copy_1;
-    buffer_image_copy_2.imageOffset = {32, 32, 0};
-    buffer_image_copy_2.imageExtent = {32, 32, 1};
-
-    vk::CmdCopyBufferToImage(m_command_buffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                             &buffer_image_copy_2);
-
-    m_command_buffer.End();
-    m_errorMonitor->SetDesiredError("has a float value at offset 16376 that is not in the range [0, 1]");
-    m_errorMonitor->SetDesiredError("has a float value at offset 16376 that is not in the range [0, 1]");
-    m_default_queue->SubmitAndWait(m_command_buffer);
-    m_errorMonitor->VerifyFound();
-}
-
-TEST_F(NegativeGpuAV, CopyBufferToImageD32Vk13) {
-    TEST_DESCRIPTION(
-        "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
-        "VK_FORMAT_D32_SFLOAT.");
-    SetTargetApiVersion(VK_API_VERSION_1_3);
-    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
-
-    vkt::Buffer copy_src_buffer(*m_device, sizeof(float) * 64 * 64,
-                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, kHostVisibleMemProps);
-
-    float *ptr = static_cast<float *>(copy_src_buffer.Memory().Map());
-    for (size_t i = 0; i < 64 * 64; ++i) {
-        ptr[i] = 0.1f;
-    }
-    ptr[4094] = 42.0f;
-
-    vkt::Image copy_dst_image(*m_device, 64, 64, VK_FORMAT_D32_SFLOAT,
-                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    m_command_buffer.Begin();
-
-    VkBufferImageCopy2 region_1 = vku::InitStructHelper();
-    region_1.bufferOffset = 0;
-    region_1.bufferRowLength = 0;
-    region_1.bufferImageHeight = 0;
-    region_1.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
-    region_1.imageOffset = {0, 0, 0};
-    region_1.imageExtent = {64, 64, 1};
-
-    VkCopyBufferToImageInfo2 buffer_image_copy = vku::InitStructHelper();
-    buffer_image_copy.srcBuffer = copy_src_buffer;
-    buffer_image_copy.dstImage = copy_dst_image;
-    buffer_image_copy.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    buffer_image_copy.regionCount = 1;
-    buffer_image_copy.pRegions = &region_1;
-
-    vk::CmdCopyBufferToImage2(m_command_buffer, &buffer_image_copy);
-
-    region_1.imageOffset = {32, 32, 0};
-    region_1.imageExtent = {32, 32, 1};
-
-    vk::CmdCopyBufferToImage2(m_command_buffer, &buffer_image_copy);
-
-    m_command_buffer.End();
-    m_errorMonitor->SetDesiredError("has a float value at offset 16376 that is not in the range [0, 1]");
-    m_errorMonitor->SetDesiredError("has a float value at offset 16376 that is not in the range [0, 1]");
-    m_default_queue->SubmitAndWait(m_command_buffer);
-    m_errorMonitor->VerifyFound();
-}
-
-TEST_F(NegativeGpuAV, CopyBufferToImageD32U8) {
-    TEST_DESCRIPTION(
-        "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
-        "VK_FORMAT_D32_SFLOAT_S8_UINT.");
-    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
-
-    vkt::Buffer copy_src_buffer(*m_device, 5 * 64 * 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                kHostVisibleMemProps);
-
-    auto ptr = static_cast<uint8_t *>(copy_src_buffer.Memory().Map());
-    std::memset(ptr, 0, static_cast<size_t>(copy_src_buffer.CreateInfo().size));
-    for (size_t i = 0; i < 64 * 64; ++i) {
-        auto ptr_float = reinterpret_cast<float *>(ptr + 5 * i);
-        if (i == 64 * 64 - 1) {
-            *ptr_float = 42.0f;
-        } else {
-            *ptr_float = 0.1f;
-        }
-    }
-
-    vkt::Image copy_dst_image(*m_device, 64, 64, VK_FORMAT_D32_SFLOAT_S8_UINT,
-                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    m_command_buffer.Begin();
-
-    VkBufferImageCopy buffer_image_copy;
-    buffer_image_copy.bufferOffset = 0;
-    buffer_image_copy.bufferRowLength = 0;
-    buffer_image_copy.bufferImageHeight = 0;
-    buffer_image_copy.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
-    buffer_image_copy.imageOffset = {33, 33, 0};
-    buffer_image_copy.imageExtent = {31, 31, 1};
-
-    vk::CmdCopyBufferToImage(m_command_buffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                             &buffer_image_copy);
-
-    m_command_buffer.End();
-    m_errorMonitor->SetDesiredError("has a float value at offset 20475 that is not in the range [0, 1]");
-    m_default_queue->SubmitAndWait(m_command_buffer);
-    m_errorMonitor->VerifyFound();
-}
-
-TEST_F(NegativeGpuAV, CopyBufferToImageD32U8Vk13) {
-    TEST_DESCRIPTION(
-        "Copy depth buffer to image with some of its depth value being outside of the [0, 1] legal range. Depth image has format "
-        "VK_FORMAT_D32_SFLOAT_S8_UINT.");
-    SetTargetApiVersion(VK_API_VERSION_1_3);
-    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
-
-    vkt::Buffer copy_src_buffer(*m_device, 5 * 64 * 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                kHostVisibleMemProps);
-
-    auto ptr = static_cast<uint8_t *>(copy_src_buffer.Memory().Map());
-    std::memset(ptr, 0, static_cast<size_t>(copy_src_buffer.CreateInfo().size));
-    for (size_t i = 0; i < 64 * 64; ++i) {
-        auto ptr_float = reinterpret_cast<float *>(ptr + 5 * i);
-        if (i == 64 * 64 - 1) {
-            *ptr_float = 42.0f;
-        } else {
-            *ptr_float = 0.1f;
-        }
-    }
-
-    vkt::Image copy_dst_image(*m_device, 64, 64, VK_FORMAT_D32_SFLOAT_S8_UINT,
-                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    m_command_buffer.Begin();
-
-    VkBufferImageCopy2 region_1 = vku::InitStructHelper();
-    region_1.bufferOffset = 0;
-    region_1.bufferRowLength = 0;
-    region_1.bufferImageHeight = 0;
-    region_1.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
-    region_1.imageOffset = {33, 33, 0};
-    region_1.imageExtent = {31, 31, 1};
-
-    VkCopyBufferToImageInfo2 buffer_image_copy = vku::InitStructHelper();
-    buffer_image_copy.srcBuffer = copy_src_buffer;
-    buffer_image_copy.dstImage = copy_dst_image;
-    buffer_image_copy.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    buffer_image_copy.regionCount = 1;
-    buffer_image_copy.pRegions = &region_1;
-
-    vk::CmdCopyBufferToImage2(m_command_buffer, &buffer_image_copy);
-
-    m_command_buffer.End();
-    m_errorMonitor->SetDesiredError("has a float value at offset 20475 that is not in the range [0, 1]");
-    m_default_queue->SubmitAndWait(m_command_buffer);
     m_errorMonitor->VerifyFound();
 }
 
@@ -797,6 +593,57 @@ TEST_F(NegativeGpuAV, RemoveGpuAvInPresenceOfSyncVal) {
     RETURN_IF_SKIP(InitFramework(&validation_features));
 
     m_errorMonitor->SetDesiredError("UNASSIGNED-GPU-Assisted-Validation");
-    RETURN_IF_SKIP(InitState(nullptr));
+    RETURN_IF_SKIP(InitState());
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeGpuAV, BadDestroy) {
+    TEST_DESCRIPTION(
+        "In PreCallRecordDestroyDevice, make sure CommandBufferSubState is destroyed before destroying device state and validation "
+        "does not crash");
+    RETURN_IF_SKIP(InitGpuAvFramework());
+
+    // Workaround for overzealous layers checking even the guaranteed 0th queue family
+    const auto q_props = vkt::PhysicalDevice(Gpu()).queue_properties_;
+    ASSERT_TRUE(q_props.size() > 0);
+    ASSERT_TRUE(q_props[0].queueCount > 0);
+
+    const float q_priority[] = {1.0f};
+    VkDeviceQueueCreateInfo queue_ci = vku::InitStructHelper();
+    queue_ci.queueFamilyIndex = 0;
+    queue_ci.queueCount = 1;
+    queue_ci.pQueuePriorities = q_priority;
+
+    VkDeviceCreateInfo device_ci = vku::InitStructHelper();
+    device_ci.queueCreateInfoCount = 1;
+    device_ci.pQueueCreateInfos = &queue_ci;
+
+    VkDevice leaky_device;
+    ASSERT_EQ(VK_SUCCESS, vk::CreateDevice(Gpu(), &device_ci, nullptr, &leaky_device));
+
+    VkCommandPool command_pool;
+    VkCommandPoolCreateInfo pool_create_info = vku::InitStructHelper();
+    pool_create_info.queueFamilyIndex = 0;
+    vk::CreateCommandPool(leaky_device, &pool_create_info, nullptr, &command_pool);
+
+    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+    VkCommandBufferAllocateInfo command_buffer_allocate_info = vku::InitStructHelper();
+    command_buffer_allocate_info.commandPool = command_pool;
+    command_buffer_allocate_info.commandBufferCount = 1;
+    command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    vk::AllocateCommandBuffers(leaky_device, &command_buffer_allocate_info, &command_buffer);
+
+    m_errorMonitor->SetDesiredError("VUID-vkDestroyDevice-device-05137");
+    m_errorMonitor->SetDesiredError("VUID-vkDestroyDevice-device-05137");
+    // Those 2 will come from self validation if it is enabled
+    m_errorMonitor->SetAllowedFailureMsg("VUID-vkDestroyDevice-device-05137");
+    m_errorMonitor->SetAllowedFailureMsg("VUID-vkDestroyDevice-device-05137");
+    vk::DestroyDevice(leaky_device, nullptr);
+    m_errorMonitor->VerifyFound();
+
+    // There's no way we can destroy the command pool at this point. Even though DestroyDevice failed, the loader has already
+    // removed references to the device
+    m_errorMonitor->SetAllowedFailureMsg("VUID-vkDestroyDevice-device-05137");
+    m_errorMonitor->SetAllowedFailureMsg("VUID-vkDestroyDevice-device-05137");
+    m_errorMonitor->SetAllowedFailureMsg("VUID-vkDestroyInstance-instance-00629");
 }

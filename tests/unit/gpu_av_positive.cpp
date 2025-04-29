@@ -15,11 +15,14 @@
  * limitations under the License.
  */
 
+#include <vulkan/vulkan_core.h>
 #include <vector>
 #include "../framework/layer_validation_tests.h"
+#include "../framework/buffer_helper.h"
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
 #include "../framework/gpu_av_helper.h"
+#include "../framework/external_memory_sync.h"
 #include "../../layers/gpuav/shaders/gpuav_shaders_constants.h"
 
 class PositiveGpuAV : public GpuAVTest {};
@@ -74,7 +77,7 @@ TEST_F(PositiveGpuAV, ReserveBinding) {
     AddRequiredFeature(vkt::Feature::descriptorBindingPartiallyBound);
     AddRequiredFeature(vkt::Feature::inlineUniformBlock);
     RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState(nullptr));
+    RETURN_IF_SKIP(InitState());
 
     auto ici = GetInstanceCreateInfo();
     VkInstance test_inst;
@@ -929,131 +932,6 @@ TEST_F(PositiveGpuAV, FirstInstance) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
     m_default_queue->SubmitAndWait(m_command_buffer);
-}
-
-TEST_F(PositiveGpuAV, CopyBufferToImageD32) {
-    TEST_DESCRIPTION(
-        "Copy depth buffer to image with all depth values in the [0, 1] legal range. Depth image has format "
-        "VK_FORMAT_D32_SFLOAT.");
-    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
-
-    vkt::Buffer copy_src_buffer(*m_device, sizeof(float) * 64 * 64,
-                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, kHostVisibleMemProps);
-
-    float *ptr = static_cast<float *>(copy_src_buffer.Memory().Map());
-    for (size_t i = 0; i < 64 * 64; ++i) {
-        if (i % 2) {
-            ptr[i] = 1.0f;
-        } else {
-            ptr[i] = 0.0f;
-        }
-    }
-
-    vkt::Image copy_dst_image(*m_device, 64, 64, VK_FORMAT_D32_SFLOAT,
-                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    m_command_buffer.Begin();
-
-    VkBufferImageCopy buffer_image_copy_1;
-    buffer_image_copy_1.bufferOffset = 0;
-    buffer_image_copy_1.bufferRowLength = 0;
-    buffer_image_copy_1.bufferImageHeight = 0;
-    buffer_image_copy_1.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
-    buffer_image_copy_1.imageOffset = {0, 0, 0};
-    buffer_image_copy_1.imageExtent = {64, 64, 1};
-
-    vk::CmdCopyBufferToImage(m_command_buffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                             &buffer_image_copy_1);
-
-    VkBufferImageCopy buffer_image_copy_2 = buffer_image_copy_1;
-    buffer_image_copy_2.imageOffset = {32, 32, 0};
-    buffer_image_copy_2.imageExtent = {32, 32, 1};
-
-    vk::CmdCopyBufferToImage(m_command_buffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                             &buffer_image_copy_2);
-
-    m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    vk::DeviceWaitIdle(*m_device);
-}
-
-TEST_F(PositiveGpuAV, CopyBufferToImageD32U8) {
-    TEST_DESCRIPTION(
-        "Copy depth buffer to image with all depth values in the [0, 1] legal range. Depth image has format "
-        "VK_FORMAT_D32_SFLOAT_S8_UINT.");
-    AddRequiredExtensions(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
-    AddRequiredFeature(vkt::Feature::uniformAndStorageBuffer8BitAccess);
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
-
-    vkt::Buffer copy_src_buffer(*m_device, 5 * 64 * 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                kHostVisibleMemProps);
-
-    auto ptr = static_cast<uint8_t *>(copy_src_buffer.Memory().Map());
-    std::memset(ptr, 0, static_cast<size_t>(copy_src_buffer.CreateInfo().size));
-    for (size_t i = 0; i < 64 * 64; ++i) {
-        auto ptr_float = reinterpret_cast<float *>(ptr + 5 * i);
-        if (i % 2) {
-            *ptr_float = 1.0f;
-        } else {
-            *ptr_float = 0.0f;
-        }
-    }
-
-    vkt::Image copy_dst_image(*m_device, 64, 64, VK_FORMAT_D32_SFLOAT_S8_UINT,
-                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    copy_dst_image.SetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    m_command_buffer.Begin();
-
-    VkBufferImageCopy buffer_image_copy;
-    buffer_image_copy.bufferOffset = 0;
-    buffer_image_copy.bufferRowLength = 0;
-    buffer_image_copy.bufferImageHeight = 0;
-    buffer_image_copy.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
-    buffer_image_copy.imageOffset = {33, 33, 0};
-    buffer_image_copy.imageExtent = {31, 31, 1};
-
-    vk::CmdCopyBufferToImage(m_command_buffer, copy_src_buffer, copy_dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                             &buffer_image_copy);
-
-    m_command_buffer.End();
-    m_default_queue->Submit(m_command_buffer);
-    vk::DeviceWaitIdle(*m_device);
-}
-
-TEST_F(PositiveGpuAV, CopyBufferToImageTwoSubmit) {
-    TEST_DESCRIPTION("Make sure resources are managed correctly afer a CopyBufferToImage call.");
-    RETURN_IF_SKIP(InitGpuAvFramework());
-    RETURN_IF_SKIP(InitState());
-
-    vkt::CommandBuffer cb_0(*m_device, m_command_pool);
-    vkt::CommandBuffer cb_1(*m_device, m_command_pool);
-
-    auto image_ci = vkt::Image::ImageCreateInfo2D(32, 32, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    vkt::Image image(*m_device, image_ci, vkt::set_layout);
-    vkt::Buffer buffer(*m_device, 4096, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-
-    VkBufferImageCopy region = {};
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    region.imageOffset = {0, 0, 0};
-    region.imageExtent = {32, 32, 1};
-    region.bufferOffset = 0;
-
-    cb_0.Begin();
-    vk::CmdCopyBufferToImage(cb_0.handle(), buffer.handle(), image.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region);
-    cb_0.End();
-    m_default_queue->SubmitAndWait(cb_0);
-
-    cb_1.Begin();
-    cb_1.End();
-    m_default_queue->SubmitAndWait(cb_1);
 }
 
 TEST_F(PositiveGpuAV, SwapchainImage) {
@@ -2120,4 +1998,250 @@ TEST_F(PositiveGpuAV, DualShaderLibraryInline) {
     exe_pipe_ci.layout = pipeline_layout;
     vkt::Pipeline exe_pipe(*m_device, exe_pipe_ci);
     ASSERT_TRUE(exe_pipe.initialized());
+}
+
+TEST_F(PositiveGpuAV, FailedSampler) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9916");
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+
+    VkSamplerCreateInfo sampler_info = SafeSaneSamplerCreateInfo();
+    VkSampler sampler_handle;
+
+    struct Alloc {
+        static VKAPI_ATTR void *VKAPI_CALL alloc(void *, size_t, size_t, VkSystemAllocationScope) { return nullptr; };
+        static VKAPI_ATTR void *VKAPI_CALL reallocFunc(void *, void *, size_t, size_t, VkSystemAllocationScope) { return nullptr; };
+        static VKAPI_ATTR void VKAPI_CALL freeFunc(void *, void *){};
+    };
+    const VkAllocationCallbacks bad_allocator = {nullptr, Alloc::alloc, Alloc::reallocFunc, Alloc::freeFunc, nullptr, nullptr};
+
+    // Will not return VK_SUCCESS on real device (tested by CTS) and need to ignore
+    vk::CreateSampler(device(), &sampler_info, &bad_allocator, &sampler_handle);
+}
+
+TEST_F(PositiveGpuAV, ImportFenceWait) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9706");
+    AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME);
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+
+    const auto handle_types = FindSupportedExternalFenceHandleTypes(Gpu(), VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT);
+    if ((handle_types & VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT) == 0) {
+        GTEST_SKIP() << "VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT is not exportable";
+    }
+
+    int handle = 0;
+
+    VkExportFenceCreateInfo export_info = vku::InitStructHelper();
+    export_info.handleTypes = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT;
+    const VkFenceCreateInfo create_info = vku::InitStructHelper(&export_info);
+    vkt::Fence fence(*m_device, create_info);
+    fence.ExportHandle(handle, VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT);
+    fence.ImportHandle(handle, VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT);
+
+    VkSubmitInfo submit = vku::InitStructHelper();
+    submit.commandBufferCount = 0;
+    submit.waitSemaphoreCount = 0;
+    submit.signalSemaphoreCount = 0;
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit, fence);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, 1000000000);
+}
+
+TEST_F(PositiveGpuAV, EmptySubmit) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9706");
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+
+    vkt::Fence fence(*m_device);
+    VkSubmitInfo submit = vku::InitStructHelper();
+    submit.commandBufferCount = 0;
+    submit.waitSemaphoreCount = 0;
+    submit.signalSemaphoreCount = 0;
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit, fence);
+    vk::WaitForFences(device(), 1, &fence.handle(), VK_TRUE, 1000000000);
+    m_device->Wait();
+}
+
+TEST_F(PositiveGpuAV, ValidationBufferSuballocations) {
+    TEST_DESCRIPTION("Make sure sub-allocating inside buffers used for validation purposes does not blow up");
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+    InitRenderTarget();
+
+    CreatePipelineHelper pipe(*this);
+    pipe.CreateGraphicsPipeline();
+
+    constexpr uint32_t num_vertices = 12;
+    std::vector<uint32_t> indicies(num_vertices);
+    for (uint32_t i = 0; i < num_vertices; i++) {
+        indicies[i] = num_vertices - 1 - i;
+    }
+    vkt::Buffer index_buffer = vkt::IndexBuffer(*m_device, std::move(indicies));
+
+    VkDrawIndexedIndirectCommand draw_params{};
+    draw_params.indexCount = 3;
+    draw_params.instanceCount = 1;
+    draw_params.firstIndex = 0;
+    draw_params.vertexOffset = 0;
+    draw_params.firstInstance = 0;
+    vkt::Buffer draw_params_buffer = vkt::IndirectBuffer<VkDrawIndexedIndirectCommand>(*m_device, {draw_params});
+    VkCommandBufferBeginInfo begin_info = vku::InitStructHelper();
+    m_command_buffer.Begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindIndexBuffer(m_command_buffer, index_buffer, 0, VK_INDEX_TYPE_UINT32);
+    for (uint32_t i = 0; i < 1025; i++) {
+        vk::CmdDrawIndexedIndirect(m_command_buffer, draw_params_buffer, 0, 1, sizeof(VkDrawIndexedIndirectCommand));
+    }
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.End();
+
+    vk::ResetCommandBuffer(m_command_buffer, 0);
+
+    m_command_buffer.Begin(&begin_info);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindIndexBuffer(m_command_buffer, index_buffer, 0, VK_INDEX_TYPE_UINT32);
+    for (uint32_t i = 0; i < 1025; i++) {
+        vk::CmdDrawIndexedIndirect(m_command_buffer, draw_params_buffer, 0, 1, sizeof(VkDrawIndexedIndirectCommand));
+    }
+    m_command_buffer.EndRenderPass();
+    m_command_buffer.End();
+}
+
+TEST_F(PositiveGpuAV, MixDynamicNormalRenderPass) {
+    TEST_DESCRIPTION("Test mixing Dynamic rendering and normal renderpass to stress Restore pipeline logic");
+    AddRequiredExtensions(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::dynamicRendering);
+    AddRequiredFeature(vkt::Feature::bufferDeviceAddress);
+    AddRequiredFeature(vkt::Feature::vertexPipelineStoresAndAtomics);
+    AddRequiredFeature(vkt::Feature::fragmentStoresAndAtomics);
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+    InitRenderTarget();
+
+    vkt::Buffer ssbo_buffer(*m_device, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+    OneOffDescriptorSet descriptor_set1(m_device, {
+                                                      {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                  });
+    OneOffDescriptorSet descriptor_set2(m_device, {
+                                                      {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr},
+                                                  });
+    descriptor_set1.WriteDescriptorBufferInfo(0, ssbo_buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set1.UpdateDescriptorSets();
+    descriptor_set2.WriteDescriptorBufferInfo(0, ssbo_buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    descriptor_set2.UpdateDescriptorSets();
+
+    VkShaderStageFlags all_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+    VkPushConstantRange pc_ranges = {all_stages, 0, 16};
+    const vkt::PipelineLayout g_pipeline_layout(*m_device, {&descriptor_set1.layout_}, {pc_ranges});
+    const vkt::PipelineLayout c_pipeline_layout(*m_device, {&descriptor_set2.layout_}, {pc_ranges});
+
+    char const *shader_source = R"glsl(
+        #version 450
+        layout(push_constant) uniform PushConstants {
+            uint a[4];
+        } pc;
+
+        layout(set = 0, binding = 0) buffer SSBO { uint b; };
+        void main() {
+            b = pc.a[0];
+        }
+    )glsl";
+
+    VkShaderObj vs(this, shader_source, VK_SHADER_STAGE_VERTEX_BIT);
+    VkShaderObj fs(this, shader_source, VK_SHADER_STAGE_FRAGMENT_BIT);
+    CreatePipelineHelper g_pipe(*this);
+    g_pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    g_pipe.gp_ci_.layout = g_pipeline_layout;
+    g_pipe.CreateGraphicsPipeline();
+
+    VkFormat rendering_format = GetRenderTargetFormat();
+    VkPipelineRenderingCreateInfo pipeline_rendering_info = vku::InitStructHelper();
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &rendering_format;
+
+    CreatePipelineHelper dr_pipe(*this, &pipeline_rendering_info);
+    dr_pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
+    dr_pipe.gp_ci_.layout = g_pipeline_layout;
+    dr_pipe.gp_ci_.renderPass = VK_NULL_HANDLE;
+    dr_pipe.CreateGraphicsPipeline();
+
+    CreateComputePipelineHelper c_pipe(*this);
+    c_pipe.cp_ci_.layout = c_pipeline_layout;
+    c_pipe.cs_ = std::make_unique<VkShaderObj>(this, shader_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    c_pipe.CreateComputePipeline();
+
+    vkt::Buffer dispatch_params_buffer(*m_device, sizeof(VkDrawIndirectCommand), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                                       kHostVisibleMemProps);
+    auto &indirect_dispatch_parameters = *static_cast<VkDispatchIndirectCommand *>(dispatch_params_buffer.Memory().Map());
+    indirect_dispatch_parameters.x = 1u;
+    indirect_dispatch_parameters.y = 1u;
+    indirect_dispatch_parameters.z = 1u;
+
+    VkDrawIndexedIndirectCommand draw_params{3, 1, 0, 0, 0};
+    vkt::Buffer draw_params_buffer = vkt::IndirectBuffer<VkDrawIndexedIndirectCommand>(*m_device, {draw_params});
+
+    auto image_ci = vkt::Image::ImageCreateInfo2D(
+        m_width, m_height, 1, 1, rendering_format,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkt::Image rendering_image(*m_device, image_ci, vkt::set_layout);
+    vkt::ImageView rendering_view = rendering_image.CreateView();
+
+    uint32_t dummy = 0;
+    m_command_buffer.Begin();
+    vk::CmdPushConstants(m_command_buffer, g_pipeline_layout, all_stages, 0, 4, &dummy);
+
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, c_pipeline_layout, 0, 1, &descriptor_set1.set_, 0,
+                              nullptr);
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipeline_layout, 0, 1, &descriptor_set2.set_, 0,
+                              nullptr);
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, c_pipe.Handle());
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.Handle());
+
+    vk::CmdPushConstants(m_command_buffer, g_pipeline_layout, all_stages, 4, 4, &dummy);
+    vk::CmdDispatchIndirect(m_command_buffer, dispatch_params_buffer, 0u);
+
+    vk::CmdPushConstants(m_command_buffer, g_pipeline_layout, all_stages, 8, 4, &dummy);
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vkt::Buffer index_buffer = vkt::IndexBuffer<uint32_t>(*m_device, {0, std::numeric_limits<uint32_t>::max(), 42});
+    vk::CmdBindIndexBuffer(m_command_buffer, index_buffer, 0, VK_INDEX_TYPE_UINT32);
+    vk::CmdPushConstants(m_command_buffer, g_pipeline_layout, all_stages, 0, 4, &dummy);
+    vk::CmdDrawIndexedIndirect(m_command_buffer, draw_params_buffer, 0, 1, 0);
+    m_command_buffer.EndRenderPass();
+
+    vk::CmdDispatchIndirect(m_command_buffer, dispatch_params_buffer, 0u);
+
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, c_pipeline_layout, 0, 1, &descriptor_set2.set_, 0,
+                              nullptr);
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipeline_layout, 0, 1, &descriptor_set1.set_, 0,
+                              nullptr);
+
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, dr_pipe.Handle());
+    vk::CmdPushConstants(m_command_buffer, g_pipeline_layout, all_stages, 4, 4, &dummy);
+    m_command_buffer.BeginRenderingColor(rendering_view, GetRenderTargetArea());
+    vk::CmdPushConstants(m_command_buffer, g_pipeline_layout, all_stages, 8, 4, &dummy);
+    vk::CmdDrawIndexedIndirect(m_command_buffer, draw_params_buffer, 0, 1, 0);
+    m_command_buffer.EndRendering();
+
+    m_command_buffer.BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipe.Handle());
+    vk::CmdPushConstants(m_command_buffer, g_pipeline_layout, all_stages, 0, 4, &dummy);
+    vk::CmdDrawIndexedIndirect(m_command_buffer, draw_params_buffer, 0, 1, 0);
+    m_command_buffer.EndRenderPass();
+
+    m_command_buffer.BeginRenderingColor(rendering_view, GetRenderTargetArea());
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, dr_pipe.Handle());
+    vk::CmdDrawIndexedIndirect(m_command_buffer, draw_params_buffer, 0, 1, 0);
+    m_command_buffer.EndRendering();
+
+    vk::CmdDispatchIndirect(m_command_buffer, dispatch_params_buffer, 0u);
+
+    m_command_buffer.End();
+    m_default_queue->SubmitAndWait(m_command_buffer);
 }

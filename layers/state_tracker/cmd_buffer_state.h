@@ -170,29 +170,25 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
     using Func = vvl::Func;
 
   public:
-    using AliasedLayoutMap = vvl::unordered_map<const GlobalImageLayoutRangeMap *, std::shared_ptr<ImageLayoutRegistry>>;
+    using AliasedLayoutMap = vvl::unordered_map<const ImageLayoutRangeMap *, std::shared_ptr<ImageLayoutRegistry>>;
 
     VkCommandBufferAllocateInfo allocate_info;
-    VkCommandBufferBeginInfo beginInfo;
-    VkCommandBufferInheritanceInfo inheritanceInfo;
+
+    VkCommandBufferUsageFlags begin_info_flags;
+    bool has_inheritance;
+    vku::safe_VkCommandBufferInheritanceInfo inheritance_info;
+
     // since command buffers can only be destroyed by their command pool, this does not need to be a shared_ptr
     const vvl::CommandPool *command_pool;
     DeviceState &dev_data;
     bool unprotected;  // can't be used for protected memory
-    bool hasRenderPassInstance;
-    bool suspendsRenderPassInstance;
-    bool resumesRenderPassInstance;
-
-    // Track if certain commands have been called at least once in lifetime of the command buffer
-    // primary command buffers values are set true if a secondary command buffer has a command
-    bool has_draw_cmd;
-    bool has_dispatch_cmd;
-    bool has_trace_rays_cmd;
-    bool has_build_as_cmd;
+    bool has_render_pass_instance;
+    bool suspends_render_pass_instance;
+    bool resumes_render_pass_instance;
 
     CbState state;           // Track cmd buffer update state
     uint64_t command_count;  // Number of commands recorded. Currently only used with VK_KHR_performance_query
-    uint64_t submitCount;    // Number of times CB has been submitted
+    uint64_t submit_count;   // Number of times CB has been submitted
     typedef uint64_t ImageLayoutUpdateCount;
     ImageLayoutUpdateCount image_layout_change_count;  // The sequence number for changes to image layout (for cached validation)
 
@@ -399,37 +395,36 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
     std::shared_ptr<const CommandBuffer> shared_from_this() const { return SharedFromThisImpl(this); }
     std::shared_ptr<CommandBuffer> shared_from_this() { return SharedFromThisImpl(this); }
 
-    // If VK_NV_inherited_viewport_scissor is enabled and VkCommandBufferInheritanceViewportScissorInfoNV::viewportScissor2D is
-    // true, then is the nonempty list of viewports passed in pViewportDepths. Otherwise, this is empty.
-    std::vector<VkViewport> inheritedViewportDepths;
+    struct Viewport {
+        uint32_t mask;
+        uint32_t count_mask;
 
-    // For each draw command D recorded to this command buffer, let
-    //  * g_D be the graphics pipeline used
-    //  * v_G be the viewportCount of g_D (0 if g_D disables rasterization or enables VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT)
-    //  * s_G be the scissorCount  of g_D (0 if g_D disables rasterization or enables VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT)
-    // Then this value is max(0, max(v_G for all D in cb), max(s_G for all D in cb))
-    uint32_t usedViewportScissorCount;
-    uint32_t pipelineStaticViewportCount;  // v_G for currently-bound graphics pipeline.
-    uint32_t pipelineStaticScissorCount;   // s_G for currently-bound graphics pipeline.
+        // Bits set when binding graphics pipeline defining corresponding static state, or executing any secondary command buffer.
+        // Bits unset by calling a corresponding vkCmdSet[State] cmd.
+        uint32_t trashed_mask;
+        bool trashed_count;
 
-    uint32_t viewportMask;
-    uint32_t viewportWithCountMask;
-    uint32_t scissorMask;
-    uint32_t scissorWithCountMask;
+        bool used_dynamic_count;  // true if any draw recorded used VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT
 
-    // Bits set when binding graphics pipeline defining corresponding static state, or executing any secondary command buffer.
-    // Bits unset by calling a corresponding vkCmdSet[State] cmd.
-    uint32_t trashedViewportMask;
-    uint32_t trashedScissorMask;
-    bool trashedViewportCount;
-    bool trashedScissorCount;
+        // If VK_NV_inherited_viewport_scissor is enabled and VkCommandBufferInheritanceViewportScissorInfoNV::viewportScissor2D is
+        // true, then is the nonempty list of viewports passed in pViewportDepths. Otherwise, this is empty.
+        std::vector<VkViewport> inherited_depths;
+    } viewport;
 
-    // True if any draw command recorded to this command buffer consumes dynamic viewport/scissor with count state.
-    bool usedDynamicViewportCount;
-    bool usedDynamicScissorCount;
+    struct Scissor {
+        uint32_t mask;
+        uint32_t count_mask;
+
+        uint32_t trashed_mask;
+        bool trashed_count;
+
+        bool used_dynamic_count;  // true if any draw recorded used VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT
+    } scissor;
+
+    uint32_t used_viewport_scissor_count;
 
     // Track if any dynamic state is set that is static in the currently bound pipeline
-    bool dirtyStaticState;
+    bool dirty_static_state;
 
     // Device Mask at start of command buffer
     uint32_t initial_device_mask;
@@ -465,14 +460,11 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
     void SetActiveSubpassRasterizationSampleCount(VkSampleCountFlagBits rasterization_sample_count) {
         active_subpass_sample_count_ = rasterization_sample_count;
     }
-    std::shared_ptr<vvl::Framebuffer> activeFramebuffer;
+    std::shared_ptr<vvl::Framebuffer> active_framebuffer;
     // Unified data structs to track objects bound to this command buffer as well as object
     //  dependencies that have been broken : either destroyed objects, or updated descriptor sets
     vvl::unordered_set<std::shared_ptr<StateObject>> object_bindings;
     vvl::unordered_map<VulkanTypedHandle, LogObjectList> broken_bindings;
-
-    QFOTransferBarrierSets<QFOBufferTransferBarrier> qfo_transfer_buffer_barriers;
-    QFOTransferBarrierSets<QFOImageTransferBarrier> qfo_transfer_image_barriers;
 
     // VK_KHR_dynamic_rendering_local_read works like dynamic state, but lives for the rendering lifetime only
     struct RenderingAttachment {
@@ -492,22 +484,22 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
         }
     } rendering_attachments;
 
-    vvl::unordered_set<VkEvent> waitedEvents;
-    std::vector<VkEvent> writeEventsBeforeWait;
+    vvl::unordered_set<VkEvent> waited_events;
+    std::vector<VkEvent> write_events_before_wait;
     std::vector<VkEvent> events;
-    vvl::unordered_set<QueryObject> activeQueries;
-    vvl::unordered_set<QueryObject> startedQueries;
-    vvl::unordered_set<QueryObject> updatedQueries;
-    vvl::unordered_set<QueryObject> renderPassQueries;
+    vvl::unordered_set<QueryObject> active_queries;
+    vvl::unordered_set<QueryObject> started_queries;
+    vvl::unordered_set<QueryObject> updated_queries;
+    vvl::unordered_set<QueryObject> render_pass_queries;
     CommandBufferImageLayoutMap image_layout_map;
     AliasedLayoutMap aliased_image_layout_map;  // storage for potentially aliased images
 
     vvl::unordered_map<uint32_t, vvl::VertexBufferBinding> current_vertex_buffer_binding_info;
     vvl::IndexBufferBinding index_buffer_binding;
 
-    VkCommandBuffer primaryCommandBuffer;
+    VkCommandBuffer primary_command_buffer;
     // If primary, the secondary command buffers we will call.
-    vvl::unordered_set<CommandBuffer *> linkedCommandBuffers;
+    vvl::unordered_set<CommandBuffer *> linked_command_buffers;
     // Validation functions run at primary CB queue submit time
     using QueueCallback = std::function<bool(const class vvl::Queue &queue_state, const CommandBuffer &cb_state)>;
     std::vector<QueueCallback> queue_submit_functions;
@@ -528,9 +520,6 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
     bool performance_lock_acquired = false;
     bool performance_lock_released = false;
 
-    // Cache of current insert label...
-    LoggingLabel debug_label;
-
     std::vector<PushConstantData> push_constant_data_chunks;
     std::array<VkPipelineLayout, BindPoint_Count> push_constant_latest_used_layout{};
     PushConstantRangesId push_constant_ranges_layout;
@@ -543,15 +532,13 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
     std::optional<uint32_t> video_encode_quality_level{};
     VideoSessionUpdateMap video_session_updates;
 
-    // VK_EXT_nested_command_buffer
-    uint32_t nesting_level;
-
     bool transform_feedback_active{false};
     uint32_t transform_feedback_buffers_bound;
 
     bool conditional_rendering_active{false};
     bool conditional_rendering_inside_render_pass{false};
     uint32_t conditional_rendering_subpass{0};
+
     std::vector<VkDescriptorBufferBindingInfoEXT> descriptor_buffer_binding_info;
 
     mutable std::shared_mutex lock;
@@ -586,21 +573,11 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
 
     void Reset(const Location &loc);
 
-    void IncrementResources();
-
     void ResetPushConstantRangesLayoutIfIncompatible(const vvl::PipelineLayout &pipeline_layout_state);
 
     std::shared_ptr<const ImageLayoutRegistry> GetImageLayoutRegistry(VkImage image) const;
     std::shared_ptr<ImageLayoutRegistry> GetOrCreateImageLayoutRegistry(const vvl::Image &image_state);
     const CommandBufferImageLayoutMap &GetImageLayoutMap() const;
-
-    const QFOTransferBarrierSets<QFOImageTransferBarrier> &GetQFOBarrierSets(const QFOImageTransferBarrier &type_tag) const {
-        return qfo_transfer_image_barriers;
-    }
-
-    const QFOTransferBarrierSets<QFOBufferTransferBarrier> &GetQFOBarrierSets(const QFOBufferTransferBarrier &type_tag) const {
-        return qfo_transfer_buffer_barriers;
-    }
 
     // Used to get error message objects, but overloads depending on what information is known
     LogObjectList GetObjectList(VkShaderStageFlagBits stage) const;
@@ -644,17 +621,17 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
 
     void ExecuteCommands(vvl::span<const VkCommandBuffer> secondary_command_buffers);
 
-    void UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_bind_point, const vvl::PipelineLayout &pipeline_layout,
-                                       vvl::Func bound_command, uint32_t first_set, uint32_t set_count,
-                                       const VkDescriptorSet *pDescriptorSets,
+    void UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_bind_point,
+                                       std::shared_ptr<const vvl::PipelineLayout> pipeline_layout, vvl::Func bound_command,
+                                       uint32_t first_set, uint32_t set_count, const VkDescriptorSet *pDescriptorSets,
                                        std::shared_ptr<vvl::DescriptorSet> &push_descriptor_set, uint32_t dynamic_offset_count,
                                        const uint32_t *p_dynamic_offsets);
 
-    void UpdateLastBoundDescriptorBuffers(VkPipelineBindPoint pipeline_bind_point, const vvl::PipelineLayout &pipeline_layout,
-                                          uint32_t first_set, uint32_t set_count, const uint32_t *buffer_indicies,
-                                          const VkDeviceSize *buffer_offsets);
+    void UpdateLastBoundDescriptorBuffers(VkPipelineBindPoint pipeline_bind_point,
+                                          std::shared_ptr<const vvl::PipelineLayout> pipeline_layout, uint32_t first_set,
+                                          uint32_t set_count, const uint32_t *buffer_indicies, const VkDeviceSize *buffer_offsets);
 
-    void PushDescriptorSetState(VkPipelineBindPoint pipelineBindPoint, const vvl::PipelineLayout &pipeline_layout,
+    void PushDescriptorSetState(VkPipelineBindPoint pipelineBindPoint, std::shared_ptr<const vvl::PipelineLayout> pipeline_layout,
                                 vvl::Func bound_command, uint32_t set, uint32_t descriptorWriteCount,
                                 const VkWriteDescriptorSet *pDescriptorWrites);
 
@@ -682,22 +659,21 @@ class CommandBuffer : public RefcountedStateObject, public SubStateManager<Comma
 
     void SetImageLayout(const vvl::Image &image_state, const VkImageSubresourceRange &image_subresource_range, VkImageLayout layout,
                         VkImageLayout expected_layout = kInvalidLayout);
-    void SetImageLayout(const vvl::Image &image_state, const VkImageSubresourceLayers &image_subresource_layers,
-                        VkImageLayout layout);
-    void SetImageInitialLayout(VkImage image, const VkImageSubresourceRange &range, VkImageLayout layout);
     void SetImageInitialLayout(const vvl::Image &image_state, const VkImageSubresourceRange &range, VkImageLayout layout);
-    void SetImageInitialLayout(const vvl::Image &image_state, const VkImageSubresourceLayers &layers, VkImageLayout layout);
 
     void Submit(Queue &queue_state, uint32_t perf_submit_pass, const Location &loc);
     void Retire(uint32_t perf_submit_pass, const std::function<bool(const QueryObject &)> &is_query_updated_after);
 
-    uint32_t GetDynamicColorAttachmentCount() const;
-    uint32_t GetDynamicColorAttachmentImageIndex(uint32_t index) const { return index; }
-    uint32_t GetDynamicColorResolveAttachmentImageIndex(uint32_t index) const { return index + GetDynamicColorAttachmentCount(); }
-    uint32_t GetDynamicDepthAttachmentImageIndex() const { return 2 * GetDynamicColorAttachmentCount(); }
-    uint32_t GetDynamicDepthResolveAttachmentImageIndex() const { return 2 * GetDynamicColorAttachmentCount() + 1; }
-    uint32_t GetDynamicStencilAttachmentImageIndex() const { return 2 * GetDynamicColorAttachmentCount() + 2; }
-    uint32_t GetDynamicStencilResolveAttachmentImageIndex() const { return 2 * GetDynamicColorAttachmentCount() + 3; }
+    // Helpers to offset into |active_attachments|
+    // [all color, all color resolve, depth, depth resolve, stencil, stencil resolve, FragmentDensityMap]
+    uint32_t GetDynamicRenderingColorAttachmentCount() const;
+    uint32_t GetDynamicRenderingColorAttachmentIndex(uint32_t index) const { return index; }
+    uint32_t GetDynamicRenderingColorResolveAttachmentIndex(uint32_t index) const {
+        return index + GetDynamicRenderingColorAttachmentCount();
+    }
+    // used for non-color types
+    uint32_t GetDynamicRenderingAttachmentIndex(AttachmentInfo::Type type) const;
+
     bool HasValidDynamicDepthAttachment() const;
     bool HasValidDynamicStencilAttachment() const;
     bool HasExternalFormatResolveAttachment() const;
@@ -751,9 +727,13 @@ class CommandBufferSubState {
     CommandBufferSubState(const CommandBufferSubState &) = delete;
     CommandBufferSubState &operator=(const CommandBufferSubState &) = delete;
     virtual ~CommandBufferSubState() {}
+
+    virtual void Begin(const VkCommandBufferBeginInfo &begin_info) {}
+    virtual void Reset(const Location &loc) {}
     virtual void Destroy() {}
 
-    virtual void Reset(const Location &loc) {}
+    virtual void ExecuteCommands(vvl::CommandBuffer &secondary_command_buffer) {}
+
     virtual void RecordCmd(Func command) {}
     virtual void RecordWaitEvents(Func command, uint32_t eventCount, const VkEvent *pEvents,
                                   VkPipelineStageFlags2KHR src_stage_mask) {}

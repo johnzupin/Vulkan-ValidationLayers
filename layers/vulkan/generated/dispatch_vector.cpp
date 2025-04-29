@@ -1794,7 +1794,6 @@ void Device::InitObjectDispatchVectors() {
     BUILD_DESTROY_DISPATCH_VECTOR(PreCallRecordDestroyShaderEXT);
     BUILD_DESTROY_DISPATCH_VECTOR(PostCallRecordDestroyShaderEXT);
     BUILD_DISPATCH_VECTOR(PreCallValidateGetShaderBinaryDataEXT);
-    BUILD_DISPATCH_VECTOR(PreCallRecordGetShaderBinaryDataEXT);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetShaderBinaryDataEXT);
     BUILD_DISPATCH_VECTOR(PreCallValidateCmdBindShadersEXT);
     BUILD_DISPATCH_VECTOR(PreCallRecordCmdBindShadersEXT);
@@ -1837,6 +1836,9 @@ void Device::InitObjectDispatchVectors() {
     BUILD_DISPATCH_VECTOR(PreCallRecordGetScreenBufferPropertiesQNX);
     BUILD_DISPATCH_VECTOR(PostCallRecordGetScreenBufferPropertiesQNX);
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
+    BUILD_DISPATCH_VECTOR(PreCallValidateCmdBindTileMemoryQCOM);
+    BUILD_DISPATCH_VECTOR(PreCallRecordCmdBindTileMemoryQCOM);
+    BUILD_DISPATCH_VECTOR(PostCallRecordCmdBindTileMemoryQCOM);
     BUILD_DISPATCH_VECTOR(PreCallValidateCreateExternalComputeQueueNV);
     BUILD_DISPATCH_VECTOR(PreCallRecordCreateExternalComputeQueueNV);
     BUILD_DISPATCH_VECTOR(PostCallRecordCreateExternalComputeQueueNV);

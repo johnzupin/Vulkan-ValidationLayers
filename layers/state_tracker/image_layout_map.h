@@ -44,34 +44,31 @@ using IndexRange = vvl::range<IndexType>;
 using Encoder = subresource_adapter::RangeEncoder;
 using RangeGenerator = subresource_adapter::RangeGenerator;
 
-struct InitialLayoutState {
-    VkImageView image_view;          // For relaxed matching rule evaluation, else VK_NULL_HANDLE
-    VkImageAspectFlags aspect_mask;  // For relaxed matching rules... else 0
-    LoggingLabel label;
-    InitialLayoutState(const vvl::CommandBuffer& cb_state_, const vvl::ImageView* view_state_);
-    InitialLayoutState() : image_view(VK_NULL_HANDLE), aspect_mask(0), label() {}
-};
-
 // Contains all info around an image, its subresources and layout map
 class ImageLayoutRegistry {
   public:
-    typedef std::function<bool(const VkImageSubresource&, VkImageLayout, VkImageLayout)> Callback;
-
     struct LayoutEntry {
+        // This tracks the first known layout of the subresource in the command buffer (that's why initial).
+        // This value is tracked based on the expected layout parameters from various API functions.
+        // For example, for vkCmdCopyImageToBuffer the expected layout is the srcImageLayout parameter,
+        // and for image barrier it is the oldLayout.
         VkImageLayout initial_layout;
+
+        // This tracks current subresource layout as we progress through the command buffer
         VkImageLayout current_layout;
-        InitialLayoutState* state;
 
-        LayoutEntry(VkImageLayout initial_ = kInvalidLayout, VkImageLayout current_ = kInvalidLayout,
-                    InitialLayoutState* s = nullptr)
-            : initial_layout(initial_), current_layout(current_), state(s) {}
+        // For relaxed matching rules
+        VkImageAspectFlags aspect_mask;
 
-        bool operator!=(const LayoutEntry& rhs) const {
-            return initial_layout != rhs.initial_layout || current_layout != rhs.current_layout || state != rhs.state;
-        }
-        bool CurrentWillChange(VkImageLayout new_layout) const {
-            return new_layout != kInvalidLayout && current_layout != new_layout;
-        }
+        // Initialize entry with the current layout. If API also defines the expected layout it can be specified as second parameter
+        static LayoutEntry ForCurrentLayout(VkImageLayout current_layout, VkImageLayout expected_layout = kInvalidLayout);
+
+        // Initialize entry with the expected layout. This is usually used by the APIs that do not perform layout transitions
+        // but just manifest the expected layout, e.g. srcImageLayout parameter in vkCmdCopyImageToBuffer.
+        // The aspect mask is used if API additionally restricts subresource to specific aspect (descriptor image views).
+        static LayoutEntry ForExpectedLayout(VkImageLayout expected_layout, VkImageAspectFlags aspect_mask = 0);
+
+        bool CurrentWillChange(VkImageLayout new_layout) const;
         bool Update(const LayoutEntry& src);
 
         // updater for splice()
@@ -82,16 +79,13 @@ class ImageLayoutRegistry {
             }
         };
     };
-    using InitialLayoutStates = small_vector<InitialLayoutState, 2, uint32_t>;
     using LayoutMap = subresource_adapter::BothRangeMap<LayoutEntry, 16>;
     using RangeType = LayoutMap::key_type;
 
-    bool SetSubresourceRangeLayout(const vvl::CommandBuffer& cb_state, const VkImageSubresourceRange& range, VkImageLayout layout,
+    bool SetSubresourceRangeLayout(const VkImageSubresourceRange& range, VkImageLayout layout,
                                    VkImageLayout expected_layout = kInvalidLayout);
-    void SetSubresourceRangeInitialLayout(const vvl::CommandBuffer& cb_state, const VkImageSubresourceRange& range,
-                                          VkImageLayout layout);
-    void SetSubresourceRangeInitialLayout(const vvl::CommandBuffer& cb_state, VkImageLayout layout,
-                                          const vvl::ImageView& view_state);
+    void SetSubresourceRangeInitialLayout(const VkImageSubresourceRange& range, VkImageLayout layout);
+    void SetSubresourceRangeInitialLayout(VkImageLayout layout, const vvl::ImageView& view_state);
     bool UpdateFrom(const ImageLayoutRegistry& from);
     uintptr_t CompatibilityKey() const;
     const LayoutMap& GetLayoutMap() const { return layout_map_; }
@@ -141,26 +135,25 @@ class ImageLayoutRegistry {
     const vvl::Image& image_state_;
     const Encoder& encoder_;
     LayoutMap layout_map_;
-    InitialLayoutStates initial_layout_states_;
 };
 }  // namespace image_layout_map
 
-class GlobalImageLayoutRangeMap : public subresource_adapter::BothRangeMap<VkImageLayout, 16> {
+class ImageLayoutRangeMap : public subresource_adapter::BothRangeMap<VkImageLayout, 16> {
   public:
     using RangeGenerator = image_layout_map::RangeGenerator;
 
-    GlobalImageLayoutRangeMap(index_type index) : BothRangeMap<VkImageLayout, 16>(index) {}
-    ReadLockGuard ReadLock() const { return ReadLockGuard(lock_); }
-    WriteLockGuard WriteLock() { return WriteLockGuard(lock_); }
+    ImageLayoutRangeMap(index_type index) : BothRangeMap<VkImageLayout, 16>(index) {}
+    ReadLockGuard ReadLock() const { return ReadLockGuard(*lock); }
+    WriteLockGuard WriteLock() { return WriteLockGuard(*lock); }
 
     bool AnyInRange(RangeGenerator& gen, std::function<bool(const key_type& range, const mapped_type& state)>&& func) const;
 
-  private:
-    mutable std::shared_mutex lock_;
+    // Not null if this layout map is owned by the vvl::Image and points to vvl::Image::layout_range_map_lock.
+    // The layout maps that are not owned by the images do not use locking functionality.
+    std::shared_mutex* lock = nullptr;
 };
 
-// TODO - Get to work with non-STL custom hashmap
-using GlobalImageLayoutMap = std::unordered_map<const vvl::Image*, std::optional<GlobalImageLayoutRangeMap>>;
+using SubmissionImageLayoutMap = vvl::unordered_map<const vvl::Image*, std::optional<ImageLayoutRangeMap>>;
 
 // Not declared in the CommandBuffer class to allow other files to forward reference this
 // (was slow to have ever file need to compile in the Image Layout map)

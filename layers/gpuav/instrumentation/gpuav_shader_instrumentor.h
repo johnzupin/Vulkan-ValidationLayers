@@ -58,7 +58,8 @@ struct InstrumentedShader {
     VkPipeline pipeline;
     VkShaderModule shader_module;
     VkShaderEXT shader_object;
-    std::vector<uint32_t> instrumented_spirv;
+    // We keep the original SPIR-V so we can match up where the error occured to map to shader source files
+    std::vector<uint32_t> original_spirv;
 };
 
 // Historically this was an common interface to both GPU-AV and DebugPrintf before the were merged together.
@@ -93,14 +94,14 @@ class GpuShaderInstrumentor : public vvl::DeviceProxy {
     void PreCallRecordCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo,
                                            const VkAllocationCallbacks *pAllocator, VkPipelineLayout *pPipelineLayout,
                                            const RecordObject &record_obj, chassis::CreatePipelineLayout &chassis_state) override;
-    void PostCallRecordCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo,
-                                            const VkAllocationCallbacks *pAllocator, VkPipelineLayout *pPipelineLayout,
-                                            const RecordObject &record_obj) override;
 
     void PostCallRecordCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo,
                                           const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule,
                                           const RecordObject &record_obj, chassis::CreateShaderModule &chassis_state) override;
-    void PreCallRecordShaderObjectInstrumentation(VkShaderCreateInfoEXT &create_info, const Location &create_info_loc,
+    void PreCallRecordGetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t *pDataSize, void *pData,
+                                             const RecordObject &record_obj, chassis::ShaderBinaryData &chassis_state) override;
+    bool PreCallRecordShaderObjectInstrumentation(vku::safe_VkShaderCreateInfoEXT &modified_create_info,
+                                                  const Location &create_info_loc,
                                                   chassis::ShaderObjectInstrumentationData &shader_instrumentation_data);
     void PreCallRecordCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
                                        const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders,
@@ -179,7 +180,7 @@ class GpuShaderInstrumentor : public vvl::DeviceProxy {
     };
     void BuildDescriptorSetLayoutInfo(const vvl::Pipeline &pipeline_state,
                                       InstrumentationDescriptorSetLayouts &out_instrumentation_dsl);
-    void BuildDescriptorSetLayoutInfo(const VkShaderCreateInfoEXT &create_info,
+    void BuildDescriptorSetLayoutInfo(const vku::safe_VkShaderCreateInfoEXT &modified_create_info,
                                       InstrumentationDescriptorSetLayouts &out_instrumentation_dsl);
     void BuildDescriptorSetLayoutInfo(const vvl::DescriptorSetLayout &set_layout_state, const uint32_t set_layout_index,
                                       InstrumentationDescriptorSetLayouts &out_instrumentation_dsl);

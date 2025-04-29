@@ -29,7 +29,12 @@ bool Device::ValidateSubpassGraphicsFlags(VkDevice device, const VkRenderPassCre
     const auto kExcludeStages = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT | VK_PIPELINE_STAGE_2_COPY_BIT |
                                 VK_PIPELINE_STAGE_2_RESOLVE_BIT | VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT;
     const auto kMetaGraphicsStages = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT |
-                                     VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT;
+                                     VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT |
+                                     // ALL_COMMANDS means only graphics in graphics only context,
+                                     // TOP_OF_PIPE/BOTTOM_OF_PIPE are also always valid
+                                     // https://gitlab.khronos.org/vulkan/vulkan/-/issues/4257
+                                     VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT |
+                                     VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
     const auto kGraphicsStages =
         (sync_utils::ExpandPipelineStages(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_QUEUE_GRAPHICS_BIT) | kMetaGraphicsStages) &
         ~kExcludeStages;
@@ -405,7 +410,9 @@ void Device::RecordRenderPass(VkRenderPass renderPass, const VkRenderPassCreateI
 void Device::PostCallRecordCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo *pCreateInfo,
                                             const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass,
                                             const RecordObject &record_obj) {
-    if (record_obj.result != VK_SUCCESS) return;
+    if (record_obj.result != VK_SUCCESS) {
+        return;
+    }
     vku::safe_VkRenderPassCreateInfo2 create_info_2 = ConvertVkRenderPassCreateInfoToV2KHR(*pCreateInfo);
     RecordRenderPass(*pRenderPass, create_info_2.ptr());
 }
@@ -414,7 +421,9 @@ void Device::PostCallRecordCreateRenderPass2KHR(VkDevice device, const VkRenderP
                                                 const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass,
                                                 const RecordObject &record_obj) {
     // Track the state necessary for checking vkCreateGraphicsPipeline (subpass usage of depth and color attachments)
-    if (record_obj.result != VK_SUCCESS) return;
+    if (record_obj.result != VK_SUCCESS) {
+        return;
+    }
     vku::safe_VkRenderPassCreateInfo2 create_info_2(pCreateInfo);
     RecordRenderPass(*pRenderPass, create_info_2.ptr());
 }

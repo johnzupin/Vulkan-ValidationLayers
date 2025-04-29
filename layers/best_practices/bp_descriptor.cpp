@@ -24,9 +24,6 @@ bool BestPractices::PreCallValidateAllocateDescriptorSets(VkDevice device, const
                                                           VkDescriptorSet* pDescriptorSets, const ErrorObject& error_obj,
                                                           vvl::AllocateDescriptorSetsData& ads_state_data) const {
     bool skip = false;
-    skip |= BaseClass::PreCallValidateAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets, error_obj, ads_state_data);
-    if (skip) return skip;
-
     const auto pool_state = Get<vvl::DescriptorPool>(pAllocateInfo->descriptorPool);
     ASSERT_AND_RETURN_SKIP(pool_state);
 
@@ -60,9 +57,10 @@ bool BestPractices::PreCallValidateAllocateDescriptorSets(VkDevice device, const
                     "BestPractices-vkAllocateDescriptorSets-EmptyDescriptorPoolType", ads_pool_state->Handle(), error_obj.location,
                     "Unable to allocate %" PRIu32
                     " descriptors of type %s from %s"
-                    ". This pool only has %" PRIu32 " descriptors of this type remaining.",
+                    ". This pool only has %" PRIu32 " descriptors of this type remaining.\n%s",
                     ads_state_data.required_descriptors_by_type.at(it->first), string_VkDescriptorType(VkDescriptorType(it->first)),
-                    FormatHandle(*ads_pool_state).c_str(), available_count);
+                    FormatHandle(*ads_pool_state).c_str(), available_count,
+                    device_state->PrintDescriptorAllocation(*pAllocateInfo, *pool_state, VkDescriptorType(it->first)).c_str());
             }
         }
     }

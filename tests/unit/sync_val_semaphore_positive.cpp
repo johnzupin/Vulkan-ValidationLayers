@@ -1,6 +1,6 @@
-/* Copyright (c) 2024 The Khronos Group Inc.
- * Copyright (c) 2024 Valve Corporation
- * Copyright (c) 2024 LunarG, Inc.
+/* Copyright (c) 2024-2025 The Khronos Group Inc.
+ * Copyright (c) 2024-2025 Valve Corporation
+ * Copyright (c) 2024-2025 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@
 
 #include <thread>
 #include "../framework/layer_validation_tests.h"
+#ifdef VK_USE_PLATFORM_WIN32_KHR
 #include "../framework/external_memory_sync.h"
+#endif  // VK_USE_PLATFORM_WIN32_KHR
 
 struct PositiveSyncValTimelineSemaphore : public VkSyncValTest {};
 

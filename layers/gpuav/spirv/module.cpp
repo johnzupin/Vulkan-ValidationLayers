@@ -195,6 +195,22 @@ Module::Module(vvl::span<const uint32_t> words, DebugReport* debug_report, const
             current_block->loop_header_merge_target_ = new_inst->Word(1);
         }
 
+        if (opcode == spv::OpSelectionMerge) {
+            current_block->selection_merge_target_ = new_inst->Word(1);
+        }
+
+        if (opcode == spv::OpSwitch) {
+            current_block->switch_default_ = new_inst->Word(2);
+            for (uint32_t i = 4; i < new_inst->Length(); i++) {
+                current_block->switch_cases_.push_back(new_inst->Word(i));
+            }
+        }
+
+        if (opcode == spv::OpBranchConditional) {
+            current_block->branch_conditional_true_ = new_inst->Word(2);
+            current_block->branch_conditional_false_ = new_inst->Word(3);
+        }
+
         if (opcode == spv::OpLabel) {
             block_found = true;
             auto new_block = std::make_unique<BasicBlock>(std::move(new_inst), *current_function);
@@ -641,11 +657,12 @@ void Module::LinkFunctions(const LinkInfo& info) {
             if (opcode == spv::OpFunction) {
                 new_inst->UpdateWord(1, id_swap_map[new_inst->Word(1)]);
                 new_inst->UpdateWord(2, link_function.id);
-                // We can easily inject the same function hundreds of times and really don't want to inline it.
-                // Have found that if drivers don't inline, can get a 20x speed-up at compiling large bloated shaders.
-                // There is no way to query this or test if the driver does consume this, also currently most drivers
-                // will ignore this as it is not hooked up... but worth trying
-                new_inst->UpdateWord(3, spv::FunctionControlDontInlineMask);
+                // We originally tried to use DontInline...
+                // - Most drivers don't actually support it
+                // - Fun nasty bugs with those that did (since no CTS is written to use it)
+                // - There is zero way to truely check if it supported or not
+                // - We reworked our functions to be smaller because we have to assume it will be inlined
+                new_inst->UpdateWord(3, spv::FunctionControlMaskNone);
                 new_inst->UpdateWord(4, function_type_id);
             } else if (opcode == spv::OpLabel) {
                 uint32_t new_result_id = id_swap_map[new_inst->ResultId()];

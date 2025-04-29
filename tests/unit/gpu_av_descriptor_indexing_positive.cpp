@@ -1701,7 +1701,7 @@ TEST_F(PositiveGpuAVDescriptorIndexing, SharedPipelineLayoutSubsetGraphicsShader
 
     VkShaderCreateInfoEXT shader_obj_ci = vku::InitStructHelper();
     shader_obj_ci.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    shader_obj_ci.nextStage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    shader_obj_ci.nextStage = 0;
     shader_obj_ci.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
     shader_obj_ci.codeSize = vs_spv_1.size() * sizeof(uint32_t);
     shader_obj_ci.pCode = vs_spv_1.data();
@@ -1710,6 +1710,7 @@ TEST_F(PositiveGpuAVDescriptorIndexing, SharedPipelineLayoutSubsetGraphicsShader
     shader_obj_ci.pPushConstantRanges = &push_constant_ranges[0];
     vkt::Shader vs_1(*m_device, shader_obj_ci);
 
+    shader_obj_ci.nextStage = VK_SHADER_STAGE_FRAGMENT_BIT;
     shader_obj_ci.codeSize = vs_spv_2.size() * sizeof(uint32_t);
     shader_obj_ci.pCode = vs_spv_2.data();
     shader_obj_ci.pushConstantRangeCount = 2;
@@ -1724,8 +1725,8 @@ TEST_F(PositiveGpuAVDescriptorIndexing, SharedPipelineLayoutSubsetGraphicsShader
     const std::array<VkShaderStageFlagBits, 5> stages = {{VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
                                                           VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, VK_SHADER_STAGE_GEOMETRY_BIT,
                                                           VK_SHADER_STAGE_FRAGMENT_BIT}};
-    const std::array<VkShaderEXT, 5> shaders_1 = {{vs_1.handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE}};
-    const std::array<VkShaderEXT, 5> shaders_2 = {{vs_2.handle(), VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, fs_2.handle()}};
+    const std::array<VkShaderEXT, 5> shaders_1 = {{vs_1, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE}};
+    const std::array<VkShaderEXT, 5> shaders_2 = {{vs_2, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, fs_2}};
 
     std::array<uint32_t, 3> push_constants_data = {{1, 2, 3}};
 
@@ -1733,22 +1734,22 @@ TEST_F(PositiveGpuAVDescriptorIndexing, SharedPipelineLayoutSubsetGraphicsShader
     m_command_buffer.Begin(&begin_info);
     m_command_buffer.BeginRenderingColor(GetDynamicRenderTarget(), GetRenderTargetArea());
 
-    vk::CmdPushConstants(m_command_buffer.handle(), pipeline_layout_2.handle(), VK_SHADER_STAGE_VERTEX_BIT, 0,
+    vk::CmdPushConstants(m_command_buffer, pipeline_layout_2, VK_SHADER_STAGE_VERTEX_BIT, 0,
                          static_cast<uint32_t>(2 * sizeof(uint32_t)), &push_constants_data[0]);
-    vk::CmdPushConstants(m_command_buffer.handle(), pipeline_layout_2.handle(), VK_SHADER_STAGE_FRAGMENT_BIT,
+    vk::CmdPushConstants(m_command_buffer, pipeline_layout_2, VK_SHADER_STAGE_FRAGMENT_BIT,
                          static_cast<uint32_t>(2 * sizeof(uint32_t)), static_cast<uint32_t>(1 * sizeof(uint32_t)),
                          &push_constants_data[2]);
 
-    vk::CmdBindShadersEXT(m_command_buffer.handle(), size32(stages), stages.data(), shaders_2.data());
-    SetDefaultDynamicStatesAll(m_command_buffer.handle());
+    vk::CmdBindShadersEXT(m_command_buffer, size32(stages), stages.data(), shaders_2.data());
+    SetDefaultDynamicStatesAll(m_command_buffer);
 
-    vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
+    vk::CmdDraw(m_command_buffer, 3, 1, 0, 0);
 
-    vk::CmdBindShadersEXT(m_command_buffer.handle(), size32(stages), stages.data(), shaders_1.data());
-    vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
+    vk::CmdBindShadersEXT(m_command_buffer, size32(stages), stages.data(), shaders_1.data());
+    vk::CmdDraw(m_command_buffer, 3, 1, 0, 0);
 
-    vk::CmdBindShadersEXT(m_command_buffer.handle(), size32(stages), stages.data(), shaders_2.data());
-    vk::CmdDraw(m_command_buffer.handle(), 3, 1, 0, 0);
+    vk::CmdBindShadersEXT(m_command_buffer, size32(stages), stages.data(), shaders_2.data());
+    vk::CmdDraw(m_command_buffer, 3, 1, 0, 0);
 
     m_command_buffer.EndRendering();
     m_command_buffer.End();
@@ -2883,5 +2884,77 @@ TEST_F(PositiveGpuAVDescriptorIndexing, MixedCombinedImageSampler) {
     m_command_buffer.EndRenderPass();
     m_command_buffer.End();
 
+    m_default_queue->SubmitAndWait(m_command_buffer);
+}
+
+TEST_F(PositiveGpuAVDescriptorIndexing, BranchConditonalPostDominate) {
+    TEST_DESCRIPTION(
+        "Showcase of making sure we can eliminate instrument in blocks which is post-dominated with a block that already "
+        "instrument");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredFeature(vkt::Feature::runtimeDescriptorArray);
+    std::vector<VkLayerSettingEXT> layer_settings = {
+        {OBJECT_LAYER_NAME, "gpuav_post_process_descriptor_indexing", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &kVkFalse},
+        {OBJECT_LAYER_NAME, "gpuav_force_on_robustness", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &kVkTrue},
+    };
+    RETURN_IF_SKIP(InitGpuAvFramework(layer_settings, false));
+    RETURN_IF_SKIP(InitState());
+
+    char const *cs_source = R"glsl(
+        #version 450
+        layout(set = 0, binding = 0, std430) buffer SSBO {
+            uint a;
+            uint b;
+            uint c;
+            uint d;
+            uint e;
+        } buffers[];
+
+        uint Foo(uint x) {
+            uint data = x + buffers[0].a;
+            switch(data) {
+                case 0:
+                    data += buffers[0].b;
+                case 1:
+                    data += buffers[0].c;
+                default:
+                    data += buffers[0].d;
+            }
+            return data + buffers[0].e;
+        }
+
+        void main() {
+            uint data = buffers[0].a;
+            data += buffers[0].a;
+            if (data > 0) {
+                data += buffers[0].b;
+                if (data == 2) {
+                    data += buffers[0].c;
+                }
+            } else {
+                data += buffers[0].d;
+            }
+            buffers[0].e = data;
+
+            data += Foo(data);
+        }
+    )glsl";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.dsl_bindings_ = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, VK_SHADER_STAGE_ALL, nullptr}};
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.CreateComputePipeline();
+
+    vkt::Buffer buffer(*m_device, 64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    pipe.descriptor_set_->WriteDescriptorBufferInfo(0, buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0);
+    pipe.descriptor_set_->WriteDescriptorBufferInfo(0, buffer, 0, VK_WHOLE_SIZE, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+    pipe.descriptor_set_->UpdateDescriptorSets();
+
+    m_command_buffer.Begin();
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.pipeline_layout_, 0, 1,
+                              &pipe.descriptor_set_->set_, 0, nullptr);
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdDispatch(m_command_buffer, 1, 1, 1);
+    m_command_buffer.End();
     m_default_queue->SubmitAndWait(m_command_buffer);
 }

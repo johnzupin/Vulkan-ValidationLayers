@@ -21,6 +21,7 @@
 #include "../framework/descriptor_helper.h"
 #include "../framework/render_pass_helper.h"
 #include "../framework/ray_tracing_objects.h"
+#include <algorithm>
 
 class NegativeDescriptors : public VkLayerTest {};
 
@@ -222,6 +223,33 @@ TEST_F(NegativeDescriptors, AllocateOverDescriptorCount2) {
     alloc_info.pSetLayouts = &ds_layout_over.handle();
     m_errorMonitor->SetDesiredWarning("WARNING-VkDescriptorSetAllocateInfo-descriptorCount");
     vk::AllocateDescriptorSets(device(), &alloc_info, &descriptor_sets[2]);
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeDescriptors, AllocateOverDescriptorCount3) {
+    AddRequiredExtensions(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    VkDescriptorPoolSize ds_type_counts[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 20}, {VK_DESCRIPTOR_TYPE_SAMPLER, 2}};
+    VkDescriptorPoolCreateInfo ds_pool_ci = vku::InitStructHelper();
+    ds_pool_ci.maxSets = 4;
+    ds_pool_ci.poolSizeCount = 2;
+    ds_pool_ci.pPoolSizes = ds_type_counts;
+    vkt::DescriptorPool ds_pool(*m_device, ds_pool_ci);
+
+    VkDescriptorSetLayoutBinding dsl_binding_sampler = {1, VK_DESCRIPTOR_TYPE_SAMPLER, 2, VK_SHADER_STAGE_ALL, nullptr};
+    VkDescriptorSetLayoutBinding dsl_binding_buffer = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2, VK_SHADER_STAGE_ALL, nullptr};
+    const vkt::DescriptorSetLayout ds_layout_sampler(*m_device, {dsl_binding_buffer, dsl_binding_sampler});
+    const vkt::DescriptorSetLayout ds_layout_buffer(*m_device, {dsl_binding_buffer});
+
+    VkDescriptorSetLayout descriptor_set_layouts[4] = {ds_layout_sampler, ds_layout_buffer, ds_layout_sampler, ds_layout_sampler};
+    VkDescriptorSet descriptor_sets[4];
+    VkDescriptorSetAllocateInfo alloc_info = vku::InitStructHelper();
+    alloc_info.descriptorPool = ds_pool;
+    alloc_info.descriptorSetCount = 4;
+    alloc_info.pSetLayouts = descriptor_set_layouts;
+    m_errorMonitor->SetDesiredWarning("WARNING-VkDescriptorSetAllocateInfo-descriptorCount");
+    vk::AllocateDescriptorSets(device(), &alloc_info, descriptor_sets);
     m_errorMonitor->VerifyFound();
 }
 
@@ -1932,7 +1960,10 @@ TEST_F(NegativeDescriptors, DescriptorSetCompatibility) {
     dsl_binding[0].descriptorCount = 2;
     ds_layouts.emplace_back(*m_device, std::vector<VkDescriptorSetLayoutBinding>(1, dsl_binding[0]));
 
-    const auto &ds_vk_layouts = MakeVkHandles<VkDescriptorSetLayout>(ds_layouts);
+    std::vector<VkDescriptorSetLayout> ds_vk_layouts;
+    for (const auto &ds_layout : ds_layouts) {
+        ds_vk_layouts.push_back(ds_layout.handle());
+    }
 
     static const uint32_t NUM_SETS = 4;
     VkDescriptorSet descriptorSet[NUM_SETS] = {};

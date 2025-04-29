@@ -147,7 +147,7 @@ bool CoreChecks::ValidateMeshShaderStage(const vvl::CommandBuffer &cb_state, con
                          "bound pipeline are %s.",
                          string_VkShaderStageFlags(pipeline_state->active_shaders).c_str());
     }
-    for (const auto &query : cb_state.activeQueries) {
+    for (const auto &query : cb_state.active_queries) {
         const auto query_pool_state = Get<vvl::QueryPool>(query.pool);
         if (!query_pool_state) continue;
         if (query_pool_state->create_info.queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
@@ -1293,6 +1293,15 @@ bool CoreChecks::ValidateActionState(const vvl::CommandBuffer &cb_state, const V
             skip |= ValidateDrawShaderObject(last_bound_state, vuid);
         }
 
+    } else if (bind_point == VK_PIPELINE_BIND_POINT_COMPUTE) {
+        if (!pipeline && !last_bound_state.IsValidShaderBound(ShaderObjectStage::COMPUTE)) {
+            const bool is_null_bound = last_bound_state.IsValidShaderOrNullBound(ShaderObjectStage::COMPUTE);
+            return LogError(
+                vuid.compute_not_bound_10743, cb_state.GetObjectList(bind_point), loc,
+                "No compute shader is bound, before this dispatch command, you either need to call vkCmdBindPipeline with a valid "
+                "compute pipeline or vkCmdBindShadersEXT with a valid compute shader object.%s",
+                is_null_bound ? " (vkCmdBindShadersEXT was called, but it set the compute stage to VK_NULL_HANDLE)" : "");
+        }
     } else if (bind_point == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR) {
         if (pipeline) {
             skip |= ValidateTraceRaysDynamicStateSetStatus(last_bound_state, *pipeline, vuid);
@@ -1383,15 +1392,21 @@ bool CoreChecks::ValidateActionStateDescriptorsPipeline(const LastBound &last_bo
         } else {
             pipe_layouts_log << FormatHandle(*layouts.front());
         }
-        objlist.add(last_bound_state.desc_set_pipeline_layout);
+        std::string pipeline_layout_handle_str;
+        if (last_bound_state.desc_set_pipeline_layout) {
+            pipeline_layout_handle_str = FormatHandle(last_bound_state.desc_set_pipeline_layout->Handle());
+            objlist.add(last_bound_state.desc_set_pipeline_layout->Handle());
+        } else {
+            pipeline_layout_handle_str = "Pipeline Layout never bound";  // < can happen when dealing with multiview
+        }
+
         std::string range =
             pipeline.max_active_slot == 0 ? "set 0 is" : "all sets 0 to " + std::to_string(pipeline.max_active_slot) + " are";
         skip |= LogError(vuid.compatible_pipeline_08600, objlist, vuid.loc(),
                          "The %s (created with %s) statically uses descriptor set %" PRIu32
                          ", but %s not compatible with the pipeline layout bound with %s (%s)\n%s",
                          FormatHandle(pipeline).c_str(), pipe_layouts_log.str().c_str(), pipeline.max_active_slot, range.c_str(),
-                         String(last_bound_state.desc_set_bound_command),
-                         FormatHandle(last_bound_state.desc_set_pipeline_layout).c_str(),
+                         String(last_bound_state.desc_set_bound_command), pipeline_layout_handle_str.c_str(),
                          last_bound_state.DescribeNonCompatibleSet(pipeline.max_active_slot, *pipeline_layout).c_str());
     } else {
         // if the bound set is not compatible, the rest will just be extra redundant errors
@@ -1625,7 +1640,7 @@ bool CoreChecks::ValidateDrawPrimitivesGeneratedQuery(const LastBound &last_boun
     }
 
     bool primitives_generated_query = false;
-    for (const auto &query : cb_state.activeQueries) {
+    for (const auto &query : cb_state.active_queries) {
         auto query_pool_state = Get<vvl::QueryPool>(query.pool);
         if (query_pool_state && query_pool_state->create_info.queryType == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT) {
             primitives_generated_query = true;

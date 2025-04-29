@@ -17,6 +17,7 @@
 #include "../framework/layer_validation_tests.h"
 #include "../framework/pipeline_helper.h"
 #include "../framework/descriptor_helper.h"
+#include "../framework/external_memory_sync.h"
 
 class NegativeGpuAVDescriptorPostProcess : public GpuAVTest {};
 
@@ -2522,7 +2523,7 @@ TEST_F(NegativeGpuAVDescriptorPostProcess, ImageTypeMismatchDebugLabels) {
 
     CreatePipelineHelper pipe(*this);
     pipe.shader_stages_ = {vs.GetStageCreateInfo(), fs.GetStageCreateInfo()};
-    pipe.gp_ci_.layout = pipeline_layout.handle();
+    pipe.gp_ci_.layout = pipeline_layout;
     pipe.CreateGraphicsPipeline();
 
     VkDebugUtilsLabelEXT label = vku::InitStructHelper();
@@ -2534,10 +2535,9 @@ TEST_F(NegativeGpuAVDescriptorPostProcess, ImageTypeMismatchDebugLabels) {
     label.pLabelName = "render_pass_label_cb_1";
     vk::CmdBeginDebugUtilsLabelEXT(cb_1, &label);
 
-    vk::CmdBindPipeline(cb_1.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdBindDescriptorSets(cb_1.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0,
-                              nullptr);
-    vk::CmdDraw(cb_1.handle(), 3, 1, 0, 0);
+    vk::CmdBindPipeline(cb_1, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindDescriptorSets(cb_1, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0, nullptr);
+    vk::CmdDraw(cb_1, 3, 1, 0, 0);
     cb_1.EndRenderPass();
     vk::CmdEndDebugUtilsLabelEXT(cb_1);
 
@@ -2550,12 +2550,11 @@ TEST_F(NegativeGpuAVDescriptorPostProcess, ImageTypeMismatchDebugLabels) {
     label.pLabelName = "render_pass_label_cb_2";
     vk::CmdBeginDebugUtilsLabelEXT(cb_2, &label);
 
-    vk::CmdBindPipeline(cb_2.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdBindDescriptorSets(cb_2.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0,
-                              nullptr);
+    vk::CmdBindPipeline(cb_2, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindDescriptorSets(cb_2, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0, nullptr);
     label.pLabelName = "nested_label_cb_2";
     vk::CmdBeginDebugUtilsLabelEXT(cb_2, &label);
-    vk::CmdDraw(cb_2.handle(), 3, 1, 0, 0);
+    vk::CmdDraw(cb_2, 3, 1, 0, 0);
     cb_2.EndRenderPass();
     vk::CmdEndDebugUtilsLabelEXT(cb_2);
     vk::CmdEndDebugUtilsLabelEXT(cb_2);
@@ -2569,10 +2568,9 @@ TEST_F(NegativeGpuAVDescriptorPostProcess, ImageTypeMismatchDebugLabels) {
     label.pLabelName = "render_pass_label_cb_3";
     vk::CmdBeginDebugUtilsLabelEXT(cb_3, &label);
 
-    vk::CmdBindPipeline(cb_3.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdBindDescriptorSets(cb_3.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0,
-                              nullptr);
-    vk::CmdDraw(cb_3.handle(), 3, 1, 0, 0);
+    vk::CmdBindPipeline(cb_3, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindDescriptorSets(cb_3, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0, nullptr);
+    vk::CmdDraw(cb_3, 3, 1, 0, 0);
     label.pLabelName = "nested_label_cb_3";
     vk::CmdBeginDebugUtilsLabelEXT(cb_3, &label);
     cb_3.EndRenderPass();
@@ -2594,10 +2592,9 @@ TEST_F(NegativeGpuAVDescriptorPostProcess, ImageTypeMismatchDebugLabels) {
     label.pLabelName = "render_pass_label_cb_5";
     vk::CmdBeginDebugUtilsLabelEXT(cb_5, &label);
 
-    vk::CmdBindPipeline(cb_5.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
-    vk::CmdBindDescriptorSets(cb_5.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0,
-                              nullptr);
-    vk::CmdDraw(cb_5.handle(), 3, 1, 0, 0);
+    vk::CmdBindPipeline(cb_5, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.Handle());
+    vk::CmdBindDescriptorSets(cb_5, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set.set_, 0, nullptr);
+    vk::CmdDraw(cb_5, 3, 1, 0, 0);
     label.pLabelName = "nested_label_cb_5";
     vk::CmdBeginDebugUtilsLabelEXT(cb_5, &label);
     cb_5.EndRenderPass();
@@ -2620,8 +2617,73 @@ TEST_F(NegativeGpuAVDescriptorPostProcess, ImageTypeMismatchDebugLabels) {
     m_errorMonitor->VerifyFound();
 
     m_errorMonitor->SetDesiredError("label_start_cb_4::render_pass_label_cb_5");
-    std::array cbs = {&cb_4, &cb_5};
-    m_default_queue->Submit(cbs);
+    m_default_queue->Submit({cb_4, cb_5});
     m_default_queue->Wait();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativeGpuAVDescriptorPostProcess, ImportFence) {
+    AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME);
+    AddRequiredExtensions(VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME);
+    AddRequiredExtensions(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::descriptorBindingSampledImageUpdateAfterBind);
+    RETURN_IF_SKIP(InitGpuAvFramework());
+    RETURN_IF_SKIP(InitState());
+
+    const auto handle_types = FindSupportedExternalFenceHandleTypes(Gpu(), VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT);
+    if ((handle_types & VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT) == 0) {
+        GTEST_SKIP() << "VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT is not exportable";
+    }
+
+    char const *cs_source = R"glsl(
+        #version 450
+        layout(set=0, binding=0) uniform sampler3D s;
+        void main() {
+           vec4 color = texture(s, vec3(0));
+        }
+    )glsl";
+
+    vkt::Image image(*m_device, 16, 16, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+    image.SetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    vkt::ImageView image_view = image.CreateView();
+    vkt::Sampler sampler(*m_device, SafeSaneSamplerCreateInfo());
+
+    OneOffDescriptorIndexingSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL,
+                                                           nullptr, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT}});
+    const vkt::PipelineLayout pipeline_layout(*m_device, {&descriptor_set.layout_});
+
+    descriptor_set.WriteDescriptorImageInfo(0, image_view, sampler);
+    descriptor_set.UpdateDescriptorSets();
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, cs_source, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.cp_ci_.layout = pipeline_layout;
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.Begin();
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &descriptor_set.set_, 0,
+                              nullptr);
+    vk::CmdDispatch(m_command_buffer, 1, 1, 1);
+    m_command_buffer.End();
+
+    int handle = 0;
+    VkExportFenceCreateInfo export_info = vku::InitStructHelper();
+    export_info.handleTypes = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT;
+    const VkFenceCreateInfo create_info = vku::InitStructHelper(&export_info);
+    vkt::Fence fence(*m_device, create_info);
+    fence.ExportHandle(handle, VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT);
+    fence.ImportHandle(handle, VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT);
+
+    VkSubmitInfo submit = vku::InitStructHelper();
+    submit.pCommandBuffers = &m_command_buffer.handle();
+    submit.commandBufferCount = 1;
+    submit.waitSemaphoreCount = 0;
+    submit.signalSemaphoreCount = 0;
+
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDraw-viewType-07752");
+    vk::QueueSubmit(m_default_queue->handle(), 1, &submit, fence);
+    m_device->Wait();
     m_errorMonitor->VerifyFound();
 }

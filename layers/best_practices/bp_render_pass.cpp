@@ -312,13 +312,11 @@ bool BestPractices::PreCallValidateCmdBeginRenderingKHR(VkCommandBuffer commandB
     return ValidateCmdBeginRendering(commandBuffer, pRenderingInfo, error_obj.location);
 }
 
+// Using PreCallRecord because LayerObjectTypeStateTracker will destroy render pass object first in PostCallRecord
 void BestPractices::PreCallRecordCmdEndRenderPass(VkCommandBuffer commandBuffer, const RecordObject& record_obj) {
-    BaseClass::PreCallRecordCmdEndRenderPass(commandBuffer, record_obj);
-
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    auto& sub_state = bp_state::SubState(*cb_state);
-    // Using PreCallRecord because logic relies on render pass state not being destroyed yet
     if (auto rp_state = cb_state->active_render_pass.get()) {
+        auto& sub_state = bp_state::SubState(*cb_state);
         RecordCmdEndRenderingCommon(sub_state, *rp_state);
     }
 
@@ -329,13 +327,12 @@ void BestPractices::PreCallRecordCmdEndRenderPass(VkCommandBuffer commandBuffer,
     cb_state->queue_submit_functions_after_render_pass.clear();
 }
 
+// Using PreCallRecord because LayerObjectTypeStateTracker will destroy render pass object first in PostCallRecord
 void BestPractices::PreCallRecordCmdEndRenderPass2(VkCommandBuffer commandBuffer, const VkSubpassEndInfo* pSubpassInfo,
                                                    const RecordObject& record_obj) {
-    BaseClass::PreCallRecordCmdEndRenderPass2(commandBuffer, pSubpassInfo, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    auto& sub_state = bp_state::SubState(*cb_state);
-    // Using PreCallRecord because logic relies on render pass state not being destroyed yet
     if (auto rp_state = cb_state->active_render_pass.get()) {
+        auto& sub_state = bp_state::SubState(*cb_state);
         RecordCmdEndRenderingCommon(sub_state, *rp_state);
     }
 
@@ -351,12 +348,11 @@ void BestPractices::PreCallRecordCmdEndRenderPass2KHR(VkCommandBuffer commandBuf
     PreCallRecordCmdEndRenderPass2(commandBuffer, pSubpassInfo, record_obj);
 }
 
+// Using PreCallRecord because LayerObjectTypeStateTracker will destroy render pass object first in PostCallRecord
 void BestPractices::PreCallRecordCmdEndRendering(VkCommandBuffer commandBuffer, const RecordObject& record_obj) {
-    BaseClass::PreCallRecordCmdEndRendering(commandBuffer, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
-    auto& sub_state = bp_state::SubState(*cb_state);
-    // Using PreCallRecord because logic relies on render pass state not being destroyed yet
     if (auto rp_state = cb_state->active_render_pass.get()) {
+        auto& sub_state = bp_state::SubState(*cb_state);
         RecordCmdEndRenderingCommon(sub_state, *rp_state);
     }
 }
@@ -367,7 +363,6 @@ void BestPractices::PreCallRecordCmdEndRenderingKHR(VkCommandBuffer commandBuffe
 
 void BestPractices::PostCallRecordCmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo,
                                                     const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdBeginRendering(commandBuffer, pRenderingInfo, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto& sub_state = bp_state::SubState(*cb_state);
     RecordCmdBeginRenderingCommon(sub_state, nullptr, pRenderingInfo);
@@ -380,7 +375,6 @@ void BestPractices::PostCallRecordCmdBeginRenderingKHR(VkCommandBuffer commandBu
 
 void BestPractices::PostCallRecordCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents,
                                                  const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdNextSubpass(commandBuffer, contents, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto& sub_state = bp_state::SubState(*cb_state);
     RecordCmdNextSubpass(sub_state);
@@ -623,7 +617,6 @@ void BestPractices::PostCallRecordCmdNextSubpass2KHR(VkCommandBuffer commandBuff
 
 void BestPractices::PostCallRecordCmdNextSubpass2(VkCommandBuffer commandBuffer, const VkSubpassBeginInfo* pSubpassBeginInfo,
                                                   const VkSubpassEndInfo* pSubpassEndInfo, const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdNextSubpass2(commandBuffer, pSubpassBeginInfo, pSubpassEndInfo, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto& sub_state = bp_state::SubState(*cb_state);
     RecordCmdNextSubpass(sub_state);
@@ -636,28 +629,9 @@ void BestPractices::RecordCmdNextSubpass(bp_state::CommandBufferSubState& cb_sta
     }
 }
 
-void BestPractices::PostCallRecordCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
-                                                   VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size,
-                                                   const void* pValues, const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, pValues, record_obj);
-}
-
-void BestPractices::PostCallRecordCmdPushConstants2(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo,
-                                                    const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdPushConstants2(commandBuffer, pPushConstantsInfo, record_obj);
-}
-
-void BestPractices::PostCallRecordCmdPushConstants2KHR(VkCommandBuffer commandBuffer,
-                                                       const VkPushConstantsInfoKHR* pPushConstantsInfo,
-                                                       const RecordObject& record_obj) {
-    PostCallRecordCmdPushConstants2(commandBuffer, pPushConstantsInfo, record_obj);
-}
-
 void BestPractices::PostRecordCmdBeginRenderPass(bp_state::CommandBufferSubState& cb_state,
                                                  const VkRenderPassBeginInfo* pRenderPassBegin) {
     // Reset the renderpass state
-    // TODO - move this logic to the Render Pass state as cb->has_draw_cmd should stay true for lifetime of command buffer
-    cb_state.base.has_draw_cmd = false;
     auto& render_pass_state = cb_state.render_pass_state;
     render_pass_state.touchesAttachments.clear();
     render_pass_state.earlyClearAttachments.clear();
@@ -666,6 +640,7 @@ void BestPractices::PostRecordCmdBeginRenderPass(bp_state::CommandBufferSubState
     render_pass_state.colorAttachment = false;
     render_pass_state.depthAttachment = false;
     render_pass_state.drawTouchAttachments = true;
+    render_pass_state.has_draw_cmd = false;
     // Don't reset state related to pipeline state.
 
     // Reset NV state
@@ -688,7 +663,6 @@ void BestPractices::PostRecordCmdBeginRenderPass(bp_state::CommandBufferSubState
 
 void BestPractices::PostCallRecordCmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin,
                                                      VkSubpassContents contents, const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto& sub_state = bp_state::SubState(*cb_state);
     PostRecordCmdBeginRenderPass(sub_state, pRenderPassBegin);
@@ -698,7 +672,6 @@ void BestPractices::PostCallRecordCmdBeginRenderPass(VkCommandBuffer commandBuff
 
 void BestPractices::PostCallRecordCmdBeginRenderPass2(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin,
                                                       const VkSubpassBeginInfo* pSubpassBeginInfo, const RecordObject& record_obj) {
-    BaseClass::PostCallRecordCmdBeginRenderPass2(commandBuffer, pRenderPassBegin, pSubpassBeginInfo, record_obj);
     auto cb_state = GetWrite<vvl::CommandBuffer>(commandBuffer);
     auto& sub_state = bp_state::SubState(*cb_state);
     PostRecordCmdBeginRenderPass(sub_state, pRenderPassBegin);

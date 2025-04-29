@@ -1402,7 +1402,7 @@ TEST_F(NegativePipeline, FramebufferMixedSamplesCoverageReduction) {
                     bool combination_found = false;
                     for (const auto &combination : combinations) {
                         if (mode == combination.coverageReductionMode && rs == combination.rasterizationSamples &&
-                            ds & combination.depthStencilSamples && cs & combination.colorSamples) {
+                            (ds & combination.depthStencilSamples || ds == 0) && (cs & combination.colorSamples || cs == 0)) {
                             combination_found = true;
                             break;
                         }
@@ -1778,6 +1778,43 @@ TEST_F(NegativePipeline, NotCompatibleForSet) {
                               &descriptor_set.set_, 0, nullptr);
     m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-None-08600");
     vk::CmdDispatch(m_command_buffer.handle(), 1, 1, 1);
+    m_errorMonitor->VerifyFound();
+    m_command_buffer.End();
+}
+
+TEST_F(NegativePipeline, NotCompatibleForSetIndependent) {
+    TEST_DESCRIPTION("https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9870");
+    AddRequiredExtensions(VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME);
+    RETURN_IF_SKIP(Init());
+
+    vkt::Buffer uniform_buffer(*m_device, 16, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+    OneOffDescriptorSet descriptor_set(m_device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr}});
+    descriptor_set.WriteDescriptorBufferInfo(0, uniform_buffer, 0, VK_WHOLE_SIZE);
+    descriptor_set.UpdateDescriptorSets();
+
+    const vkt::PipelineLayout pipeline_layout_1(*m_device, {&descriptor_set.layout_}, {},
+                                                VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT);
+    const vkt::PipelineLayout pipeline_layout_2(*m_device, {&descriptor_set.layout_});
+
+    char const *csSource = R"glsl(
+        #version 450
+        layout(set = 0, binding = 0) uniform UniformStruct { uint dummy; } ubo;
+        void main() {
+            uint x = ubo.dummy; // make descriptor set statically used
+        }
+    )glsl";
+
+    CreateComputePipelineHelper pipe(*this);
+    pipe.cs_ = std::make_unique<VkShaderObj>(this, csSource, VK_SHADER_STAGE_COMPUTE_BIT);
+    pipe.cp_ci_.layout = pipeline_layout_1;
+    pipe.CreateComputePipeline();
+
+    m_command_buffer.Begin();
+    vk::CmdBindPipeline(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe.Handle());
+    vk::CmdBindDescriptorSets(m_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout_2, 0, 1, &descriptor_set.set_, 0,
+                              nullptr);
+    m_errorMonitor->SetDesiredError("VUID-vkCmdDispatch-None-08600");
+    vk::CmdDispatch(m_command_buffer, 1, 1, 1);
     m_errorMonitor->VerifyFound();
     m_command_buffer.End();
 }
@@ -3541,6 +3578,58 @@ TEST_F(NegativePipeline, PipelineCreationFlags2CacheControl) {
     };
     CreateComputePipelineHelper::OneshotTest(*this, set_compute_flags, kErrorBit,
                                              "VUID-VkComputePipelineCreateInfo-pipelineCreationCacheControl-02875");
+}
+
+TEST_F(NegativePipeline, PipelineCreationFlags2Library) {
+    TEST_DESCRIPTION("Test VK_PIPELINE_CREATE_LIBRARY_BIT_KHR with VkPipelineCreateFlags2");
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    AddRequiredExtensions(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::maintenance5);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
+    flags2.flags = VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR;
+
+    CreatePipelineHelper pipe(*this, &flags2);
+    m_errorMonitor->SetDesiredError("VUID-VkGraphicsPipelineCreateInfo-graphicsPipelineLibrary-06606");
+    pipe.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(NegativePipeline, PipelineCreationFlags2LibraryLinkTime) {
+    TEST_DESCRIPTION("Test VK_PIPELINE_CREATE_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT with VkPipelineCreateFlags2");
+    SetTargetApiVersion(VK_API_VERSION_1_2);
+    AddRequiredExtensions(VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME);
+    AddRequiredFeature(vkt::Feature::graphicsPipelineLibrary);
+    RETURN_IF_SKIP(Init());
+    InitRenderTarget();
+
+    VkPipelineCreateFlags2CreateInfo flags2 = vku::InitStructHelper();
+    flags2.flags = VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR;
+
+    CreatePipelineHelper vertex_input_lib(*this);
+    vertex_input_lib.InitVertexInputLibInfo(&flags2);
+    vertex_input_lib.CreateGraphicsPipeline(false);
+
+    VkPipeline libraries[1] = {
+        vertex_input_lib.Handle(),
+    };
+
+    flags2.flags = VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR | VK_PIPELINE_CREATE_2_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT;
+    VkPipelineLibraryCreateInfoKHR link_info = vku::InitStructHelper(&flags2);
+    link_info.libraryCount = size32(libraries);
+    link_info.pLibraries = libraries;
+
+    const auto vs_spv = GLSLToSPV(VK_SHADER_STAGE_VERTEX_BIT, kVertexMinimalGlsl);
+    vkt::GraphicsPipelineLibraryStage vs_stage(vs_spv, VK_SHADER_STAGE_VERTEX_BIT);
+
+    CreatePipelineHelper pre_raster_lib(*this);
+    pre_raster_lib.InitPreRasterLibInfo(&vs_stage.stage_ci);
+    pre_raster_lib.gpl_info->pNext = &link_info;
+    m_errorMonitor->SetDesiredError("VUID-VkGraphicsPipelineCreateInfo-flags-06610");
+    pre_raster_lib.CreateGraphicsPipeline();
+    m_errorMonitor->VerifyFound();
 }
 
 TEST_F(NegativePipeline, ViewportStateScissorOverflow) {

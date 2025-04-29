@@ -83,6 +83,7 @@ TEST_F(VkLayerTest, VuidHashStability) {
     ASSERT_TRUE(hash_util::VuidHash("VUID-RayTmaxKHR-RayTmaxKHR-04349") == 0x8e67514c);
     ASSERT_TRUE(hash_util::VuidHash("VUID-RuntimeSpirv-SubgroupUniformControlFlowKHR-06379") == 0x2f574188);
     ASSERT_TRUE(hash_util::VuidHash("VVL-DEBUG-PRINTF") == 0x4fe1fef9);
+    ASSERT_TRUE(hash_util::VuidHash("WARNING-GPU-Assisted-Validation") == 0x24b5c69f);
 }
 
 TEST_F(VkLayerTest, RequiredParameter) {
@@ -493,18 +494,18 @@ TEST_F(VkLayerTest, UseObjectWithWrongDevice) {
     device_create_info.queueCreateInfoCount = 1;
     device_create_info.pQueueCreateInfos = &queue_info;
     device_create_info.enabledLayerCount = 0;
-    device_create_info.ppEnabledLayerNames = NULL;
+    device_create_info.ppEnabledLayerNames = nullptr;
     device_create_info.pEnabledFeatures = &features;
 
     VkDevice second_device;
-    ASSERT_EQ(VK_SUCCESS, vk::CreateDevice(Gpu(), &device_create_info, NULL, &second_device));
+    ASSERT_EQ(VK_SUCCESS, vk::CreateDevice(Gpu(), &device_create_info, nullptr, &second_device));
 
     // Try to destroy the renderpass from the first device using the second device
     m_errorMonitor->SetDesiredError("VUID-vkDestroyRenderPass-renderPass-parent");
-    vk::DestroyRenderPass(second_device, m_renderPass, NULL);
+    vk::DestroyRenderPass(second_device, m_renderPass, nullptr);
     m_errorMonitor->VerifyFound();
 
-    vk::DestroyDevice(second_device, NULL);
+    vk::DestroyDevice(second_device, nullptr);
 }
 
 TEST_F(VkLayerTest, InvalidAllocationCallbacks) {
@@ -955,66 +956,6 @@ TEST_F(VkLayerTest, GetCalibratedTimestampsQuery) {
     m_errorMonitor->SetDesiredError("VUID-VkCalibratedTimestampInfoKHR-timeDomain-02354");
     vk::GetCalibratedTimestampsEXT(device(), 1, &timestamp_info, &timestamp, &max_deviation);
     m_errorMonitor->VerifyFound();
-}
-
-TEST_F(VkLayerTest, RayTracingStageFlagWithoutFeature) {
-    TEST_DESCRIPTION("Test using the ray tracing stage flag without enabling any of ray tracing features");
-
-    SetTargetApiVersion(VK_API_VERSION_1_1);
-    AddRequiredExtensions(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-    RETURN_IF_SKIP(Init());
-
-    vkt::Semaphore semaphore(*m_device);
-    VkPipelineStageFlags stage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
-
-    VkSubmitInfo submit_info = vku::InitStructHelper();
-    submit_info.signalSemaphoreCount = 1u;
-    submit_info.pSignalSemaphores = &semaphore.handle();
-    vk::QueueSubmit(m_default_queue->handle(), 1u, &submit_info, VK_NULL_HANDLE);
-
-    submit_info.signalSemaphoreCount = 0u;
-    submit_info.waitSemaphoreCount = 1u;
-    submit_info.pWaitSemaphores = &semaphore.handle();
-    submit_info.pWaitDstStageMask = &stage;
-
-    m_errorMonitor->SetDesiredError("VUID-VkSubmitInfo-pWaitDstStageMask-07949");
-    vk::QueueSubmit(m_default_queue->handle(), 1u, &submit_info, VK_NULL_HANDLE);
-    m_errorMonitor->VerifyFound();
-
-    vkt::Event event(*m_device);
-    m_command_buffer.Begin();
-
-    m_errorMonitor->SetDesiredError("VUID-vkCmdSetEvent-stageMask-07949");
-    vk::CmdSetEvent(m_command_buffer.handle(), event.handle(), stage);
-    m_errorMonitor->VerifyFound();
-
-    m_errorMonitor->SetDesiredError("VUID-vkCmdResetEvent-stageMask-07949");
-    vk::CmdResetEvent(m_command_buffer.handle(), event.handle(), stage);
-    m_errorMonitor->VerifyFound();
-
-    m_errorMonitor->SetDesiredError("VUID-vkCmdWaitEvents-srcStageMask-07949");
-    vk::CmdWaitEvents(m_command_buffer.handle(), 1u, &event.handle(), stage, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0u, nullptr, 0u,
-                      nullptr, 0u, nullptr);
-    m_errorMonitor->VerifyFound();
-
-    m_errorMonitor->SetDesiredError("VUID-vkCmdWaitEvents-dstStageMask-07949");
-    vk::CmdWaitEvents(m_command_buffer.handle(), 1u, &event.handle(), VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, stage, 0u, nullptr, 0u,
-                      nullptr, 0u, nullptr);
-    m_errorMonitor->VerifyFound();
-
-    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-srcStageMask-07949");
-    vk::CmdPipelineBarrier(m_command_buffer.handle(), stage, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0u, 0u, nullptr, 0u, nullptr, 0u,
-                           nullptr);
-    m_errorMonitor->VerifyFound();
-
-    m_errorMonitor->SetDesiredError("VUID-vkCmdPipelineBarrier-dstStageMask-07949");
-    vk::CmdPipelineBarrier(m_command_buffer.handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, stage, 0u, 0u, nullptr, 0u, nullptr, 0u,
-                           nullptr);
-    m_errorMonitor->VerifyFound();
-
-    m_command_buffer.End();
-
-    m_default_queue->Wait();
 }
 
 TEST_F(VkLayerTest, ExtensionXmlDependsLogic) {

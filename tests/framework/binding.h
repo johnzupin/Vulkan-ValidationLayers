@@ -18,10 +18,7 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cassert>
-#include <iterator>
-#include <memory>
 #include <vector>
 #include <optional>
 
@@ -32,31 +29,6 @@
 #include "test_common.h"
 
 namespace vkt {
-
-template <class Dst, class Src>
-std::vector<Dst> MakeVkHandles(const std::vector<Src> &v) {
-    std::vector<Dst> handles;
-    handles.reserve(v.size());
-    std::transform(v.begin(), v.end(), std::back_inserter(handles), [](const Src &o) { return o.handle(); });
-    return handles;
-}
-
-template <class Dst, class Src>
-std::vector<Dst> MakeVkHandles(const std::vector<Src *> &v) {
-    std::vector<Dst> handles;
-    handles.reserve(v.size());
-    std::transform(v.begin(), v.end(), std::back_inserter(handles),
-                   [](const Src *o) { return (o) ? o->handle() : VK_NULL_HANDLE; });
-    return handles;
-}
-
-template <class Dst, class Src>
-std::vector<Dst> MakeVkHandles(const vvl::span<Src *> &v) {
-    std::vector<Dst> handles;
-    handles.reserve(v.size());
-    std::transform(v.begin(), v.end(), std::back_inserter(handles), [](const Src *o) { return o->handle(); });
-    return handles;
-}
 
 class PhysicalDevice;
 class Device;
@@ -512,7 +484,7 @@ class Queue : public internal::Handle<VkQueue> {
 
     // vkQueueSubmit()
     VkResult Submit(const CommandBuffer &cmd, const Fence &fence = no_fence);
-    VkResult Submit(const vvl::span<CommandBuffer *> &cmds, const Fence &fence = no_fence);
+    VkResult Submit(const std::vector<VkCommandBuffer> &cmds, const Fence &fence = no_fence);
 
     VkResult Submit(const CommandBuffer &cmd, const Wait &wait, const Fence &fence = no_fence);
     VkResult Submit(const CommandBuffer &cmd, const Signal &signal, const Fence &fence = no_fence);
@@ -525,7 +497,7 @@ class Queue : public internal::Handle<VkQueue> {
 
     // vkQueueSubmit2()
     VkResult Submit2(const CommandBuffer &cmd, const Fence &fence = no_fence, bool use_khr = false);
-    VkResult Submit2(const vvl::span<const CommandBuffer> &cmds, const Fence &fence = no_fence, bool use_khr = false);
+    VkResult Submit2(const std::vector<VkCommandBuffer> &cmds, const Fence &fence = no_fence, bool use_khr = false);
 
     VkResult Submit2(const CommandBuffer &cmd, const Wait &wait, const Fence &fence = no_fence, bool use_khr = false);
     VkResult Submit2(const CommandBuffer &cmd, const Signal &signal, const Fence &fence = no_fence, bool use_khr = false);
@@ -1147,7 +1119,7 @@ class CommandBuffer : public internal::Handle<VkCommandBuffer> {
 
     void BeginRenderPass(const VkRenderPassBeginInfo &info, VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
     void BeginRenderPass(VkRenderPass rp, VkFramebuffer fb, uint32_t render_area_width = 1, uint32_t render_area_height = 1,
-                         uint32_t clear_count = 0, VkClearValue *clear_values = nullptr);
+                         uint32_t clear_count = 0, const VkClearValue *clear_values = nullptr);
     void NextSubpass(VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
     void EndRenderPass();
     void BeginRendering(const VkRenderingInfo &renderingInfo);
