@@ -1316,7 +1316,7 @@ void CommandBuffer::UpdateLastBoundDescriptorSets(VkPipelineBindPoint pipeline_b
 
     uint32_t required_size = first_set + set_count;
     const uint32_t last_binding_index = required_size - 1;
-    assert(last_binding_index < pipeline_layout->set_compat_ids.size());
+    ASSERT_AND_RETURN(last_binding_index < pipeline_layout->set_compat_ids.size());
 
     // Some useful shorthand
     const auto lv_bind_point = ConvertToLvlBindPoint(pipeline_bind_point);
@@ -1459,8 +1459,7 @@ void CommandBuffer::SetImageLayout(const vvl::Image &image_state, const VkImageS
     }
 }
 
-// Set the initial image layout for all slices of an image view
-void CommandBuffer::SetImageViewInitialLayout(const vvl::ImageView &view_state, VkImageLayout layout) {
+void CommandBuffer::TrackImageViewInitialLayout(const vvl::ImageView &view_state, VkImageLayout layout) {
     if (dev_data.disabled[image_layout_validation]) {
         return;
     }
@@ -1472,11 +1471,9 @@ void CommandBuffer::SetImageViewInitialLayout(const vvl::ImageView &view_state, 
     }
 }
 
-// Set the initial image layout for a passed non-normalized subresource range
-void CommandBuffer::SetImageInitialLayout(const vvl::Image &image_state, const VkImageSubresourceRange &range,
-                                          VkImageLayout layout) {
-    auto image_layout_registry = GetOrCreateImageLayoutRegistry(image_state);
-    if (image_layout_registry) {
+void CommandBuffer::TrackImageInitialLayout(const vvl::Image &image_state, const VkImageSubresourceRange &range,
+                                            VkImageLayout layout) {
+    if (auto image_layout_registry = GetOrCreateImageLayoutRegistry(image_state)) {
         image_layout_registry->SetSubresourceRangeInitialLayout(image_state.NormalizeSubresourceRange(range), layout);
     }
 }
@@ -1848,6 +1845,12 @@ LogObjectList CommandBuffer::GetObjectList(VkPipelineBindPoint pipeline_bind_poi
             objlist.add(shader);
         }
     }
+
+    // If using dynamic rendering, will just not add anything
+    if (pipeline_bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS && active_render_pass) {
+        objlist.add(active_render_pass->Handle());
+    }
+
     return objlist;
 }
 
