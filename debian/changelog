@@ -1,3 +1,47 @@
+vulkan-validationlayers (1.4.313.0~rc2-1lunarg24.04-1) noble; urgency=medium
+
+  [ ziga-lunarg ]
+  * scripts: Fix apksigner in android script
+
+  [ spencer-lunarg ]
+  * gpuav: Warn users to use robustness feature
+  * gpuav: Make internal shader ID print as decimal
+  * layers: Fix Task early return and add tests
+  * bp: Fix multi-entrypoint
+
+  [ Artem Kharytoniuk ]
+  * layers: Help vvl retire submissions on present-only queue
+  * tests: Add test for present-only queue
+  * layers: Rename initial layout tracking function
+
+  [ Arno ]
+  * gpuav: Move ComputeValidationPipeline to core
+  * gpuav: Remove location from VMA errors
+
+  [ spencer-lunarg ]
+  * layers: BindBufferMemory error message improvement
+  * docs: Update CONTRIBUTING.md
+  * layers: Print out pipeline in draw spirv VUs
+  * gpuav: Handle VkBufferUsageFlags2CreateInfo
+  * settings: Order of GPU-AV settings
+
+  [ ziga-lunarg ]
+  * layers: Fix tracking linked shader objects
+  * tests: Test compute and linked graphics shaders
+
+  [ Artem Kharytoniuk ]
+  * layers: Update swapchain semaphore error message
+
+  [ spencer-lunarg ]
+  * gpuav: Fix ShaderObject hitting descriptor set limit
+  * docs: Update GPU-AV Docs
+  * layers: Improve 08600 error messages
+
+  [ Artem Kharytoniuk ]
+  * layers: Remove extra properties pretty print setting
+
+ -- john <john@odin>  Mon, 05 May 2025 14:48:40 -0600
+
 vulkan-validationlayers (1.4.313.0~rc1-1lunarg24.04-1) noble; urgency=medium
 
   [ spencer-lunarg ]
