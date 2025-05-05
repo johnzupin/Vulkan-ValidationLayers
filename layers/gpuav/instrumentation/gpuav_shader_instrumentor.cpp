@@ -239,9 +239,7 @@ void GpuShaderInstrumentor::PreCallRecordCreatePipelineLayout(VkDevice device, c
             strm << "pCreateInfo::setLayoutCount (" << chassis_state.modified_create_info.setLayoutCount
                  << ") will conflicts with validation's descriptor set at slot " << instrumentation_desc_set_bind_index_ << ". "
                  << "This Pipeline Layout has too many descriptor sets that will not allow GPU shader instrumentation to be setup "
-                    "for "
-                    "pipelines created with it, therefor no validation error will be repored for them by GPU-AV at "
-                    "runtime.";
+                    "for pipelines created with it, therefore no validation error will be repored for them by GPU-AV at runtime.";
             InternalWarning(device, record_obj.location, strm.str().c_str());
         } else {
             // Modify the pipeline layout by:
@@ -378,7 +376,7 @@ void GpuShaderInstrumentor::PreCallRecordCreateShadersEXT(VkDevice device, uint3
             strm << "pCreateInfos[" << i << "]::setLayoutCount (" << new_create_info.setLayoutCount
                  << ") will conflicts with validation's descriptor set at slot " << instrumentation_desc_set_bind_index_ << ". "
                  << "This Shader Object has too many descriptor sets that will not allow GPU shader instrumentation to be setup "
-                    "for VkShaderEXT created with it, therefor no validation error will be repored for them by GPU-AV at "
+                    "for VkShaderEXT created with it, therefore no validation error will be repored for them by GPU-AV at "
                     "runtime.";
             InternalWarning(device, record_obj.location, strm.str().c_str());
         } else {
@@ -402,10 +400,10 @@ void GpuShaderInstrumentor::PreCallRecordCreateShadersEXT(VkDevice device, uint3
                 new_create_info.pSetLayouts[k] = dummy_desc_layout_;
             }
             new_create_info.pSetLayouts[instrumentation_desc_set_bind_index_] = instrumentation_desc_layout_;
-        }
 
-        chassis_state.is_modified |=
-            PreCallRecordShaderObjectInstrumentation(new_create_info, create_info_loc, instrumentation_data);
+            chassis_state.is_modified |=
+                PreCallRecordShaderObjectInstrumentation(new_create_info, create_info_loc, instrumentation_data);
+        }
     }
 
     chassis_state.pCreateInfos = reinterpret_cast<VkShaderCreateInfoEXT *>(chassis_state.modified_create_infos.data());
@@ -1284,7 +1282,7 @@ bool GpuShaderInstrumentor::InstrumentShader(const vvl::span<const uint32_t> &in
         DumpSpirvToFile(non_instrumented_spirv_file.string(), input_spirv.data(), input_spirv.size());
     }
 
-    spirv::Settings module_settings{};
+    spirv::Settings module_settings(loc);
     // Use the unique_shader_id as a shader ID so we can look up its handle later in the shader_map.
     module_settings.shader_id = unique_shader_id;
     module_settings.output_buffer_descriptor_set = instrumentation_desc_set_bind_index_;
@@ -1507,19 +1505,19 @@ static void GenerateStageMessage(std::ostringstream &ss, const GpuShaderInstrume
         } break;
         case glsl::kExecutionModelTaskEXT: {
             ss << "Stage = TaskEXT. Global invocation ID (x, y, z) = (" << shader_info.stage_info_0 << ", "
-               << shader_info.stage_info_1 << ", " << shader_info.stage_info_2 << " )";
+               << shader_info.stage_info_1 << ", " << shader_info.stage_info_2 << ")";
         } break;
         case glsl::kExecutionModelMeshEXT: {
             ss << "Stage = MeshEXT. Global invocation ID (x, y, z) = (" << shader_info.stage_info_0 << ", "
-               << shader_info.stage_info_1 << ", " << shader_info.stage_info_2 << " )";
+               << shader_info.stage_info_1 << ", " << shader_info.stage_info_2 << ")";
         } break;
         case glsl::kExecutionModelTaskNV: {
             ss << "Stage = TaskNV. Global invocation ID (x, y, z) = (" << shader_info.stage_info_0 << ", "
-               << shader_info.stage_info_1 << ", " << shader_info.stage_info_2 << " )";
+               << shader_info.stage_info_1 << ", " << shader_info.stage_info_2 << ")";
         } break;
         case glsl::kExecutionModelMeshNV: {
             ss << "Stage = MeshNV. Global invocation ID (x, y, z) = (" << shader_info.stage_info_0 << ", "
-               << shader_info.stage_info_1 << ", " << shader_info.stage_info_2 << " )";
+               << shader_info.stage_info_1 << ", " << shader_info.stage_info_2 << ")";
         } break;
         default: {
             ss << "Internal Error (unexpected stage = " << shader_info.stage_id << "). ";
@@ -1589,17 +1587,19 @@ std::string GpuShaderInstrumentor::GenerateDebugInfoMessage(VkCommandBuffer comm
 
         if (instrumented_shader->shader_module == VK_NULL_HANDLE) {
             ss << "Shader Object " << LookupDebugUtilsNameNoLock(debug_report, HandleToUint64(instrumented_shader->shader_object))
-               << "(" << HandleToUint64(instrumented_shader->shader_object) << ") (internal ID " << shader_info.shader_id << ")\n";
+               << "(0x" << HandleToUint64(instrumented_shader->shader_object) << ") (internal ID " << std::dec
+               << shader_info.shader_id << ")\n";
         } else {
-            ss << "Pipeline " << LookupDebugUtilsNameNoLock(debug_report, HandleToUint64(instrumented_shader->pipeline)) << "("
+            ss << "Pipeline " << LookupDebugUtilsNameNoLock(debug_report, HandleToUint64(instrumented_shader->pipeline)) << "(0x"
                << HandleToUint64(instrumented_shader->pipeline) << ")";
             if (instrumented_shader->shader_module == kPipelineStageInfoHandle) {
-                ss << " (internal ID " << shader_info.shader_id
+                ss << " (internal ID " << std::dec << shader_info.shader_id
                    << ")\nShader Module was passed in via VkPipelineShaderStageCreateInfo::pNext\n";
             } else {
                 ss << "\nShader Module "
-                   << LookupDebugUtilsNameNoLock(debug_report, HandleToUint64(instrumented_shader->shader_module)) << "("
-                   << HandleToUint64(instrumented_shader->shader_module) << ") (internal ID " << shader_info.shader_id << ")\n";
+                   << LookupDebugUtilsNameNoLock(debug_report, HandleToUint64(instrumented_shader->shader_module)) << "(0x"
+                   << HandleToUint64(instrumented_shader->shader_module) << ") (internal ID " << std::dec << shader_info.shader_id
+                   << ")\n";
             }
         }
     }
